@@ -192,9 +192,13 @@ impl Orchestrator {
                 let request = json!({ "step": kind, "state": view_state(&item, &ledger, step, chosen) });
                 let shared = Arc::clone(&self.shared);
                 let owner = item.clone();
-                tokio::task::spawn_blocking(move || shared.script_for(&owner)?.view(&request).map_err(Error::Script))
-                    .await
-                    .map_err(|error| Error::Script(error.to_string()))??
+                tokio::task::spawn_blocking(move || {
+                    let latest =
+                        shared.latest_for(&owner).and_then(|script| script.view(&request).map_err(Error::Script));
+                    latest.or_else(|_| shared.script_for(&owner)?.view(&request).map_err(Error::Script))
+                })
+                .await
+                .map_err(|error| Error::Script(error.to_string()))??
             }
             (None, None) => json!([]),
         };

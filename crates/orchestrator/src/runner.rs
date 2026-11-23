@@ -7,12 +7,13 @@ use serde_json::{Value, json};
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
 use tokio::task::AbortHandle;
 
+use crate::activation::Script;
 use crate::children;
 use crate::effects::{Launch, launch};
 use crate::error::{Error, Result};
 use crate::events::{OrchestratorEvent, Wake};
 use crate::ledger::Ledger;
-use crate::protocol::{AGENT, Activated, CHILD, Command, Signal, kind_of};
+use crate::protocol::{AGENT, Activated, CHILD, Command, Signal, WAIT_HUMAN, kind_of};
 use crate::shared::Shared;
 use crate::views::item_json;
 
@@ -227,14 +228,20 @@ impl Runner {
             "start": ledger.start,
             "seed": item.id.as_str(),
         });
-        let value = tokio::task::spawn_blocking(move || {
-            let script = shared.script_for(&owner)?;
-            activation["target"] = script.target.clone();
-            script.activate(&activation).map_err(Error::Script)
+        tokio::task::spawn_blocking(move || {
+            let pinned = shared.script_for(&owner)?;
+            let latest = shared.latest_for(&owner)?;
+            if latest.version() != pinned.version() {
+                let tried = run_script(&latest, &mut activation)?;
+                if tried.state != "nondeterministic" {
+                    shared.adopt(&owner, &latest)?;
+                    return Ok(tried);
+                }
+            }
+            run_script(&pinned, &mut activation)
         })
         .await
-        .map_err(|error| Error::Script(error.to_string()))??;
-        serde_json::from_value(value).map_err(|error| Error::Script(error.to_string()))
+        .map_err(|error| Error::Script(error.to_string()))?
     }
 
     fn settle(&mut self, ledger: &Ledger) {
@@ -294,7 +301,12 @@ impl Runner {
         let mut launches = Vec::new();
         for command in fresh {
             let key = match ledger.requested.get(&command.seq) {
-                Some(known) => known.key.clone(),
+                Some(known) => {
+                    if let Some(refreshed) = refreshed(ledger, known, &command) {
+                        requests.push(WorkflowEvent::EffectRequested(refreshed));
+                    }
+                    known.key.clone()
+                }
                 None => {
                     let key = self.key_for(&item, ledger, &command);
                     let mut request = EffectRequest::new(key.clone(), command.effect())
@@ -336,4 +348,18 @@ impl Runner {
         }
         Ok(())
     }
+}
+
+fn run_script(script: &Script, activation: &mut Value) -> Result<Activated> {
+    activation["target"] = script.target.clone();
+    let value = script.activate(activation).map_err(Error::Script)?;
+    serde_json::from_value(value).map_err(|error| Error::Script(error.to_string()))
+}
+
+fn refreshed(ledger: &Ledger, known: &EffectRequest, command: &Command) -> Option<EffectRequest> {
+    let open = !ledger.resolved.contains_key(&command.seq);
+    let effect = command.effect();
+    let changed =
+        open && kind_of(&known.effect) == WAIT_HUMAN && kind_of(&effect) == WAIT_HUMAN && known.effect != effect;
+    changed.then(|| EffectRequest { effect, ..known.clone() })
 }

@@ -197,6 +197,15 @@ impl Shared {
         Ok(script)
     }
 
+    pub fn latest_for(&self, item: &WorkItem) -> Result<Arc<Script>> {
+        self.script_in(self.home(&item.input).as_deref(), &item.workflow)
+    }
+
+    pub fn adopt(&self, item: &WorkItem, script: &Script) -> Result<()> {
+        self.store.pin_workflow(item.id.as_str(), &script.version(), &script.code())?;
+        Ok(())
+    }
+
     fn pinned(&self, version: &str, code: &str, workflow: &str) -> Result<Arc<Script>> {
         let key = (version.to_owned(), workflow.to_owned());
         if let Some(found) = self.pins.lock().unwrap_or_else(PoisonError::into_inner).get(&key) {

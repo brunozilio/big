@@ -263,3 +263,28 @@ async fn an_item_goes_on_with_the_workflow_code_it_started_with_after_the_code_c
     let made = ended(&kernel, &fresh).await;
     assert_eq!(output(&made)["data"]["by"], "novo", "a new item takes the new code");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_item_takes_new_workflow_code_that_still_replays_its_history_and_shows_the_new_view() {
+    let world = World::new();
+    let before = "const r = await ctx.waitHuman([{ type: \"markdown\", text: \"antes\" }]); return ctx.pass({ by: \"antigo\", r });";
+    world.workflow("adopted", &single("adopted", before));
+    let kernel = world.start().await;
+    let id = kernel.create_item("adopted", json!({ "title": "t" })).expect("item");
+    until(&kernel, &id, |item| item.steps.iter().any(|run| run.state == StepState::WaitingHuman)).await;
+    crash(kernel).await;
+    let after = "const r = await ctx.waitHuman([{ type: \"markdown\", text: \"depois\" }]); return ctx.pass({ by: \"novo\", r });";
+    world.workflow("adopted", &single("adopted", after));
+    let kernel = world.start().await;
+    let shown = |item: &WorkItem| {
+        item.effects
+            .values()
+            .any(|entry| matches!(&entry.request.effect, Effect::WaitHuman { view } if view[0]["text"] == "depois"))
+    };
+    let waiting = until(&kernel, &id, shown).await;
+    let ask =
+        waiting.effects.values().find(|entry| matches!(entry.request.effect, Effect::WaitHuman { .. })).expect("ask");
+    kernel.human_input(&id, &ask.request.key.step, "ok", json!({})).expect("answer");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item)["data"]["by"], "novo");
+}
