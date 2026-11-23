@@ -99,7 +99,7 @@ mod tests {
 
     #[test]
     fn the_page_goes_to_the_small_model_when_one_is_set() {
-        let provider = domain::ModelProvider::new("anthropic");
+        let provider = domain::ModelProvider::new("claude-subscription");
         let parent = template();
         assert_eq!(reader(None, &parent, provider).model, "m");
         assert_eq!(reader(Some("haiku"), &parent, provider).model, "claude-haiku-5-5");

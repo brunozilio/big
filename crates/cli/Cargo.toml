@@ -10,10 +10,6 @@ license.workspace = true
 name = "big"
 path = "src/main.rs"
 
-[features]
-default = ["subscription-providers"]
-subscription-providers = ["app/subscription-providers"]
-
 [dependencies]
 platform.workspace = true
 content.workspace = true

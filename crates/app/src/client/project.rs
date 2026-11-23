@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::api::features::code_map::CodeMapRequest;
-use crate::api::features::declared_providers::DeclaredProvidersRequest;
 use crate::api::features::flags::{FlagsRequest, ListedFlag};
 use crate::api::features::plugins::{PluginsReply, PluginsRequest};
 use crate::api::features::schedules::{SchedulesReply, SchedulesRequest};
@@ -124,10 +123,6 @@ impl Client {
     pub fn code_map(&self, cwd: &Path, prompt: &str) -> Result<Option<String>, Error> {
         let request = CodeMapRequest { path: cwd.to_path_buf(), prompt: prompt.to_owned() };
         self.ask_code_map(request).map(|reply| reply.map)
-    }
-
-    pub fn declare_providers(&self, cwd: &Path) -> Result<Vec<String>, Error> {
-        self.ask_declared_providers(DeclaredProvidersRequest { path: cwd.to_path_buf() }).map(|reply| reply.lines)
     }
 
     pub fn output_savings(&self) -> Result<Vec<Saving>, Error> {

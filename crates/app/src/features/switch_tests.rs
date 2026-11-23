@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use crate::api::features::channels::ChannelsRequest;
 use crate::api::features::code_map::CodeMapRequest;
-use crate::api::features::declared_providers::DeclaredProvidersRequest;
 use crate::api::features::flags::FlagsRequest;
 use crate::api::features::memory::{MemoryOp, MemoryRequest};
 use crate::api::features::plugins::PluginsRequest;
@@ -24,7 +23,6 @@ fn a_request_to(feature: FeatureName, cwd: &Path) -> FeatureRequest {
     match feature {
         FeatureName::Channels => FeatureRequest::Channels(ChannelsRequest { path, names: Vec::new() }),
         FeatureName::CodeMap => FeatureRequest::CodeMap(CodeMapRequest { path, prompt: "retry".into() }),
-        FeatureName::DeclaredProviders => FeatureRequest::DeclaredProviders(DeclaredProvidersRequest { path }),
         FeatureName::Flags => FeatureRequest::Flags(FlagsRequest::List { cwd: path }),
         FeatureName::Memory => FeatureRequest::Memory(MemoryRequest { path, op: MemoryOp::List }),
         FeatureName::OutputSavings => FeatureRequest::OutputSavings,

@@ -60,9 +60,6 @@ impl LocalServices {
         if let Ok(settings) = self.project_settings(cwd) {
             self.off.follow(&settings.features);
         }
-        if !self.off.contains(domain::features::DECLARED_PROVIDERS) {
-            let _ = crate::engine::declare_providers(&self.gate(cwd));
-        }
     }
 
     pub fn turned_off_in(self, cwd: &Path) -> Self {

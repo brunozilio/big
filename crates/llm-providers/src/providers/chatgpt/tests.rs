@@ -97,7 +97,7 @@ fn openai_s_own_providers_keep_tools_a_search_loaded_in_the_conversation() {
         "tools": [],
         "input": [{"type": "additional_tools", "role": "developer", "tools": [{"name": "a"}]}],
     });
-    for provider in [&Provider as &dyn Shape, &crate::providers::openai::Provider] {
+    for provider in [&Provider as &dyn Shape] {
         let mut shaped = body.clone();
         llm_providers::request::shape(provider, None, &mut shaped).expect("shaped");
         assert_eq!(shaped["input"][0]["type"], "additional_tools", "{}", provider.id());

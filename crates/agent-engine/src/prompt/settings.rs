@@ -36,8 +36,6 @@ pub struct Settings {
     #[serde(default)]
     pub teammate_mode: domain::team::TeammateMode,
     #[serde(default)]
-    pub enabled_providers: Vec<String>,
-    #[serde(default)]
     pub mcp_approval: domain::mcp_config::McpApproval,
     #[serde(default)]
     pub lsp_servers: Vec<LspLayer>,
@@ -194,8 +192,6 @@ impl Layer<'_> {
         let settings = self.value;
         if self.owners {
             merged.mcp_approval.read(settings);
-            let named = settings["enabledProviders"].as_array().into_iter().flatten();
-            merged.enabled_providers.extend(named.filter_map(|id| id.as_str().map(str::to_owned)));
         }
         super::permissions::read(settings, self.owners, &mut merged.permissions, &mut merged.added_dirs)
             .map_err(|e| self.located(e))?;

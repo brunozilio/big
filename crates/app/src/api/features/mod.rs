@@ -1,6 +1,5 @@
 pub mod channels;
 pub mod code_map;
-pub mod declared_providers;
 pub mod flags;
 pub mod memory;
 pub mod output_savings;
@@ -16,7 +15,6 @@ use serde::{Deserialize, Serialize};
 
 use self::channels::{ChannelsReply, ChannelsRequest};
 use self::code_map::{CodeMapReply, CodeMapRequest};
-use self::declared_providers::{DeclaredProvidersReply, DeclaredProvidersRequest};
 use self::flags::{FlagsReply, FlagsRequest};
 use self::memory::{MemoryReply, MemoryRequest};
 use self::output_savings::OutputSavingsReply;
@@ -33,7 +31,6 @@ use self::workspace::{WorkspaceReply, WorkspaceRequest};
 pub enum FeatureName {
     Channels,
     CodeMap,
-    DeclaredProviders,
     Flags,
     Memory,
     OutputSavings,
@@ -47,10 +44,9 @@ pub enum FeatureName {
 }
 
 impl FeatureName {
-    pub const ALL: [Self; 13] = [
+    pub const ALL: [Self; 12] = [
         Self::Channels,
         Self::CodeMap,
-        Self::DeclaredProviders,
         Self::Flags,
         Self::Memory,
         Self::OutputSavings,
@@ -67,7 +63,6 @@ impl FeatureName {
         match self {
             Self::Channels => "channels",
             Self::CodeMap => "code_map",
-            Self::DeclaredProviders => "declared_providers",
             Self::Flags => "flags",
             Self::Memory => "memory",
             Self::OutputSavings => "output_savings",
@@ -86,7 +81,6 @@ impl FeatureName {
         match self {
             Self::Channels => Some(flags::CHANNELS),
             Self::CodeMap => Some(flags::CODE_MAP),
-            Self::DeclaredProviders => Some(flags::DECLARED_PROVIDERS),
             Self::OutputSavings => Some(flags::OUTPUT_SAVINGS),
             Self::Plugins => Some(flags::PLUGINS),
             Self::Schedules => Some(flags::SCHEDULES),
@@ -108,7 +102,6 @@ impl std::fmt::Display for FeatureName {
 pub enum FeatureRequest {
     Channels(ChannelsRequest),
     CodeMap(CodeMapRequest),
-    DeclaredProviders(DeclaredProvidersRequest),
     Flags(FlagsRequest),
     Memory(MemoryRequest),
     OutputSavings,
@@ -126,7 +119,6 @@ impl FeatureRequest {
         match self {
             Self::Channels(_) => FeatureName::Channels,
             Self::CodeMap(_) => FeatureName::CodeMap,
-            Self::DeclaredProviders(_) => FeatureName::DeclaredProviders,
             Self::Flags(_) => FeatureName::Flags,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings => FeatureName::OutputSavings,
@@ -146,7 +138,6 @@ impl FeatureRequest {
 pub enum FeatureReply {
     Channels(ChannelsReply),
     CodeMap(CodeMapReply),
-    DeclaredProviders(DeclaredProvidersReply),
     Flags(FlagsReply),
     Memory(MemoryReply),
     OutputSavings(OutputSavingsReply),
@@ -164,7 +155,6 @@ impl FeatureReply {
         match self {
             Self::Channels(_) => FeatureName::Channels,
             Self::CodeMap(_) => FeatureName::CodeMap,
-            Self::DeclaredProviders(_) => FeatureName::DeclaredProviders,
             Self::Flags(_) => FeatureName::Flags,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings(_) => FeatureName::OutputSavings,

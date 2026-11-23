@@ -23,7 +23,6 @@ fn every_feature_has_a_name_in_one_fixed_order() {
         [
             "channels",
             "code_map",
-            "declared_providers",
             "flags",
             "memory",
             "output_savings",

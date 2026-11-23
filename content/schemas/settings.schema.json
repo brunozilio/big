@@ -181,13 +181,6 @@
       },
       "type": "array"
     },
-    "enabledProviders": {
-      "description": "Ids of providers declared by the project that you allow to load.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
     "escalationModel": {
       "description": "Where a call the agent keeps failing is sent. Read only from your own files.",
       "type": [
@@ -233,10 +226,6 @@
         },
         "channels": {
           "description": "MCP servers that stay open for the session and send messages to the agent",
-          "type": "boolean"
-        },
-        "declared-providers": {
-          "description": "Load the model providers that files in your settings folder and the project declare",
           "type": "boolean"
         },
         "destructive-snapshot": {

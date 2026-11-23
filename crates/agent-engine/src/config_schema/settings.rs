@@ -61,7 +61,6 @@ fn properties() -> Value {
             "type": ["object", "boolean", "null"],
             "description": "Gives the agent a StructuredOutput tool whose result must match this JSON Schema."
         },
-        "enabledProviders": names("Ids of providers declared by the project that you allow to load."),
         "enableAllProjectMcpServers": switch("Starts every MCP server the project's mcp.json declares without asking."),
         "enabledMcpServers": names("Project MCP servers you approved."),
         "disabledMcpServers": names("Project MCP servers you turned off; wins over the approvals."),

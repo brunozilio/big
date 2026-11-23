@@ -28,7 +28,6 @@ fn knows_that_configuring_means_its_own_files() {
         assert!(prompt.contains(&format!("~/{}/", brand::DIR)), "names the user's folder");
         assert!(prompt.contains(file), "names {file}");
     }
-    assert!(prompt.contains("`configure` skill"));
     assert!(prompt.contains("Never edit another app's configuration"));
 }
 

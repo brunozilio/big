@@ -1,7 +1,6 @@
 mod channels;
 mod code_map;
 pub mod context;
-mod declared_providers;
 mod flags;
 pub(crate) mod memory;
 mod output_savings;
@@ -21,10 +20,9 @@ use crate::features::context::{Context, Finish};
 type Forget = fn(u64);
 type Prepare = fn(&Context<'_>, RunId, PromptRequest) -> (PromptRequest, Option<Finish>);
 
-const ALL: [(FeatureName, Forget); 13] = [
+const ALL: [(FeatureName, Forget); 12] = [
     (FeatureName::Channels, channels::forget),
     (FeatureName::CodeMap, code_map::forget),
-    (FeatureName::DeclaredProviders, declared_providers::forget),
     (FeatureName::Flags, flags::forget),
     (FeatureName::Memory, memory::forget),
     (FeatureName::OutputSavings, output_savings::forget),
@@ -59,9 +57,6 @@ fn answer(context: &Context<'_>, request: FeatureRequest) -> Result<FeatureReply
     match request {
         FeatureRequest::Channels(request) => channels::handle(context, request).map(FeatureReply::Channels),
         FeatureRequest::CodeMap(request) => code_map::handle(context, request).map(FeatureReply::CodeMap),
-        FeatureRequest::DeclaredProviders(request) => {
-            declared_providers::handle(context, request).map(FeatureReply::DeclaredProviders)
-        }
         FeatureRequest::Flags(request) => flags::handle(context, request).map(FeatureReply::Flags),
         FeatureRequest::Memory(request) => memory::handle(context, request).map(FeatureReply::Memory),
         FeatureRequest::OutputSavings => output_savings::handle(context).map(FeatureReply::OutputSavings),
@@ -115,7 +110,6 @@ mod tests {
             [
                 "channels",
                 "code_map",
-                "declared_providers",
                 "flags",
                 "memory",
                 "output_savings",
