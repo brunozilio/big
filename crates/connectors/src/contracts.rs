@@ -26,6 +26,7 @@ pub mod code {
     pub const SUBMIT_REVIEW: &str = "code.submit_review";
     pub const RESOLVE_THREAD: &str = "code.resolve_thread";
     pub const MERGE: &str = "code.merge";
+    pub const REPOS: &str = "code.repos";
 }
 
 pub mod pipelines {
@@ -132,6 +133,14 @@ fn pull_ref() -> Value {
     object(&[("pr", "string")], &[])
 }
 
+fn repo_list() -> Value {
+    let repo = object(
+        &[("id", "string"), ("ref", "string"), ("name", "string")],
+        &[("url", "string"), ("default_branch", "string"), ("private", "boolean")],
+    );
+    json!({ "type": "array", "items": repo })
+}
+
 pub fn code() -> Vec<ActionSpec> {
     let open = object(
         &[("head", "string"), ("title", "string")],
@@ -163,6 +172,7 @@ pub fn code() -> Vec<ActionSpec> {
             object(&[("merged", "boolean")], &[("sha", "string"), ("already", "boolean")]),
             Idempotency::Lookup,
         ),
+        ActionSpec::read(code::REPOS, object(&[], &[("query", "string")]), repo_list()),
     ]
 }
 

@@ -70,7 +70,17 @@ export interface ReviewLine {
 
 export type MergeMethod = "merge" | "squash" | "rebase";
 
+export interface Repo {
+  id: string;
+  ref: string;
+  name: string;
+  url: string;
+  default_branch: string;
+  private: boolean;
+}
+
 export interface Code {
+  repos: { args: { query?: string }; result: Repo[] };
   open_pull_request: {
     args: { head: string; base?: string; repo?: string; title: string; body?: string; draft?: boolean };
     result: PullRequest;
