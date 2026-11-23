@@ -10,7 +10,7 @@ import { AskBlock, PermissionBlock, type Respond } from './actionBlocks'
 import { BackgroundWork, hasWork } from './BackgroundWork'
 import { Composer } from './Composer'
 import { PlanBlock } from './PlanCard'
-import { AgentMark, AgentsContext, AssistantMessage, StatusLine, ThinkingSteps, ToolRunSummary, TurnHeader, UserMessage } from './events'
+import { AgentMark, AgentsContext, emptyThinking, AssistantMessage, StatusLine, ThinkingSteps, ToolRunSummary, TurnHeader, UserMessage } from './events'
 
 interface Turn {
   user: Extract<SessionEvent, { type: 'user' }> | null
@@ -146,7 +146,7 @@ export function EventView({ event, respond }: { event: SessionEvent; respond: Re
 }
 
 function TurnWork({ live, started, ended, events, render }: { live: boolean; started?: string; ended: string | undefined; events: SessionEvent[]; render: (e: SessionEvent) => ReactNode }) {
-  const work = events.filter((e) => !human(e))
+  const work = events.filter((e) => !human(e) && !emptyThinking(e))
   const finals = events.filter(human)
   const [open, setOpen] = useState(live)
   useEffect(() => setOpen(live), [live])

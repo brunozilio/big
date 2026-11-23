@@ -106,6 +106,8 @@ export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
 
 export const visibleSteps = (steps: ThinkingStep[]) => steps.filter((s) => s.text.trim().length > 0)
 
+export const emptyThinking = (e: SessionEvent) => e.type === 'thinking' && !e.live && visibleSteps(e.steps).length === 0
+
 function StepList({ steps, live }: { steps: ThinkingStep[]; live: boolean }) {
   return (
     <ol className="relative ml-[13px] mt-3 space-y-3 pb-1 pl-5">
