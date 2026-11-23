@@ -29,9 +29,7 @@ impl Transcript {
             EngineEvent::ModeChanged(PermissionMode::Plan) => self.notice("Entered plan mode"),
             EngineEvent::ModeChanged(mode) => self.settle_plan(Outcome::Approved(*mode)),
             EngineEvent::ToolResult { id, failed, .. } if self.plan_call.as_ref() == Some(id) => {
-                if *failed {
-                    self.settle_plan(Outcome::KeptPlanning);
-                }
+                self.settle_plan(if *failed { Outcome::KeptPlanning } else { Outcome::Approved(PermissionMode::Plan) });
                 self.plan_call = None;
             }
             EngineEvent::Completed { .. } | EngineEvent::Failed(_) | EngineEvent::Cancelled => {

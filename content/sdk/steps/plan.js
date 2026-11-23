@@ -28,6 +28,6 @@ export default step({
       return ctx.fail({ session: result.session, plan, error: output.reason ?? "o plano não foi aprovado" });
     }
     const title = output.title ?? (written.title || item.title || "");
-    return ctx.pass({ session: result.session, plan, title, story: written.story });
+    return ctx.pass({ session: result.session, plan, title, story: written.story, subtasks: written.subtasks });
   },
 });

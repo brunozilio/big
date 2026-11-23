@@ -42,16 +42,42 @@ export function source(ctx, opts, kind) {
   return object(ctx.output(ids[kind] ?? kind));
 }
 
+function sections(body) {
+  const found = {};
+  let name = "";
+  for (const line of body.split("\n")) {
+    const heading = /^##\s+(.+?)\s*$/.exec(line);
+    if (heading) {
+      name = heading[1].toLowerCase();
+      found[name] = [];
+    } else if (name) {
+      found[name].push(line);
+    }
+  }
+  return Object.fromEntries(Object.entries(found).map(([key, lines]) => [key, lines.join("\n").trim()]));
+}
+
+function subtasksOf(text) {
+  return String(text ?? "")
+    .split(/^###\s+/m)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .map((part) => {
+      const [first, ...rest] = part.split("\n");
+      return { title: first.trim(), details: rest.join("\n").trim() };
+    });
+}
+
 export function parsePlan(text) {
   const lines = String(text ?? "").split("\n");
   const at = lines.findIndex((line) => /^# \S/.test(line));
-  if (at < 0) return { title: "", story: "", plan: String(text ?? "").trim(), text: String(text ?? "").trim() };
+  if (at < 0) return { title: "", story: "", subtasks: [], text: String(text ?? "").trim() };
   const title = lines[at].slice(2).trim();
-  const body = lines.slice(at + 1).join("\n");
-  const split = body.search(/^#{2,3} Plano\s*$/m);
-  const story = (split < 0 ? body : body.slice(0, split)).trim();
-  const plan = split < 0 ? "" : body.slice(split).replace(/^#{2,3} Plano\s*$/m, "").trim();
-  return { title, story, plan, text: lines.slice(at).join("\n").trim() };
+  const found = sections(lines.slice(at + 1).join("\n"));
+  const description = found["descrição"] ?? found["descricao"] ?? "";
+  const criteria = found["critérios de aceite"] ?? found["criterios de aceite"] ?? "";
+  const story = [description, criteria ? `## Critérios de aceite\n${criteria}` : ""].filter(Boolean).join("\n\n");
+  return { title, story, subtasks: subtasksOf(found["subtarefas"]), text: lines.slice(at).join("\n").trim() };
 }
 
 export function planOf(ctx, opts) {
@@ -60,6 +86,7 @@ export function planOf(ctx, opts) {
     title: opts.title ?? found.title ?? ctx.item.title ?? "",
     text: opts.plan ?? found.plan ?? "",
     story: found.story ?? "",
+    subtasks: Array.isArray(found.subtasks) ? found.subtasks : [],
   };
 }
 

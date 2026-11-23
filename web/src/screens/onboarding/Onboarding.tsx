@@ -1,14 +1,14 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useState, type ReactNode } from 'react'
+import { useState } from 'react'
 import { api } from '@/api'
-import type { Application, ApplicationRepository, CodeRepo, Connection, DirListing, Provider, TrackerProject } from '@/api/contract'
+import type { Application, ApplicationRepository, CodeRepo, DirListing, TrackerProject } from '@/api/contract'
 import { errorText, setApplications, useStore } from '@/api/store'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
-import { LogoTile, ProductMark, ProviderLogo } from '@/ui/domain'
+import { ProductMark, ProviderLogo } from '@/ui/domain'
 import { Field, Input, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
-import { tween, tweenClose } from '@/ui/motion'
+import { tweenClose } from '@/ui/motion'
 import { ConnectDialog } from '../settings/ConnectDialog'
 import { ConnectionCard } from '../settings/ConnectionCard'
 import { FolderDialog } from '../settings/FolderDialog'
@@ -127,60 +127,7 @@ function ApplicationStage({ draft, onChange, onFolder, projects, repos }: { draf
   )
 }
 
-function Row({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-3 text-sm">
-      <span className="flex items-center gap-2 text-muted">{icon}{label}</span>
-      <span className="flex min-w-0 items-center gap-1.5 truncate text-fg">{children}</span>
-    </div>
-  )
-}
-
-function Skeleton({ title }: { title: string }) {
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-faint">{title}</p>
-      {[64, 48, 56].map((w) => (
-        <div key={w} className="flex items-center gap-2.5">
-          <span className="size-3 rounded-full bg-inset" />
-          <span className="h-2 rounded-full bg-inset" style={{ width: `${w}%` }} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function Preview({ draft, connections, providers }: { draft: Draft; connections: Connection[]; providers: Provider[] }) {
-  const providerOf = (connection: string | undefined) => providers.find((p) => p.key === connections.find((c) => c.id === connection)?.provider)
-  const tracker = providerOf(draft.tracker?.connection)
-  const coder = providerOf(draft.repository.code?.connection)
-  const connected = providers.filter((p) => connections.some((c) => c.provider === p.key))
-  return (
-    <div className="relative hidden h-full overflow-hidden rounded-card bg-inset md:block">
-      <div className="absolute bottom-0 left-10 right-16 top-24 space-y-8 rounded-t-card bg-subtle px-6 pt-[260px]">
-        <Skeleton title="Itens" />
-        <Skeleton title="Etapas" />
-      </div>
-      <motion.div layout transition={tween} className="absolute left-6 right-10 top-10 space-y-4 rounded-card bg-surface p-5 shadow-pop">
-        <span className="flex size-10 items-center justify-center rounded-control bg-fg text-bg"><Icon name="apps" size={20} /></span>
-        <div>
-          <p className="truncate text-lg font-medium text-fg">{draft.name || 'Sua aplicação'}</p>
-          <p className="flex items-center gap-1.5 truncate font-mono text-xs text-muted"><Icon name="folder" size={12} />{draft.repository.directory ? folderName(draft.repository.directory) : 'pasta do repositório'}</p>
-        </div>
-        <div className="space-y-2.5">
-          <Row icon={<Icon name="sTicket" size={14} />} label="Espaço">{tracker && <ProviderLogo logo={tracker.logo} name={tracker.name} size={13} />}{draft.tracker?.project ?? '—'}</Row>
-          <Row icon={<Icon name="sCode" size={14} />} label="Repositório">{coder && <ProviderLogo logo={coder.logo} name={coder.name} size={13} />}{draft.repository.code?.repo ?? '—'}</Row>
-          <Row icon={<Icon name="link" size={14} />} label="Conexões">
-            {connected.length === 0 ? '—' : connected.map((p) => <LogoTile key={p.key} logo={p.logo} name={p.name} size={20} />)}
-          </Row>
-        </div>
-      </motion.div>
-    </div>
-  )
-}
-
 export function Onboarding({ onDone }: { onDone: () => void }) {
-  const data = useStore((s) => s.connections)
   const [stage, setStage] = useState<Stage>('connections')
   const [draft, setDraft] = useState<Draft>(blank)
   const [connecting, setConnecting] = useState<string | null>(null)
@@ -219,8 +166,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
   return (
     <div className="flex min-h-full flex-col items-center bg-subtle px-4 py-10">
       <ProductMark size={34} className="mb-8" />
-      <div className="grid w-full max-w-[1040px] gap-2 rounded-card bg-bg p-2 shadow-card md:h-[640px] md:grid-cols-2">
-        <div className="flex min-h-0 flex-col p-6 md:p-8">
+      <div className="w-full max-w-[560px] rounded-card bg-bg shadow-card">
+        <div className="flex max-h-[calc(100dvh-160px)] min-h-[520px] flex-col p-6 md:p-8">
           <Steps stage={stage} />
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
@@ -246,7 +193,6 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
             )}
           </div>
         </div>
-        <Preview draft={draft} connections={data?.connections ?? []} providers={data?.providers ?? []} />
       </div>
       <ConnectDialog provider={connecting} onClose={() => setConnecting(null)} />
       <FolderDialog open={choosing} start={draft.repository.directory || null} onClose={() => setChoosing(false)} onChoose={chosen} />

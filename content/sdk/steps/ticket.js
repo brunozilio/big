@@ -22,6 +22,12 @@ export default step({
     });
     const connection = opts.connection ?? ctx.item.connection;
     const created = await ctx.call("tracker", "create_issue", args, effects({ ...opts, connection }));
-    return ctx.pass(defined({ issue: created.ref, url: created.url, title: created.title ?? plan.title, created: true }));
+    const subtasks = [];
+    for (const task of opts.subtasks === false ? [] : plan.subtasks) {
+      const child = defined({ project: args.project, title: task.title, description: task.details, parent: created.ref });
+      const made = await ctx.call("tracker", "create_issue", child, effects({ ...opts, connection }));
+      subtasks.push({ issue: made.ref, title: task.title });
+    }
+    return ctx.pass(defined({ issue: created.ref, url: created.url, title: created.title ?? plan.title, created: true, subtasks: subtasks.length > 0 ? subtasks : undefined }));
   },
 });

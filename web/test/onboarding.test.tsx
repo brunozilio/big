@@ -42,7 +42,7 @@ describe('primeira vez', () => {
     fireEvent.click(screen.getByText('Continuar'))
     expect(await screen.findByText('Crie sua aplicação')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Loja' } })
-    expect(screen.getAllByText('Loja').length).toBeGreaterThan(0)
+    expect((screen.getByLabelText('Nome') as HTMLInputElement).value).toBe('Loja')
     expect((screen.getByText('Criar aplicação').closest('button') as HTMLButtonElement).disabled).toBe(true)
     fireEvent.click(screen.getByText('Pular por agora'))
     expect(done).toBe(1)

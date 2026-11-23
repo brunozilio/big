@@ -80,6 +80,7 @@ export interface PlanOutput {
   plan: string;
   title: string;
   story: string;
+  subtasks: { title: string; details: string }[];
 }
 
 export interface TestsOptions extends AgentStepOptions {
@@ -100,6 +101,7 @@ export interface TicketOptions extends EffectStepOptions {
   type?: string;
   labels?: string[];
   parent?: string;
+  subtasks?: boolean;
 }
 
 export interface TicketOutput {

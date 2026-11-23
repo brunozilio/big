@@ -373,7 +373,7 @@ export default workflow({
     assert!(result["result"]["output"].as_str().is_some_and(|out| out.contains("Nenhum comando de verificação")), "{result}");
 }
 
-const WRITTEN_PLAN: &str = "Vou ler o código antes.\n# Cadastro de clientes\n\n**Como** atendente,\n**eu quero** cadastrar clientes,\n**para** atendê-los depois.\n\n### Critérios de aceite\n- [ ] Cadastro salva o cliente\n\n### Plano\n1. Criar a tabela\n2. Criar a ferramenta";
+const WRITTEN_PLAN: &str = "Vou ler o código antes.\n# Cadastro de clientes\n\n## Descrição\nComo atendente, eu quero cadastrar clientes para que eu os atenda depois.\n\n## Critérios de aceite\n- Dado que estou no cadastro, quando salvo um cliente, então ele aparece na lista.\n\n## Subtarefas\n### Criar a tabela\nTabela clientes com nome e documento.\n\n### Criar a ferramenta\nFerramenta MCP de cadastro.";
 
 #[test]
 fn the_plan_gives_the_title_the_story_goes_to_the_issue_and_the_pull_request_is_short() {
@@ -390,10 +390,19 @@ fn the_plan_gives_the_title_the_story_goes_to_the_issue_and_the_pull_request_is_
         Some(reply)
     });
     assert_eq!(result["state"], "completed", "{result}");
-    let issue = &calls(&asked, "create_issue")[0]["args"]["args"];
+    let created = calls(&asked, "create_issue");
+    let issue = &created[0]["args"]["args"];
     assert_eq!(issue["title"], "Cadastro de clientes");
     let story = issue["description"].as_str().expect("description");
-    assert!(story.starts_with("**Como** atendente") && story.contains("Critérios de aceite") && !story.contains("Criar a tabela"), "{story}");
+    assert!(story.starts_with("Como atendente, eu quero") && story.contains("## Critérios de aceite\n- Dado que") && !story.contains("Criar a tabela"), "{story}");
+    let subtasks: Vec<(&Value, &Value, &Value)> = created[1..]
+        .iter()
+        .map(|call| (&call["args"]["args"]["title"], &call["args"]["args"]["description"], &call["args"]["args"]["parent"]))
+        .collect();
+    assert_eq!(subtasks, [
+        (&json!("Criar a tabela"), &json!("Tabela clientes com nome e documento."), &json!("T-9")),
+        (&json!("Criar a ferramenta"), &json!("Ferramenta MCP de cadastro."), &json!("T-9")),
+    ]);
     let developer = of_kind(&asked, "agent").into_iter().find(|command| command["args"]["name"] == "developer").cloned();
     let prompt = developer.expect("developer")["args"]["input"]["prompt"].as_str().unwrap_or_default().to_owned();
     assert!(prompt.contains("Cenário: x") && prompt.contains("Criar a tabela"), "{prompt}");

@@ -36,6 +36,15 @@ fn an_approved_plan_remembers_the_mode_it_goes_on_in() {
 }
 
 #[test]
+fn a_plan_approved_while_staying_in_plan_mode_reads_as_approved() {
+    let mut transcript = Transcript::default();
+    presented(&mut transcript);
+    transcript.apply(&EngineEvent::ToolResult { id: "p1".into(), output: "approved".into(), failed: false });
+    transcript.apply(&EngineEvent::Completed { duration_ms: 5, cost_usd: None });
+    assert_eq!(outcome(&transcript), Some(Outcome::Approved(PermissionMode::Plan)), "a workflow's planner stops there");
+}
+
+#[test]
 fn a_plan_that_was_refused_or_left_open_kept_planning() {
     let mut refused = Transcript::default();
     presented(&mut refused);
