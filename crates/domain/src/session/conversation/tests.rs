@@ -218,3 +218,18 @@ fn a_finished_run_says_how_long_it_took_and_what_it_cost() {
     assert_eq!(done(900, None), "✓ Done in 1s");
     assert_eq!(done(5_000, Some(0.0)), "✓ Done in 5s", "a free run shows no cost");
 }
+
+#[test]
+fn a_thinking_followed_by_anything_else_stops_thinking_even_if_more_thinking_comes() {
+    let mut transcript = Transcript::default();
+    for event in [
+        EngineEvent::ThinkingDelta("first".into()),
+        EngineEvent::Refused { tool: "Write".into(), reason: "planning".into() },
+        EngineEvent::ThinkingDelta("second".into()),
+        EngineEvent::Picked { model: "m".into(), effort: crate::Effort::Medium },
+    ] {
+        transcript.apply(&event);
+    }
+    let open = transcript.entries.iter().filter(|entry| matches!(entry, Entry::Thinking { done: false, .. })).count();
+    assert_eq!(open, 0, "{:?}", transcript.entries);
+}

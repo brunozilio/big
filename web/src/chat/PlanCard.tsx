@@ -137,7 +137,7 @@ function Decide({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: bo
       </Collapse>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         <p className="min-w-0 flex-1 text-md text-muted">
-          {revising ? 'O planejador refaz o plano com o que você pedir.' : target ? `Cria a issue no ${target.name} com este plano e segue para o desenvolvimento.` : 'O desenvolvimento só começa depois que você aprovar.'}
+          {revising ? 'O planejador refaz o plano com o que você pedir.' : target ? null : 'O desenvolvimento só começa depois que você aprovar.'}
         </p>
         <div className="flex shrink-0 gap-2">
           {revising ? (

@@ -82,7 +82,7 @@ export function ChatView({ sessionId, composer, dock }: { sessionId: string; com
                     </motion.div>
                   )}
                   <TurnWork live={live} started={started} ended={ended ?? started} events={turn.events} render={(e) => {
-                    const node = <EventView event={e} respond={respond} />
+                    const node = <EventView event={e} running={running} respond={respond} />
                     return <motion.div key={e.id} data-event={e.type} {...enterFor(e.id)}>{node}</motion.div>
                   }} />
                 </section>
@@ -124,14 +124,14 @@ export function ChatView({ sessionId, composer, dock }: { sessionId: string; com
   )
 }
 
-export function EventView({ event, respond }: { event: SessionEvent; respond: Respond }) {
+export function EventView({ event, running = true, respond }: { event: SessionEvent; running?: boolean; respond: Respond }) {
   switch (event.type) {
     case 'user':
       return <UserMessage event={event} />
     case 'assistant':
       return <AssistantMessage event={event} />
     case 'thinking':
-      return <ThinkingSteps event={event} />
+      return <ThinkingSteps event={running ? event : { ...event, live: false }} />
     case 'tools':
       return <ToolRunSummary event={event} />
     case 'status':
@@ -146,7 +146,7 @@ export function EventView({ event, respond }: { event: SessionEvent; respond: Re
 }
 
 function TurnWork({ live, started, ended, events, render }: { live: boolean; started?: string; ended: string | undefined; events: SessionEvent[]; render: (e: SessionEvent) => ReactNode }) {
-  const work = events.filter((e) => !human(e) && !emptyThinking(e))
+  const work = events.filter((e) => !human(e) && !emptyThinking(e, live))
   const finals = events.filter(human)
   const [open, setOpen] = useState(live)
   useEffect(() => setOpen(live), [live])

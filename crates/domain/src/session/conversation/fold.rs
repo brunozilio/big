@@ -136,12 +136,11 @@ impl Transcript {
         });
     }
 
-    fn close_thinking(&mut self) {
-        let open = self.entries.iter().rposition(|entry| matches!(entry, Entry::Thinking { .. }));
-        if let Some(at) = open
-            && let Entry::Thinking { done: done @ false, .. } = &mut self.entries[at]
-        {
-            *done = true;
+    pub(super) fn close_thinking(&mut self) {
+        for entry in &mut self.entries {
+            if let Entry::Thinking { done: done @ false, .. } = entry {
+                *done = true;
+            }
         }
     }
 

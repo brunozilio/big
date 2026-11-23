@@ -17,3 +17,9 @@ describe('pensamento vazio', () => {
     expect(emptyThinking(thinking(false, 'Lendo'))).toBe(false)
   })
 })
+
+test('sessão parada não deixa pensamento vazio girando', () => {
+  const stuck = { id: 't', at: '2026-11-23T00:00:00Z', type: 'thinking' as const, steps: [{ text: '', done: false }], seconds: 0, live: true }
+  expect(emptyThinking(stuck, false)).toBe(true)
+  expect(emptyThinking(stuck, true)).toBe(false)
+})

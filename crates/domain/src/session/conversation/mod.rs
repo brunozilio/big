@@ -101,6 +101,9 @@ pub fn call(name: &str, summary: &str) -> String {
 
 impl Transcript {
     pub fn push(&mut self, entry: Entry) {
+        if !matches!(entry, Entry::Thinking { .. }) {
+            self.close_thinking();
+        }
         self.entries.push(entry);
     }
 
