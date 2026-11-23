@@ -7,8 +7,7 @@ use crate::http::Method;
 use crate::idempotency;
 use crate::provider::{Args, text_of};
 
-const ISSUE_FIELDS: &str =
-    "summary,description,status,labels,attachment,subtasks,comment,created,updated,issuetype,assignee";
+const ISSUE_FIELDS: &str = "summary,description,status,labels,attachment,subtasks,comment,created,updated";
 const DEFAULT_LIMIT: u64 = 50;
 
 fn property(key: &str) -> Value {
@@ -19,20 +18,9 @@ fn flagged(value: Option<&Value>) -> bool {
     value.and_then(Value::as_array).is_some_and(|flags| !flags.is_empty())
 }
 
-fn created(api: &Api<'_>, issue: &Value, title: &str, fresh: bool) -> Value {
+fn created(api: &Api<'_>, issue: &Value, fresh: bool) -> Value {
     let key = text_of(issue, "/key");
-    json!({
-        "ref": key,
-        "id": text_of(issue, "/id"),
-        "url": api.browse(&key),
-        "title": title,
-        "status": text_of(issue, "/fields/status/name"),
-        "created": fresh,
-    })
-}
-
-fn project_of<'a>(api: &'a Api<'_>, args: Args<'a>) -> Result<&'a str, ActionError> {
-    args.optional_text("project").or(api.project.as_deref()).ok_or_else(|| ActionError::missing("project"))
+    json!({ "id": text_of(issue, "/id"), "url": api.browse(&key), "key": key, "created": fresh })
 }
 
 async fn find_issue(api: &Api<'_>, project: &str, title: &str, key: &str) -> Result<Option<Value>, ActionError> {
@@ -43,23 +31,22 @@ async fn find_issue(api: &Api<'_>, project: &str, title: &str, key: &str) -> Res
     }
     jql.push_str(" ORDER BY created DESC");
     let name = idempotency::property_key();
-    let body = json!({ "jql": jql, "fields": ["summary", "status"], "properties": [name], "maxResults": 50 });
+    let body = json!({ "jql": jql, "fields": ["summary"], "properties": [name], "maxResults": 50 });
     let page = api.send(Method::Post, "/search/jql", &body).await?;
     let issues = page["issues"].as_array().map(Vec::as_slice).unwrap_or_default();
     Ok(issues.iter().find(|issue| issue["properties"][&name]["key"].as_str() == Some(key)).cloned())
 }
 
 pub async fn create_issue(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Value, ActionError> {
-    let project = project_of(api, args)?;
+    let project = args.text("project")?;
     let title = args.text("title")?;
     if !key.is_empty()
         && let Some(found) = find_issue(api, project, title, key).await?
     {
-        return Ok(created(api, &found, title, false));
+        return Ok(created(api, &found, false));
     }
     let parent = args.optional_text("parent");
-    let named = args.optional_text("type").or_else(|| args.optional_text("issue_type"));
-    let kind = named.unwrap_or(if parent.is_some() { "Subtask" } else { "Task" });
+    let kind = args.optional_text("issue_type").unwrap_or(if parent.is_some() { "Subtask" } else { "Task" });
     let mut fields = json!({
         "project": { "key": project },
         "summary": title,
@@ -77,7 +64,7 @@ pub async fn create_issue(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Va
         body["properties"] = property(key);
     }
     let answer = api.send(Method::Post, "/issue", &body).await?;
-    Ok(created(api, &answer, title, true))
+    Ok(created(api, &answer, true))
 }
 
 fn comments(fields: &Value) -> Vec<Value> {
@@ -87,7 +74,7 @@ fn comments(fields: &Value) -> Vec<Value> {
         .map(|comment| {
             json!({
                 "id": text_of(comment, "/id"),
-                "author": person(&comment["author"]),
+                "author": text_of(comment, "/author/displayName"),
                 "body": adf_to_markdown(&comment["body"]),
                 "at": text_of(comment, "/created"),
             })
@@ -95,56 +82,41 @@ fn comments(fields: &Value) -> Vec<Value> {
         .collect()
 }
 
-fn person(found: &Value) -> Value {
-    if found.is_null() {
-        return Value::Null;
-    }
-    json!({ "id": text_of(found, "/accountId"), "name": text_of(found, "/displayName") })
-}
-
-fn subtask(api: &Api<'_>, task: &Value) -> Value {
-    let key = text_of(task, "/key");
-    json!({
-        "url": api.browse(&key),
-        "ref": key,
-        "title": text_of(task, "/fields/summary"),
-        "status": text_of(task, "/fields/status/name"),
-        "done": text_of(task, "/fields/status/statusCategory/key") == "done",
-    })
-}
-
-fn attachment(file: &Value) -> Value {
-    json!({
-        "id": text_of(file, "/id"),
-        "name": text_of(file, "/filename"),
-        "url": text_of(file, "/content"),
-        "mime": text_of(file, "/mimeType"),
-        "size": file["size"],
-    })
-}
-
-fn list(value: &Value) -> &[Value] {
-    value.as_array().map(Vec::as_slice).unwrap_or_default()
-}
-
 pub async fn issue(api: &Api<'_>, issue: &str) -> Result<Value, ActionError> {
     let path = format!("/issue/{}?fields={ISSUE_FIELDS},{}", jql_key(issue)?, api.flag_field);
     let answer = api.get(&path).await?;
     let fields = &answer["fields"];
+    let subtasks: Vec<Value> = fields["subtasks"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|task| {
+            json!({
+                "key": text_of(task, "/key"),
+                "title": text_of(task, "/fields/summary"),
+                "status": text_of(task, "/fields/status/name"),
+            })
+        })
+        .collect();
+    let attachments: Vec<Value> = fields["attachment"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|file| json!({ "name": text_of(file, "/filename"), "size": file["size"], "url": text_of(file, "/content") }))
+        .collect();
     let key = text_of(&answer, "/key");
-    let kind = text_of(fields, "/issuetype/name");
     Ok(json!({
         "url": api.browse(&key),
-        "ref": key,
+        "key": key,
         "title": text_of(fields, "/summary"),
         "description": adf_to_markdown(&fields["description"]),
         "status": text_of(fields, "/status/name"),
-        "type": if kind.is_empty() { Value::Null } else { json!(kind) },
-        "assignee": person(&fields["assignee"]),
-        "impediment": { "on": flagged(fields.get(&api.flag_field)), "reason": null },
-        "labels": fields["labels"].as_array().cloned().unwrap_or_default(),
-        "subtasks": list(&fields["subtasks"]).iter().map(|task| subtask(api, task)).collect::<Vec<_>>(),
-        "attachments": list(&fields["attachment"]).iter().map(attachment).collect::<Vec<_>>(),
+        "impediment": flagged(fields.get(&api.flag_field)),
+        "labels": fields["labels"],
+        "subtasks": subtasks,
+        "attachments": attachments,
         "comments": comments(fields),
         "updated": text_of(fields, "/updated"),
     }))
@@ -164,7 +136,7 @@ pub async fn comment(api: &Api<'_>, issue: &str, body: &str, key: &str) -> Resul
             api.get(&format!("/issue/{issue}/comment?expand=properties&orderBy=-created&maxResults=100")).await?;
         let listed = page["comments"].as_array().map(Vec::as_slice).unwrap_or_default();
         if let Some(found) = listed.iter().find(|comment| carries_key(comment, key)) {
-            return Ok(comment_view(found, body, false));
+            return Ok(json!({ "id": text_of(found, "/id"), "created": false }));
         }
     }
     let mut request = json!({ "body": markdown_to_adf(body) });
@@ -172,21 +144,10 @@ pub async fn comment(api: &Api<'_>, issue: &str, body: &str, key: &str) -> Resul
         request["properties"] = property(key);
     }
     let answer = api.send(Method::Post, &format!("/issue/{issue}/comment"), &request).await?;
-    Ok(comment_view(&answer, body, true))
+    Ok(json!({ "id": text_of(&answer, "/id"), "created": true }))
 }
 
-fn comment_view(found: &Value, body: &str, fresh: bool) -> Value {
-    json!({
-        "id": text_of(found, "/id"),
-        "author": person(&found["author"]),
-        "body": body,
-        "at": text_of(found, "/created"),
-        "created": fresh,
-    })
-}
-
-pub async fn statuses(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
-    let project = project_of(api, args)?;
+pub async fn statuses(api: &Api<'_>, project: &str) -> Result<Value, ActionError> {
     let answer = api.get(&format!("/project/{}/statuses", jql_key(project)?)).await?;
     let mut seen: Vec<Value> = Vec::new();
     for kind in answer.as_array().map(Vec::as_slice).unwrap_or_default() {
@@ -201,7 +162,7 @@ pub async fn statuses(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionErro
             }
         }
     }
-    Ok(Value::Array(seen))
+    Ok(json!({ "statuses": seen }))
 }
 
 pub async fn transition(api: &Api<'_>, issue: &str, target: &str) -> Result<Value, ActionError> {
@@ -209,7 +170,7 @@ pub async fn transition(api: &Api<'_>, issue: &str, target: &str) -> Result<Valu
     let current = api.get(&format!("/issue/{issue}?fields=status")).await?;
     let now = text_of(&current, "/fields/status/name");
     if now.eq_ignore_ascii_case(target) {
-        return Ok(json!({ "ref": issue, "status": now, "changed": false }));
+        return Ok(json!({ "status": now, "changed": false }));
     }
     let page = api.get(&format!("/issue/{issue}/transitions")).await?;
     let listed = page["transitions"].as_array().map(Vec::as_slice).unwrap_or_default();
@@ -219,7 +180,7 @@ pub async fn transition(api: &Api<'_>, issue: &str, target: &str) -> Result<Valu
         .ok_or_else(|| ActionError::permanent(format!("{issue} cannot go from {now} to {target}")))?;
     let body = json!({ "transition": { "id": text_of(found, "/id") } });
     api.send(Method::Post, &format!("/issue/{issue}/transitions"), &body).await?;
-    Ok(json!({ "ref": issue, "status": text_of(found, "/to/name"), "changed": true }))
+    Ok(json!({ "status": text_of(found, "/to/name"), "changed": true }))
 }
 
 pub async fn set_impediment(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Value, ActionError> {
@@ -232,7 +193,7 @@ pub async fn set_impediment(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<
     if on && let Some(reason) = args.optional_text("reason") {
         comment(api, issue, reason, key).await?;
     }
-    Ok(json!({ "on": on, "reason": if on { args.optional_text("reason") } else { None } }))
+    Ok(json!({ "impediment": on }))
 }
 
 pub async fn search(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
@@ -243,8 +204,7 @@ pub async fn search(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError>
     if let Some(status) = args.optional_text("status") {
         clauses.push(format!("status = \"{}\"", jql_text(status)));
     }
-    let text = args.optional_text("query").or_else(|| args.optional_text("text"));
-    if let Some(text) = text.map(jql_text).filter(|text| !text.is_empty()) {
+    if let Some(text) = args.optional_text("text").map(jql_text).filter(|text| !text.is_empty()) {
         clauses.push(format!("text ~ \"{text}\""));
     }
     if clauses.is_empty() {
@@ -261,10 +221,8 @@ pub async fn search(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError>
         .unwrap_or_default()
         .iter()
         .map(|issue| {
-            let key = text_of(issue, "/key");
             json!({
-                "url": api.browse(&key),
-                "ref": key,
+                "key": text_of(issue, "/key"),
                 "title": text_of(issue, "/fields/summary"),
                 "status": text_of(issue, "/fields/status/name"),
                 "impediment": flagged(issue["fields"].get(&api.flag_field)),
@@ -272,5 +230,5 @@ pub async fn search(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError>
             })
         })
         .collect();
-    Ok(json!({ "issues": issues, "cursor": null }))
+    Ok(json!({ "issues": issues }))
 }
