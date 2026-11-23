@@ -50,6 +50,7 @@ pub struct State {
     pub sent: Vec<String>,
     pub merges: usize,
     pub deploy_reviews: Vec<String>,
+    pub ci_running: bool,
     next: u64,
 }
 
@@ -136,6 +137,20 @@ impl Github {
         }
     }
 
+    pub fn finish_ci(&self, conclusion: &str) {
+        let mut state = self.state();
+        state.ci_running = false;
+        for run in state.runs.iter_mut().filter(|run| run.status == "in_progress") {
+            run.status = "completed".into();
+            run.conclusion = Some(conclusion.into());
+            run.updated = now();
+        }
+    }
+
+    pub fn ci_runs(&self) -> usize {
+        self.state().runs.iter().filter(|run| run.name == "CI").count()
+    }
+
     pub fn approve_deploy(&self) {
         let mut state = self.state();
         for run in state.runs.iter_mut().filter(|run| run.status == "waiting") {
@@ -162,13 +177,14 @@ impl Github {
         }
         let conclusion = state.ci.pop_front().unwrap_or_else(|| "success".into());
         let id = state.next();
+        let running = state.ci_running;
         let run = Run {
             id,
             name: "CI".into(),
             branch: branch.to_owned(),
             sha,
-            status: "completed".into(),
-            conclusion: Some(conclusion),
+            status: if running { "in_progress" } else { "completed" }.into(),
+            conclusion: (!running).then_some(conclusion),
             updated: now(),
         };
         state.runs.push(run);

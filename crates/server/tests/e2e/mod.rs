@@ -241,6 +241,18 @@ impl Server {
             .await;
     }
 
+    pub async fn create(&self, body: Value) -> String {
+        let item = self.post("/api/items", body).await;
+        item["id"].as_str().expect("id").to_owned()
+    }
+
+    pub async fn approve_plan(&self, id: &str) {
+        let ask = self.ask(id, "the plan").await;
+        assert!(matches!(ask.ask.kind, domain::AskKind::Plan { .. }), "{ask:?}");
+        self.until(id, "the plan asks", |item| item["group"] == "you").await;
+        self.respond(&ask, json!({ "kind": "plan", "decision": "approve" })).await;
+    }
+
     pub async fn stop(self) {
         drop(self.handle);
         tokio::time::sleep(Duration::from_millis(200)).await;
