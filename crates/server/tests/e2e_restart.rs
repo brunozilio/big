@@ -22,6 +22,20 @@ async fn until_true(what: &str, check: impl Fn() -> bool) {
     panic!("{what} never happened");
 }
 
+async fn until_true_async<F, Fut>(what: &str, check: F)
+where
+    F: Fn() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    for _ in 0..500 {
+        if check().await {
+            return;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("{what} never happened");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn a_restart_in_the_middle_of_develop_resumes_the_session_without_repeating_effects() {
     let hub = Hub::new();
@@ -32,6 +46,10 @@ async fn a_restart_in_the_middle_of_develop_resumes_the_session_without_repeatin
     until_true("the developer starts", || hub.agents.runs_of("developer").len() == 1).await;
     let before = server.until(&id, "develop runs", |item| item["current"] == "develop").await;
     assert_eq!(before["live"], true);
+    until_true_async("the develop session is recorded", || async {
+        server.get(&format!("/api/items/{id}/steps/develop")).await.to_string().contains("developer-")
+    })
+    .await;
     server.stop().await;
 
     hub.agents.script.hold_develop.store(false, Ordering::SeqCst);
