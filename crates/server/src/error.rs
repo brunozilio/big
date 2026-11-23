@@ -52,7 +52,9 @@ impl From<orchestrator::Error> for ApiError {
             orchestrator::Error::NotWaiting { .. } | orchestrator::Error::Ended(_) => ApiError::busy(text),
             orchestrator::Error::UnknownStep(_)
             | orchestrator::Error::UnknownAsk(_)
-            | orchestrator::Error::UnknownItem(_) => ApiError::missing(text),
+            | orchestrator::Error::UnknownItem(_)
+            | orchestrator::Error::UnknownCloudToken => ApiError::missing(text),
+            orchestrator::Error::Cloud(_) => ApiError::upstream(text),
             orchestrator::Error::Store(_) | orchestrator::Error::Script(_) => ApiError::failed(text),
         }
     }

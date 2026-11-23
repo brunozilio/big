@@ -76,6 +76,7 @@ pub struct Config {
     pub resources: Resources,
     pub repo: Option<PathBuf>,
     pub data: PathBuf,
+    pub server: Option<String>,
     pub limits: Limits,
     pub sync: bool,
     pub sync_config: sync::SyncConfig,
@@ -88,6 +89,7 @@ impl fmt::Debug for Config {
             .field("resources", &self.resources)
             .field("repo", &self.repo)
             .field("data", &self.data)
+            .field("server", &self.server)
             .field("limits", &self.limits)
             .finish_non_exhaustive()
     }
@@ -102,6 +104,7 @@ impl Config {
             resources: Resources::standard(None),
             repo: None,
             data,
+            server: None,
             limits: Limits::from_config(),
             sync: true,
             sync_config: sync::SyncConfig::from_brand(),
@@ -130,6 +133,12 @@ impl Config {
     #[must_use]
     pub fn with_sync_config(mut self, sync_config: sync::SyncConfig) -> Config {
         self.sync_config = sync_config;
+        self
+    }
+
+    #[must_use]
+    pub fn with_server(mut self, url: impl Into<String>) -> Config {
+        self.server = Some(url.into());
         self
     }
 

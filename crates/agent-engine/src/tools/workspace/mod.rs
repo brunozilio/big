@@ -34,6 +34,7 @@ pub struct Workspace {
     pub stop: Arc<platform::Stop>,
     pub detach: Arc<AtomicBool>,
     pub credentials: domain::credentials::RunCredentials,
+    pub environment: Vec<(String, String)>,
     pub prompt_context: Option<crate::prompt::Environment>,
     pub hooks: crate::hooks::Hooks,
     pub home: Option<PathBuf>,
@@ -60,6 +61,7 @@ impl Workspace {
             stop: Arc::default(),
             detach: Arc::default(),
             credentials: Default::default(),
+            environment: Vec::new(),
             prompt_context: None,
             hooks: Default::default(),
             home: None,
@@ -92,6 +94,7 @@ impl Workspace {
     pub fn for_request(request: &domain::PromptRequest) -> Self {
         Self {
             credentials: request.host.credentials.clone(),
+            environment: request.host.environment.clone(),
             models: Models::new(request.session.model.clone()),
             ..Self::new(&request.session.cwd)
         }
@@ -103,6 +106,7 @@ impl Workspace {
             stop,
             detach: Arc::clone(&self.detach),
             credentials: self.credentials.clone(),
+            environment: self.environment.clone(),
             prompt_context: self.prompt_context.clone(),
             hooks: self.hooks.clone(),
             home: self.home.clone(),

@@ -9,7 +9,7 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::error::ApiError;
 use crate::state::Ctx;
-use crate::{applications, attachments, branding, connections, folders, items, models, sessions};
+use crate::{applications, attachments, branding, cloud, connections, folders, items, models, sessions};
 
 const MOST_BODY_BYTES: usize = 32 * 1024 * 1024;
 
@@ -35,6 +35,7 @@ fn api() -> Router<Ctx> {
         .route("/api/branding", get(branding::get).put(branding::put))
         .route("/api/applications", get(applications::list).post(applications::create))
         .route("/api/applications/{id}", put(applications::update).delete(applications::remove))
+        .route(&cloud::route(), get(cloud::credentials))
         .route("/api/fs/dirs", get(folders::dirs))
         .route("/api/attachments", post(attachments::upload))
         .route("/api/live", get(live))

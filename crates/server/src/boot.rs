@@ -30,8 +30,10 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
     let sink = Arc::new(StoredSettings(Arc::clone(&store)));
     let connectors = Arc::new(Connectors::new(http, keeper).with_sink(sink));
+    let address = launch.listener.local_addr().map_err(|error| error.to_string())?;
     let config = Config::new(Arc::clone(&store), Arc::clone(&connectors), engine.clone(), launch.data.clone())
-        .in_repo(launch.repo.clone());
+        .in_repo(launch.repo.clone())
+        .with_server(format!("http://{address}"));
     let handle = Orchestrator::start(config).map_err(|error| error.to_string())?;
     let remembered = (client.clone(), Arc::clone(&engine));
     std::thread::spawn(move || {

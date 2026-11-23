@@ -100,6 +100,10 @@ impl Orchestrator {
         self.shared.config.repo.clone()
     }
 
+    pub async fn cloud_credentials(&self, token: &str) -> Result<Value> {
+        crate::cloud::credentials(&self.shared, token).await
+    }
+
     pub fn workflows(&self) -> Vec<String> {
         self.shared.config.resources.workflows()
     }

@@ -14,6 +14,10 @@ pub enum Error {
     UnknownStep(String),
     #[error("the item {0} has ended")]
     Ended(String),
+    #[error("no agent holds this cloud token")]
+    UnknownCloudToken,
+    #[error("the cloud credentials could not be had: {0}")]
+    Cloud(String),
 }
 
 pub type Result<T> = std::result::Result<T, Error>;

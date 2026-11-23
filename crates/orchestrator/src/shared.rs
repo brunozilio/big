@@ -15,6 +15,7 @@ use tokio::task::AbortHandle;
 
 use crate::activation::Script;
 use crate::asks::Asks;
+use crate::cloud::Leases;
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::events::{OrchestratorEvent, Wake};
@@ -41,6 +42,7 @@ pub struct Shared {
     pub permits: Arc<Semaphore>,
     pub token: CancellationToken,
     pub sync: OnceLock<Arc<sync::Synchronizer>>,
+    pub clouds: Leases,
     runners: Mutex<HashMap<ItemId, (u64, mpsc::UnboundedSender<Wake>)>>,
     generation: AtomicU64,
     scripts: Mutex<HashMap<ScriptKey, Arc<Script>>>,
@@ -69,6 +71,7 @@ impl Shared {
             waits: Mutex::default(),
             token: CancellationToken::new(),
             sync: OnceLock::new(),
+            clouds: Leases::default(),
             runners: Mutex::default(),
             generation: AtomicU64::new(0),
             scripts: Mutex::default(),

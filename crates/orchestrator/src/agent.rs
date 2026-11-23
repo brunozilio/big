@@ -211,10 +211,12 @@ impl AgentEffect<'_> {
         let first = trees.first().ok_or_else(|| Failure::permanent("the item has no repository"))?;
         let cwd = first.path.clone();
         let bases = heads(&trees).await?;
+        let cloud = crate::cloud::lease(self.shared, self.command).await?;
         let mut request = request(self.shared, &profile, self.command, &cwd, self.resume.as_deref());
         request.session.agent = Some(MainAgentSpec { name: name.clone(), definition: Some(definition.text.clone()) });
         let client = Client(clients::fresh());
         request.host.credentials.client = client.0;
+        request.host.environment = cloud.as_ref().map(|lease| lease.environment.clone()).unwrap_or_default();
         request.session.add_dirs = trees.iter().skip(1).map(|tree| tree.path.clone()).collect();
         if let Some(text) = repos::described(&trees) {
             let system = request.session.append_system.take().unwrap_or_default();

@@ -1,3 +1,4 @@
+mod cloud;
 mod instance;
 mod logging;
 mod teammate;
@@ -24,6 +25,8 @@ struct Cli {
 enum Internal {
     #[command(hide = true, about = "Run as a teammate of a lead's team (started by the lead)")]
     Teammate(teammate::Args),
+    #[command(name = server::CLOUD_CREDENTIALS_COMMAND, hide = true, about = "Print an agent's cloud credentials")]
+    CloudCredentials(cloud::Args),
 }
 
 fn main() -> ExitCode {
@@ -31,6 +34,7 @@ fn main() -> ExitCode {
     logging::install();
     let ended = match cli.command {
         Some(Internal::Teammate(args)) => teammate::run(args),
+        Some(Internal::CloudCredentials(args)) => cloud::run(args),
         None => serve(cli.port.unwrap_or_else(configured_port), !cli.no_open && configured_open()),
     };
     match ended {
@@ -123,6 +127,12 @@ mod tests {
         assert_eq!((plain.port, plain.no_open), (None, false));
         assert!(Cli::try_parse_from([brand::COMMAND, "--print", "hi"]).is_err());
         assert!(Cli::try_parse_from([brand::COMMAND, "login"]).is_err());
+    }
+
+    #[test]
+    fn the_cloud_credentials_command_takes_the_address_it_asks() {
+        let cli = Cli::parse_from([brand::COMMAND, server::CLOUD_CREDENTIALS_COMMAND, "http://127.0.0.1:1/x"]);
+        assert!(matches!(cli.command, Some(Internal::CloudCredentials(_))));
     }
 
     #[test]

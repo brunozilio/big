@@ -1,3 +1,4 @@
+mod cloud;
 mod control;
 mod flow;
 mod repos;
@@ -40,8 +41,15 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value, String)>>,
 }
 
-const ACTIONS: [&str; 6] =
-    ["tracker.issue", "tracker.comment", "tracker.transition", "tracker.set_impediment", "pipelines.run", "code.merge"];
+const ACTIONS: [&str; 7] = [
+    "tracker.issue",
+    "tracker.comment",
+    "tracker.transition",
+    "tracker.set_impediment",
+    "pipelines.run",
+    "code.merge",
+    "cloud.identity",
+];
 
 impl FakeProvider {
     pub fn leaked() -> &'static FakeProvider {
@@ -79,7 +87,12 @@ impl Provider for FakeProvider {
             key: ProviderKey::from("fake"),
             name: "Fake".into(),
             logo: "<svg/>".into(),
-            capabilities: vec![Capability::from("tracker"), Capability::from("pipelines"), Capability::from("code")],
+            capabilities: vec![
+                Capability::from("tracker"),
+                Capability::from("pipelines"),
+                Capability::from("code"),
+                Capability::from("cloud"),
+            ],
             auth: AuthSpec::Device(DeviceApp {
                 client_id: "c".into(),
                 client_secret: None,
@@ -203,7 +216,7 @@ impl AgentEngine for FakeEngine {
             if let Some(name) = state.write.lock().expect("lock").clone() {
                 commit_file(&request.session.cwd, &name);
             }
-            while held && !stop.load(Ordering::SeqCst) {
+            while held && state.hold.load(Ordering::SeqCst) && !stop.load(Ordering::SeqCst) {
                 std::thread::sleep(Duration::from_millis(10));
             }
             if state.ask.load(Ordering::SeqCst) {
@@ -233,7 +246,10 @@ pub struct World {
     pub git: bool,
     pub parallel: usize,
     pub sync: bool,
+    pub cloud: bool,
 }
+
+pub const SERVER: &str = "http://127.0.0.1:9";
 
 pub const WORKER: &str = "---\nname: worker\npermissionMode: bypass\nmodel: auto\ntools: [Read, Edit]\n---\nVocê trabalha.";
 
@@ -246,6 +262,7 @@ impl World {
             git: false,
             parallel: 4,
             sync: false,
+            cloud: false,
         };
         world.write("agents/worker.md", WORKER);
         world
@@ -290,8 +307,14 @@ impl World {
             settings: json!({}),
         };
         store.save_connection(&record).expect("connection");
+        if self.cloud {
+            let cloud = ConnectionRecord { id: "aws".into(), capabilities: vec!["cloud".into()], ..record };
+            store.save_connection(&cloud).expect("cloud connection");
+        }
         let tokens = Arc::new(MemoryTokenStore::new());
-        tokens.save(&ConnectionId::from("c1"), &Grant::bearer("tok")).await.expect("grant");
+        for id in ["c1", "aws"] {
+            tokens.save(&ConnectionId::from(id), &Grant::bearer("tok")).await.expect("grant");
+        }
         let keeper = TokenKeeper::new(tokens, Arc::new(FakeHttp::new()), Arc::new(FixedClock::at_second(1_000)));
         let provider: &'static dyn Provider = self.provider;
         let hub = Arc::new(Connectors::with_providers(&[provider], Arc::new(FakeHttp::new()), keeper));
@@ -300,7 +323,8 @@ impl World {
             Resources::new(Some(self.repo().join(brand::DIR)), None, Arc::new(content::builtin_text)).listing(listed);
         let mut config = Config::new(store, hub, Arc::new(self.engine.clone()), self.dir.path().join("data"))
             .with_resources(resources)
-            .with_limits(Limits { max_parallel_items: self.parallel, ..limits() });
+            .with_limits(Limits { max_parallel_items: self.parallel, ..limits() })
+            .with_server(SERVER);
         if self.git {
             config.repo = Some(self.repo());
         }

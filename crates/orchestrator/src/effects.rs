@@ -190,7 +190,7 @@ async fn push(shared: &Shared, item: &WorkItem, command: &Command, key: &Idempot
     }
 }
 
-fn connection_of(shared: &Shared, call: &Call) -> Result<(Connection, Value), Failure> {
+pub fn connection_of(shared: &Shared, call: &Call) -> Result<(Connection, Value), Failure> {
     let records =
         shared.store.connections().map_err(|error| Failure::Class(ErrorClass::Transient, error.to_string()))?;
     let found = records.into_iter().find(|record| match &call.connection {
