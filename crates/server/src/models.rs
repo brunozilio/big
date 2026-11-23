@@ -23,11 +23,30 @@ pub fn listing(models: &[app::Model]) -> Value {
     let listed = models.iter().map(|model| {
         let provider = model.provider.id();
         json!({
-            "id": model.id, "name": model.label, "provider": provider, "logo": provider,
+            "id": model.id, "name": model.label, "provider": provider, "logo": logo_of(&model.id, provider),
             "efforts": app::efforts(model), "fast": false,
         })
     });
     json!({ "models": std::iter::once(auto).chain(listed).collect::<Vec<_>>(), "default": AUTO })
+}
+
+const MAKERS: [(&str, &str); 7] = [
+    ("claude", "claude"),
+    ("gpt", "openai"),
+    ("codex", "openai"),
+    ("o3", "openai"),
+    ("o4", "openai"),
+    ("grok", "grok"),
+    ("gemini", "google"),
+];
+
+pub fn logo_of(model: &str, provider: &str) -> String {
+    let id = model.to_ascii_lowercase();
+    let words: Vec<&str> = id.split(|letter: char| !letter.is_ascii_alphanumeric()).collect();
+    MAKERS
+        .iter()
+        .find(|(prefix, _)| words.iter().any(|word| word.starts_with(prefix)))
+        .map_or_else(|| provider.trim_end_matches("-subscription").to_owned(), |(_, logo)| (*logo).to_owned())
 }
 
 pub fn tuning(body: &Value) -> ApiResult<Option<app::Effort>> {
@@ -77,5 +96,21 @@ mod tests {
         assert_eq!(tuning(&json!({})).ok(), Some(None));
         assert!(tuning(&json!({ "effort": 3 })).is_err());
         assert!(tuning(&json!({ "fast": true })).is_err());
+    }
+}
+
+#[cfg(test)]
+mod logo_tests {
+    use super::logo_of;
+
+    #[test]
+    fn the_logo_is_the_maker_of_the_model_whatever_account_serves_it() {
+        assert_eq!(logo_of("claude-sonnet-4-5", "copilot-subscription"), "claude");
+        assert_eq!(logo_of("gpt-5", "copilot-subscription"), "openai");
+        assert_eq!(logo_of("gpt-5-codex", "openai-subscription"), "openai");
+        assert_eq!(logo_of("grok-4", "grok-subscription"), "grok");
+        assert_eq!(logo_of("gemini-3-pro", "antigravity-subscription"), "google");
+        assert_eq!(logo_of("us.anthropic.claude-opus-4", "kiro-subscription"), "claude");
+        assert_eq!(logo_of("auto-kiro", "kiro-subscription"), "kiro");
     }
 }

@@ -40,5 +40,6 @@ pub fn serve(bundle: &'static [Asset], uri: &Uri) -> Response {
     let Some(asset) = resolve(bundle, uri) else {
         return (StatusCode::SERVICE_UNAVAILABLE, Html(MISSING)).into_response();
     };
-    ([(header::CONTENT_TYPE, content_type(asset))], asset.bytes).into_response()
+    let cache = if asset.path.starts_with("assets/") { "public, max-age=31536000, immutable" } else { "no-cache" };
+    ([(header::CONTENT_TYPE, content_type(asset)), (header::CACHE_CONTROL, cache.to_owned())], asset.bytes).into_response()
 }
