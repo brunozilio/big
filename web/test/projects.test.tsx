@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { setApi } from '../src/api'
 import type { Api, CallAction, CallArgs, NewItem as NewItemInput } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
@@ -74,7 +75,7 @@ describe('projeto do composer', () => {
     if (!tracker) throw new Error('sem tracker no mock')
     rememberProject([tracker.id], { connection: tracker.id, key: 'OPS' })
     act(() => setConnections(connections))
-    const view = render(<TooltipProvider><NewItem onCreated={() => undefined} /></TooltipProvider>)
+    const view = render(<MemoryRouter><TooltipProvider><NewItem onCreated={() => undefined} /></TooltipProvider></MemoryRouter>)
     const trigger = await view.findByRole('button', { name: /Começar de uma issue/ })
     expect(trigger.textContent).toContain('OPS')
     fireEvent.click(trigger)
