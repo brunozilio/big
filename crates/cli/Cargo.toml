@@ -1,6 +1,6 @@
 [package]
 name = "cli"
-description = "The terminal chat: talk to the agent in your project."
+description = "The launcher: starts the local server and opens it in the browser."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
@@ -16,30 +16,18 @@ subscription-providers = ["app/subscription-providers"]
 
 [dependencies]
 platform.workspace = true
-content.workspace = true
 brand.workspace = true
 app.workspace = true
 console.workspace = true
 domain.workspace = true
 serde_json.workspace = true
-tempfile.workspace = true
-crossbeam-channel.workspace = true
-ratatui = "0.30.2"
-unicode-width = "0.2.3"
 clap = { version = "4.6.7", features = ["derive"] }
-tui-markdown = "0.3.13"
-syntect = { version = "5.3.0", default-features = false, features = ["default-syntaxes", "default-themes", "plist-load", "regex-onig"] }
-tachyonfx = { version = "0.25.2", default-features = false, features = ["std", "std-duration"] }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "std"] }
-relay.workspace = true
-page.workspace = true
-reqwest = { workspace = true, features = ["blocking", "multipart", "json"] }
-qrcode = { version = "0.14", default-features = false }
-jiff.workspace = true
 
 [dev-dependencies]
 agent-engine = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
 
 [lints]
 workspace = true

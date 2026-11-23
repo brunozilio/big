@@ -69,6 +69,7 @@ fn in_iterm2(launching: &Launching<'_>, program: &Path) -> Result<Planned, Strin
 
 fn teammate_args(launching: &Launching<'_>) -> Vec<OsString> {
     vec![
+        SUBCOMMAND.into(),
         "-C".into(),
         launching.cwd.as_os_str().to_owned(),
         "--model".into(),
@@ -77,7 +78,6 @@ fn teammate_args(launching: &Launching<'_>) -> Vec<OsString> {
         domain::command::mode_label(launching.mode).into(),
         "--append-system-prompt".into(),
         launching.instructions.into(),
-        SUBCOMMAND.into(),
     ]
 }
 
@@ -196,6 +196,7 @@ mod tests {
         assert_eq!(
             args,
             [
+                "teammate",
                 "-C",
                 "/work",
                 "--model",
@@ -204,7 +205,6 @@ mod tests {
                 domain::command::mode_label(PermissionMode::AcceptEdits),
                 "--append-system-prompt",
                 "# Team coordination",
-                "teammate"
             ]
         );
         assert!(planned.env.contains(&(TEAM_VARIABLE.to_owned(), "team-1".to_owned())));
@@ -226,7 +226,7 @@ mod tests {
             args.contains(&format!("{TEAM_VARIABLE}=team-1")) && args.contains(&format!("{AGENT_VARIABLE}=tester"))
         );
         let at = args.iter().position(|arg| arg == "/bin/app").expect("the program");
-        assert_eq!(args[at + 1..].last().map(String::as_str), Some("teammate"));
+        assert_eq!(args.get(at + 1).map(String::as_str), Some("teammate"));
         assert_eq!(args[at + 1..].len(), 9, "each of the app's arguments stays its own argument");
         assert_eq!(planned.log, None, "the pane shows what it prints");
     }

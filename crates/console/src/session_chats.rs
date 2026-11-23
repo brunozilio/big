@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
+use crate::{ChatError, Chats, Live};
 use app::{Client, EngineEvent, RunControl, SessionId};
-use console::{ChatError, Chats, Live};
 use domain::catalog::Listed;
 use domain::conversation::{Entry, Transcript};
 use serde_json::Value;
@@ -23,25 +23,38 @@ struct Sent<'a> {
     run: app::Run,
 }
 
-type Runs =Arc<Mutex<HashMap<String, Going>>>;
+type Runs = Arc<Mutex<HashMap<String, Going>>>;
 
-pub(super) struct PhoneChats {
+pub struct SessionChats {
     client: Mutex<Client>,
     folder: PathBuf,
     live: Live,
     runs: Runs,
 }
 
+impl std::fmt::Debug for SessionChats {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.debug_struct("SessionChats").field("folder", &self.folder).finish_non_exhaustive()
+    }
+}
+
 fn failed(error: impl ToString) -> ChatError {
     ChatError::Failed(error.to_string())
+}
+
+fn chosen_model(client: &Client) -> Result<app::Model, ChatError> {
+    let models = client.models().map_err(failed)?;
+    let remembered = client.settings().ok().and_then(|settings| settings["model"].as_str().map(str::to_owned));
+    domain::model::choose_model(&models, remembered.as_deref())
+        .ok_or_else(|| ChatError::Failed("No model is available: connect a provider first.".to_owned()))
 }
 
 fn locked(runs: &Runs) -> MutexGuard<'_, HashMap<String, Going>> {
     runs.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-impl PhoneChats {
-    pub(super) fn new(client: Client, folder: PathBuf, live: Live) -> Self {
+impl SessionChats {
+    pub fn new(client: Client, folder: PathBuf, live: Live) -> Self {
         Self { client: Mutex::new(client), folder, live, runs: Arc::default() }
     }
 
@@ -63,7 +76,13 @@ impl PhoneChats {
         Ok(transcript)
     }
 
-    fn going(&self, session: &str, title: Option<String>, mut transcript: Transcript, sent: Sent) -> Result<(), ChatError> {
+    fn going(
+        &self,
+        session: &str,
+        title: Option<String>,
+        mut transcript: Transcript,
+        sent: Sent,
+    ) -> Result<(), ChatError> {
         transcript.push(Entry::User(sent.text.to_owned()));
         transcript.begin();
         for event in &sent.early {
@@ -74,7 +93,7 @@ impl PhoneChats {
         self.live.chat_changed(session);
         let (runs, live, named) = (Arc::clone(&self.runs), self.live.clone(), session.to_owned());
         let run = sent.run;
-        let pumped = std::thread::Builder::new().name("phone-chat".into()).spawn(move || pump(run, &runs, &live, &named));
+        let pumped = std::thread::Builder::new().name("web-chat".into()).spawn(move || pump(run, &runs, &live, &named));
         if let Err(error) = pumped {
             locked(&self.runs).remove(session);
             return Err(failed(error));
@@ -99,7 +118,7 @@ fn pump(run: app::Run, runs: &Runs, live: &Live, session: &str) {
     live.chat_changed(session);
 }
 
-impl Chats for PhoneChats {
+impl Chats for SessionChats {
     fn list(&self) -> Result<Value, ChatError> {
         let rows = self.client().sessions().map_err(failed)?;
         Ok(domain::chat::listed(&rows))
@@ -116,7 +135,7 @@ impl Chats for PhoneChats {
 
     fn start(&self, text: &str) -> Result<String, ChatError> {
         let client = self.client();
-        let model = crate::print::chosen_model(&client, None).map_err(ChatError::Failed)?;
+        let model = chosen_model(&client)?;
         let session = client.session(self.folder.clone(), model);
         let mut run = session.send(text).map_err(failed)?;
         let mut early = Vec::new();
@@ -142,16 +161,17 @@ impl Chats for PhoneChats {
         }
         let transcript = self.replayed(session, &row.cwd)?;
         let client = self.client();
-        let model = crate::print::chosen_model(&client, None).map_err(ChatError::Failed)?;
+        let model = chosen_model(&client)?;
         let run = client.session(row.cwd.clone(), model).resume(row.session.clone()).send(text).map_err(failed)?;
         self.going(session, row.title, transcript, Sent { text, early: Vec::new(), run })
     }
 
     fn answer(&self, session: &str, ask: &str, decision: &str) -> Result<(), ChatError> {
         let decision = domain::chat::decision(decision)
-            .ok_or_else(|| ChatError::Failed(format!("{decision} is not a decision a phone can make.")))?;
+            .ok_or_else(|| ChatError::Failed(format!("{decision} is not a decision this page can make.")))?;
         let runs = locked(&self.runs);
-        let going = runs.get(session).ok_or_else(|| ChatError::Missing("Nothing in this chat waits for you.".to_owned()))?;
+        let going =
+            runs.get(session).ok_or_else(|| ChatError::Missing("Nothing in this chat waits for you.".to_owned()))?;
         going.control.answer(app::AskId(ask.to_owned()), decision).map_err(failed)
     }
 
@@ -163,5 +183,5 @@ impl Chats for PhoneChats {
 }
 
 #[cfg(test)]
-#[path = "chats_tests.rs"]
+#[path = "session_chats_tests.rs"]
 mod tests;

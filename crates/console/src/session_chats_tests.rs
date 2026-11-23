@@ -1,11 +1,21 @@
 use std::time::{Duration, Instant};
 
+use crate::{ChatError, Chats, Live};
 use agent_engine::fake::FakeEngine;
 use app::{AgentAsk, AskId, AskKind, Decision, EngineEvent, Model, SessionId};
-use console::{ChatError, Chats, Live};
 use serde_json::Value;
 
-use super::PhoneChats;
+use super::SessionChats;
+
+const SETTLES_WITHIN: Duration = Duration::from_secs(120);
+
+fn client(engine: &FakeEngine, data: &std::path::Path) -> app::Client {
+    let mut services = app::LocalServices::with_engine(std::sync::Arc::new(engine.clone()));
+    services.homes = std::sync::Arc::new(app::OwnerHome::at(data));
+    let secrets = std::sync::Arc::new(app::InMemorySecretStore::default());
+    services.providers = services.providers.with_secrets(secrets);
+    app::Client::builder().data_dir(data).services(services).build().expect("client")
+}
 
 fn asked() -> EngineEvent {
     EngineEvent::Asked(AgentAsk {
@@ -14,8 +24,8 @@ fn asked() -> EngineEvent {
     })
 }
 
-fn until(chats: &PhoneChats, session: &str, done: impl Fn(&Value) -> bool) -> Value {
-    let deadline = Instant::now() + crate::tui::tests::SETTLES_WITHIN;
+fn until(chats: &SessionChats, session: &str, done: impl Fn(&Value) -> bool) -> Value {
+    let deadline = Instant::now() + SETTLES_WITHIN;
     loop {
         let shown = chats.open(session).expect("open");
         if done(&shown) {
@@ -35,7 +45,7 @@ fn said(shown: &Value, kind: &str, text: &str) -> bool {
 }
 
 #[test]
-fn a_phone_starts_a_chat_answers_its_question_and_reads_the_reply() {
+fn a_page_starts_a_chat_answers_its_question_and_reads_the_reply() {
     let data = tempfile::tempdir().expect("data");
     let script = vec![
         EngineEvent::SessionStarted(SessionId("s1".into())),
@@ -46,8 +56,8 @@ fn a_phone_starts_a_chat_answers_its_question_and_reads_the_reply() {
     ];
     let engine =
         FakeEngine::new(vec![Model::new("keyed:scripted", "Scripted")], script).with_delay(Duration::from_millis(50));
-    let client = crate::tui::tests::client(&engine, data.path());
-    let chats = PhoneChats::new(client, data.path().to_owned(), Live::default());
+    let client = client(&engine, data.path());
+    let chats = SessionChats::new(client, data.path().to_owned(), Live::default());
 
     let session = chats.start("run the tests").expect("start");
     assert_eq!(session, "s1");
@@ -62,11 +72,10 @@ fn a_phone_starts_a_chat_answers_its_question_and_reads_the_reply() {
 }
 
 #[test]
-fn a_phone_cannot_answer_a_chat_that_waits_for_nothing() {
+fn a_page_cannot_answer_a_chat_that_waits_for_nothing() {
     let data = tempfile::tempdir().expect("data");
     let engine = FakeEngine::new(vec![Model::new("keyed:scripted", "Scripted")], Vec::new());
-    let chats =
-        PhoneChats::new(crate::tui::tests::client(&engine, data.path()), data.path().to_owned(), Live::default());
+    let chats = SessionChats::new(client(&engine, data.path()), data.path().to_owned(), Live::default());
 
     assert!(matches!(chats.answer("s1", "a1", "allow"), Err(ChatError::Missing(_))));
     assert!(matches!(chats.answer("s1", "a1", "maybe"), Err(ChatError::Failed(_))));
