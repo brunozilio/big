@@ -11,7 +11,10 @@ function groupsOf(ctx, opts) {
   }));
 }
 
+const NOTHING = "Nenhum comando de verificação configurado para este repositório.\n";
+
 async function verify(ctx, opts, group) {
+  if (group.commands.length === 0) return defined({ repository: group.repository, name: group.name, output: NOTHING });
   let output = "";
   for (const command of group.commands) {
     const options = defined({ repository: group.repository, cwd: opts.cwd, env: opts.env, timeout: opts.timeout, retry: opts.retry });

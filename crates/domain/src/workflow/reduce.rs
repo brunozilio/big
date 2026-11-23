@@ -176,4 +176,5 @@ fn rewind(item: &mut WorkItem, to: &str) {
     item.effects.retain(|_, entry| !dropped.contains(&entry.request.key.step));
     item.inputs.retain(|input| !dropped.contains(&input.step));
     item.ending = None;
+    item.impediment = None;
 }

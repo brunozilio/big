@@ -189,6 +189,18 @@ fn rewinding_drops_what_came_after_the_step_and_resets_it() {
 }
 
 #[test]
+fn rewinding_clears_the_impediment_of_the_run_it_replaces() {
+    let item = replay(&[
+        created(),
+        started("a"),
+        finished("a", StepState::Failed),
+        WorkflowEvent::ImpedimentSet { on: true, reason: Some("a falhou".into()) },
+        WorkflowEvent::Rewound { to: "a".into() },
+    ]);
+    assert!(item.impediment.is_none());
+}
+
+#[test]
 fn rewinding_to_an_unknown_step_changes_nothing_but_the_version() {
     let item = replay(&[created(), started("a")]);
     let rewound = reduce(item.clone(), &WorkflowEvent::Rewound { to: "zzz".into() });

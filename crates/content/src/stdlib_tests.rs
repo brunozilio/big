@@ -331,6 +331,25 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
 }
 
 #[test]
+fn checks_without_any_command_say_so_instead_of_an_empty_log() {
+    let text = r#"
+import { workflow } from "sdk";
+import { checks } from "sdk/steps";
+export default workflow({
+  name: "so-checks",
+  async run(ctx) {
+    const checked = await checks(ctx, { commands: [] });
+    return { outcome: checked.outcome, output: checked.data.output };
+  },
+});
+"#;
+    let (result, asked) = drive(&source("workflows/so-checks.ts", text), &item(json!("T-1")), |_| None);
+    assert!(of_kind(&asked, "exec").is_empty());
+    assert_eq!(result["result"]["outcome"], "passed", "{result}");
+    assert!(result["result"]["output"].as_str().is_some_and(|out| out.contains("Nenhum comando de verificação")), "{result}");
+}
+
+#[test]
 fn a_develop_run_that_left_no_commit_fails_there_instead_of_at_the_pull_request() {
     let mut fake = Fake::default();
     let (result, asked) = drive(&default_workflow(), &item(json!("T-1")), |command| {
