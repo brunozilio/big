@@ -120,7 +120,15 @@ async fn a_new_item_needs_a_text_or_an_issue_and_keeps_the_issue_and_model() {
         )
         .await;
     assert_eq!(empty.0, StatusCode::BAD_REQUEST);
-    let body = json!({ "text": "", "issue": { "connection": "c1", "key": "K-1" }, "model": "m1", "attachments": [] });
+    for wrong in [json!({ "effort": "enorme" }), json!({ "effort": "high", "fast": true })] {
+        let mut body = json!({ "text": "x", "issue": null, "model": "m1", "attachments": [] });
+        body.as_object_mut().expect("object").extend(wrong.as_object().expect("object").clone());
+        assert_eq!(world.send(Method::POST, "/api/items", Some(body)).await.0, StatusCode::BAD_REQUEST);
+    }
+    let body = json!({
+        "text": "", "issue": { "connection": "c1", "key": "K-1" }, "model": "m1", "effort": "high", "fast": false,
+        "attachments": [],
+    });
     let (status, item) = world.send(Method::POST, "/api/items", Some(body)).await;
     assert_eq!(status, StatusCode::OK, "{item}");
     assert_eq!(item["title"], "K-1");
@@ -130,6 +138,7 @@ async fn a_new_item_needs_a_text_or_an_issue_and_keeps_the_issue_and_model() {
     world.until("the agent ran", |item| item["group"] == "you").await;
     let asked = world.engine.requests();
     assert!(asked.iter().any(|request| request.session.model.id == "m1"), "the item's model went to the agent");
+    assert!(asked.iter().any(|request| request.session.effort == domain::Effort::High), "and its effort");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -262,6 +271,9 @@ async fn models_branding_and_attachments() {
     assert_eq!(models["default"], "auto");
     assert_eq!(models["models"][0]["id"], "auto");
     assert_eq!(models["models"][1]["id"], "m1");
+    assert_eq!(models["models"][0]["efforts"], json!(["low", "medium", "high", "xhigh", "max"]));
+    assert_eq!(models["models"][1]["efforts"], json!([]));
+    assert_eq!(models["models"][1]["fast"], false);
     fixture("models", &models);
     let branding = world.get("/api/branding").await;
     assert_eq!(branding, json!({ "name": brand::NAME, "logo": null, "theme": "system" }));

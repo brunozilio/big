@@ -100,11 +100,19 @@ fn input(shared: &Shared, body: &Value) -> ApiResult<Value> {
     if let Some(model) = body["model"].as_str().filter(|model| !model.is_empty()) {
         input["model"] = json!(model);
     }
+    if let Some(effort) = crate::models::tuning(body)? {
+        input["effort"] = json!(effort.cli_value());
+    }
     Ok(input)
 }
 
 pub async fn create(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {
     let input = input(&ctx, &body)?;
+    let shared = std::sync::Arc::clone(&ctx);
+    let models = tokio::task::spawn_blocking(move || crate::models::known(&shared)).await.map_err(ApiError::failed)??;
+    if models.is_empty() {
+        return Err(ApiError::bad(crate::models::NONE));
+    }
     let id = ctx.backend.orchestrator.create_item(&workflow(&ctx)?, input)?;
     let summary = ctx.backend.orchestrator.summary(&id)?.ok_or_else(|| ApiError::failed("O item sumiu."))?;
     let item = Context::load(&ctx)?.item(&ctx, &summary)?;

@@ -25,6 +25,10 @@ pub trait Vendor: Sync {
         false
     }
 
+    fn efforts(&self, model: &str) -> Vec<&'static str> {
+        if self.reasons(model) { EFFORTS.to_vec() } else { Vec::new() }
+    }
+
     fn effort(
         &self,
         _body: &mut Value,
@@ -62,6 +66,22 @@ pub fn effort(
     always: bool,
 ) -> Result<(), ProviderError> {
     vendor(vendor_id).map_or(Ok(()), |vendor| vendor.effort(body, selected, effort, always))
+}
+
+pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
+
+pub fn efforts(model: &ModelOption) -> Vec<&'static str> {
+    let caps = model.capabilities.as_ref();
+    let offered = caps.map(|caps| caps.reasoning_levels.as_slice()).unwrap_or_default();
+    if !offered.is_empty() {
+        return EFFORTS.into_iter().filter(|level| offered.iter().any(|given| given == level)).collect();
+    }
+    let name = bare(&model.id);
+    let known = owner(name).map(|vendor| vendor.efforts(name)).unwrap_or_default();
+    if known.is_empty() && caps.is_some_and(|caps| caps.reasoning || caps.adaptive_thinking) {
+        return EFFORTS.to_vec();
+    }
+    known
 }
 
 pub type Price = (&'static [&'static str], TokenRates);

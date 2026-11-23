@@ -58,6 +58,11 @@ impl Family for Vendor {
         Some("claude-haiku-5-5")
     }
 
+    fn efforts(&self, model: &str) -> Vec<&'static str> {
+        let dialed = modern(model) || adaptive_4(model) || model.starts_with("claude-opus-4-5");
+        if dialed { crate::EFFORTS.to_vec() } else { Vec::new() }
+    }
+
     fn effort(
         &self,
         body: &mut Value,

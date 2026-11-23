@@ -37,6 +37,7 @@ pub struct Message<'a> {
     pub folder: PathBuf,
     pub text: &'a str,
     pub model: app::Model,
+    pub effort: Option<app::Effort>,
     pub shown: Shown,
 }
 
@@ -68,8 +69,11 @@ impl Chats {
         }
         let id = SessionId(message.session.to_owned());
         let model = message.model.clone();
-        let run =
-            client.session(message.folder.clone(), model).resume(id).send(message.text).map_err(ApiError::failed)?;
+        let mut session = client.session(message.folder.clone(), model).resume(id);
+        if let Some(effort) = message.effort {
+            session = session.effort(effort);
+        }
+        let run = session.send(message.text).map_err(ApiError::failed)?;
         let mut shown = message.shown;
         shown.model = message.model.id.clone();
         shown.transcript.push(Entry::User(message.text.to_owned()));

@@ -26,6 +26,14 @@ impl Family for Vendor {
         WITH_EFFORT.iter().any(|prefix| lower.starts_with(prefix))
     }
 
+    fn efforts(&self, model: &str) -> Vec<&'static str> {
+        if !self.reasons(model) {
+            return Vec::new();
+        }
+        let known = known_levels(model);
+        crate::EFFORTS.into_iter().filter(|level| known.iter().any(|given| given == level)).collect()
+    }
+
     fn rates(&self, _model: &str, _prompt_tokens: u64) -> Option<TokenRates> {
         None
     }

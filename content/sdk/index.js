@@ -230,8 +230,11 @@ class Ctx {
   agent(name, input, options) {
     const prompt = typeof input === "string" ? { prompt: input } : input || {};
     const { retry, timeout, connection, ...rest } = options || {};
+    const args = { name, input: prompt, ...rest };
     const model = rest.model ?? this.runtime.item.model;
-    const args = model === undefined || model === null ? { name, input: prompt, ...rest } : { name, input: prompt, ...rest, model };
+    if (model !== undefined && model !== null) args.model = model;
+    const effort = rest.effort ?? this.runtime.item.effort;
+    if (effort !== undefined && effort !== null) args.effort = effort;
     return this.runtime.issue(this, "agent", args, { retry, timeout, connection });
   }
 

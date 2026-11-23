@@ -114,7 +114,7 @@ fn chosen_model(shared: &Shared, wanted: Option<&str>) -> ApiResult<app::Model> 
     let models = shared.backend.client.models().map_err(ApiError::failed)?;
     let wanted = wanted.filter(|wanted| *wanted != crate::models::AUTO);
     domain::model::choose_model(&models, wanted)
-        .ok_or_else(|| ApiError::bad("Nenhum modelo disponível: conecte um provedor de IA."))
+        .ok_or_else(|| ApiError::bad(crate::models::NONE))
 }
 
 fn prompt(shared: &Shared, body: &Value) -> ApiResult<String> {
@@ -142,9 +142,10 @@ fn send_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<()> {
     }
     let text = prompt(shared, body)?;
     let model = chosen_model(shared, body["model"].as_str())?;
+    let effort = crate::models::tuning(body)?;
     let nudged = Arc::clone(ctx);
     let notify: Notify = Arc::new(move |session: &str| nudged.follow(session));
-    let message = Message { session, folder: row.folder, text: &text, model, shown };
+    let message = Message { session, folder: row.folder, text: &text, model, effort, shown };
     shared.chats.send(&shared.backend.client, message, notify)
 }
 

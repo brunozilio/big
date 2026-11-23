@@ -42,6 +42,19 @@ async fn a_typescript_workflow_runs_each_effect_once_and_replays_without_repeati
     assert_eq!(again.item(&id).expect("store"), Some(item));
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn the_effort_chosen_for_the_item_reaches_each_agent_request() {
+    let world = World::new();
+    world.workflow("plain", PLAIN);
+    let kernel = world.start().await;
+    let id = kernel.create_item("plain", json!({ "title": "x", "effort": "xhigh" })).expect("item");
+    ended(&kernel, &id).await;
+    assert_eq!(world.engine.requests()[0].session.effort, domain::Effort::XHigh);
+    let other = kernel.create_item("plain", json!({ "title": "y" })).expect("item");
+    ended(&kernel, &other).await;
+    assert_eq!(world.engine.requests()[1].session.effort, domain::Effort::default());
+}
+
 const PARALLEL: &str = r#"
 import { workflow } from "sdk";
 

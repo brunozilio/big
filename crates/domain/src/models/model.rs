@@ -133,6 +133,10 @@ pub enum Effort {
 impl Effort {
     pub const ALL: [Effort; 5] = [Self::Low, Self::Medium, Self::High, Self::XHigh, Self::Max];
 
+    pub fn named(name: &str) -> Option<Effort> {
+        Self::ALL.into_iter().find(|effort| effort.cli_value() == name)
+    }
+
     pub const fn cli_value(self) -> &'static str {
         match self {
             Self::Low => "low",
@@ -177,5 +181,11 @@ mod tests {
         assert_eq!(ModelProvider::named("acme"), ModelProvider::named(&String::from("acme")));
         assert_eq!(ModelProvider::named("acme"), ModelProvider::new("acme"));
         assert!(Access::Browser.subscription() && !Access::Key.subscription());
+    }
+
+    #[test]
+    fn an_effort_is_found_by_its_name() {
+        assert_eq!(Effort::named("xhigh"), Some(Effort::XHigh));
+        assert_eq!(Effort::named("Medium"), None);
     }
 }

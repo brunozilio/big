@@ -102,6 +102,7 @@ export interface AgentInput {
 
 export interface AgentOptions extends CallOptions {
   model?: string;
+  effort?: "low" | "medium" | "high" | "xhigh" | "max";
   mode?: string;
   worktree?: string;
 }

@@ -39,6 +39,10 @@ impl Family for Vendor {
         REASONING.iter().any(|prefix| lower.starts_with(prefix))
     }
 
+    fn efforts(&self, model: &str) -> Vec<&'static str> {
+        if self.reasons(model) { vec!["low", "medium", "high", "xhigh"] } else { Vec::new() }
+    }
+
     fn search_price(&self) -> Option<u64> {
         Some(SEARCH)
     }

@@ -109,6 +109,9 @@ fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, re
     let text = if resume.is_some() { RESUME.to_owned() } else { prompt_of(input) };
     let mut request = PromptRequest::plain(cwd.to_path_buf(), text, option);
     request.session.auto_pick = auto;
+    if let Some(effort) = command.args["effort"].as_str().and_then(domain::Effort::named) {
+        request.session.effort = effort;
+    }
     request.session.resume = resume.or(carried).map(|id| SessionId(id.to_owned()));
     request.session.append_system = Some(profile.body.clone()).filter(|body| !body.is_empty());
     let mode = command.args["mode"].as_str().and_then(domain::command::mode_named).or(profile.mode);

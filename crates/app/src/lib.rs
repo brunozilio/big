@@ -45,6 +45,7 @@ pub use handler::local::LocalBackend;
 pub use handler::outbox::{Outbox, Replies};
 pub use homes::{Homes, OwnerHome};
 pub use keyed::KeyedEngine;
+pub use llm_providers::efforts;
 pub use mcp_auth::{McpAuth, McpAuthError};
 pub use providers::{InMemoryProviderStore, ModelCatalog, ModelProviders, ProviderStore};
 pub use secrets::{InMemorySecretStore, SecretStore, Secrets};
