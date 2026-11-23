@@ -28,6 +28,19 @@
       "site": "do Fake"
     },
     {
+      "alternative": null,
+      "button": "Entrar com Picky",
+      "description": "Sua conta Picky",
+      "fields": [],
+      "group": "Tarefas",
+      "key": "picky",
+      "logo": "<svg/>",
+      "multiple": true,
+      "name": "Picky",
+      "signIn": "device",
+      "site": "do Picky"
+    },
+    {
       "ai": true,
       "alternative": null,
       "button": "Entrar com Claude",

@@ -1,6 +1,6 @@
-import type { ChangeData, Comment, FileDiff, IssueData, IssueSummary, Job, JobState, PipelineRun } from '../contract'
+import type { ChangeData, Comment, FileDiff, IssueData, IssueSummary, Job, JobState, PipelineRun, TrackerProject } from '../contract'
 import { agentPerson, PEOPLE } from './fixtures'
-import { ISSUES, IDX, REPO, STEPS, commentIssue, fileOf, moduleOf, store, type SimItem } from './sim'
+import { ISSUES, IDX, PROJECTS, REPO, STEPS, commentIssue, fileOf, moduleOf, store, type SimItem } from './sim'
 import { commands, iso, issueUrl, prUrl } from './view'
 
 function prFiles(it: SimItem): FileDiff[] {
@@ -71,9 +71,14 @@ export function issueData(key: string): IssueData {
   }
 }
 
-export function searchIssues(query: string): IssueSummary[] {
+export function searchIssues(query: string, project?: string): IssueSummary[] {
   const q = query.toLowerCase()
-  return ISSUES.filter((i) => !i.used && `${i.key} ${i.title}`.toLowerCase().includes(q)).map((i) => ({ key: i.key, title: i.title, status: 'To Do' }))
+  return ISSUES.filter((i) => !i.used && (!project || i.key.startsWith(`${project}-`)) && `${i.key} ${i.title}`.toLowerCase().includes(q)).map((i) => ({ key: i.key, title: i.title, status: 'To Do' }))
+}
+
+export function trackerProjects(query: string): TrackerProject[] {
+  const q = query.toLowerCase()
+  return PROJECTS.filter((p) => `${p.key} ${p.name}`.toLowerCase().includes(q)).map((p) => ({ ...p }))
 }
 
 export function addIssueComment(key: string, body: string): Comment {

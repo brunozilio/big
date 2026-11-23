@@ -1,14 +1,15 @@
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex, PoisonError};
 
-use domain::connection::{Capability, Connection, ProviderKey};
-use serde_json::Value;
+use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
+use serde_json::{Map, Value};
 
 use crate::descriptor::{AlternateAuth, Presentation, ProviderDescriptor};
 use crate::error::{ActionError, ErrorClass, RECONNECT};
 use crate::http::Http;
 use crate::limiter::{Metered, RateLimiter};
 use crate::oauth::TokenKeeper;
-use crate::provider::{AccountOption, Credentials, EventBatch, Provider, unknown_action};
+use crate::provider::{AccountOption, Credentials, EventBatch, Provider, SettingsSink, unknown_action};
 use crate::providers;
 
 #[derive(Debug)]
@@ -25,6 +26,30 @@ pub struct Connectors {
     http: Arc<dyn Http>,
     keeper: TokenKeeper,
     limiter: RateLimiter,
+    learned: Mutex<HashMap<ConnectionId, Value>>,
+    sink: Option<Arc<dyn SettingsSink>>,
+}
+
+fn present(value: Option<&Value>) -> bool {
+    match value {
+        None | Some(Value::Null) => false,
+        Some(Value::String(text)) => !text.is_empty(),
+        Some(_) => true,
+    }
+}
+
+fn has(settings: &Value, name: &str) -> bool {
+    present(settings.get(name))
+}
+
+pub fn filled(settings: &Value, extra: &Value) -> Value {
+    let mut merged: Map<String, Value> = settings.as_object().cloned().unwrap_or_default();
+    for (key, value) in extra.as_object().into_iter().flatten() {
+        if !present(merged.get(key)) && present(Some(value)) {
+            merged.insert(key.clone(), value.clone());
+        }
+    }
+    Value::Object(merged)
 }
 
 impl Connectors {
@@ -42,7 +67,16 @@ impl Connectors {
                 alternative: provider.alternative(),
             })
             .collect();
-        Connectors { entries, http, keeper, limiter: RateLimiter::new() }
+        Connectors { entries, http, keeper, limiter: RateLimiter::new(), learned: Mutex::default(), sink: None }
+    }
+
+    pub fn with_sink(mut self, sink: Arc<dyn SettingsSink>) -> Connectors {
+        self.sink = Some(sink);
+        self
+    }
+
+    pub fn chooses(&self, key: &ProviderKey) -> &'static [&'static str] {
+        self.entry(key).map(|entry| entry.provider.chooses()).unwrap_or_default()
     }
 
     pub fn descriptors(&self) -> Vec<&ProviderDescriptor> {
@@ -80,6 +114,28 @@ impl Connectors {
             .ok_or_else(|| ActionError::permanent(format!("no provider is registered as `{key}`")))
     }
 
+    async fn completed(&self, entry: &Entry, connection: &Connection, settings: &Value) -> Value {
+        let known = self.learned.lock().unwrap_or_else(PoisonError::into_inner).get(&connection.id).cloned();
+        let settings = known.map_or_else(|| settings.clone(), |known| filled(settings, &known));
+        let chooses = entry.provider.chooses();
+        if chooses.iter().all(|name| has(&settings, name)) {
+            return settings;
+        }
+        let Ok(creds) = self.credentials(entry, connection, &settings).await else { return settings };
+        let metered = Metered { inner: self.http.as_ref(), limiter: &self.limiter, connection: &connection.id };
+        let options = entry.provider.accounts(&metered, &creds).await.unwrap_or_default();
+        let [only] = options.as_slice() else { return settings };
+        if !chooses.iter().all(|name| has(&only.settings, name)) {
+            return settings;
+        }
+        let settings = filled(&settings, &only.settings);
+        self.learned.lock().unwrap_or_else(PoisonError::into_inner).insert(connection.id.clone(), settings.clone());
+        if let Some(sink) = &self.sink {
+            sink.learned(&connection.id, &settings);
+        }
+        settings
+    }
+
     async fn credentials(
         &self,
         entry: &Entry,
@@ -111,7 +167,8 @@ impl Connectors {
         if let Some(missing) = spec.missing(args) {
             return Err(ActionError::missing(&missing));
         }
-        let mut creds = self.credentials(entry, connection, settings).await?;
+        let settings = self.completed(entry, connection, settings).await;
+        let mut creds = self.credentials(entry, connection, &settings).await?;
         let metered = Metered { inner: self.http.as_ref(), limiter: &self.limiter, connection: &connection.id };
         let first = entry.provider.call(&metered, &creds, action, args, idempotency_key).await;
         let result = match first {
@@ -139,7 +196,8 @@ impl Connectors {
     ) -> Result<Option<EventBatch>, ActionError> {
         let entry = self.entry(&connection.provider)?;
         let Some(source) = entry.provider.events() else { return Ok(None) };
-        let creds = self.credentials(entry, connection, settings).await?;
+        let settings = self.completed(entry, connection, settings).await;
+        let creds = self.credentials(entry, connection, &settings).await?;
         let metered = Metered { inner: self.http.as_ref(), limiter: &self.limiter, connection: &connection.id };
         let mut batch = source
             .poll(&metered, &creds, cursor)

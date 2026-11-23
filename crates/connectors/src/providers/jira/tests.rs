@@ -24,6 +24,24 @@ fn session(results: &[Value]) -> FakeHttp {
     http
 }
 
+fn structured(results: &[Value]) -> FakeHttp {
+    let init = HttpResponse::new(200, r#"{"jsonrpc":"2.0","id":1,"result":{}}"#).with_header("mcp-session-id", "s1");
+    let mut http = FakeHttp::new().respond(Method::Post, MCP, init).once(Method::Post, MCP, 202, "");
+    for (index, result) in results.iter().enumerate() {
+        let content = json!({ "content": [{ "type": "text", "text": "ok" }], "structuredContent": result });
+        let answer = json!({ "jsonrpc": "2.0", "id": index + 2, "result": content });
+        http = http.once(Method::Post, MCP, 200, &answer.to_string());
+    }
+    http
+}
+
+fn real_sites() -> Value {
+    json!([{
+        "id": "0aeb9d87-1111", "url": "https://minhaempresa.atlassian.net", "name": "minhaempresa",
+        "scopes": ["read:jira-work", "write:jira-work"], "avatarUrl": "https://a/x.png",
+    }])
+}
+
 fn tool_calls(http: &FakeHttp) -> Vec<(String, Value)> {
     http.sent()
         .iter()
@@ -291,4 +309,68 @@ fn a_flag_change_in_the_history_is_an_impediment_event_with_booleans() {
     collector.history("BIG-1", &history);
     assert_eq!(collector.events[0].kind, "tracker.impediment.changed");
     assert_eq!(collector.events[0].data, json!({"from": false, "to": true, "author": "Ana"}));
+}
+
+#[tokio::test]
+async fn the_site_is_found_however_the_server_wraps_the_list() {
+    let one = json!({"values": [{"id": "1", "key": "APP", "name": "App"}], "isLast": true});
+    for sites in [real_sites(), json!({"result": real_sites()}), json!({"resources": real_sites()})] {
+        let http = structured(&[sites.clone(), one.clone()]);
+        let options = Jira.accounts(&http, &creds()).await;
+        let Ok(options) = options else { panic!("{sites}: {options:?}") };
+        assert_eq!(options.len(), 1, "{sites}");
+        assert_eq!(options[0].label, "minhaempresa.atlassian.net");
+        assert_eq!(options[0].settings["cloud_id"], "0aeb9d87-1111");
+        assert_eq!(options[0].settings["project"], "APP", "the only project becomes the default");
+    }
+    let http = session(&[json!({"result": real_sites()}), json!({"values": []})]);
+    let options = Jira.accounts(&http, &creds()).await;
+    assert_eq!(options.map(|o| o[0].settings.get("project").cloned()), Ok(None));
+}
+
+#[tokio::test]
+async fn an_account_without_sites_fails_the_sign_in() {
+    for empty in [json!([]), json!({"result": []}), json!("nothing here")] {
+        let http = session(std::slice::from_ref(&empty));
+        let refused = Jira.accounts(&http, &creds()).await;
+        assert_eq!(refused.map_err(|e| e.message), Err(NO_SITES.to_owned()), "{empty}");
+    }
+    assert_eq!(Jira.chooses(), ["cloud_id"]);
+}
+
+#[tokio::test]
+async fn a_connection_without_a_site_or_a_project_is_blocked() {
+    let http = session(&[]);
+    let bare = Credentials::new(&ConnectionId::from("jira1"), "at", json!({}));
+    let refused = Jira.call(&http, &bare, actions::SEARCH, &json!({"query": "x"}), "").await;
+    assert_eq!(refused.as_ref().map_err(ActionError::blocker), Err(Some(NO_SITE)));
+    let http = session(&[]);
+    let siteless = Credentials::new(&ConnectionId::from("jira1"), "at", json!({"cloud_id": "c1"}));
+    let refused = Jira.call(&http, &siteless, actions::CREATE_ISSUE, &json!({"title": "T"}), "").await;
+    assert_eq!(refused.as_ref().map_err(ActionError::blocker), Err(Some(NO_PROJECT)));
+    assert!(tool_calls(&http).is_empty());
+}
+
+#[tokio::test]
+async fn projects_list_the_visible_projects_of_the_site_and_page_through_them() {
+    let full: Vec<Value> = (0..50).map(|n| json!({"id": n.to_string(), "key": format!("P{n}"), "name": "x"})).collect();
+    let last = json!({"values": [{"id": "99", "key": "OPS", "name": "Operações", "avatarUrls": {"48x48": "https://a/ops.png"}}], "isLast": true});
+    let http = session(&[json!({"values": full}), last]);
+    let answer = call(&http, actions::PROJECTS, json!({"query": " op "}), "").await;
+    let Ok(Value::Array(projects)) = answer else { panic!("{answer:?}") };
+    assert_eq!(projects.len(), 51);
+    assert_eq!(projects[50], json!({"id": "99", "key": "OPS", "name": "Operações", "avatar": "https://a/ops.png"}));
+    let calls = tool_calls(&http);
+    assert_eq!(calls[0].0, "getVisibleJiraProjects");
+    assert_eq!(calls[0].1["cloudId"], "cloud1");
+    assert_eq!(calls[0].1["searchString"], "op");
+    assert_eq!(calls[1].1["startAt"], 50);
+}
+
+#[tokio::test]
+async fn a_created_issue_goes_to_the_chosen_project_and_reads_a_wrapped_answer() {
+    let http = structured(&[json!({"issues": []}), json!({"result": {"id": "10", "key": "OPS-3"}})]);
+    let answer = call(&http, actions::CREATE_ISSUE, json!({"project": "OPS", "title": "T"}), "k").await;
+    assert_eq!(answer.map(|a| a["ref"].clone()), Ok(json!("OPS-3")));
+    assert_eq!(tool_calls(&http)[1].1["projectKey"], "OPS");
 }

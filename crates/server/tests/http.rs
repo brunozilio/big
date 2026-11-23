@@ -239,6 +239,15 @@ async fn the_page_s_reads_go_through_the_connection() {
         .await
         .1;
     assert_eq!(found, json!([{ "key": "K-1", "title": "Corrigir", "status": "A fazer" }]));
+    let projects = world.send(Method::POST, "/api/connections/c1/call", Some(call("tracker.projects", json!({})))).await;
+    assert_eq!(projects.0, StatusCode::OK, "{}", projects.1);
+    assert_eq!(projects.1[0], json!({ "id": "1", "key": "APP", "name": "Aplicativo", "avatar": "https://tracker.test/app.png" }));
+    assert_eq!(projects.1[1]["avatar"], Value::Null);
+    fixture("call-projects", &projects.1);
+    let filtered = call("tracker.search", json!({ "query": "", "project": "OPS" }));
+    assert_eq!(world.send(Method::POST, "/api/connections/c1/call", Some(filtered)).await.0, StatusCode::OK);
+    let sent = world.provider.calls.lock().expect("calls").clone();
+    assert!(sent.iter().any(|(action, args)| action == "tracker.search" && args["project"] == "OPS"));
     let comment = world
         .send(
             Method::POST,
@@ -360,4 +369,50 @@ async fn the_live_feed_tells_about_items_sessions_connections_and_branding() {
     let response = tower::ServiceExt::oneshot(world.router.clone(), request).await.expect("response");
     assert_eq!(response.status(), StatusCode::OK);
     assert_eq!(response.headers()["content-type"], "text/event-stream");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_item_without_an_issue_keeps_the_project_chosen_in_the_composer() {
+    let world = World::new().await;
+    let body = json!({
+        "text": "Exportar CSV", "issue": null, "project": { "connection": "c1", "key": "OPS" },
+        "model": "auto", "attachments": [],
+    });
+    let (status, item) = world.send(Method::POST, "/api/items", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    let id = domain::workflow::ItemId::from(item["id"].as_str().expect("id"));
+    let kept = world.handle.item(&id).expect("store").expect("item");
+    assert_eq!(kept.input["project"], "OPS");
+    assert_eq!(kept.input["connection"], "c1");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_connection_saved_without_its_choice_learns_the_only_one_and_a_sign_in_with_none_fails() {
+    let world = World::new().await;
+    let record = store::ConnectionRecord {
+        id: "c2".into(),
+        provider: "picky".into(),
+        label: "Picky".into(),
+        account: Some("Picky".into()),
+        capabilities: vec!["tracker".into()],
+        settings: json!({}),
+    };
+    world.store.save_connection(&record).expect("connection");
+    let grant = connectors::Grant::bearer("tok");
+    world.connectors.keeper().store().save(&domain::connection::ConnectionId::from("c2"), &grant).await.expect("grant");
+    let call = json!({ "action": "tracker.search", "args": { "query": "x" } });
+    let found = world.send(Method::POST, "/api/connections/c2/call", Some(call)).await;
+    assert_eq!(found.0, StatusCode::OK, "{}", found.1);
+    assert_eq!(found.1[0]["title"], "only.test");
+    let kept = world.store.connection("c2").expect("store").expect("record");
+    assert_eq!(kept.settings["site"], "only.test");
+    let started = world.send(Method::POST, "/api/connections/picky/start", Some(json!({ "fields": {} }))).await.1;
+    let flow = started["flow"].clone();
+    let mut last = Value::Null;
+    for _ in 0..3 {
+        last = world.send(Method::POST, "/api/connections/device/poll", Some(json!({ "flow": flow }))).await.1;
+    }
+    assert_eq!(last["state"], "failed", "{last}");
+    assert!(last["message"].as_str().is_some_and(|text| text.contains("Picky")), "{last}");
+    assert_eq!(world.store.connections().expect("store").len(), 2, "nothing was saved without a choice");
 }

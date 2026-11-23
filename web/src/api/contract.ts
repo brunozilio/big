@@ -94,6 +94,7 @@ export interface Item {
 export interface NewItem {
   text: string
   issue: { connection: string; key: string } | null
+  project?: { connection: string; key: string } | null
   model: string
   effort: Effort
   fast: boolean
@@ -190,6 +191,13 @@ export interface IssueSummary {
   status: string | null
 }
 
+export interface TrackerProject {
+  id: string
+  key: string
+  name: string
+  avatar: string | null
+}
+
 export interface IssueData {
   key: string
   url: string | null
@@ -252,7 +260,8 @@ export interface PipelineRun {
 }
 
 export type ConnectionCall =
-  | { action: 'tracker.search'; args: { query: string }; result: IssueSummary[] }
+  | { action: 'tracker.search'; args: { query: string; project?: string }; result: IssueSummary[] }
+  | { action: 'tracker.projects'; args: { query?: string }; result: TrackerProject[] }
   | { action: 'tracker.issue'; args: { key: string }; result: IssueData }
   | { action: 'tracker.comment'; args: { key: string; body: string }; result: Comment }
   | { action: 'code.change'; args: { change: string }; result: ChangeData }

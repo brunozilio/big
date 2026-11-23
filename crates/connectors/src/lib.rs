@@ -21,4 +21,4 @@ pub use oauth::{
     Authorization, DeviceApp, DeviceCode, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, OAuthApp, Polled,
     RegisteredClient, SsoSpec, TokenKeeper, TokenStore,
 };
-pub use provider::{AccountOption, Args, Credentials, EventBatch, EventSource, ExternalEvent, Provider};
+pub use provider::{AccountOption, Args, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SettingsSink};

@@ -10,7 +10,7 @@ use crate::contracts::{self, tracker as actions};
 use crate::descriptor::{AuthSpec, Presentation, ProviderDescriptor};
 use crate::error::ActionError;
 use crate::http::Http;
-use crate::mcp::McpClient;
+use crate::mcp::{self, McpClient};
 use crate::oauth::{Loopback, mcp::McpSignIn};
 use crate::provider::{AccountOption, Args, Credentials, EventSource, Provider, text_of, unknown_action};
 
@@ -25,6 +25,12 @@ pub const SCOPES: [&str; 6] = [
     "offline_access",
 ];
 const LOGO: &str = include_str!("logo.svg");
+const PAGE: u64 = 50;
+const MOST_PAGES: u64 = 10;
+pub const NO_SITE: &str = "Reconecte o Jira e escolha o site.";
+pub const NO_PROJECT: &str = "Escolha o projeto.";
+pub const NO_SITES: &str =
+    "Nenhum site do Jira foi encontrado nesta conta Atlassian. Confira se a conta tem acesso ao Jira e conecte de novo.";
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Jira;
@@ -49,8 +55,7 @@ struct Api<'a> {
 
 impl<'a> Api<'a> {
     async fn new(http: &'a dyn Http, creds: &'a Credentials) -> Result<Api<'a>, ActionError> {
-        let cloud =
-            creds.setting("cloud_id").ok_or_else(|| ActionError::permanent("the connection has no site chosen"))?;
+        let cloud = creds.setting("cloud_id").ok_or_else(|| ActionError::blocked(NO_SITE))?;
         Ok(Api {
             mcp: McpClient::connect(http, brand::connectors::ATLASSIAN_MCP_URL, &creds.access_token).await?,
             cloud: cloud.to_owned(),
@@ -78,7 +83,7 @@ impl<'a> Api<'a> {
 
     fn project<'p>(&'p self, args: Args<'p>) -> Result<&'p str, ActionError> {
         let project = args.optional_text("project").or(self.project.as_deref());
-        jql_key(project.ok_or_else(|| ActionError::missing("project"))?)
+        jql_key(project.ok_or_else(|| ActionError::blocked(NO_PROJECT))?)
     }
 
     fn browse(&self, key: &str) -> String {
@@ -100,19 +105,59 @@ pub fn jql_key(key: &str) -> Result<&str, ActionError> {
     if valid { Ok(key) } else { Err(ActionError::permanent(format!("{key:?} is not a project or issue key"))) }
 }
 
-pub fn listed<'v>(value: &'v Value, field: &str) -> &'v [Value] {
-    value[field].as_array().map(Vec::as_slice).unwrap_or_default()
+pub fn listed(value: &Value, field: &str) -> Vec<Value> {
+    mcp::items(value, field)
 }
 
-async fn projects(mcp: &McpClient<'_>, cloud: &str) -> Option<String> {
-    let arguments = json!({ "cloudId": cloud, "action": "browse", "expandIssueTypes": false, "maxResults": 50 });
-    let found = mcp.call("getVisibleJiraProjects", arguments).await.ok()?;
-    let keys: Vec<String> = listed(&found, "values").iter().map(|project| text_of(project, "/key")).collect();
-    match keys.len() {
-        0 => None,
-        1 => Some(format!("Projeto {}", keys[0])),
-        _ => Some(format!("Projetos {}", keys.join(", "))),
+pub fn project_of(project: &Value) -> Value {
+    let avatar = project.pointer("/avatarUrls/48x48").and_then(Value::as_str);
+    json!({
+        "id": text_of(project, "/id"),
+        "key": text_of(project, "/key"),
+        "name": text_of(project, "/name"),
+        "avatar": avatar,
+    })
+}
+
+pub async fn visible_projects(mcp: &McpClient<'_>, cloud: &str, query: Option<&str>) -> Result<Vec<Value>, ActionError> {
+    let mut found = Vec::new();
+    for page in 0..MOST_PAGES {
+        let mut arguments = json!({
+            "cloudId": cloud, "action": "browse", "expandIssueTypes": false, "maxResults": PAGE, "startAt": page * PAGE,
+        });
+        if let Some(query) = query.map(str::trim).filter(|query| !query.is_empty()) {
+            arguments["searchString"] = json!(query);
+        }
+        let answer = mcp.call("getVisibleJiraProjects", arguments).await?;
+        let projects = listed(&answer, "values");
+        let fetched = projects.len();
+        found.extend(projects.iter().map(project_of).filter(|project| !text_of(project, "/key").is_empty()));
+        if answer["isLast"] == json!(true) || u64::try_from(fetched).unwrap_or(0) < PAGE {
+            break;
+        }
     }
+    Ok(found)
+}
+
+fn site_settings(site: &Value, projects: &[Value]) -> Value {
+    let keys: Vec<String> = projects.iter().map(|project| text_of(project, "/key")).collect();
+    let detail = match keys.len() {
+        0 => text_of(site, "/name"),
+        1 => format!("Projeto {}", keys[0]),
+        _ => format!("Projetos {}", keys.join(", ")),
+    };
+    let url = text_of(site, "/url");
+    let mut settings = json!({ "cloud_id": text_of(site, "/id"), "site_url": url, "detail": detail });
+    if let [only] = keys.as_slice() {
+        settings["project"] = json!(only);
+    }
+    settings
+}
+
+fn site_label(site: &Value) -> String {
+    let url = text_of(site, "/url");
+    let label = url.trim_start_matches("https://").trim_end_matches('/');
+    if label.is_empty() { text_of(site, "/name") } else { label.to_owned() }
 }
 
 #[async_trait]
@@ -156,6 +201,7 @@ impl Provider for Jira {
             actions::TRANSITION => tracker::transition(&api, args.text("issue")?, args.text("status")?).await,
             actions::SET_IMPEDIMENT => tracker::set_impediment(&api, args, idempotency_key).await,
             actions::SEARCH => tracker::search(&api, args).await,
+            actions::PROJECTS => tracker::projects(&api, args).await,
             _ => Err(unknown_action(action)),
         }
     }
@@ -163,18 +209,22 @@ impl Provider for Jira {
     async fn accounts(&self, http: &dyn Http, creds: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
         let mcp = McpClient::connect(http, brand::connectors::ATLASSIAN_MCP_URL, &creds.access_token).await?;
         let sites = mcp.call("getAccessibleAtlassianResources", json!({})).await?;
+        let sites: Vec<Value> =
+            listed(&sites, "resources").into_iter().filter(|site| !text_of(site, "/id").is_empty()).collect();
+        if sites.is_empty() {
+            return Err(ActionError::permanent(NO_SITES));
+        }
         let mut options = Vec::new();
-        for site in sites.as_array().map(Vec::as_slice).unwrap_or_default() {
+        for site in &sites {
             let id = text_of(site, "/id");
-            let url = text_of(site, "/url");
-            let detail = projects(&mcp, &id).await.unwrap_or_else(|| text_of(site, "/name"));
-            options.push(AccountOption {
-                label: url.trim_start_matches("https://").to_owned(),
-                settings: json!({ "cloud_id": id, "site_url": url, "detail": detail }),
-                id,
-            });
+            let projects = visible_projects(&mcp, &id, None).await.unwrap_or_default();
+            options.push(AccountOption { label: site_label(site), settings: site_settings(site, &projects), id });
         }
         Ok(options)
+    }
+
+    fn chooses(&self) -> &'static [&'static str] {
+        &["cloud_id"]
     }
 
     fn events(&self) -> Option<&dyn EventSource> {

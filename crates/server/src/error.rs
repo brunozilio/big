@@ -66,7 +66,7 @@ impl From<store::Error> for ApiError {
 
 impl From<connectors::ActionError> for ApiError {
     fn from(error: connectors::ActionError) -> ApiError {
-        ApiError::upstream(error.message)
+        ApiError::upstream(error.shown())
     }
 }
 

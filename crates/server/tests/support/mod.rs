@@ -63,9 +63,10 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value)>>,
 }
 
-const ACTIONS: [&str; 6] = [
+const ACTIONS: [&str; 7] = [
     "tracker.issue",
     "tracker.search",
+    "tracker.projects",
     "tracker.comment",
     "code.pull_request",
     "code.files_diff",
@@ -112,6 +113,10 @@ impl Provider for FakeProvider {
                 "description": "texto", "subtasks": [], "attachments": [], "comments": [] })
             }
             "tracker.search" => json!({ "issues": [{ "ref": "K-1", "title": "Corrigir", "status": "A fazer" }] }),
+            "tracker.projects" => json!([
+                { "id": "1", "key": "APP", "name": "Aplicativo", "avatar": "https://tracker.test/app.png" },
+                { "id": "2", "key": "OPS", "name": "Operações" },
+            ]),
             "tracker.comment" => json!({ "id": "9", "created": true }),
             "code.pull_request" => {
                 json!({ "ref": "o/r#3", "number": 3, "title": "PR", "url": "https://code.test/3", "state": "open", "head": "h", "base": "main", "reviews": [] })
@@ -133,7 +138,40 @@ impl Provider for FakeProvider {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct Picky;
+
+#[async_trait]
+impl Provider for Picky {
+    fn descriptor(&self) -> ProviderDescriptor {
+        let mut descriptor = FakeProvider::default().descriptor();
+        descriptor.key = ProviderKey::from("picky");
+        descriptor.name = "Picky".into();
+        descriptor.capabilities = vec![Capability::from("tracker")];
+        descriptor.actions = vec![ActionSpec::read("tracker.search", object(&[], &[]), json!({}))];
+        descriptor
+    }
+
+    async fn call(&self, _: &dyn Http, creds: &Credentials, _: &str, _: &Value, _: &str) -> Result<Value, ActionError> {
+        let site = creds.setting("site").ok_or_else(|| ActionError::blocked("Reconecte e escolha o site."))?;
+        Ok(json!({ "issues": [{ "ref": "S-1", "title": site, "status": "A fazer" }] }))
+    }
+
+    async fn accounts(&self, _: &dyn Http, creds: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
+        if creds.access_token == "novo" {
+            return Ok(Vec::new());
+        }
+        Ok(vec![AccountOption { id: "s".into(), label: "only.test".into(), settings: json!({ "site": "only.test" }) }])
+    }
+
+    fn chooses(&self) -> &'static [&'static str] {
+        &["site"]
+    }
+}
+
 pub struct World {
+    pub store: Arc<Store>,
+    pub connectors: Arc<Connectors>,
     pub dir: tempfile::TempDir,
     pub provider: &'static FakeProvider,
     pub engine: FakeEngine,
@@ -195,7 +233,9 @@ impl World {
         let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(FixedClock::at_second(1_000)));
         let provider: &'static FakeProvider = Box::leak(Box::new(FakeProvider::default()));
         let fake: &'static dyn Provider = provider;
-        let connectors = Arc::new(Connectors::with_providers(&[fake], http, keeper));
+        let picky: &'static dyn Provider = &Picky;
+        let sink = Arc::new(server::StoredSettings(Arc::clone(&store)));
+        let connectors = Arc::new(Connectors::with_providers(&[fake, picky], http, keeper).with_sink(sink));
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();
         let builtin: orchestrator::Builtin = Arc::new(content::builtin_text);
         let resources = Resources::new(Some(repo(dir.path()).join(brand::DIR)), None, builtin).listing(listed);
@@ -203,10 +243,16 @@ impl World {
             .with_resources(resources)
             .without_sync();
         let handle = Orchestrator::start(config).expect("start");
-        let backend =
-            server::Backend { orchestrator: (*handle).clone(), store, connectors, client, engine: Some(keyed), data };
+        let backend = server::Backend {
+            orchestrator: (*handle).clone(),
+            store: Arc::clone(&store),
+            connectors: Arc::clone(&connectors),
+            client,
+            engine: Some(keyed),
+            data,
+        };
         let (router, ctx_live) = server::app(backend, BUNDLE, 7999);
-        World { dir, provider, engine, handle, router, ctx_live }
+        World { store, connectors, dir, provider, engine, handle, router, ctx_live }
     }
 
     pub async fn send(&self, method: Method, path: &str, body: Option<Value>) -> (StatusCode, Value) {

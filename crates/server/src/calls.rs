@@ -56,6 +56,7 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
     let caller = Caller { shared, record };
     match action {
         "tracker.search" => search(&caller, args).await,
+        "tracker.projects" => projects(&caller, args).await,
         "tracker.issue" => Ok(issue(&caller.call(tracker::ISSUE, json!({ "issue": arg(args, "key")? })).await?)),
         "tracker.comment" => {
             let body = arg(args, "body")?;
@@ -71,10 +72,33 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
 
 async fn search(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
     let query = args["query"].as_str().unwrap_or_default();
-    let found = caller.call(tracker::SEARCH, json!({ "query": query, "limit": 20 })).await?;
+    let mut wanted = json!({ "query": query, "limit": 20 });
+    if let Some(project) = args["project"].as_str().filter(|project| !project.is_empty()) {
+        wanted["project"] = json!(project);
+    }
+    let found = caller.call(tracker::SEARCH, wanted).await?;
     let listed: Vec<Value> = list(&found, "issues")
         .iter()
         .map(|issue| json!({ "key": text(&issue["ref"]), "title": text(&issue["title"]), "status": issue["status"].as_str() }))
+        .collect();
+    Ok(json!(listed))
+}
+
+async fn projects(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
+    let mut wanted = json!({});
+    if let Some(query) = args["query"].as_str().filter(|query| !query.is_empty()) {
+        wanted["query"] = json!(query);
+    }
+    let found = caller.call(tracker::PROJECTS, wanted).await?;
+    let listed: Vec<Value> = items(&found)
+        .iter()
+        .map(|project| {
+            json!({
+                "id": text(&project["id"]), "key": text(&project["key"]), "name": text(&project["name"]),
+                "avatar": project["avatar"].as_str(),
+            })
+        })
+        .filter(|project| !text(&project["key"]).is_empty())
         .collect();
     Ok(json!(listed))
 }

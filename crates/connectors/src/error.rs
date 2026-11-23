@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 
 pub const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(60);
 pub const RECONNECT: &str = "the access could not be renewed; reconnect the account";
+pub const BLOCKED: &str = "blocked: ";
 
 pub use domain::effect::ErrorClass;
 
@@ -37,6 +38,18 @@ impl ActionError {
 
     pub fn reconnect() -> ActionError {
         ActionError::auth(RECONNECT)
+    }
+
+    pub fn blocked(reason: impl fmt::Display) -> ActionError {
+        ActionError::permanent(format!("{BLOCKED}{reason}"))
+    }
+
+    pub fn blocker(&self) -> Option<&str> {
+        if self.class == ErrorClass::Permanent { self.message.strip_prefix(BLOCKED) } else { None }
+    }
+
+    pub fn shown(&self) -> &str {
+        self.blocker().unwrap_or(&self.message)
     }
 
     pub fn rate_limited(retry_after: Duration, message: impl Into<String>) -> ActionError {

@@ -96,6 +96,9 @@ fn input(shared: &Shared, body: &Value) -> ApiResult<Value> {
     if let Some(key) = issue {
         input["issue"] = json!(key);
         input["connection"] = body["issue"]["connection"].clone();
+    } else if let Some(project) = body["project"]["key"].as_str().filter(|key| !key.is_empty()) {
+        input["project"] = json!(project);
+        input["connection"] = body["project"]["connection"].clone();
     }
     if let Some(model) = body["model"].as_str().filter(|model| !model.is_empty()) {
         input["model"] = json!(model);

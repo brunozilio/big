@@ -107,14 +107,14 @@ impl EventSource for JiraEvents {
         for _ in 0..PAGES {
             let page = api.search(&jql, &["updated"], token.as_deref()).await?;
             let issues = listed(&page, "issues");
-            for found in issues {
+            for found in &issues {
                 let arguments = json!({
                     "issueIdOrKey": text_of(found, "/key"), "fields": DETAIL, "expand": "changelog",
                     "responseContentFormat": "markdown",
                 });
                 collector.issue(&api.tool("getJiraIssue", arguments).await?);
             }
-            newest = latest(issues, newest);
+            newest = latest(&issues, newest);
             token = page["nextPageToken"].as_str().map(str::to_owned).filter(|_| page["isLast"] != json!(true));
             if token.is_none() {
                 break;
