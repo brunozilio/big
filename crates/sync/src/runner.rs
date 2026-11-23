@@ -219,6 +219,7 @@ impl Synchronizer {
     async fn after_failure(&self, entry: &Entry, book: &Book, desired: &[Desired], error: &Error) -> Duration {
         let id = &entry.connection.id;
         let class = error.class();
+        tracing::warn!(connection = %id.as_str(), ?class, %error, "the sync of a connection failed");
         if class == ErrorClass::Auth {
             let _ = self.revoke(id, &error.to_string(), book, desired).await;
             return self.config.slow_poll;

@@ -76,7 +76,7 @@ fn status(shared: &Shared, record: &ConnectionRecord) -> &'static str {
     let health = shared.backend.orchestrator.health();
     let state = health.map(|health| health.state(&ConnectionId::from(record.id.as_str())));
     match state {
-        Some(ConnectionState::NeedsReconnect { .. } | ConnectionState::Failing { .. }) => "error",
+        Some(ConnectionState::NeedsReconnect { .. }) => "error",
         _ => "ok",
     }
 }
