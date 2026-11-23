@@ -32,25 +32,18 @@ impl Agent<'_> {
         }
     }
 
-    pub(super) fn ask_permission(
-        &self,
-        asking: &Asking<'_>,
-        shown: &str,
-        rememberable: bool,
-        rule: Option<String>,
-    ) -> Outcome {
+    pub(super) fn ask_permission(&self, asking: &Asking<'_>, shown: &str, rememberable: bool) -> Outcome {
         let Asking { id, tool, called, .. } = *asking;
         let Called { name, input, .. } = *called;
         self.notify(
             "permission_prompt",
             &format!("{brand_name} needs your permission to use {name}", brand_name = brand::NAME),
         );
-        let kind =
-            AskKind::Permission { tool: name.to_owned(), subject: shown.to_owned(), rememberable, rule: rule.clone() };
+        let kind = AskKind::Permission { tool: name.to_owned(), subject: shown.to_owned(), rememberable };
         match self.asked_relaying(id, kind, Some(input)) {
             Ok(Decision::Allow | Decision::Answer(_) | Decision::Approve(_)) => self.went_ahead(id, tool, input),
             Ok(Decision::AllowAlways) => {
-                self.remember_allowed(asking, rule);
+                self.remember_allowed(asking);
                 self.went_ahead(id, tool, input)
             }
             Ok(Decision::Deny) => self.refused(
@@ -64,33 +57,9 @@ impl Agent<'_> {
         }
     }
 
-    fn remember_allowed(&self, asking: &Asking<'_>, rule: Option<String>) {
-        match rule {
-            Some(rule) => {
-                match crate::prompt::permissions::keep_allow(&self.workspace.cwd, &rule) {
-                    Ok(()) => self.say_when_the_rule_waits_for_trust(&rule),
-                    Err(error) => tracing::warn!(%error, %rule, "the rule lasts this session only"),
-                }
-                self.control.remember(|remembered| remembered.allow_rule(&rule));
-            }
-            None => {
-                let Judgement { standing, subject, .. } = asking.judgement;
-                self.control.remember(|remembered| remembered.remember(asking.called.name, *standing, subject));
-            }
-        }
-    }
-
-    fn say_when_the_rule_waits_for_trust(&self, rule: &str) {
-        let workspace = self.workspace;
-        let kept = workspace.cwd.join(brand::DIR).join("settings.local.json");
-        let gate = crate::trust::Gate::at(&workspace.cwd, workspace.home.as_deref(), workspace.policy.trust);
-        if !gate.honours(&kept) {
-            (self.emit)(EngineEvent::Notice(format!(
-                "Kept {rule} in {}/settings.local.json. This folder is not trusted, so the rule holds for this run \
-                 only; it applies to later ones once you trust the folder (/trust).",
-                brand::DIR
-            )));
-        }
+    fn remember_allowed(&self, asking: &Asking<'_>) {
+        let Judgement { standing, subject, .. } = asking.judgement;
+        self.control.remember(|remembered| remembered.remember(asking.called.name, *standing, subject));
     }
 
     pub(in crate::agent) fn asked(&self, call: &str, kind: AskKind) -> Result<Decision, RecvError> {

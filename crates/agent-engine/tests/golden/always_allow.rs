@@ -30,7 +30,7 @@ fn an_edit_always_allowed_is_remembered_for_the_run_only_and_writes_no_rule() {
         Checkpoint(0)
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
         ToolStarted w1 Write "out.txt" input="{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
-        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true, rule: None }
+        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true }
         Answered ask-<uuid>-w1 AllowAlways
         Edited(Edited { path: "<project>/out.txt", line: 1, removed: 0, added: 1 })
         ToolFinished w1
@@ -101,99 +101,6 @@ fn an_edit_always_allowed_is_remembered_for_the_run_only_and_writes_no_rule() {
         rewritten
         == settings.local.json ==
         (absent)
-        "##,
-    );
-}
-
-#[cfg(unix)]
-#[test]
-fn a_command_always_allowed_runs_and_keeps_its_rule_in_the_project_s_local_settings() {
-    let stage = Stage::new();
-    stage.script([
-        call("b1", "Bash", json!({"command": "echo one"})),
-        call("b2", "Bash", json!({"command": "echo one"})),
-        says("Done."),
-    ]);
-    let mut request = stage.trusted("Echo twice");
-    request.policy.permission = PermissionMode::Ask;
-
-    let mut run = stage.start(&request);
-    let ask = run.asked();
-    run.answer(&ask, Decision::AllowAlways);
-    stage.end("prompt", run);
-
-    stage.disk("settings.local.json", &stage.project.join(brand::DIR).join("settings.local.json"));
-    stage.assert(
-        r##"
-        == prompt: events ==
-        SessionStarted <session-1>
-        Checkpoint(0)
-        Usage model=claude-opus-5-5 input=10 output=5 cost=none
-        ToolStarted b1 Bash "echo one" input="{\"command\":\"echo one\"}"
-        Asked ask-<uuid>-b1 Permission { tool: "Bash", subject: "echo one", rememberable: true, rule: Some("Bash(echo one:*)") }
-        Answered ask-<uuid>-b1 AllowAlways
-        ToolProgress b1 "one"
-        ToolFinished b1
-        ToolResult b1 ok "one"
-        Usage model=claude-opus-5-5 input=10 output=5 cost=none
-        ToolStarted b2 Bash "echo one" input="{\"command\":\"echo one\"}"
-        ToolProgress b2 "one"
-        ToolFinished b2
-        ToolResult b2 ok "one"
-        Text "Done."
-        Usage model=claude-opus-5-5 input=10 output=5 cost=none
-        Completed duration=<ms> cost=none
-        == prompt: conversation ==
-        user:
-          text "Echo twice"
-          reminder "# Runtime reminder\nAsk mode: tool actions require the permissions enforced by the runtime. Respect denials and do not bypass them.\nCollect background agent reports be…
-        assistant:
-          tool_use b1 Bash "{\"command\":\"echo one\"}"
-        user:
-          tool_result b1 ok "one"
-        assistant:
-          tool_use b2 Bash "{\"command\":\"echo one\"}"
-        user:
-          tool_result b2 ok "one"
-        assistant:
-          text "Done."
-        == prompt: log appended ==
-        prompted "Echo twice"
-        event SessionStarted
-        opened
-        event Checkpoint
-        message user
-        called model=claude-opus-5-5 stop=ToolUse messages=1
-        event Usage
-        message assistant
-        event ToolStarted b1
-        event Asked
-        event Answered
-        event ToolProgress b1
-        event ToolFinished b1
-        event ToolResult b1
-        message user
-        called model=claude-opus-5-5 stop=ToolUse messages=3
-        event Usage
-        message assistant
-        event ToolStarted b2
-        event ToolProgress b2
-        event ToolFinished b2
-        event ToolResult b2
-        message user
-        event TextDelta
-        called model=claude-opus-5-5 stop=EndTurn messages=5
-        event Usage
-        message assistant
-        event Completed
-        == settings.local.json ==
-        {
-          "permissions": {
-            "allow": [
-              "Bash(echo one:*)"
-            ]
-          }
-        }
         "##,
     );
 }

@@ -6,7 +6,6 @@ use super::plugins::PluginsRequest;
 use super::schedules::SchedulesRequest;
 use super::sessions::SessionsRequest;
 use super::shell::ShellRequest;
-use super::suggested_rules::SuggestedRulesRequest;
 use super::trace::TraceRequest;
 use super::workspace::{WorkspaceOp, WorkspaceRequest};
 use super::*;
@@ -23,7 +22,6 @@ fn every_feature_has_a_name_in_one_fixed_order() {
         [
             "channels",
             "code_map",
-            "declared_providers",
             "flags",
             "memory",
             "output_savings",
@@ -31,7 +29,6 @@ fn every_feature_has_a_name_in_one_fixed_order() {
             "schedules",
             "sessions",
             "shell",
-            "suggested_rules",
             "trace",
             "workspace",
         ]
@@ -66,8 +63,6 @@ fn what_used_to_take_a_silent_default_is_refused_when_it_is_missing() {
     assert!(refused::<PluginsRequest>(json!({})), "the op is required");
     assert!(refused::<FlagsRequest>(json!({ "set": { "cwd": "/repo", "name": "budget" } })), "the state is required");
     assert!(refused::<FlagsRequest>(json!({ "set": { "cwd": "/repo", "on": false } })), "the name is required");
-    assert!(refused::<SuggestedRulesRequest>(json!({ "keep_rule": { "cwd": "/repo", "rule": "Bash(ls:*)" } })));
-    assert!(refused::<SuggestedRulesRequest>(json!({ "keep_rule": { "cwd": "/r", "rule": "x", "kind": "dney" } })));
     assert!(refused::<TraceRequest>(json!({ "session": { "session": "s" } })), "the folder is required");
     assert!(refused::<SchedulesRequest>(json!({ "create": { "prompt": "x" } })));
     assert!(refused::<ShellRequest>(json!({ "run": { "command": "ls" } })), "the folder is required");
@@ -93,8 +88,8 @@ fn every_request_round_trips() {
 
 #[test]
 fn a_feature_that_is_off_says_how_to_turn_it_on_and_a_failure_says_what_failed() {
-    let off = FeatureError::FeatureOff { feature: FeatureName::SuggestedRules };
-    assert_eq!(off.to_string(), "suggested_rules is turned off (/features suggested-rules on)");
+    let off = FeatureError::FeatureOff { feature: FeatureName::Schedules };
+    assert_eq!(off.to_string(), "schedules is turned off (/features schedules on)");
     for feature in FeatureName::ALL {
         let said = FeatureError::FeatureOff { feature }.to_string();
         match feature.switch() {
@@ -107,5 +102,5 @@ fn a_feature_that_is_off_says_how_to_turn_it_on_and_a_failure_says_what_failed()
     }
     let failed = FeatureError::Failed { feature: FeatureName::Memory, message: "nothing to undo".into() };
     assert_eq!((failed.to_string().as_str(), failed.feature()), ("nothing to undo", FeatureName::Memory));
-    assert_ne!(off, FeatureError::Failed { feature: FeatureName::SuggestedRules, message: off.to_string() });
+    assert_ne!(off, FeatureError::Failed { feature: FeatureName::Schedules, message: off.to_string() });
 }

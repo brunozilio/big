@@ -5,7 +5,6 @@ pub const SCHEDULES: &str = "schedules";
 pub const PLUGINS: &str = "plugins";
 pub const TRACE: &str = "trace";
 pub const CHANNELS: &str = "channels";
-pub const DECLARED_PROVIDERS: &str = "declared-providers";
 
 pub const KNOWN: &[Flag] = &[
     Flag { name: MEMORY_SEARCH, about: "The memory_search tool the agent uses to look further into project memory" },
@@ -13,10 +12,6 @@ pub const KNOWN: &[Flag] = &[
     Flag { name: PLUGINS, about: "Install, update, list and remove plugins" },
     Flag { name: TRACE, about: "/trace and /console show what each run did, on the local web page" },
     Flag { name: CHANNELS, about: "MCP servers that stay open for the session and send messages to the agent" },
-    Flag {
-        name: DECLARED_PROVIDERS,
-        about: "Load the model providers that files in your settings folder and the project declare",
-    },
 ];
 
 #[cfg(test)]

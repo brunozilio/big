@@ -108,8 +108,6 @@ pub enum Protocol {
         description: String,
         #[serde(default)]
         rememberable: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        rule: Option<String>,
     },
     PermissionResponse {
         request_id: String,
@@ -246,8 +244,6 @@ pub enum Asked {
         description: String,
         #[serde(default)]
         rememberable: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        rule: Option<String>,
     },
     Plan {
         plan: String,
@@ -265,8 +261,8 @@ pub struct TeammateAsk {
 impl TeammateAsk {
     pub fn of(team: &str, mail: &Mail) -> Option<Self> {
         let (request_id, from, asked) = match Protocol::of(&mail.text)? {
-            Protocol::PermissionRequest { request_id, from, tool_name, description, rememberable, rule } => {
-                (request_id, from, Asked::Permission { tool_name, description, rememberable, rule })
+            Protocol::PermissionRequest { request_id, from, tool_name, description, rememberable } => {
+                (request_id, from, Asked::Permission { tool_name, description, rememberable })
             }
             Protocol::PlanApprovalRequest { request_id, from, plan } => (request_id, from, Asked::Plan { plan }),
             _ => return None,
@@ -283,11 +279,10 @@ impl TeammateAsk {
 
     pub fn ask(&self) -> crate::AgentAsk {
         let kind = match &self.asked {
-            Asked::Permission { tool_name, description, rememberable, rule } => crate::AskKind::Permission {
+            Asked::Permission { tool_name, description, rememberable } => crate::AskKind::Permission {
                 tool: format!("{tool_name} (teammate {})", self.teammate),
                 subject: description.clone(),
                 rememberable: *rememberable,
-                rule: rule.clone(),
             },
             Asked::Plan { plan } => {
                 crate::AskKind::Plan { plan: format!("Plan from teammate {}:\n\n{plan}", self.teammate) }
@@ -447,7 +442,6 @@ mod tests {
             tool_name: "Bash".into(),
             description: "npm run deploy".into(),
             rememberable: true,
-            rule: Some("Bash(npm run:*)".into()),
         };
         let mail = mailed("tester", &request);
         let ask = TeammateAsk::of("team-1", &mail).expect("a request");
@@ -455,8 +449,8 @@ mod tests {
         assert_eq!(question.id.0, "teammate-ask:team-1:tester:p1");
         assert!(matches!(
             &question.kind,
-            crate::AskKind::Permission { tool, subject, rememberable: true, rule: Some(rule) }
-                if tool == "Bash (teammate tester)" && subject == "npm run deploy" && rule == "Bash(npm run:*)"
+            crate::AskKind::Permission { tool, subject, rememberable: true }
+                if tool == "Bash (teammate tester)" && subject == "npm run deploy"
         ));
         for decision in [
             crate::Decision::Allow,

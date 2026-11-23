@@ -88,16 +88,6 @@ impl Stage {
         request
     }
 
-    pub fn trusted(&self, prompt: &str) -> PromptRequest {
-        let mut request = self.request(prompt);
-        request.host.extensions = Some(Extensions {
-            home: Some(self.home.clone()),
-            trust: domain::trust::Trust::Trusted,
-            ..Extensions::default()
-        });
-        request
-    }
-
     pub fn resuming(&self, session: &SessionId, prompt: &str) -> PromptRequest {
         let mut request = self.request(prompt);
         request.session.resume = Some(session.clone());
@@ -231,10 +221,8 @@ impl Stage {
             .collect();
         kept.sort();
         for path in kept {
-            let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
-            let stream = if name.ends_with(".trace.jsonl") { "trace file" } else { "conversation file" };
             let text = std::fs::read_to_string(&path).expect("a session file");
-            self.section(&format!("{label}: {stream}"), text.lines().map(render::line).collect());
+            self.section(&format!("{label}: session file"), text.lines().map(render::line).collect());
         }
     }
 

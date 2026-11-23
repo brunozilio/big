@@ -181,12 +181,3 @@ fn end_unfinished_line(path: &Path) -> io::Result<&'static str> {
     file.set_len(last as u64)?;
     Ok("")
 }
-
-pub(super) fn ends_mid_line(path: &Path) -> bool {
-    let mut last = *b"\n";
-    let read = File::open(path).and_then(|mut file| {
-        file.seek(SeekFrom::End(-1))?;
-        file.read_exact(&mut last)
-    });
-    read.is_ok() && last != *b"\n"
-}

@@ -125,16 +125,4 @@ mod tests {
 
         assert_eq!((changes.base.as_str(), changes.files.as_slice()), ("HEAD", ["a.rs".to_owned()].as_slice()));
     }
-
-    #[cfg(unix)]
-    #[test]
-    fn reading_the_changes_runs_nothing_the_repository_s_config_names() {
-        let hostile = crate::hostile_repository::Hostile::new();
-
-        let changes = changes(hostile.path()).expect("changes");
-
-        assert!(changes.diff.contains("+two"), "{}", changes.diff);
-        assert_eq!(hostile.ran(), None, "the repository's fsmonitor, filter or diff program ran");
-        assert!(hostile.plain_git_runs_it(), "the same repository does run them through plain git");
-    }
 }

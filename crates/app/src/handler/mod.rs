@@ -16,7 +16,6 @@ use crate::handler::flows::Flows;
 use crate::handler::outbox::{Outbox, Replies};
 use crate::handler::runs::{Reach, RunTable};
 use crate::services::LocalServices;
-use crate::trust::Asked;
 
 #[derive(Debug)]
 pub struct CommandHandler {
@@ -173,11 +172,6 @@ impl CommandHandler {
             ClientCommand::SignOutMcpServer { path, name } => {
                 crate::mcp_auth::command::sign_out(&self.services, &path, &name)
             }
-            ClientCommand::Trust { path, trusted } => crate::trust::answer(&self.services, &path, Asked::Kept(trusted)),
-            ClientCommand::TrustForThisProcess { path } => {
-                crate::trust::answer(&self.services, &path, Asked::ForThisProcess)
-            }
-            ClientCommand::TrustState { path } => crate::trust::answer(&self.services, &path, Asked::State),
             ClientCommand::CancelRequest { request } => {
                 if !self.flows.cancel(request) {
                     tracing::debug!(%request, "nothing left to cancel for this request");
@@ -277,8 +271,6 @@ impl CommandHandler {
 
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod trust_tests;
 
 struct RunSink {
     runs: Arc<RunTable>,

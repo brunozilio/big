@@ -1,7 +1,7 @@
 mod commands;
 mod plan_watch;
 
-pub use commands::{commands, judge_rules};
+pub use commands::commands;
 pub use plan_watch::PlanWatch;
 use serde::{Deserialize, Serialize};
 
@@ -23,13 +23,10 @@ impl Criteria {
         Self { text: text.into(), source: CriteriaSource::Project }
     }
 
-    pub fn judge_allow(
-        &self,
-        owner: &crate::permission_rules::PermissionRules,
-    ) -> crate::permission_rules::PermissionRules {
+    pub fn judge_commands(&self) -> Vec<String> {
         match self.source {
-            CriteriaSource::Project => owner.clone(),
-            CriteriaSource::User | CriteriaSource::Plan => judge_rules(&self.text, owner),
+            CriteriaSource::Project => Vec::new(),
+            CriteriaSource::User | CriteriaSource::Plan => commands(&self.text),
         }
     }
 

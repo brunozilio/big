@@ -2,24 +2,17 @@ use domain::AgentStatus;
 
 use crate::agent::Ending;
 use crate::tools::Outcome;
-use crate::transcript::{Block, Message, Role};
+use crate::transcript::{Message, Role};
 
 pub(super) fn last_said(history: &[Message], own: usize) -> String {
-    let report = history
+    history
         .get(if history.len() >= own { own } else { 0 }..)
         .unwrap_or_default()
         .iter()
         .rev()
         .find(|message| message.role == Role::Assistant)
         .map(Message::text)
-        .unwrap_or_default();
-    let read_outside = history
-        .get(own.min(history.len())..)
         .unwrap_or_default()
-        .iter()
-        .flat_map(|message| &message.blocks)
-        .any(|block| matches!(block, Block::ToolUse { name, .. } if domain::untrusted::reads_outside(name)));
-    if read_outside && !report.trim().is_empty() { domain::untrusted::relayed(&report) } else { report }
 }
 
 pub(super) fn how_it_ran(unisolated: bool, unserved: Option<&str>, model: &str) -> String {

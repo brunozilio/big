@@ -27,7 +27,6 @@ done"#,
         command: "/bin/sh".into(),
         args: vec!["-c".into(), script],
         env: vec![],
-        sandbox: Default::default(),
     };
     let http: Arc<dyn Http> = Arc::new(NetHttp);
     let server = Arc::new(McpServer::open(&spec, &http).expect("valid test fixture"));
@@ -50,22 +49,15 @@ done"#,
 #[test]
 fn planning_mode_rejects_builtin_mutations() {
     use agent_engine::mcp::remote_effects;
-    use domain::permission::{Bounds, Call, NothingAround, PolicyContext, PolicyEngine, Remembered, Verdict};
-    use domain::permission_rules::PermissionRules;
+    use domain::permission::{Bounds, Call, PolicyContext, PolicyEngine, Remembered, Verdict};
     use domain::{PermissionMode, memory};
-    let (rules, remembered, bounds) = (PermissionRules::default(), Remembered::default(), Bounds::default());
+    let (remembered, bounds) = (Remembered::default(), Bounds::default());
     let planning = PolicyContext {
         mode: PermissionMode::Plan,
         ceiling: None,
-        rules: &rules,
         remembered: &remembered,
         bounds: &bounds,
-        cwd: "/repo",
-        home: None,
-        sandboxed: false,
-        sandbox_missing: None,
         no_prompts: false,
-        surroundings: &NothingAround,
     };
     let decide = |server: &str, tool: &str| {
         let effects = remote_effects(server, tool);

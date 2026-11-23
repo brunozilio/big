@@ -28,7 +28,7 @@ pub static FAMILY: Stand =
     Stand { id: "family-key", name: "Family Key", vendor: "anthropic", access: Access::Key, rank: 204 };
 
 pub fn install() {
-    crate::declared::install(&[&KEYED, &KEYED_TOO, &BROWSER, &DEVICE, &FAMILY]);
+    crate::providers::install(&[&KEYED, &KEYED_TOO, &BROWSER, &DEVICE, &FAMILY]);
 }
 
 impl Provider for Stand {

@@ -34,7 +34,7 @@ fn an_edit_in_ask_mode_waits_for_the_user_and_runs_once_allowed() {
         Checkpoint(0)
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
         ToolStarted w1 Write "out.txt" input="{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
-        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true, rule: None }
+        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true }
         Answered ask-<uuid>-w1 Allow
         Edited(Edited { path: "<project>/out.txt", line: 1, removed: 0, added: 1 })
         ToolFinished w1
@@ -110,7 +110,7 @@ fn an_edit_the_user_denies_never_runs_and_the_model_reads_the_refusal() {
         Checkpoint(0)
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
         ToolStarted w1 Write "out.txt" input="{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
-        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true, rule: None }
+        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true }
         Answered ask-<uuid>-w1 Deny
         Refused { tool: "Write", reason: "The user did not allow Write here. Do not retry it; ask them or take another approach." }
         ToolFinished w1
@@ -172,7 +172,7 @@ fn an_edit_denied_with_a_note_carries_the_note_to_the_model() {
         Checkpoint(0)
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
         ToolStarted w1 Write "out.txt" input="{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
-        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true, rule: None }
+        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true }
         Answered ask-<uuid>-w1 DenyWith("use notes.txt instead")
         Refused { tool: "Write", reason: "The user did not allow Write here and said what to do instead: use notes.txt instead" }
         ToolFinished w1

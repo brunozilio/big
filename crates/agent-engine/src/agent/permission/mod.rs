@@ -1,11 +1,9 @@
 mod ask;
-pub(in crate::agent) mod egress;
 mod plan_mode;
 mod policy;
 
 use domain::EngineEvent;
-use domain::permission::{Effect, Judgement, Reason, Standing, Verdict};
-use domain::permission_rules::RuleKind;
+use domain::permission::{Effect, Judgement, Reason, RuleKind, Verdict};
 use serde_json::{Value, json};
 
 use super::Agent;
@@ -22,20 +20,15 @@ pub(in crate::agent) struct Asking<'r> {
 }
 
 impl Asking<'_> {
-    fn shown(&self, reason: &Reason) -> String {
-        let about = match &self.judgement.guarded {
+    fn shown(&self) -> String {
+        match &self.judgement.guarded {
             Some((path, guard)) => format!("{}\n{}", guard.why(), path.display()),
             None => self.shown.unwrap_or(&self.judgement.subject).to_owned(),
-        };
-        reason.heading().map_or(about.clone(), |heading| format!("{heading}\n{about}"))
+        }
     }
 }
 
 impl Agent<'_> {
-    fn unattended(&self, standing: Standing) -> bool {
-        self.control.mode() == domain::PermissionMode::Bypass && standing != Standing::Reads
-    }
-
     pub(in crate::agent) fn permitted(
         &self,
         id: &str,
@@ -65,28 +58,17 @@ impl Agent<'_> {
     }
 
     fn decided(&self, asking: &Asking<'_>, hook_permission: Option<RuleKind>) -> Outcome {
-        let original = asking.judgement.verdict.clone();
-        if original.asked_every_time() {
-            return self.carried_out(asking, original);
-        }
-        let rule_asks = original.asked_by_a_rule();
-        let verdict = after_the_tool_hook(original, hook_permission, rule_asks, asking.judgement);
-        let pre_approved = self.pre_approved(asking);
-        if pre_approved && !rule_asks && !verdict.denies() && hook_permission != Some(RuleKind::Ask) {
+        let verdict = after_the_tool_hook(asking.judgement.verdict.clone(), hook_permission, asking.judgement);
+        if self.pre_approved(asking) && !verdict.denies() && hook_permission != Some(RuleKind::Ask) {
             return self.went_ahead(asking.id, asking.tool, asking.called.input);
         }
-        match self.after_the_permission_hook(asking, verdict, rule_asks) {
+        match self.after_the_permission_hook(asking, verdict) {
             Ok(verdict) => self.carried_out(asking, verdict),
             Err(settled) => settled,
         }
     }
 
-    fn after_the_permission_hook(
-        &self,
-        asking: &Asking<'_>,
-        verdict: Verdict,
-        rule_asks: bool,
-    ) -> Result<Verdict, Outcome> {
+    fn after_the_permission_hook(&self, asking: &Asking<'_>, verdict: Verdict) -> Result<Verdict, Outcome> {
         if !verdict.asks() {
             return Ok(verdict);
         }
@@ -113,42 +95,30 @@ impl Agent<'_> {
             )));
         }
         Ok(match hook.permission {
-            Some(RuleKind::Allow) if !rule_asks => Verdict::Allow,
+            Some(RuleKind::Allow) => Verdict::Allow,
             _ => verdict,
         })
     }
 
     fn carried_out(&self, asking: &Asking<'_>, verdict: Verdict) -> Outcome {
-        let Asking { id, tool, called, judgement, .. } = *asking;
+        let Asking { id, tool, called, .. } = *asking;
         let Called { name, input, .. } = *called;
         let verdict = if self.control.no_prompts() { verdict.without_the_user(name) } else { verdict };
         match verdict {
-            Verdict::Allow if self.unattended(judgement.standing) => {
-                let instructions = self.workspace.instructions_text();
-                let checked = self.workspace.policy.safety.as_deref().map_or(Ok(()), |safety| {
-                    safety.check(self.api, &self.request, &instructions, name, input, self.control.stop_flag())
-                });
-                match checked {
-                    Ok(()) => self.went_ahead(id, tool, input),
-                    Err(reason) => self.refused(name, reason),
-                }
-            }
             Verdict::Allow => self.went_ahead(id, tool, input),
             Verdict::Deny(reason) => self.refused(name, reason),
-            Verdict::Ask { reason, rememberable, rule } => {
-                self.ask_permission(asking, &asking.shown(&reason), rememberable, rule)
-            }
+            Verdict::Ask { rememberable, .. } => self.ask_permission(asking, &asking.shown(), rememberable),
         }
     }
 
     fn pre_approved(&self, asking: &Asking<'_>) -> bool {
-        let rules = &self.workspace.policy.pre_approved;
-        let ruling = if asking.judgement.guarded.is_some() {
-            self.ruling_in(&rules.naming_their_target(), asking.called)
-        } else {
-            self.ruling_in(rules, asking.called)
-        };
-        matches!(ruling, Some((RuleKind::Allow, _)))
+        let commands = &self.workspace.policy.pre_approved;
+        let ran = asking.called.effects.iter().filter_map(|effect| match effect {
+            Effect::Exec(exec) => Some(exec.command.text().trim()),
+            _ => None,
+        });
+        let mut ran = ran.peekable();
+        ran.peek().is_some() && ran.all(|command| commands.iter().any(|approved| approved.trim() == command))
     }
 
     pub(in crate::agent) fn went_ahead(&self, id: &str, tool: &dyn Tool, input: &Value) -> Outcome {
@@ -171,18 +141,12 @@ impl Agent<'_> {
     }
 }
 
-fn after_the_tool_hook(
-    original: Verdict,
-    hook_permission: Option<RuleKind>,
-    rule_asks: bool,
-    judgement: &Judgement,
-) -> Verdict {
+fn after_the_tool_hook(original: Verdict, hook_permission: Option<RuleKind>, judgement: &Judgement) -> Verdict {
     match (original, hook_permission) {
         (Verdict::Deny(reason), _) => Verdict::Deny(reason),
         (Verdict::Allow, Some(RuleKind::Ask)) => judgement.asking(Reason::Hook),
-        (Verdict::Ask { reason, rule, .. }, Some(RuleKind::Ask)) => Verdict::Ask { reason, rememberable: false, rule },
+        (Verdict::Ask { reason, .. }, Some(RuleKind::Ask)) => Verdict::Ask { reason, rememberable: false },
         (_, Some(RuleKind::Deny)) => Verdict::Deny("Hook denied the tool call".into()),
-        (verdict, Some(RuleKind::Allow)) if rule_asks => verdict,
         (_, Some(RuleKind::Allow)) => Verdict::Allow,
         (verdict, None) => verdict,
     }
@@ -190,40 +154,30 @@ fn after_the_tool_hook(
 
 #[cfg(test)]
 mod tests {
+    use domain::permission::Standing;
+
     use super::*;
 
     fn judgement() -> Judgement {
-        Judgement {
-            verdict: Verdict::Allow,
-            standing: Standing::Acts,
-            subject: "make".into(),
-            guarded: None,
-            rule: Some("Bash(make)".into()),
-        }
+        Judgement { verdict: Verdict::Allow, standing: Standing::Acts, subject: "make".into(), guarded: None }
     }
 
     #[test]
-    fn a_tool_hook_s_answer_never_lifts_a_denial_nor_a_rule_that_asks() {
+    fn a_tool_hook_s_answer_never_lifts_a_denial() {
         let judgement = judgement();
-        let after = |original, hook, rule_asks| after_the_tool_hook(original, hook, rule_asks, &judgement);
+        let after = |original, hook| after_the_tool_hook(original, hook, &judgement);
         let denied = || Verdict::Deny("no".into());
         let asked = || judgement.asking(Reason::Mode);
-        let by_rule = || judgement.asking(Reason::Rule("Bash(make)".into()));
         for hook in [None, Some(RuleKind::Allow), Some(RuleKind::Ask), Some(RuleKind::Deny)] {
-            assert_eq!(after(denied(), hook, false), denied(), "{hook:?}");
+            assert_eq!(after(denied(), hook), denied(), "{hook:?}");
         }
-        assert_eq!(after(asked(), Some(RuleKind::Allow), false), Verdict::Allow);
-        assert_eq!(after(by_rule(), Some(RuleKind::Allow), true), by_rule(), "the rule still asks");
-        assert_eq!(after(Verdict::Allow, Some(RuleKind::Ask), false), judgement.asking(Reason::Hook));
+        assert_eq!(after(asked(), Some(RuleKind::Allow)), Verdict::Allow);
+        assert_eq!(after(Verdict::Allow, Some(RuleKind::Ask)), judgement.asking(Reason::Hook));
         assert!(
-            matches!(
-                after(asked(), Some(RuleKind::Ask), false),
-                Verdict::Ask { reason: Reason::Mode, rememberable: false, .. }
-            ),
+            matches!(after(asked(), Some(RuleKind::Ask)), Verdict::Ask { reason: Reason::Mode, rememberable: false }),
             "the hook asks again next time, so always is not offered"
         );
-        assert!(after(Verdict::Allow, Some(RuleKind::Deny), false).denies());
-        assert_eq!(after(Verdict::Allow, None, false), Verdict::Allow);
-        assert_eq!(after(by_rule(), None, true), by_rule());
+        assert!(after(Verdict::Allow, Some(RuleKind::Deny)).denies());
+        assert_eq!(after(Verdict::Allow, None), Verdict::Allow);
     }
 }

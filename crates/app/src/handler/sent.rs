@@ -20,12 +20,8 @@ mod tests {
     #[test]
     fn a_client_cannot_hand_a_run_its_own_tools_files_or_trust() {
         let mut request = PromptRequest::plain("/srv/u/rocket".into(), "hi", ModelOption::new("m", "M"));
-        request.host.extensions = Some(Extensions {
-            dirs: vec!["/etc".into()],
-            plugins: vec!["/tmp/evil".into()],
-            trust: domain::trust::Trust::Trusted,
-            ..Extensions::default()
-        });
+        request.host.extensions =
+            Some(Extensions { dirs: vec!["/etc".into()], plugins: vec!["/tmp/evil".into()], ..Extensions::default() });
         request.host.memory =
             Some(MemoryBrief { output: "/etc/passwd".into(), origin: Some("Launch".into()), ..MemoryBrief::default() });
         let sent = as_sent(&request);

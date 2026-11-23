@@ -12,7 +12,7 @@ fn settings(flags: serde_json::Value) -> Settings {
 }
 
 fn policy(flags: serde_json::Value) -> Policy {
-    flagged(&settings(flags), Path::new("/nowhere"), false)
+    flagged(&settings(flags), Path::new("/nowhere"))
 }
 
 fn request() -> PromptRequest {
@@ -21,15 +21,12 @@ fn request() -> PromptRequest {
 
 type Reads = fn(&Policy) -> bool;
 
-const SWITCHES: [(&str, Reads); 20] = [
+const SWITCHES: [(&str, Reads); 17] = [
     (features::WEB_LINKS, |policy| policy.web.links),
     (features::WEB_SMALL_PAGES_DIRECT, |policy| policy.web.small_pages_direct),
     (features::WEB_FORMATS, |policy| policy.web.formats),
     (features::WEB_EMPTY_PAGE_ERROR, |policy| policy.web.empty_page_error),
-    (features::SANDBOX, |policy| policy.sandbox.is_some()),
     (features::REDACT_SECRETS, |policy| policy.redact.is_some()),
-    (features::DESTRUCTIVE_SNAPSHOT, |policy| policy.snapshots),
-    (features::DEPENDENCY_GUARD, |policy| policy.dependency_guard),
     (features::ESCALATION, |policy| policy.escalation),
     (features::AUTO_REVIEW, |policy| policy.auto_review),
     (features::FOLLOW_THROUGH, |policy| policy.follow_through),
@@ -65,10 +62,9 @@ fn turning_one_flag_off_turns_off_its_own_switch_and_no_other() {
 }
 
 #[test]
-fn the_sandbox_is_the_one_the_settings_describe() {
+fn the_scripts_are_the_ones_the_settings_describe() {
     let settings = settings(json!({}));
-    let policy = flagged(&settings, Path::new("/nowhere"), false);
-    assert_eq!(policy.sandbox, Some(settings.sandbox.clone()));
+    let policy = flagged(&settings, Path::new("/nowhere"));
     assert_eq!(policy.scripts, settings.scripts);
 }
 
@@ -82,24 +78,16 @@ fn secrets_are_read_from_the_folder_s_env_files_only_when_redaction_is_on() {
     let dir = tempfile::tempdir().expect("dir");
     std::fs::write(dir.path().join(".env"), "TOKEN=s3cr3t-value-123456\n").expect("env");
     let said = "the token is s3cr3t-value-123456";
-    let redacting = flagged(&settings(json!({})), dir.path(), false);
+    let redacting = flagged(&settings(json!({})), dir.path());
     assert!(!redacting.redacted(said).contains("s3cr3t-value-123456"));
-    let plain = flagged(&settings(json!({ features::REDACT_SECRETS: false })), dir.path(), false);
+    let plain = flagged(&settings(json!({ features::REDACT_SECRETS: false })), dir.path());
     assert_eq!(plain.redacted(said), said);
 }
 
 #[test]
-fn the_safety_classifier_follows_the_request_and_no_flag() {
-    let settings = settings(json!({}));
-    assert!(flagged(&settings, Path::new("/nowhere"), false).safety.is_none());
-    assert!(flagged(&settings, Path::new("/nowhere"), true).safety.is_some());
-}
-
-#[test]
-fn flags_grant_no_permission_rule_and_no_pre_approval() {
+fn flags_grant_no_pre_approval() {
     let policy = policy(json!({}));
-    assert_eq!(policy.permissions, PermissionRules::default());
-    assert_eq!(policy.pre_approved, PermissionRules::default());
+    assert!(policy.pre_approved.is_empty());
     assert_eq!(policy.code_mode_detach, None);
 }
 
@@ -109,34 +97,6 @@ fn a_budget_is_kept_only_while_its_flag_is_on() {
     request.policy.budget = Some(domain::budget::Budget { limit_usd: 2.0, spent_usd: 0.5 });
     assert_eq!(budget(&request, &Features::default()), request.policy.budget);
     assert_eq!(budget(&request, &settings(json!({ features::BUDGET: false })).features), None);
-}
-
-#[test]
-fn rules_asked_on_the_command_line_come_after_the_settings_rules() {
-    let mut settings = Settings::default();
-    settings.permissions.add(RuleKind::Allow, "Read").expect("rule");
-    let mut request = request();
-    request.policy.allowed_tools = vec!["Bash(ls:*)".into()];
-    request.policy.ask_tools = vec!["Edit".into()];
-    request.policy.disallowed_tools = vec!["WebFetch".into()];
-    let rules = permissions(&request, &settings).expect("rules");
-    assert_eq!(
-        rules.listed(),
-        [
-            (RuleKind::Deny, "WebFetch".to_owned()),
-            (RuleKind::Ask, "Edit".to_owned()),
-            (RuleKind::Allow, "Read".to_owned()),
-            (RuleKind::Allow, "Bash(ls:*)".to_owned()),
-        ]
-    );
-}
-
-#[test]
-fn a_rule_that_does_not_parse_names_the_flags_it_came_from() {
-    let mut request = request();
-    request.policy.disallowed_tools = vec!["Bash(".into()];
-    let error = permissions(&request, &Settings::default()).expect_err("unparsed");
-    assert!(error.starts_with("--allowedTools/--disallowedTools: "), "{error}");
 }
 
 #[test]
@@ -200,32 +160,4 @@ fn anchored_memories_need_the_brief_to_ask_and_the_flag_to_be_on() {
     assert_eq!(anchored(&request, &off), []);
     request.host.memory = Some(brief(false));
     assert_eq!(anchored(&request, &Features::default()), []);
-}
-
-struct Unboxed;
-
-impl crate::tools::Launcher for Unboxed {
-    fn launch(
-        &self,
-        command: std::process::Command,
-        _: Option<&platform::sandbox::Confinement>,
-    ) -> std::process::Command {
-        command
-    }
-
-    fn support(&self) -> platform::sandbox::Support {
-        platform::sandbox::Support::Missing("this system has no sandbox".into())
-    }
-}
-
-#[test]
-fn a_sandbox_the_system_cannot_provide_is_said_once_per_process() {
-    let said = AtomicBool::new(false);
-    let mut workspace = Workspace::new("/nowhere");
-    workspace.services.launch = crate::tools::Launch(Arc::new(Unboxed));
-    assert_eq!(sandbox_notice(&workspace, &said), None, "the sandbox is off: nothing to say");
-    workspace.policy.sandbox = Some(domain::sandbox::Sandbox { required: false, ..Default::default() });
-    let notice = sandbox_notice(&workspace, &said).expect("said");
-    assert!(notice.contains("this system has no sandbox") && notice.contains("unconfined"), "{notice}");
-    assert_eq!(sandbox_notice(&workspace, &said), None, "once is enough");
 }

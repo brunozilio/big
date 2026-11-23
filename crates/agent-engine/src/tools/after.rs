@@ -79,7 +79,7 @@ mod tests {
     }
 
     #[test]
-    fn a_short_page_is_handed_over_whole_and_fenced_when_small_pages_go_direct() {
+    fn a_short_page_is_handed_over_whole_when_small_pages_go_direct() {
         let model = ScriptedModel::new([]);
         let mut workspace = Workspace::new("/repo");
         workspace.policy.web.small_pages_direct = true;
@@ -89,6 +89,6 @@ mod tests {
         let ran = Ran { input: &input, workspace: &workspace, agent: &agent };
         let answer = after(names::WEB_FETCH).expect("a reader for fetched pages")(&ran, "Port 8080.");
         assert!(model.asked().is_empty());
-        assert!(answer.contains("<untrusted-content>\nPort 8080.\n</untrusted-content>"), "{answer}");
+        assert!(answer.ends_with("\n\nPort 8080."), "{answer}");
     }
 }

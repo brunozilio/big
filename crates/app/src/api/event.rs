@@ -41,9 +41,8 @@ pub enum Reply {
     FeatureFailed(FeatureError),
     Permissions {
         path: PathBuf,
-        permissions: domain::permission_rules::PermissionsInfo,
+        permissions: domain::permission::PermissionsInfo,
     },
-    Trust(domain::trust::TrustReport),
     Providers(ProviderEvent),
     Error {
         message: String,
@@ -136,7 +135,7 @@ mod tests {
                     name: "jira".into(),
                     origin: domain::mcp_config::McpOrigin::Project,
                     target: "jira-mcp".into(),
-                    state: domain::mcp_config::McpState::Untrusted,
+                    state: domain::mcp_config::McpState::Pending,
                 },
                 file: Some("/repo/mcp.json".into()),
                 entry: Some(serde_json::json!({"command": "jira-mcp"})),
@@ -153,7 +152,6 @@ mod tests {
                         tool_name: "Bash".into(),
                         description: "npm test".into(),
                         rememberable: true,
-                        rule: None,
                     },
                 }],
             }),
@@ -167,16 +165,6 @@ mod tests {
                 message: "nothing to undo".into(),
             }),
             Reply::Permissions { path: "/repo".into(), permissions: Default::default() },
-            Reply::Trust(domain::trust::TrustReport {
-                root: "/repo".into(),
-                trust: domain::trust::Trust::Untrusted,
-                refusal: Some(domain::trust::Refusal::Home),
-                brings: {
-                    let mut brings = domain::trust::Contributions::default();
-                    brings.add(domain::trust::ContributionKind::HookScript, "hooks/guard.js");
-                    brings
-                },
-            }),
             Reply::error("could not save the settings"),
         ];
         replies.extend(provider_events().into_iter().map(Reply::Providers));

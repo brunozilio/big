@@ -8,12 +8,6 @@ use crate::tools::names::ToolName;
 use crate::tools::{Consult, Outcome, clip};
 use crate::transcript::Block;
 
-const SCRIPT_CALLS: [&str; 2] = ["repl-", "script-"];
-
-fn from_a_script(id: &str) -> bool {
-    SCRIPT_CALLS.iter().any(|prefix| id.starts_with(prefix))
-}
-
 impl Agent<'_> {
     pub(super) fn after(&self, calling: &Calling<'_, '_>, input: &Value, hook_context: &str, outcome: &mut Outcome) {
         let raw = crate::tools::raw_text::active();
@@ -22,12 +16,6 @@ impl Agent<'_> {
         }
         self.after_hook(calling, input, raw, outcome);
         self.made_safe_to_read(raw, outcome);
-        let to_the_model = !raw && !from_a_script(calling.id);
-        let source =
-            domain::untrusted::mcp_source(calling.name).or_else(|| outcome.carried_from.take().map(|from| *from));
-        if let Some(source) = source.filter(|_| to_the_model) {
-            outcome.content = domain::untrusted::fenced(&outcome.content, &source);
-        }
         self.read_as_its_tool_asks(calling, input, outcome);
         if !kept_whole(calling.name) {
             let dir = crate::tools::persisted::results_dir(&self.workspace.session_id);
@@ -75,7 +63,7 @@ impl Agent<'_> {
         if raw {
             outcome.shown = Some(policy.redacted(outcome.shown.as_deref().unwrap_or(&outcome.content)));
         } else {
-            outcome.content = policy.redacted(&domain::untrusted::neutralize(&outcome.content));
+            outcome.content = policy.redacted(&outcome.content);
         }
         outcome.shown = outcome.shown.take().map(|shown| policy.redacted(&shown));
     }
@@ -114,16 +102,5 @@ impl Agent<'_> {
                 is_error: outcome.is_error,
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod fence_tests {
-    use super::from_a_script;
-
-    #[test]
-    fn a_call_a_script_makes_feeds_the_script_and_is_not_fenced_for_the_model() {
-        assert!(from_a_script("repl-3") && from_a_script("script-12"));
-        assert!(!from_a_script("toolu_01") && !from_a_script("m"));
     }
 }

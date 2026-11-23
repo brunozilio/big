@@ -13,7 +13,6 @@ pub enum FlagsRequest {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ListedFlag {
     pub flag: Listed,
-    pub available: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

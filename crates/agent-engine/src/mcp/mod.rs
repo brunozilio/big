@@ -14,7 +14,6 @@ mod servers;
 mod sse;
 mod sse_listen;
 mod stdio;
-mod stdio_sandbox;
 mod tool;
 
 use std::sync::Arc;
@@ -28,7 +27,7 @@ pub use self::error::McpError;
 pub use self::http::{HttpTransport, parse};
 pub use self::local::LocalTransport;
 pub use self::pool::McpPool;
-pub use self::servers::{ServerSpec, StdioSandbox, parse_config, servers};
+pub use self::servers::{ServerSpec, parse_config, servers};
 pub use self::stdio::StdioTransport;
 #[doc(hidden)]
 pub use self::tool::outcome;
@@ -114,15 +113,12 @@ impl McpServer {
             ServerSpec::Sse { name, url, headers } => {
                 Box::new(sse::SseTransport::connect(name, url, headers, Arc::clone(http), stop.token(), listener)?)
             }
-            ServerSpec::Script { path, cwd, access, origin, confinement, judge, .. } => {
-                let server = script_server::ScriptServer::open(spec.name(), path, cwd, *access)?
-                    .coming_from(*origin)
-                    .confined_to(confinement.clone())
-                    .judged_by(Arc::clone(&judge.0));
+            ServerSpec::Script { path, cwd, access, origin, .. } => {
+                let server = script_server::ScriptServer::open(spec.name(), path, cwd, *access)?.coming_from(*origin);
                 Box::new(LocalTransport::new(Arc::new(server)))
             }
-            ServerSpec::Stdio { name, command, args, env, sandbox } => {
-                Box::new(StdioTransport::spawn_in(name, command, args, env, sandbox, listener)?)
+            ServerSpec::Stdio { name, command, args, env } => {
+                Box::new(StdioTransport::spawn_listening(name, command, args, env, listener)?)
             }
         };
         Ok(Self::new(spec.name(), transport))
@@ -263,18 +259,8 @@ pub fn connect_stopped(
     http: &Arc<dyn Http>,
     stop: &platform::Stop,
 ) -> Vec<Arc<McpServer>> {
-    connect_judged(request, sources, http, stop, &Arc::default())
-}
-
-pub fn connect_judged(
-    request: &PromptRequest,
-    sources: &McpSources,
-    http: &Arc<dyn Http>,
-    stop: &platform::Stop,
-    judge: &Arc<crate::tools::host_judge::HostJudge>,
-) -> Vec<Arc<McpServer>> {
     let mut connected = in_process(request, stop);
-    let remote = wanted(request, sources, judge)
+    let remote = wanted(request, sources)
         .into_iter()
         .take_while(|_| !stop.load(Ordering::Relaxed))
         .filter_map(|spec| ready(spec.name(), McpServer::open_stopped(&spec, http, stop), stop));
@@ -303,16 +289,12 @@ fn in_process(request: &PromptRequest, stop: &platform::Stop) -> Vec<Arc<McpServ
         .collect()
 }
 
-fn wanted(
-    request: &PromptRequest,
-    sources: &McpSources,
-    judge: &Arc<crate::tools::host_judge::HostJudge>,
-) -> Vec<ServerSpec> {
+fn wanted(request: &PromptRequest, sources: &McpSources) -> Vec<ServerSpec> {
     let credentials = &request.host.credentials;
     servers(request.folder(), sources)
         .into_iter()
         .filter(|spec| !credentials.mcp.iter().any(|local| local.name == spec.name()))
-        .map(|spec| spec.signed_in(credentials.mcp_tokens.as_ref()).judged_by(judge))
+        .map(|spec| spec.signed_in(credentials.mcp_tokens.as_ref()))
         .collect()
 }
 

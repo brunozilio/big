@@ -6,7 +6,6 @@ use serde_json::Value;
 use super::{CommandOutput, Handler};
 use crate::model::{ModelApi, TurnRequest};
 use crate::tools::Workspace;
-use crate::tools::host_judge::Grounds;
 use crate::tools::script_bridge::{ask_model, hosted, read_only_tool};
 use crate::tools::script_io::StandaloneHost;
 use crate::tools::script_tool::{Capabilities, Declaration};
@@ -34,13 +33,11 @@ pub fn script(
         cwd: workspace.cwd.clone(),
         access: workspace.policy.scripts.of(origin),
         origin,
-        confine: workspace.confiner(),
+        starter: workspace.starter(),
         stop: workspace.stop.flag(),
         cancel: workspace.stop.token().clone(),
         script: format!("the hook {}", handler.command),
         capabilities,
-        judge: workspace.host_judge(),
-        grounds: Grounds::of(workspace),
     };
     let result = match model {
         None => hook.run(Arc::new(standalone), workspace),

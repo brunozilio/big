@@ -13,6 +13,7 @@ pub mod mcp_config;
 pub mod mcp_oauth;
 pub mod output;
 pub mod schedule;
+pub mod site;
 pub mod skill;
 pub mod tool_name;
 pub mod watch;

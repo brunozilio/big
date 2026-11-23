@@ -52,12 +52,8 @@ const OUTPUT: usize = 30_000;
 const ANSWER_WAIT: Duration = Duration::from_secs(60);
 const DIAGNOSTICS_WAIT: Duration = Duration::from_secs(10);
 
-fn trusted(workspace: &Workspace) -> bool {
-    workspace.policy.trust == domain::trust::Trust::Trusted
-}
-
 fn pending_install(input: &Value, workspace: &Workspace) -> Option<String> {
-    let lsp = workspace.services.lsp.as_ref().filter(|_| trusted(workspace))?;
+    let lsp = workspace.services.lsp.as_ref()?;
     lsp.pending_install(&workspace.resolve(field(input, "file_path")?))
 }
 
@@ -65,14 +61,6 @@ fn server_name(input: &Value, workspace: &Workspace) -> Option<String> {
     let lsp = workspace.services.lsp.as_ref()?;
     let file = workspace.resolve(field(input, "file_path")?);
     domain::lsp::server_for(&file, &lsp.specs).map(|(spec, _)| spec.name.clone())
-}
-
-fn installing(workspace: &Workspace) -> crate::lsp::Installing {
-    if trusted(workspace) {
-        crate::lsp::Installing::Allowed
-    } else {
-        crate::lsp::Installing::Refused("this folder is not trusted (/trust), so nothing is installed for it")
-    }
 }
 
 fn with_install(installed: Option<String>, answer: String) -> String {
@@ -86,7 +74,7 @@ fn diagnose(lsp: &crate::lsp::Lsp, scope: Scope, input: &Value, workspace: &Work
     let file = workspace.resolve(field(input, "file_path").ok_or("Missing required parameter `file_path`.")?);
     let named = shown(&file, workspace);
     let text = std::fs::read_to_string(&file).map_err(|error| format!("Cannot read {named}: {error}"))?;
-    let (opened, installed) = lsp.open(&file, &workspace.cwd, &workspace.stop, installing(workspace))?;
+    let (opened, installed) = lsp.open(&file, &workspace.cwd, &workspace.stop, crate::lsp::Installing::Allowed)?;
     let version = opened.server.sync(&file, &opened.language, &text)?;
     let found = opened.server.diagnostics(&file, version, DIAGNOSTICS_WAIT);
     let answer = match scope {
@@ -120,16 +108,8 @@ fn diagnose(lsp: &crate::lsp::Lsp, scope: Scope, input: &Value, workspace: &Work
     Ok(with_install(installed, answer))
 }
 
-pub const NOT_TRUSTED: &str = "Language servers do not start in a folder that is not trusted: a server runs the \
-                                project's own code (rust-analyzer runs build scripts and procedural macros, \
-                                tsserver loads node_modules/typescript). The user can trust this folder with /trust; \
-                                until then, read and search the code instead.";
-
 fn ask(input: &Value, workspace: &Workspace) -> Result<String, String> {
     let lsp = workspace.services.lsp.as_ref().ok_or("No language servers are available in this run.")?;
-    if !trusted(workspace) {
-        return Err(NOT_TRUSTED.to_owned());
-    }
     if let Some(scope) = field(input, "operation").and_then(Scope::named) {
         return diagnose(lsp, scope, input, workspace);
     }
@@ -137,7 +117,7 @@ fn ask(input: &Value, workspace: &Workspace) -> Result<String, String> {
     let file = workspace.resolve(&query.file);
     let text =
         std::fs::read_to_string(&file).map_err(|error| format!("Cannot read {}: {error}", shown(&file, workspace)))?;
-    let (opened, installed) = lsp.open(&file, &workspace.cwd, &workspace.stop, installing(workspace))?;
+    let (opened, installed) = lsp.open(&file, &workspace.cwd, &workspace.stop, crate::lsp::Installing::Allowed)?;
     let server = &opened.server;
     server.sync(&file, &opened.language, &text)?;
     let line = text.lines().nth(query.line as usize - 1).unwrap_or_default();

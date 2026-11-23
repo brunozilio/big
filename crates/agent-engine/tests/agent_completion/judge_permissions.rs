@@ -6,7 +6,6 @@ use agent_engine::model::TurnRequest;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::{self, Verification, Workspace};
 use agent_engine::transcript::Message;
-use domain::permission_rules::PermissionRules;
 use domain::{Criteria, Effort, EngineEvent, PermissionMode};
 use serde_json::json;
 
@@ -20,7 +19,7 @@ fn judged(dir: &std::path::Path) -> Workspace {
     workspace.verification = Some(Verification {
         criteria: Criteria::user(CRITERIA),
         model: "claude-opus-5-5".into(),
-        allow: domain::verification::judge_rules(CRITERIA, &PermissionRules::default()),
+        allow: Criteria::user(CRITERIA).judge_commands(),
     });
     workspace
 }
@@ -55,7 +54,7 @@ fn judge_runs(command: &str, mode: PermissionMode, workspace: &Workspace) -> Vec
         turn_limit: 20,
     };
     agent.run(&mut vec![Message::user("check it")]).expect("run completes");
-    assert_eq!(model.asked().len(), 4, "no other model call, such as the safety check, took a reply");
+    assert_eq!(model.asked().len(), 4, "no other model call took a reply");
     events.into_inner().expect("events")
 }
 
@@ -96,11 +95,9 @@ fn outside_bypass_the_judge_is_refused_any_other_command_without_asking() {
 }
 
 #[test]
-fn in_bypass_a_command_the_criteria_name_skips_the_safety_check() {
+fn in_bypass_the_judge_runs_a_command_the_criteria_name() {
     let dir = tempfile::tempdir().expect("dir");
-    let mut workspace = judged(dir.path());
-    workspace.policy.safety = Some(Arc::new(agent_engine::guard::Safety::default()));
-    let events = judge_runs("echo checked", PermissionMode::Bypass, &workspace);
+    let events = judge_runs("echo checked", PermissionMode::Bypass, &judged(dir.path()));
     let (failed, output) = judge_result(&events);
     assert!(!failed && output.contains("checked"), "{output}");
 }

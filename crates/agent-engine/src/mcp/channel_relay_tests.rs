@@ -36,7 +36,6 @@ fn spec(name: &str, script: &str) -> ServerSpec {
         command: "/bin/sh".into(),
         args: vec!["-c".into(), script.into()],
         env: vec![],
-        sandbox: Default::default(),
     }
 }
 

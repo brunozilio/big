@@ -31,7 +31,7 @@ fn a_message_steered_during_a_tool_call_is_delivered_with_its_results_and_cannot
         Checkpoint(0)
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
         ToolStarted w1 Write "out.txt" input="{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
-        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true, rule: None }
+        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true }
         Answered ask-<uuid>-w1 Allow
         Edited(Edited { path: "<project>/out.txt", line: 1, removed: 0, added: 1 })
         ToolFinished w1

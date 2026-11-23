@@ -190,8 +190,11 @@ fn a_run_of_many_turns_writes_each_message_once_and_never_reads_the_file_back() 
     assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");
 
     let written = sessions.written();
-    let transitions = 1 + 2 * TURNS as u64 + 1;
-    assert_eq!(written.appends, transitions, "the prompt, each reply, each batch of results, the answer");
+    let transitions = 1 + 2 * TURNS as u64 + 1 + 1;
+    assert_eq!(
+        written.appends, transitions,
+        "the prompt, each reply, each batch of results, the answer, the trace left at the end"
+    );
     assert_eq!(written.syncs, transitions, "one sync per transition");
     assert!(written.rereads <= 1, "the conversation file is not read back at every save: {written:?}");
     let conversation = std::fs::read_dir(&store)
@@ -200,11 +203,12 @@ fn a_run_of_many_turns_writes_each_message_once_and_never_reads_the_file_back() 
         .map(|entry| entry.path())
         .find(|path| {
             let name = path.file_name().map(|name| name.to_string_lossy().into_owned()).unwrap_or_default();
-            name.ends_with(".jsonl") && !name.contains(".trace.")
+            name.ends_with(".jsonl")
         })
         .expect("the conversation file");
     let on_disk = std::fs::metadata(&conversation).expect("file").len();
     assert_eq!(written.bytes, on_disk, "every byte was written once: the cost grows with the turns, not their square");
-    let lines = std::fs::read_to_string(&conversation).expect("text").lines().count() as u64;
-    assert_eq!(lines, transitions, "one message per transition");
+    let text = std::fs::read_to_string(&conversation).expect("text");
+    let messages = text.lines().filter(|line| !line.starts_with("{\"type\":\"trace\"")).count() as u64;
+    assert_eq!(messages, transitions - 1, "one message per transition");
 }

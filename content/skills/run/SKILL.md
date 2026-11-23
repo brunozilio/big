@@ -54,7 +54,6 @@ section - you're using the recipe, not authoring one.
 |---|---|---|
 | CLI tool | direct invocation, exit code, stdin/stdout | [examples/cli.md](examples/cli.md) |
 | Web server / API | background launch + `curl` smoke | [examples/server.md](examples/server.md) |
-| TUI / interactive terminal | tmux `send-keys` / `capture-pane` | [examples/tui.md](examples/tui.md) |
 | Electron / desktop GUI | Playwright `_electron` REPL (xvfb only on headless Linux) | [examples/electron.md](examples/electron.md) |
 | Browser-driven | dev server + headless Playwright (or a browser MCP server) | [examples/playwright.md](examples/playwright.md) |
 | Library / SDK | import-and-call smoke script at the package boundary | [examples/library.md](examples/library.md) |

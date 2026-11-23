@@ -88,8 +88,6 @@ fn model() -> ModelOption {
     ModelOption::new("claude-opus-5-5", "Opus 5.5")
 }
 
-fn trusted(dir: &std::path::Path, prompt: &str) -> PromptRequest {
-    let mut request = PromptRequest::plain(dir.into(), prompt, model());
-    request.host.extensions = Some(domain::Extensions { trust: domain::trust::Trust::Trusted, ..Default::default() });
-    request
+fn asked_in(dir: &std::path::Path, prompt: &str) -> PromptRequest {
+    PromptRequest::plain(dir.into(), prompt, model())
 }

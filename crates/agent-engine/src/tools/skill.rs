@@ -33,7 +33,7 @@ fn invocation_enabled() -> bool {
 }
 pub fn discover(folder: Folder<'_>, home: Option<&Path>) -> Vec<FoundSkill> {
     let cwd = folder.cwd;
-    let gate = crate::trust::Gate::within(folder, home);
+    let gate = crate::scope::Scope::within(folder, home);
     let project_folders = cwd.ancestors().count();
     let mut sources: Vec<(PathBuf, Option<String>, bool)> = Vec::new();
     for directory in cwd.ancestors() {
@@ -166,13 +166,7 @@ impl Tool for SkillTool {
 
 fn granted(skill: &FoundSkill, workspace: &Workspace) -> Granted {
     let origin = Origin::trusted(skill.trusted);
-    Granted {
-        access: workspace.policy.scripts.of(origin),
-        origin,
-        confine: workspace.confiner(),
-        judge: workspace.host_judge(),
-        grounds: super::host_judge::Grounds::of(workspace),
-    }
+    Granted { access: workspace.policy.scripts.of(origin), origin, starter: workspace.starter() }
 }
 
 fn load(skill: &FoundSkill, args: &str, cwd: &Path, access: &Granted) -> Outcome {

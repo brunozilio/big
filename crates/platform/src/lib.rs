@@ -7,7 +7,6 @@ pub mod keychain;
 pub mod named;
 pub mod private_file;
 pub mod runtime;
-pub mod sandbox;
 pub mod stop;
 pub mod store;
 pub mod sync;

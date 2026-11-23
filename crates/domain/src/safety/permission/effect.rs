@@ -32,7 +32,6 @@ pub enum Declared {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Exec {
     pub command: ShellCommand,
-    pub unsandboxed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,8 +52,8 @@ pub enum Effect {
 }
 
 impl Effect {
-    pub fn exec(command: &str, unsandboxed: bool) -> Self {
-        Self::Exec(Exec { command: ShellCommand::parse(command), unsandboxed })
+    pub fn exec(command: &str) -> Self {
+        Self::Exec(Exec { command: ShellCommand::parse(command) })
     }
 
     pub fn acts(&self) -> bool {

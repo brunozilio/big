@@ -1,25 +1,16 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use domain::permission_rules::PermissionRules;
 use domain::redact::Known;
-use domain::sandbox::Sandbox;
 use domain::web_reading::WebReading;
 
-use crate::guard::Safety;
 use crate::tools::script_tool::ScriptGrants;
 
 #[derive(Debug, Default)]
 pub struct Policy {
-    pub permissions: PermissionRules,
-    pub pre_approved: PermissionRules,
+    pub pre_approved: Vec<String>,
     pub scripts: ScriptGrants,
-    pub trust: domain::trust::Trust,
-    pub safety: Option<Arc<Safety>>,
-    pub sandbox: Option<Sandbox>,
     pub redact: Option<Arc<Known>>,
-    pub snapshots: bool,
-    pub dependency_guard: bool,
     pub escalation: bool,
     pub auto_review: bool,
     pub follow_through: bool,
@@ -37,15 +28,9 @@ pub struct Policy {
 impl Policy {
     pub fn fork(&self) -> Self {
         Self {
-            permissions: self.permissions.clone(),
-            pre_approved: PermissionRules::default(),
+            pre_approved: Vec::new(),
             scripts: self.scripts,
-            trust: self.trust,
-            safety: self.safety.as_ref().map(|safety| Arc::new(safety.fork())),
-            sandbox: self.sandbox.clone(),
             redact: self.redact.clone(),
-            snapshots: self.snapshots,
-            dependency_guard: self.dependency_guard,
             escalation: self.escalation,
             auto_review: self.auto_review,
             follow_through: self.follow_through,

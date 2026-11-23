@@ -4,7 +4,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::permission_rules::{PermissionRules, RuleKind};
 use domain::{AskId, AskKind, Decision, EngineEvent, PermissionMode};
 use serde_json::json;
 
@@ -149,30 +148,6 @@ fn always_allowing_edits_does_not_cover_a_protected_file() {
     assert_eq!(asked.len(), 2, "the first edit and the protected one: {asked:?}");
     assert!(rig.dir.path().join("b.txt").exists(), "always covers ordinary edits");
     assert!(!rig.dir.path().join(".git/hooks/x").exists());
-}
-
-#[test]
-fn a_deny_rule_still_refuses_a_protected_edit_without_asking() {
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
-    rig.workspace.policy.permissions = PermissionRules::default().with(RuleKind::Deny, "Edit(.git/**)");
-    let asked = run_answering(&rig, &writes(&[Path::new(".git/hooks/x")]), Vec::new());
-    assert!(asked.is_empty(), "{asked:?}");
-    assert!(!rig.dir.path().join(".git/hooks/x").exists());
-}
-
-#[test]
-fn only_an_allow_rule_naming_the_path_lets_a_protected_edit_through() {
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
-    rig.workspace.policy.permissions = PermissionRules::default().with(RuleKind::Allow, "Edit");
-    let asked = run_answering(&rig, &writes(&[Path::new(".git/hooks/x")]), vec![Decision::Deny]);
-    assert_eq!(asked.len(), 1, "a bare Edit rule does not reach it: {asked:?}");
-
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
-    rig.workspace = agent_engine::tools::Workspace::new(rig.dir.path().canonicalize().expect("real"));
-    rig.workspace.policy.permissions = PermissionRules::default().with(RuleKind::Allow, "Edit(.git/hooks/**)");
-    let asked = run_answering(&rig, &writes(&[Path::new(".git/hooks/x")]), Vec::new());
-    assert!(asked.is_empty(), "{asked:?}");
-    assert!(rig.dir.path().join(".git/hooks/x").exists());
 }
 
 #[cfg(unix)]

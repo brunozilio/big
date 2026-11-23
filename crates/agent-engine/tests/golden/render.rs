@@ -235,7 +235,8 @@ pub fn line(line: &str) -> String {
         },
         _ => String::new(),
     };
-    format!("{kind} {what}").trim_end().to_owned() + " (" + numbered + ")"
+    let stream = if kept["type"] == "trace" { "trace " } else { "" };
+    format!("{stream}{kind} {what}").trim_end().to_owned() + " (" + numbered + ")"
 }
 
 pub fn log(entries: &[Entry]) -> Vec<String> {

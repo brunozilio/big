@@ -1,56 +1,66 @@
-use crate::{Provider, ProviderError, declared};
+use crate::{Provider, ProviderError};
 use domain::ModelProvider;
 use domain::provider::ProviderInfo;
 
-pub mod anthropic;
-#[cfg(feature = "subscription-providers")]
 pub mod antigravity;
-#[cfg(feature = "subscription-providers")]
 pub mod chatgpt;
-#[cfg(feature = "subscription-providers")]
 pub mod claude;
-#[cfg(feature = "subscription-providers")]
 pub mod copilot;
-#[cfg(feature = "subscription-providers")]
 pub mod grok;
-#[cfg(feature = "subscription-providers")]
 pub mod kiro;
-pub mod openai;
 
 pub static ALL: &[&dyn Provider] = &[
-    &anthropic::Provider,
-    #[cfg(feature = "subscription-providers")]
     &antigravity::Provider,
-    #[cfg(feature = "subscription-providers")]
     &chatgpt::Provider,
-    #[cfg(feature = "subscription-providers")]
     &claude::Provider,
-    #[cfg(feature = "subscription-providers")]
     &copilot::Provider,
-    #[cfg(feature = "subscription-providers")]
     &grok::Provider,
-    #[cfg(feature = "subscription-providers")]
     &kiro::Provider,
-    &openai::Provider,
 ];
 
 #[cfg(test)]
 pub(crate) mod testing;
 
 #[cfg(any(test, feature = "test-support"))]
+static INSTALLED: std::sync::RwLock<Vec<&'static dyn Provider>> = std::sync::RwLock::new(Vec::new());
+
+#[cfg(any(test, feature = "test-support"))]
 pub fn install_testing() {
     crate::testing::install();
 }
 
+#[cfg(any(test, feature = "test-support"))]
+pub(crate) fn install(providers: &[&'static dyn Provider]) {
+    let mut installed = INSTALLED.write().unwrap_or_else(std::sync::PoisonError::into_inner);
+    for provider in providers {
+        if !installed.iter().any(|known| known.id() == provider.id()) {
+            installed.push(*provider);
+        }
+    }
+}
+
+#[cfg(any(test, feature = "test-support"))]
+fn installed() -> Vec<&'static dyn Provider> {
+    INSTALLED.read().unwrap_or_else(std::sync::PoisonError::into_inner).clone()
+}
+
+#[cfg(not(any(test, feature = "test-support")))]
+fn installed() -> Vec<&'static dyn Provider> {
+    Vec::new()
+}
+
 pub fn all() -> Vec<&'static dyn Provider> {
     let mut all = ALL.to_vec();
-    all.extend(declared::registered());
+    all.extend(installed());
     all.sort_by_key(|provider| provider.rank());
     all
 }
 
 pub fn find(provider: ModelProvider) -> Option<&'static dyn Provider> {
-    ALL.iter().copied().find(|known| known.id() == provider.id()).or_else(|| declared::find(provider))
+    ALL.iter()
+        .copied()
+        .find(|known| known.id() == provider.id())
+        .or_else(|| installed().into_iter().find(|known| known.id() == provider.id()))
 }
 
 pub fn get(provider: ModelProvider) -> Result<&'static dyn Provider, ProviderError> {
@@ -91,30 +101,20 @@ pub(crate) fn output_limit(model: Option<&domain::ModelOption>, body: &serde_jso
 mod tests {
     use super::*;
 
-    #[cfg(feature = "subscription-providers")]
     #[test]
     fn the_built_in_providers_are_these_in_this_order() {
         let ids: Vec<&str> = ALL.iter().map(|provider| provider.id()).collect();
         assert_eq!(
             ids,
             [
-                "anthropic",
                 "antigravity-subscription",
                 "openai-subscription",
                 "claude-subscription",
                 "copilot-subscription",
                 "grok-subscription",
                 "kiro-subscription",
-                "openai",
             ]
         );
-    }
-
-    #[cfg(not(feature = "subscription-providers"))]
-    #[test]
-    fn the_built_in_providers_are_these_in_this_order() {
-        let ids: Vec<&str> = ALL.iter().map(|provider| provider.id()).collect();
-        assert_eq!(ids, ["anthropic", "openai"]);
     }
 
     #[test]

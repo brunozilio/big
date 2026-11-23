@@ -26,7 +26,6 @@ fn a_notice_reaches_the_model_with_the_next_tool_results() {
         Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&scripted)]))), Arc::new(InMemorySessions::default()));
     let mut request = PromptRequest::plain(dir.path().into(), "read it", model());
     request.policy.permission = PermissionMode::Bypass;
-    request.policy.safety_check = false;
     request.host.credentials.client = 93_001;
     agent_engine::tools::inbox::push(93_001, Notice::new("monitor bash_9", "ERROR: build failed"));
     let events = finish(&start(&engine, &request));
@@ -58,7 +57,6 @@ fn a_channel_that_takes_permission_prompts_can_allow_a_call_while_the_terminal_w
         command: "/bin/sh".into(),
         args: vec!["-c".into(), ALLOWING_CHANNEL.into()],
         env: vec![],
-        sandbox: Default::default(),
     };
     let http: Arc<dyn agent_engine::model::http::Http> = Arc::new(agent_engine::model::http::ScriptedHttp::new([]));
     let _channel = agent_engine::mcp::channel::open(&spec, &http, 93_002).expect("channel");
@@ -75,7 +73,6 @@ fn a_channel_that_takes_permission_prompts_can_allow_a_call_while_the_terminal_w
         Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&scripted)]))), Arc::new(InMemorySessions::default()));
     let mut request = PromptRequest::plain(dir.path().into(), "write it", model());
     request.policy.permission = PermissionMode::Ask;
-    request.policy.safety_check = false;
     request.host.credentials.client = 93_002;
     let events = finish(&start(&engine, &request));
     assert!(events.iter().any(|event| matches!(event, EngineEvent::Asked(_))), "the terminal was asked too");
