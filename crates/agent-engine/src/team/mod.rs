@@ -7,8 +7,6 @@ use platform::store::Document;
 pub mod launch;
 pub mod lead_inbox;
 
-pub const TEAM_VARIABLE: &str = concat!(brand::env_prefix!(), "_TEAM_NAME");
-pub const AGENT_VARIABLE: &str = concat!(brand::env_prefix!(), "_AGENT_NAME");
 
 pub fn now_ms() -> u64 {
     SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |since| u64::try_from(since.as_millis()).unwrap_or(u64::MAX))
@@ -144,10 +142,9 @@ impl Team {
 }
 
 impl Me {
-    pub fn from_env(home: &Path) -> Option<Self> {
-        let team = std::env::var(TEAM_VARIABLE).ok().filter(|name| !name.is_empty())?;
-        let name = std::env::var(AGENT_VARIABLE).ok().filter(|name| !name.is_empty())?;
-        Some(Self { team: Team::named(home, &team), name })
+    pub fn of(home: Option<&Path>, teammate: Option<&domain::team::TeammateOf>) -> Option<Self> {
+        let teammate = teammate.filter(|teammate| !teammate.team.is_empty() && !teammate.name.is_empty())?;
+        Some(Self { team: Team::named(home?, &teammate.team), name: teammate.name.clone() })
     }
 }
 

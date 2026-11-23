@@ -8,14 +8,13 @@ use axum::routing::{any, get};
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::{Assets, Entries, Launch, Live};
+use crate::{Assets, Entries, Live};
 
 #[derive(Debug, Clone)]
 pub struct Settings {
     pub token: String,
     pub port: u16,
     pub assets: Assets,
-    pub terminal: Launch,
     pub entries: Arc<Entries>,
 }
 
@@ -25,8 +24,6 @@ pub struct Shared {
     pub entries: Arc<Entries>,
     pub port: u16,
     pub live: Live,
-    pub terminal: Launch,
-    pub terminals: Arc<tokio::sync::Semaphore>,
     pub subscribers: Arc<tokio::sync::Semaphore>,
 }
 
@@ -36,15 +33,12 @@ pub fn router(settings: Settings, live: Live) -> Router {
         entries: settings.entries,
         port: settings.port,
         live,
-        terminal: settings.terminal,
-        terminals: Arc::new(tokio::sync::Semaphore::new(crate::terminal::MOST_AT_ONCE)),
         subscribers: Arc::new(tokio::sync::Semaphore::new(crate::live::MOST_SUBSCRIBERS)),
     };
     let api = Router::new()
         .route("/api/health", get(|| async { axum::Json(json!({ "status": "ok" })) }))
         .route("/api/instance", get(|| async { axum::Json(json!({ "name": brand::NAME })) }))
         .merge(crate::live::routes())
-        .merge(crate::terminal::routes())
         .merge(crate::chats::routes())
         .route("/api/{*rest}", any(|| async { failure(StatusCode::NOT_FOUND, "not_found", "No such endpoint.") }));
     let app = match settings.assets {

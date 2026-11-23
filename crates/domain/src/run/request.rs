@@ -56,6 +56,8 @@ pub struct SessionConfig {
     pub roles: crate::model_roles::ModelRoles,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub append_system: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub teammate: Option<crate::team::TeammateOf>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -127,6 +129,7 @@ impl SessionConfig {
             fallbacks: Vec::new(),
             roles: Default::default(),
             append_system: None,
+            teammate: None,
         }
     }
 }

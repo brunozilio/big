@@ -158,7 +158,7 @@ mod tests {
         let store = kept_in(Some(dir.path()), Keeper::Keychain(&keychain));
 
         let reason = store.unkept().expect("says why");
-        assert!(reason.contains("locked out") && reason.contains("_SECRETS=file"), "{reason}");
+        assert!(reason.contains("locked out") && reason.contains(&format!("{} to file", key::CHOICE)), "{reason}");
         assert!(stored(&*store).is_err());
         assert!(
             std::fs::read_to_string(dir.path().join("secrets.json")).expect("vault").contains(&connection.to_string())

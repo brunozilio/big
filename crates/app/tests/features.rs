@@ -65,7 +65,6 @@ fn each_feature_answers_its_typed_call() {
     assert!(client.take_due_schedules().expect("due").is_empty());
     assert!(client.keep_instruction(cwd, "Run the tests first.").is_ok());
     assert_eq!(client.trace_of_every_session().expect("trace")["sessions"], serde_json::json!([]));
-    assert_eq!(client.open_channels(cwd, &[]).expect("channels"), (Vec::new(), Vec::new()));
     assert_eq!(client.code_map(cwd, "hello").expect("code map"), None);
     assert!(client.output_savings().expect("savings").is_empty());
 }

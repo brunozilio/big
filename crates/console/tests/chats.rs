@@ -55,9 +55,7 @@ impl Chats for Told {
 }
 
 async fn call(live: &Live, method: &str, path: &str, body: Option<Value>) -> (StatusCode, String) {
-    let terminal = console::Launch::this_program(std::env::temp_dir());
-    let settings =
-        Settings { token: "t".into(), port: 4000, assets: Assets::Missing, terminal, entries: Default::default() };
+    let settings = Settings { token: "t".into(), port: 4000, assets: Assets::Missing, entries: Default::default() };
     let request = Request::builder()
         .method(method)
         .uri(path)

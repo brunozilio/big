@@ -14,14 +14,12 @@ use tower::ServiceExt;
 const BEARER: &str = "Bearer t";
 
 fn app(live: &Live) -> axum::Router {
-    let terminal = console::Launch::this_program(std::env::temp_dir());
-    let settings =
-        Settings { token: "t".into(), port: 4000, assets: Assets::Missing, terminal, entries: Default::default() };
+    let settings = Settings { token: "t".into(), port: 4000, assets: Assets::Missing, entries: Default::default() };
     console::router(settings, live.clone())
 }
 
 fn started() -> console::Running {
-    console::start(Options { assets: Assets::Missing, port: 0, folder: std::env::temp_dir() }).expect("server")
+    console::start(Options { assets: Assets::Missing, port: 0 }).expect("server")
 }
 
 async fn call(live: &Live, method: &str, path: &str, body: Option<Value>) -> (StatusCode, String) {
@@ -40,16 +38,12 @@ async fn call(live: &Live, method: &str, path: &str, body: Option<Value>) -> (St
 }
 
 #[tokio::test]
-async fn the_report_and_the_session_list_are_what_the_terminal_last_gave() {
+async fn the_session_list_is_what_the_launcher_last_gave() {
     let live = Live::default();
-    let (status, _) = call(&live, "GET", "/api/report", None).await;
-    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "nothing to show before the first report");
     assert_eq!(call(&live, "GET", "/api/sessions", None).await, (StatusCode::OK, "[]".into()));
 
-    live.show(json!({ "sessions": [] }).to_string());
     live.list(json!([{ "session": "s1" }]).to_string());
 
-    assert_eq!(call(&live, "GET", "/api/report", None).await, (StatusCode::OK, r#"{"sessions":[]}"#.into()));
     assert_eq!(call(&live, "GET", "/api/sessions", None).await, (StatusCode::OK, r#"[{"session":"s1"}]"#.into()));
 }
 
@@ -212,17 +206,6 @@ fn the_page_gets_each_session_s_latest_update_at_once_then_every_new_one() {
     assert_eq!(next_data(&mut reader), r#"{"id":"s2", "runs":[]}"#, "one line per event");
 }
 
-#[tokio::test]
-async fn the_docs_are_what_the_terminal_last_gave() {
-    let live = Live::default();
-    let (status, _) = call(&live, "GET", "/api/docs", None).await;
-    assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE, "nothing to show before the terminal sends them");
-
-    live.document(json!({ "groups": [] }).to_string());
-
-    assert_eq!(call(&live, "GET", "/api/docs", None).await, (StatusCode::OK, r#"{"groups":[]}"#.into()));
-}
-
 fn next_event(reader: &mut BufReader<TcpStream>) -> (Option<String>, String) {
     let (mut name, mut line) = (None, String::new());
     loop {
@@ -239,13 +222,13 @@ fn next_event(reader: &mut BufReader<TcpStream>) -> (Option<String>, String) {
 }
 
 #[test]
-fn a_new_report_tells_the_page_to_fetch_it_again() {
+fn a_changed_chat_tells_the_page_to_fetch_it_again() {
     let running = started();
     let live = running.live();
     let mut reader = events(&running);
     std::thread::sleep(Duration::from_millis(200));
 
-    live.show(json!({ "sessions": [] }).to_string());
+    live.chat_changed("s1");
 
-    assert_eq!(next_event(&mut reader), (Some("report".into()), "changed".into()));
+    assert_eq!(next_event(&mut reader), (Some("chat".into()), "s1".into()));
 }

@@ -1,7 +1,6 @@
 pub mod api;
 mod catalog;
 mod client;
-mod cloudflare;
 mod data_root;
 mod db;
 mod degraded;
@@ -12,8 +11,6 @@ mod features;
 mod git;
 mod handler;
 mod homes;
-#[cfg(test)]
-mod legacy_layout_tests;
 mod mcp_admin;
 mod mcp_auth;
 mod permissions;
@@ -27,7 +24,6 @@ pub use api::features::shell::BackgroundCommand;
 pub use api::{Backend, BackendError, Wake};
 pub use catalog::{InMemorySessionCatalog, SessionCatalog, SqliteSessionCatalog};
 pub use client::{Builder, Client, Error, Headless, ProjectMemory, Run, RunControl, Session, SignedIn, Spending};
-pub use cloudflare::{CloudflareClient, CloudflareSignIn};
 pub use data_root::DataRoot;
 pub use db::Db;
 pub use degraded::Degraded;

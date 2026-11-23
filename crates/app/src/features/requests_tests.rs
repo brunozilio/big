@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::api::features::channels::{ChannelsReply, ChannelsRequest};
 use crate::api::features::memory::{MemoryOp, MemoryReply, MemoryRequest};
 use crate::api::features::sessions::{SessionsReply, SessionsRequest};
 use crate::api::features::trace::{TraceReply, TraceRequest};
@@ -109,26 +108,6 @@ fn the_trace_reports_every_session_or_one_with_its_project_or_follows_only_one()
 
     let unknown = trace(TraceRequest::Follow { session: SessionId("none".into()), cwd });
     assert!(matches!(unknown, Err(FeatureError::Failed { feature: FeatureName::Trace, .. })), "{unknown:?}");
-}
-
-#[test]
-fn channels_open_none_for_an_empty_list_and_say_which_names_failed() {
-    let project = tempfile::tempdir().expect("project");
-    let services = testing::services(None);
-    let channels = |names: &[&str]| {
-        let names = names.iter().map(|name| (*name).to_owned()).collect();
-        let request = ChannelsRequest { path: project.path().to_path_buf(), names };
-        match typed(&services, 96_101, FeatureRequest::Channels(request)) {
-            Ok(FeatureReply::Channels(reply)) => reply,
-            other => panic!("{other:?}"),
-        }
-    };
-
-    assert_eq!(channels(&[]), ChannelsReply::default());
-    let missing = channels(&["chat"]);
-    assert!(missing.opened.is_empty());
-    assert!(missing.failed[0].starts_with("chat:"), "{missing:?}");
-    super::forget(96_101);
 }
 
 #[test]

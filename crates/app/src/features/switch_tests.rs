@@ -1,7 +1,6 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use crate::api::features::channels::ChannelsRequest;
 use crate::api::features::code_map::CodeMapRequest;
 use crate::api::features::memory::{MemoryOp, MemoryRequest};
 use crate::api::features::plugins::PluginsRequest;
@@ -19,7 +18,6 @@ const CLIENT: u64 = 96_301;
 fn a_request_to(feature: FeatureName, cwd: &Path) -> FeatureRequest {
     let path = cwd.to_path_buf();
     match feature {
-        FeatureName::Channels => FeatureRequest::Channels(ChannelsRequest { path, names: Vec::new() }),
         FeatureName::CodeMap => FeatureRequest::CodeMap(CodeMapRequest { path, prompt: "retry".into() }),
         FeatureName::Memory => FeatureRequest::Memory(MemoryRequest { path, op: MemoryOp::List }),
         FeatureName::OutputSavings => FeatureRequest::OutputSavings,

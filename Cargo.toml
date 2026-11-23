@@ -24,8 +24,6 @@ llm-providers = { path = "crates/llm-providers", default-features = false }
 code-map = { path = "crates/code-map" }
 console = { path = "crates/console" }
 page = { path = "crates/page" }
-tunnel = { path = "crates/tunnel" }
-relay = { path = "crates/relay" }
 store = { path = "crates/store" }
 orchestrator = { path = "crates/orchestrator" }
 sync = { path = "crates/sync" }

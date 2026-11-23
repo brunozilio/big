@@ -154,7 +154,6 @@ fn the_documented_full_example_reads_without_a_notice() {
             "additionalDirectories": ["~/notes"]
         },
         "scripts": { "files": true, "processes": true, "network": false },
-        "features": { "experimental-code-map": false, "git-offer": false },
         "lspServers": {
             "zls": { "command": "zls", "args": [], "extensionToLanguage": { ".zig": "zig" },
                      "rootMarkers": ["build.zig"], "env": { "A": "1" } },
@@ -196,7 +195,6 @@ fn one_value_per_published_key() -> Vec<(&'static str, Value)> {
         ("lspServers", json!({ "zls": { "command": "zls" } })),
         ("permissions", json!({ "additionalDirectories": ["~/notes"] })),
         ("scripts", json!({ "network": false })),
-        ("features", json!({ "git-offer": false })),
     ]
 }
 

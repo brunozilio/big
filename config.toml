@@ -3,11 +3,6 @@ command = "big"
 company = "brunozilio"
 author = "brunozilio"
 
-[cloudflare]
-client_id = "54d11594-84e4-41aa-b438-e81b8fa78ee7"
-redirect = "http://localhost:8976/oauth/callback"
-scopes = "account:read user:read workers:write workers_scripts:write offline_access"
-
 [connectors]
 github_client_id = ""
 atlassian_client_id = ""
@@ -89,4 +84,3 @@ memory_search = true
 schedules = true
 plugins = true
 trace = true
-channels = true

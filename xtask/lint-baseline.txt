@@ -1,0 +1,2 @@
+env-var crates/console/src/assets.rs: brand::env (configuration lives in config.toml; system variables go through platform)
+env-var crates/console/src/assets.rs: env::var_os(brand::env("CONSOLE_DIR") (configuration lives in config.toml; system variables go through platform)

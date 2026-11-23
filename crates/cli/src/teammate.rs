@@ -1,20 +1,91 @@
+use std::io::Write;
+use std::path::PathBuf;
+use std::process::ExitCode;
 use std::time::Duration;
 
 use app::team::Me;
+use app::{Decision, EngineEvent, PermissionMode};
 use domain::team::{LEAD, Protocol, shown};
 
 const POLL: Duration = Duration::from_millis(500);
 
-pub fn spec_of(cli: &mut crate::Cli) -> Result<Option<domain::team::TeammateSpec>, String> {
-    let Some(crate::Action::Teammate { spec: Some(path) }) = &cli.command else { return Ok(None) };
+#[derive(Debug, Default, clap::Args)]
+pub struct Args {
+    #[arg(short = 'C', long)]
+    cwd: Option<PathBuf>,
+    #[arg(long)]
+    model: Option<String>,
+    #[arg(long, value_parser = parse_mode)]
+    mode: Option<PermissionMode>,
+    #[arg(long = "append-system-prompt")]
+    instructions: Option<String>,
+    #[arg(long)]
+    spec: Option<PathBuf>,
+}
+
+fn parse_mode(text: &str) -> Result<PermissionMode, String> {
+    domain::command::mode_named(text).ok_or_else(|| format!("`{text}` is not ask, edits, plan or bypass"))
+}
+
+pub fn spec_of(args: &mut Args) -> Result<Option<domain::team::TeammateSpec>, String> {
+    let Some(path) = &args.spec else { return Ok(None) };
     let text = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
     let spec: domain::team::TeammateSpec =
         serde_json::from_str(&text).map_err(|error| format!("{}: {error}", path.display()))?;
-    cli.cwd = Some(spec.cwd.clone().into());
-    cli.model = Some(spec.model.clone());
-    cli.mode = Some(domain::command::mode_named(&spec.mode).ok_or_else(|| format!("unknown mode {}", spec.mode))?);
-    cli.append_system_prompt = Some(spec.instructions.clone());
+    args.cwd = Some(spec.cwd.clone().into());
+    args.model = Some(spec.model.clone());
+    args.mode = Some(parse_mode(&spec.mode)?);
+    args.instructions = Some(spec.instructions.clone());
     Ok(Some(spec))
+}
+
+pub fn run(mut args: Args) -> Result<ExitCode, String> {
+    let spec = spec_of(&mut args)?;
+    let home = std::env::home_dir().ok_or("a teammate needs a home folder")?;
+    let spec = spec.ok_or("a teammate is started by its lead, with a --spec file naming its team and name")?;
+    let me = Me { team: app::team::Team::named(&home, &spec.team), name: spec.name.clone() };
+    let teammate = domain::team::TeammateOf { team: spec.team, name: spec.name };
+    let cwd = match args.cwd.take() {
+        Some(dir) => dir,
+        None => std::env::current_dir().map_err(|error| error.to_string())?,
+    };
+    let cwd = std::fs::canonicalize(&cwd).map_err(|error| format!("{}: {error}", cwd.display()))?;
+    let client = app::Client::builder().cwd(&cwd).build().map_err(|error| error.to_string())?;
+    let models = client.models().map_err(|error| error.to_string())?;
+    let model = domain::model::choose_model(&models, args.model.as_deref()).ok_or("no model is available")?;
+    let mut session = client.session(cwd, model);
+    if let Some(mode) = args.mode {
+        session.set_permission(mode);
+    }
+    let headless = app::Headless { append_system: args.instructions.take(), teammate: Some(teammate), ..Default::default() };
+    session.set_headless(headless);
+    let (team, name) = (me.team.clone(), me.name.clone());
+    let asker = Mailbox::new(me.clone());
+    let ended = work(&session, &asker, Mailbox::new(me));
+    team.departed(&name);
+    ended.map(|()| ExitCode::SUCCESS)
+}
+
+fn work(session: &app::Session, asker: &Mailbox, prompts: Mailbox) -> Result<(), String> {
+    let mut out = std::io::stdout().lock();
+    for prompt in prompts {
+        let mut run = session.send(&prompt?).map_err(|error| error.to_string())?;
+        while let Some(event) = run.next_event() {
+            match event {
+                EngineEvent::TextDelta(text) => {
+                    let _ = out.write_all(text.as_bytes());
+                    let _ = out.flush();
+                }
+                EngineEvent::Asked(ask) => {
+                    let decision = asker.forward(&ask).unwrap_or(Decision::Deny);
+                    run.answer(ask.id, decision).map_err(|error| error.to_string())?;
+                }
+                _ => {}
+            }
+        }
+        let _ = writeln!(out);
+    }
+    Ok(())
 }
 
 pub struct Mailbox {
@@ -42,14 +113,13 @@ impl Mailbox {
         let request_id = format!("{}-{nanos:x}", self.me.name);
         let from = self.me.name.clone();
         let (request, summary) = match &ask.kind {
-            app::AskKind::Permission { tool, subject, rememberable, rule } => (
+            app::AskKind::Permission { tool, subject, rememberable } => (
                 Protocol::PermissionRequest {
                     request_id: request_id.clone(),
                     from,
                     tool_name: tool.clone(),
                     description: subject.clone(),
                     rememberable: *rememberable,
-                    rule: rule.clone(),
                 },
                 format!("may I use {tool}?"),
             ),
@@ -150,7 +220,6 @@ mod tests {
                 tool: "Bash".into(),
                 subject: "npm run deploy".into(),
                 rememberable: true,
-                rule: None,
             },
         };
         let answered = |decision: app::Decision| {
@@ -186,12 +255,7 @@ mod tests {
         team.send("tester", LEAD, &asked.text(), None).expect("send");
         let ask = app::AgentAsk {
             id: app::AskId("ask-1".into()),
-            kind: app::AskKind::Permission {
-                tool: "Bash".into(),
-                subject: "x".into(),
-                rememberable: false,
-                rule: None,
-            },
+            kind: app::AskKind::Permission { tool: "Bash".into(), subject: "x".into(), rememberable: false },
         };
 
         assert_eq!(mailbox.forward(&ask), Some(app::Decision::Deny));
@@ -212,15 +276,27 @@ mod tests {
             instructions: "# Team coordination".into(),
         };
         std::fs::write(&path, serde_json::to_string(&spec).expect("json")).expect("write");
-        let mut cli = crate::Cli::parse_from([brand::COMMAND, "teammate", "--spec", &path.display().to_string()]);
+        let cli = crate::Cli::parse_from([brand::COMMAND, "teammate", "--spec", &path.display().to_string()]);
+        let Some(crate::Internal::Teammate(mut args)) = cli.command else { panic!("a teammate") };
 
-        assert_eq!(spec_of(&mut cli), Ok(Some(spec)));
+        assert_eq!(spec_of(&mut args), Ok(Some(spec)));
 
-        assert_eq!(cli.cwd, Some("/work".into()));
-        assert_eq!((cli.model.as_deref(), cli.mode), (Some("m1"), Some(app::PermissionMode::AcceptEdits)));
-        assert_eq!(cli.append_system_prompt.as_deref(), Some("# Team coordination"));
-        let mut plain = crate::Cli::parse_from([brand::COMMAND, "teammate"]);
-        assert_eq!(spec_of(&mut plain), Ok(None));
+        assert_eq!(args.cwd, Some("/work".into()));
+        assert_eq!((args.model.as_deref(), args.mode), (Some("m1"), Some(app::PermissionMode::AcceptEdits)));
+        assert_eq!(args.instructions.as_deref(), Some("# Team coordination"));
+        assert_eq!(spec_of(&mut Args::default()), Ok(None));
+    }
+
+    #[test]
+    fn the_lead_starts_a_teammate_with_its_folder_model_mode_and_instructions() {
+        use clap::Parser;
+        let mode = domain::command::mode_label(app::PermissionMode::AcceptEdits);
+        let started = [brand::COMMAND, "teammate", "-C", "/work", "--model", "m1", "--mode", mode];
+        let cli = crate::Cli::parse_from(started.into_iter().chain(["--append-system-prompt", "# Team"]));
+        let Some(crate::Internal::Teammate(args)) = cli.command else { panic!("a teammate") };
+        assert_eq!(args.cwd, Some("/work".into()));
+        assert_eq!((args.model.as_deref(), args.mode), (Some("m1"), Some(app::PermissionMode::AcceptEdits)));
+        assert_eq!(args.instructions.as_deref(), Some("# Team"));
     }
 
     #[test]

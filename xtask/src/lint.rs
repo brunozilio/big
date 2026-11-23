@@ -8,6 +8,7 @@ pub fn run(root: &Path, update_baseline: bool) -> Result<(), Box<dyn std::error:
     found.extend(crate::brand::findings(root)?);
     found.extend(crate::comments::findings(root)?);
     found.extend(crate::crate_graph::findings(root)?);
+    found.extend(crate::environment::findings(root)?);
     found.extend(crate::git_commands::findings(root)?);
     let baseline_path = root.join(BASELINE);
     if update_baseline {

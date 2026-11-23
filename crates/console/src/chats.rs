@@ -86,8 +86,13 @@ impl IntoResponse for Refused {
     }
 }
 
+pub fn session_id(text: &str) -> Option<&str> {
+    let allowed = |char: char| char.is_ascii_alphanumeric() || char == '-' || char == '_';
+    Some(text).filter(|text| !text.is_empty() && !text.starts_with('-') && text.chars().all(allowed))
+}
+
 fn session_of(asked: &str) -> Result<String, Refused> {
-    crate::pty::session_id(asked)
+    session_id(asked)
         .map(str::to_owned)
         .ok_or_else(|| Refused(StatusCode::BAD_REQUEST, "validation", "That is not a session id.".to_owned()))
 }

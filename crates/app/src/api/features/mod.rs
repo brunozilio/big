@@ -1,4 +1,3 @@
-pub mod channels;
 pub mod code_map;
 pub mod memory;
 pub mod output_savings;
@@ -11,7 +10,6 @@ pub mod workspace;
 
 use serde::{Deserialize, Serialize};
 
-use self::channels::{ChannelsReply, ChannelsRequest};
 use self::code_map::{CodeMapReply, CodeMapRequest};
 use self::memory::{MemoryReply, MemoryRequest};
 use self::output_savings::OutputSavingsReply;
@@ -25,7 +23,6 @@ use self::workspace::{WorkspaceReply, WorkspaceRequest};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FeatureName {
-    Channels,
     CodeMap,
     Memory,
     OutputSavings,
@@ -38,8 +35,7 @@ pub enum FeatureName {
 }
 
 impl FeatureName {
-    pub const ALL: [Self; 10] = [
-        Self::Channels,
+    pub const ALL: [Self; 9] = [
         Self::CodeMap,
         Self::Memory,
         Self::OutputSavings,
@@ -53,7 +49,6 @@ impl FeatureName {
 
     pub fn name(self) -> &'static str {
         match self {
-            Self::Channels => "channels",
             Self::CodeMap => "code_map",
             Self::Memory => "memory",
             Self::OutputSavings => "output_savings",
@@ -69,7 +64,6 @@ impl FeatureName {
     pub fn on(self) -> bool {
         use brand::features as flags;
         let flag = match self {
-            Self::Channels => flags::CHANNELS,
             Self::CodeMap => flags::CODE_MAP,
             Self::OutputSavings => flags::OUTPUT_SAVINGS,
             Self::Plugins => flags::PLUGINS,
@@ -90,7 +84,6 @@ impl std::fmt::Display for FeatureName {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "feature", content = "request", rename_all = "snake_case")]
 pub enum FeatureRequest {
-    Channels(ChannelsRequest),
     CodeMap(CodeMapRequest),
     Memory(MemoryRequest),
     OutputSavings,
@@ -105,7 +98,6 @@ pub enum FeatureRequest {
 impl FeatureRequest {
     pub fn feature(&self) -> FeatureName {
         match self {
-            Self::Channels(_) => FeatureName::Channels,
             Self::CodeMap(_) => FeatureName::CodeMap,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings => FeatureName::OutputSavings,
@@ -122,7 +114,6 @@ impl FeatureRequest {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "feature", content = "reply", rename_all = "snake_case")]
 pub enum FeatureReply {
-    Channels(ChannelsReply),
     CodeMap(CodeMapReply),
     Memory(MemoryReply),
     OutputSavings(OutputSavingsReply),
@@ -137,7 +128,6 @@ pub enum FeatureReply {
 impl FeatureReply {
     pub fn feature(&self) -> FeatureName {
         match self {
-            Self::Channels(_) => FeatureName::Channels,
             Self::CodeMap(_) => FeatureName::CodeMap,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings(_) => FeatureName::OutputSavings,

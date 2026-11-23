@@ -53,10 +53,10 @@ fn the_published_schemas_never_spell_the_product() {
 }
 
 #[test]
-fn the_shipped_copy_names_the_app_s_own_folder() {
+fn the_shipped_copy_has_no_placeholder_left_and_every_key() {
     let shipped = content::builtin_text(SETTINGS_FILE).expect("shipped with the app");
     let schema: Value = serde_json::from_str(&shipped).expect("JSON");
-    assert!(shipped.contains(brand::DIR) && !shipped.contains("{{DIR}}"));
+    assert!(!shipped.contains("{{"));
     assert_eq!(
         schema["properties"].as_object().map(|keys| keys.len()),
         settings()["properties"].as_object().map(|keys| keys.len())
@@ -98,11 +98,11 @@ fn an_unknown_key_is_named_once_and_left_out() {
 }
 
 #[test]
-fn a_feature_the_app_does_not_list_is_still_a_switch() {
-    let checked = checked_settings(json!({ "features": { "insights": false, "trace": "no" } }));
+fn features_are_no_longer_a_setting() {
+    let checked = checked_settings(json!({ "features": { "trace": false }, "smallModel": "s" }));
 
-    assert_eq!(checked.problems, ["features.trace: expected boolean, found \"no\""]);
-    assert_eq!(checked.value, json!({ "features": { "insights": false } }));
+    assert_eq!(checked.problems, ["features: unknown key, ignored"]);
+    assert_eq!(checked.value, json!({ "smallModel": "s" }));
 }
 
 #[test]

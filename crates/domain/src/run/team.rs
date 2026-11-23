@@ -221,6 +221,12 @@ impl TeammateMode {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TeammateOf {
+    pub team: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeammateSpec {
     pub team: String,
     pub name: String,

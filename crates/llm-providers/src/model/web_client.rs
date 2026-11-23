@@ -6,7 +6,7 @@ use domain::site::is_private_address;
 const PROXY_VARIABLES: [&str; 6] = ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"];
 
 pub fn proxied() -> bool {
-    PROXY_VARIABLES.iter().any(|key| std::env::var_os(key).is_some_and(|value| !value.is_empty()))
+    PROXY_VARIABLES.iter().any(|key| platform::environment::set(key))
 }
 
 pub fn builder() -> reqwest::ClientBuilder {

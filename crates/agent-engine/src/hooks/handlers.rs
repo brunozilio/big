@@ -99,7 +99,7 @@ pub fn http(handler: &Handler, input: &Value, workspace: &Workspace) -> Result<C
             .replace_all(value, |captures: &regex::Captures<'_>| {
                 let key = captures.get(1).or_else(|| captures.get(2)).map_or("", |found| found.as_str());
                 if handler.allowed_env_vars.iter().any(|allowed| allowed == key) {
-                    std::env::var(key).unwrap_or_default()
+                    platform::environment::var(key).unwrap_or_default()
                 } else {
                     String::new()
                 }

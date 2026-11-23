@@ -1,6 +1,7 @@
 mod brand;
 mod comments;
 mod crate_graph;
+mod environment;
 mod git_commands;
 mod lint;
 mod web;

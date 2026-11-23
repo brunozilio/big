@@ -19,9 +19,7 @@ fn every_feature_has_a_name_in_one_fixed_order() {
     assert_eq!(
         names,
         [
-            "channels",
             "code_map",
-            "flags",
             "memory",
             "output_savings",
             "plugins",

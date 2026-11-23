@@ -34,6 +34,7 @@ pub struct Headless {
     pub max_turns: Option<u32>,
     pub append_system: Option<String>,
     pub fallback_model: Option<String>,
+    pub teammate: Option<domain::team::TeammateOf>,
 }
 
 impl Session {
@@ -236,6 +237,7 @@ impl Session {
         request.policy.max_turns = self.headless.max_turns;
         request.session.append_system.clone_from(&self.headless.append_system);
         request.session.fallback_model.clone_from(&self.headless.fallback_model);
+        request.session.teammate.clone_from(&self.headless.teammate);
         request.session.roles.clone_from(&self.roles);
         request.session.fallbacks.clone_from(&self.fallbacks);
         if request.session.output_style.is_none() {

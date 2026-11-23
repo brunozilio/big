@@ -32,9 +32,8 @@ pub fn install() -> Option<PathBuf> {
     let data = platform::local_data_dir(brand::NAME, brand::COMMAND)?;
     let path = file_in(&data);
     let file = open(&path).ok()?;
-    let asked = std::env::var(brand::env("LOG")).ok();
     tracing_subscriber::fmt()
-        .with_env_filter(filter(asked.as_deref()))
+        .with_env_filter(filter(Some(brand::log::FILTER)))
         .with_writer(Mutex::new(file))
         .with_ansi(false)
         .with_thread_names(true)

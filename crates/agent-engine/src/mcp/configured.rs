@@ -139,7 +139,7 @@ fn parsed(path: &Path) -> Result<Parsed, String> {
     let text = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
     let config: Value = serde_json::from_str(&text).map_err(|error| error.to_string())?;
     let checked = crate::config_schema::checked_mcp(config);
-    let config = expand(checked.value, &|name| std::env::var(name).ok());
+    let config = expand(checked.value, &platform::environment::var);
     Ok(Parsed { servers: parse_config(&config.to_string())?, problems: checked.problems })
 }
 

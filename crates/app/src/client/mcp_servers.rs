@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use crate::api::features::channels::ChannelsRequest;
 use crate::api::{ClientCommand, Reply};
 use domain::mcp_config::{McpEntry, McpListing, McpServerInfo};
 
@@ -60,11 +59,6 @@ impl Client {
             }
             listed(reply)
         })
-    }
-
-    pub fn open_channels(&self, cwd: &Path, names: &[String]) -> Result<(Vec<String>, Vec<String>), Error> {
-        let request = ChannelsRequest { path: cwd.to_path_buf(), names: names.to_vec() };
-        self.ask_channels(request).map(|reply| (reply.opened, reply.failed))
     }
 
     pub fn sign_out_mcp_server(&self, cwd: &Path, name: &str) -> Result<Vec<McpServerInfo>, Error> {
