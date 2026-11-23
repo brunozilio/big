@@ -25,17 +25,6 @@ pub enum Reply {
     },
     Skills(Vec<Skill>),
     Agents(Vec<CustomAgent>),
-    McpServers {
-        path: PathBuf,
-        servers: Vec<domain::mcp_config::McpServerInfo>,
-        #[serde(default)]
-        unreadable: Vec<domain::mcp_config::McpUnreadable>,
-    },
-    McpServer(domain::mcp_config::McpEntry),
-    McpAuthorizeAt {
-        name: String,
-        url: String,
-    },
     Notices(Notices),
     Feature(FeatureReply),
     FeatureFailed(FeatureError),
@@ -76,7 +65,7 @@ impl Reply {
     }
 
     pub fn is_terminal(&self) -> bool {
-        !matches!(self, Self::McpAuthorizeAt { .. } | Self::Providers(ProviderEvent::AuthorizeAt { .. }))
+        !matches!(self, Self::Providers(ProviderEvent::AuthorizeAt { .. }))
     }
 }
 
@@ -120,27 +109,6 @@ mod tests {
             Reply::Settings { settings: Some(serde_json::json!({ "model": "m" })) },
             Reply::Skills(Vec::new()),
             Reply::Agents(Vec::new()),
-            Reply::McpServers { path: "/repo".into(), servers: Vec::new(), unreadable: Vec::new() },
-            Reply::McpServers {
-                path: "/repo".into(),
-                servers: Vec::new(),
-                unreadable: vec![domain::mcp_config::McpUnreadable::broken(
-                    "/home/mcp.json".into(),
-                    domain::mcp_config::McpOrigin::User,
-                    "EOF".into(),
-                )],
-            },
-            Reply::McpServer(domain::mcp_config::McpEntry {
-                info: domain::mcp_config::McpServerInfo {
-                    name: "jira".into(),
-                    origin: domain::mcp_config::McpOrigin::Project,
-                    target: "jira-mcp".into(),
-                    state: domain::mcp_config::McpState::Pending,
-                },
-                file: Some("/repo/mcp.json".into()),
-                entry: Some(serde_json::json!({"command": "jira-mcp"})),
-            }),
-            Reply::McpAuthorizeAt { name: "linear".into(), url: "https://auth.test".into() },
             Reply::Notices(Notices {
                 for_user: vec!["keys cannot be kept".into()],
                 for_agent: vec![domain::inbox::Notice::new("monitor bash_1", "ready")],
@@ -221,9 +189,9 @@ mod tests {
         let open: Vec<Reply> = replies().into_iter().filter(|reply| !reply.is_terminal()).collect();
         assert!(open.iter().all(|reply| matches!(
             reply,
-            Reply::McpAuthorizeAt { .. } | Reply::Providers(ProviderEvent::AuthorizeAt { .. })
+            Reply::Providers(ProviderEvent::AuthorizeAt { .. })
         )));
-        assert_eq!(open.len(), 3);
+        assert_eq!(open.len(), 2);
         assert!(Reply::done_or(Ok(())).is_terminal() && Reply::done_or(Err("no".into())).is_terminal());
     }
 }

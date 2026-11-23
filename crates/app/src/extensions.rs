@@ -3,13 +3,11 @@ use std::path::{Path, PathBuf};
 use domain::{CustomAgent, Folder, PromptRequest, Skill};
 
 #[derive(Debug, Clone, Default)]
-pub struct Extensions {
-    pub plugins: Vec<PathBuf>,
-}
+pub struct Extensions;
 
 impl Extensions {
     pub(crate) fn host(&self, _cwd: &Path, home: Option<&Path>) -> domain::Extensions {
-        domain::Extensions { plugins: self.plugins.clone(), home: home.map(Path::to_path_buf), ..Default::default() }
+        domain::Extensions { home: home.map(Path::to_path_buf), ..Default::default() }
     }
 
     pub(crate) fn brief(&self, mut request: PromptRequest, home: Option<PathBuf>) -> PromptRequest {
@@ -42,29 +40,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_installed_plugin_s_commands_are_offered_under_its_name() {
-        let dir = tempfile::tempdir().expect("dir");
-        let plugin = dir.path().join("acme");
-        std::fs::create_dir_all(plugin.join("commands")).expect("commands");
-        std::fs::write(plugin.join("commands/ship.md"), "---\ndescription: Ships\n---\nShip it.").expect("command");
-        let extensions = Extensions { plugins: vec![plugin] };
-        let names: Vec<String> = skills(dir.path(), &extensions, None).into_iter().map(|s| s.name).collect();
-        assert!(names.contains(&"acme:ship".into()), "{names:?}");
-    }
-
-    #[test]
-    fn a_run_gets_the_host_s_plugins() {
+    fn a_run_without_a_home_gets_nothing_added() {
         let request = PromptRequest::plain("/repo".into(), "hi", ModelOption::new("m", "M"));
-        assert_eq!(Extensions::default().brief(request.clone(), None), request, "nothing to add");
-        let extensions = Extensions { plugins: vec!["/plugins/acme".into()] };
-        let added = extensions.brief(request, None).host.extensions.expect("extensions");
-        assert_eq!(added.plugins, [PathBuf::from("/plugins/acme")]);
+        assert_eq!(Extensions.brief(request.clone(), None), request);
     }
 
     #[test]
     fn a_run_gets_the_home_its_owner_was_given() {
         let request = PromptRequest::plain("/repo".into(), "hi", ModelOption::new("m", "M"));
-        let briefed = Extensions::default().brief(request, Some("/users/ana".into()));
+        let briefed = Extensions.brief(request, Some("/users/ana".into()));
         assert_eq!(briefed.host.extensions.and_then(|extensions| extensions.home), Some(PathBuf::from("/users/ana")));
     }
 
@@ -81,7 +65,7 @@ mod tests {
         let project = dir.path().join("project");
         std::fs::create_dir_all(&project).expect("project");
         let named =
-            |home: Option<&Path>| agents(&project, &Extensions::default(), home).iter().any(|a| a.name == "helper");
+            |home: Option<&Path>| agents(&project, &Extensions, home).iter().any(|a| a.name == "helper");
         assert!(named(Some(&home)));
         assert!(!named(None));
     }

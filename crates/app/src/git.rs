@@ -6,7 +6,6 @@ use std::time::Duration;
 use platform::{Bounds, Ended};
 
 pub const LOCAL: Duration = Duration::from_secs(30);
-pub const REMOTE: Duration = Duration::from_secs(120);
 const MOST_OUTPUT: usize = 16 << 20;
 
 pub fn run(cwd: &Path, args: &[&str], limit: Duration) -> Result<String, String> {

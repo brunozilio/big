@@ -43,7 +43,6 @@ pub enum Effect {
     Net { host: Option<String> },
     Spawn(SpawnKind),
     Cancel { own: bool },
-    Notify,
     Session { to: String },
     Resource { server: String, uri: String },
     Remote { server: String },
@@ -61,7 +60,6 @@ impl Effect {
             Self::ReadPath(_)
             | Self::ReadTree(_)
             | Self::WritePath(_)
-            | Self::Notify
             | Self::Cancel { own: true }
             | Self::Spawn(SpawnKind::Agent | SpawnKind::Watch)
             | Self::Declared(Declared::Edits) => false,

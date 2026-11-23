@@ -14,7 +14,6 @@ mod lsp;
 mod mcp;
 mod memory_edits;
 mod model_roles;
-mod plugins;
 mod prompt_hooks;
 mod runs;
 mod scripts;

@@ -1,8 +1,6 @@
 use serde_json::json;
 
 use super::memory::{MemoryOp, MemoryRequest};
-use super::plugins::PluginsRequest;
-use super::schedules::SchedulesRequest;
 use super::sessions::SessionsRequest;
 use super::shell::ShellRequest;
 use super::trace::TraceRequest;
@@ -22,8 +20,6 @@ fn every_feature_has_a_name_in_one_fixed_order() {
             "code_map",
             "memory",
             "output_savings",
-            "plugins",
-            "schedules",
             "sessions",
             "shell",
             "trace",
@@ -57,9 +53,7 @@ fn what_used_to_take_a_silent_default_is_refused_when_it_is_missing() {
     assert!(refused::<MemoryRequest>(json!({ "path": "/repo", "op": { "search": {} } })), "the query is required");
     assert!(refused::<MemoryRequest>(json!({ "path": "/repo", "op": "list", "pth": "/x" })), "an unknown field");
     assert!(refused::<WorkspaceRequest>(json!({ "path": "/repo", "op": { "mentions": {} } })));
-    assert!(refused::<PluginsRequest>(json!({})), "the op is required");
     assert!(refused::<TraceRequest>(json!({ "session": { "session": "s" } })), "the folder is required");
-    assert!(refused::<SchedulesRequest>(json!({ "create": { "prompt": "x" } })));
     assert!(refused::<ShellRequest>(json!({ "run": { "command": "ls" } })), "the folder is required");
 }
 
@@ -69,8 +63,6 @@ fn every_request_round_trips() {
         FeatureRequest::Memory(MemoryRequest { path: "/repo".into(), op: MemoryOp::Search { query: "x".into() } }),
         FeatureRequest::Workspace(WorkspaceRequest { path: "/repo".into(), op: WorkspaceOp::GitOffer }),
         FeatureRequest::Shell(ShellRequest::Kill { id: "bash_1".into() }),
-        FeatureRequest::Plugins(PluginsRequest::Install { source: "git@x:a/b.git".into(), name: None }),
-        FeatureRequest::Schedules(SchedulesRequest::TakeDue),
         FeatureRequest::Trace(TraceRequest::EverySession),
         FeatureRequest::OutputSavings,
     ];
@@ -82,9 +74,9 @@ fn every_request_round_trips() {
 
 #[test]
 fn a_feature_that_is_off_says_so_and_a_failure_says_what_failed() {
-    let off = FeatureError::FeatureOff { feature: FeatureName::Schedules };
-    assert_eq!(off.to_string(), "schedules is turned off");
+    let off = FeatureError::FeatureOff { feature: FeatureName::Trace };
+    assert_eq!(off.to_string(), "trace is turned off");
     let failed = FeatureError::Failed { feature: FeatureName::Memory, message: "nothing to undo".into() };
     assert_eq!((failed.to_string().as_str(), failed.feature()), ("nothing to undo", FeatureName::Memory));
-    assert_ne!(off, FeatureError::Failed { feature: FeatureName::Schedules, message: off.to_string() });
+    assert_ne!(off, FeatureError::Failed { feature: FeatureName::Trace, message: off.to_string() });
 }

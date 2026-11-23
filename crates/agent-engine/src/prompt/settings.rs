@@ -65,7 +65,7 @@ fn model_names(value: &Value, key: &str) -> Result<Vec<String>, String> {
     }
 }
 
-pub fn load(scope: &Scope, plugins: &[crate::plugins::Plugin]) -> Result<Settings, String> {
+pub fn load(scope: &Scope) -> Result<Settings, String> {
     let home = scope.home();
     let roots = roots(scope.cwd(), home);
     let is_user_root = |root: &Path| home.is_some_and(|home| root == home.join(brand::DIR));
@@ -101,7 +101,6 @@ pub fn load(scope: &Scope, plugins: &[crate::plugins::Plugin]) -> Result<Setting
             Err(error) => skipped.push((path, error)),
         }
     }
-    add_plugins(&mut merged, plugins);
     problems.extend(skipped.iter().map(|(path, error)| skipped_layer(path, error)));
     merged.skipped_files = skipped.into_iter().map(|(path, _)| path).collect();
     merged.notices = Vec::new();
@@ -250,17 +249,6 @@ impl Layer<'_> {
     }
 }
 
-fn add_plugins(merged: &mut Settings, plugins: &[crate::plugins::Plugin]) {
-    for plugin in plugins {
-        match plugin.hooks().and_then(|events| events.map(|events| crate::hooks::Hooks::parse(&events)).transpose()) {
-            Ok(Some(found)) => merged.hooks.extend(&found),
-            Ok(None) => {}
-            Err(error) => tracing::warn!(%error, plugin = %plugin.name, "a plugin's hooks are left out"),
-        }
-    }
-    merged.lsp_servers.extend(crate::plugins::lsp_layers(plugins));
-}
-
 fn style_named(selected: String, roots: &[PathBuf]) -> Result<Option<Style>, String> {
     match selected.to_ascii_lowercase().as_str() {
         "default" => return Ok(None),
@@ -288,12 +276,8 @@ fn style_named(selected: String, roots: &[PathBuf]) -> Result<Option<Style>, Str
     }))
 }
 #[cfg(test)]
-pub(crate) fn load_trusted(
-    cwd: &Path,
-    home: Option<&Path>,
-    plugins: &[crate::plugins::Plugin],
-) -> Result<Settings, String> {
-    load(&Scope::at(cwd, home), plugins)
+pub(crate) fn load_trusted(cwd: &Path, home: Option<&Path>) -> Result<Settings, String> {
+    load(&Scope::at(cwd, home))
 }
 #[cfg(test)]
 #[path = "settings_lsp_tests.rs"]

@@ -6,8 +6,14 @@ use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
 use domain::{EngineEvent, PromptRequest};
 
-use crate::plugins::SERVER;
 use crate::{Source, finish, start};
+
+pub(crate) const SERVER: &str = r#"while IFS= read -r line; do
+case "$line" in
+*'"method":"initialize"'*) printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{}}';;
+*'"method":"tools/list"'*) printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"ping","inputSchema":{"type":"object"}}]}}';;
+esac
+done"#;
 
 fn offered(repo: &std::path::Path) -> Vec<String> {
     offered_to(&crate::asked_in(repo, "hi"))

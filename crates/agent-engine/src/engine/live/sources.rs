@@ -8,8 +8,7 @@ use domain::Folder;
 const MOST_RECORDS: usize = 50_000;
 const DEEPEST: usize = 8;
 const HASHED_AT_MOST: u64 = 64 * 1024;
-const BRIEF_FOLDERS: [&str; 9] =
-    ["skills", "commands", "agents", "rules", "hooks", "plugins", "output-styles", "styles", "tools"];
+const BRIEF_FOLDERS: [&str; 8] = ["skills", "commands", "agents", "rules", "hooks", "output-styles", "styles", "tools"];
 const NEVER_WALKED: [&str; 3] = [".git", "node_modules", "target"];
 const INSTRUCTION_NAMES: [&str; 3] = [brand::INSTRUCTIONS, "AGENTS.md", brand::LOCAL_INSTRUCTIONS];
 
@@ -46,7 +45,7 @@ impl Seen {
         }
         self.nested_instructions(folder.cwd)?;
         let extensions = folder.extensions.into_iter();
-        for root in extensions.flat_map(|extensions| extensions.plugins.iter().chain(&extensions.dirs)) {
+        for root in extensions.flat_map(|extensions| &extensions.dirs) {
             self.tree(root, 0)?;
         }
         Ok(())

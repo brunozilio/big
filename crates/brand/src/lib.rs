@@ -14,7 +14,6 @@ pub fn text(template: &str) -> String {
         ("{{DIR}}", DIR),
         ("{{INSTRUCTIONS}}", INSTRUCTIONS),
         ("{{LOCAL_INSTRUCTIONS}}", LOCAL_INSTRUCTIONS),
-        ("{{PLUGIN_DIR}}", PLUGIN_DIR),
         ("{{ENV}}", ENV),
         ("{{COMPANY}}", COMPANY),
     ]

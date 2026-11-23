@@ -1,8 +1,6 @@
 use crate::api::features::code_map::{CodeMapReply, CodeMapRequest};
 use crate::api::features::memory::{MemoryReply, MemoryRequest};
 use crate::api::features::output_savings::OutputSavingsReply;
-use crate::api::features::plugins::{PluginsReply, PluginsRequest};
-use crate::api::features::schedules::{SchedulesReply, SchedulesRequest};
 use crate::api::features::sessions::{SessionsReply, SessionsRequest};
 use crate::api::features::shell::{ShellReply, ShellRequest};
 use crate::api::features::trace::{TraceReply, TraceRequest};
@@ -49,8 +47,6 @@ macro_rules! asks {
 asks! {
     ask_code_map: CodeMap(CodeMapRequest) -> CodeMapReply;
     ask_memory: Memory(MemoryRequest) -> MemoryReply;
-    ask_plugins: Plugins(PluginsRequest) -> PluginsReply;
-    ask_schedules: Schedules(SchedulesRequest) -> SchedulesReply;
     ask_sessions: Sessions(SessionsRequest) -> SessionsReply;
     ask_shell: Shell(ShellRequest) -> ShellReply;
     ask_trace: Trace(TraceRequest) -> TraceReply;

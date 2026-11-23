@@ -323,7 +323,5 @@ impl McpTokenSource for RunTokens {
     }
 }
 
-pub(crate) mod command;
-
 #[cfg(test)]
 mod tests;

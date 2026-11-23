@@ -83,7 +83,7 @@ impl Command {
         ("skills", "List skills and commands, /skills new <what it does> writes one"),
         ("agents", "List agents, /agents new <what it does> writes one"),
         ("config", "Change the chat's settings"),
-        ("reload", concat!("Reread ~/", brand::dir!(), " and the project: plugins, skills, agents, MCP")),
+        ("reload", concat!("Reread ~/", brand::dir!(), " and the project: skills, agents, MCP")),
         ("mcp", "List MCP servers, or /mcp approve|deny|login|logout <name>"),
         ("cost", "Show this session's cost (also /usage)"),
         ("status", "Show the model, mode, folders, session and version"),

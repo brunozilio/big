@@ -1,7 +1,6 @@
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
 
 use super::{McpOrigin, McpServerInfo};
 
@@ -40,10 +39,6 @@ pub struct McpListing {
 }
 
 impl McpListing {
-    pub fn named(&self, name: &str) -> Result<&McpServerInfo, String> {
-        self.servers.iter().find(|server| server.name == name).ok_or_else(|| unknown(name, &self.servers))
-    }
-
     pub fn owner_s_file_is_broken(&self) -> bool {
         self.unreadable.iter().any(McpUnreadable::breaks_the_owner_s_file)
     }
@@ -57,36 +52,9 @@ impl McpListing {
     }
 }
 
-pub fn unknown(name: &str, servers: &[McpServerInfo]) -> String {
-    let known: Vec<&str> = servers.iter().map(|server| server.name.as_str()).collect();
-    let known = if known.is_empty() { "none".to_owned() } else { known.join(", ") };
-    format!("No MCP server `{name}` here; known: {known}")
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct McpEntry {
-    pub info: McpServerInfo,
-    pub file: Option<PathBuf>,
-    pub entry: Option<Value>,
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::mcp_config::McpState;
-
-    fn server(name: &str) -> McpServerInfo {
-        McpServerInfo { name: name.into(), origin: McpOrigin::Project, target: "x".into(), state: McpState::Pending }
-    }
-
-    #[test]
-    fn a_name_that_is_not_listed_is_refused_naming_the_known_ones() {
-        let listing = McpListing { servers: vec![server("jira"), server("sonar")], unreadable: Vec::new() };
-        assert_eq!(listing.named("jira").map(|found| found.name.as_str()), Ok("jira"));
-        assert_eq!(listing.named("ghost"), Err("No MCP server `ghost` here; known: jira, sonar".into()));
-        assert_eq!(McpListing::default().named("ghost"), Err("No MCP server `ghost` here; known: none".into()));
-    }
-
     #[test]
     fn only_the_owner_s_own_broken_file_is_an_error() {
         let broken = |origin: McpOrigin| McpUnreadable::broken("/m.json".into(), origin, "eof".into());

@@ -1,70 +1,8 @@
 use std::path::Path;
 
 use crate::api::{ClientCommand, Reply};
-use domain::mcp_config::{McpEntry, McpListing, McpServerInfo};
 
 use crate::{Client, Error};
-
-impl Client {
-    pub fn mcp_servers(&self, cwd: &Path) -> Result<Vec<McpServerInfo>, Error> {
-        self.dispatcher.call(ClientCommand::ListMcpServers { path: cwd.to_path_buf() }, listed)
-    }
-
-    pub fn approve_mcp_server(&self, cwd: &Path, name: &str, approve: bool) -> Result<Vec<McpServerInfo>, Error> {
-        let command = ClientCommand::ApproveMcpServer { path: cwd.to_path_buf(), name: name.to_owned(), approve };
-        self.dispatcher.call(command, listed)
-    }
-
-    pub fn mcp_listing(&self, cwd: &Path) -> Result<McpListing, Error> {
-        self.dispatcher.call(ClientCommand::ListMcpServers { path: cwd.to_path_buf() }, |reply| match reply {
-            Reply::McpServers { servers, unreadable, .. } => Some(Ok(McpListing { servers, unreadable })),
-            _ => None,
-        })
-    }
-
-    pub fn mcp_server(&self, cwd: &Path, name: &str) -> Result<McpEntry, Error> {
-        let command = ClientCommand::GetMcpServer { path: cwd.to_path_buf(), name: name.to_owned() };
-        self.dispatcher.call(command, |reply| match reply {
-            Reply::McpServer(entry) => Some(Ok(entry)),
-            _ => None,
-        })
-    }
-
-    pub fn add_mcp_server(
-        &self,
-        cwd: &Path,
-        name: &str,
-        server: serde_json::Value,
-        replace: bool,
-    ) -> Result<Vec<McpServerInfo>, Error> {
-        let command = ClientCommand::AddMcpServer { path: cwd.to_path_buf(), name: name.to_owned(), server, replace };
-        self.dispatcher.call(command, listed)
-    }
-
-    pub fn remove_mcp_server(&self, cwd: &Path, name: &str) -> Result<Vec<McpServerInfo>, Error> {
-        self.dispatcher.call(ClientCommand::RemoveMcpServer { path: cwd.to_path_buf(), name: name.to_owned() }, listed)
-    }
-
-    pub fn sign_in_mcp_server(
-        &self,
-        cwd: &Path,
-        name: &str,
-        mut open: impl FnMut(&str),
-    ) -> Result<Vec<McpServerInfo>, Error> {
-        let command = ClientCommand::SignInMcpServer { path: cwd.to_path_buf(), name: name.to_owned() };
-        self.dispatcher.flow(command, crate::client::dispatch::sign_in_patience(), |reply| {
-            if let Reply::McpAuthorizeAt { url, .. } = &reply {
-                open(url);
-                return None;
-            }
-            listed(reply)
-        })
-    }
-
-    pub fn sign_out_mcp_server(&self, cwd: &Path, name: &str) -> Result<Vec<McpServerInfo>, Error> {
-        self.dispatcher.call(ClientCommand::SignOutMcpServer { path: cwd.to_path_buf(), name: name.to_owned() }, listed)
-    }
-}
 
 impl Client {
     pub fn notices(&self, for_agent: bool) -> Result<crate::api::Notices, Error> {
@@ -87,12 +25,5 @@ impl Client {
             Reply::Permissions { permissions, .. } => Some(Ok(permissions)),
             _ => None,
         })
-    }
-}
-
-fn listed(reply: Reply) -> Option<Result<Vec<McpServerInfo>, String>> {
-    match reply {
-        Reply::McpServers { servers, .. } => Some(Ok(servers)),
-        _ => None,
     }
 }

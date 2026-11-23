@@ -48,8 +48,6 @@ pub fn waiting(client: u64, mode: PermissionMode, now: i64) -> Waiting {
 mod tests {
     use domain::inbox::Notice;
 
-    use domain::schedule::When;
-
     use super::*;
     use crate::tools::builtin::schedules;
 
@@ -69,7 +67,7 @@ mod tests {
         crate::tools::inbox::push(client, Notice::new("teammate tester", "terminei"));
         let Waiting::Due(text) = waiting(client, PermissionMode::Ask, 100) else { panic!("mail is due") };
         assert!(text.contains("terminei"));
-        schedules::add(client, "olhe o deploy", When::At(500), 100).expect("scheduled");
+        schedules::add(client, "olhe o deploy", 500).expect("scheduled");
         assert_eq!(waiting(client, PermissionMode::Ask, 100), Waiting::Later(500));
         assert_eq!(waiting(client, PermissionMode::Ask, 500), Waiting::Due("olhe o deploy".to_owned()));
         assert_eq!(waiting(client, PermissionMode::Ask, 501), Waiting::Idle);
@@ -78,7 +76,7 @@ mod tests {
     #[test]
     fn a_released_client_leaves_nothing_behind() {
         let client = fresh();
-        schedules::add(client, "depois", When::At(900), 100).expect("scheduled");
+        schedules::add(client, "depois", 900).expect("scheduled");
         crate::tools::inbox::push(client, Notice::new("teammate tester", "oi"));
         release(client);
         assert_eq!(waiting(client, PermissionMode::Ask, 100), Waiting::Idle);

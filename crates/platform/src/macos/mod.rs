@@ -16,12 +16,6 @@ pub fn open_url(url: &str) -> Command {
     open
 }
 
-pub fn notification(title: &str, message: &str) -> (String, Vec<String>, Vec<(String, String)>) {
-    let quoted = |text: &str| format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\""));
-    let script = format!("display notification {} with title {}", quoted(message), quoted(title));
-    ("osascript".into(), vec!["-e".into(), script], Vec::new())
-}
-
 pub fn clipboard_image() -> Option<Vec<u8>> {
     let out = capture("osascript", &["-e", "the clipboard as «class PNGf»"])?;
     apple_data(&String::from_utf8_lossy(&out))
@@ -60,8 +54,6 @@ mod tests {
     fn data_lives_in_application_support_and_the_text_never_becomes_code() {
         let dir = data_dir_in(|_| None, Some("/Users/ana".into()), "App", "app");
         assert_eq!(dir, Some(PathBuf::from("/Users/ana/Library/Application Support/App")));
-        let (_, args, _) = notification("Build \"done\"", "it said \"ok\" \\ then");
-        assert_eq!(args[1], "display notification \"it said \\\"ok\\\" \\\\ then\" with title \"Build \\\"done\\\"\"");
         assert_eq!(apple_data("«data PNGf89504E47»\n"), Some(vec![0x89, 0x50, 0x4e, 0x47]));
         assert_eq!(apple_data("«data PNGf895»"), None);
         assert_eq!(apple_data("nothing"), None);

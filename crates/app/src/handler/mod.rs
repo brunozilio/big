@@ -136,7 +136,6 @@ impl CommandHandler {
             ClientCommand::UseProviderAccount { provider, account } => providers.use_account(provider, &account),
             ClientCommand::RemoveProviderAccount { provider, account } => providers.remove_account(provider, &account),
             ClientCommand::SetProviderBalance { provider, balance } => providers.set_balance(provider, balance),
-            ClientCommand::ListMcpServers { path } => self.mcp_servers(&path, Ok(())),
             ClientCommand::TakeNotices { for_agent } => Reply::Notices(self.notices(for_agent)),
             ClientCommand::AnswerTeammate { ask, decision } => {
                 Reply::done_or(agent_engine::team::lead_inbox::answer(self.client, &ask, &decision))
@@ -148,29 +147,6 @@ impl CommandHandler {
                 }
             }
             ClientCommand::ListPermissions { path } => crate::permissions::list(&path, &self.services.extensions, home),
-            ClientCommand::ApproveMcpServer { path, name, approve } => {
-                let extensions = &self.services.extensions;
-                let approved = crate::mcp_admin::known(&path, extensions, home, &name)
-                    .and_then(|()| crate::mcp_admin::approve(&path, home, &name, approve));
-                self.mcp_servers(&path, approved)
-            }
-            ClientCommand::AddMcpServer { path, name, server, replace } => {
-                self.mcp_servers(&path, crate::mcp_admin::add(home, &name, server, replace))
-            }
-            ClientCommand::GetMcpServer { path, name } => {
-                crate::mcp_admin::get(&path, &self.services.extensions, home, &name)
-            }
-            ClientCommand::RemoveMcpServer { path, name } => {
-                self.mcp_servers(&path, crate::mcp_admin::remove(home, &name))
-            }
-            ClientCommand::SignInMcpServer { path, name } => {
-                self.flows.began(replies);
-                crate::mcp_auth::command::sign_in(&self.services, path, name, replies);
-                return None;
-            }
-            ClientCommand::SignOutMcpServer { path, name } => {
-                crate::mcp_auth::command::sign_out(&self.services, &path, &name)
-            }
             ClientCommand::CancelRequest { request } => {
                 if !self.flows.cancel(request) {
                     tracing::debug!(%request, "nothing left to cancel for this request");
@@ -188,13 +164,6 @@ impl CommandHandler {
             for_user: unkept_keys.into_iter().chain(unkept_database).collect(),
             for_agent: arrived,
             teammate_asks: agent_engine::team::lead_inbox::take_asks(self.client),
-        }
-    }
-
-    fn mcp_servers(&self, path: &std::path::Path, changed: Result<(), String>) -> Reply {
-        match changed {
-            Ok(()) => crate::mcp_admin::list(path, &self.services.extensions, self.services.home().as_deref()),
-            Err(error) => Reply::error(error),
         }
     }
 

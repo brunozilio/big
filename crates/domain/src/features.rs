@@ -12,7 +12,7 @@ mod tests {
 
     use super::*;
 
-    const ALL: [&str; 33] = [
+    const ALL: [&str; 31] = [
         flags::REDACT_SECRETS,
         flags::BUDGET,
         flags::ESCALATION,
@@ -43,8 +43,6 @@ mod tests {
         flags::MEMORY_SEED,
         flags::MEMORY_SCORECARD,
         flags::MEMORY_SEARCH,
-        flags::SCHEDULES,
-        flags::PLUGINS,
         flags::TRACE,
     ];
 

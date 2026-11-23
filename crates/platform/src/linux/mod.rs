@@ -20,11 +20,6 @@ pub fn open_url(url: &str) -> Command {
     open
 }
 
-pub fn notification(title: &str, message: &str) -> (String, Vec<String>, Vec<(String, String)>) {
-    let args = vec!["--".into(), title.into(), message.into()];
-    ("notify-send".into(), args, Vec::new())
-}
-
 pub fn clipboard_image() -> Option<Vec<u8>> {
     capture("wl-paste", &["--no-newline", "--type", "image/png"])
         .or_else(|| capture("xclip", &["-selection", "clipboard", "-t", "image/png", "-o"]))
@@ -64,6 +59,5 @@ mod tests {
             data_dir_in(|_| None, Some("/home/ana".into()), "App", "app"),
             Some(PathBuf::from("/home/ana/.config/app"))
         );
-        assert_eq!(notification("t", "m").1[0], "--", "a title like `-u critical` is not an option");
     }
 }

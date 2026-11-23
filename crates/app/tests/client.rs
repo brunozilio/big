@@ -182,49 +182,6 @@ fn a_session_s_effort_and_mode_reach_the_run_and_a_control_cancels_it_from_elsew
 }
 
 #[test]
-fn a_program_manages_the_owner_s_mcp_servers() {
-    use app::{McpOrigin, McpState};
-    let data = tempfile::tempdir().expect("data");
-    let home = tempfile::tempdir().expect("home");
-    let repo = tempfile::tempdir().expect("repo");
-    std::fs::create_dir_all(repo.path().join(brand::DIR)).expect("dir");
-    std::fs::write(
-        repo.path().join(concat!(brand::dir!(), "/mcp.json")),
-        r#"{"mcpServers": {"jira": {"command": "jira-mcp"}}}"#,
-    )
-    .expect("config");
-    let engine = FakeEngine::new(vec![model()], Vec::new());
-    let mut services = services(&engine);
-    services.homes = std::sync::Arc::new(app::OwnerHome::at(home.path()));
-    let client = Client::builder().data_dir(data.path()).services(services).build().expect(brand::COMMAND);
-    let states = |servers: Vec<app::McpServerInfo>| -> Vec<(String, McpOrigin, McpState)> {
-        servers.into_iter().map(|s| (s.name, s.origin, s.state)).collect()
-    };
-
-    assert!(client.approve_mcp_server(repo.path(), "ghost", true).is_err(), "only a server that is there");
-    assert_eq!(
-        states(client.mcp_servers(repo.path()).expect("list")),
-        [("jira".into(), McpOrigin::Project, McpState::Pending)]
-    );
-    let approved = client.approve_mcp_server(repo.path(), "jira", true).expect("approve");
-    assert_eq!(states(approved)[0].2, McpState::Ready);
-    let added = client
-        .add_mcp_server(
-            repo.path(),
-            "atlassian",
-            json!({"type": "http", "url": "https://mcp.atlassian.com/v1/mcp"}),
-            false,
-        )
-        .expect("add");
-    assert_eq!(client.mcp_server(repo.path(), "atlassian").expect("get").info.origin, McpOrigin::User);
-    assert!(client.mcp_listing(repo.path()).expect("listing").unreadable.is_empty());
-    assert_eq!(states(added)[1], ("atlassian".into(), McpOrigin::User, McpState::Ready));
-    assert!(home.path().join(concat!(brand::dir!(), "/mcp.json")).is_file());
-    assert!(client.add_mcp_server(repo.path(), "plugin_x", json!({"command": "x"}), false).is_err());
-    assert_eq!(client.remove_mcp_server(repo.path(), "atlassian").expect("remove").len(), 1);
-}
-
-#[test]
 fn a_side_question_is_answered_from_the_conversation_without_continuing_it() {
     let data = tempfile::tempdir().expect("data");
     let answer = EngineEvent::Chore(ChoreAnswer::Side("It edits main.rs.".into()));

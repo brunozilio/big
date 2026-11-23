@@ -16,7 +16,6 @@ mod lsp_fetch;
 pub use lsp_fetch::NetFetch;
 pub mod mcp;
 pub mod meter;
-pub mod plugins;
 pub mod prompt;
 pub mod scope;
 pub mod sessions;

@@ -32,16 +32,13 @@ pub struct Brief {
     pub git: Option<prompt::GitSnapshot>,
     pub instructions: Vec<prompt::Instructions>,
     #[serde(default)]
-    pub plugins: Vec<crate::plugins::Plugin>,
-    #[serde(default)]
     pub home: Option<PathBuf>,
 }
 impl Brief {
     pub fn load(folder: Folder<'_>) -> Result<Self, BriefError> {
         let gate = Scope::of(folder);
         let home = gate.home();
-        let plugins = crate::plugins::found(folder, home);
-        let settings = prompt::settings::load(&gate, &plugins).map_err(BriefError::Settings)?;
+        let settings = prompt::settings::load(&gate).map_err(BriefError::Settings)?;
         let mut skills = tools::skill::discover(folder, home);
         skills.retain(|skill| domain::features::skill_on(&skill.name));
         let found = crate::hooks::Briefed {
@@ -58,7 +55,6 @@ impl Brief {
             rules: edited.rules,
             git: prompt::snapshot(folder.cwd),
             instructions: edited.instructions,
-            plugins,
             home: home.map(PathBuf::from),
         })
     }
@@ -66,7 +62,6 @@ impl Brief {
     pub fn mcp(&self) -> crate::mcp::McpSources {
         crate::mcp::McpSources {
             home: self.home.clone(),
-            plugins: self.plugins.clone(),
             approval: self.settings.mcp_approval.clone(),
             scripts: self.settings.scripts,
         }
@@ -90,11 +85,9 @@ fn hook_workspace(
 
 pub fn mcp_sources(folder: Folder<'_>) -> Result<crate::mcp::McpSources, BriefError> {
     let gate = Scope::of(folder);
-    let plugins = crate::plugins::found(folder, gate.home());
-    let settings = prompt::settings::load(&gate, &plugins).map_err(BriefError::Settings)?;
+    let settings = prompt::settings::load(&gate).map_err(BriefError::Settings)?;
     Ok(crate::mcp::McpSources {
         home: gate.home().map(PathBuf::from),
-        plugins,
         approval: settings.mcp_approval,
         scripts: settings.scripts,
     })
@@ -102,8 +95,7 @@ pub fn mcp_sources(folder: Folder<'_>) -> Result<crate::mcp::McpSources, BriefEr
 
 pub fn permissions(folder: Folder<'_>) -> Result<domain::permission::PermissionsInfo, BriefError> {
     let gate = Scope::of(folder);
-    let plugins = crate::plugins::found(folder, gate.home());
-    let settings = prompt::settings::load(&gate, &plugins).map_err(BriefError::Settings)?;
+    let settings = prompt::settings::load(&gate).map_err(BriefError::Settings)?;
     Ok(domain::permission::PermissionsInfo {
         added_dirs: settings.added_dirs,
         hooks: settings.hooks.listed(),

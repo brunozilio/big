@@ -43,9 +43,6 @@ pub fn discover(folder: Folder<'_>, home: Option<&Path>) -> Vec<FoundSkill> {
     if let Some(home) = home {
         sources.push((home.join(concat!(brand::dir!(), "/skills")), None, true));
     }
-    for plugin in crate::plugins::found(folder, home) {
-        sources.push((plugin.root.join("skills"), Some(plugin.name), true));
-    }
     for dir in folder.extensions.iter().flat_map(|extensions| &extensions.dirs) {
         sources.push((dir.join("skills"), None, true));
     }

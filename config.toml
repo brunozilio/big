@@ -80,6 +80,4 @@ code_map = true
 memory_seed = true
 memory_scorecard = true
 memory_search = true
-schedules = true
-plugins = true
 trace = true

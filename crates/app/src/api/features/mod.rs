@@ -1,8 +1,6 @@
 pub mod code_map;
 pub mod memory;
 pub mod output_savings;
-pub mod plugins;
-pub mod schedules;
 pub mod sessions;
 pub mod shell;
 pub mod trace;
@@ -13,8 +11,6 @@ use serde::{Deserialize, Serialize};
 use self::code_map::{CodeMapReply, CodeMapRequest};
 use self::memory::{MemoryReply, MemoryRequest};
 use self::output_savings::OutputSavingsReply;
-use self::plugins::{PluginsReply, PluginsRequest};
-use self::schedules::{SchedulesReply, SchedulesRequest};
 use self::sessions::{SessionsReply, SessionsRequest};
 use self::shell::{ShellReply, ShellRequest};
 use self::trace::{TraceReply, TraceRequest};
@@ -26,8 +22,6 @@ pub enum FeatureName {
     CodeMap,
     Memory,
     OutputSavings,
-    Plugins,
-    Schedules,
     Sessions,
     Shell,
     Trace,
@@ -35,12 +29,10 @@ pub enum FeatureName {
 }
 
 impl FeatureName {
-    pub const ALL: [Self; 9] = [
+    pub const ALL: [Self; 7] = [
         Self::CodeMap,
         Self::Memory,
         Self::OutputSavings,
-        Self::Plugins,
-        Self::Schedules,
         Self::Sessions,
         Self::Shell,
         Self::Trace,
@@ -52,8 +44,6 @@ impl FeatureName {
             Self::CodeMap => "code_map",
             Self::Memory => "memory",
             Self::OutputSavings => "output_savings",
-            Self::Plugins => "plugins",
-            Self::Schedules => "schedules",
             Self::Sessions => "sessions",
             Self::Shell => "shell",
             Self::Trace => "trace",
@@ -66,8 +56,6 @@ impl FeatureName {
         let flag = match self {
             Self::CodeMap => flags::CODE_MAP,
             Self::OutputSavings => flags::OUTPUT_SAVINGS,
-            Self::Plugins => flags::PLUGINS,
-            Self::Schedules => flags::SCHEDULES,
             Self::Trace => flags::TRACE,
             Self::Memory | Self::Sessions | Self::Shell | Self::Workspace => return true,
         };
@@ -87,8 +75,6 @@ pub enum FeatureRequest {
     CodeMap(CodeMapRequest),
     Memory(MemoryRequest),
     OutputSavings,
-    Plugins(PluginsRequest),
-    Schedules(SchedulesRequest),
     Sessions(SessionsRequest),
     Shell(ShellRequest),
     Trace(TraceRequest),
@@ -101,8 +87,6 @@ impl FeatureRequest {
             Self::CodeMap(_) => FeatureName::CodeMap,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings => FeatureName::OutputSavings,
-            Self::Plugins(_) => FeatureName::Plugins,
-            Self::Schedules(_) => FeatureName::Schedules,
             Self::Sessions(_) => FeatureName::Sessions,
             Self::Shell(_) => FeatureName::Shell,
             Self::Trace(_) => FeatureName::Trace,
@@ -117,8 +101,6 @@ pub enum FeatureReply {
     CodeMap(CodeMapReply),
     Memory(MemoryReply),
     OutputSavings(OutputSavingsReply),
-    Plugins(PluginsReply),
-    Schedules(SchedulesReply),
     Sessions(SessionsReply),
     Shell(ShellReply),
     Trace(TraceReply),
@@ -131,8 +113,6 @@ impl FeatureReply {
             Self::CodeMap(_) => FeatureName::CodeMap,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings(_) => FeatureName::OutputSavings,
-            Self::Plugins(_) => FeatureName::Plugins,
-            Self::Schedules(_) => FeatureName::Schedules,
             Self::Sessions(_) => FeatureName::Sessions,
             Self::Shell(_) => FeatureName::Shell,
             Self::Trace(_) => FeatureName::Trace,

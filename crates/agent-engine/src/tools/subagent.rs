@@ -31,9 +31,6 @@ pub fn discover(folder: Folder<'_>, home: Option<&Path>) -> Vec<FoundAgent> {
     if let Some(home) = home {
         sources.push((home.join(concat!(brand::dir!(), "/agents")), None));
     }
-    for plugin in crate::plugins::found(folder, home) {
-        sources.push((plugin.root.join("agents"), Some(plugin.name)));
-    }
     for dir in folder.extensions.iter().flat_map(|extensions| &extensions.dirs) {
         sources.push((dir.join("agents"), None));
     }

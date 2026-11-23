@@ -7,13 +7,11 @@ use domain::mcp_config::{
 use serde_json::Value;
 
 use super::{ServerSpec, parse_config};
-use crate::plugins::Plugin;
 use crate::tools::script_tool::Origin;
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct McpSources {
     pub home: Option<PathBuf>,
-    pub plugins: Vec<Plugin>,
     pub approval: McpApproval,
     #[serde(default)]
     pub scripts: crate::tools::script_tool::ScriptGrants,
@@ -108,26 +106,7 @@ fn origins(cwd: &Path, sources: &McpSources) -> Vec<(McpOrigin, ServerSpec)> {
             found.push((origin, server));
         }
     }
-    for plugin in &sources.plugins {
-        let origin = McpOrigin::Plugin(plugin.name.clone());
-        found.extend(plugin_servers(plugin).into_iter().map(|server| (origin.clone(), server)));
-    }
     found
-}
-
-fn plugin_servers(plugin: &Plugin) -> Vec<ServerSpec> {
-    let Some(config) = plugin.mcp_config() else { return Vec::new() };
-    match parse_config(&config.to_string()) {
-        Ok(found) => found
-            .into_iter()
-            .filter(|s| !s.name().starts_with(concat!(brand::command!(), "_")))
-            .map(|s| s.renamed(plugin))
-            .collect(),
-        Err(error) => {
-            tracing::warn!(%error, plugin = %plugin.name, "a plugin's MCP servers are not available");
-            Vec::new()
-        }
-    }
 }
 
 struct Parsed {
@@ -199,7 +178,6 @@ mod tests {
         use domain::mcp_config::{McpOrigin, McpServerInfo, McpState};
         let home = tempfile::tempdir().expect("home");
         let repo = tempfile::tempdir().expect("repo");
-        let plugin = tempfile::tempdir().expect("plugin");
         write(
             home.path().join(concat!(brand::dir!(), "/mcp.json")),
             r#"{"mcpServers": {"atlassian": {"type": "http", "url": "https://mcp.atlassian.com/v1/mcp", "headers": {"Authorization": "Bearer secret"}}}}"#,
@@ -209,14 +187,8 @@ mod tests {
             r#"{"mcpServers": {"jira": {"command": "jira-mcp", "args": ["--stdio"]}, "sonar": {"command": "sonar-mcp"}}}"#,
         );
         write(repo.path().join(concat!(brand::dir!(), "/settings.local.json")), r#"{"disabledMcpServers": ["sonar"]}"#);
-        write(plugin.path().join(concat!(brand::plugin_dir!(), "/plugin.json")), r#"{"name": "acme"}"#);
-        write(plugin.path().join(".mcp.json"), r#"{"mcpServers": {"datadog": {"command": "dd-mcp"}}}"#);
         let mut request = PromptRequest::plain(repo.path().to_path_buf(), "", ModelOption::new("", ""));
-        request.host.extensions = Some(Extensions {
-            home: Some(home.path().to_path_buf()),
-            plugins: vec![plugin.path().to_path_buf()],
-            ..Extensions::default()
-        });
+        request.host.extensions = Some(Extensions { home: Some(home.path().to_path_buf()), ..Extensions::default() });
         let info = |name: &str, origin: McpOrigin, target: &str, state: McpState| McpServerInfo {
             name: name.into(),
             origin,
@@ -230,7 +202,6 @@ mod tests {
                 info("jira", McpOrigin::Project, "jira-mcp --stdio", McpState::Pending),
                 info("sonar", McpOrigin::Project, "sonar-mcp", McpState::Off),
                 info("atlassian", McpOrigin::User, "https://mcp.atlassian.com/v1/mcp", McpState::Ready),
-                info("plugin_acme_datadog", McpOrigin::Plugin("acme".into()), "dd-mcp", McpState::Ready),
             ]
         );
         assert!(!format!("{listed:?}").contains("secret"), "headers stay out");
@@ -309,8 +280,7 @@ mod tests {
                 "notes": {"command": "notes-mcp", "env": {"KEY": "${"#,
                 brand::env_prefix!(),
                 r#"_TEST_NEVER_SET:-dflt}"}},
-                "jira": {"command": "user-jira"},
-                "plugin_fake": {"command": "x"}
+                "jira": {"command": "user-jira"}
             }}"#
             ),
         );

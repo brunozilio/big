@@ -24,7 +24,7 @@ pub use run::{
 pub use safety::{permission, redact, shell};
 pub use session::{catalog, chat, conversation, repeats, usage};
 pub use tools::{
-    agents, brief_edits, channel_relay, code_mode, executable, extensions, hooks, inbox, looping, lsp, mcp, mcp_config,
+    agents, brief_edits, channel_relay, code_mode, executable, extensions, hooks, inbox, lsp, mcp, mcp_config,
     mcp_oauth, output, schedule, site, skill, tool_name, watch, web_reading,
 };
 

@@ -81,16 +81,6 @@ pub fn open_url(url: &str) -> Command {
     open
 }
 
-pub fn notification(title: &str, message: &str) -> (String, Vec<String>, Vec<(String, String)>) {
-    let script = "[reflection.assembly]::loadwithpartialname('System.Windows.Forms') | Out-Null; \
-         $n = New-Object System.Windows.Forms.NotifyIcon; $n.Icon = [System.Drawing.SystemIcons]::Information; \
-         $n.Visible = $true; $n.ShowBalloonTip(5000, $env:APP_NOTIFICATION_TITLE, $env:APP_NOTIFICATION_MESSAGE, 'Info'); \
-         Start-Sleep 6";
-    let env =
-        vec![("APP_NOTIFICATION_TITLE".into(), title.into()), ("APP_NOTIFICATION_MESSAGE".into(), message.into())];
-    ("powershell".into(), vec!["-NoProfile".into(), "-Command".into(), script.into()], env)
-}
-
 pub fn clipboard_image() -> Option<Vec<u8>> {
     None
 }

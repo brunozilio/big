@@ -2,7 +2,6 @@ pub mod advisor;
 pub mod code_review;
 pub mod files;
 pub mod follow_through;
-pub mod notify;
 pub mod schedules;
 pub mod shell;
 pub mod verification;
@@ -12,10 +11,7 @@ use crate::agent::Review;
 use crate::tools::Tool;
 
 pub fn tools() -> Vec<Box<dyn Tool>> {
-    [advisor::tools(), files::tools(), notify::tools(), schedules::tools(), shell::tools(), web::tools()]
-        .into_iter()
-        .flatten()
-        .collect()
+    [advisor::tools(), files::tools(), schedules::tools(), shell::tools(), web::tools()].into_iter().flatten().collect()
 }
 
 pub fn reviewers() -> Vec<Box<dyn Review>> {
@@ -38,7 +34,6 @@ mod tests {
         let folders = [
             ("advisor", names(advisor::tools())),
             ("files", names(files::tools())),
-            ("notify", names(notify::tools())),
             ("schedules", names(schedules::tools())),
             ("shell", names(shell::tools())),
             ("web", names(web::tools())),
@@ -50,8 +45,7 @@ mod tests {
             [
                 "advisor: Advisor",
                 "files: Read Write Edit Glob Grep NotebookEdit",
-                "notify: PushNotification",
-                "schedules: CronCreate CronList CronDelete ScheduleWakeup",
+                "schedules: ScheduleWakeup",
                 "shell: Bash BashOutput KillShell Monitor",
                 "web: WebFetch WebSearch",
             ]

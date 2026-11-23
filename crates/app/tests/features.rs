@@ -20,14 +20,14 @@ fn a_feature_is_off_only_when_the_config_turns_it_off() {
     let data = tempfile::tempdir().expect("data");
     let client = client(data.path());
 
-    let scheduled = client.scheduled();
+    let traced = client.trace_of_every_session();
 
-    match scheduled {
-        Ok(_) => assert!(FeatureName::Schedules.on()),
+    match traced {
+        Ok(_) => assert!(FeatureName::Trace.on()),
         Err(refused) => {
-            assert!(!FeatureName::Schedules.on());
-            assert!(matches!(&refused, Error::Feature(FeatureError::FeatureOff { feature: FeatureName::Schedules })));
-            assert_eq!(refused.to_string(), "schedules is turned off");
+            assert!(!FeatureName::Trace.on());
+            assert!(matches!(&refused, Error::Feature(FeatureError::FeatureOff { feature: FeatureName::Trace })));
+            assert_eq!(refused.to_string(), "trace is turned off");
         }
     }
     assert!(client.notices(true).expect("notices").is_empty());
@@ -59,10 +59,6 @@ fn each_feature_answers_its_typed_call() {
     assert_eq!(client.with_mentioned_files(cwd, "no files here").expect("mentions"), "no files here");
     assert_eq!(client.git_offered(cwd).expect("offer"), domain::features::on(brand::features::GIT_OFFER));
     assert!(client.background_commands().expect("commands").is_empty());
-    let plugins = client.plugins(app::PluginsRequest::List).expect("plugins");
-    assert_eq!(plugins, app::PluginsReply::Listed(Vec::new()));
-    assert!(client.scheduled().expect("scheduled").is_empty());
-    assert!(client.take_due_schedules().expect("due").is_empty());
     assert!(client.keep_instruction(cwd, "Run the tests first.").is_ok());
     assert_eq!(client.trace_of_every_session().expect("trace")["sessions"], serde_json::json!([]));
     assert_eq!(client.code_map(cwd, "hello").expect("code map"), None);

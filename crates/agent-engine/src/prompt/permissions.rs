@@ -40,7 +40,7 @@ mod tests {
             home.path().join(concat!(brand::dir!(), "/settings.json")),
             r#"{"permissions": {"additionalDirectories": ["~/notes"]}}"#,
         );
-        let settings = load(repo.path(), Some(home.path()), &[]).expect("settings");
+        let settings = load(repo.path(), Some(home.path())).expect("settings");
         assert_eq!(settings.added_dirs, ["~/notes", "../shared"], "the checked-in one is ignored");
     }
 }

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-pub const SCHEDULING_TOOLS: [&str; 2] = ["ScheduleWakeup", "CronCreate"];
+pub const SCHEDULING_TOOLS: [&str; 1] = ["ScheduleWakeup"];
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Active {
@@ -40,7 +40,6 @@ mod tests {
         let refused = while_watching("ScheduleWakeup", &["watch_1".into()]).expect("refused");
         assert!(refused.starts_with("Not run: watch_1 already checks for you"), "{refused}");
         assert!(refused.contains("End your turn now"));
-        assert!(while_watching("CronCreate", &["watch_1".into()]).is_some());
         assert_eq!(while_watching("ScheduleWakeup", &[]), None, "no watch, no refusal");
         assert_eq!(while_watching("Bash", &["watch_1".into()]), None, "other tools are left alone");
     }

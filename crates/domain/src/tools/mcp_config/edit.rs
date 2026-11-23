@@ -1,10 +1,6 @@
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
 
-use super::{McpApproval, is_free_name};
-
-const ENABLED: &str = "enabledMcpServers";
-const DISABLED: &str = "disabledMcpServers";
+use super::McpApproval;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "kind", content = "name", rename_all = "snake_case")]
@@ -12,7 +8,6 @@ pub enum McpOrigin {
     Host,
     Project,
     User,
-    Plugin(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,107 +36,4 @@ pub struct McpServerInfo {
     pub origin: McpOrigin,
     pub target: String,
     pub state: McpState,
-}
-
-pub fn set_approval(settings: Value, name: &str, approve: bool) -> Value {
-    let mut settings = into_object(settings);
-    let mut list = |key: &str, keep: bool| {
-        let mut names: Vec<Value> = settings
-            .get(key)
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-            .into_iter()
-            .filter(|n| n != name)
-            .collect();
-        if keep {
-            names.push(json!(name));
-        }
-        settings.insert(key.to_owned(), Value::Array(names));
-    };
-    list(ENABLED, approve);
-    list(DISABLED, !approve);
-    Value::Object(settings)
-}
-
-pub fn server_from(target: &str, args: &[String], env: &[(String, String)], headers: &[(String, String)]) -> Value {
-    let pairs = |pairs: &[(String, String)]| -> Value {
-        Value::Object(pairs.iter().map(|(key, value)| (key.clone(), json!(value))).collect())
-    };
-    let mut server = Map::new();
-    if target.starts_with("https://") || target.starts_with("http://") {
-        server.insert("type".into(), json!("http"));
-        server.insert("url".into(), json!(target));
-        if !headers.is_empty() {
-            server.insert("headers".into(), pairs(headers));
-        }
-    } else {
-        server.insert("command".into(), json!(target));
-        if !args.is_empty() {
-            server.insert("args".into(), json!(args));
-        }
-        if !env.is_empty() {
-            server.insert("env".into(), pairs(env));
-        }
-    }
-    Value::Object(server)
-}
-
-pub fn entry_target(server: &Value) -> String {
-    if let Some(url) = server["url"].as_str() {
-        return url.to_owned();
-    }
-    let args = server["args"].as_array().into_iter().flatten().filter_map(Value::as_str);
-    server["command"].as_str().into_iter().chain(args).collect::<Vec<_>>().join(" ")
-}
-
-pub fn add_server(config: Value, name: &str, server: Value, replace: bool) -> Result<Value, String> {
-    if !replace && let Some(existing) = config["mcpServers"].get(name) {
-        return Err(format!(
-            "`{name}` is already one of your MCP servers ({}); add it with --force to replace it",
-            entry_target(existing)
-        ));
-    }
-    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || "-_".contains(c)) {
-        return Err(format!("`{name}` is not a server name: use letters, digits, - and _"));
-    }
-    if !is_free_name(name) {
-        return Err(format!("`{name}` starts with a name {brand_name} keeps for itself", brand_name = brand::NAME));
-    }
-    let valid = match server["type"].as_str() {
-        Some("http" | "sse") => server["url"].is_string(),
-        Some("stdio") | None => server["command"].is_string(),
-        Some(_) => false,
-    };
-    if !valid {
-        return Err("a server needs a `command` (stdio) or `type: http` (or `sse`) with a `url`".into());
-    }
-    if let Some(place) = super::secrets::written_out(&server) {
-        return Err(format!(
-            "`{place}` writes a secret into the file. Keep it in the environment and write `${{VAR}}` in its \
-             place, such as -H 'Authorization: Bearer ${{TOKEN}}' (single quotes, so the shell leaves it alone)"
-        ));
-    }
-    let mut config = into_object(config);
-    let servers = config.entry("mcpServers").or_insert_with(|| json!({}));
-    if !servers.is_object() {
-        *servers = json!({});
-    }
-    if let Some(servers) = servers.as_object_mut() {
-        servers.insert(name.to_owned(), server);
-    }
-    Ok(Value::Object(config))
-}
-
-pub fn remove_server(config: Value, name: &str) -> (Value, bool) {
-    let mut config = into_object(config);
-    let removed = config.get_mut("mcpServers").and_then(Value::as_object_mut).and_then(|s| s.remove(name)).is_some();
-    (Value::Object(config), removed)
-}
-
-fn into_object(value: Value) -> Map<String, Value> {
-    match value {
-        Value::Object(map) => map,
-        _ => Map::new(),
-    }
 }

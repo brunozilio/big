@@ -3,8 +3,6 @@ use std::sync::Arc;
 
 use crate::api::features::code_map::CodeMapRequest;
 use crate::api::features::memory::{MemoryOp, MemoryRequest};
-use crate::api::features::plugins::PluginsRequest;
-use crate::api::features::schedules::SchedulesRequest;
 use crate::api::features::sessions::SessionsRequest;
 use crate::api::features::shell::ShellRequest;
 use crate::api::features::trace::TraceRequest;
@@ -21,8 +19,6 @@ fn a_request_to(feature: FeatureName, cwd: &Path) -> FeatureRequest {
         FeatureName::CodeMap => FeatureRequest::CodeMap(CodeMapRequest { path, prompt: "retry".into() }),
         FeatureName::Memory => FeatureRequest::Memory(MemoryRequest { path, op: MemoryOp::List }),
         FeatureName::OutputSavings => FeatureRequest::OutputSavings,
-        FeatureName::Plugins => FeatureRequest::Plugins(PluginsRequest::List),
-        FeatureName::Schedules => FeatureRequest::Schedules(SchedulesRequest::List),
         FeatureName::Sessions => FeatureRequest::Sessions(SessionsRequest::List),
         FeatureName::Shell => FeatureRequest::Shell(ShellRequest::List),
         FeatureName::Trace => FeatureRequest::Trace(TraceRequest::EverySession),

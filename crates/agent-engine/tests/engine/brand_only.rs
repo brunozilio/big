@@ -7,7 +7,7 @@ use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
 use domain::{EngineEvent, Extensions, PromptRequest};
 
-use crate::plugins::SERVER;
+use crate::mcp::SERVER;
 use crate::{Source, finish, model, start};
 
 fn write(path: &Path, text: &str) {

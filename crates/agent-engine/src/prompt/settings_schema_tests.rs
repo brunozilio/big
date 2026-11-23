@@ -27,7 +27,7 @@ fn a_key_of_the_wrong_type_is_reported_and_the_rest_of_the_file_still_applies() 
         }),
     );
 
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("the run goes on");
+    let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
 
     let shown = path.display().to_string();
     assert!(
@@ -51,7 +51,7 @@ fn a_value_outside_its_choices_is_reported_with_the_choices() {
     ] } });
     let path = write(home.path(), "settings.json", &hooks);
 
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("the run goes on");
+    let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
 
     let expected = format!(
         "{}: hooks.Stop[0].hooks[0].type: expected one of \"command\", \"script\", \"http\", \"prompt\", \"agent\", \
@@ -72,7 +72,7 @@ fn an_unknown_key_is_named_once_and_ignored() {
         &json!({ "outputStyle": "Concise", "theme": "dark", "permissions": { "defaultMode": "plan" } }),
     );
 
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("the run goes on");
+    let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
 
     let shown = path.display().to_string();
     let about = |key: &str| settings.notices.iter().filter(|notice| notice.contains(key)).count();
@@ -87,7 +87,7 @@ fn a_leftover_auto_memory_switch_is_named_once_and_ignored() {
     let (home, repo) = folders();
     let path = write(repo.path(), "settings.json", &json!({ "autoMemoryEnabled": false, "outputStyle": "Concise" }));
 
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("the file still loads");
+    let settings = load(repo.path(), Some(home.path())).expect("the file still loads");
 
     let about = settings.notices.iter().filter(|notice| notice.contains("autoMemoryEnabled")).count();
     assert_eq!(about, 1, "{:?}", settings.notices);
@@ -105,7 +105,7 @@ fn an_unknown_hook_event_is_named_and_the_other_hooks_still_run() {
     } });
     let path = write(home.path(), "settings.json", &hooks);
 
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("the run goes on");
+    let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
 
     assert!(settings.notices.contains(&format!("{}: hooks.OnSave: unknown key, ignored", path.display())));
     assert_eq!(settings.hooks.listed().len(), 1);
@@ -117,7 +117,7 @@ fn a_file_that_is_not_an_object_is_reported_and_skipped() {
     let path = write(repo.path(), "settings.json", &json!(["outputStyle", "Concise"]));
     write(home.path(), "settings.json", &json!({ "outputStyle": "Concise" }));
 
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("the run goes on");
+    let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
 
     assert!(settings.notices.iter().any(|notice| notice.starts_with(&format!("{}: expected object", path.display()))));
     assert_eq!(settings.style.map(|style| style.name), Some("Concise".into()));
@@ -130,7 +130,7 @@ fn a_schema_reference_is_not_an_unknown_key() {
     write(home.path(), "settings.json", &schema);
     write(repo.path(), "settings.local.json", &schema);
 
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("settings");
+    let settings = load(repo.path(), Some(home.path())).expect("settings");
 
     assert!(settings.notices.is_empty(), "{:?}", settings.notices);
 }
@@ -170,7 +170,7 @@ fn the_documented_full_example_reads_without_a_notice() {
     });
     write(home.path(), "settings.json", &example);
 
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("settings");
+    let settings = load(repo.path(), Some(home.path())).expect("settings");
 
     assert!(settings.notices.is_empty(), "{:?}", settings.notices);
     assert_eq!(settings.added_dirs, ["~/notes"]);
@@ -215,10 +215,10 @@ fn every_key_the_schema_publishes_changes_what_the_loader_reads() {
     assert_eq!(keys, sampled, "each published key has a sample here");
 
     let (home, repo) = folders();
-    let unset = format!("{:?}", load(repo.path(), Some(home.path()), &[]).expect("settings"));
+    let unset = format!("{:?}", load(repo.path(), Some(home.path())).expect("settings"));
     for (key, value) in samples {
         write(home.path(), "settings.json", &json!({ key: value }));
-        let read = load(repo.path(), Some(home.path()), &[]).expect("settings");
+        let read = load(repo.path(), Some(home.path())).expect("settings");
         assert!(!read.notices.iter().any(|notice| notice.contains(key) && notice.contains("ignored")), "{key}");
         assert_ne!(format!("{read:?}"), unset, "{key} is published but the loader does not read it");
     }

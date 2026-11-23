@@ -2,13 +2,10 @@ use std::path::{Path, PathBuf};
 
 use crate::api::features::code_map::CodeMapRequest;
 use crate::api::features::memory::{MemoryOp, MemoryReply, MemoryRequest};
-use crate::api::features::plugins::{PluginsReply, PluginsRequest};
-use crate::api::features::schedules::{SchedulesReply, SchedulesRequest};
 use crate::api::features::shell::{BackgroundCommand, ShellReply, ShellRequest};
 use crate::api::features::trace::{TraceReply, TraceRequest};
 use domain::SessionId;
 use domain::output::Saving;
-use domain::schedule::{Scheduled, When};
 
 use crate::client::features::unexpected;
 use crate::{Client, Error};
@@ -41,26 +38,6 @@ impl Client {
             ShellReply::Listed(commands) => Ok(commands),
             _ => Err(unexpected()),
         }
-    }
-
-    pub fn plugins(&self, request: PluginsRequest) -> Result<PluginsReply, Error> {
-        self.ask_plugins(request)
-    }
-
-    pub fn scheduled(&self) -> Result<Vec<Scheduled>, Error> {
-        self.ask_schedules(SchedulesRequest::List).map(|reply| reply.scheduled)
-    }
-
-    pub fn take_due_schedules(&self) -> Result<Vec<Scheduled>, Error> {
-        self.ask_schedules(SchedulesRequest::TakeDue).map(|reply| reply.due)
-    }
-
-    pub fn delete_schedule(&self, id: &str) -> Result<Vec<Scheduled>, Error> {
-        self.ask_schedules(SchedulesRequest::Delete { id: id.to_owned() }).map(|reply| reply.scheduled)
-    }
-
-    pub fn schedule(&self, prompt: &str, when: When) -> Result<SchedulesReply, Error> {
-        self.ask_schedules(SchedulesRequest::Create { prompt: prompt.to_owned(), when })
     }
 
     pub fn keep_instruction(&self, cwd: &Path, line: &str) -> Result<PathBuf, Error> {

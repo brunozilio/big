@@ -2,8 +2,6 @@ mod code_map;
 pub mod context;
 pub(crate) mod memory;
 mod output_savings;
-mod plugins;
-mod schedules;
 mod sessions;
 mod shell;
 pub(crate) mod trace;
@@ -17,12 +15,10 @@ use crate::features::context::{Context, Finish};
 type Forget = fn(u64);
 type Prepare = fn(&Context<'_>, RunId, PromptRequest) -> (PromptRequest, Option<Finish>);
 
-const ALL: [(FeatureName, Forget); 9] = [
+const ALL: [(FeatureName, Forget); 7] = [
     (FeatureName::CodeMap, code_map::forget),
     (FeatureName::Memory, memory::forget),
     (FeatureName::OutputSavings, output_savings::forget),
-    (FeatureName::Plugins, plugins::forget),
-    (FeatureName::Schedules, schedules::forget),
     (FeatureName::Sessions, sessions::forget),
     (FeatureName::Shell, shell::forget),
     (FeatureName::Trace, trace::forget),
@@ -45,8 +41,6 @@ fn answer(context: &Context<'_>, request: FeatureRequest) -> Result<FeatureReply
         FeatureRequest::CodeMap(request) => code_map::handle(context, request).map(FeatureReply::CodeMap),
         FeatureRequest::Memory(request) => memory::handle(context, request).map(FeatureReply::Memory),
         FeatureRequest::OutputSavings => output_savings::handle(context).map(FeatureReply::OutputSavings),
-        FeatureRequest::Plugins(request) => plugins::handle(context, request).map(FeatureReply::Plugins),
-        FeatureRequest::Schedules(request) => schedules::handle(context, request).map(FeatureReply::Schedules),
         FeatureRequest::Sessions(request) => sessions::handle(context, request).map(FeatureReply::Sessions),
         FeatureRequest::Shell(request) => shell::handle(context, request).map(FeatureReply::Shell),
         FeatureRequest::Trace(request) => trace::handle(context, request).map(FeatureReply::Trace),
@@ -93,8 +87,6 @@ mod tests {
                 "code_map",
                 "memory",
                 "output_savings",
-                "plugins",
-                "schedules",
                 "sessions",
                 "shell",
                 "trace",

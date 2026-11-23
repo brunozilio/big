@@ -6,7 +6,6 @@ pub mod executable;
 pub mod extensions;
 pub mod hooks;
 pub mod inbox;
-pub mod looping;
 pub mod lsp;
 pub mod mcp;
 pub mod mcp_config;

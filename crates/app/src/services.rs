@@ -58,7 +58,7 @@ impl LocalServices {
         &self,
         cwd: &Path,
     ) -> Result<agent_engine::prompt::settings::Settings, crate::settings::SettingsError> {
-        agent_engine::prompt::settings::load(&self.gate(cwd), &[]).map_err(crate::settings::SettingsError::Unreadable)
+        agent_engine::prompt::settings::load(&self.gate(cwd)).map_err(crate::settings::SettingsError::Unreadable)
     }
 
     pub fn with_engine(engine: Arc<dyn AgentEngine>) -> Self {
@@ -81,7 +81,7 @@ impl LocalServices {
             database: stores.database,
             exporter: exporter(&stores.sessions),
             sessions: stores.sessions,
-            extensions: Extensions::default(),
+            extensions: Extensions,
             providers: ModelProviders::new(stores.providers, Arc::clone(&stores.secrets)),
             homes: Arc::new(crate::OwnerHome::none()),
             mcp_auth: crate::McpAuth::new(Arc::clone(&stores.secrets), http),
@@ -104,7 +104,6 @@ impl LocalServices {
             database: stores.database,
             exporter: exporter(&stores.sessions),
             sessions: stores.sessions,
-            extensions: Extensions { plugins: self.extensions.plugins },
             providers: self.providers.with_store(stores.providers).with_secrets(Arc::clone(&stores.secrets)),
             mcp_auth: self.mcp_auth.with_secrets(Arc::clone(&stores.secrets)),
             secrets: stores.secrets,

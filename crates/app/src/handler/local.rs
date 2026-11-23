@@ -99,17 +99,10 @@ fn is_query(command: &ClientCommand) -> bool {
         ClientCommand::RegisterPeer { .. }
             | ClientCommand::ListSkills { .. }
             | ClientCommand::ListAgents { .. }
-            | ClientCommand::ListMcpServers { .. }
             | ClientCommand::ListPermissions { .. }
             | ClientCommand::TakeNotices { .. }
             | ClientCommand::AnswerTeammate { .. }
             | ClientCommand::Feature(_)
-            | ClientCommand::ApproveMcpServer { .. }
-            | ClientCommand::AddMcpServer { .. }
-            | ClientCommand::GetMcpServer { .. }
-            | ClientCommand::RemoveMcpServer { .. }
-            | ClientCommand::SignInMcpServer { .. }
-            | ClientCommand::SignOutMcpServer { .. }
             | ClientCommand::CancelRequest { .. }
     )
 }

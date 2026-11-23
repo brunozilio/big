@@ -83,9 +83,6 @@ pub enum ClientCommand {
         provider: ModelProvider,
         balance: domain::account_pool::Balance,
     },
-    ListMcpServers {
-        path: PathBuf,
-    },
     TakeNotices {
         for_agent: bool,
     },
@@ -96,34 +93,6 @@ pub enum ClientCommand {
     Feature(FeatureRequest),
     ListPermissions {
         path: PathBuf,
-    },
-    ApproveMcpServer {
-        path: PathBuf,
-        name: String,
-        approve: bool,
-    },
-    AddMcpServer {
-        path: PathBuf,
-        name: String,
-        server: serde_json::Value,
-        #[serde(default)]
-        replace: bool,
-    },
-    GetMcpServer {
-        path: PathBuf,
-        name: String,
-    },
-    RemoveMcpServer {
-        path: PathBuf,
-        name: String,
-    },
-    SignInMcpServer {
-        path: PathBuf,
-        name: String,
-    },
-    SignOutMcpServer {
-        path: PathBuf,
-        name: String,
     },
     CancelRequest {
         request: RequestId,
@@ -155,17 +124,10 @@ impl ClientCommand {
             Self::UseProviderAccount { .. } => "use_provider_account",
             Self::RemoveProviderAccount { .. } => "remove_provider_account",
             Self::SetProviderBalance { .. } => "set_provider_balance",
-            Self::ListMcpServers { .. } => "list_mcp_servers",
             Self::ListPermissions { .. } => "list_permissions",
             Self::TakeNotices { .. } => "take_notices",
             Self::AnswerTeammate { .. } => "answer_teammate",
             Self::Feature(_) => "feature",
-            Self::ApproveMcpServer { .. } => "approve_mcp_server",
-            Self::AddMcpServer { .. } => "add_mcp_server",
-            Self::GetMcpServer { .. } => "get_mcp_server",
-            Self::RemoveMcpServer { .. } => "remove_mcp_server",
-            Self::SignInMcpServer { .. } => "sign_in_mcp_server",
-            Self::SignOutMcpServer { .. } => "sign_out_mcp_server",
             Self::CancelRequest { .. } => "cancel_request",
         }
     }
@@ -174,7 +136,6 @@ impl ClientCommand {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::features::schedules::SchedulesRequest;
     use domain::ModelOption;
 
     #[test]
@@ -212,7 +173,6 @@ mod tests {
                 provider: ModelProvider::new("keyed"),
                 balance: domain::account_pool::Balance::RoundRobin,
             },
-            ClientCommand::ListMcpServers { path: "/repo".into() },
             ClientCommand::ListPermissions { path: "/repo".into() },
             ClientCommand::TakeNotices { for_agent: true },
             ClientCommand::AnswerTeammate {
@@ -228,19 +188,7 @@ mod tests {
                 },
                 decision: domain::Decision::Allow,
             },
-            ClientCommand::Feature(FeatureRequest::Schedules(SchedulesRequest::Delete { id: "cron_1".into() })),
             ClientCommand::Feature(FeatureRequest::OutputSavings),
-            ClientCommand::ApproveMcpServer { path: "/repo".into(), name: "jira".into(), approve: true },
-            ClientCommand::AddMcpServer {
-                path: "/repo".into(),
-                name: "atlassian".into(),
-                server: serde_json::json!({"type": "http", "url": "https://mcp.atlassian.com/v1/mcp"}),
-                replace: true,
-            },
-            ClientCommand::GetMcpServer { path: "/repo".into(), name: "atlassian".into() },
-            ClientCommand::RemoveMcpServer { path: "/repo".into(), name: "atlassian".into() },
-            ClientCommand::SignInMcpServer { path: "/repo".into(), name: "linear".into() },
-            ClientCommand::SignOutMcpServer { path: "/repo".into(), name: "linear".into() },
             ClientCommand::CancelRequest { request: RequestId(7) },
         ];
         for command in commands {

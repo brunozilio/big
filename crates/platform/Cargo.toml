@@ -1,6 +1,6 @@
 [package]
 name = "platform"
-description = "What differs between operating systems (processes, shells, private files, folders, notifications), one folder per system."
+description = "What differs between operating systems (processes, shells, private files, folders), one folder per system."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

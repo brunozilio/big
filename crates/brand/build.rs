@@ -76,7 +76,6 @@ fn main() {
         ("DIR", format!(".{command}")),
         ("INSTRUCTIONS", format!("{env}.md")),
         ("LOCAL_INSTRUCTIONS", format!("{env}.local.md")),
-        ("PLUGIN_DIR", format!(".{command}-plugin")),
     ];
     let mut code = String::new();
     for (name, value) in constants {
