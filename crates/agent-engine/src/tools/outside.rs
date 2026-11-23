@@ -66,7 +66,8 @@ impl Workspace {
     pub fn bounds(&self) -> domain::permission::Bounds {
         let roots = std::iter::once(self.project_root()).chain(self.added_dirs.iter().map(|dir| settled(dir)));
         let saved = settled(&super::persisted::results_dir(&self.session_id));
-        domain::permission::Bounds::of(roots.collect(), vec![saved])
+        let own = content::folder().map(|folder| settled(&folder.join("skills")));
+        domain::permission::Bounds::of(roots.collect(), std::iter::once(saved).chain(own).collect())
     }
 
     pub fn place(&self, path: &str) -> domain::permission::Place {
@@ -119,6 +120,19 @@ mod tests {
         let saved = super::super::persisted::results_dir(&workspace.session_id).join("call_1.txt");
         assert!(workspace.may_read(&saved));
         assert!(!workspace.may_read(&super::super::persisted::results_dir("another").join("call_1.txt")));
+    }
+
+    #[test]
+    fn the_product_s_own_skills_read_freely_but_are_not_written_without_asking() {
+        let installed = tempfile::tempdir().expect("installed");
+        let _ = content::use_folder(installed.path().to_path_buf());
+        let folder = content::folder().expect("the content folder");
+        let project = tempfile::tempdir().expect("dir");
+        let workspace = Workspace::new(project.path());
+        let skill = folder.join("skills/code-review/medium.md");
+        assert!(workspace.may_read(&skill), "an agent reads its own skills");
+        assert!(workspace.bounds().guard(&workspace.place(&skill.display().to_string()).real).is_some(), "writing there still asks");
+        assert!(!workspace.may_read(&folder.join("mcp.json")), "the owner's settings stay outside");
     }
 
     #[test]
