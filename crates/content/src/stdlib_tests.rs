@@ -331,6 +331,24 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
 }
 
 #[test]
+fn a_develop_run_that_left_no_commit_fails_there_instead_of_at_the_pull_request() {
+    let mut fake = Fake::default();
+    let (result, asked) = drive(&default_workflow(), &item(json!("T-1")), |command| {
+        let mut reply = fake.reply(command)?;
+        if command["kind"] == "agent" && command["args"]["name"] == "developer" {
+            reply["commit"] = Value::Null;
+            reply["base"] = Value::Null;
+        }
+        Some(reply)
+    });
+    assert_eq!(result["state"], "cancelled", "{result}");
+    assert!(calls(&asked, "open_pull_request").is_empty());
+    let reasons: Vec<&str> =
+        of_kind(&asked, "impediment.set").iter().filter_map(|command| command["args"]["reason"].as_str()).collect();
+    assert!(reasons.iter().any(|reason| reason.starts_with("Develop falhou") && reason.contains("não é um repositório git")), "{reasons:?}");
+}
+
+#[test]
 fn a_known_issue_is_reused_and_a_rejected_deploy_raises_an_impediment() {
     let mut fake = Fake { reject_deploy: true, ..Fake::default() };
     let (result, asked) = drive(&default_workflow(), &item(json!("T-1")), |command| fake.reply(command));

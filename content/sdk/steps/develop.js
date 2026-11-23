@@ -10,6 +10,14 @@ function request(item, plan, issue, feedback) {
   return parts.join("\n\n");
 }
 
+function uncommitted(result, branch) {
+  const trees = Array.isArray(result.repositories) && result.repositories.length > 0 ? result.repositories : [result];
+  const known = trees.filter((tree) => tree && typeof tree === "object" && "commit" in tree);
+  if (known.length === 0 || known.some((tree) => tree.commit && tree.commit !== tree.base)) return null;
+  if (known.every((tree) => !tree.commit)) return "a pasta de trabalho não é um repositório git, então nada foi commitado nem enviado";
+  return `o agente terminou sem nenhum commit na branch ${branch}`;
+}
+
 export default step({
   name: "develop",
   label: "Develop",
@@ -32,6 +40,8 @@ export default step({
     const worktree = opts.worktree ?? branch ?? ctx.item.id;
     const result = await ctx.agent(opts.agent ?? "developer", input, agentOptions(opts, { worktree }));
     const output = object(result.output);
+    const missing = uncommitted(result, output.branch ?? branch);
+    if (missing) return ctx.fail({ error: missing, session: result.session });
     const repositories = Array.isArray(result.repositories) && result.repositories.some((repository) => repository.id) ? result.repositories : undefined;
     return ctx.pass(defined({ session: result.session, branch: output.branch ?? branch, summary: output.summary ?? result.text, repositories }));
   },
