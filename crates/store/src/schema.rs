@@ -44,6 +44,16 @@ const MIGRATIONS: &[&str] = &["
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );
+", "
+    CREATE TABLE applications (
+        id TEXT PRIMARY KEY,
+        position INTEGER NOT NULL,
+        data TEXT NOT NULL
+    );
+    CREATE TABLE preferences (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
 "];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
