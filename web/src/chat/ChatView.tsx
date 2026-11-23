@@ -39,7 +39,7 @@ function useHistoricalIds(sessionId: string, events: SessionEvent[] | undefined)
   return (id: string | undefined) => (id && ids?.has(id) ? settled : enter)
 }
 
-export function ChatView({ sessionId, composer, dock }: { sessionId: string; composer: boolean; dock?: ReactNode }) {
+export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: string; composer: boolean; dock?: ReactNode; hidePlans?: boolean }) {
   const { session, error } = useSession(sessionId)
   const enterFor = useHistoricalIds(sessionId, session?.events)
   const scroller = useRef<HTMLDivElement>(null)
@@ -71,7 +71,7 @@ export function ChatView({ sessionId, composer, dock }: { sessionId: string; com
   if (!session) return <div className="flex h-full items-center justify-center"><Spinner /></div>
 
   const running = session.status === 'running'
-  const turns = toTurns(withoutRepeatedPlans(session.events))
+  const turns = toTurns(hidePlans ? session.events.filter((e) => e.type !== 'plan') : withoutRepeatedPlans(session.events))
   const respond: Respond = (event, response) => api().respond(session.id, event, response)
 
   return (

@@ -214,7 +214,7 @@ function StepContent({ it, step }: { it: Item; step: string }) {
     <BlockContext.Provider value={host}>
       <Card className="scrollbar-thin h-full overflow-y-auto p-4">
         <RunPicker view={current} onPick={setAttempt} />
-        <div className={cn('space-y-4', current.blocks.some((b) => b.type === 'review') && 'h-full')}>
+        <div className={cn('space-y-4', current.blocks.some((b) => b.type === 'review' || b.type === 'cases') && 'h-full')}>
           {current.blocks.map((b, i) => <BlockView key={`${current.attempt}-${i}-${b.type}`} block={b} />)}
         </div>
       </Card>
