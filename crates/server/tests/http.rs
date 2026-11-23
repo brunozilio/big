@@ -153,7 +153,7 @@ async fn a_session_shows_its_events_and_refuses_unknown_answers() {
         .await;
     world.until("the agent ran", |item| item["group"] == "you").await;
     let session = world.get(&format!("/api/sessions/{SESSION}")).await;
-    assert_eq!(keys(&session), ["agents", "events", "id", "mode", "model", "status", "title"]);
+    assert_eq!(keys(&session), ["agents", "events", "id", "mode", "model", "status", "title", "work"]);
     assert_eq!(session["status"], "idle");
     fixture("session", &session);
     let bad = world.send(Method::GET, "/api/sessions/..", None).await;

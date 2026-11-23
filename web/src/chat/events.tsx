@@ -184,7 +184,7 @@ export function ToolTimeline({ calls, done }: { calls: ToolCall[]; done?: boolea
 
 export function ToolCallItem({ call, last }: { call: ToolCall; last?: boolean }) {
   const [open, setOpen] = useState(call.state === 'error')
-  const hasDetail = call.input !== undefined || call.output !== undefined || call.diff !== undefined
+  const hasDetail = call.input !== undefined || call.output !== undefined || call.diff !== undefined || (call.steps?.length ?? 0) > 0
   return (
     <li className="relative list-none pb-5">
       {!last && <span className="absolute bottom-0 left-[11px] top-[28px] w-px bg-line-strong" />}
@@ -207,7 +207,20 @@ export function ToolCallItem({ call, last }: { call: ToolCall; last?: boolean })
   )
 }
 
+function SubagentSteps({ steps }: { steps: string[] }) {
+  return (
+    <ol aria-label="Passos do subagente" className="space-y-1 border-l border-line-strong pl-3 text-sm text-muted">
+      {steps.map((step, i) => (
+        <li key={i} className="truncate" title={step}>{step}</li>
+      ))}
+    </ol>
+  )
+}
+
 function ToolCallDetail({ call }: { call: ToolCall }) {
+  if (call.steps && call.steps.length > 0 && call.output === undefined) {
+    return <div className="mt-3"><SubagentSteps steps={call.steps} /></div>
+  }
   const output = call.output ?? ''
   const isJson = output.trim().startsWith('{') || output.trim().startsWith('[')
   return (

@@ -308,6 +308,7 @@ export interface ToolCall {
   output?: string
   diff?: string
   durationMs: number
+  steps?: string[]
 }
 
 export interface AskQuestion {
@@ -339,6 +340,18 @@ export interface Session {
   model: string
   agents: Agent[]
   events: SessionEvent[]
+  work?: SessionWork
+}
+
+export interface SessionTask {
+  id: string
+  subject: string
+  status: string
+}
+
+export interface SessionWork {
+  background: string[]
+  tasks: SessionTask[]
 }
 
 export interface NewMessage {

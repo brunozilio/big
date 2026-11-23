@@ -85,9 +85,10 @@ fn call(entry: &Entry) -> Option<Value> {
             "id": id, "kind": tool_kind(name), "title": if summary.is_empty() { name } else { summary },
             "tag": name, "state": tool_state(state), "output": output, "durationMs": 0,
         })),
-        Entry::Agent { index, kind, summary, done, .. } => Some(json!({
+        Entry::Agent { index, kind, summary, done, steps } => Some(json!({
             "id": format!("agent-{index}"), "kind": "subagent", "title": summary, "tag": kind,
             "state": match done { None => "running", Some(true) => "ok", Some(false) => "error" }, "durationMs": 0,
+            "steps": steps,
         })),
         _ => None,
     }
@@ -195,6 +196,15 @@ pub fn events(shown: &Shown, pending: Option<&AgentAsk>) -> Vec<Value> {
         listed.push(ask_event(ask, shown.times.last().copied().unwrap_or(0)));
     }
     listed
+}
+
+pub fn work(transcript: &Transcript) -> Value {
+    let tasks: Vec<Value> = transcript
+        .tasks
+        .iter()
+        .map(|task| json!({ "id": task.id, "subject": task.subject, "status": task.status }))
+        .collect();
+    json!({ "background": transcript.background, "tasks": tasks })
 }
 
 pub fn status(transcript: &Transcript, pending: bool) -> &'static str {

@@ -78,9 +78,11 @@ pub fn view(shared: &Shared, session: &str) -> ApiResult<Value> {
     };
     let events = with_answered(shared, session, events)?;
     let agents = agents(shared, session)?;
-    Ok(
-        json!({ "id": session, "title": title, "status": status, "mode": mode, "model": model, "agents": agents, "events": events }),
-    )
+    let work = session_view::work(&shown.transcript);
+    Ok(json!({
+        "id": session, "title": title, "status": status, "mode": mode, "model": model, "agents": agents,
+        "events": events, "work": work,
+    }))
 }
 
 fn agents(shared: &Shared, session: &str) -> ApiResult<Vec<Value>> {

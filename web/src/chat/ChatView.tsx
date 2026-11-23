@@ -7,6 +7,7 @@ import { EmptyState, Spinner } from '@/ui/display'
 import { Icon } from '@/ui/icon'
 import { AnimatePresence, Collapse, motion, tween, tweenClose } from '@/ui/motion'
 import { AskBlock, PermissionBlock, PlanBlock, type Respond } from './actionBlocks'
+import { BackgroundWork, hasWork } from './BackgroundWork'
 import { Composer } from './Composer'
 import { AgentMark, AgentsContext, AssistantMessage, StatusLine, ThinkingSteps, ToolRunSummary, TurnHeader, UserMessage } from './events'
 
@@ -86,6 +87,7 @@ export function ChatView({ sessionId, composer }: { sessionId: string; composer:
                 </section>
               )
             })}
+            {hasWork(session.work) && <BackgroundWork work={session.work} />}
           </div>
           <AnimatePresence>
             {!atBottom && (
