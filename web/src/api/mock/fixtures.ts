@@ -50,9 +50,11 @@ export function agentPerson(id: string): Person {
   return { id: a.id, name: a.name, avatar: a.avatar }
 }
 
+const ALL_EFFORTS: Model['efforts'] = ['low', 'medium', 'high', 'xhigh', 'max']
+
 export const MODELS: Model[] = [
-  { id: 'auto', name: 'Auto', provider: 'auto', logo: '', description: 'Escolhe o modelo por etapa' },
-  { id: 'claude-opus', name: 'Claude Opus', provider: 'claude', logo: 'claude' },
-  { id: 'claude-sonnet', name: 'Claude Sonnet', provider: 'claude', logo: 'claude' },
-  { id: 'gpt-5', name: 'GPT-5', provider: 'copilot', logo: 'copilot' },
+  { id: 'auto', name: 'Auto', provider: 'auto', logo: '', description: 'Escolhe o modelo por etapa', efforts: ALL_EFFORTS, fast: false },
+  { id: 'claude-opus', name: 'Claude Opus', provider: 'claude', logo: 'claude', efforts: ALL_EFFORTS, fast: false },
+  { id: 'claude-sonnet', name: 'Claude Sonnet', provider: 'claude', logo: 'claude', efforts: ALL_EFFORTS, fast: false },
+  { id: 'gpt-5', name: 'GPT-5', provider: 'copilot', logo: 'copilot', efforts: ['low', 'medium', 'high', 'xhigh'], fast: false },
 ]

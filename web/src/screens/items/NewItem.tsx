@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api'
 import type { Connection, IssueSummary, Item, Provider } from '@/api/contract'
 import { errorText, setItems, useStore } from '@/api/store'
-import { Composer } from '@/chat/Composer'
+import { Composer, type Tuning } from '@/chat/Composer'
 import { Button, IconButton } from '@/ui/button'
 import { StatusIcon, ProviderLogo } from '@/ui/domain'
 import { SearchInput } from '@/ui/form'
@@ -89,12 +89,13 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
   const [model, setModel] = useState<string | null>(null)
   const sources = useTrackers()
   const defaultModel = useStore((s) => s.models?.default ?? null)
+  const [tuning, setTuning] = useState<Tuning>({ effort: 'medium', fast: false })
   const start = (text: string, attachments: string[]) => {
     if (!issue && !text) return
     setBusy(true)
     setError(null)
     api()
-      .createItem({ text, issue: issue ? { connection: issue.source.connection.id, key: issue.key } : null, model: model ?? defaultModel ?? 'auto', attachments })
+      .createItem({ text, issue: issue ? { connection: issue.source.connection.id, key: issue.key } : null, model: model ?? defaultModel ?? 'auto', ...tuning, attachments })
       .then((it) => {
         setItems((items) => (items.some((x) => x.id === it.id) ? items : [it, ...items]))
         setIssue(null)
@@ -123,6 +124,8 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
         allowEmpty={!!issue}
         model={model}
         onModel={setModel}
+        tuning={tuning}
+        onTuning={setTuning}
         leading={<IssuePicker sources={sources} onPick={setIssue} />}
         onSubmit={(input) => start(input.text, input.attachments)}
       />

@@ -108,7 +108,7 @@ export function ChatView({ sessionId, composer }: { sessionId: string; composer:
                 onSubmit={(input) => {
                   setAtBottom(true)
                   setSendError(null)
-                  api().send(session.id, { text: input.text, model: input.model, attachments: input.attachments }).catch((e: unknown) => setSendError(e instanceof Error ? e.message : 'Não foi possível enviar'))
+                  api().send(session.id, { text: input.text, model: input.model, effort: input.effort, fast: input.fast, attachments: input.attachments }).catch((e: unknown) => setSendError(e instanceof Error ? e.message : 'Não foi possível enviar'))
                 }}
               />
               {sendError && <p role="alert" className="mt-2 px-2 text-sm text-danger-fg">{sendError}</p>}

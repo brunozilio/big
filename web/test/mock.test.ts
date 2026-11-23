@@ -118,9 +118,19 @@ describe('adaptador mock', () => {
 
   test('criar item a partir de issue pula a etapa do tracker', async () => {
     const api = fresh()
-    const it = await api.createItem({ text: '', issue: { connection: 'c-jira', key: 'APP-251' }, model: 'auto', attachments: [] })
+    const it = await api.createItem({ text: '', issue: { connection: 'c-jira', key: 'APP-251' }, model: 'auto', effort: 'medium', fast: false, attachments: [] })
     expect(it.steps.find((s) => s.id === 'ticket')?.state).toBe('skipped')
     expect((await api.models()).models.some((m) => m.id === 'auto')).toBe(true)
+  })
+
+  test('modelos trazem esforços e somem, com o Auto, sem provedor de IA', async () => {
+    const api = fresh()
+    const listed = await api.models()
+    expect(listed.models[0]).toMatchObject({ id: 'auto', fast: false })
+    expect(listed.models.every((m) => Array.isArray(m.efforts))).toBe(true)
+    await api.disconnect('c-claude')
+    await api.disconnect('c-copilot')
+    expect(await api.models()).toEqual({ models: [], default: null })
   })
 
   test('branding guarda logo e tema sem nome fixo na página', async () => {

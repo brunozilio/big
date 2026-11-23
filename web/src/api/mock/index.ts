@@ -1,5 +1,5 @@
 import { setClock } from '../clock'
-import type { Api, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, SessionEvent, SignInPoll, SignInStart } from '../contract'
+import type { Api, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues } from './calls'
 import { INITIAL_CONNECTIONS, MODELS, PROVIDERS } from './fixtures'
 import { itemOfSession, sessionById } from './sessions'
@@ -17,6 +17,13 @@ export interface MockOptions {
 function wireConnections(): Connections {
   const providers = PROVIDERS.map(({ capabilities, accounts: _a, choose: _h, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
   return { providers, connections: store.connections.map((c) => ({ ...c, status: 'ok' })) }
+}
+
+export function wireModels(): Models {
+  const connected = new Set(store.connections.map((c) => c.provider))
+  const served = MODELS.filter((m) => connected.has(m.provider))
+  if (!served.length) return { models: [], default: null }
+  return { models: MODELS.filter((m) => m.provider === 'auto' || connected.has(m.provider)), default: 'auto' }
 }
 
 interface Flow { provider: string; polls: number; chosen: string | null; started: number }
@@ -217,7 +224,7 @@ export function mockApi(options: MockOptions = {}): Api {
       disconnect(id)
       publish({ type: 'connections', connections: wireConnections() })
     }),
-    models: () => wait(() => ({ models: MODELS, default: 'auto' })),
+    models: () => wait(wireModels),
     branding: () => wait(() => branding),
     saveBranding: (patch) => wait(() => {
       branding = { ...branding, ...patch }

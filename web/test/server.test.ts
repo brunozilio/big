@@ -36,7 +36,8 @@ describe('respostas reais do servidor', () => {
     expect(connections.providers.every((p) => typeof p.key === 'string' && typeof p.logo === 'string' && Array.isArray(p.fields))).toBe(true)
     expect(connections.connections.every((c) => c.status === 'ok' || c.status === 'error')).toBe(true)
     const models = load('models') as Models
-    expect(models.models[0].id).toBe(models.default)
+    expect(models.models[0].id).toBe(models.default ?? '')
+    expect(models.models.every((m) => Array.isArray(m.efforts) && typeof m.fast === 'boolean')).toBe(true)
     const branding = load('branding') as Branding
     expect(['system', 'light', 'dark']).toContain(branding.theme)
   })

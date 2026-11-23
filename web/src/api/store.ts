@@ -75,6 +75,7 @@ export function applyLive(e: LiveEvent) {
       return
     case 'connections':
       set({ connections: e.connections })
+      refreshModels()
       return
     case 'branding':
       set({ branding: e.branding })
@@ -122,6 +123,14 @@ export function setBranding(branding: Branding) {
 
 export function setConnections(connections: Connections) {
   set({ connections })
+  refreshModels()
+}
+
+function refreshModels() {
+  api()
+    .models()
+    .then((models) => set({ models }))
+    .catch(() => undefined)
 }
 
 export function useSession(id: string | null): { session: Session | null; error: string | null } {

@@ -95,6 +95,8 @@ export interface NewItem {
   text: string
   issue: { connection: string; key: string } | null
   model: string
+  effort: Effort
+  fast: boolean
   attachments: string[]
 }
 
@@ -323,6 +325,8 @@ export interface Session {
 export interface NewMessage {
   text: string
   model: string | null
+  effort: Effort
+  fast: boolean
   attachments: string[]
 }
 
@@ -387,17 +391,23 @@ export type SignInPoll =
   | { state: 'done'; connection: Connection }
   | { state: 'failed'; message: string }
 
+export const EFFORTS = ['low', 'medium', 'high', 'xhigh', 'max'] as const
+
+export type Effort = (typeof EFFORTS)[number]
+
 export interface Model {
   id: string
   name: string
   provider: string
   logo: string
   description?: string
+  efforts: Effort[]
+  fast: boolean
 }
 
 export interface Models {
   models: Model[]
-  default: string
+  default: string | null
 }
 
 export const AUTO_MODEL = 'auto'

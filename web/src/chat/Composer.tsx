@@ -4,12 +4,20 @@ import { Icon } from '@/ui/icon'
 import { AnimatePresence, dur, easeOut, IconSwap, motion, tween } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
 import { AttachmentStrip, useAttachments } from './Attachments'
-import { ModelPicker } from './ModelPicker'
+import type { Effort } from '@/api/contract'
+import { DEFAULT_EFFORT, ModelPicker, useModels } from './ModelPicker'
+
+export interface Tuning {
+  effort: Effort
+  fast: boolean
+}
 
 export interface ComposerSubmit {
   text: string
   attachments: string[]
   model: string | null
+  effort: Effort
+  fast: boolean
 }
 
 export function Composer({
@@ -23,6 +31,8 @@ export function Composer({
   allowEmpty,
   model,
   onModel,
+  tuning,
+  onTuning,
 }: {
   onSubmit: (input: ComposerSubmit) => void
   running?: boolean
@@ -33,7 +43,9 @@ export function Composer({
   leading?: ReactNode
   allowEmpty?: boolean
   model?: string | null
-  onModel?: (id: string) => void
+  onModel?: (id: string | null) => void
+  tuning?: Tuning
+  onTuning?: (tuning: Tuning) => void
 }) {
   const [text, setText] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -41,6 +53,11 @@ export function Composer({
   const [dragging, setDragging] = useState(false)
   const [focused, setFocused] = useState(false)
   const [ownModel, setOwnModel] = useState<string | null>(null)
+  const [ownTuning, setOwnTuning] = useState<Tuning>({ effort: DEFAULT_EFFORT, fast: false })
+  const { effort, fast } = tuning ?? ownTuning
+  const tune = (patch: Partial<Tuning>) => (onTuning ?? setOwnTuning)({ effort, fast, ...patch })
+  const models = useModels()
+  const noModel = models.loaded && models.list.length === 0
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
   const chosen = model === undefined ? ownModel : model
@@ -54,11 +71,11 @@ export function Composer({
   }, [text])
 
   const hasText = text.trim().length > 0
-  const ready = (hasText || !!allowEmpty) && !disabled && !attachments.uploading
+  const ready = (hasText || !!allowEmpty) && !disabled && !attachments.uploading && !noModel
 
   const submit = () => {
     if (!ready) return
-    onSubmit({ text: text.trim(), attachments: attachments.serverIds, model: chosen })
+    onSubmit({ text: text.trim(), attachments: attachments.serverIds, model: chosen, effort, fast })
     setText('')
     setRefusal(null)
     attachments.clear()
@@ -128,7 +145,7 @@ export function Composer({
           </Tooltip>
           {leading}
           <span className="ml-auto flex items-center">
-            <ModelPicker value={chosen} onChange={chooseModel} />
+            <ModelPicker value={chosen} onChange={chooseModel} effort={effort} onEffort={(next) => tune({ effort: next })} fast={fast} onFast={(next) => tune({ fast: next })} />
             <SendButton running={!!running} ready={ready} onSend={submit} onStop={onStop} />
           </span>
         </div>
