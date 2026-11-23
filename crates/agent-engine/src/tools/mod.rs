@@ -6,6 +6,7 @@ pub mod builtin_agents;
 mod builtin_skills;
 pub mod checked;
 pub mod clients;
+pub mod hosted;
 pub mod inbox;
 mod lsp;
 pub mod names;

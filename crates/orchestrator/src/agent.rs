@@ -216,6 +216,9 @@ impl AgentEffect<'_> {
         request.session.agent = Some(MainAgentSpec { name: name.clone(), definition: Some(definition.text.clone()) });
         let client = Client(clients::fresh());
         request.host.credentials.client = client.0;
+        if let Some(application) = crate::application::id_of(&state.input) {
+            crate::application::offer(client.0, &self.shared.store, application);
+        }
         request.host.environment = cloud.as_ref().map(|lease| lease.environment.clone()).unwrap_or_default();
         request.session.add_dirs = trees.iter().skip(1).map(|tree| tree.path.clone()).collect();
         if let Some(text) = repos::described(&trees) {

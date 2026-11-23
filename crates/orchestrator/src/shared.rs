@@ -153,11 +153,11 @@ impl Shared {
     }
 
     pub fn checkouts(&self, item: &WorkItem) -> Vec<Checkout> {
-        repos::of_input(&item.input, self.config.repo.as_deref())
+        repos::of_input(&crate::application::live(&self.store, &item.input), self.config.repo.as_deref())
     }
 
     pub fn home(&self, input: &Value) -> Option<PathBuf> {
-        repos::home(input, self.config.repo.as_deref())
+        repos::home(&crate::application::live(&self.store, input), self.config.repo.as_deref())
     }
 
     fn other_home<'a>(&self, home: Option<&'a Path>) -> Option<&'a Path> {

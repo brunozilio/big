@@ -74,6 +74,7 @@ impl Job {
         tools.push(Box::new(tools::send_message::SendMessageTool));
         tools.push(Box::new(tools::repl::Repl));
         tools.extend(tools::task::tools());
+        tools.extend(tools::hosted::tools(self.request.host.credentials.client));
         let main = MainAgent::chosen(brief, self.request.session.agent.as_ref()).map_err(Stop::failed)?;
         self.control = self.control.reconfigured(main.config.permission, main.config.dont_ask);
         workspace.stop = self.control.shared_stop();

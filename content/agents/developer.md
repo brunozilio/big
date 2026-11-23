@@ -2,7 +2,7 @@
 name: developer
 label: Desenvolvedor
 description: Implementa o plano de um item na branch dele, com testes, até os checks do repositório passarem. Também corrige o que a revisão, o CI ou os checks apontarem.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, Edit, Write, NotebookEdit, LSP, WebFetch, WebSearch, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ScheduleWakeup, PushNotification, Advisor, REPL, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, Edit, Write, NotebookEdit, LSP, WebFetch, WebSearch, Skill, AskUserQuestion, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ScheduleWakeup, PushNotification, Advisor, REPL, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput, AddRepository]
 permissionMode: bypass
 model: auto
 skills: [verify, simplify, run]

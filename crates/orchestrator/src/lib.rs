@@ -1,6 +1,7 @@
 mod activation;
 mod agent;
 mod api;
+mod application;
 mod asks;
 mod bundle;
 mod cards;

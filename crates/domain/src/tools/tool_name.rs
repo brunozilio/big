@@ -6,6 +6,7 @@ pub const MCP_PREFIX: &str = "mcp__";
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToolName {
+    AddRepository,
     Advisor,
     Agent,
     AskUserQuestion,
@@ -51,7 +52,8 @@ pub enum ToolName {
 }
 
 impl ToolName {
-    pub const BUILTIN: [Self; 40] = [
+    pub const BUILTIN: [Self; 41] = [
+        Self::AddRepository,
         Self::Advisor,
         Self::Agent,
         Self::AskUserQuestion,
@@ -103,6 +105,7 @@ impl ToolName {
 
     pub const fn as_str(&self) -> &str {
         match self {
+            Self::AddRepository => "AddRepository",
             Self::Advisor => "Advisor",
             Self::Agent => "Agent",
             Self::AskUserQuestion => "AskUserQuestion",

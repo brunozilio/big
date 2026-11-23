@@ -22,6 +22,7 @@ pub fn release(client: u64) {
     super::watch::forget_client(client);
     crate::team::lead_inbox::closing(client);
     super::inbox::forget_client(client);
+    super::hosted::forget(client);
 }
 
 pub fn waiting(client: u64, mode: PermissionMode, now: i64) -> Waiting {
