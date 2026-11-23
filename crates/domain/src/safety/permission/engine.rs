@@ -19,7 +19,9 @@ impl PolicyEngine {
 
     pub fn judge(call: &Call<'_>, cx: &PolicyContext<'_>) -> Judgement {
         let stood = standing(call, cx);
-        let verdict = match by_mode(cx.mode(), stood.standing, call.tool, &stood.subject, cx.remembered) {
+        let planned = cx.mode() == PermissionMode::Plan && only_commands(call);
+        let decided = by_mode(cx.mode(), stood.standing, call.tool, &stood.subject, cx.remembered);
+        let verdict = match if planned { Verdict::Allow } else { decided } {
             Verdict::Ask { .. } => {
                 let reason = match (&stood.guarded, stood.standing) {
                     (Some((path, guard)), _) => Reason::Guarded { path: path.clone(), guard: *guard },
@@ -32,6 +34,12 @@ impl PolicyEngine {
         };
         Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded }
     }
+}
+
+fn only_commands(call: &Call<'_>) -> bool {
+    let runs = call.effects.iter().any(|effect| matches!(effect, Effect::Exec(_)));
+    let only = call.effects.iter().all(|effect| matches!(effect, Effect::Exec(_)) || !(effect.acts() || effect.changes_files()));
+    runs && only
 }
 
 fn shown(path: &Path) -> String {

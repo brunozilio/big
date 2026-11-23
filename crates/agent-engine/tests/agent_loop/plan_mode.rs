@@ -113,3 +113,21 @@ fn entering_plan_mode_makes_the_agent_read_only() {
     assert!(!results[0].1, "{results:?}");
     assert!(results[1].1, "Write is refused once planning: {results:?}");
 }
+
+#[test]
+fn planning_runs_commands_without_asking_but_still_refuses_writes() {
+    let rig = Rig::new(PermissionMode::Plan);
+    let model = ScriptedModel::new([
+        ScriptedModel::reply(vec![tool_use("b", "Bash", json!({"command": "echo planejando"}))]),
+        ScriptedModel::reply(vec![tool_use("w", "Write", json!({"file_path": "out.txt", "content": "x"}))]),
+        ScriptedModel::reply(vec![Block::Text("Plano pronto.".into())]),
+    ]);
+    let mut history = vec![Message::user("investigue")];
+    rig.run(&model, &mut history).expect("run");
+
+    assert!(!rig.events().iter().any(|event| matches!(event, EngineEvent::Asked(_))), "nothing was asked");
+    let results = results(&history);
+    assert!(!results[0].1 && results[0].0.contains("planejando"), "{results:?}");
+    assert!(results[1].1, "writes stay refused while planning: {results:?}");
+    assert!(!rig.dir.path().join("out.txt").exists());
+}

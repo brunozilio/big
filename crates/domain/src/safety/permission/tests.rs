@@ -20,6 +20,7 @@ enum Access {
     Edits,
     EditsGuarded,
     Executes,
+    Commands,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -33,8 +34,10 @@ fn expected(mode: PermissionMode, access: Access) -> Outcome {
     match (mode, access) {
         (_, Access::Reads) | (PermissionMode::Bypass, _) => Outcome::Allow,
         (_, Access::ReadsOutside) => Outcome::Ask,
+        (PermissionMode::Plan, Access::Commands) => Outcome::Allow,
         (PermissionMode::Plan, _) => Outcome::Deny,
         (PermissionMode::AcceptEdits, Access::Edits) => Outcome::Allow,
+        (_, Access::Commands) => expected(mode, Access::Executes),
         _ => Outcome::Ask,
     }
 }
@@ -62,8 +65,8 @@ fn cases() -> Vec<(&'static str, &'static str, Vec<Effect>, Access)> {
         ("Write", "/home/ana/.zshrc", vec![Effect::WritePath(place("/home/ana/.zshrc"))], Access::EditsGuarded),
         ("Edit", "config", vec![Effect::WritePath(place("/work/rocket/.git/config"))], Access::EditsGuarded),
         ("Write", "settings", vec![Effect::WritePath(Place::at(settings))], Access::EditsGuarded),
-        ("Bash", "ls -la", vec![Effect::exec("ls -la")], Access::Executes),
-        ("Bash", "cargo build", vec![Effect::exec("cargo build")], Access::Executes),
+        ("Bash", "ls -la", vec![Effect::exec("ls -la")], Access::Commands),
+        ("Bash", "cargo build", vec![Effect::exec("cargo build")], Access::Commands),
         ("WebFetch", "https://docs.rs/x", vec![Effect::Net { host: Some("docs.rs".into()) }], Access::Executes),
         ("Agent", "explore", vec![Effect::Spawn(SpawnKind::Agent)], Access::Reads),
         ("CronCreate", "nightly", vec![Effect::Spawn(SpawnKind::Schedule)], Access::Executes),
@@ -117,8 +120,8 @@ fn a_guarded_write_names_its_guard_and_unattended_asks_are_denied() {
 fn the_ceiling_caps_the_mode() {
     let bounds = bounds();
     let none = Remembered::default();
-    let effects = [Effect::exec("make")];
-    let call = Call { tool: "Bash", subject: "make", effects: &effects };
+    let effects = [Effect::WritePath(place("/work/rocket/src/a.rs"))];
+    let call = Call { tool: "Write", subject: "src/a.rs", effects: &effects };
     let capped =
         PolicyContext { ceiling: Some(PermissionMode::Plan), ..context(PermissionMode::Bypass, &none, &bounds) };
     assert!(PolicyEngine::decide(&call, &capped).denies());
