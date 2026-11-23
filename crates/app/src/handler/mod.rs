@@ -39,8 +39,7 @@ impl Drop for CommandHandler {
 impl CommandHandler {
     pub fn new(services: LocalServices, outbox: Outbox) -> Self {
         let runs = Arc::new(RunTable::default());
-        static CLIENTS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
-        let client = CLIENTS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let client = agent_engine::tools::clients::fresh();
         Self { services, runs, outbox, flows: Flows::default(), client }
     }
 

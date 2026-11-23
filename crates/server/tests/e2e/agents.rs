@@ -136,10 +136,12 @@ impl AgentEngine for Agents {
         sink: Arc<dyn EventSink>,
     ) -> Result<Box<dyn RunHandle>, EngineError> {
         let number = self.script.started.fetch_add(1, Ordering::SeqCst) + 1;
-        let role = if request.policy.permission == PermissionMode::Plan { "planner" } else { "developer" };
+        let named = request.session.agent.as_ref().map(|agent| agent.name.clone());
+        let fallback = if request.policy.permission == PermissionMode::Plan { "planner" } else { "developer" };
+        let role = named.unwrap_or_else(|| fallback.to_owned());
         let session = request.session.resume.clone().unwrap_or_else(|| SessionId(format!("{role}-{number}")));
         self.script.runs.lock().unwrap_or_else(PoisonError::into_inner).push((
-            role.to_owned(),
+            role.clone(),
             session.0.clone(),
             request.prompt.text.clone(),
         ));
@@ -156,8 +158,10 @@ impl AgentEngine for Agents {
                 turn.emit(EngineEvent::Completed { duration_ms: 0, cost_usd: None });
                 return;
             }
-            match role {
+            match role.as_str() {
                 "planner" => plan(&turn, number),
+                "reviewer" => turn.finish(json!({ "verdict": "approve", "summary": "sem problemas", "lines": [] })),
+                "release" => turn.finish(json!({ "notes": "## Notas da release" })),
                 _ => develop(&turn, &script, &places, number),
             }
         });

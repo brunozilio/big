@@ -42,6 +42,7 @@ const block = (type, fields) => Object.freeze({ type, ...fields });
 
 export const chat = (session, options) => block("chat", { session, composer: Boolean(options && options.composer) });
 export const issue = (ref) => block("issue", { ref });
+export const change = (pr) => block("change", { pr });
 export const review = (pr) => block("review", { pr });
 export const pipeline = (run) => block("pipeline", { run });
 export const merge = (pr, methods) => block("merge", { pr, methods: methods || [] });

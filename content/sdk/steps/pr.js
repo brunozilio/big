@@ -1,4 +1,4 @@
-import { step, markdown } from "sdk";
+import { step, change, markdown } from "sdk";
 import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, issueOf, object, planOf, repoOf, targetFields } from "./context.js";
 
 function describe(plan, issue) {
@@ -15,7 +15,7 @@ function shown(entry, many) {
 
 function opened(entries) {
   const many = entries.length > 1;
-  return entries.filter((entry) => entry.title).map((entry) => shown(entry, many));
+  return entries.filter((entry) => entry.title || entry.pr).map((entry) => (entry.pr ? change(entry.pr) : shown(entry, many)));
 }
 
 async function open(ctx, opts, target, wanted) {

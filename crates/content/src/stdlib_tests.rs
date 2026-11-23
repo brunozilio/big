@@ -199,6 +199,7 @@ fn agent(args: &Value) -> Value {
             json!({ "text": "plano", "session": "plan-1", "output": { "plan": "1. mudar x", "title": "Corrigir x" } })
         }
         Some("developer") => json!({ "text": "feito", "session": "dev-1", "output": { "branch": "item/i1" } }),
+        Some("release") => json!({ "text": "", "session": "rel-1", "output": { "notes": "## Notas\n- x corrigido" } }),
         _ => json!({ "text": "", "session": "other", "output": null }),
     }
 }
@@ -316,6 +317,17 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     let reviewed = calls(&asked, "review_deployment");
     assert_eq!(reviewed[0]["args"]["args"], json!({ "run": "REL-1", "deployments": ["D1"], "decision": "approve" }));
     assert!(of_kind(&asked, "impediment.set").is_empty());
+    let named = |name: &str| -> Vec<&Value> {
+        of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == name).collect()
+    };
+    let reviewers = named("reviewer");
+    assert_eq!(reviewers.len(), 2, "the reviewer reads the pull request before each human verdict");
+    assert!(reviewers.iter().all(|command| command["args"]["mode"] == "plan" && command["args"]["input"]["pr"] == "PR-7"));
+    let releases = named("release");
+    assert_eq!(releases.len(), 1, "the release agent writes the notes once the deploy passed");
+    assert_eq!(releases[0]["args"]["mode"], "plan");
+    assert_eq!(releases[0]["args"]["cloud"], true);
+    assert!(releases[0]["args"]["input"]["prompt"].as_str().is_some_and(|prompt| prompt.contains("REL-1")));
 }
 
 #[test]
@@ -339,6 +351,10 @@ fn a_known_issue_is_reused_and_a_rejected_deploy_raises_an_impediment() {
             .any(|args| args["on"] == true && args["reason"].as_str().is_some_and(|reason| reason.contains("release")))
     );
     assert!(!of_kind(&asked, "status.set").iter().any(|command| command["args"]["name"] == "Feito"));
+    assert!(
+        !of_kind(&asked, "agent").iter().any(|command| command["args"]["name"] == "release"),
+        "a rejected deploy needs a person, not release notes"
+    );
 }
 
 #[test]
@@ -359,11 +375,22 @@ fn each_step_view_is_made_of_blocks() {
     assert_eq!(view("release", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));
     assert_eq!(view("plan", json!({})), json!([]));
     let prs = json!({ "prs": [{ "pr": "P1", "name": "a/web", "title": "T", "body": "" }, { "pr": "P2", "name": "a/api", "title": "T", "body": "" }] });
-    let shown: Vec<Value> = view("pr", prs).as_array().expect("blocks").iter().map(|block| block["text"].clone()).collect();
+    assert_eq!(view("pr", prs), json!([{ "type": "change", "pr": "P1" }, { "type": "change", "pr": "P2" }]));
+    let drafts = json!({ "prs": [{ "name": "a/web", "title": "T", "body": "" }, { "name": "a/api", "title": "T", "body": "" }] });
+    let shown: Vec<Value> = view("pr", drafts).as_array().expect("blocks").iter().map(|block| block["text"].clone()).collect();
     assert_eq!(shown, [json!("# a/web: T\n\n"), json!("# a/api: T\n\n")]);
+    assert_eq!(view("pr", json!({ "pr": "o/r#3", "title": "T", "body": "B" })), json!([{ "type": "change", "pr": "o/r#3" }]));
     let runs = json!({ "run": "R1", "runs": [{ "run": "R1" }, { "run": "R2" }] });
     assert_eq!(view("ci", runs.clone()), json!([{ "type": "pipeline", "run": "R1" }, { "type": "pipeline", "run": "R2" }]));
     assert_eq!(view("release", runs).as_array().map(Vec::len), Some(2));
+    assert_eq!(
+        view("release", json!({ "run": "R", "notes": "## Notas", "session": "s3" })),
+        json!([
+            { "type": "pipeline", "run": "R" },
+            { "type": "markdown", "text": "## Notas" },
+            { "type": "chat", "session": "s3", "composer": false }
+        ])
+    );
     let merges = json!({ "pr": "P1", "methods": ["squash"], "merges": [{ "pr": "P1" }, { "pr": "P2" }] });
     assert_eq!(view("merge", merges).as_array().map(Vec::len), Some(2));
     assert_eq!(view("review", json!({ "pr": "P1", "prs": ["P1", "P2"] })).as_array().map(Vec::len), Some(2));

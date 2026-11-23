@@ -60,33 +60,35 @@ fn scan(dir: &Path, namespace: Option<&str>, privileged: &dyn Fn(&Path) -> bool)
         .filter(|path| path.is_file() && path.extension().is_some_and(|ext| ext == "md"))
         .filter_map(|path| {
             let text = std::fs::read_to_string(&path).ok()?;
-            let (front, body, config) = match crate::prompt::markdown::frontmatter(&text) {
-                Ok((mut front, body)) => {
-                    if !privileged(&path)
-                        && let Some(map) = front.as_object_mut()
-                    {
-                        for key in PRIVILEGES {
-                            map.remove(key);
-                        }
-                    }
-                    let config = AgentConfig::parse(&front)
-                        .unwrap_or_else(|error| AgentConfig { error: Some(error), ..Default::default() });
-                    (front, body, config)
-                }
-                Err(error) => (Value::Null, "", AgentConfig { error: Some(error), ..Default::default() }),
-            };
             let stem = path.file_stem()?.to_string_lossy().into_owned();
-            let bare = front["name"].as_str().unwrap_or(&stem).trim().to_owned();
-            let name = match namespace {
-                Some(namespace) => format!("{namespace}:{bare}"),
-                None => bare,
-            };
-            let description = front["description"].as_str().unwrap_or_default().trim().to_owned();
-            Some(FoundAgent { name, description, instructions: body.trim().to_owned(), config })
+            Some(parsed(&stem, &text, namespace, privileged(&path)))
         })
         .collect();
     agents.sort_by(|a, b| a.name.cmp(&b.name));
     agents
+}
+
+pub fn parsed(stem: &str, text: &str, namespace: Option<&str>, privileged: bool) -> FoundAgent {
+    let (front, body, config) = match crate::prompt::markdown::frontmatter(text) {
+        Ok((mut front, body)) => {
+            if !privileged && let Some(map) = front.as_object_mut() {
+                for key in PRIVILEGES {
+                    map.remove(key);
+                }
+            }
+            let config =
+                AgentConfig::parse(&front).unwrap_or_else(|error| AgentConfig { error: Some(error), ..Default::default() });
+            (front, body, config)
+        }
+        Err(error) => (Value::Null, "", AgentConfig { error: Some(error), ..Default::default() }),
+    };
+    let bare = front["name"].as_str().unwrap_or(stem).trim().to_owned();
+    let name = match namespace {
+        Some(namespace) => format!("{namespace}:{bare}"),
+        None => bare,
+    };
+    let description = front["description"].as_str().unwrap_or_default().trim().to_owned();
+    FoundAgent { name, description, instructions: body.trim().to_owned(), config }
 }
 
 #[derive(Debug, Clone, Default)]

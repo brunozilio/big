@@ -65,6 +65,11 @@ pub fn closing(client: u64) {
     }
 }
 
+pub fn teammates_working(client: u64) -> bool {
+    let teams = watched().get(&client).cloned().unwrap_or_default();
+    teams.iter().filter_map(Team::read).any(|config| config.members.iter().any(|member| member.active && member.name != LEAD))
+}
+
 pub fn watch(team: &Team, client: u64) {
     {
         let mut watched = watched();

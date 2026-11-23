@@ -60,6 +60,7 @@ export interface FormField {
 export type Block =
   | { type: "chat"; session: string; composer: boolean }
   | { type: "issue"; ref: string }
+  | { type: "change"; pr: string }
   | { type: "review"; pr: string }
   | { type: "pipeline"; run: string }
   | { type: "merge"; pr: string; methods: string[] }
@@ -72,6 +73,7 @@ export type View = Block | Block[];
 
 export declare function chat(session: string, options?: { composer?: boolean }): Block;
 export declare function issue(ref: string): Block;
+export declare function change(pr: string): Block;
 export declare function review(pr: string): Block;
 export declare function pipeline(run: string): Block;
 export declare function merge(pr: string, methods: string[]): Block;

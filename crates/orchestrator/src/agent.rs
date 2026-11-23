@@ -5,7 +5,12 @@ use std::time::Duration;
 use agent_engine::EventSink;
 use domain::effect::{ErrorClass, IdempotencyKey};
 use domain::workflow::{ItemId, WorkflowEvent};
-use domain::{AgentAsk, EngineEvent, ModelOption, PermissionMode, PromptRequest, RunId, SessionCommand, SessionId};
+use agent_engine::tools::builtin::schedules;
+use agent_engine::tools::clients::{self, Waiting};
+use domain::{
+    AgentAsk, EngineEvent, MainAgentSpec, ModelOption, PermissionMode, Prompt, PromptRequest, RunId, SessionCommand,
+    SessionId,
+};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
@@ -37,12 +42,11 @@ struct Profile {
     mode: Option<PermissionMode>,
     model: Option<String>,
     tools: Vec<String>,
-    body: String,
 }
 
 impl Profile {
     fn parse(text: &str) -> Profile {
-        let (header, body) = agent_engine::frontmatter::parse(text);
+        let (header, _) = agent_engine::frontmatter::parse(text);
         let tools = header
             .get("tools")
             .map(|list| {
@@ -57,7 +61,6 @@ impl Profile {
             mode: header.get("permissionmode").and_then(domain::command::mode_named),
             model: header.get("model").map(str::to_owned),
             tools,
-            body: body.trim().to_owned(),
         }
     }
 }
@@ -131,7 +134,6 @@ fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, re
         request.session.effort = effort;
     }
     request.session.resume = resume.or(carried).map(|id| SessionId(id.to_owned()));
-    request.session.append_system = Some(profile.body.clone()).filter(|body| !body.is_empty());
     let mode = command.args["mode"].as_str().and_then(domain::command::mode_named).or(profile.mode);
     if let Some(mode) = mode {
         request.policy.permission = mode;
@@ -146,6 +148,34 @@ struct Collected {
     output: Value,
     checkpoint: Option<u32>,
 }
+
+impl Collected {
+    fn absorb(&mut self, later: Collected) {
+        if !later.text.is_empty() {
+            if !self.text.is_empty() {
+                self.text.push_str("\n\n");
+            }
+            self.text.push_str(&later.text);
+        }
+        if later.session.is_some() {
+            self.session = later.session;
+        }
+        if !later.output.is_null() {
+            self.output = later.output;
+        }
+        self.checkpoint = self.checkpoint.or(later.checkpoint);
+    }
+}
+
+struct Client(u64);
+
+impl Drop for Client {
+    fn drop(&mut self) {
+        clients::release(self.0);
+    }
+}
+
+const WAKE_POLL: Duration = Duration::from_secs(1);
 
 struct Running {
     run: SharedRun,
@@ -182,6 +212,9 @@ impl AgentEffect<'_> {
         let cwd = first.path.clone();
         let bases = heads(&trees).await?;
         let mut request = request(self.shared, &profile, self.command, &cwd, self.resume.as_deref());
+        request.session.agent = Some(MainAgentSpec { name: name.clone(), definition: Some(definition.text.clone()) });
+        let client = Client(clients::fresh());
+        request.host.credentials.client = client.0;
         request.session.add_dirs = trees.iter().skip(1).map(|tree| tree.path.clone()).collect();
         if let Some(text) = repos::described(&trees) {
             let system = request.session.append_system.take().unwrap_or_default();
@@ -210,6 +243,18 @@ impl AgentEffect<'_> {
     }
 
     async fn drive(&self, request: &PromptRequest) -> Result<Collected, Failure> {
+        let mut collected = self.turn(request).await?;
+        let mut next = request.clone();
+        while let Some(prompt) = woken(request.host.credentials.client, request.policy.permission).await {
+            next.prompt = Prompt::typed(prompt);
+            next.session.resume = collected.session.clone().map(SessionId).or(next.session.resume);
+            let later = self.turn(&next).await?;
+            collected.absorb(later);
+        }
+        Ok(collected)
+    }
+
+    async fn turn(&self, request: &PromptRequest) -> Result<Collected, Failure> {
         let (sender, receiver) = mpsc::unbounded_channel();
         let sink: Arc<dyn EventSink> = Arc::new(move |_run: RunId, event: EngineEvent| {
             let _ = sender.send(event);
@@ -369,6 +414,16 @@ impl AgentEffect<'_> {
         asks.insert(ask.id.0.clone(), serde_json::to_value(&pending).unwrap_or(Value::Null));
         self.note(json!({ "asks": asks }));
         self.announce(pending);
+    }
+}
+
+async fn woken(client: u64, mode: PermissionMode) -> Option<String> {
+    loop {
+        match clients::waiting(client, mode, schedules::now()) {
+            Waiting::Idle => return None,
+            Waiting::Due(prompt) => return Some(prompt),
+            Waiting::Later(_) => tokio::time::sleep(WAKE_POLL).await,
+        }
     }
 }
 

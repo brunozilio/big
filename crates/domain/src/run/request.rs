@@ -58,6 +58,15 @@ pub struct SessionConfig {
     pub append_system: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub teammate: Option<crate::team::TeammateOf>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<MainAgentSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MainAgentSpec {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub definition: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -130,6 +139,7 @@ impl SessionConfig {
             roles: Default::default(),
             append_system: None,
             teammate: None,
+            agent: None,
         }
     }
 }

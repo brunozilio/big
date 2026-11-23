@@ -214,6 +214,10 @@ impl AgentEngine for FakeEngine {
             if stop.load(Ordering::SeqCst) {
                 return;
             }
+            if request.prompt.text.contains("chame a equipe") {
+                let mail = domain::inbox::Notice::new("teammate tester", "terminei a parte da equipe");
+                agent_engine::tools::inbox::push(request.host.credentials.client, mail);
+            }
             sink.emit(run, EngineEvent::TextDelta(format!("feito {number}")));
             sink.emit(run, EngineEvent::StructuredOutput(json!({ "run": number })));
             sink.emit(run, EngineEvent::Completed { duration_ms: 0, cost_usd: None });

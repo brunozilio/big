@@ -59,6 +59,7 @@ export interface AgentStepOptions extends EffectStepOptions {
   prompt?: string;
   worktree?: string;
   askTimeout?: number;
+  cloud?: boolean | string;
 }
 
 export interface HumanStepOptions {
@@ -220,7 +221,10 @@ export interface MergeOutput {
   merges?: MergeEntry[];
 }
 
-export interface ReleaseOptions extends PipelineStepOptions, HumanStepOptions {
+export interface ReleaseOptions
+  extends PipelineStepOptions,
+    HumanStepOptions,
+    Pick<AgentStepOptions, "agent" | "model" | "mode" | "askTimeout" | "cloud"> {
   pr?: string;
   approve?: "human" | "auto";
 }

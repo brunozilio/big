@@ -11,8 +11,8 @@ export default workflow({
     checks({ onFail: "develop", retries: 3 }),
     pr(),
     ci({ onFail: "develop", retries: 3 }),
-    review({ status: "Revisando", onChanges: "develop" }),
+    review({ agent: "reviewer", status: "Revisando", onChanges: "develop" }),
     merge({ method: "squash" }),
-    release({ doneStatus: "Feito" }),
+    release({ agent: "release", cloud: true, doneStatus: "Feito" }),
   ],
 });

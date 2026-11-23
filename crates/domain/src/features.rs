@@ -12,10 +12,9 @@ mod tests {
 
     use super::*;
 
-    const ALL: [&str; 36] = [
+    const ALL: [&str; 33] = [
         flags::REDACT_SECRETS,
         flags::BUDGET,
-        flags::CACHE_WARNING,
         flags::ESCALATION,
         flags::PROJECT_CRITERIA,
         flags::AUTO_REVIEW,
@@ -27,10 +26,8 @@ mod tests {
         flags::OUTPUT_CLEANUP,
         flags::OUTPUT_FILTERS,
         flags::OUTPUT_SAVINGS,
-        flags::BRANCHES,
         flags::GIT_OFFER,
         flags::TEAM_MEMORY,
-        flags::LEARNING,
         flags::WEB_MAIN_CONTENT,
         flags::WEB_CLEANUP,
         flags::WEB_LINKS,

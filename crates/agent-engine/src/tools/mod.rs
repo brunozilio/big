@@ -5,6 +5,7 @@ pub mod builtin_agents;
 #[cfg(test)]
 mod builtin_skills;
 pub mod checked;
+pub mod clients;
 pub mod inbox;
 mod lsp;
 pub mod names;

@@ -144,7 +144,8 @@ async fn a_new_workflow_in_the_repository_changes_the_steps_and_the_statuses_sen
     assert_eq!(merging["status"], "Etapa 2");
     assert_eq!(merging["change"]["checks"], Value::Null, "this workflow has no pipeline step");
     let view = server.get(&format!("/api/items/{id}/steps/pr")).await;
-    assert_eq!(view["blocks"][0]["type"], "markdown");
+    assert_eq!(view["blocks"][0]["type"], "change", "an opened pull request is shown live");
+    assert_eq!(view["blocks"][0]["change"], merging["change"]["key"]);
     server.input(&id, "merge", "merge", json!({ "method": "squash" })).await;
     let done = server.until(&id, "the delivery", |item| item["group"] == "delivered").await;
     assert_eq!(done["status"], "Etapa 3");

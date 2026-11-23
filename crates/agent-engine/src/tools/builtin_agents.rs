@@ -88,6 +88,17 @@ pub fn all() -> Vec<FoundAgent> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn shipped() -> Vec<FoundAgent> {
+        content::builtin_files("agents/")
+            .into_iter()
+            .filter(|(path, _)| path.ends_with(".md"))
+            .filter_map(|(path, _)| {
+                let stem = path.trim_start_matches("agents/").trim_end_matches(".md");
+                content::builtin_text(path).map(|text| crate::tools::subagent::parsed(stem, &text, None, true))
+            })
+            .collect()
+    }
     use domain::PermissionMode;
 
     #[test]
@@ -106,12 +117,12 @@ mod tests {
 
     #[test]
     fn the_delivery_agents_are_built_in_with_their_mode_skills_and_avatar() {
-        let named = |name: &str| all().into_iter().find(|agent| agent.name == name).expect(name);
+        let named = |name: &str| shipped().into_iter().find(|agent| agent.name == name).expect(name);
         for (name, label, shape, color, mode) in [
             ("planner", "Planejador", "triangle", "#e94b9b", PermissionMode::Plan),
             ("developer", "Desenvolvedor", "squircle", "#3b82f6", PermissionMode::Bypass),
             ("reviewer", "Revisor", "circle", "#4fb39c", PermissionMode::Plan),
-            ("release", "Release", "cloud", "#f0a235", PermissionMode::AcceptEdits),
+            ("release", "Release", "cloud", "#f0a235", PermissionMode::Plan),
         ] {
             let agent = named(name);
             assert_eq!(agent.config.error, None, "{name}");
@@ -124,7 +135,7 @@ mod tests {
             assert!(agent.instructions.contains(brand::NAME) && !agent.instructions.contains("{{"), "{name}");
         }
         assert!(!named("planner").config.allows("Edit") && !named("reviewer").config.allows("Write"));
-        assert!(named("developer").config.allows("Edit") && named("release").config.allows("Edit"));
+        assert!(named("developer").config.allows("Edit") && !named("release").config.allows("Edit"));
         assert!(named("reviewer").config.skills.contains(&"code-review".to_owned()));
     }
 
@@ -151,5 +162,21 @@ mod tests {
         assert!(history[2].text().ends_with("Your directive:\nCheck the tests"));
         assert!(is_fork(&serde_json::json!({"subagent_type": "fork"})));
         assert!(!is_fork(&serde_json::json!({"subagent_type": "Explore"})));
+    }
+
+    #[test]
+    fn every_built_in_agent_names_only_real_tools_and_can_delegate_and_reach_mcp() {
+        let written: Vec<FoundAgent> = shipped().into_iter().filter(|agent| agent.config.tools.is_some()).collect();
+        assert!(written.len() >= 4, "the workflow's agents declare their tools");
+        for agent in &written {
+            assert_eq!(agent.config.error, None, "{}", agent.name);
+            let listed = agent.config.tools.iter().flatten().chain(&agent.config.disallowed_tools);
+            for name in listed.filter(|name| !name.ends_with('*')) {
+                assert!(domain::ToolName::of(name).is_builtin(), "{} lists {name}, which is no tool", agent.name);
+            }
+            for tool in ["Agent", "TaskOutput", "BashOutput", "Monitor", "ToolSearch", "mcp__any__tool"] {
+                assert!(agent.config.allows(tool), "{} cannot use {tool}", agent.name);
+            }
+        }
     }
 }

@@ -22,6 +22,7 @@ export function agentOptions(opts, extra) {
     askTimeout: opts.askTimeout,
     timeout: opts.timeout,
     retry: opts.retry,
+    cloud: opts.cloud,
     ...extra,
   });
 }

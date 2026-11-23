@@ -29,7 +29,11 @@ async fn a_typescript_workflow_runs_each_effect_once_and_replays_without_repeati
     let request = &world.engine.requests()[0];
     assert_eq!(request.prompt.text, "faça x");
     assert_eq!(request.policy.permission, domain::PermissionMode::Bypass);
-    assert_eq!(request.session.append_system.as_deref(), Some("Você trabalha."));
+    assert_eq!(request.session.append_system, None);
+    let agent = request.session.agent.clone().expect("the step's agent runs as the main agent");
+    assert_eq!(agent.name, "worker");
+    assert_eq!(agent.definition.as_deref(), Some(WORKER), "its tools, skills and hooks travel with it");
+    assert_ne!(request.host.credentials.client, 0, "each agent run has a client of its own");
     assert!(request.session.cwd.ends_with(git::folder_for(&git::branch_name(id.as_str()))));
     let keys = world.provider.keys("tracker.issue");
     assert_eq!(keys.len(), 1);
@@ -196,4 +200,37 @@ async fn the_built_in_delivery_workflow_loads_and_describes_its_steps() {
     assert_eq!(script.target, json!({ "workflow": "entrega" }));
     let steps = script.described["workflows"][0]["steps"].as_array().map(Vec::len);
     assert_eq!(steps, Some(9));
+}
+
+const TEAM: &str = r#"
+import { workflow } from "sdk";
+
+export default workflow({
+  name: "team",
+  async run(ctx, item) {
+    const done = await ctx.agent("worker", "chame a equipe");
+    return { agent: done.text, session: done.session, output: done.output };
+  },
+});
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_teammate_message_after_the_turn_wakes_the_agent_in_the_same_session_before_the_step_ends() {
+    let world = World::new();
+    world.workflow("team", TEAM);
+    let kernel = world.start().await;
+    let id = kernel.create_item("team", json!({ "title": "x" })).expect("item");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item), json!({ "agent": "feito 1\n\nfeito 2", "session": "s1", "output": { "run": 2 } }));
+    let requests = world.engine.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[1].session.resume, Some(domain::SessionId("s1".into())));
+    assert!(requests[1].prompt.text.contains("terminei a parte da equipe"), "{}", requests[1].prompt.text);
+    let client = requests[0].host.credentials.client;
+    assert_eq!(requests[1].host.credentials.client, client);
+    assert_eq!(
+        agent_engine::tools::clients::waiting(client, domain::PermissionMode::Ask, 0),
+        agent_engine::tools::clients::Waiting::Idle,
+        "the client is released when the step ends"
+    );
 }
