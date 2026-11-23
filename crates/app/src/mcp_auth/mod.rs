@@ -29,10 +29,9 @@ pub enum McpAuthError {
     NoMetadata(String),
     #[error(
         "this server does not let applications register themselves, so {name} cannot sign in. \
-         Use a token the service issues instead, kept in the environment: \
-         `{cmd} mcp add -H 'Authorization: Bearer ${{TOKEN}}' <name> {server}`",
+         Use a token the service issues instead, kept in the environment: in mcp.json, give {server} \
+         `\"headers\": {{\"Authorization\": \"Bearer ${{TOKEN}}\"}}`",
         name = brand::NAME,
-        cmd = brand::COMMAND,
     )]
     NoRegistration { server: String },
     #[error("{0}")]

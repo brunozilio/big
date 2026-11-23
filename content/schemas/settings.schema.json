@@ -164,18 +164,7 @@
       "type": "integer"
     },
     "disabledMcpServers": {
-      "description": "Project MCP servers you turned off; wins over the approvals.",
-      "items": {
-        "type": "string"
-      },
-      "type": "array"
-    },
-    "enableAllProjectMcpServers": {
-      "description": "Starts every MCP server the project's mcp.json declares without asking.",
-      "type": "boolean"
-    },
-    "enabledMcpServers": {
-      "description": "Project MCP servers you approved.",
+      "description": "MCP servers from the project's mcp.json that do not start.",
       "items": {
         "type": "string"
       },

@@ -78,20 +78,17 @@ fn judge_and_fallback_models_are_model_names() {
 }
 
 #[test]
-fn only_the_owner_approves_a_project_s_mcp_servers() {
+fn any_settings_file_can_turn_a_project_s_mcp_server_off() {
     let home = tempfile::tempdir().expect("home");
     let repo = tempfile::tempdir().expect("repo");
     let write = |path: std::path::PathBuf, text: &str| {
         std::fs::create_dir_all(path.parent().expect("parent")).expect("dir");
         std::fs::write(path, text).expect("write");
     };
-    write(repo.path().join(concat!(brand::dir!(), "/settings.json")), r#"{"enableAllProjectMcpServers": true}"#);
-    write(repo.path().join(concat!(brand::dir!(), "/settings.local.json")), r#"{"enabledMcpServers": ["jira"]}"#);
+    write(repo.path().join(concat!(brand::dir!(), "/settings.json")), r#"{"disabledMcpServers": ["jira"]}"#);
     write(home.path().join(concat!(brand::dir!(), "/settings.json")), r#"{"disabledMcpServers": ["sonar"]}"#);
     let approval = load(repo.path(), Some(home.path())).expect("settings").mcp_approval;
-    assert!(!approval.all, "a checked-in setting cannot approve its own servers");
-    assert_eq!(approval.enabled, ["jira"]);
-    assert_eq!(approval.disabled, ["sonar"]);
+    assert!(approval.disabled.contains(&"jira".to_owned()) && approval.disabled.contains(&"sonar".to_owned()));
 }
 
 #[test]

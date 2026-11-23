@@ -40,7 +40,6 @@ fn nothing_of_claude_code_s_folders_reaches_a_run() {
             r.join("server.sh").display()
         ),
     );
-    write(&r.join(concat!(brand::dir!(), "/settings.local.json")), r#"{"enabledMcpServers": ["jira"]}"#);
     write(&h.join(".claude/CLAUDE.md"), "SENTINEL_HOME_CLAUDE_MD");
     write(&h.join(".claude/rules/all.md"), "SENTINEL_HOME_CLAUDE_RULE");
     write(&h.join(".claude/skills/home-sentinel/SKILL.md"), "---\nname: home-sentinel\ndescription: S\n---\nS");

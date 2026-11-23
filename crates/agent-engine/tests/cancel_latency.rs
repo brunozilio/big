@@ -52,10 +52,7 @@ impl Project {
             std::fs::write(&path, script).expect("server script");
             config.insert((*name).to_owned(), json!({"command": "/bin/sh", "args": [path.display().to_string()]}));
         }
-        let names: Vec<&str> = servers.iter().map(|(name, _)| *name).collect();
         std::fs::write(folder.join("mcp.json"), json!({ "mcpServers": config }).to_string()).expect("mcp.json");
-        std::fs::write(folder.join("settings.local.json"), json!({ "enabledMcpServers": names }).to_string())
-            .expect("approval");
     }
 
     fn request(&self) -> PromptRequest {
@@ -286,8 +283,6 @@ fn cancelling_a_run_whose_mcp_call_over_http_has_stalled_ends_it_at_once() {
     std::fs::create_dir_all(&folder).expect("project folder");
     let config = json!({"mcpServers": {"remote": {"type": "http", "url": url}}});
     std::fs::write(folder.join("mcp.json"), config.to_string()).expect("mcp.json");
-    std::fs::write(folder.join("settings.local.json"), json!({"enabledMcpServers": ["remote"]}).to_string())
-        .expect("approval");
     let model: Arc<dyn ModelApi> = Arc::new(CallsTool { asked: AtomicUsize::new(0), tool: "mcp__remote__wait" });
     let engine = Engine::new(Arc::new(One(model)), Arc::new(InMemorySessions::default()));
     let (events, mut handle) = start(&engine, &project.request());

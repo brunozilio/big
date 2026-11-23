@@ -15,26 +15,17 @@ pub fn is_free_name(name: &str) -> bool {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct McpApproval {
-    pub all: bool,
-    pub enabled: Vec<String>,
     pub disabled: Vec<String>,
 }
 
 impl McpApproval {
     pub fn read(&mut self, settings: &Value) {
-        if let Some(all) = settings["enableAllProjectMcpServers"].as_bool() {
-            self.all = all;
-        }
-        let names = |key: &str| -> Vec<String> {
-            settings[key].as_array().into_iter().flatten().filter_map(|n| n.as_str().map(str::to_owned)).collect()
-        };
-        self.enabled.extend(names("enabledMcpServers"));
-        self.disabled.extend(names("disabledMcpServers"));
+        let names = settings["disabledMcpServers"].as_array().into_iter().flatten();
+        self.disabled.extend(names.filter_map(|name| name.as_str().map(str::to_owned)));
     }
 
     pub fn allows(&self, name: &str) -> bool {
-        let named = |list: &[String]| list.iter().any(|known| known == name);
-        !named(&self.disabled) && (self.all || named(&self.enabled))
+        !self.disabled.iter().any(|known| known == name)
     }
 }
 
@@ -79,14 +70,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_project_server_starts_only_when_the_owner_approved_it() {
+    fn a_project_server_starts_unless_it_is_turned_off() {
         let mut approval = McpApproval::default();
-        assert!(!approval.allows("jira"), "nothing approved yet");
-        approval.read(&json!({"enabledMcpServers": ["jira"]}));
-        assert!(approval.allows("jira") && !approval.allows("sonar"));
-        approval.read(&json!({"enableAllProjectMcpServers": true, "disabledMcpServers": ["jira"]}));
-        assert!(approval.allows("sonar"), "all approved");
-        assert!(!approval.allows("jira"), "turned off wins");
+        assert!(approval.allows("jira"), "the project's mcp.json is the configuration");
+        approval.read(&json!({"disabledMcpServers": ["jira"]}));
+        assert!(!approval.allows("jira") && approval.allows("sonar"));
     }
 
     #[test]
@@ -104,10 +92,9 @@ mod tests {
     #[test]
     fn a_server_s_state_says_why_it_does_or_does_not_start() {
         let mut approval = McpApproval::default();
-        approval.read(&json!({"enabledMcpServers": ["jira"], "disabledMcpServers": ["sonar"]}));
-        assert_eq!(McpState::of(&McpOrigin::Project, "jira", &approval), McpState::Ready);
+        approval.read(&json!({"disabledMcpServers": ["sonar"]}));
+        assert_eq!(McpState::of(&McpOrigin::Project, "jira", &approval), McpState::Ready, "a project's mcp.json counts");
         assert_eq!(McpState::of(&McpOrigin::Project, "sonar", &approval), McpState::Off);
-        assert_eq!(McpState::of(&McpOrigin::Project, "new", &approval), McpState::Pending);
         assert_eq!(McpState::of(&McpOrigin::User, "new", &approval), McpState::Ready);
     }
 

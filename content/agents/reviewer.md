@@ -2,7 +2,7 @@
 name: reviewer
 label: Revisor
 description: Revisa a mudança de um item (o diff da branch ou do pull request) procurando bugs, riscos de segurança e quebras das regras do repositório. Só lê e devolve um veredito com comentários por linha.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, LSP, WebFetch, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, LSP, WebFetch, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
 disallowedTools: [Edit, Write, NotebookEdit]
 permissionMode: plan
 model: auto

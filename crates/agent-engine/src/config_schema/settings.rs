@@ -61,9 +61,7 @@ fn properties() -> Value {
             "type": ["object", "boolean", "null"],
             "description": "Gives the agent a StructuredOutput tool whose result must match this JSON Schema."
         },
-        "enableAllProjectMcpServers": switch("Starts every MCP server the project's mcp.json declares without asking."),
-        "enabledMcpServers": names("Project MCP servers you approved."),
-        "disabledMcpServers": names("Project MCP servers you turned off; wins over the approvals."),
+        "disabledMcpServers": names("MCP servers from the project's mcp.json that do not start."),
         "hooks": hooks(),
         "lspServers": map_of(reference_to("languageServer"), "Adds, changes or disables language servers, by name."),
         "permissions": permissions(),

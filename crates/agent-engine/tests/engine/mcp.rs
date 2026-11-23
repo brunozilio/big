@@ -30,7 +30,7 @@ fn offered_to(request: &PromptRequest) -> Vec<String> {
 
 #[test]
 #[cfg(unix)]
-fn a_project_server_reaches_a_run_once_approved() {
+fn a_project_server_reaches_a_run_until_it_is_turned_off() {
     let repo = tempfile::tempdir().expect("repo");
     std::fs::write(repo.path().join("server.sh"), SERVER).expect("server");
     let config = format!(
@@ -39,12 +39,12 @@ fn a_project_server_reaches_a_run_once_approved() {
     );
     std::fs::create_dir_all(repo.path().join(brand::DIR)).expect("dir");
     std::fs::write(repo.path().join(concat!(brand::dir!(), "/mcp.json")), config).expect("config");
-    assert!(!offered(repo.path()).iter().any(|name| name.starts_with("mcp__jira__")), "not approved yet");
+    assert!(offered(repo.path()).contains(&"mcp__jira__ping".to_owned()), "the project's mcp.json is enough");
 
     std::fs::write(
         repo.path().join(concat!(brand::dir!(), "/settings.local.json")),
-        r#"{"enabledMcpServers": ["jira"]}"#,
+        r#"{"disabledMcpServers": ["jira"]}"#,
     )
-    .expect("approve");
-    assert!(offered(repo.path()).contains(&"mcp__jira__ping".to_owned()));
+    .expect("turn off");
+    assert!(!offered(repo.path()).iter().any(|name| name.starts_with("mcp__jira__")), "turned off");
 }

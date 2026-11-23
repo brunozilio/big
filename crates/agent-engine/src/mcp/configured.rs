@@ -199,7 +199,7 @@ mod tests {
         assert_eq!(
             listed,
             [
-                info("jira", McpOrigin::Project, "jira-mcp --stdio", McpState::Pending),
+                info("jira", McpOrigin::Project, "jira-mcp --stdio", McpState::Ready),
                 info("sonar", McpOrigin::Project, "sonar-mcp", McpState::Off),
                 info("atlassian", McpOrigin::User, "https://mcp.atlassian.com/v1/mcp", McpState::Ready),
             ]
@@ -270,7 +270,7 @@ mod tests {
     }
 
     #[test]
-    fn a_run_gets_the_project_s_approved_servers_and_the_user_s() {
+    fn a_run_gets_the_project_s_servers_and_the_user_s() {
         let home = tempfile::tempdir().expect("home");
         let repo = tempfile::tempdir().expect("repo");
         write(
@@ -304,14 +304,14 @@ mod tests {
 
         assert_eq!(
             servers(request.folder(), &sources),
-            [stdio("jira", "user-jira", &[]), stdio("notes", "notes-mcp", &[("KEY", "dflt")])],
-            "an unapproved project brings nothing; the user's own run"
+            [stdio("jira", "jira-mcp", &[]), stdio("sonar", "sonar-mcp", &[]), stdio("notes", "notes-mcp", &[("KEY", "dflt")])],
+            "the project's server wins its name; reserved names never start"
         );
-        sources.approval.enabled = vec!["jira".into(), concat!(brand::command!(), "_memory").into()];
+        sources.approval.disabled = vec!["jira".into(), "sonar".into()];
         assert_eq!(
             servers(request.folder(), &sources),
-            [stdio("jira", "jira-mcp", &[]), stdio("notes", "notes-mcp", &[("KEY", "dflt")])],
-            "the approved project server wins its name; reserved names never start"
+            [stdio("jira", "user-jira", &[]), stdio("notes", "notes-mcp", &[("KEY", "dflt")])],
+            "a project server switched off leaves the user's own"
         );
     }
 

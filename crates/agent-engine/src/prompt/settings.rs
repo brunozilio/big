@@ -178,9 +178,7 @@ impl Layer<'_> {
 
     fn merge_access(&self, merged: &mut Settings) -> Result<(), String> {
         let settings = self.value;
-        if self.owners {
-            merged.mcp_approval.read(settings);
-        }
+        merged.mcp_approval.read(settings);
         super::permissions::read(settings, self.owners, &mut merged.added_dirs).map_err(|e| self.located(e))?;
         if let Some(value) = settings.get("scripts") {
             merged.scripts = merged.scripts.layered(value, self.owners)?;

@@ -165,7 +165,6 @@ fn serving(project: &Project) -> PathBuf {
     let args = [project.repo.path().join("server.sh").display().to_string(), started.display().to_string()];
     let config = json!({"mcpServers": {"jira": {"command": "/bin/sh", "args": args}}});
     project.project_file(&format!("{}/mcp.json", brand::DIR), &config.to_string());
-    project.project_file(&format!("{}/settings.local.json", brand::DIR), r#"{"enabledMcpServers": ["jira"]}"#);
     started
 }
 
@@ -187,7 +186,7 @@ fn offered(model: &ScriptedModel) -> bool {
 
 #[test]
 #[cfg(unix)]
-fn a_session_keeps_its_mcp_server_across_runs_and_closes_it_when_approval_is_revoked() {
+fn a_session_keeps_its_mcp_server_across_runs_and_closes_it_when_it_is_turned_off() {
     let project = Project::new(3);
     let started = serving(&project);
     let engine = project.engine();
@@ -199,11 +198,11 @@ fn a_session_keeps_its_mcp_server_across_runs_and_closes_it_when_approval_is_rev
     assert_eq!(pid.len(), 1, "started once for both runs");
     assert!(running(&pid[0]));
 
-    project.project_file(&format!("{}/settings.local.json", brand::DIR), r#"{"enabledMcpServers": []}"#);
+    project.project_file(&format!("{}/settings.local.json", brand::DIR), r#"{"disabledMcpServers": ["jira"]}"#);
     run(&engine, &project.request("three", Some(&session)));
 
-    assert!(!offered(&project.models[2]), "revoked between runs");
-    assert!(!running(&pid[0]), "the revoked server was closed");
+    assert!(!offered(&project.models[2]), "turned off between runs");
+    assert!(!running(&pid[0]), "the server turned off was closed");
 }
 
 #[test]

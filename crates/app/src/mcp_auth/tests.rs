@@ -85,12 +85,12 @@ fn a_server_that_does_not_let_brand_register_says_so() {
     let auth = McpAuth::new(Arc::new(InMemorySecretStore::default()), http);
     let error = auth.sign_in(SERVER, &Arc::default(), &mut |_| {}).expect_err("no registration");
     assert_eq!(error, McpAuthError::NoRegistration { server: SERVER.to_owned() });
-    let with_a_token = format!("{} mcp add -H 'Authorization: Bearer ${{TOKEN}}' <name> {SERVER}", brand::COMMAND);
+    let with_a_token = format!("in mcp.json, give {SERVER} `\"headers\": {{\"Authorization\": \"Bearer ${{TOKEN}}\"}}`");
     assert_eq!(
         error.to_string(),
         format!(
             "this server does not let applications register themselves, so {} cannot sign in. Use a token the \
-             service issues instead, kept in the environment: `{with_a_token}`",
+             service issues instead, kept in the environment: {with_a_token}",
             brand::NAME
         ),
         "says how to use a token instead"

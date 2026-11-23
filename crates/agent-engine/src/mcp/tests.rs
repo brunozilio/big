@@ -278,5 +278,5 @@ fn a_server_the_owner_signed_in_to_gets_their_token_and_one_refusing_says_how_to
     let refusing: Arc<dyn Http> = Arc::new(ScriptedHttp::new([(401, String::new())]));
     let error = McpServer::open(&spec, &refusing).expect("open").initialize_stopped(&platform::Stop::new());
     let error = error.expect_err("refused");
-    assert!(error.needs_sign_in() && error.to_string().contains("/mcp login linear"), "{error}");
+    assert!(error.needs_sign_in() && error.to_string().contains("headers of its entry in mcp.json"), "{error}");
 }

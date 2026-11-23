@@ -21,7 +21,7 @@ fn a_key_of_the_wrong_type_is_reported_and_the_rest_of_the_file_still_applies() 
         repo.path(),
         "settings.json",
         &json!({
-            "enableAllProjectMcpServers": "no",
+            "disabledMcpServers": "no",
             "outputStyle": "Concise",
             "permissions": { "additionalDirectories": ["../lib", 5] }
         }),
@@ -31,14 +31,14 @@ fn a_key_of_the_wrong_type_is_reported_and_the_rest_of_the_file_still_applies() 
 
     let shown = path.display().to_string();
     assert!(
-        settings.notices.contains(&format!("{shown}: enableAllProjectMcpServers: expected boolean, found \"no\"")),
+        settings.notices.contains(&format!("{shown}: disabledMcpServers: expected array, found \"no\"")),
         "{:?}",
         settings.notices
     );
     assert!(
         settings.notices.contains(&format!("{shown}: permissions.additionalDirectories[1]: expected string, found 5"))
     );
-    assert!(!settings.mcp_approval.all, "the wrong value is left out");
+    assert!(settings.mcp_approval.disabled.is_empty(), "the wrong value is left out");
     assert_eq!(settings.style.map(|style| style.name), Some("Concise".into()));
 }
 
@@ -147,8 +147,6 @@ fn the_documented_full_example_reads_without_a_notice() {
         "fallbackModel": ["sonnet", "gpt-5"],
         "agent": null,
         "jsonSchema": null,
-        "enableAllProjectMcpServers": false,
-        "enabledMcpServers": ["jira"],
         "disabledMcpServers": ["sonar"],
         "permissions": {
             "additionalDirectories": ["~/notes"]
@@ -188,8 +186,6 @@ fn one_value_per_published_key() -> Vec<(&'static str, Value)> {
         ("escalationModel", json!("e")),
         ("fallbackModel", json!(["f"])),
         ("jsonSchema", json!({ "type": "object" })),
-        ("enableAllProjectMcpServers", json!(true)),
-        ("enabledMcpServers", json!(["jira"])),
         ("disabledMcpServers", json!(["sonar"])),
         ("hooks", json!({ "Stop": [{ "hooks": [{ "type": "command", "command": "true" }] }] })),
         ("lspServers", json!({ "zls": { "command": "zls" } })),

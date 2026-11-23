@@ -2,7 +2,7 @@
 pub enum McpError {
     #[error("cancelled")]
     Cancelled,
-    #[error("{server} answered HTTP 401: sign in with /mcp login {server}")]
+    #[error("{server} answered HTTP 401: give it a token in the headers of its entry in mcp.json")]
     SignInNeeded { server: String },
     #[error("{server}: {message}")]
     Answered { server: String, message: String },
@@ -42,7 +42,7 @@ mod tests {
     fn each_failure_reads_as_the_text_it_always_had() {
         assert_eq!(McpError::Cancelled.to_string(), "cancelled");
         let refused = McpError::SignInNeeded { server: "linear".into() };
-        assert_eq!(refused.to_string(), "linear answered HTTP 401: sign in with /mcp login linear");
+        assert_eq!(refused.to_string(), "linear answered HTTP 401: give it a token in the headers of its entry in mcp.json");
         assert!(refused.needs_sign_in() && !McpError::Cancelled.needs_sign_in());
         let answered = McpError::Answered { server: "docs".into(), message: "no such tool".into() };
         assert_eq!(answered.to_string(), "docs: no such tool");
