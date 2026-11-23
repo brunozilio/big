@@ -333,9 +333,9 @@ fn a_known_issue_is_reused_and_a_rejected_deploy_raises_an_impediment() {
 fn each_step_view_is_made_of_blocks() {
     let source = default_workflow();
     let view = |step: &str, state: Value| call(&source, "host.view", &[json!({ "step": step, "state": state })]);
-    assert_eq!(view("plan", json!({ "session": "s1" })), json!([{ "type": "chat", "session": "s1" }]));
+    assert_eq!(view("plan", json!({ "session": "s1" })), json!([{ "type": "chat", "session": "s1", "composer": true }]));
     assert_eq!(view("ticket", json!({ "issue": "T-1" })), json!([{ "type": "issue", "ref": "T-1" }]));
-    assert_eq!(view("develop", json!({ "session": "s2" })), json!([{ "type": "chat", "session": "s2" }]));
+    assert_eq!(view("develop", json!({ "session": "s2" })), json!([{ "type": "chat", "session": "s2", "composer": false }]));
     assert_eq!(view("checks", json!({ "output": "erro" })), json!([{ "type": "logs", "text": "erro" }]));
     assert_eq!(view("pr", json!({ "title": "T", "body": "B" })), json!([{ "type": "markdown", "text": "# T\n\nB" }]));
     assert_eq!(view("ci", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));

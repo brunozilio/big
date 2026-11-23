@@ -58,7 +58,7 @@ export interface FormField {
 }
 
 export type Block =
-  | { type: "chat"; session: string }
+  | { type: "chat"; session: string; composer: boolean }
   | { type: "issue"; ref: string }
   | { type: "review"; pr: string }
   | { type: "pipeline"; run: string }
@@ -70,7 +70,7 @@ export type Block =
 
 export type View = Block | Block[];
 
-export declare function chat(session: string): Block;
+export declare function chat(session: string, options?: { composer?: boolean }): Block;
 export declare function issue(ref: string): Block;
 export declare function review(pr: string): Block;
 export declare function pipeline(run: string): Block;
@@ -234,6 +234,10 @@ export type StepViewState<D = Record<string, Json>> = D & {
 
 export interface StepDefinition<O, D> {
   name: string;
+  label?: string;
+  icon?: string;
+  needs?: string;
+  doing?: string;
   view?(state: StepViewState<D>): View;
   run(ctx: Ctx, options: O & StepOptions): Promise<Outcome | Json | void> | Outcome | Json | void;
 }

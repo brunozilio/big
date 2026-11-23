@@ -1,0 +1,25 @@
+{
+  "author": {
+    "avatar": null,
+    "id": "",
+    "name": ""
+  },
+  "base": "main",
+  "body": "",
+  "comments": [],
+  "files": [
+    {
+      "additions": 1,
+      "deletions": 0,
+      "diff": "@@ -0,0 +1 @@\n+x",
+      "firstLine": 1,
+      "path": "a.rs"
+    }
+  ],
+  "head": "h",
+  "key": "o/r#3",
+  "number": 3,
+  "state": "open",
+  "title": "PR",
+  "url": "https://code.test/3"
+}

@@ -22,6 +22,7 @@ pub struct LocalServices {
     pub providers: ModelProviders,
     pub homes: Arc<dyn crate::Homes>,
     pub mcp_auth: crate::McpAuth,
+    pub secrets: Arc<dyn crate::SecretStore>,
     pub(crate) exporter: Option<crate::features::trace::export::Exporter>,
 }
 
@@ -83,7 +84,8 @@ impl LocalServices {
             extensions: Extensions::default(),
             providers: ModelProviders::new(stores.providers, Arc::clone(&stores.secrets)),
             homes: Arc::new(crate::OwnerHome::none()),
-            mcp_auth: crate::McpAuth::new(stores.secrets, http),
+            mcp_auth: crate::McpAuth::new(Arc::clone(&stores.secrets), http),
+            secrets: stores.secrets,
         }
     }
 
@@ -104,7 +106,8 @@ impl LocalServices {
             sessions: stores.sessions,
             extensions: Extensions { plugins: self.extensions.plugins },
             providers: self.providers.with_store(stores.providers).with_secrets(Arc::clone(&stores.secrets)),
-            mcp_auth: self.mcp_auth.with_secrets(stores.secrets),
+            mcp_auth: self.mcp_auth.with_secrets(Arc::clone(&stores.secrets)),
+            secrets: stores.secrets,
             ..self
         }
     }

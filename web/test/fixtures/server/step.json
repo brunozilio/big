@@ -1,0 +1,20 @@
+{
+  "attempt": 1,
+  "attempts": [
+    {
+      "endedAt": "2026-01-01T00:00:00Z",
+      "n": 1,
+      "startedAt": "2026-01-01T00:00:00Z",
+      "state": "passed"
+    }
+  ],
+  "blocks": [
+    {
+      "composer": true,
+      "session": "s-work",
+      "type": "chat"
+    }
+  ],
+  "item": "item-1",
+  "step": "work"
+}

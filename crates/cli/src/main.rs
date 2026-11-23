@@ -1,18 +1,19 @@
-mod board;
-mod follow;
+mod instance;
 mod logging;
 mod teammate;
 
+use std::path::PathBuf;
 use std::process::ExitCode;
-use std::sync::Arc;
 
 use clap::{Parser, Subcommand};
+
+use instance::Instance;
 
 #[derive(Debug, Parser)]
 #[command(name = brand::COMMAND, version, about = concat!("Start ", brand::name!(), " on this computer and open it in the browser."))]
 struct Cli {
-    #[arg(long, default_value_t = 0, help = "The port to listen on (any free one by default)")]
-    port: u16,
+    #[arg(long, help = "The port to listen on (the one in config.toml by default)")]
+    port: Option<u16>,
     #[arg(long = "no-open", help = "Only print the address; do not open the browser")]
     no_open: bool,
     #[command(subcommand)]
@@ -30,7 +31,7 @@ fn main() -> ExitCode {
     logging::install();
     let ended = match cli.command {
         Some(Internal::Teammate(args)) => teammate::run(args),
-        None => serve(cli.port, !cli.no_open),
+        None => serve(cli.port.unwrap_or_else(configured_port), !cli.no_open && configured_open()),
     };
     match ended {
         Ok(code) => code,
@@ -41,22 +42,59 @@ fn main() -> ExitCode {
     }
 }
 
+fn configured_port() -> u16 {
+    brand::server::PORT.trim().parse().unwrap_or(0)
+}
+
+fn configured_open() -> bool {
+    brand::server::OPEN_BROWSER.trim() != "false"
+}
+
+fn data_dir() -> Result<PathBuf, String> {
+    platform::data_dir(brand::NAME, brand::COMMAND).ok_or_else(|| "this user has no data folder".to_owned())
+}
+
 fn serve(port: u16, open: bool) -> Result<ExitCode, String> {
     let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
-    let cwd = std::fs::canonicalize(&cwd).map_err(|error| format!("{}: {error}", cwd.display()))?;
-    let client = app::Client::builder().cwd(&cwd).build().map_err(|error| error.to_string())?;
-    let running =
-        console::start(console::Options { assets: console::discover(), port }).map_err(|error| error.to_string())?;
-    let live = running.live();
-    live.desk().open(Arc::new(console::SessionChats::new(client.clone(), cwd.clone(), live.clone())));
-    let url = running.url();
-    println!("{} is running at http://{}", brand::NAME, running.address());
-    println!("Open it with: {url}");
+    let repo = std::fs::canonicalize(&cwd).map_err(|error| format!("{}: {error}", cwd.display()))?;
+    let data = data_dir()?;
+    let held = match instance::claim(&data).map_err(|error| format!("{}: {error}", data.display()))? {
+        Instance::Ours(held) => held,
+        Instance::Running(url) => return Ok(already_running(url, open)),
+    };
+    let listener = server::bind(port).map_err(|error| format!("could not listen on 127.0.0.1: {error}"))?;
+    let address = listener.local_addr().map_err(|error| error.to_string())?;
+    let url = format!("http://{address}/");
+    held.announce(&url).map_err(|error| error.to_string())?;
+    let runtime =
+        tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|error| error.to_string())?;
+    println!("{} is running at {url}", brand::NAME);
     if open {
         open_in_browser(&url);
     }
-    follow::run(&client, &live, &cwd);
+    let launch = server::Launch { repo, data, listener };
+    let stop = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    runtime.block_on(server::run(launch, stop))?;
+    drop(held);
     Ok(ExitCode::SUCCESS)
+}
+
+fn already_running(url: Option<String>, open: bool) -> ExitCode {
+    match url {
+        Some(url) => {
+            println!("{} is already running at {url}", brand::NAME);
+            if open {
+                open_in_browser(&url);
+            }
+            ExitCode::SUCCESS
+        }
+        None => {
+            eprintln!("{} is already running on this computer, but its address is not known yet.", brand::NAME);
+            ExitCode::FAILURE
+        }
+    }
 }
 
 fn open_in_browser(url: &str) {
@@ -79,11 +117,17 @@ mod tests {
     #[test]
     fn the_launcher_takes_only_a_port_and_whether_to_open_the_browser() {
         let cli = Cli::parse_from([brand::COMMAND, "--port", "4321", "--no-open"]);
-        assert_eq!((cli.port, cli.no_open), (4321, true));
+        assert_eq!((cli.port, cli.no_open), (Some(4321), true));
         assert!(cli.command.is_none());
         let plain = Cli::parse_from([brand::COMMAND]);
-        assert_eq!((plain.port, plain.no_open), (0, false));
+        assert_eq!((plain.port, plain.no_open), (None, false));
         assert!(Cli::try_parse_from([brand::COMMAND, "--print", "hi"]).is_err());
         assert!(Cli::try_parse_from([brand::COMMAND, "login"]).is_err());
+    }
+
+    #[test]
+    fn the_defaults_come_from_the_configuration() {
+        assert_eq!(configured_port().to_string(), brand::server::PORT.trim());
+        assert_eq!(configured_open(), brand::server::OPEN_BROWSER.trim() != "false");
     }
 }

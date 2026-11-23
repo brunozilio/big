@@ -1,0 +1,88 @@
+{
+  "connections": [
+    {
+      "account": "eu",
+      "capabilities": [
+        "tracker",
+        "code",
+        "pipelines"
+      ],
+      "id": "c1",
+      "label": "Fake",
+      "provider": "fake",
+      "status": "ok"
+    }
+  ],
+  "providers": [
+    {
+      "description": "Sua conta Fake",
+      "fields": [],
+      "group": "Tarefas",
+      "key": "fake",
+      "logo": "data:image/svg+xml;base64,PHN2Zy8+",
+      "multiple": true,
+      "name": "Fake",
+      "signIn": "device"
+    },
+    {
+      "description": "Sua conta Claude Subscription",
+      "fields": [],
+      "group": "Provedores de IA",
+      "key": "claude-subscription",
+      "logo": "claude-subscription",
+      "multiple": true,
+      "name": "Claude Subscription",
+      "signIn": "browser"
+    },
+    {
+      "description": "Sua conta ChatGPT Subscription",
+      "fields": [],
+      "group": "Provedores de IA",
+      "key": "openai-subscription",
+      "logo": "openai-subscription",
+      "multiple": true,
+      "name": "ChatGPT Subscription",
+      "signIn": "browser"
+    },
+    {
+      "description": "Sua conta GitHub Copilot Subscription",
+      "fields": [],
+      "group": "Provedores de IA",
+      "key": "copilot-subscription",
+      "logo": "copilot-subscription",
+      "multiple": true,
+      "name": "GitHub Copilot Subscription",
+      "signIn": "device"
+    },
+    {
+      "description": "Sua conta Kiro Subscription",
+      "fields": [],
+      "group": "Provedores de IA",
+      "key": "kiro-subscription",
+      "logo": "kiro-subscription",
+      "multiple": true,
+      "name": "Kiro Subscription",
+      "signIn": "browser"
+    },
+    {
+      "description": "Sua conta Grok Subscription",
+      "fields": [],
+      "group": "Provedores de IA",
+      "key": "grok-subscription",
+      "logo": "grok-subscription",
+      "multiple": true,
+      "name": "Grok Subscription",
+      "signIn": "device"
+    },
+    {
+      "description": "Sua conta Antigravity Subscription",
+      "fields": [],
+      "group": "Provedores de IA",
+      "key": "antigravity-subscription",
+      "logo": "antigravity-subscription",
+      "multiple": true,
+      "name": "Antigravity Subscription",
+      "signIn": "browser"
+    }
+  ]
+}

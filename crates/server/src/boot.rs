@@ -1,0 +1,45 @@
+use std::future::Future;
+use std::net::TcpListener;
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use connectors::{Connectors, ReqwestHttp, SystemClock, TokenKeeper};
+use orchestrator::{Config, Orchestrator};
+use store::Store;
+
+use crate::backend::Backend;
+use crate::vault::VaultTokens;
+
+const SNAPSHOT_EVERY: u64 = 200;
+
+#[derive(Debug)]
+pub struct Launch {
+    pub repo: PathBuf,
+    pub data: PathBuf,
+    pub listener: TcpListener,
+}
+
+pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static) -> Result<(), String> {
+    let services = app::LocalServices::detect();
+    let client = app::Client::builder().services(services.clone()).build().map_err(|error| error.to_string())?;
+    let engine = Arc::new(app::KeyedEngine::new(services.clone()));
+    let store = Arc::new(Store::open(&launch.data.join("app.db"), SNAPSHOT_EVERY).map_err(|error| error.to_string())?);
+    let http = Arc::new(ReqwestHttp::new().map_err(|error| error.message)?);
+    let tokens = Arc::new(VaultTokens::new(Arc::clone(&services.secrets)));
+    let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
+    let connectors = Arc::new(Connectors::new(http, keeper));
+    let config = Config::new(Arc::clone(&store), Arc::clone(&connectors), engine.clone(), launch.data.clone())
+        .in_repo(launch.repo.clone());
+    let handle = Orchestrator::start(config).map_err(|error| error.to_string())?;
+    let remembered = (client.clone(), Arc::clone(&engine));
+    std::thread::spawn(move || {
+        if let Ok(models) = remembered.0.models() {
+            remembered.1.remember(models);
+        }
+    });
+    let backend =
+        Backend { orchestrator: (*handle).clone(), store, connectors, client, engine: Some(engine), data: launch.data };
+    let served = crate::server::serve(launch.listener, backend, page::embedded(), stop).await;
+    drop(handle);
+    served.map_err(|error| error.to_string())
+}

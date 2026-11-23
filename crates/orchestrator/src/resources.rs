@@ -40,6 +40,7 @@ const OVERRIDABLE: [&str; 2] = ["steps/", "views/"];
 
 impl Resources {
     pub fn standard(repo: Option<&Path>) -> Resources {
+        content::install_once();
         let builtin: Builtin = Arc::new(content::builtin_text);
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();
         Resources::new(repo.map(|repo| repo.join(brand::DIR)), content::folder(), builtin).listing(listed)

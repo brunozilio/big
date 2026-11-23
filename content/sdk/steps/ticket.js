@@ -3,6 +3,10 @@ import { defined, effects, object, planOf } from "./context.js";
 
 export default step({
   name: "ticket",
+  label: "Issue",
+  icon: "sTicket",
+  needs: "tracker",
+  doing: "Criando issue",
   view: (s) => (s.issue ? [issue(s.issue)] : []),
   async run(ctx, opts) {
     const existing = opts.issue ?? ctx.item.issue ?? object(ctx.output(ctx.step)).issue;

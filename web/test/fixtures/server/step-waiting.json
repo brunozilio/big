@@ -1,0 +1,29 @@
+{
+  "attempt": 1,
+  "attempts": [
+    {
+      "endedAt": null,
+      "n": 1,
+      "startedAt": "2026-01-01T00:00:00Z",
+      "state": "running"
+    }
+  ],
+  "blocks": [
+    {
+      "muted": false,
+      "text": "Aprovar?",
+      "type": "markdown"
+    },
+    {
+      "buttons": [
+        {
+          "action": "approve",
+          "label": "approve"
+        }
+      ],
+      "type": "actions"
+    }
+  ],
+  "item": "item-1",
+  "step": "approve"
+}

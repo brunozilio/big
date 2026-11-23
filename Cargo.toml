@@ -22,7 +22,7 @@ agent-engine = { path = "crates/agent-engine", default-features = false }
 language-servers = { path = "crates/language-servers" }
 llm-providers = { path = "crates/llm-providers", default-features = false }
 code-map = { path = "crates/code-map" }
-console = { path = "crates/console" }
+server = { path = "crates/server" }
 page = { path = "crates/page" }
 store = { path = "crates/store" }
 orchestrator = { path = "crates/orchestrator" }

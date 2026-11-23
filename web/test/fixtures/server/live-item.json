@@ -1,0 +1,39 @@
+{
+  "item": {
+    "activity": null,
+    "attention": null,
+    "change": null,
+    "createdAt": "2026-01-01T00:00:00Z",
+    "current": null,
+    "doneAt": null,
+    "group": "running",
+    "id": "item-1",
+    "impediment": null,
+    "issue": null,
+    "live": false,
+    "status": null,
+    "steps": [
+      {
+        "attempts": 0,
+        "icon": "sCode",
+        "id": "work",
+        "label": "Trabalho",
+        "seconds": 0,
+        "state": "pending"
+      },
+      {
+        "attempts": 0,
+        "icon": "check",
+        "id": "approve",
+        "label": "Aprovação",
+        "logo": "data:image/svg+xml;base64,PHN2Zy8+",
+        "seconds": 0,
+        "state": "pending"
+      }
+    ],
+    "title": "ao vivo",
+    "updatedAt": "2026-01-01T00:00:00Z",
+    "workflow": "default"
+  },
+  "type": "item"
+}

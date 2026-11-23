@@ -1,0 +1,42 @@
+[package]
+name = "server"
+description = "The local server: the page, the REST API and the live feed over the orchestrator, connectors and app."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+app.workspace = true
+brand.workspace = true
+domain.workspace = true
+orchestrator.workspace = true
+connectors.workspace = true
+store.workspace = true
+sync.workspace = true
+page.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+axum = { workspace = true, features = ["multipart"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time"] }
+futures-util.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+jiff.workspace = true
+async-trait = "0.1"
+uuid.workspace = true
+tower-http = { version = "0.6", features = ["fs"] }
+
+[dev-dependencies]
+agent-engine = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+tower = { workspace = true, features = ["util"] }
+http-body-util.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }
+platform.workspace = true
+content.workspace = true
+
+[lints]
+workspace = true

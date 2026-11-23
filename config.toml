@@ -11,6 +11,9 @@ oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
 aws_sso_region = "us-east-1"
 
 [server]
+port = 7420
+open_browser = true
+assets_dir = ""
 max_parallel_items = 4
 
 [retry]

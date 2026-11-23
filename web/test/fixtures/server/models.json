@@ -1,0 +1,18 @@
+{
+  "default": "auto",
+  "models": [
+    {
+      "description": "Escolhe o modelo de cada etapa",
+      "id": "auto",
+      "logo": "",
+      "name": "Auto",
+      "provider": "auto"
+    },
+    {
+      "id": "m1",
+      "logo": "",
+      "name": "Modelo Um",
+      "provider": ""
+    }
+  ]
+}

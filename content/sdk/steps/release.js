@@ -28,6 +28,10 @@ async function gate(ctx, opts, run) {
 
 export default step({
   name: "release",
+  label: "Release",
+  icon: "sRelease",
+  needs: "pipelines",
+  doing: "Deploy",
   view: (s) => (s.run ? [pipeline(s.run)] : []),
   async run(ctx, opts) {
     const ref = opts.ref ?? source(ctx, opts, "merge").sha ?? pullRequestOf(ctx, opts)?.base;

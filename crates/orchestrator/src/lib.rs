@@ -21,6 +21,7 @@ mod views;
 pub use api::{Handle, Orchestrator};
 pub use asks::PendingAsk;
 pub use config::{Config, Limits, Timeouts};
+pub use effects::{NEEDS_CONNECTION, NEEDS_RECONNECT};
 pub use error::{Error, Result};
 pub use events::OrchestratorEvent;
 pub use resources::{Builtin, Origin, Resource, Resources};

@@ -40,7 +40,7 @@ class Nondeterminism extends Error {
 
 const block = (type, fields) => Object.freeze({ type, ...fields });
 
-export const chat = (session) => block("chat", { session });
+export const chat = (session, options) => block("chat", { session, composer: Boolean(options && options.composer) });
 export const issue = (ref) => block("issue", { ref });
 export const review = (pr) => block("review", { pr });
 export const pipeline = (run) => block("pipeline", { run });
@@ -230,7 +230,9 @@ class Ctx {
   agent(name, input, options) {
     const prompt = typeof input === "string" ? { prompt: input } : input || {};
     const { retry, timeout, connection, ...rest } = options || {};
-    return this.runtime.issue(this, "agent", { name, input: prompt, ...rest }, { retry, timeout, connection });
+    const model = rest.model ?? this.runtime.item.model;
+    const args = model === undefined || model === null ? { name, input: prompt, ...rest } : { name, input: prompt, ...rest, model };
+    return this.runtime.issue(this, "agent", args, { retry, timeout, connection });
   }
 
   exec(command, options) {
@@ -399,7 +401,15 @@ export function step(definition) {
   if (!definition || typeof definition.name !== "string" || typeof definition.run !== "function") {
     throw new TypeError("step({ name, run }) precisa de name e run");
   }
-  const type = Object.freeze({ name: definition.name, view: definition.view || (() => []), run: definition.run });
+  const type = Object.freeze({
+    name: definition.name,
+    view: definition.view || (() => []),
+    run: definition.run,
+    label: definition.label || definition.name,
+    icon: definition.icon || null,
+    needs: definition.needs || null,
+    doing: definition.doing || null,
+  });
   registry.steps.set(type.name, type);
   const use = (first, second) => {
     if (isCtx(first)) {
@@ -569,6 +579,9 @@ function describe() {
       code: found.code,
     })),
     steps: [...registry.steps.keys()],
+    labels: Object.fromEntries(
+      [...registry.steps.values()].map((type) => [type.name, { label: type.label, icon: type.icon, needs: type.needs, doing: type.doing }]),
+    ),
   };
 }
 

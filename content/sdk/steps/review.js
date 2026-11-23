@@ -27,6 +27,10 @@ async function changesAsked(ctx, opts, pr, answer) {
 
 export default step({
   name: "review",
+  label: "Review",
+  icon: "sReview",
+  needs: "code",
+  doing: "Esperando review",
   view: (s) => [...(s.pr ? [changes(s.pr)] : []), ...(s.session ? [chat(s.session)] : [])],
   async run(ctx, opts) {
     const pr = pullRequestOf(ctx, opts)?.pr;

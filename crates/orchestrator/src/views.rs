@@ -37,6 +37,8 @@ pub struct StepSummary {
     pub kind: Option<String>,
     pub state: StepState,
     pub attempts: u32,
+    pub seconds: u64,
+    pub since: Option<i64>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -60,26 +62,47 @@ pub struct ItemSummary {
     pub ended_at: Option<i64>,
 }
 
+fn timing(ledger: &Ledger, step: &str, now: i64) -> (u64, Option<i64>) {
+    let tried = attempts(ledger, step);
+    let spent: i64 = tried.iter().map(|attempt| attempt.ended_at.unwrap_or(now) - attempt.started_at).sum();
+    (u64::try_from(spent / 1000).unwrap_or(0), tried.last().map(|attempt| attempt.started_at))
+}
+
 pub fn summary(
     item: &WorkItem,
     ledger: &Ledger,
     times: &[(i64, bool)],
     asks: usize,
-    declared: &[String],
+    declared: &[(String, Option<String>)],
 ) -> ItemSummary {
+    let now = crate::shared::now_ms();
     let mut steps: Vec<StepSummary> = item
         .steps
         .iter()
-        .map(|run| StepSummary {
-            id: run.id.clone(),
-            branch: run.branch.clone(),
-            kind: ledger.step_type(&run.id),
-            state: run.state,
-            attempts: run.attempt,
+        .map(|run| {
+            let (seconds, since) = timing(ledger, &run.id, now);
+            StepSummary {
+                id: run.id.clone(),
+                branch: run.branch.clone(),
+                kind: ledger.step_type(&run.id),
+                state: run.state,
+                attempts: run.attempt,
+                seconds,
+                since,
+            }
         })
         .collect();
-    for id in declared.iter().filter(|id| !item.steps.iter().any(|run| &run.id == *id)) {
-        steps.push(StepSummary { id: id.clone(), branch: None, kind: None, state: StepState::Pending, attempts: 0 });
+    for (id, kind) in declared.iter().filter(|(id, _)| !item.steps.iter().any(|run| &run.id == id)) {
+        let pending = StepSummary {
+            id: id.clone(),
+            branch: None,
+            kind: kind.clone(),
+            state: StepState::Pending,
+            attempts: 0,
+            seconds: 0,
+            since: None,
+        };
+        steps.push(pending);
     }
     let active = |state: StepState| matches!(state, StepState::Running | StepState::WaitingHuman);
     let current = item.steps.iter().rev().find(|run| active(run.state)).map(|run| run.id.clone());
@@ -183,7 +206,11 @@ pub fn live_blocks(ledger: &Ledger, step: &str) -> Option<Value> {
     }
     let running = open.iter().rev().find(|request| kind_of(&request.effect) == AGENT)?;
     let session = ledger.progress.get(&running.key.seq).and_then(|data| data["session"].as_str())?;
-    Some(json!([{ "type": "chat", "session": session }]))
+    let planning = match &running.effect {
+        Effect::AgentRun { input, .. } => input["mode"] == "plan",
+        _ => false,
+    };
+    Some(json!([{ "type": "chat", "session": session, "composer": planning }]))
 }
 
 pub fn view_state(item: &WorkItem, ledger: &Ledger, step: &str, chosen: Option<&Attempt>) -> Value {

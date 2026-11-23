@@ -134,13 +134,20 @@ impl Orchestrator {
         Ok(summary(item, &ledger, &times, self.shared.asks.count(&item.id), &declared))
     }
 
-    fn declared(&self, workflow: &str) -> Vec<String> {
+    fn declared(&self, workflow: &str) -> Vec<(String, Option<String>)> {
         let Ok(script) = self.shared.script(workflow) else { return Vec::new() };
         let chosen = script.target["workflow"].clone();
         let shapes = script.described["workflows"].as_array().cloned().unwrap_or_default();
         let shape = shapes.into_iter().find(|shape| shape["name"] == chosen).unwrap_or(Value::Null);
         let steps = shape["steps"].as_array().cloned().unwrap_or_default();
-        steps.iter().filter_map(|call| call["id"].as_str().map(str::to_owned)).collect()
+        steps
+            .iter()
+            .filter_map(|call| Some((call["id"].as_str()?.to_owned(), call["step"].as_str().map(str::to_owned))))
+            .collect()
+    }
+
+    pub fn describe(&self, workflow: &str) -> Value {
+        self.shared.script(workflow).map(|script| script.described.clone()).unwrap_or(Value::Null)
     }
 
     pub async fn step_view(&self, id: &ItemId, step: &str, attempt: Option<u32>) -> Result<StepView> {

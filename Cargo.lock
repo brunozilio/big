@@ -365,6 +365,7 @@ dependencies = [
  "matchit",
  "memchr",
  "mime",
+ "multer",
  "percent-encoding",
  "pin-project-lite",
  "serde_core",
@@ -656,11 +657,12 @@ dependencies = [
  "app",
  "brand",
  "clap",
- "console",
  "domain",
  "platform",
  "serde_json",
+ "server",
  "tempfile",
+ "tokio",
  "tracing",
  "tracing-subscriber",
 ]
@@ -734,28 +736,6 @@ dependencies = [
  "sha2",
  "tokio",
  "url",
-]
-
-[[package]]
-name = "console"
-version = "0.0.1"
-dependencies = [
- "agent-engine",
- "app",
- "axum",
- "brand",
- "domain",
- "futures-util",
- "getrandom 0.3.4",
- "http-body-util",
- "page",
- "platform",
- "serde_json",
- "tempfile",
- "thiserror",
- "tokio",
- "tower",
- "tower-http",
 ]
 
 [[package]]
@@ -1990,6 +1970,23 @@ dependencies = [
  "libc",
  "wasi",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "multer"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "83e87776546dc87511aa5ee218730c92b666d7264ab6ed41f9d215af9cd5224b"
+dependencies = [
+ "bytes",
+ "encoding_rs",
+ "futures-util",
+ "http",
+ "httparse",
+ "memchr",
+ "mime",
+ "spin",
+ "version_check",
 ]
 
 [[package]]
@@ -3391,6 +3388,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "server"
+version = "0.0.1"
+dependencies = [
+ "agent-engine",
+ "app",
+ "async-trait",
+ "axum",
+ "base64 0.23.1",
+ "brand",
+ "connectors",
+ "content",
+ "domain",
+ "futures-util",
+ "getrandom 0.3.4",
+ "http-body-util",
+ "jiff",
+ "orchestrator",
+ "page",
+ "platform",
+ "serde",
+ "serde_json",
+ "store",
+ "sync",
+ "tempfile",
+ "thiserror",
+ "tokio",
+ "tower",
+ "tower-http",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "sha1"
 version = "0.10.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3485,6 +3515,12 @@ dependencies = [
  "libc",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "spin"
+version = "0.9.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3763264f6b73151db08c50ff20d7d8a0b8796e021cdea7ceedad07b80155fa0e"
 
 [[package]]
 name = "stable_deref_trait"

@@ -44,6 +44,10 @@ impl Connectors {
         self.entry(key).map(|entry| &entry.descriptor)
     }
 
+    pub fn http(&self) -> &dyn Http {
+        self.http.as_ref()
+    }
+
     pub fn keeper(&self) -> &TokenKeeper {
         &self.keeper
     }

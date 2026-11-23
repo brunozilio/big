@@ -57,7 +57,8 @@ pub fn run(mut args: Args) -> Result<ExitCode, String> {
     if let Some(mode) = args.mode {
         session.set_permission(mode);
     }
-    let headless = app::Headless { append_system: args.instructions.take(), teammate: Some(teammate), ..Default::default() };
+    let headless =
+        app::Headless { append_system: args.instructions.take(), teammate: Some(teammate), ..Default::default() };
     session.set_headless(headless);
     let (team, name) = (me.team.clone(), me.name.clone());
     let asker = Mailbox::new(me.clone());

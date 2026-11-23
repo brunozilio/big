@@ -10,6 +10,10 @@ function ordered(opts) {
 
 export default step({
   name: "merge",
+  label: "Merge",
+  icon: "sMerge",
+  needs: "code",
+  doing: "Mergeando",
   view: (s) => (s.pr ? [merging(s.pr, s.methods ?? METHODS)] : []),
   async run(ctx, opts) {
     const pr = pullRequestOf(ctx, opts)?.pr;
@@ -23,6 +27,6 @@ export default step({
     }
     const merged = await ctx.call("code", "merge", { pr, method }, effects(opts));
     if (!merged || merged.merged !== true) return ctx.fail({ pr, method, methods, error: "o pull request não foi mergeado" });
-    return ctx.pass({ pr, method, methods, sha: merged.sha ?? null });
+    return ctx.pass({ pr, method, methods, merged: true, sha: merged.sha ?? null });
   },
 });

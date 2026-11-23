@@ -10,6 +10,10 @@ function describe(plan, issue) {
 
 export default step({
   name: "pr",
+  label: "Pull request",
+  icon: "sPr",
+  needs: "code",
+  doing: "Abrindo PR",
   view: (s) => (s.title ? [markdown(`# ${s.title}\n\n${s.body ?? ""}`)] : []),
   async run(ctx, opts) {
     const previous = object(ctx.output(ctx.step));

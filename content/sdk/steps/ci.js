@@ -3,6 +3,10 @@ import { FINISHED, branchOf, failedLogs, findRun, object, pullRequestOf, settle 
 
 export default step({
   name: "ci",
+  label: "CI",
+  icon: "sCi",
+  needs: "pipelines",
+  doing: "Aguardando CI",
   view: (s) => (s.run ? [pipeline(s.run)] : []),
   async run(ctx, opts) {
     const ref = opts.ref ?? pullRequestOf(ctx, opts)?.head ?? branchOf(ctx, opts);

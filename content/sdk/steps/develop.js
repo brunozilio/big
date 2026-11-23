@@ -12,6 +12,9 @@ function request(item, plan, issue, feedback) {
 
 export default step({
   name: "develop",
+  label: "Develop",
+  icon: "sCode",
+  doing: "Desenvolvendo",
   view: (s) => (s.session ? [chat(s.session)] : []),
   async run(ctx, opts) {
     const plan = planOf(ctx, opts);

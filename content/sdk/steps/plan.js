@@ -11,7 +11,10 @@ function request(item, opts) {
 
 export default step({
   name: "plan",
-  view: (s) => (s.session ? [chat(s.session)] : []),
+  label: "Plano",
+  icon: "sPlan",
+  doing: "Planejando",
+  view: (s) => (s.session ? [chat(s.session, { composer: true })] : []),
   async run(ctx, opts) {
     const item = ctx.item;
     const previous = object(ctx.output(ctx.step));

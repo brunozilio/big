@@ -3,6 +3,9 @@ import { defined, tail } from "./context.js";
 
 export default step({
   name: "checks",
+  label: "Checks",
+  icon: "sTest",
+  doing: "Rodando checks",
   view: (s) => [logs(s.output ?? "")],
   async run(ctx, opts) {
     const commands = opts.commands ?? ctx.item.checks ?? [];

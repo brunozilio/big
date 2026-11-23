@@ -1,9 +1,9 @@
 use axum::http::{StatusCode, Uri, header};
 use axum::response::{Html, IntoResponse, Response};
 
-pub const MISSING: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Console</title></head>\
+pub const MISSING: &str = "<!doctype html><html><head><meta charset=\"utf-8\"><title>Page</title></head>\
 <body style=\"font-family: system-ui; max-width: 40rem; margin: 4rem auto; line-height: 1.5\">\
-<h1>The console app is not built yet</h1>\
+<h1>The page is not built yet</h1>\
 <p>This program was compiled without the page. From the repository, with <a href=\"https://bun.sh\">Bun</a> installed, \
 build the page and then the program again:</p>\
 <pre>cargo run -p xtask -- web\ncargo build --release</pre>\

@@ -99,6 +99,9 @@ fn perform(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> AbortHandle {
     })
 }
 
+pub const NEEDS_CONNECTION: &str = "conecte uma conta para ";
+pub const NEEDS_RECONNECT: &str = "reconecte a conta: ";
+
 fn roll() -> f64 {
     let bytes = uuid::Uuid::new_v4().into_bytes();
     f64::from(u32::from_le_bytes([bytes[0], bytes[1], bytes[2], bytes[3]])) / f64::from(u32::MAX)
@@ -112,7 +115,7 @@ async fn attempts(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Resul
         let class = match once(shared, item, launch).await {
             Ok(value) => return Ok(value),
             Err(Failure::Class(ErrorClass::Auth, message)) => {
-                return Err(Failure::Blocked(format!("reconecte a conta: {message}")));
+                return Err(Failure::Blocked(format!("{NEEDS_RECONNECT}{message}")));
             }
             Err(Failure::Class(class, message)) => (class, message),
             Err(blocked) => return Err(blocked),
@@ -159,7 +162,7 @@ async fn push(shared: &Shared, item: &WorkItem, command: &Command, key: &Idempot
     }
     match sync::push(&shared.config.connectors, &shared.store, item, &request).await {
         Ok(Pushed::Done(_) | Pushed::NoIssue | Pushed::NotSynced) => Ok(Value::Null),
-        Ok(Pushed::NoConnection) => Err(Failure::Blocked(format!("conecte uma conta para {}", contracts::TRACKER))),
+        Ok(Pushed::NoConnection) => Err(Failure::Blocked(format!("{NEEDS_CONNECTION}{}", contracts::TRACKER))),
         Err(error) => Err(Failure::Class(error.class(), error.to_string())),
     }
 }
@@ -173,7 +176,7 @@ fn connection_of(shared: &Shared, call: &Call) -> Result<(Connection, Value), Fa
     });
     let Some(record) = found else {
         let wanted = call.connection.clone().unwrap_or_else(|| call.capability.clone());
-        return Err(Failure::Blocked(format!("conecte uma conta para {wanted}")));
+        return Err(Failure::Blocked(format!("{NEEDS_CONNECTION}{wanted}")));
     };
     let connection = Connection {
         id: ConnectionId::from(record.id.as_str()),
