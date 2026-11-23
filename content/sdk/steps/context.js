@@ -202,10 +202,14 @@ export function feedbackText(from) {
   return parts.join("\n\n");
 }
 
+function ours(run) {
+  return run && run.event !== "dynamic" && !String(run.file ?? "").startsWith("dynamic/");
+}
+
 async function neverRan(ctx, opts, wanted) {
   try {
-    const ever = await ctx.call("pipelines", "runs", defined({ repo: wanted.repo, pipeline: opts.pipeline, limit: 1 }), effects(opts));
-    return Array.isArray(ever) && ever.length === 0;
+    const ever = await ctx.call("pipelines", "runs", defined({ repo: wanted.repo, pipeline: opts.pipeline, limit: 20 }), effects(opts));
+    return Array.isArray(ever) && !ever.some(ours);
   } catch {
     return false;
   }
@@ -216,7 +220,7 @@ export async function findRun(ctx, opts, wanted) {
   const patience = opts.patience ?? 10;
   for (let tries = 1; ; tries += 1) {
     const runs = await ctx.call("pipelines", "runs", args, effects(opts));
-    const fresh = (Array.isArray(runs) ? runs : []).find((run) => !wanted.seen.includes(run.ref));
+    const fresh = (Array.isArray(runs) ? runs : []).find((run) => ours(run) && !wanted.seen.includes(run.ref));
     if (fresh) return fresh;
     if (wanted.optional && tries >= patience) return null;
     if (wanted.optional && tries === 2 && (await neverRan(ctx, opts, wanted))) return null;

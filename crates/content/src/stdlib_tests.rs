@@ -85,7 +85,9 @@ fn drive(source: &str, item: &Value, mut reply: impl FnMut(&Value) -> Option<Val
             let Some(value) = reply(command) else { continue };
             answered = true;
             let entry = match value.get("failed") {
-                Some(error) => json!({ "seq": command["seq"], "kind": command["kind"], "error": error, "at": 2000 + round }),
+                Some(error) => {
+                    json!({ "seq": command["seq"], "kind": command["kind"], "error": error, "at": 2000 + round })
+                }
                 None => json!({ "seq": command["seq"], "kind": command["kind"], "ok": value, "at": 2000 + round }),
             };
             journal.push(entry);
@@ -279,14 +281,22 @@ fn the_ticket_goes_to_the_project_and_connection_chosen_for_the_item() {
 }
 
 fn shows_the_reviewer_and_asks_for_portuguese(asked: &[Value]) {
-    let has_review = |command: &&Value| command["args"]["view"].as_array().is_some_and(|view| view.iter().any(|block| block["type"] == "review"));
+    let has_review = |command: &&Value| {
+        command["args"]["view"].as_array().is_some_and(|view| view.iter().any(|block| block["type"] == "review"))
+    };
     let reviewing = of_kind(asked, "wait.human").into_iter().find(has_review).expect("a review waits for a person");
     let view = reviewing["args"]["view"].as_array().expect("view");
-    assert_eq!(view.iter().find(|block| block["type"] == "review").map(|block| &block["session"]), Some(&json!("other")));
+    assert_eq!(
+        view.iter().find(|block| block["type"] == "review").map(|block| &block["session"]),
+        Some(&json!("other"))
+    );
     assert!(view.iter().all(|block| block["type"] != "actions"), "the review block has its own buttons: {view:?}");
     let agents = of_kind(asked, "agent");
     let prompts: Vec<&str> = agents.iter().filter_map(|command| command["args"]["input"]["prompt"].as_str()).collect();
-    assert!(!prompts.is_empty() && prompts.iter().all(|prompt| prompt.ends_with("português do Brasil.")), "{prompts:?}");
+    assert!(
+        !prompts.is_empty() && prompts.iter().all(|prompt| prompt.ends_with("português do Brasil.")),
+        "{prompts:?}"
+    );
 }
 
 #[test]
@@ -303,7 +313,11 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     shows_the_reviewer_and_asks_for_portuguese(&asked);
     let created = calls(&asked, "create_issue");
     assert_eq!(created.len(), 1);
-    assert_eq!(created[0]["args"]["args"], json!({ "title": "Corrigir x", "description": "1. mudar x" }), "no format, the whole plan");
+    assert_eq!(
+        created[0]["args"]["args"],
+        json!({ "title": "Corrigir x", "description": "1. mudar x" }),
+        "no format, the whole plan"
+    );
     let developers: Vec<&Value> =
         of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "developer").collect();
     assert_eq!(developers.len(), 3, "develop, back from checks, back from review");
@@ -326,7 +340,11 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     assert_eq!(opened[0]["args"]["args"]["head"], "item/i1");
     let polled: Vec<&Value> =
         of_kind(&asked, "wait.poll").iter().map(|command| &command["args"]["call"]["args"]["run"]).collect();
-    assert_eq!(polled, ["CI-1", "CI-2", "REL-1", "REL-1", "REL-1"], "a new run per CI attempt and the run raced with the approval");
+    assert_eq!(
+        polled,
+        ["CI-1", "CI-2", "REL-1", "REL-1", "REL-1"],
+        "a new run per CI attempt and the run raced with the approval"
+    );
     assert!(of_kind(&asked, "event").iter().any(|command| command["args"]["kind"] == "pipelines.run.finished"));
     let verdicts: Vec<&Value> =
         calls(&asked, "submit_review").iter().map(|command| &command["args"]["args"]["verdict"]).collect();
@@ -340,7 +358,9 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     };
     let reviewers = named("reviewer");
     assert_eq!(reviewers.len(), 2, "the reviewer reads the pull request before each human verdict");
-    assert!(reviewers.iter().all(|command| command["args"]["mode"] == "plan" && command["args"]["input"]["pr"] == "PR-7"));
+    assert!(
+        reviewers.iter().all(|command| command["args"]["mode"] == "plan" && command["args"]["input"]["pr"] == "PR-7")
+    );
     let releases = named("release");
     assert_eq!(releases.len(), 1, "the release agent writes the notes once the deploy passed");
     assert_eq!(releases[0]["args"]["mode"], "plan");
@@ -361,10 +381,11 @@ export default workflow({
   },
 });
 "#;
-    let (result, asked) = drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
-        Some("call") => Some(json!([])),
-        _ => Some(Value::Null),
-    });
+    let (result, asked) =
+        drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
+            Some("call") => Some(json!([])),
+            _ => Some(Value::Null),
+        });
     let runs = calls(&asked, "runs");
     assert_eq!(runs.len(), 3, "twice for the branch, then once for the whole repository");
     assert_eq!(runs[2]["args"]["args"].get("ref"), None, "the repository never ran any pipeline");
@@ -384,11 +405,14 @@ export default workflow({
   },
 });
 "#;
-    let (result, asked) = drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
-        Some("call") if command["args"]["args"].get("ref").is_none() => Some(json!([{ "ref": "old", "state": "passed" }])),
-        Some("call") => Some(json!([])),
-        _ => Some(Value::Null),
-    });
+    let (result, asked) =
+        drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
+            Some("call") if command["args"]["args"].get("ref").is_none() => {
+                Some(json!([{ "ref": "old", "state": "passed" }]))
+            }
+            Some("call") => Some(json!([])),
+            _ => Some(Value::Null),
+        });
     assert_eq!(calls(&asked, "runs").len(), 5, "four for the branch and one look at the repository");
     assert_eq!(result["result"]["state"], "none", "{result}");
 }
@@ -406,13 +430,14 @@ export default workflow({
   },
 });
 "#;
-    let (result, asked) = drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
-        Some("call") if command["args"]["args"].get("ref").is_none() => {
-            Some(json!({ "failed": { "kind": "permanent", "message": "ref is missing" } }))
-        }
-        Some("call") => Some(json!([])),
-        _ => Some(Value::Null),
-    });
+    let (result, asked) =
+        drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
+            Some("call") if command["args"]["args"].get("ref").is_none() => {
+                Some(json!({ "failed": { "kind": "permanent", "message": "ref is missing" } }))
+            }
+            Some("call") => Some(json!([])),
+            _ => Some(Value::Null),
+        });
     assert_eq!(calls(&asked, "runs").len(), 4, "three for the branch and the failed look");
     assert_eq!(result["result"], json!({ "outcome": "skipped", "state": "none" }), "{result}");
 }
@@ -428,9 +453,11 @@ export default workflow({
   steps: [release({ ref: "abc", patience: 2, doneStatus: "Feito" })],
 });
 "#;
-    let (result, asked) = drive(&source("workflows/so-release.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
-        Some("call") => Some(json!([])),
-        _ => Some(Value::Null),
+    let (result, asked) = drive(&source("workflows/so-release.ts", text), &item(json!("T-1")), |command| {
+        match command["kind"].as_str() {
+            Some("call") => Some(json!([])),
+            _ => Some(Value::Null),
+        }
     });
     assert_eq!(result["state"], "completed", "{result}");
     let statuses: Vec<&Value> = of_kind(&asked, "status.set").iter().map(|command| &command["args"]["name"]).collect();
@@ -455,6 +482,29 @@ fn a_reviewer_that_only_wrote_its_verdict_still_reaches_the_pull_request() {
 }
 
 #[test]
+fn ci_ignores_the_runs_github_starts_by_itself() {
+    let text = r#"
+import { workflow } from "sdk";
+import { ci } from "sdk/steps";
+export default workflow({
+  name: "so-ci",
+  async run(ctx) {
+    const done = await ci(ctx, { ref: "big/x", patience: 5 });
+    return { outcome: done.outcome, state: done.data.state };
+  },
+});
+"#;
+    let dependabot = json!([{ "ref": "D1", "state": "queued", "event": "dynamic", "file": "dynamic/dependabot/dependabot-updates" }]);
+    let (result, asked) =
+        drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
+            Some("call") => Some(dependabot.clone()),
+            _ => Some(Value::Null),
+        });
+    assert!(of_kind(&asked, "wait.poll").is_empty(), "nobody waits for Dependabot");
+    assert_eq!(result["result"], json!({ "outcome": "skipped", "state": "none" }), "{result}");
+}
+
+#[test]
 fn checks_without_any_command_say_so_instead_of_an_empty_log() {
     let text = r#"
 import { workflow } from "sdk";
@@ -470,7 +520,10 @@ export default workflow({
     let (result, asked) = drive(&source("workflows/so-checks.ts", text), &item(json!("T-1")), |_| None);
     assert!(of_kind(&asked, "exec").is_empty());
     assert_eq!(result["result"]["outcome"], "passed", "{result}");
-    assert!(result["result"]["output"].as_str().is_some_and(|out| out.contains("Nenhum comando de verificação")), "{result}");
+    assert!(
+        result["result"]["output"].as_str().is_some_and(|out| out.contains("Nenhum comando de verificação")),
+        "{result}"
+    );
 }
 
 const WRITTEN_PLAN: &str = "Vou ler o código antes.\n# Cadastro de clientes\n\n## Descrição\nComo atendente, eu quero cadastrar clientes para que eu os atenda depois.\n\n## Critérios de aceite\n- Dado que estou no cadastro, quando salvo um cliente, então ele aparece na lista.\n\n## Subtarefas\n### Criar a tabela\nTabela clientes com nome e documento.\n\n### Criar a ferramenta\nFerramenta MCP de cadastro.";
@@ -494,16 +547,27 @@ fn the_plan_gives_the_title_the_story_goes_to_the_issue_and_the_pull_request_is_
     let issue = &created[0]["args"]["args"];
     assert_eq!(issue["title"], "Cadastro de clientes");
     let story = issue["description"].as_str().expect("description");
-    assert!(story.starts_with("Como atendente, eu quero") && story.contains("## Critérios de aceite\n- Dado que") && !story.contains("Criar a tabela"), "{story}");
+    assert!(
+        story.starts_with("Como atendente, eu quero")
+            && story.contains("## Critérios de aceite\n- Dado que")
+            && !story.contains("Criar a tabela"),
+        "{story}"
+    );
     let subtasks: Vec<(&Value, &Value, &Value)> = created[1..]
         .iter()
-        .map(|call| (&call["args"]["args"]["title"], &call["args"]["args"]["description"], &call["args"]["args"]["parent"]))
+        .map(|call| {
+            (&call["args"]["args"]["title"], &call["args"]["args"]["description"], &call["args"]["args"]["parent"])
+        })
         .collect();
-    assert_eq!(subtasks, [
-        (&json!("Criar a tabela"), &json!("Tabela clientes com nome e documento."), &json!("T-9")),
-        (&json!("Criar a ferramenta"), &json!("Ferramenta MCP de cadastro."), &json!("T-9")),
-    ]);
-    let developer = of_kind(&asked, "agent").into_iter().find(|command| command["args"]["name"] == "developer").cloned();
+    assert_eq!(
+        subtasks,
+        [
+            (&json!("Criar a tabela"), &json!("Tabela clientes com nome e documento."), &json!("T-9")),
+            (&json!("Criar a ferramenta"), &json!("Ferramenta MCP de cadastro."), &json!("T-9")),
+        ]
+    );
+    let developer =
+        of_kind(&asked, "agent").into_iter().find(|command| command["args"]["name"] == "developer").cloned();
     let prompt = developer.expect("developer")["args"]["input"]["prompt"].as_str().unwrap_or_default().to_owned();
     assert!(prompt.contains("Dado que estou no cadastro") && prompt.contains("Criar a tabela"), "{prompt}");
     let opened = &calls(&asked, "open_pull_request")[0]["args"]["args"];
@@ -532,7 +596,11 @@ export default workflow({
         (command["kind"] == "agent").then(|| json!({ "text": "✗ cadastro\nVEREDITO: REPROVADO", "session": "ver-1" }))
     });
     assert_eq!(of_kind(&asked, "agent")[0]["args"]["name"], "verifier");
-    assert_eq!(result["result"], json!({ "outcome": "failed", "error": "o verificador reprovou a entrega" }), "{result}");
+    assert_eq!(
+        result["result"],
+        json!({ "outcome": "failed", "error": "o verificador reprovou a entrega" }),
+        "{result}"
+    );
 }
 
 #[test]
@@ -552,7 +620,10 @@ fn a_developer_that_stops_without_a_commit_is_told_to_go_on_in_the_same_session(
     let developers: Vec<&Value> =
         of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "developer").collect();
     let nudge = &developers[1]["args"]["input"];
-    assert!(nudge["prompt"].as_str().is_some_and(|prompt| prompt.starts_with("Você encerrou sem nenhum commit")), "{nudge}");
+    assert!(
+        nudge["prompt"].as_str().is_some_and(|prompt| prompt.starts_with("Você encerrou sem nenhum commit")),
+        "{nudge}"
+    );
     assert_eq!(nudge["session"], "dev-1");
 }
 
@@ -571,7 +642,12 @@ fn a_develop_run_that_left_no_commit_fails_there_instead_of_at_the_pull_request(
     assert!(calls(&asked, "open_pull_request").is_empty());
     let reasons: Vec<&str> =
         of_kind(&asked, "impediment.set").iter().filter_map(|command| command["args"]["reason"].as_str()).collect();
-    assert!(reasons.iter().any(|reason| reason.starts_with("Develop falhou") && reason.contains("não é um repositório git")), "{reasons:?}");
+    assert!(
+        reasons
+            .iter()
+            .any(|reason| reason.starts_with("Develop falhou") && reason.contains("não é um repositório git")),
+        "{reasons:?}"
+    );
 }
 
 #[test]
@@ -590,9 +666,8 @@ fn a_known_issue_is_reused_and_a_rejected_deploy_raises_an_impediment() {
     assert!(impediments[0]["reason"].as_str().is_some_and(|reason| reason.contains("producao")));
     assert_eq!(impediments[0], &json!({ "on": true, "reason": "o deploy em producao foi rejeitado" }));
     assert!(
-        impediments
-            .iter()
-            .any(|args| args["on"] == true && args["reason"].as_str().is_some_and(|reason| reason.starts_with("Release falhou")))
+        impediments.iter().any(|args| args["on"] == true
+            && args["reason"].as_str().is_some_and(|reason| reason.starts_with("Release falhou")))
     );
     assert!(!of_kind(&asked, "status.set").iter().any(|command| command["args"]["name"] == "Feito"));
     assert!(
@@ -605,17 +680,25 @@ fn a_known_issue_is_reused_and_a_rejected_deploy_raises_an_impediment() {
 fn each_step_view_is_made_of_blocks() {
     let source = default_workflow();
     let view = |step: &str, state: Value| call(&source, "host.view", &[json!({ "step": step, "state": state })]);
-    assert_eq!(view("plan", json!({ "session": "s1" })), json!([{ "type": "chat", "session": "s1", "composer": true }]));
+    assert_eq!(
+        view("plan", json!({ "session": "s1" })),
+        json!([{ "type": "chat", "session": "s1", "composer": true }])
+    );
     assert_eq!(view("ticket", json!({ "issue": "T-1" })), json!([{ "type": "issue", "ref": "T-1" }]));
-    assert_eq!(view("develop", json!({ "session": "s2" })), json!([{ "type": "chat", "session": "s2", "composer": false }]));
+    assert_eq!(
+        view("develop", json!({ "session": "s2" })),
+        json!([{ "type": "chat", "session": "s2", "composer": false }])
+    );
     assert_eq!(view("checks", json!({ "output": "erro" })), json!([{ "type": "logs", "text": "erro" }]));
     let ran = json!([
         { "name": "bun run lint", "state": "done", "seconds": null, "log": "ok" },
         { "name": "bun test", "state": "done", "seconds": null, "log": "12 pass" },
     ]);
-    let verified = json!({ "output": "x", "ran": ran, "session": "v1", "verdict": "✓ a\nVEREDITO: APROVADO", "approved": true });
+    let verified =
+        json!({ "output": "x", "ran": ran, "session": "v1", "verdict": "✓ a\nVEREDITO: APROVADO", "approved": true });
     let shown = view("checks", verified);
-    let names: Vec<&Value> = shown[0]["commands"].as_array().expect("commands").iter().map(|command| &command["name"]).collect();
+    let names: Vec<&Value> =
+        shown[0]["commands"].as_array().expect("commands").iter().map(|command| &command["name"]).collect();
     assert_eq!(names, [&json!("bun run lint"), &json!("bun test"), &json!("Verificador: critérios de aceite")]);
     assert_eq!(shown[0]["commands"][2]["state"], "done");
     assert_eq!(shown[1], json!({ "type": "chat", "session": "v1", "composer": false }));
@@ -624,7 +707,10 @@ fn each_step_view_is_made_of_blocks() {
     assert_eq!(view("pr", json!({ "title": "T", "body": "B" })), json!([{ "type": "markdown", "text": "# T\n\nB" }]));
     assert_eq!(view("ci", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));
     assert_eq!(view("review", json!({ "pr": "P" })), json!([{ "type": "review", "pr": "P" }]));
-    assert_eq!(view("review", json!({ "pr": "P", "session": "r1" })), json!([{ "type": "review", "pr": "P", "session": "r1" }]));
+    assert_eq!(
+        view("review", json!({ "pr": "P", "session": "r1" })),
+        json!([{ "type": "review", "pr": "P", "session": "r1" }])
+    );
     assert_eq!(
         view("merge", json!({ "pr": "P", "methods": ["squash"] })),
         json!([{ "type": "merge", "pr": "P", "methods": ["squash"] }])
@@ -634,11 +720,18 @@ fn each_step_view_is_made_of_blocks() {
     let prs = json!({ "prs": [{ "pr": "P1", "name": "a/web", "title": "T", "body": "" }, { "pr": "P2", "name": "a/api", "title": "T", "body": "" }] });
     assert_eq!(view("pr", prs), json!([{ "type": "change", "pr": "P1" }, { "type": "change", "pr": "P2" }]));
     let drafts = json!({ "prs": [{ "name": "a/web", "title": "T", "body": "" }, { "name": "a/api", "title": "T", "body": "" }] });
-    let shown: Vec<Value> = view("pr", drafts).as_array().expect("blocks").iter().map(|block| block["text"].clone()).collect();
+    let shown: Vec<Value> =
+        view("pr", drafts).as_array().expect("blocks").iter().map(|block| block["text"].clone()).collect();
     assert_eq!(shown, [json!("# a/web: T\n\n"), json!("# a/api: T\n\n")]);
-    assert_eq!(view("pr", json!({ "pr": "o/r#3", "title": "T", "body": "B" })), json!([{ "type": "change", "pr": "o/r#3" }]));
+    assert_eq!(
+        view("pr", json!({ "pr": "o/r#3", "title": "T", "body": "B" })),
+        json!([{ "type": "change", "pr": "o/r#3" }])
+    );
     let runs = json!({ "run": "R1", "runs": [{ "run": "R1" }, { "run": "R2" }] });
-    assert_eq!(view("ci", runs.clone()), json!([{ "type": "pipeline", "run": "R1" }, { "type": "pipeline", "run": "R2" }]));
+    assert_eq!(
+        view("ci", runs.clone()),
+        json!([{ "type": "pipeline", "run": "R1" }, { "type": "pipeline", "run": "R2" }])
+    );
     assert_eq!(view("release", runs).as_array().map(Vec::len), Some(2));
     assert_eq!(
         view("release", json!({ "run": "R", "notes": "## Notas", "session": "s3" })),
@@ -685,9 +778,17 @@ fn an_application_with_two_coded_repositories_verifies_each_and_delivers_a_pull_
     assert_eq!(result["state"], "completed", "{result}");
     let execs: Vec<(String, String)> = of_kind(&asked, "exec")
         .iter()
-        .map(|command| (command["args"]["repository"].as_str().unwrap_or_default().to_owned(), command["args"]["command"].as_str().unwrap_or_default().to_owned()))
+        .map(|command| {
+            (
+                command["args"]["repository"].as_str().unwrap_or_default().to_owned(),
+                command["args"]["command"].as_str().unwrap_or_default().to_owned(),
+            )
+        })
         .collect();
-    assert!(execs.contains(&("web".into(), "lint".into())) && execs.contains(&("api".into(), "cargo test".into())), "{execs:?}");
+    assert!(
+        execs.contains(&("web".into(), "lint".into())) && execs.contains(&("api".into(), "cargo test".into())),
+        "{execs:?}"
+    );
     let opened: Vec<(&Value, &Value)> = calls(&asked, "open_pull_request")
         .iter()
         .map(|command| (&command["args"]["args"]["repo"], &command["connection"]))

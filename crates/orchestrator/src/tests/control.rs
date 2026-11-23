@@ -191,7 +191,9 @@ async fn a_status_is_kept_and_sent_to_the_tracker_of_the_item_s_issue() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_status_the_tracker_board_does_not_have_does_not_stop_the_item() {
     let world = World::new();
-    world.provider.then("tracker.transition", Reply::Fail(ActionError::permanent("K-7 cannot go from Fazendo to Revisando")));
+    world
+        .provider
+        .then("tracker.transition", Reply::Fail(ActionError::permanent("K-7 cannot go from Fazendo to Revisando")));
     world.workflow("status", "import { workflow } from \"sdk\";\nexport default workflow({ name: \"status\", async run(ctx) { await ctx.status(\"Revisando\"); return \"seguiu\"; } });");
     let kernel = world.start().await;
     let id = kernel.create_item("status", json!({ "issue": "K-7" })).expect("item");
@@ -294,13 +296,35 @@ async fn a_step_tried_again_after_a_failure_is_the_current_one() {
     let world = World::new();
     world.provider.then("tracker.issue", Reply::Fail(ActionError::permanent("404")));
     let body = "const r = await ctx.call(\"tracker\", \"issue\", { issue: \"K\" }); await ctx.waitHuman([]); return ctx.pass(r);";
-    let source = format!("import {{ workflow, step }} from \"sdk\";\nconst only = step({{ name: \"only\", async run(ctx) {{ {body} }} }});\nexport default workflow({{ name: \"again\", steps: [only()] }});\n");
+    let source = format!(
+        "import {{ workflow, step }} from \"sdk\";\nconst only = step({{ name: \"only\", async run(ctx) {{ {body} }} }});\nexport default workflow({{ name: \"again\", steps: [only()] }});\n"
+    );
     world.workflow("again", &source);
     let kernel = world.start().await;
     let id = kernel.create_item("again", json!({})).expect("item");
-    until(&kernel, &id, |item| item.step("", Some("main")).is_some_and(|run| run.state == StepState::WaitingHuman)).await;
+    until(&kernel, &id, |item| item.step("", Some("main")).is_some_and(|run| run.state == StepState::WaitingHuman))
+        .await;
     kernel.human_input(&id, "", "retry", json!({})).expect("retry");
-    until(&kernel, &id, |item| item.step("only", Some("main")).is_some_and(|run| run.attempt == 2 && run.state == StepState::WaitingHuman)).await;
+    until(&kernel, &id, |item| {
+        item.step("only", Some("main")).is_some_and(|run| run.attempt == 2 && run.state == StepState::WaitingHuman)
+    })
+    .await;
     let summary = kernel.summary(&id).expect("summary").expect("item");
     assert_eq!(summary.current.as_deref(), Some("only"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_failed_step_the_person_skips_shows_as_skipped() {
+    let world = World::new();
+    world.provider.then("tracker.issue", Reply::Fail(ActionError::permanent("404")));
+    let source = "import { workflow, step } from \"sdk\";\nconst only = step({ name: \"only\", async run(ctx) { return ctx.pass(await ctx.call(\"tracker\", \"issue\", { issue: \"K\" })); } });\nconst after = step({ name: \"after\", async run(ctx) { return ctx.pass(1); } });\nexport default workflow({ name: \"skip\", steps: [only(), after()] });\n";
+    world.workflow("skip", source);
+    let kernel = world.start().await;
+    let id = kernel.create_item("skip", json!({})).expect("item");
+    until(&kernel, &id, |item| item.step("", Some("main")).is_some_and(|run| run.state == StepState::WaitingHuman))
+        .await;
+    kernel.human_input(&id, "", "skip", json!({})).expect("skip");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(item.step("only", Some("main")).map(|run| run.state), Some(StepState::Skipped));
+    assert_eq!(item.step("after", Some("main")).map(|run| run.state), Some(StepState::Passed));
 }

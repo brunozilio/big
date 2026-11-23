@@ -497,6 +497,8 @@ async function sequence(ctx, steps) {
       if (decision.cancel) return decision.cancel;
       retries.set(call.id, 0);
       if (decision.skip) {
+        const attempt = ctx.runtime.attempts.get(`${ctx.branch}|${call.id}`) || 1;
+        ctx.runtime.signal(ctx.scoped(ctx.branch, call.id, attempt, null), "step.finished", { outcome: "skipped", data: null, to: null });
         at += 1;
         from = null;
       }
