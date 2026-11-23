@@ -220,7 +220,7 @@ impl Runner {
 
     async fn activate(&self, item: &WorkItem, ledger: &Ledger) -> Result<Activated> {
         let shared = Arc::clone(&self.shared);
-        let workflow = item.workflow.clone();
+        let owner = item.clone();
         let mut activation = json!({
             "item": item_json(item),
             "journal": ledger.journal(),
@@ -228,7 +228,7 @@ impl Runner {
             "seed": item.id.as_str(),
         });
         let value = tokio::task::spawn_blocking(move || {
-            let script = shared.script(&workflow)?;
+            let script = shared.script_for(&owner)?;
             activation["target"] = script.target.clone();
             script.activate(&activation).map_err(Error::Script)
         })

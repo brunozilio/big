@@ -11,7 +11,7 @@ use sync::Pushed;
 use tokio::io::AsyncWriteExt;
 use tokio::task::AbortHandle;
 
-use crate::agent::{AgentEffect, Failure, workdir};
+use crate::agent::{AgentEffect, Failure, worktree};
 use crate::events::Wake;
 use crate::git;
 use crate::matching::{event_matches, matches};
@@ -239,7 +239,11 @@ async fn poll(shared: &Shared, command: &Command, key: &str) -> Result<Value, Fa
 }
 
 async fn exec(shared: &Shared, item: &WorkItem, command: &Command) -> Result<Value, Failure> {
-    let worktree = workdir(shared, &git::branch_name(item.id.as_str())).await?;
+    let wanted = command.args["repository"].as_str().unwrap_or_default();
+    let checkouts = shared.checkouts(item);
+    let chosen = checkouts.iter().find(|checkout| checkout.id == wanted).or(checkouts.first()).cloned();
+    let checkout = chosen.ok_or_else(|| Failure::permanent("the item has no repository"))?;
+    let worktree = worktree(shared, checkout, &git::branch_name(item.id.as_str())).await?.path;
     let cwd = command.args["cwd"].as_str().map_or_else(|| worktree.clone(), |dir| worktree.join(dir));
     let mut process = tokio::process::Command::from(platform::shell(&command.text("command")));
     process.current_dir(&cwd).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);

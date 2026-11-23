@@ -21,8 +21,12 @@ pub fn folder_for(branch: &str) -> String {
     branch.chars().map(|letter| if letter.is_ascii_alphanumeric() || letter == '-' { letter } else { '_' }).collect()
 }
 
-pub fn worktree(repo: Option<&Path>, data: &Path, branch: &str) -> std::io::Result<PathBuf> {
-    let path = data.join("worktrees").join(folder_for(branch));
+pub fn origin(dir: &Path) -> Option<String> {
+    is_repo(dir).then(|| run(dir, &["remote", "get-url", "origin"])).flatten().filter(|url| !url.is_empty())
+}
+
+pub fn worktree(repo: Option<&Path>, data: &Path, branch: &str, folder: &str) -> std::io::Result<PathBuf> {
+    let path = data.join("worktrees").join(folder);
     if path.exists() {
         return Ok(path);
     }

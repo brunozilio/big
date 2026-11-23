@@ -96,6 +96,10 @@ impl Orchestrator {
         self.shared.sync.get().map(|sync| Arc::clone(sync.health()))
     }
 
+    pub fn directory(&self) -> Option<PathBuf> {
+        self.shared.config.repo.clone()
+    }
+
     pub fn workflows(&self) -> Vec<String> {
         self.shared.config.resources.workflows()
     }
@@ -105,7 +109,7 @@ impl Orchestrator {
     }
 
     fn create(&self, workflow: &str, input: Value, parent: Option<ItemId>) -> Result<ItemId> {
-        if self.shared.config.resources.workflow(workflow).is_none() {
+        if self.shared.resources_in(self.shared.home(&input).as_deref()).workflow(workflow).is_none() {
             return Err(Error::Script(format!("there is no workflow named {workflow}")));
         }
         let id = ItemId::new();
@@ -132,12 +136,12 @@ impl Orchestrator {
         let ledger = Ledger::load(&self.shared.store, &item.id)?;
         let times: Vec<(i64, bool)> =
             self.shared.store.timed_events(&item.id, 0)?.iter().map(|(_, at, event)| (*at, ends(event))).collect();
-        let declared = self.declared(&item.workflow);
+        let declared = self.declared(item);
         Ok(summary(item, &ledger, &times, self.shared.asks.count(&item.id), &declared))
     }
 
-    fn declared(&self, workflow: &str) -> Vec<(String, Option<String>)> {
-        let Ok(script) = self.shared.script(workflow) else { return Vec::new() };
+    fn declared(&self, item: &WorkItem) -> Vec<(String, Option<String>)> {
+        let Ok(script) = self.shared.script_for(item) else { return Vec::new() };
         let chosen = script.target["workflow"].clone();
         let shapes = script.described["workflows"].as_array().cloned().unwrap_or_default();
         let shape = shapes.into_iter().find(|shape| shape["name"] == chosen).unwrap_or(Value::Null);
@@ -165,8 +169,8 @@ impl Orchestrator {
             (None, Some(kind)) => {
                 let request = json!({ "step": kind, "state": view_state(&item, &ledger, step, chosen) });
                 let shared = Arc::clone(&self.shared);
-                let workflow = item.workflow.clone();
-                tokio::task::spawn_blocking(move || shared.script(&workflow)?.view(&request).map_err(Error::Script))
+                let owner = item.clone();
+                tokio::task::spawn_blocking(move || shared.script_for(&owner)?.view(&request).map_err(Error::Script))
                     .await
                     .map_err(|error| Error::Script(error.to_string()))??
             }
@@ -239,8 +243,19 @@ impl Orchestrator {
 
     async fn restore(&self, agent: &Value) {
         let Some(worktree) = agent["worktree"].as_str().map(PathBuf::from) else { return };
-        if let Some(base) = agent["base"].as_str().map(str::to_owned) {
-            let place = worktree.clone();
+        let mut places: Vec<(PathBuf, String)> = agent["repositories"]
+            .as_array()
+            .map(Vec::as_slice)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|repo| Some((PathBuf::from(repo["worktree"].as_str()?), repo["base"].as_str()?.to_owned())))
+            .collect();
+        if places.is_empty()
+            && let Some(base) = agent["base"].as_str()
+        {
+            places.push((worktree.clone(), base.to_owned()));
+        }
+        for (place, base) in places {
             let _ = tokio::task::spawn_blocking(move || git::restore(&place, &base)).await;
         }
         let session = agent["session"].as_str();

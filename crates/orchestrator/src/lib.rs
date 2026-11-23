@@ -13,6 +13,7 @@ mod git;
 mod ledger;
 mod matching;
 mod protocol;
+mod repos;
 mod resources;
 mod runner;
 mod shared;
@@ -26,6 +27,7 @@ pub use config::{Config, Limits, Timeouts};
 pub use effects::{NEEDS_CONNECTION, NEEDS_RECONNECT};
 pub use error::{Error, Result};
 pub use events::OrchestratorEvent;
+pub use git::{is_repo, origin};
 pub use resources::{Builtin, Origin, Resource, Resources};
 pub use views::{Attempt, ItemSummary, StepSummary, StepView};
 
