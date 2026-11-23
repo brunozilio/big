@@ -329,6 +329,17 @@ async fn the_site_is_found_however_the_server_wraps_the_list() {
 }
 
 #[tokio::test]
+async fn the_site_of_the_second_version_of_the_server_comes_as_cloud_id() {
+    let v2 = json!([{"cloudId": "0aeb9d87-2222", "products": [{"access": "read-write", "id": "jira"}], "url": "https://minhaempresa.atlassian.net"}]);
+    let http = structured(&[v2, json!({"values": [], "isLast": true})]);
+    let options = Jira.accounts(&http, &creds()).await;
+    let Ok(options) = options else { panic!("{options:?}") };
+    assert_eq!(options[0].id, "0aeb9d87-2222");
+    assert_eq!(options[0].settings["cloud_id"], "0aeb9d87-2222");
+    assert_eq!(options[0].label, "minhaempresa.atlassian.net");
+}
+
+#[tokio::test]
 async fn an_account_without_sites_fails_the_sign_in() {
     for empty in [json!([]), json!({"result": []}), json!("nothing here")] {
         let http = session(std::slice::from_ref(&empty));

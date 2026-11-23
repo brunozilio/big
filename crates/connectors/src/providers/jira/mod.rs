@@ -147,11 +147,16 @@ fn site_settings(site: &Value, projects: &[Value]) -> Value {
         _ => format!("Projetos {}", keys.join(", ")),
     };
     let url = text_of(site, "/url");
-    let mut settings = json!({ "cloud_id": text_of(site, "/id"), "site_url": url, "detail": detail });
+    let mut settings = json!({ "cloud_id": site_id(site), "site_url": url, "detail": detail });
     if let [only] = keys.as_slice() {
         settings["project"] = json!(only);
     }
     settings
+}
+
+fn site_id(site: &Value) -> String {
+    let id = text_of(site, "/cloudId");
+    if id.is_empty() { text_of(site, "/id") } else { id }
 }
 
 fn site_label(site: &Value) -> String {
@@ -210,17 +215,22 @@ impl Provider for Jira {
         let mcp = McpClient::connect(http, brand::connectors::ATLASSIAN_MCP_URL, &creds.access_token).await?;
         let raw = mcp.call("getAccessibleAtlassianResources", json!({})).await?;
         let sites: Vec<Value> =
-            listed(&raw, "resources").into_iter().filter(|site| !text_of(site, "/id").is_empty()).collect();
+            listed(&raw, "resources").into_iter().filter(|site| !site_id(site).is_empty()).collect();
         if sites.is_empty() {
-            let tools = mcp.tools().await.unwrap_or_default();
-            let raw: String = raw.to_string().chars().take(2000).collect();
-            tracing::warn!(%raw, tools = %tools.join(","), "nenhum site do Jira na resposta do MCP");
+            tracing::warn!(%raw, "nenhum site do Jira na resposta do MCP");
             return Err(ActionError::permanent(NO_SITES));
         }
         let mut options = Vec::new();
         for site in &sites {
-            let id = text_of(site, "/id");
-            let projects = visible_projects(&mcp, &id, None).await.unwrap_or_default();
+            let id = site_id(site);
+            let projects = match visible_projects(&mcp, &id, None).await {
+                Ok(projects) => projects,
+                Err(error) => {
+                    let catalog = mcp.catalog().await.unwrap_or_default();
+                    tracing::warn!(%error.message, %catalog, "projetos do Jira indisponíveis");
+                    Vec::new()
+                }
+            };
             options.push(AccountOption { label: site_label(site), settings: site_settings(site, &projects), id });
         }
         Ok(options)

@@ -168,6 +168,11 @@ impl<'a> McpClient<'a> {
         Ok(listed.iter().filter_map(|tool| tool["name"].as_str()).map(str::to_owned).collect())
     }
 
+    pub async fn catalog(&self) -> Result<Value, ActionError> {
+        let (_, result) = self.exchange("tools/list", json!({})).await?;
+        Ok(result)
+    }
+
     pub async fn call(&self, tool: &str, arguments: Value) -> Result<Value, ActionError> {
         let (_, result) = self.exchange("tools/call", json!({ "name": tool, "arguments": arguments })).await?;
         tool_value(&result)
