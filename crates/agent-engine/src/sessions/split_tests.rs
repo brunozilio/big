@@ -55,11 +55,17 @@ fn steered(at_ms: u64) -> Entry {
     Entry::Event { at_ms, event: EngineEvent::Steered(format!("at {at_ms}")) }
 }
 
-fn kinds(path: &Path) -> Vec<String> {
+fn streams(path: &Path) -> Vec<String> {
     std::fs::read_to_string(path)
         .unwrap_or_default()
         .lines()
-        .map(|line| serde_json::from_str::<serde_json::Value>(line).expect("a whole line")["kind"].to_string())
+        .map(|line| {
+            let value = serde_json::from_str::<serde_json::Value>(line).expect("a whole line");
+            match value["type"].as_str() {
+                Some(stream) => format!("{stream}:{}", value["kind"].as_str().unwrap_or_default()),
+                None => value["kind"].as_str().unwrap_or_default().to_owned(),
+            }
+        })
         .collect()
 }
 
@@ -67,11 +73,15 @@ fn mixed(path: &Path, entries: &[Entry]) {
     std::fs::create_dir_all(path.parent().expect("folder")).expect("folder");
     let text: String =
         entries.iter().map(|entry| format!("{}\n", serde_json::to_string(entry).expect("json"))).collect();
-    std::fs::write(path, text).expect("a file from before the split");
+    std::fs::write(path, text).expect("a file from before the trace lines were marked");
+}
+
+fn call(id: &str) -> Message {
+    Message::assistant(vec![Block::ToolUse { id: id.into(), name: "Read".into(), input: serde_json::json!({}) }])
 }
 
 #[test]
-fn a_new_session_keeps_the_conversation_and_the_trace_in_two_files_read_back_as_one_log() {
+fn a_new_session_keeps_the_trace_in_its_own_file_in_the_order_it_happened() {
     let kept = Kept::new();
     kept.record(&steered(1));
     kept.save(&[Message::user("one")]);
@@ -83,106 +93,91 @@ fn a_new_session_keeps_the_conversation_and_the_trace_in_two_files_read_back_as_
         kept.entries(),
         [steered(1), Entry::Message(Message::user("one")), steered(2), Entry::Message(reply("two")), steered(3)]
     );
-    assert_eq!(kinds(&kept.file("jsonl")), ["\"message\"", "\"message\""]);
-    assert_eq!(kinds(&kept.file("trace.jsonl")), ["\"event\"", "\"event\"", "\"event\""]);
+    assert_eq!(streams(&kept.file("jsonl")), ["trace:event", "message", "trace:event", "message", "trace:event"]);
     assert_eq!(kept.reopened().entries(&kept.request, &kept.id).expect("entries"), kept.entries());
+    let files = std::fs::read_dir(&kept.native).expect("dir").count();
+    assert_eq!(files, 1, "no trace file beside the session");
 }
 
 #[test]
-fn a_file_from_before_the_split_reads_as_it_always_did() {
+fn resuming_and_repairing_leave_the_trace_lines_out_of_the_conversation() {
+    let kept = Kept::new();
+    kept.record(&Entry::Prompted { at_ms: 1, prompt: "go".into() });
+    kept.save(&[Message::user("go")]);
+    kept.record(&steered(2));
+    kept.save(&[Message::user("go"), call("a")]);
+    kept.record(&steered(3));
+    kept.store.end_trace(&kept.request, &kept.id);
+    assert_eq!(streams(&kept.file("jsonl")).iter().filter(|line| line.starts_with("trace:")).count(), 3);
+
+    let resumed = kept.reopened().load_for_checked(&kept.request, &kept.id).expect("readable").expect("kept");
+    assert_eq!(resumed, [Message::user("go"), call("a")]);
+    let repaired = crate::sessions::repaired(resumed);
+    let interrupted =
+        Block::ToolResult { id: "a".into(), content: crate::sessions::INTERRUPTED.into(), is_error: true };
+    assert_eq!(
+        repaired,
+        [Message::user("go"), call("a"), Message { role: crate::transcript::Role::User, blocks: vec![interrupted] }]
+    );
+    assert!(repaired.iter().all(|message| !message.text().contains("at 2")), "no trace became context");
+}
+
+#[test]
+fn a_file_whose_trace_lines_are_not_marked_reads_as_it_always_did() {
     let kept = Kept::new();
     let written = [steered(1), Entry::Message(Message::user("one")), steered(2), Entry::Message(reply("two"))];
     mixed(&kept.file("jsonl"), &written);
 
     assert_eq!(kept.entries(), written);
     assert_eq!(kept.load(), [Message::user("one"), reply("two")]);
-    assert!(!kept.file("trace.jsonl").exists(), "reading moves nothing");
 }
 
 #[test]
-fn a_file_from_before_the_split_goes_on_with_the_conversation_in_it_and_the_trace_beside_it() {
-    let kept = Kept::new();
-    let old = [steered(1), Entry::Message(Message::user("one")), steered(2), Entry::Message(reply("two"))];
-    mixed(&kept.file("jsonl"), &old);
-
-    kept.record(&steered(3));
-    kept.save(&[Message::user("one"), reply("two"), Message::user("three")]);
-    kept.record(&steered(4));
-
-    let added = [steered(3), Entry::Message(Message::user("three")), steered(4)];
-    assert_eq!(kept.entries(), [old.to_vec(), added.to_vec()].concat());
-    assert_eq!(kept.load(), [Message::user("one"), reply("two"), Message::user("three")]);
-    assert_eq!(kinds(&kept.file("trace.jsonl")), ["\"event\"", "\"event\""]);
-    assert_eq!(kinds(&kept.file("jsonl")).len(), 5, "only the new message was added to the old file");
-}
-
-#[test]
-fn a_trace_that_is_missing_or_does_not_parse_never_stops_the_conversation() {
+fn a_trace_line_that_does_not_parse_never_stops_the_conversation() {
     let kept = Kept::new();
     kept.record(&steered(1));
     kept.save(&[Message::user("one"), reply("two")]);
     kept.store.end_trace(&kept.request, &kept.id);
 
-    std::fs::write(kept.file("trace.jsonl"), b"{\"kind\":\"called\",\"at_ms\":\n\xff\xfe not text\n").expect("corrupt");
+    let whole = std::fs::read_to_string(kept.file("jsonl")).expect("session");
+    let broken = format!("{whole}{{\"type\":\"trace\",\"kind\":\"called\",\"at_ms\":\n");
+    std::fs::write(kept.file("jsonl"), broken).expect("corrupt");
     assert_eq!(kept.reopened().load_for_checked(&kept.request, &kept.id), Ok(Some(kept.load())));
-    assert_eq!(kept.entries(), [Entry::Message(Message::user("one")), Entry::Message(reply("two"))]);
-
-    std::fs::remove_file(kept.file("trace.jsonl")).expect("removed");
-    std::fs::create_dir(kept.file("trace.jsonl")).expect("something that cannot be read as a file");
-    assert_eq!(kept.load(), [Message::user("one"), reply("two")]);
-    assert_eq!(kept.entries().len(), 2, "the conversation is still listed");
+    assert_eq!(kept.entries(), [steered(1), Entry::Message(Message::user("one")), Entry::Message(reply("two"))]);
+    assert!(!kept.file("jsonl.corrupt").exists(), "a broken trace line is not set aside as conversation");
     kept.save(&[Message::user("one"), reply("two"), Message::user("three")]);
     assert_eq!(kept.load().len(), 3, "and it still grows");
 }
 
 #[test]
-fn the_trace_is_written_through_one_open_file_and_reaches_the_disk_when_flushed() {
+fn the_trace_waits_in_memory_and_reaches_the_file_when_flushed() {
     let kept = Kept::new();
     kept.record(&steered(1));
     kept.record(&steered(2));
-    let on_disk = || std::fs::read_to_string(kept.file("trace.jsonl")).unwrap_or_default().lines().count();
-    assert_eq!(on_disk(), 0, "small entries wait in the buffer");
+    let on_disk = || std::fs::read_to_string(kept.file("jsonl")).unwrap_or_default().lines().count();
+    assert_eq!(on_disk(), 0, "small entries wait in memory");
 
     kept.store.flush_trace(&kept.request, &kept.id);
     assert_eq!(on_disk(), 2);
 
     kept.record(&steered(3));
-    assert_eq!(kept.entries().len(), 3, "a reader in this program sees what is still buffered");
+    assert_eq!(kept.entries().len(), 3, "a reader in this program sees what was waiting");
     kept.record(&steered(4));
     kept.store.end_trace(&kept.request, &kept.id);
     assert_eq!(on_disk(), 4);
-    assert_eq!(kept.store.written().syncs, 0, "the trace is never synced");
 }
 
 #[test]
-fn a_trace_cut_mid_write_goes_on_from_a_new_line() {
+fn a_session_cut_mid_write_goes_on_from_a_new_line() {
     let kept = Kept::new();
     kept.record(&steered(1));
     kept.store.end_trace(&kept.request, &kept.id);
-    let whole = std::fs::read_to_string(kept.file("trace.jsonl")).expect("trace");
-    std::fs::write(kept.file("trace.jsonl"), format!("{whole}{{\"kind\":\"event\",\"at_")).expect("cut");
+    let whole = std::fs::read_to_string(kept.file("jsonl")).expect("session");
+    std::fs::write(kept.file("jsonl"), format!("{whole}{{\"type\":\"trace\",\"kind\":\"event\",\"at_")).expect("cut");
 
     let later = kept.reopened();
     later.record(&kept.request, &kept.id, &steered(2)).expect("record");
     assert_eq!(later.entries(&kept.request, &kept.id).expect("entries"), [steered(1), steered(2)]);
-}
-
-#[test]
-fn a_trace_that_grew_past_its_limit_is_set_aside_once_and_both_parts_are_read() {
-    let kept = Kept::new();
-    let store = kept.reopened().rotating_the_trace_at(200);
-    let record = |at_ms| store.record(&kept.request, &kept.id, &steered(at_ms)).expect("record");
-    (1..=4).for_each(record);
-    assert!(kept.file("trace.1.jsonl").exists(), "the full file was set aside");
-    assert_eq!(store.entries(&kept.request, &kept.id).expect("entries"), (1..=4).map(steered).collect::<Vec<_>>());
-
-    (5..=12).for_each(record);
-    let read = store.entries(&kept.request, &kept.id).expect("entries");
-    assert_eq!(read.last(), Some(&steered(12)));
-    assert!(read.len() < 12, "only one earlier part is kept: {}", read.len());
-    assert_eq!(read, (13 - read.len() as u64..=12).map(steered).collect::<Vec<_>>(), "what is kept is in order");
-    let files = std::fs::read_dir(&kept.native).expect("dir").count();
-    assert_eq!(files, 2, "the trace and one earlier part, nothing else");
 }
 
 #[cfg(unix)]

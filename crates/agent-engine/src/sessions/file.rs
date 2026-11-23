@@ -8,15 +8,13 @@ use platform::store::Document;
 use platform::sync::Locked;
 
 use super::durable::{self, Counted, Digests, Persisted, Tail, Written};
-use super::log::{self, Entry, Holds, Line};
-use super::trace_file::{Paths, Traces};
+use super::log::{self, Entry};
 use super::{Hold, Sessions, scoped_id, seq};
 use crate::checkpoints::{self, Checkpoint};
 use crate::transcript::Message;
 
 const CONVERSATION: &str = "jsonl";
-const TRACE: &str = "trace.jsonl";
-const EARLIER_TRACE: &str = "trace.1.jsonl";
+const TRACE_BUFFERED_AT_MOST: usize = 256 * 1024;
 const BEFORE_THE_LOG: &str = "json";
 const CORRUPT: &str = "jsonl.corrupt";
 
@@ -24,7 +22,7 @@ const CORRUPT: &str = "jsonl.corrupt";
 pub struct FileSessions {
     dir: PathBuf,
     persisted: Mutex<HashMap<String, Persisted>>,
-    traces: Mutex<Traces>,
+    traced: Mutex<HashMap<String, String>>,
     counted: Counted,
     notices: Mutex<Vec<String>>,
 }
@@ -34,15 +32,10 @@ impl FileSessions {
         Self {
             dir: dir.into(),
             persisted: Mutex::default(),
-            traces: Mutex::default(),
+            traced: Mutex::default(),
             counted: Counted::default(),
             notices: Mutex::default(),
         }
-    }
-
-    pub fn rotating_the_trace_at(self, bytes: u64) -> Self {
-        self.traces.locked().rotating_at(bytes);
-        self
     }
 
     pub fn written(&self) -> Written {
@@ -51,28 +44,15 @@ impl FileSessions {
 
     pub fn entries(&self, cwd: &Path, id: &SessionId) -> Result<Vec<Entry>, String> {
         let id = scoped_id(cwd, id);
-        let said = match read(&self.path(&id, CONVERSATION)?)? {
+        self.write_traced(&id)?;
+        match read(&self.path(&id, CONVERSATION)?)? {
             Some(text) => {
-                let (said, skipped) = log::lines(&text, Holds::Conversation);
+                let (said, skipped) = log::lines(&text);
                 self.set_aside(&id, &skipped);
-                said
+                Ok(said)
             }
-            None => self.before_the_log(&id)?.into_iter().flatten().map(unnumbered).collect(),
-        };
-        Ok(log::merged(said, self.traced(&id)))
-    }
-
-    fn traced(&self, id: &SessionId) -> Vec<Line> {
-        self.traces.locked().flush(&id.0);
-        let mut traced = Vec::new();
-        for generation in [EARLIER_TRACE, TRACE] {
-            let read = self.path(id, generation).and_then(|path| read(&path));
-            match read.map(|text| log::lines(&text.unwrap_or_default(), Holds::TraceOnly).0) {
-                Ok(lines) => traced.extend(lines),
-                Err(error) => tracing::warn!(%error, "a trace file could not be read; the trace goes on without it"),
-            }
+            None => Ok(self.before_the_log(&id)?.into_iter().flatten().map(Entry::Message).collect()),
         }
-        traced
     }
 
     fn path(&self, id: &SessionId, extension: &str) -> Result<PathBuf, String> {
@@ -135,7 +115,11 @@ impl FileSessions {
         let carried = if tail == Tail::Unknown && !path.exists() { self.before_the_log(id)? } else { None };
         let carried_entries: Vec<Entry> = carried.iter().flatten().cloned().map(Entry::Message).collect();
         let mut lines = String::new();
-        for entry in carried_entries.iter().chain(entries) {
+        for entry in &carried_entries {
+            lines.push_str(&log::encoded(entry, seq::next())?);
+        }
+        lines.push_str(&self.traced.locked().remove(&id.0).unwrap_or_default());
+        for entry in entries {
             lines.push_str(&log::encoded(entry, seq::next())?);
         }
         std::fs::create_dir_all(&self.dir).map_err(|e| e.to_string())?;
@@ -147,10 +131,35 @@ impl FileSessions {
     }
 
     fn trace(&self, id: &SessionId, entry: &Entry) -> Result<(), String> {
-        let paths = Paths { current: self.path(id, TRACE)?, previous: self.path(id, EARLIER_TRACE)? };
-        let mut traces = self.traces.locked();
         let line = log::encoded(entry, seq::next())?;
-        traces.append(&id.0, &paths, &line).map_err(|e| e.to_string())
+        let full = {
+            let mut traced = self.traced.locked();
+            let waiting = traced.entry(id.0.clone()).or_default();
+            waiting.push_str(&line);
+            waiting.len() >= TRACE_BUFFERED_AT_MOST
+        };
+        if full { self.write_traced(id) } else { Ok(()) }
+    }
+
+    fn write_traced(&self, id: &SessionId) -> Result<(), String> {
+        if self.traced.locked().get(&id.0).is_none_or(String::is_empty) {
+            return Ok(());
+        }
+        let path = self.path(id, CONVERSATION)?;
+        let on_disk = durable::length(&path).map_err(|e| e.to_string())?;
+        let known = self.persisted.locked().get(&id.0).copied().filter(|kept| Some(kept.bytes) == on_disk);
+        let tail = if known.is_some() { Tail::KnownWhole } else { Tail::Unknown };
+        let bytes = self.append(id, &[], tail)?;
+        if let Some(kept) = known {
+            self.persisted.locked().insert(id.0.clone(), Persisted { bytes, ..kept });
+        }
+        Ok(())
+    }
+
+    fn flushed(&self, id: &SessionId) {
+        if let Err(error) = self.write_traced(id) {
+            tracing::warn!(%error, "the trace of this run could not be written");
+        }
     }
 
     fn set_aside(&self, id: &SessionId, skipped: &[String]) {
@@ -190,10 +199,6 @@ impl FileSessions {
     fn write_json(&self, name: String, value: &impl serde::Serialize) -> Result<(), String> {
         self.side_file(name).write(value).map_err(|error| error.to_string())
     }
-}
-
-fn unnumbered(message: Message) -> Line {
-    Line { seq: None, entry: Entry::Message(message) }
 }
 
 fn read(path: &PathBuf) -> Result<Option<String>, String> {
@@ -267,22 +272,18 @@ impl Sessions for FileSessions {
         self.append(&id, std::slice::from_ref(entry), Tail::Unknown).map(|_| ())
     }
     fn flush_trace(&self, cwd: &Path, id: &SessionId) {
-        self.traces.locked().flush(&scoped_id(cwd, id).0);
+        self.flushed(&scoped_id(cwd, id));
     }
     fn end_trace(&self, cwd: &Path, id: &SessionId) {
-        self.traces.locked().close(&scoped_id(cwd, id).0);
+        self.flushed(&scoped_id(cwd, id));
     }
     fn hold(&self, cwd: &Path, id: &SessionId) -> Result<Hold, String> {
         super::hold::take(&self.path(&scoped_id(cwd, id), "lock")?)
     }
     fn length(&self, cwd: &Path, id: &SessionId) -> Result<u64, String> {
         let id = scoped_id(cwd, id);
-        self.traces.locked().flush(&id.0);
-        let mut bytes = 0;
-        for file in [CONVERSATION, TRACE, EARLIER_TRACE] {
-            bytes += durable::length(&self.path(&id, file)?).map_err(|e| e.to_string())?.unwrap_or(0);
-        }
-        Ok(bytes)
+        self.write_traced(&id)?;
+        Ok(durable::length(&self.path(&id, CONVERSATION)?).map_err(|e| e.to_string())?.unwrap_or(0))
     }
 }
 

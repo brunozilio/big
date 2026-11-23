@@ -46,25 +46,23 @@ impl Entry {
 const CONVERSATION: [&str; 3] = ["message", "truncated", "restarted"];
 const KIND_FIRST: &str = "{\"kind\":\"";
 
+const TRACE_FIRST: &str = "{\"type\":\"trace\",";
+
 #[derive(Deserialize)]
 struct Head {
     kind: String,
+    #[serde(default, rename = "type")]
+    stream: Option<String>,
     #[serde(default)]
     seq: Option<u64>,
     #[serde(default)]
     amended: bool,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(super) struct Line {
-    pub(super) seq: Option<u64>,
-    pub(super) entry: Entry,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) enum Holds {
-    Conversation,
-    TraceOnly,
+impl Head {
+    fn is_conversation(&self) -> bool {
+        self.stream.as_deref() != Some("trace") && CONVERSATION.contains(&self.kind.as_str())
+    }
 }
 
 pub(super) fn changes(kept: &[Message], history: &[Message]) -> Vec<Entry> {
@@ -112,16 +110,18 @@ pub(super) fn encoded(entry: &Entry, seq: u64) -> Result<String, String> {
         return Err("a session entry is not a JSON object".into());
     }
     line.push_str(&format!(",\"seq\":{seq}}}\n"));
-    Ok(line)
+    match line.strip_prefix('{') {
+        Some(rest) if !entry.is_conversation() => Ok(format!("{TRACE_FIRST}{rest}")),
+        _ => Ok(line),
+    }
 }
 
-fn decoded(line: &str) -> Result<Line, serde_json::Error> {
+fn decoded(line: &str) -> Result<Entry, serde_json::Error> {
     let head: Head = serde_json::from_str(line)?;
-    let entry = match serde_json::from_str(line)? {
+    Ok(match serde_json::from_str(line)? {
         Entry::Truncated { keep } if head.amended => Entry::Amended { keep },
         entry => entry,
-    };
-    Ok(Line { seq: head.seq, entry })
+    })
 }
 
 fn kind_at_the_start(line: &str) -> Option<&str> {
@@ -130,7 +130,8 @@ fn kind_at_the_start(line: &str) -> Option<&str> {
 }
 
 fn is_trace_line(line: &str) -> bool {
-    kind_at_the_start(line).is_some_and(|kind| !CONVERSATION.contains(&kind))
+    line.trim_start().starts_with(TRACE_FIRST)
+        || kind_at_the_start(line).is_some_and(|kind| !CONVERSATION.contains(&kind))
 }
 
 pub(super) fn written(text: &str) -> &str {
@@ -171,9 +172,10 @@ pub(super) fn resume(text: &str) -> Resumed {
             }
         };
         last_seq = last_seq.max(head.seq.unwrap_or(0));
-        if CONVERSATION.contains(&head.kind.as_str()) {
-            since_restart.push(*line);
+        if !head.is_conversation() {
+            continue;
         }
+        since_restart.push(*line);
         if head.kind == "restarted" {
             break;
         }
@@ -182,7 +184,7 @@ pub(super) fn resume(text: &str) -> Resumed {
     let mut entries = Vec::new();
     for line in since_restart.into_iter().rev() {
         match decoded(line) {
-            Ok(line) => entries.push(line.entry),
+            Ok(entry) => entries.push(entry),
             Err(error) => {
                 tracing::warn!(%error, "skipping a conversation line that does not parse");
                 skipped.push(line.to_owned());
@@ -192,12 +194,12 @@ pub(super) fn resume(text: &str) -> Resumed {
     Resumed { history: conversation(entries), last_seq, skipped }
 }
 
-pub(super) fn lines(text: &str, file: Holds) -> (Vec<Line>, Vec<String>) {
+pub(super) fn lines(text: &str) -> (Vec<Entry>, Vec<String>) {
     let (mut read, mut skipped) = (Vec::new(), Vec::new());
     for line in written(text).lines().filter(|line| !line.trim().is_empty()) {
         match decoded(line) {
-            Ok(line) => read.push(line),
-            Err(error) if file == Holds::TraceOnly || is_trace_line(line) => {
+            Ok(entry) => read.push(entry),
+            Err(error) if is_trace_line(line) => {
                 tracing::warn!(%error, "skipping a trace line that does not parse");
             }
             Err(error) => {
@@ -207,33 +209,6 @@ pub(super) fn lines(text: &str, file: Holds) -> (Vec<Line>, Vec<String>) {
         }
     }
     (read, skipped)
-}
-
-pub(super) fn merged(conversation: Vec<Line>, trace: Vec<Line>) -> Vec<Entry> {
-    let mut conversation = keyed(conversation).into_iter().peekable();
-    let mut trace = keyed(trace).into_iter().peekable();
-    let mut entries = Vec::new();
-    loop {
-        let from_trace = match (conversation.peek(), trace.peek()) {
-            (Some((said, _)), Some((traced, _))) => traced < said,
-            (None, Some(_)) => true,
-            (Some(_), None) => false,
-            (None, None) => return entries,
-        };
-        let next = if from_trace { trace.next() } else { conversation.next() };
-        entries.extend(next.map(|(_, entry)| entry));
-    }
-}
-
-fn keyed(lines: Vec<Line>) -> Vec<(u64, Entry)> {
-    let mut last = 0;
-    lines
-        .into_iter()
-        .map(|line| {
-            last = last.max(line.seq.unwrap_or(last));
-            (last, line.entry)
-        })
-        .collect()
 }
 
 #[cfg(test)]
