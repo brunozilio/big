@@ -18,7 +18,13 @@ import { choiceKey, folderName, fromKey, loadProjects, loadRepos, suggestedCode,
 const SKIPPED = 'onboarding:skipped'
 const NONE = 'none'
 
-type Stage = 'connections' | 'application'
+type Stage = 'connections' | 'ai' | 'application'
+
+const STAGES: { stage: Stage; label: string; title: string; text: string }[] = [
+  { stage: 'connections', label: 'Conexões', title: 'Conecte suas ferramentas', text: 'Código, tarefas e nuvem. Dá para mudar depois em Configurações.' },
+  { stage: 'ai', label: 'IA', title: 'Conecte um provedor de IA', text: 'É ele que dá vida aos agentes. Conecte pelo menos um.' },
+  { stage: 'application', label: 'Aplicação', title: 'Crie sua aplicação', text: 'A pasta do código e onde as tarefas vivem.' },
+]
 
 export function skippedOnboarding(): boolean {
   try {
@@ -49,10 +55,10 @@ interface Draft {
 const blank: Draft = { name: '', tracker: null, repository: { id: '', code: null, directory: '', run: '', verify: [] } }
 
 function Steps({ stage }: { stage: Stage }) {
-  const at = stage === 'connections' ? 0 : 1
+  const at = STAGES.findIndex((s) => s.stage === stage)
   return (
     <div className="mb-6 flex items-center gap-2 text-sm text-muted">
-      {['Conexões', 'Aplicação'].map((label, i) => (
+      {STAGES.map(({ label }, i) => (
         <span key={label} className="flex items-center gap-2">
           {i > 0 && <span className="h-px w-6 bg-border" />}
           <span className={cn('flex size-5 items-center justify-center rounded-full text-xs tabular-nums', i < at ? 'bg-success text-white' : i === at ? 'bg-fg text-bg' : 'bg-inset text-faint')}>
@@ -65,17 +71,18 @@ function Steps({ stage }: { stage: Stage }) {
   )
 }
 
-function ConnectionsStage({ onConnect }: { onConnect: (provider: string) => void }) {
+function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider: string) => void }) {
   const data = useStore((s) => s.connections)
   if (!data) return null
-  const groups = [...new Set(data.providers.map((p) => p.group))]
+  const providers = data.providers.filter((p) => !!p.ai === ai)
+  const groups = [...new Set(providers.map((p) => p.group))]
   return (
     <div className="space-y-5">
       {groups.map((g) => (
         <section key={g}>
           <h3 className="mb-2 text-sm font-medium text-muted">{g}</h3>
           <div className="grid gap-2">
-            {data.providers.filter((p) => p.group === g).map((p) => <ConnectionCard key={p.key} provider={p} accounts={accountsOf(p, data.connections)} onConnect={onConnect} />)}
+            {providers.filter((p) => p.group === g).map((p) => <ConnectionCard key={p.key} provider={p} accounts={accountsOf(p, data.connections)} onConnect={onConnect} />)}
           </div>
         </section>
       ))}
@@ -127,10 +134,28 @@ function ApplicationStage({ draft, onChange, onFolder, projects, repos }: { draf
   )
 }
 
-export function Onboarding({ onDone }: { onDone: () => void }) {
-  const [stage, setStage] = useState<Stage>('connections')
+export function stageOf(provider: string | null, providers: { key: string; ai?: boolean }[]): Stage {
+  return providers.find((p) => p.key === provider)?.ai ? 'ai' : 'connections'
+}
+
+export interface Resumed {
+  provider: string
+  flow: string | null
+}
+
+export function returnedTo(path: string, search: string): Resumed | null {
+  if (!path.startsWith('/settings/connections')) return null
+  const params = new URLSearchParams(search)
+  const provider = params.get('connect')
+  return provider ? { provider, flow: params.get('flow') } : null
+}
+
+export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void; resumed?: Resumed | null; onResumed?: () => void }) {
+  const providers = useStore((s) => s.connections?.providers ?? [])
+  const [stage, setStage] = useState<Stage>(() => stageOf(resumed?.provider ?? null, providers))
   const [draft, setDraft] = useState<Draft>(blank)
-  const [connecting, setConnecting] = useState<string | null>(null)
+  const [connecting, setConnecting] = useState<string | null>(resumed?.provider ?? null)
+  const [flow, setFlow] = useState<string | null>(resumed?.flow ?? null)
   const [choosing, setChoosing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -163,6 +188,8 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
     onDone()
   }
   const ready = draft.name.trim() !== '' && draft.repository.directory !== ''
+  const at = STAGES.findIndex((s) => s.stage === stage)
+  const current = STAGES[at]
   return (
     <div className="flex min-h-full flex-col items-center bg-subtle px-4 py-10">
       <ProductMark size={34} className="mb-8" />
@@ -171,11 +198,11 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           <Steps stage={stage} />
           <AnimatePresence mode="wait" initial={false}>
             <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
-              <h1 className="text-2xl font-medium tracking-tighter2 text-fg">{stage === 'connections' ? 'Conecte suas ferramentas' : 'Crie sua aplicação'}</h1>
-              <p className="mb-6 mt-1.5 text-base text-muted">{stage === 'connections' ? 'Gestão, código, nuvem e IA. Dá para mudar depois em Configurações.' : 'A pasta do código e onde as tarefas vivem.'}</p>
+              <h1 className="text-2xl font-medium tracking-tighter2 text-fg">{current.title}</h1>
+              <p className="mb-6 mt-1.5 text-base text-muted">{current.text}</p>
               <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-                {stage === 'connections' ? (
-                  <ConnectionsStage onConnect={setConnecting} />
+                {stage !== 'application' ? (
+                  <ConnectionsStage ai={stage === 'ai'} onConnect={setConnecting} />
                 ) : (
                   <ApplicationStage draft={draft} onChange={setDraft} onFolder={() => setChoosing(true)} projects={projects} repos={repos} />
                 )}
@@ -184,17 +211,21 @@ export function Onboarding({ onDone }: { onDone: () => void }) {
           </AnimatePresence>
           {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
           <div className="mt-6 flex items-center gap-2">
-            {stage === 'application' && <Button variant="ghost" icon={<Icon name="left" size={15} />} onClick={() => setStage('connections')}>Voltar</Button>}
+            {at > 0 && <Button variant="ghost" icon={<Icon name="left" size={15} />} onClick={() => setStage(STAGES[at - 1].stage)}>Voltar</Button>}
             <Button variant="ghost" onClick={skip}>Pular por agora</Button>
-            {stage === 'connections' ? (
-              <Button variant="primary" className="ml-auto" onClick={() => setStage('application')}>Continuar</Button>
+            {stage !== 'application' ? (
+              <Button variant="primary" className="ml-auto" onClick={() => setStage(STAGES[at + 1].stage)}>Continuar</Button>
             ) : (
               <Button variant="primary" className="ml-auto" loading={busy} disabled={!ready} onClick={create}>Criar aplicação</Button>
             )}
           </div>
         </div>
       </div>
-      <ConnectDialog provider={connecting} onClose={() => setConnecting(null)} />
+      <ConnectDialog provider={connecting} resume={flow} onClose={() => {
+        setConnecting(null)
+        setFlow(null)
+        onResumed?.()
+      }} />
       <FolderDialog open={choosing} start={draft.repository.directory || null} onClose={() => setChoosing(false)} onChoose={chosen} />
     </div>
   )

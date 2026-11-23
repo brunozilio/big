@@ -12,7 +12,7 @@ import { Tooltip } from '@/ui/overlay'
 import { ItemModal } from './items/ItemModal'
 import { ItemsView } from './items/ItemsView'
 import { NewItem } from './items/NewItem'
-import { needsOnboarding, Onboarding } from './onboarding/Onboarding'
+import { needsOnboarding, Onboarding, returnedTo } from './onboarding/Onboarding'
 import { ConnectDialog } from './settings/ConnectDialog'
 import { SettingsView, type SettingsTab } from './settings/Settings'
 
@@ -24,10 +24,11 @@ export function App() {
   const ready = useStore((s) => s.ready)
   const applications = useStore((s) => s.applications)
   const [, setSettled] = useState(0)
-  if (!location.pathname.startsWith('/settings') && needsOnboarding(ready, applications)) {
+  const resumed = returnedTo(location.pathname, location.search)
+  if ((resumed || !location.pathname.startsWith('/settings')) && needsOnboarding(ready, applications)) {
     return (
       <div className="scrollbar-thin h-full overflow-y-auto">
-        <Onboarding onDone={() => {
+        <Onboarding resumed={resumed} onResumed={() => resumed && navigate('/', { replace: true })} onDone={() => {
           setSettled((n) => n + 1)
           navigate('/')
         }} />

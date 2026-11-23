@@ -4,7 +4,7 @@ import { setApi } from '../src/api'
 import type { Api } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
 import { boot, stop } from '../src/api/store'
-import { needsOnboarding, Onboarding } from '../src/screens/onboarding/Onboarding'
+import { needsOnboarding, Onboarding, returnedTo, stageOf } from '../src/screens/onboarding/Onboarding'
 import { TooltipProvider } from '../src/ui/overlay'
 
 async function started() {
@@ -33,12 +33,26 @@ describe('primeira vez', () => {
     expect(needsOnboarding(true, [])).toBe(false)
   })
 
+  test('a volta do login cai no onboarding, no passo do provedor', () => {
+    expect(returnedTo('/settings/connections', '?connect=jira&flow=f1')).toEqual({ provider: 'jira', flow: 'f1' })
+    expect(returnedTo('/settings/connections', '')).toBeNull()
+    expect(returnedTo('/', '?connect=jira')).toBeNull()
+    const providers = [{ key: 'jira' }, { key: 'claude-subscription', ai: true }]
+    expect(stageOf('jira', providers)).toBe('connections')
+    expect(stageOf('claude-subscription', providers)).toBe('ai')
+  })
+
   test('primeiro as conexões, depois a aplicação, que só nasce com nome e pasta', async () => {
     await started()
     let done = 0
     render(<TooltipProvider><Onboarding onDone={() => (done += 1)} /></TooltipProvider>)
     expect(screen.getByText('Conecte suas ferramentas')).toBeTruthy()
-    expect(document.querySelectorAll('[data-provider]').length).toBeGreaterThan(0)
+    const shown = () => Array.from(document.querySelectorAll<HTMLElement>('[data-provider]')).map((el) => el.dataset.provider)
+    expect(shown()).toEqual(['github', 'jira', 'aws'])
+    fireEvent.click(screen.getByText('Continuar'))
+    expect(await screen.findByText('Conecte um provedor de IA')).toBeTruthy()
+    expect(shown().length).toBeGreaterThan(0)
+    expect(shown().every((key) => !['github', 'jira', 'aws'].includes(key ?? ''))).toBe(true)
     fireEvent.click(screen.getByText('Continuar'))
     expect(await screen.findByText('Crie sua aplicação')).toBeTruthy()
     fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Loja' } })
