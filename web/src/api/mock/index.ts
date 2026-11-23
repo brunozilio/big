@@ -203,7 +203,8 @@ export function mockApi(options: MockOptions = {}): Api {
     createItem: (input) => wait(() => {
       const app = applications.find((x) => x.id === input.application)
       if (input.application && !app) throw new Error('Essa aplicação não existe mais.')
-      return item(createItem(input.text, input.issue?.key ?? null, input.model, input.project?.key ?? app?.tracker?.project ?? null))
+      const space = app?.tracker?.project ?? null
+      return item(createItem(input.text, input.issue?.key ?? null, input.model, space))
     }, 600),
     rerun: (id, step) => wait(() => {
       const it = findItem(id)

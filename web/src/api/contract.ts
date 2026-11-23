@@ -95,7 +95,6 @@ export interface NewItem {
   application?: string | null
   text: string
   issue: { connection: string; key: string } | null
-  project?: { connection: string; key: string } | null
   model: string
   effort: Effort
   fast: boolean

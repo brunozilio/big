@@ -96,29 +96,47 @@ describe('aba Aplicações', () => {
   })
 })
 
-describe('aplicação no composer', () => {
-  test('começa na aplicação lembrada, usa o espaço dela e cria o item nela', async () => {
+describe('aplicações no composer', () => {
+  test('sem espaço no composer; sempre uma aplicação, e o espaço dela filtra a busca e o item', async () => {
     const base = fresh()
     const created: NewItemInput[] = []
-    await started({ ...base, createItem: (input) => (created.push(input), base.createItem(input)) })
+    const searched: unknown[] = []
+    const spy = {
+      ...base,
+      createItem: (input: NewItemInput) => (created.push(input), base.createItem(input)),
+      call: ((connection, action, args) => (action === 'tracker.search' && searched.push(args), base.call(connection, action, args))) as typeof base.call,
+    }
+    await started(spy)
     await act(async () => {
       await base.createApplication({ name: 'Infra', tracker: { connection: 'c-jira', project: 'OPS' }, repositories: [{ id: '', code: null, directory: `${MOCK_HOME}/projetos/infra`, run: '', verify: [] }] })
-      await boot({ ...base, createItem: (input) => (created.push(input), base.createItem(input)) })
+      await boot(spy)
     })
     const view = render(<MemoryRouter><TooltipProvider><NewItem onCreated={() => undefined} /></TooltipProvider></MemoryRouter>)
+    const trigger = await view.findByRole('button', { name: /Começar de uma issue/ })
     const menu = await view.findByRole('button', { name: 'Aplicação: Checkout' })
-    expect(view.getByRole('button', { name: /Começar de uma issue/ }).textContent).toContain('APP')
+    expect(trigger.textContent).toBe('')
+    fireEvent.click(trigger)
+    await waitFor(() => expect(searched.length).toBeGreaterThan(0))
+    expect(searched.every((args) => (args as { project?: string }).project === 'APP')).toBe(true)
+    expect(view.queryByRole('button', { name: /Projeto:/ })).toBeNull()
+    fireEvent.keyDown(document, { key: 'Escape' })
+
     fireEvent.keyDown(menu, { key: 'Enter' })
+    expect(view.queryByRole('menuitem', { name: /Todas/ })).toBeNull()
     fireEvent.click(await view.findByRole('menuitem', { name: 'Infra' }))
     await waitFor(() => expect(view.getByRole('button', { name: 'Aplicação: Infra' })).toBeTruthy())
-    expect(view.getByRole('button', { name: /Começar de uma issue/ }).textContent).toContain('OPS')
+    const infra = getState().applications?.find((a) => a.name === 'Infra')
+    expect(localStorage.getItem('composer.application')).toBe(infra?.id ?? '')
+    searched.length = 0
+    fireEvent.click(view.getByRole('button', { name: /Começar de uma issue/ }))
+    await waitFor(() => expect(searched.length).toBeGreaterThan(0))
+    expect(searched.every((args) => (args as { project?: string }).project === 'OPS')).toBe(true)
+    fireEvent.keyDown(document, { key: 'Escape' })
     const box = view.getByLabelText('Mensagem')
     fireEvent.change(box, { target: { value: 'Subir a fila' } })
     fireEvent.keyDown(box, { key: 'Enter' })
     await waitFor(() => expect(created.length).toBe(1))
-    const infra = getState().applications?.find((a) => a.name === 'Infra')
     expect(created[0].application).toBe(infra?.id ?? '')
-    expect(created[0].project).toEqual({ connection: 'c-jira', key: 'OPS' })
-    expect(localStorage.getItem('composer.application')).toBe(infra?.id ?? '')
+    expect(Object.keys(created[0])).not.toContain('project')
   })
 })

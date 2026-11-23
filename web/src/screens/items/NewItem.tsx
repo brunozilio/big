@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api'
-import type { Application, Connection, IssueSummary, Item, Provider, TrackerProject } from '@/api/contract'
+import type { Application, Connection, IssueSummary, Item, Provider } from '@/api/contract'
 import { errorText, setItems, useStore } from '@/api/store'
 import { Composer, type Tuning } from '@/chat/Composer'
 import { Button, IconButton } from '@/ui/button'
@@ -10,7 +10,7 @@ import { SearchInput } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { tween } from '@/ui/motion'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger, Popover } from '@/ui/overlay'
-import { applicationProject, initialApplication, initialProject, rememberApplication, rememberProject, sameProject, searchTargets, type ProjectChoice } from './projects'
+import { configuredSpaces, rememberApplication, rememberedApplication, searchTargets, type Space } from './projects'
 
 interface Source {
   connection: Connection
@@ -30,39 +30,6 @@ export function useTrackers(): Source[] {
         return c.capabilities.includes('tracker') && provider ? [{ connection: c, provider }] : []
       }),
     [connections],
-  )
-}
-
-function ProjectMenu({ sources, projects, choice, onChoose }: { sources: Source[]; projects: Record<string, TrackerProject[]>; choice: ProjectChoice | null; onChoose: (choice: ProjectChoice | null) => void }) {
-  const listed = sources.filter((s) => (projects[s.connection.id] ?? []).length > 0)
-  const chosen = choice ? (projects[choice.connection] ?? []).find((p) => p.key === choice.key) : undefined
-  const label = chosen?.name ?? choice?.key ?? 'Todos os projetos'
-  return (
-    <Menu>
-      <MenuTrigger asChild>
-        <button aria-label={`Projeto: ${label}`} className="flex h-9 max-w-[180px] shrink-0 items-center gap-1.5 rounded-control px-2.5 text-base text-fg2 transition-colors hover:bg-hover data-[state=open]:bg-inset">
-          <Icon name="folder" size={15} className="shrink-0 text-muted" />
-          <span className="truncate">{label}</span>
-          <Icon name="down" size={14} className="shrink-0 text-muted" />
-        </button>
-      </MenuTrigger>
-      <MenuContent align="start" className="max-h-[320px] overflow-y-auto">
-        <MenuItem icon={<Icon name="folder" size={15} />} onSelect={() => onChoose(null)} right={choice === null ? <Icon name="check" size={15} /> : undefined}>Todos os projetos</MenuItem>
-        {listed.map((s) => (
-          <div key={s.connection.id}>
-            {listed.length > 1 && <MenuLabel>{s.connection.account || s.connection.label}</MenuLabel>}
-            {(projects[s.connection.id] ?? []).map((p) => {
-              const next = { connection: s.connection.id, key: p.key }
-              return (
-                <MenuItem key={p.id || p.key} icon={p.avatar ? <img src={p.avatar} alt="" className="size-[15px] rounded-[4px]" /> : <Icon name="folder" size={15} />} onSelect={() => onChoose(next)} right={sameProject(choice, next) ? <Icon name="check" size={15} /> : undefined}>
-                  <span className="text-fg2">{p.name}</span> <span className="text-muted">{p.key}</span>
-                </MenuItem>
-              )
-            })}
-          </div>
-        ))}
-      </MenuContent>
-    </Menu>
   )
 }
 
@@ -88,42 +55,16 @@ function ApplicationMenu({ applications, chosen, onChoose }: { applications: App
   )
 }
 
-function useProjects(open: boolean, sources: Source[]): Record<string, TrackerProject[]> {
-  const [projects, setProjects] = useState<Record<string, TrackerProject[]>>({})
-  const asked = useRef(new Set<string>())
-  useEffect(() => {
-    if (!open) return
-    for (const s of sources) {
-      const id = s.connection.id
-      if (asked.current.has(id)) continue
-      asked.current.add(id)
-      api()
-        .call(id, 'tracker.projects', {})
-        .then((list) => setProjects((known) => ({ ...known, [id]: list })))
-        .catch(() => {
-          asked.current.delete(id)
-          setProjects((known) => ({ ...known, [id]: [] }))
-        })
-    }
-  }, [open, sources])
-  return projects
-}
-
-function IssuePicker({ sources, project, onProject, onPick }: { sources: Source[]; project: ProjectChoice | null; onProject: (choice: ProjectChoice | null) => void; onPick: (issue: Picked) => void }) {
+function IssuePicker({ sources, spaces, onPick }: { sources: Source[]; spaces: Space[]; onPick: (issue: Picked) => void }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
   const [found, setFound] = useState<Picked[]>([])
   const [error, setError] = useState<string | null>(null)
-  const projects = useProjects(open, sources)
-  useEffect(() => {
-    const known = project ? projects[project.connection] : undefined
-    if (project && known && known.length > 0 && !known.some((p) => p.key === project.key)) onProject(null)
-  }, [project, projects, onProject])
   useEffect(() => {
     if (!open) return
     let alive = true
     const t = setTimeout(() => {
-      const targets = searchTargets(sources.map((s) => s.connection.id), project, q)
+      const targets = searchTargets(sources.map((s) => s.connection.id), spaces, q)
       Promise.all(
         targets.map((target) => {
           const source = sources.find((s) => s.connection.id === target.connection)
@@ -137,7 +78,7 @@ function IssuePicker({ sources, project, onProject, onPick }: { sources: Source[
       alive = false
       clearTimeout(t)
     }
-  }, [open, q, sources, project])
+  }, [open, q, sources, spaces])
   const first = sources[0]
   if (!first) return null
   return (
@@ -150,12 +91,10 @@ function IssuePicker({ sources, project, onProject, onPick }: { sources: Source[
       trigger={
         <button aria-label={`Começar de uma issue do ${first.provider.name}`} className="flex h-8 min-w-8 items-center justify-center gap-1.5 rounded-full px-2 transition-colors hover:bg-inset data-[state=open]:bg-inset">
           <ProviderLogo logo={first.provider.logo} name={first.provider.name} size={16} />
-          {project && <span className="max-w-[96px] truncate text-base text-fg2">{project.key}</span>}
         </button>
       }
     >
       <div className="flex items-center gap-1 p-1">
-        <ProjectMenu sources={sources} projects={projects} choice={project} onChoose={onProject} />
         <div className="min-w-0 flex-1"><SearchInput autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={`Buscar issue do ${first.provider.name}`} /></div>
       </div>
       <ul className="mt-1 max-h-[280px] overflow-y-auto">
@@ -180,27 +119,17 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
   const [error, setError] = useState<string | null>(null)
   const [model, setModel] = useState<string | null>(null)
   const sources = useTrackers()
-  const ids = useMemo(() => sources.map((s) => s.connection.id), [sources])
   const applications = useStore((s) => s.applications)
-  const [chosenApplication, setChosenApplication] = useState<string | null>(null)
-  const application = useMemo(() => {
+  const [chosenId, setChosenId] = useState<string | null>(() => rememberedApplication())
+  const chosen = useMemo(() => {
     const listed = applications ?? []
-    return listed.find((a) => a.id === chosenApplication) ?? initialApplication(listed)
-  }, [applications, chosenApplication])
-  const [chosenProject, setChosenProject] = useState<ProjectChoice | null | undefined>(undefined)
-  const project = useMemo(() => (chosenProject === undefined ? applicationProject(application, ids) ?? initialProject(ids) : chosenProject), [chosenProject, ids, application])
-  const chooseApplication = useCallback((next: Application) => {
-    setChosenApplication(next.id)
+    return listed.find((a) => a.id === chosenId) ?? listed[0] ?? null
+  }, [applications, chosenId])
+  const choose = (next: Application) => {
+    setChosenId(next.id)
     rememberApplication(next.id)
-    setChosenProject(undefined)
-  }, [])
-  const chooseProject = useCallback(
-    (choice: ProjectChoice | null) => {
-      setChosenProject(choice)
-      rememberProject(ids, choice)
-    },
-    [ids],
-  )
+  }
+  const spaces = useMemo(() => configuredSpaces(chosen ? [chosen] : [], sources.map((s) => s.connection.id)), [chosen, sources])
   const defaultModel = useStore((s) => s.models?.default ?? null)
   const [tuning, setTuning] = useState<Tuning>({ effort: 'medium', fast: false })
   const start = (text: string, attachments: string[]) => {
@@ -208,7 +137,7 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
     setBusy(true)
     setError(null)
     api()
-      .createItem({ application: application?.id ?? null, text, issue: issue ? { connection: issue.source.connection.id, key: issue.key } : null, project: issue ? null : project, model: model ?? defaultModel ?? 'auto', ...tuning, attachments })
+      .createItem({ application: chosen?.id ?? null, text, issue: issue ? { connection: issue.source.connection.id, key: issue.key } : null, model: model ?? defaultModel ?? 'auto', ...tuning, attachments })
       .then((it) => {
         setItems((items) => (items.some((x) => x.id === it.id) ? items : [it, ...items]))
         setIssue(null)
@@ -241,8 +170,8 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
         onTuning={setTuning}
         leading={
           <>
-            <ApplicationMenu applications={applications ?? []} chosen={application} onChoose={chooseApplication} />
-            <IssuePicker sources={sources} project={project} onProject={chooseProject} onPick={setIssue} />
+            <ApplicationMenu applications={applications ?? []} chosen={chosen} onChoose={choose} />
+            <IssuePicker sources={sources} spaces={spaces} onPick={setIssue} />
           </>
         }
         onSubmit={(input) => start(input.text, input.attachments)}

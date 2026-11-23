@@ -372,21 +372,6 @@ async fn the_live_feed_tells_about_items_sessions_connections_and_branding() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_new_item_without_an_issue_keeps_the_project_chosen_in_the_composer() {
-    let world = World::new().await;
-    let body = json!({
-        "text": "Exportar CSV", "issue": null, "project": { "connection": "c1", "key": "OPS" },
-        "model": "auto", "attachments": [],
-    });
-    let (status, item) = world.send(Method::POST, "/api/items", Some(body)).await;
-    assert_eq!(status, StatusCode::OK, "{item}");
-    let id = domain::workflow::ItemId::from(item["id"].as_str().expect("id"));
-    let kept = world.handle.item(&id).expect("store").expect("item");
-    assert_eq!(kept.input["project"], "OPS");
-    assert_eq!(kept.input["connection"], "c1");
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn a_connection_saved_without_its_choice_learns_the_only_one_and_a_sign_in_with_none_fails() {
     let world = World::new().await;
     let record = store::ConnectionRecord {

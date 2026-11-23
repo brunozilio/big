@@ -1,9 +1,30 @@
-export interface ProjectChoice {
+export interface Space {
   connection: string
   key: string
 }
 
-const PREFIX = 'composer.project.'
+export interface SearchTarget {
+  connection: string
+  args: { query: string; project?: string }
+}
+
+export function configuredSpaces(applications: { tracker: { connection: string; project: string } | null }[], connections: string[]): Space[] {
+  const found: Space[] = []
+  for (const a of applications) {
+    const t = a.tracker
+    if (!t || !connections.includes(t.connection)) continue
+    if (!found.some((s) => s.connection === t.connection && s.key === t.project)) found.push({ connection: t.connection, key: t.project })
+  }
+  return found
+}
+
+export function searchTargets(connections: string[], spaces: Space[], query: string): SearchTarget[] {
+  const kept = spaces.filter((s) => connections.includes(s.connection))
+  if (kept.length > 0) return kept.map((s) => ({ connection: s.connection, args: { query, project: s.key } }))
+  return connections.map((connection) => ({ connection, args: { query } }))
+}
+
+const APPLICATION = 'composer.application'
 
 function storage(): Storage | null {
   try {
@@ -12,51 +33,6 @@ function storage(): Storage | null {
     return null
   }
 }
-
-export function rememberedProject(connection: string): string | null {
-  try {
-    return storage()?.getItem(PREFIX + connection) || null
-  } catch {
-    return null
-  }
-}
-
-export function rememberProject(connections: string[], choice: ProjectChoice | null): void {
-  try {
-    const kept = storage()
-    if (!kept) return
-    for (const connection of connections) {
-      if (choice && connection === choice.connection) kept.setItem(PREFIX + connection, choice.key)
-      else kept.removeItem(PREFIX + connection)
-    }
-  } catch {
-    return
-  }
-}
-
-export function initialProject(connections: string[]): ProjectChoice | null {
-  for (const connection of connections) {
-    const key = rememberedProject(connection)
-    if (key) return { connection, key }
-  }
-  return null
-}
-
-export interface SearchTarget {
-  connection: string
-  args: { query: string; project?: string }
-}
-
-export function searchTargets(connections: string[], choice: ProjectChoice | null, query: string): SearchTarget[] {
-  if (choice && connections.includes(choice.connection)) return [{ connection: choice.connection, args: { query, project: choice.key } }]
-  return connections.map((connection) => ({ connection, args: { query } }))
-}
-
-export function sameProject(a: ProjectChoice | null, b: ProjectChoice | null): boolean {
-  return a?.connection === b?.connection && a?.key === b?.key
-}
-
-const APPLICATION = 'composer.application'
 
 export function rememberedApplication(): string | null {
   try {
@@ -75,14 +51,4 @@ export function rememberApplication(id: string | null): void {
   } catch {
     return
   }
-}
-
-export function initialApplication<T extends { id: string }>(applications: T[]): T | null {
-  const remembered = rememberedApplication()
-  return applications.find((a) => a.id === remembered) ?? applications[0] ?? null
-}
-
-export function applicationProject(application: { tracker: { connection: string; project: string } | null } | null, connections: string[]): ProjectChoice | null {
-  const tracker = application?.tracker
-  return tracker && connections.includes(tracker.connection) ? { connection: tracker.connection, key: tracker.project } : null
 }
