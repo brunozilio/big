@@ -115,7 +115,6 @@ fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, re
     if let Some(mode) = mode {
         request.policy.permission = mode;
     }
-    request.policy.allowed_tools.clone_from(&profile.tools);
     request
 }
 
