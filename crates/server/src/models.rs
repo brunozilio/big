@@ -91,6 +91,20 @@ mod tests {
     }
 
     #[test]
+    fn a_kiro_model_lists_the_efforts_its_catalog_declared() {
+        let mut opus = app::Model::new("kiro-subscription:claude-opus-4.6", "Claude Opus 4.6");
+        opus.capabilities = Some(domain::model::ModelCapabilities {
+            reasoning: true,
+            adaptive_thinking: true,
+            reasoning_levels: ["low", "medium", "high", "max"].map(String::from).to_vec(),
+            ..Default::default()
+        });
+        let listed = listing(&[opus, app::Model::new("kiro-subscription:claude-sonnet-4.5", "Claude Sonnet 4.5")]);
+        assert_eq!(listed["models"][1]["efforts"], json!(["low", "medium", "high", "max"]));
+        assert_eq!(listed["models"][2]["efforts"], json!([]));
+    }
+
+    #[test]
     fn the_effort_is_read_and_fast_is_refused() {
         assert_eq!(tuning(&json!({ "effort": "low" })).ok(), Some(Some(app::Effort::Low)));
         assert_eq!(tuning(&json!({})).ok(), Some(None));

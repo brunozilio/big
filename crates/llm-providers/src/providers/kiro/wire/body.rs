@@ -36,7 +36,7 @@ pub fn body(request: &TurnRequest) -> Value {
     if !messages.is_empty() {
         state["history"] = json!(messages);
     }
-    json!({"conversationState": state})
+    json!({"conversationState": state, "output_config": {"effort": crate::model::wires::messages::effort(request.effort)}})
 }
 
 fn message(message: &Message, model: &str) -> Value {
@@ -165,6 +165,21 @@ mod tests {
         assert!(first.is_string());
         assert_eq!(first, later);
         assert_ne!(first, id(vec![Message::user("Write c")]));
+    }
+
+    #[test]
+    fn the_chosen_effort_travels_with_the_turn() {
+        let levels = [
+            (Effort::Low, "low"),
+            (Effort::Medium, "medium"),
+            (Effort::High, "high"),
+            (Effort::XHigh, "xhigh"),
+            (Effort::Max, "max"),
+        ];
+        for (effort, named) in levels {
+            let body = body(&TurnRequest { effort, ..request(vec![Message::user("hi")]) });
+            assert_eq!(body["output_config"], json!({"effort": named}));
+        }
     }
 
     #[test]

@@ -1,4 +1,5 @@
 pub mod auth;
+pub mod effort;
 pub mod idc;
 pub mod models;
 pub mod search;
@@ -76,8 +77,9 @@ impl Shape for Provider {
     fn retries_after_refresh(&self, status: u16) -> bool {
         matches!(status, 401 | 403)
     }
-    fn shape(&self, _model: Option<&ModelOption>, body: &mut Value, _effort: &str) -> Result<(), ProviderError> {
+    fn shape(&self, model: Option<&ModelOption>, body: &mut Value, effort: &str) -> Result<(), ProviderError> {
         shape(body);
+        effort::put(model, body, effort);
         Ok(())
     }
     fn catalog(&self, config: &Config, after: &str) -> Call {
@@ -191,6 +193,25 @@ mod tests {
         assert_eq!(body["conversationState"]["history"][0]["userInputMessage"]["modelId"], "auto");
         assert_eq!(body["profileArn"], ARN);
         assert_eq!(body["conversationState"]["currentMessage"]["userInputMessage"]["origin"], ORIGIN);
+    }
+
+    #[test]
+    fn a_turn_asks_a_thinking_model_for_its_effort_beside_the_conversation() {
+        let mut model = ModelOption::new("kiro-subscription:claude-opus-4.6", "Claude Opus 4.6");
+        model.capabilities = effort::known("claude-opus-4.6");
+        let turn = |model: &ModelOption, effort: &str| {
+            let mut body = json!({
+                "conversationState": {"currentMessage": {"userInputMessage": {"modelId": model.id}}},
+                "output_config": {"effort": effort},
+            });
+            llm_providers::request::shape(&Provider, Some(model), &mut body).unwrap_or_else(|e| panic!("{e}"));
+            body
+        };
+        let body = turn(&model, "xhigh");
+        assert_eq!(body["additionalModelRequestFields"], json!({"output_config": {"effort": "high"}}));
+        assert!(body.get("output_config").is_none());
+        let plain = turn(&ModelOption::new("kiro-subscription:claude-sonnet-4.5", "Sonnet 4.5"), "high");
+        assert!(plain.get("additionalModelRequestFields").is_none() && plain.get("output_config").is_none());
     }
 
     #[test]
