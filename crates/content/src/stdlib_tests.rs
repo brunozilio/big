@@ -331,6 +331,27 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
 }
 
 #[test]
+fn ci_without_any_pipeline_moves_on_and_says_why() {
+    let text = r#"
+import { workflow } from "sdk";
+import { ci } from "sdk/steps";
+export default workflow({
+  name: "so-ci",
+  async run(ctx) {
+    const done = await ci(ctx, { ref: "big/x", patience: 3 });
+    return { outcome: done.outcome, state: done.data.state };
+  },
+});
+"#;
+    let (result, asked) = drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
+        Some("call") => Some(json!([])),
+        _ => Some(Value::Null),
+    });
+    assert_eq!(calls(&asked, "runs").len(), 3, "it asked three times, then gave up");
+    assert_eq!(result["result"], json!({ "outcome": "passed", "state": "none" }), "{result}");
+}
+
+#[test]
 fn checks_without_any_command_say_so_instead_of_an_empty_log() {
     let text = r#"
 import { workflow } from "sdk";

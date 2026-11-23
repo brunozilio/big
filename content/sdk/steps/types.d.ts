@@ -70,6 +70,7 @@ export interface PipelineStepOptions extends EffectStepOptions {
   pipeline?: string;
   ref?: string;
   every?: number;
+  patience?: number;
 }
 
 export interface PlanOptions extends AgentStepOptions {}

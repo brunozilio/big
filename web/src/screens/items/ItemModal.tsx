@@ -40,8 +40,8 @@ export function ItemModal({ it, step, onStep, onClose, onConnect }: { it: Item |
         <div className="overflow-hidden">
           <div className="flex h-16 items-center gap-3 px-5">
             {it.issue && <IssueKey issue={it.issue} />}
-            <span className="min-w-0 flex-1 truncate text-lg font-medium tracking-tightish text-fg">{it.title}</span>
-            <span className="flex shrink-0 items-center gap-2">
+            <span className="min-w-[160px] flex-1 truncate text-lg font-medium tracking-tightish text-fg" title={it.title}>{it.title}</span>
+            <span className="flex min-w-0 max-w-[60%] items-center justify-end gap-2">
               {it.impediment ? <RowRight it={it} onStep={onStep} onConnect={(p) => { onClose(); onConnect(p) }} /> : <ChangeChip change={it.change} />}
             </span>
             <ItemMenu it={it} step={step ?? it.current} onClose={onClose} />
@@ -206,6 +206,8 @@ export function EmptyStep({ it, step }: { it: Item; step: string }) {
   const [error, setError] = useState<string | null>(null)
   const label = it.steps.find((s) => s.id === step)?.label ?? step
   const stuck = it.impediment && it.current === step ? it.impediment.reason : null
+  const running = it.steps.find((s) => s.id === step)?.state === 'running'
+  if (!stuck && running) return <p className="flex items-center gap-2 text-base text-muted"><Spinner size={14} />Em andamento…</p>
   if (!stuck) return <p className="text-base text-muted">Nada para mostrar nesta etapa ainda.</p>
   return (
     <div className="space-y-3">

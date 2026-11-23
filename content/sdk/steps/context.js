@@ -151,10 +151,12 @@ export function feedbackText(from) {
 
 export async function findRun(ctx, opts, wanted) {
   const args = defined({ ref: wanted.ref, repo: wanted.repo, pipeline: opts.pipeline, limit: 10 });
-  for (;;) {
+  const patience = opts.patience ?? 10;
+  for (let tries = 1; ; tries += 1) {
     const runs = await ctx.call("pipelines", "runs", args, effects(opts));
     const fresh = (Array.isArray(runs) ? runs : []).find((run) => !wanted.seen.includes(run.ref));
     if (fresh) return fresh;
+    if (wanted.optional && tries >= patience) return null;
     await ctx.sleep(opts.every ?? 30000);
   }
 }

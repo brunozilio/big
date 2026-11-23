@@ -23,6 +23,6 @@ export declare function targetFields(target: PerRepository & { id?: string }): P
 export declare function eachOf<T, R>(ctx: Ctx, targets: T[], work: (ctx: Ctx, target: T, index: number) => Promise<R>): Promise<R[]>;
 export declare function waitOptions(opts: HumanStepOptions): { timeout?: number };
 export declare function feedbackText(from: StepEntry | null): string;
-export declare function findRun(ctx: Ctx, opts: PipelineStepOptions, wanted: { ref: string; repo?: string; seen: string[] }): Promise<RunSummary>;
+export declare function findRun(ctx: Ctx, opts: PipelineStepOptions, wanted: { ref: string; repo?: string; seen: string[]; optional?: boolean }): Promise<RunSummary | null>;
 export declare function settle(ctx: Ctx, opts: PipelineStepOptions, run: string, until: string[], events: string[]): Promise<Run>;
 export declare function failedLogs(ctx: Ctx, opts: PipelineStepOptions, run: Run): Promise<string>;
