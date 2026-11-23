@@ -12,6 +12,8 @@ pub enum WorkflowEvent {
     StepViewSet { step: String, branch: Option<String>, view: Value },
     EffectRequested(EffectRequest),
     EffectResolved { key: IdempotencyKey, outcome: EffectOutcome },
+    EffectProgress { key: IdempotencyKey, data: Value },
+    Signal { seq: u64, kind: String, branch: String, step: Option<String>, attempt: u32, data: Value },
     StepFinished { step: String, branch: Option<String>, state: StepState, output: Value },
     StatusSet(String),
     ImpedimentSet { on: bool, reason: Option<String> },

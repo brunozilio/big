@@ -119,13 +119,27 @@ pub fn run_limited(
     stop: Arc<AtomicBool>,
     limit: Limit,
 ) -> Result<Value, String> {
-    on_its_own_stack(|| run_here(name, source, export, arguments, data, host, stop, limit))
+    let modules = [(name.to_owned(), source.to_owned())];
+    on_its_own_stack(|| run_here(&modules, name, export, arguments, data, host, stop, limit))
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn run_modules(
+    modules: &[(String, String)],
+    entry: &str,
+    export: &str,
+    arguments: &[Value],
+    host: Arc<dyn Host>,
+    stop: Arc<AtomicBool>,
+    limit: Limit,
+) -> Result<Value, String> {
+    on_its_own_stack(|| run_here(modules, entry, export, arguments, &Value::Null, host, stop, limit))
 }
 
 #[allow(clippy::too_many_arguments)]
 fn run_here(
-    name: &str,
-    source: &str,
+    modules: &[(String, String)],
+    entry: &str,
     export: &str,
     arguments: &[Value],
     data: &Value,
@@ -155,7 +169,7 @@ fn run_here(
     })));
     let context = Context::full(&runtime).map_err(|error| error.to_string())?;
     context.with(|ctx| {
-        let result = evaluate(&ctx, name, source, export, arguments, data, host);
+        let result = evaluate(&ctx, modules, entry, export, arguments, data, host);
         if stop.load(Ordering::Relaxed) {
             return Err("cancelled".to_owned());
         }
@@ -168,8 +182,8 @@ fn run_here(
 
 fn evaluate<'js>(
     ctx: &Ctx<'js>,
-    name: &str,
-    source: &str,
+    modules: &[(String, String)],
+    entry: &str,
     export: &str,
     arguments: &[Value],
     data: &Value,
@@ -185,7 +199,15 @@ fn evaluate<'js>(
     })?;
     ctx.globals().set("__host", bridge)?;
     ctx.eval::<(), _>(PRELUDE)?;
-    let (module, done) = Module::declare(ctx.clone(), name, source)?.eval()?;
+    let mut main = None;
+    for (name, source) in modules {
+        let declared = Module::declare(ctx.clone(), name.as_str(), source.as_str())?;
+        if name == entry {
+            main = Some(declared);
+        }
+    }
+    let main = main.ok_or_else(|| rquickjs::Error::new_from_js("entry", "module"))?;
+    let (module, done) = main.eval()?;
     done.finish::<()>()?;
     let mut path = export.split('.');
     let mut value: JsValue = module.get(path.next().unwrap_or(export))?;

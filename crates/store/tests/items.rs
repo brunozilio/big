@@ -183,3 +183,14 @@ fn reopening_a_file_keeps_everything_and_migrations_run_once() {
     let reopened = Store::open(&path, 2).expect("the store answers");
     assert_eq!(reopened.load(&ItemId::from("a")).expect("the store answers"), Some(replay(&events)));
 }
+
+#[test]
+fn timed_events_carry_the_instant_they_were_appended() {
+    let store = Store::in_memory(0).expect("the store answers");
+    let id = ItemId::from("a");
+    store.append(&id, &story("a", 1)).expect("the store answers");
+    let timed = store.timed_events(&id, 2).expect("the store answers");
+    let plain = store.events(&id, 2).expect("the store answers");
+    assert_eq!(timed.len(), plain.len());
+    assert!(timed.iter().zip(&plain).all(|((seq, at, event), (other, same))| seq == other && event == same && *at > 0));
+}

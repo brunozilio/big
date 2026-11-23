@@ -6,15 +6,7 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(60);
 pub const RECONNECT: &str = "the access could not be renewed; reconnect the account";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "class", rename_all = "snake_case")]
-pub enum ErrorClass {
-    Transient,
-    RateLimited { retry_after: Duration },
-    Auth,
-    Conflict,
-    Permanent,
-}
+pub use domain::effect::ErrorClass;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ActionError {
@@ -144,6 +136,17 @@ mod tests {
         assert_eq!(classify(403, &quota, 1000), Some(ErrorClass::RateLimited { retry_after: Duration::from_secs(30) }));
         let spare = headers(&[("x-ratelimit-remaining", "12")]);
         assert_eq!(classify(403, &spare, 1000), Some(ErrorClass::Auth));
+    }
+
+    #[test]
+    fn the_class_is_the_domain_s_own_and_serializes_by_kind() {
+        let error = ActionError::rate_limited(Duration::from_secs(2), "slow down");
+        let value = serde_json::to_value(&error).unwrap_or_default();
+        assert_eq!(value["class"], serde_json::json!({"kind": "rate_limited", "retry_after": 2000}));
+        let back: ActionError = serde_json::from_value(value).unwrap_or_else(|_| ActionError::permanent("x"));
+        assert_eq!(back, error);
+        let same: domain::effect::ErrorClass = ErrorClass::Auth;
+        assert_eq!(same, ErrorClass::Auth);
     }
 
     #[test]

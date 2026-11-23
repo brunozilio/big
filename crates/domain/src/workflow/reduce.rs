@@ -27,6 +27,12 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
         }
         WorkflowEvent::EffectRequested(request) => request_effect(&mut item, request),
         WorkflowEvent::EffectResolved { key, outcome } => resolve(&mut item, key, outcome),
+        WorkflowEvent::EffectProgress { key, data } => {
+            if let Some(entry) = item.effects.get_mut(&key.to_string()) {
+                entry.progress = data.clone();
+            }
+        }
+        WorkflowEvent::Signal { .. } => {}
         WorkflowEvent::StepFinished { step, branch, state, output } => {
             let run = run_mut(&mut item, step, branch.as_deref());
             run.state = *state;
@@ -100,7 +106,7 @@ fn request_effect(item: &mut WorkItem, request: &EffectRequest) {
         run.state = StepState::WaitingHuman;
         run.view = view.clone();
     }
-    item.effects.insert(request.key.to_string(), EffectEntry { request: request.clone(), outcome: None });
+    item.effects.insert(request.key.to_string(), EffectEntry { request: request.clone(), outcome: None, progress: Value::Null });
 }
 
 fn resolve(item: &mut WorkItem, key: &IdempotencyKey, outcome: &EffectOutcome) {

@@ -76,6 +76,8 @@ pub struct Impediment {
 pub struct EffectEntry {
     pub request: EffectRequest,
     pub outcome: Option<EffectOutcome>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub progress: Value,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

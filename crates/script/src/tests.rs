@@ -205,3 +205,23 @@ fn a_script_past_its_time_limit_fails_without_stopping_its_caller() {
     assert!(error.contains("timed out"), "{error}");
     assert!(!stop.load(Ordering::Relaxed), "the caller's stop flag is the caller's to set");
 }
+
+#[test]
+fn modules_import_each_other_by_the_names_they_were_given() {
+    let modules = [
+        ("lib/a.js".to_owned(), "export const twice = (n) => n * 2; export const shared = { count: 0 };".to_owned()),
+        ("lib/b.js".to_owned(), "import { twice, shared } from \"lib/a.js\"; shared.count += 1; export const four = twice(2);".to_owned()),
+        (
+            "entry".to_owned(),
+            "import { four } from \"lib/b.js\"; import { shared } from \"lib/a.js\"; export const out = (n) => ({ n: four + n, count: shared.count });".to_owned(),
+        ),
+    ];
+    let host = Arc::new(Recorder::default());
+    let stop = Arc::new(AtomicBool::new(false));
+    let result = run_modules(&modules, "entry", "out", &[json!(1)], host, stop, Limit::Busy(MOST_BUSY));
+    assert_eq!(result, Ok(json!({ "n": 5, "count": 1 })));
+    let missing = [("entry".to_owned(), "import { x } from \"nowhere\"; export const out = x;".to_owned())];
+    let host = Arc::new(Recorder::default());
+    let stop = Arc::new(AtomicBool::new(false));
+    assert!(run_modules(&missing, "entry", "out", &[], host, stop, Limit::Busy(MOST_BUSY)).is_err());
+}

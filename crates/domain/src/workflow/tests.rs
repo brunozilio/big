@@ -245,6 +245,24 @@ fn replay_is_the_fold_of_reduce() {
     assert_eq!(folded.version, 4);
 }
 
+#[test]
+fn progress_of_an_effect_is_kept_and_signals_change_nothing() {
+    let signal = WorkflowEvent::Signal {
+        seq: 0,
+        kind: "fork".into(),
+        branch: "main".into(),
+        step: None,
+        attempt: 0,
+        data: json!({"branches": ["main/0.0"]}),
+    };
+    let item = replay(&[created(), signal, started("s"), requested("s", 1, exec())]);
+    let before = item.clone();
+    let item = reduce(item, &WorkflowEvent::EffectProgress { key: key("s", 1), data: json!({"session": "abc"}) });
+    assert_eq!(item.effects[&key("s", 1).to_string()].progress, json!({"session": "abc"}));
+    assert_eq!(item.version, before.version + 1);
+    assert_eq!(item.steps, before.steps);
+}
+
 fn observed(id: &str, subject: &str, to: &str, at: i64) -> WorkflowEvent {
     WorkflowEvent::ExternalObserved(Observed {
         id: id.into(),
