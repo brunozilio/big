@@ -196,6 +196,25 @@ async fn a_pending_ask_survives_a_restart_and_its_answer_is_kept_in_the_log() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn the_agent_result_carries_the_plan_put_up_for_approval() {
+    let world = World::new();
+    world.engine.state.ask.store(true, std::sync::atomic::Ordering::SeqCst);
+    world.workflow("plan", &single("plan", "return ctx.pass((await ctx.agent(\"worker\", \"planeje\")).plan);"));
+    let kernel = world.start().await;
+    let id = kernel.create_item("plan", json!({ "title": "t" })).expect("item");
+    for _ in 0..200 {
+        if !kernel.asks().is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let ask = kernel.asks()[0].ask.id.clone();
+    let decision = domain::Decision::Approve(domain::PermissionMode::Plan);
+    kernel.answer_ask_with(&ask, &decision, json!({ "resolution": "approved" })).expect("answer");
+    assert_eq!(output(&ended(&kernel, &id).await)["data"], json!("o plano"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn an_answer_given_before_the_resumed_agent_asks_again_is_applied_to_the_new_question() {
     let world = World::new();
     world.engine.state.ask.store(true, std::sync::atomic::Ordering::SeqCst);

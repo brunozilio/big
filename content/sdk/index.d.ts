@@ -122,6 +122,7 @@ export interface AgentResult {
   text: string;
   session: string;
   output: Json;
+  plan?: string | null;
   repositories?: AgentRepository[];
 }
 

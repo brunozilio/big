@@ -230,7 +230,7 @@ impl Agent<'_> {
             let Some(tool) = self.tool(run, names::SKILL) else {
                 return Err(Outcome::error("The agent requests preloaded skills, but no Skill tool is available."));
             };
-            let loaded = tool.run(&json!({"skill":skill}), child_workspace);
+            let loaded = crate::tools::skill::preloaded(tool.skills(), skill, child_workspace);
             if loaded.is_error {
                 return Err(loaded);
             }

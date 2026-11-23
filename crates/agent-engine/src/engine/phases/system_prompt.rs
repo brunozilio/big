@@ -127,7 +127,7 @@ impl Job {
             let Some(tool) = toolbox.tools.iter().find(|tool| tool.spec().name == crate::tools::names::SKILL) else {
                 return Err(Stop::failed("Configured agent requires the Skill tool"));
             };
-            let loaded = tool.run(&serde_json::json!({"skill":skill}), workspace);
+            let loaded = crate::tools::skill::preloaded(tool.skills(), skill, workspace);
             if loaded.is_error {
                 return Err(Stop::failed(loaded.content));
             }

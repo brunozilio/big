@@ -161,6 +161,14 @@ impl Tool for SkillTool {
     }
 }
 
+pub fn preloaded(skills: &[FoundSkill], name: &str, workspace: &Workspace) -> Outcome {
+    let name = name.trim_start_matches('/');
+    match skills.iter().find(|skill| skill.name == name) {
+        Some(skill) => load(skill, "", &workspace.cwd, &granted(skill, workspace)),
+        None => Outcome::error(format!("There is no skill named {name}. Use one of the available skills.")),
+    }
+}
+
 fn granted(skill: &FoundSkill, workspace: &Workspace) -> Granted {
     let origin = Origin::trusted(skill.trusted);
     Granted { access: workspace.policy.scripts.of(origin), origin, starter: workspace.starter() }

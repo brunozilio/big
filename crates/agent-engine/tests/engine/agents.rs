@@ -98,6 +98,27 @@ fn initial_prompt_expands_an_explicit_skill_before_the_first_model_call_through_
     assert!(!model_api.asked()[0].system.contains("- start:"));
 }
 #[test]
+fn a_skill_the_agent_preloads_loads_even_when_only_the_user_may_invoke_it() {
+    let dir = tempfile::tempdir().expect("dir");
+    let root = dir.path().join(brand::DIR);
+    std::fs::create_dir_all(root.join("agents")).expect("agents");
+    std::fs::create_dir_all(root.join("skills/check")).expect("skill");
+    std::fs::write(root.join("settings.json"), r#"{"agent":"builder"}"#).expect("settings");
+    std::fs::write(root.join("agents/builder.md"), "---\nname: builder\nskills: [check]\n---\nBuild.").expect("agent");
+    std::fs::write(
+        root.join("skills/check/SKILL.md"),
+        "---\nname: check\ndisable-model-invocation: true\n---\nPRELOADED_SKILL_SENTINEL",
+    )
+    .expect("skill");
+    let model_api = Arc::new(ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Built".into())])]));
+    let engine =
+        Engine::new(Arc::new(Source(Mutex::new(vec![model_api.clone()]))), Arc::new(InMemorySessions::default()));
+    let events = finish(&start(&engine, &crate::asked_in(dir.path(), "Build it")));
+    assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");
+    assert!(model_api.asked()[0].system.contains("PRELOADED_SKILL_SENTINEL"));
+}
+
+#[test]
 fn initial_prompt_expands_a_custom_command() {
     let dir = tempfile::tempdir().expect("dir");
     let root = dir.path().join(brand::DIR);

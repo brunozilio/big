@@ -22,7 +22,7 @@ export default step({
     const worktree = opts.worktree ?? item.branch ?? undefined;
     const result = await ctx.agent(opts.agent ?? "planner", input, agentOptions(opts, { mode: opts.mode ?? "plan", worktree }));
     const output = object(result.output);
-    const plan = output.plan ?? result.text ?? "";
+    const plan = output.plan ?? result.plan ?? result.text ?? "";
     if (output.approved === false) {
       return ctx.fail({ session: result.session, plan, error: output.reason ?? "o plano não foi aprovado" });
     }

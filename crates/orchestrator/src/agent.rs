@@ -8,7 +8,7 @@ use domain::workflow::{ItemId, WorkflowEvent};
 use agent_engine::tools::builtin::schedules;
 use agent_engine::tools::clients::{self, Waiting};
 use domain::{
-    AgentAsk, EngineEvent, MainAgentSpec, ModelOption, PermissionMode, Prompt, PromptRequest, RunId, SessionCommand,
+    AgentAsk, AskKind, EngineEvent, MainAgentSpec, ModelOption, PermissionMode, Prompt, PromptRequest, RunId, SessionCommand,
     SessionId,
 };
 use serde_json::{Value, json};
@@ -147,6 +147,7 @@ struct Collected {
     session: Option<String>,
     output: Value,
     checkpoint: Option<u32>,
+    plan: Option<String>,
 }
 
 impl Collected {
@@ -164,6 +165,9 @@ impl Collected {
             self.output = later.output;
         }
         self.checkpoint = self.checkpoint.or(later.checkpoint);
+        if later.plan.is_some() {
+            self.plan = later.plan;
+        }
     }
 }
 
@@ -240,7 +244,7 @@ impl AgentEffect<'_> {
             .map(|(tree, (base, commit))| repos::summary(tree, base.as_deref(), commit.as_deref()))
             .collect();
         Ok(json!({
-            "text": collected.text, "session": collected.session, "output": collected.output,
+            "text": collected.text, "session": collected.session, "output": collected.output, "plan": collected.plan,
             "checkpoint": collected.checkpoint, "base": bases.first().cloned().flatten(),
             "commit": commits.first().cloned().flatten(), "branch": branch, "agent": name,
             "worktree": cwd.to_string_lossy(), "repositories": summaries,
@@ -340,7 +344,12 @@ impl AgentEffect<'_> {
             }
             EngineEvent::TextDelta(piece) => collected.text.push_str(&piece),
             EngineEvent::StructuredOutput(value) => collected.output = value,
-            EngineEvent::Asked(ask) => self.asked(ask, collected, run),
+            EngineEvent::Asked(ask) => {
+                if let AskKind::Plan { plan } = &ask.kind {
+                    collected.plan = Some(plan.clone());
+                }
+                self.asked(ask, collected, run);
+            }
             EngineEvent::AskWithdrawn(ask) | EngineEvent::Answered { ask, .. } => {
                 if self.shared.asks.close(&ask).is_some() {
                     self.note(json!({ "asks": { ask.0.clone(): null } }));
