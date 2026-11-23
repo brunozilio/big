@@ -231,3 +231,37 @@ pub async fn merge(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> 
     let done = api.send(Method::Put, &format!("/repos/{repo}/pulls/{number}/merge"), &body).await?;
     Ok(json!({ "merged": done["merged"].as_bool().unwrap_or(true), "already": false, "sha": done["sha"] }))
 }
+
+const REPO_PAGE: usize = 100;
+const REPO_PAGES: usize = 20;
+
+fn repo_summary(repo: &Value) -> Value {
+    json!({
+        "id": repo["id"].as_u64().map_or_else(|| text_of(repo, "/node_id"), |id| id.to_string()),
+        "ref": text_of(repo, "/full_name"),
+        "name": text_of(repo, "/name"),
+        "url": text_of(repo, "/html_url"),
+        "default_branch": text_of(repo, "/default_branch"),
+        "private": repo["private"].as_bool().unwrap_or(false),
+    })
+}
+
+pub async fn repos(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
+    let query = args.optional_text("query").map(str::to_lowercase).unwrap_or_default();
+    let mut found = Vec::new();
+    for page in 1..=REPO_PAGES {
+        let path = format!(
+            "/user/repos?per_page={REPO_PAGE}&page={page}&sort=updated&affiliation=owner,collaborator,organization_member"
+        );
+        let listed = api.get(&path).await?;
+        let repos = list(&listed);
+        found.extend(repos.iter().map(repo_summary).filter(|repo| {
+            let name = text_of(repo, "/ref");
+            !name.is_empty() && (query.is_empty() || name.to_lowercase().contains(&query))
+        }));
+        if repos.len() < REPO_PAGE {
+            break;
+        }
+    }
+    Ok(Value::Array(found))
+}

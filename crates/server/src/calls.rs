@@ -52,6 +52,30 @@ fn arg<'a>(args: &'a Value, name: &str) -> ApiResult<&'a str> {
     args[name].as_str().filter(|text| !text.is_empty()).ok_or_else(|| ApiError::bad(format!("Falta {name}.")))
 }
 
+pub async fn action(shared: &Shared, record: &ConnectionRecord, action: &str, args: Value) -> ApiResult<Value> {
+    Caller { shared, record }.call(action, args).await
+}
+
+async fn repos(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
+    let mut wanted = json!({});
+    if let Some(query) = args["query"].as_str().filter(|query| !query.is_empty()) {
+        wanted["query"] = json!(query);
+    }
+    let found = caller.call(code::REPOS, wanted).await?;
+    let listed: Vec<Value> = items(&found)
+        .iter()
+        .map(|repo| {
+            json!({
+                "id": text(&repo["id"]), "ref": text(&repo["ref"]), "name": text(&repo["name"]),
+                "url": repo["url"].as_str(), "defaultBranch": repo["default_branch"].as_str(),
+                "private": repo["private"].as_bool().unwrap_or(false),
+            })
+        })
+        .filter(|repo| !text(&repo["ref"]).is_empty())
+        .collect();
+    Ok(json!(listed))
+}
+
 pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args: &Value) -> ApiResult<Value> {
     let caller = Caller { shared, record };
     match action {
@@ -64,6 +88,7 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
             let you = json!({ "id": "you", "name": "Você", "avatar": null, "you": true });
             Ok(json!({ "id": text(&made["id"]), "author": you, "body": body, "at": iso(now_ms()), "kind": "comment" }))
         }
+        "code.repos" => repos(&caller, args).await,
         "code.change" => change(&caller, arg(args, "change")?).await,
         "ci.run" => pipeline(&caller, arg(args, "run")?).await,
         _ => Err(ApiError::bad(format!("A ação {action} não existe para a página."))),

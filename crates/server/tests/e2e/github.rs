@@ -20,6 +20,7 @@ pub struct Review {
 
 #[derive(Debug, Clone)]
 pub struct Pull {
+    pub repo: String,
     pub number: u64,
     pub head: String,
     pub base: String,
@@ -33,6 +34,7 @@ pub struct Pull {
 
 #[derive(Debug, Clone)]
 pub struct Run {
+    pub repo: String,
     pub id: u64,
     pub name: String,
     pub branch: String,
@@ -63,7 +65,7 @@ impl State {
 
 #[derive(Debug)]
 pub struct Github {
-    pub repo: PathBuf,
+    repos: Mutex<Vec<(String, PathBuf)>>,
     state: Mutex<State>,
 }
 
@@ -93,7 +95,7 @@ fn pull_json(pull: &Pull) -> Value {
         "number": pull.number, "title": pull.title, "body": pull.body, "state": pull.state,
         "merged": pull.merged_sha.is_some(), "merged_at": pull.merged_sha.as_ref().map(|_| pull.updated.clone()),
         "merge_commit_sha": pull.merged_sha, "draft": false, "mergeable": true,
-        "html_url": format!("https://code.test/{REPO}/pull/{}", pull.number),
+        "html_url": format!("https://code.test/{}/pull/{}", pull.repo, pull.number),
         "head": { "ref": pull.head, "sha": format!("head-{}", pull.number) }, "base": { "ref": pull.base },
         "user": { "login": "agente" }, "updated_at": pull.updated, "closed_at": pull.updated,
     })
@@ -103,14 +105,27 @@ fn run_json(run: &Run) -> Value {
     json!({
         "id": run.id, "name": run.name, "path": "", "event": "push", "status": run.status,
         "conclusion": run.conclusion, "head_branch": run.branch, "head_sha": run.sha, "run_attempt": 1,
-        "html_url": format!("https://code.test/{REPO}/actions/runs/{}", run.id), "created_at": run.updated,
+        "html_url": format!("https://code.test/{}/actions/runs/{}", run.repo, run.id), "created_at": run.updated,
         "updated_at": run.updated,
     })
 }
 
 impl Github {
     pub fn new(repo: PathBuf) -> Github {
-        Github { repo, state: Mutex::default() }
+        Github { repos: Mutex::new(vec![(REPO.to_owned(), repo)]), state: Mutex::default() }
+    }
+
+    pub fn add(&self, name: &str, dir: PathBuf) {
+        self.repos.lock().unwrap_or_else(PoisonError::into_inner).push((name.to_owned(), dir));
+    }
+
+    fn dir_of(&self, name: &str) -> Option<PathBuf> {
+        let repos = self.repos.lock().unwrap_or_else(PoisonError::into_inner);
+        repos.iter().find(|(known, _)| known == name).map(|(_, dir)| dir.clone())
+    }
+
+    pub fn pulls_of(&self, name: &str) -> usize {
+        self.state().pulls.iter().filter(|pull| pull.repo == name).count()
     }
 
     pub fn state(&self) -> MutexGuard<'_, State> {
@@ -160,18 +175,18 @@ impl Github {
         }
     }
 
-    fn head_of(&self, branch: &str) -> Option<String> {
+    fn head_of(&self, repo: &str, branch: &str) -> Option<String> {
         let output = std::process::Command::new("git")
             .arg("-C")
-            .arg(&self.repo)
+            .arg(self.dir_of(repo)?)
             .args(["rev-parse", &format!("refs/heads/{branch}")])
             .output()
             .ok()?;
         output.status.success().then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
     }
 
-    fn ensure_run(&self, state: &mut State, branch: &str) {
-        let Some(sha) = self.head_of(branch) else { return };
+    fn ensure_run(&self, state: &mut State, repo: &str, branch: &str) {
+        let Some(sha) = self.head_of(repo, branch) else { return };
         if state.runs.iter().any(|run| run.sha == sha) {
             return;
         }
@@ -179,6 +194,7 @@ impl Github {
         let id = state.next();
         let running = state.ci_running;
         let run = Run {
+            repo: repo.to_owned(),
             id,
             name: "CI".into(),
             branch: branch.to_owned(),
@@ -192,10 +208,10 @@ impl Github {
 
     fn route(&self, method: Method, path: &str, body: &Value) -> Result<HttpResponse, ActionError> {
         let mut state = self.state();
-        let repo = format!("/repos/{REPO}");
-        let Some(rest) = path.strip_prefix(&repo) else {
+        let Some((repo, rest)) = self.split(path) else {
             return if path == "/graphql" { reply(200, &threads(&state, body)) } else { missing() };
         };
+        let rest = rest.as_str();
         let bare = rest.split('?').next().unwrap_or_default();
         let parts: Vec<&str> = bare.split('/').filter(|part| !part.is_empty()).collect();
         match (method, parts.as_slice()) {
@@ -206,7 +222,7 @@ impl Github {
                 let listed: Vec<Value> = state
                     .pulls
                     .iter()
-                    .filter(|pull| wanted.as_ref().is_none_or(|head| &pull.head == head))
+                    .filter(|pull| pull.repo == repo && wanted.as_ref().is_none_or(|head| &pull.head == head))
                     .map(pull_json)
                     .collect();
                 reply(200, &json!(listed))
@@ -215,6 +231,7 @@ impl Github {
                 state.sent.push("POST pulls".into());
                 let number = state.next();
                 let pull = Pull {
+                    repo: repo.clone(),
                     number,
                     head: body["head"].as_str().unwrap_or_default().into(),
                     base: body["base"].as_str().unwrap_or_default().into(),
@@ -233,7 +250,7 @@ impl Github {
             (Method::Get, ["commits", _, "check-runs"]) => reply(200, &json!({ "check_runs": [] })),
             (Method::Get, ["actions", "runs"]) => {
                 if let Some(branch) = query(rest, "branch") {
-                    self.ensure_run(&mut state, &branch);
+                    self.ensure_run(&mut state, &repo, &branch);
                 }
                 let branch = query(rest, "branch");
                 let sha = query(rest, "head_sha");
@@ -241,6 +258,7 @@ impl Github {
                     .runs
                     .iter()
                     .rev()
+                    .filter(|run| run.repo == repo)
                     .filter(|run| branch.as_ref().is_none_or(|wanted| &run.branch == wanted))
                     .filter(|run| sha.as_ref().is_none_or(|wanted| &run.sha == wanted))
                     .map(run_json)
@@ -251,6 +269,19 @@ impl Github {
             (Method::Get, ["actions", "jobs", _, "logs"]) => Ok(HttpResponse::new(200, "erro: um teste falhou")),
             _ => missing(),
         }
+    }
+}
+
+impl Github {
+    fn split(&self, path: &str) -> Option<(String, String)> {
+        let rest = path.strip_prefix("/repos/")?;
+        let mut parts = rest.splitn(3, '/');
+        let (owner, name) = (parts.next()?, parts.next()?);
+        let name = name.split('?').next().unwrap_or_default();
+        let repo = format!("{owner}/{name}");
+        self.dir_of(&repo)?;
+        let after = &rest[owner.len() + 1 + name.len()..];
+        Some((repo, after.to_owned()))
     }
 }
 
@@ -299,6 +330,7 @@ fn pulls(
             pull.state = "closed".into();
             pull.updated = now();
             let run = Run {
+                repo: pull.repo.clone(),
                 id: next,
                 name: "Deploy".into(),
                 branch: pull.base.clone(),

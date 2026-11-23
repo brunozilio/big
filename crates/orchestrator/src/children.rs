@@ -16,12 +16,18 @@ pub fn start(shared: &Arc<Shared>, parent: &ItemId, command: &Command, key: &Ide
     let id = child_id(parent, key);
     let workflow = command.text("workflow");
     if shared.store.item(&id)?.is_none() {
-        let created = WorkflowEvent::ItemCreated {
-            id: id.clone(),
-            workflow: workflow.clone(),
-            parent: Some(parent.clone()),
-            input: command.args["input"].clone(),
-        };
+        let mut input = command.args["input"].clone();
+        let application = &shared.item(parent)?.input["application"];
+        if !application.is_null() && (input.is_null() || input.get("application").is_none()) && !input.is_array() {
+            if input.is_null() {
+                input = serde_json::json!({});
+            }
+            if let Some(fields) = input.as_object_mut() {
+                fields.insert("application".to_owned(), application.clone());
+            }
+        }
+        let created =
+            WorkflowEvent::ItemCreated { id: id.clone(), workflow: workflow.clone(), parent: Some(parent.clone()), input };
         shared.append(&id, &[created])?;
     }
     if !shared.item(parent)?.children.iter().any(|link| link.id == id) {

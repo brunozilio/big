@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -105,7 +105,7 @@ fn plan(turn: &Turn, number: usize) {
     turn.finish(json!({ "plan": PLAN, "title": "Entrega do item", "approved": approved }));
 }
 
-fn develop(turn: &Turn, script: &Script, cwd: &Path, number: usize) {
+fn develop(turn: &Turn, script: &Script, places: &[PathBuf], number: usize) {
     if script.ask_develop.swap(false, Ordering::SeqCst) {
         let kind = AskKind::Permission { tool: "Bash".into(), subject: "rm -rf build".into(), rememberable: false };
         if turn.ask(format!("perm-{number}"), kind).is_none() {
@@ -118,7 +118,9 @@ fn develop(turn: &Turn, script: &Script, cwd: &Path, number: usize) {
     if turn.cancelled.load(Ordering::SeqCst) {
         return;
     }
-    commit(cwd, number);
+    for place in places {
+        commit(place, number);
+    }
     turn.finish(json!({ "summary": format!("mudança {number}") }));
 }
 
@@ -144,7 +146,9 @@ impl AgentEngine for Agents {
         let cancelled = Arc::new(AtomicBool::new(false));
         let (answer, answers) = channel();
         let turn = Turn { sink, run, cancelled: Arc::clone(&cancelled), answers };
-        let (script, cwd) = (Arc::clone(&self.script), request.session.cwd.clone());
+        let script = Arc::clone(&self.script);
+        let places: Vec<PathBuf> =
+            std::iter::once(request.session.cwd.clone()).chain(request.session.add_dirs.iter().cloned()).collect();
         let command = request.session.command.is_some();
         std::thread::spawn(move || {
             turn.emit(EngineEvent::SessionStarted(session));
@@ -154,7 +158,7 @@ impl AgentEngine for Agents {
             }
             match role {
                 "planner" => plan(&turn, number),
-                _ => develop(&turn, &script, &cwd, number),
+                _ => develop(&turn, &script, &places, number),
             }
         });
         Ok(Box::new(Handle { cancelled, answer, script: Arc::clone(&self.script) }))

@@ -1,3 +1,4 @@
+mod applications;
 mod branding;
 mod connections;
 mod error;
@@ -11,6 +12,7 @@ use std::time::Duration;
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
+pub use applications::{Application, CodeChoice, Repository, TrackerChoice};
 pub use connections::ConnectionRecord;
 pub use error::Error;
 

@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::future::Future;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -17,6 +18,10 @@ use crate::asks::Asks;
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::events::{OrchestratorEvent, Wake};
+use crate::repos::{self, Checkout};
+use crate::resources::Resources;
+
+type ScriptKey = (Option<PathBuf>, String);
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct EventWait {
@@ -38,7 +43,7 @@ pub struct Shared {
     pub sync: OnceLock<Arc<sync::Synchronizer>>,
     runners: Mutex<HashMap<ItemId, (u64, mpsc::UnboundedSender<Wake>)>>,
     generation: AtomicU64,
-    scripts: Mutex<HashMap<String, Arc<Script>>>,
+    scripts: Mutex<HashMap<ScriptKey, Arc<Script>>>,
     appending: Mutex<()>,
 }
 
@@ -144,17 +149,46 @@ impl Shared {
         .abort_handle()
     }
 
+    pub fn checkouts(&self, item: &WorkItem) -> Vec<Checkout> {
+        repos::of_input(&item.input, self.config.repo.as_deref())
+    }
+
+    pub fn home(&self, input: &Value) -> Option<PathBuf> {
+        repos::home(input, self.config.repo.as_deref())
+    }
+
+    fn other_home<'a>(&self, home: Option<&'a Path>) -> Option<&'a Path> {
+        home.filter(|home| self.config.repo.as_deref() != Some(*home))
+    }
+
+    pub fn resources_in(&self, home: Option<&Path>) -> Resources {
+        match self.other_home(home) {
+            Some(home) => self.config.resources.in_repo(home),
+            None => self.config.resources.clone(),
+        }
+    }
+
     pub fn script(&self, workflow: &str) -> Result<Arc<Script>> {
-        if let Some(found) = self.scripts.lock().unwrap_or_else(PoisonError::into_inner).get(workflow) {
+        self.script_in(None, workflow)
+    }
+
+    pub fn script_for(&self, item: &WorkItem) -> Result<Arc<Script>> {
+        self.script_in(self.home(&item.input).as_deref(), &item.workflow)
+    }
+
+    pub fn script_in(&self, home: Option<&Path>, workflow: &str) -> Result<Arc<Script>> {
+        let home = self.other_home(home);
+        let key = (home.map(Path::to_path_buf), workflow.to_owned());
+        if let Some(found) = self.scripts.lock().unwrap_or_else(PoisonError::into_inner).get(&key) {
             return Ok(Arc::clone(found));
         }
-        let loaded = Arc::new(Script::load(&self.config.resources, workflow).map_err(Error::Script)?);
+        let loaded = Arc::new(Script::load(&self.resources_in(home), workflow).map_err(Error::Script)?);
         let mut scripts = self.scripts.lock().unwrap_or_else(PoisonError::into_inner);
-        Ok(Arc::clone(scripts.entry(workflow.to_owned()).or_insert(loaded)))
+        Ok(Arc::clone(scripts.entry(key).or_insert(loaded)))
     }
 
     pub fn forget_script(&self, workflow: &str) {
-        self.scripts.lock().unwrap_or_else(PoisonError::into_inner).remove(workflow);
+        self.scripts.lock().unwrap_or_else(PoisonError::into_inner).retain(|(_, name), _| name != workflow);
     }
 
     pub fn hurry(&self) {

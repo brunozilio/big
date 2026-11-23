@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/api'
-import type { Connection, IssueSummary, Item, Provider, TrackerProject } from '@/api/contract'
+import type { Application, Connection, IssueSummary, Item, Provider, TrackerProject } from '@/api/contract'
 import { errorText, setItems, useStore } from '@/api/store'
 import { Composer, type Tuning } from '@/chat/Composer'
 import { Button, IconButton } from '@/ui/button'
@@ -10,7 +10,7 @@ import { SearchInput } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { tween } from '@/ui/motion'
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuTrigger, Popover } from '@/ui/overlay'
-import { initialProject, rememberProject, sameProject, searchTargets, type ProjectChoice } from './projects'
+import { applicationProject, initialApplication, initialProject, rememberApplication, rememberProject, sameProject, searchTargets, type ProjectChoice } from './projects'
 
 interface Source {
   connection: Connection
@@ -60,6 +60,28 @@ function ProjectMenu({ sources, projects, choice, onChoose }: { sources: Source[
               )
             })}
           </div>
+        ))}
+      </MenuContent>
+    </Menu>
+  )
+}
+
+function ApplicationMenu({ applications, chosen, onChoose }: { applications: Application[]; chosen: Application | null; onChoose: (application: Application) => void }) {
+  if (applications.length === 0 || !chosen) return null
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <button aria-label={`Aplicação: ${chosen.name}`} className="flex h-8 max-w-[160px] items-center gap-1.5 rounded-full px-2.5 text-base text-fg2 transition-colors hover:bg-inset data-[state=open]:bg-inset">
+          <Icon name="apps" size={15} className="shrink-0 text-muted" />
+          <span className="truncate">{chosen.name}</span>
+        </button>
+      </MenuTrigger>
+      <MenuContent align="start" className="max-h-[320px] overflow-y-auto">
+        <MenuLabel>Aplicação</MenuLabel>
+        {applications.map((a) => (
+          <MenuItem key={a.id} icon={<Icon name="apps" size={15} />} onSelect={() => onChoose(a)} right={a.id === chosen.id ? <Icon name="check" size={15} /> : undefined}>
+            {a.name}
+          </MenuItem>
         ))}
       </MenuContent>
     </Menu>
@@ -159,8 +181,19 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
   const [model, setModel] = useState<string | null>(null)
   const sources = useTrackers()
   const ids = useMemo(() => sources.map((s) => s.connection.id), [sources])
+  const applications = useStore((s) => s.applications)
+  const [chosenApplication, setChosenApplication] = useState<string | null>(null)
+  const application = useMemo(() => {
+    const listed = applications ?? []
+    return listed.find((a) => a.id === chosenApplication) ?? initialApplication(listed)
+  }, [applications, chosenApplication])
   const [chosenProject, setChosenProject] = useState<ProjectChoice | null | undefined>(undefined)
-  const project = useMemo(() => (chosenProject === undefined ? initialProject(ids) : chosenProject), [chosenProject, ids])
+  const project = useMemo(() => (chosenProject === undefined ? applicationProject(application, ids) ?? initialProject(ids) : chosenProject), [chosenProject, ids, application])
+  const chooseApplication = useCallback((next: Application) => {
+    setChosenApplication(next.id)
+    rememberApplication(next.id)
+    setChosenProject(undefined)
+  }, [])
   const chooseProject = useCallback(
     (choice: ProjectChoice | null) => {
       setChosenProject(choice)
@@ -175,7 +208,7 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
     setBusy(true)
     setError(null)
     api()
-      .createItem({ text, issue: issue ? { connection: issue.source.connection.id, key: issue.key } : null, project: issue ? null : project, model: model ?? defaultModel ?? 'auto', ...tuning, attachments })
+      .createItem({ application: application?.id ?? null, text, issue: issue ? { connection: issue.source.connection.id, key: issue.key } : null, project: issue ? null : project, model: model ?? defaultModel ?? 'auto', ...tuning, attachments })
       .then((it) => {
         setItems((items) => (items.some((x) => x.id === it.id) ? items : [it, ...items]))
         setIssue(null)
@@ -206,7 +239,12 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
         onModel={setModel}
         tuning={tuning}
         onTuning={setTuning}
-        leading={<IssuePicker sources={sources} project={project} onProject={chooseProject} onPick={setIssue} />}
+        leading={
+          <>
+            <ApplicationMenu applications={applications ?? []} chosen={application} onChoose={chooseApplication} />
+            <IssuePicker sources={sources} project={project} onProject={chooseProject} onPick={setIssue} />
+          </>
+        }
         onSubmit={(input) => start(input.text, input.attachments)}
       />
       {error && <p role="alert" className="px-2 text-sm text-danger-fg">{error}</p>}

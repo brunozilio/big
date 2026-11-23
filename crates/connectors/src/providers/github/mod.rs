@@ -137,6 +137,7 @@ impl Provider for Github {
             code_actions::SUBMIT_REVIEW => code::submit_review(&api, args, idempotency_key).await,
             code_actions::RESOLVE_THREAD => code::resolve_thread(&api, args).await,
             code_actions::MERGE => code::merge(&api, args).await,
+            code_actions::REPOS => code::repos(&api, args).await,
             pipeline_actions::RUNS => pipelines::runs(&api, args).await,
             pipeline_actions::RUN => pipelines::run(&api, args).await,
             pipeline_actions::JOB_LOG => pipelines::job_log(&api, args).await,

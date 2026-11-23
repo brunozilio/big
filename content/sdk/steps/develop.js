@@ -32,6 +32,7 @@ export default step({
     const worktree = opts.worktree ?? branch ?? ctx.item.id;
     const result = await ctx.agent(opts.agent ?? "developer", input, agentOptions(opts, { worktree }));
     const output = object(result.output);
-    return ctx.pass(defined({ session: result.session, branch: output.branch ?? branch, summary: output.summary ?? result.text }));
+    const repositories = Array.isArray(result.repositories) && result.repositories.some((repository) => repository.id) ? result.repositories : undefined;
+    return ctx.pass(defined({ session: result.session, branch: output.branch ?? branch, summary: output.summary ?? result.text, repositories }));
   },
 });

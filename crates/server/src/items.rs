@@ -93,12 +93,19 @@ fn input(shared: &Shared, body: &Value) -> ApiResult<Value> {
     if !text.is_empty() {
         input["description"] = json!(text);
     }
+    let application = application(shared, body)?;
     if let Some(key) = issue {
         input["issue"] = json!(key);
         input["connection"] = body["issue"]["connection"].clone();
     } else if let Some(project) = body["project"]["key"].as_str().filter(|key| !key.is_empty()) {
         input["project"] = json!(project);
         input["connection"] = body["project"]["connection"].clone();
+    } else if let Some(chosen) = application.as_ref().and_then(|application| application.tracker.as_ref()) {
+        input["project"] = json!(chosen.project);
+        input["connection"] = json!(chosen.connection);
+    }
+    if let Some(application) = &application {
+        input["application"] = crate::applications::snapshot(shared, application)?;
     }
     if let Some(model) = body["model"].as_str().filter(|model| !model.is_empty()) {
         input["model"] = json!(model);
@@ -107,6 +114,12 @@ fn input(shared: &Shared, body: &Value) -> ApiResult<Value> {
         input["effort"] = json!(effort.cli_value());
     }
     Ok(input)
+}
+
+fn application(shared: &Shared, body: &Value) -> ApiResult<Option<store::Application>> {
+    let Some(id) = body["application"].as_str().filter(|id| !id.is_empty()) else { return Ok(None) };
+    let found = shared.backend.store.application(id)?;
+    found.map(Some).ok_or_else(|| ApiError::bad("Essa aplicação não existe mais."))
 }
 
 pub async fn create(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {

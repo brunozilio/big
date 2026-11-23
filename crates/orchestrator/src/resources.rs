@@ -55,6 +55,14 @@ impl Resources {
     }
 
     #[must_use]
+    pub fn in_repo(&self, repo: &Path) -> Resources {
+        let mut layers: Vec<(Origin, PathBuf)> =
+            self.layers.iter().filter(|(origin, _)| *origin != Origin::Repo).cloned().collect();
+        layers.insert(0, (Origin::Repo, repo.join(brand::DIR)));
+        Resources { layers, builtin: Arc::clone(&self.builtin), listed: self.listed.clone() }
+    }
+
+    #[must_use]
     pub fn listing(mut self, builtin_paths: Vec<String>) -> Resources {
         self.listed = builtin_paths;
         self

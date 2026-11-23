@@ -358,6 +358,61 @@ fn each_step_view_is_made_of_blocks() {
     );
     assert_eq!(view("release", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));
     assert_eq!(view("plan", json!({})), json!([]));
+    let prs = json!({ "prs": [{ "pr": "P1", "name": "a/web", "title": "T", "body": "" }, { "pr": "P2", "name": "a/api", "title": "T", "body": "" }] });
+    let shown: Vec<Value> = view("pr", prs).as_array().expect("blocks").iter().map(|block| block["text"].clone()).collect();
+    assert_eq!(shown, [json!("# a/web: T\n\n"), json!("# a/api: T\n\n")]);
+    let runs = json!({ "run": "R1", "runs": [{ "run": "R1" }, { "run": "R2" }] });
+    assert_eq!(view("ci", runs.clone()), json!([{ "type": "pipeline", "run": "R1" }, { "type": "pipeline", "run": "R2" }]));
+    assert_eq!(view("release", runs).as_array().map(Vec::len), Some(2));
+    let merges = json!({ "pr": "P1", "methods": ["squash"], "merges": [{ "pr": "P1" }, { "pr": "P2" }] });
+    assert_eq!(view("merge", merges).as_array().map(Vec::len), Some(2));
+    assert_eq!(view("review", json!({ "pr": "P1", "prs": ["P1", "P2"] })).as_array().map(Vec::len), Some(2));
+}
+
+fn application_item() -> Value {
+    let mut chosen = item(Value::Null);
+    chosen["application"] = json!({ "id": "app", "name": "Loja", "repositories": [
+        { "id": "web", "directory": "/src/web", "code": { "connection": "cw", "repo": "acme/web", "pipelines": true },
+          "run": "bun dev", "verify": ["lint", "test"] },
+        { "id": "api", "directory": "/src/api", "code": { "connection": "cw", "repo": "acme/api", "pipelines": true },
+          "verify": ["cargo test"] },
+        { "id": "docs", "directory": "/src/docs", "verify": [] },
+    ] });
+    chosen
+}
+
+fn developed(args: &Value) -> Value {
+    let mut done = agent(args);
+    if args["name"] == "developer" {
+        done["repositories"] = json!([
+            { "id": "web", "changed": true }, { "id": "api", "changed": true }, { "id": "docs", "changed": true },
+        ]);
+    }
+    done
+}
+
+#[test]
+fn an_application_with_two_coded_repositories_verifies_each_and_delivers_a_pull_request_per_repository() {
+    let mut fake = Fake::default();
+    let (result, asked) = drive(&default_workflow(), &application_item(), |command| match command["kind"].as_str() {
+        Some("agent") => Some(developed(&command["args"])),
+        _ => fake.reply(command),
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    let execs: Vec<(String, String)> = of_kind(&asked, "exec")
+        .iter()
+        .map(|command| (command["args"]["repository"].as_str().unwrap_or_default().to_owned(), command["args"]["command"].as_str().unwrap_or_default().to_owned()))
+        .collect();
+    assert!(execs.contains(&("web".into(), "lint".into())) && execs.contains(&("api".into(), "cargo test".into())), "{execs:?}");
+    let opened: Vec<(&Value, &Value)> = calls(&asked, "open_pull_request")
+        .iter()
+        .map(|command| (&command["args"]["args"]["repo"], &command["connection"]))
+        .collect();
+    assert_eq!(opened, [(&json!("acme/web"), &json!("cw")), (&json!("acme/api"), &json!("cw"))]);
+    let runs: Vec<&Value> = calls(&asked, "runs").iter().map(|command| &command["args"]["args"]["repo"]).collect();
+    assert!(runs.contains(&&json!("acme/web")) && runs.contains(&&json!("acme/api")), "{runs:?}");
+    assert_eq!(calls(&asked, "merge").len(), 2);
+    assert_eq!(calls(&asked, "submit_review").len(), 3, "the changes asked on the first, then both approved");
 }
 
 fn custom(labels: Value, event: bool) -> (Value, Vec<Value>) {

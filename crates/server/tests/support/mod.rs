@@ -63,7 +63,8 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value)>>,
 }
 
-const ACTIONS: [&str; 7] = [
+const ACTIONS: [&str; 8] = [
+    "code.repos",
     "tracker.issue",
     "tracker.search",
     "tracker.projects",
@@ -125,6 +126,10 @@ impl Provider for FakeProvider {
                 json!([{ "path": "a.rs", "change": "added", "additions": 1, "deletions": 0, "patch": "@@ -0,0 +1 @@\n+x" }])
             }
             "code.review_comments" => json!([]),
+            "code.repos" => json!([
+                { "id": "10", "ref": "acme/web", "name": "web", "url": "https://code.test/acme/web",
+                  "default_branch": "main", "private": true },
+            ]),
             "pipelines.run" => json!({ "ref": "o/r/runs/9", "pipeline": "CI", "state": "passed", "jobs": [] }),
             _ => json!({}),
         })
@@ -239,9 +244,10 @@ impl World {
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();
         let builtin: orchestrator::Builtin = Arc::new(content::builtin_text);
         let resources = Resources::new(Some(repo(dir.path()).join(brand::DIR)), None, builtin).listing(listed);
-        let config = Config::new(Arc::clone(&store), Arc::clone(&connectors), keyed.clone(), data.clone())
+        let mut config = Config::new(Arc::clone(&store), Arc::clone(&connectors), keyed.clone(), data.clone())
             .with_resources(resources)
             .without_sync();
+        config.repo = Some(repo(dir.path()));
         let handle = Orchestrator::start(config).expect("start");
         let backend = server::Backend {
             orchestrator: (*handle).clone(),

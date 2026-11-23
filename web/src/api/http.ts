@@ -99,6 +99,11 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
     models: () => call('GET', ROUTES.models),
     branding: () => call('GET', ROUTES.branding),
     saveBranding: (patch) => call('PUT', ROUTES.branding, patch),
+    applications: () => call('GET', ROUTES.applications),
+    createApplication: (application) => call('POST', ROUTES.applications, application),
+    saveApplication: (application) => call('PUT', ROUTES.application(application.id), application),
+    deleteApplication: (id) => call('DELETE', ROUTES.application(id)),
+    dirs: (path) => call('GET', ROUTES.dirs(path)),
     upload: async (file) => {
       const form = new FormData()
       form.append('file', file)

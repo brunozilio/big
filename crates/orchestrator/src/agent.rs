@@ -12,6 +12,7 @@ use tokio::sync::mpsc;
 use crate::asks::{PendingAsk, SharedRun};
 use crate::events::OrchestratorEvent;
 use crate::git;
+use crate::repos::{self, Checkout, Worktree};
 use crate::protocol::Command;
 use crate::shared::{Shared, now_ms};
 
@@ -65,11 +66,28 @@ pub async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'stat
     tokio::task::spawn_blocking(work).await.map_err(|error| Failure::Class(ErrorClass::Transient, error.to_string()))
 }
 
-pub async fn workdir(shared: &Shared, branch: &str) -> Result<PathBuf, Failure> {
-    let (repo, data, branch) = (shared.config.repo.clone(), shared.config.data.clone(), branch.to_owned());
-    blocking(move || git::worktree(repo.as_deref(), &data, &branch))
+pub async fn worktree(shared: &Shared, checkout: Checkout, branch: &str) -> Result<Worktree, Failure> {
+    let (data, branch) = (shared.config.data.clone(), branch.to_owned());
+    let folder = repos::folder(&branch, &checkout.id);
+    let repo = checkout.directory.clone();
+    let path = blocking(move || git::worktree(repo.as_deref(), &data, &branch, &folder))
         .await?
-        .map_err(|error| Failure::Class(ErrorClass::Transient, format!("the worktree could not be made: {error}")))
+        .map_err(|error| Failure::Class(ErrorClass::Transient, format!("the worktree could not be made: {error}")))?;
+    Ok(Worktree { checkout, path })
+}
+
+pub async fn worktrees(shared: &Shared, item: &ItemId, branch: &str) -> Result<Vec<Worktree>, Failure> {
+    let state = shared.item(item).map_err(|error| Failure::permanent(error.to_string()))?;
+    let mut made = Vec::new();
+    for checkout in shared.checkouts(&state) {
+        made.push(worktree(shared, checkout, branch).await?);
+    }
+    Ok(made)
+}
+
+async fn heads(worktrees: &[Worktree]) -> Result<Vec<Option<String>>, Failure> {
+    let places: Vec<PathBuf> = worktrees.iter().map(|worktree| worktree.path.clone()).collect();
+    blocking(move || places.iter().map(|place| git::head(place)).collect()).await
 }
 
 pub fn branch_of(command: &Command, item: &ItemId) -> String {
@@ -153,23 +171,50 @@ pub struct AgentEffect<'a> {
 impl AgentEffect<'_> {
     pub async fn run(self) -> Result<Value, Failure> {
         let name = self.command.text("name");
-        let definition = self
-            .shared
-            .config
-            .resources
-            .agent(&name)
-            .ok_or_else(|| Failure::permanent(format!("there is no agent named {name}")))?;
+        let state = self.shared.item(self.item).map_err(|error| Failure::permanent(error.to_string()))?;
+        let resources = self.shared.resources_in(self.shared.home(&state.input).as_deref());
+        let definition =
+            resources.agent(&name).ok_or_else(|| Failure::permanent(format!("there is no agent named {name}")))?;
         let profile = Profile::parse(&definition.text);
         let branch = branch_of(self.command, self.item);
-        let cwd = workdir(self.shared, &branch).await?;
-        let place = cwd.clone();
-        let base = blocking(move || git::head(&place)).await?;
-        let request = request(self.shared, &profile, self.command, &cwd, self.resume.as_deref());
+        let trees = worktrees(self.shared, self.item, &branch).await?;
+        let first = trees.first().ok_or_else(|| Failure::permanent("the item has no repository"))?;
+        let cwd = first.path.clone();
+        let bases = heads(&trees).await?;
+        let mut request = request(self.shared, &profile, self.command, &cwd, self.resume.as_deref());
+        request.session.add_dirs = trees.iter().skip(1).map(|tree| tree.path.clone()).collect();
+        if let Some(text) = repos::described(&trees) {
+            let system = request.session.append_system.take().unwrap_or_default();
+            request.session.append_system = Some(if system.is_empty() { text } else { format!("{system}\n\n{text}") });
+        }
+        let collected = self.drive(&request).await?;
+        let pushed = (trees.iter().map(|tree| tree.path.clone()).collect::<Vec<_>>(), branch.clone());
+        blocking(move || {
+            for place in &pushed.0 {
+                git::push(place, &pushed.1);
+            }
+        })
+        .await?;
+        let commits = heads(&trees).await?;
+        let summaries: Vec<Value> = trees
+            .iter()
+            .zip(bases.iter().zip(&commits))
+            .map(|(tree, (base, commit))| repos::summary(tree, base.as_deref(), commit.as_deref()))
+            .collect();
+        Ok(json!({
+            "text": collected.text, "session": collected.session, "output": collected.output,
+            "checkpoint": collected.checkpoint, "base": bases.first().cloned().flatten(),
+            "commit": commits.first().cloned().flatten(), "branch": branch, "agent": name,
+            "worktree": cwd.to_string_lossy(), "repositories": summaries,
+        }))
+    }
+
+    async fn drive(&self, request: &PromptRequest) -> Result<Collected, Failure> {
         let (sender, receiver) = mpsc::unbounded_channel();
         let sink: Arc<dyn EventSink> = Arc::new(move |_run: RunId, event: EngineEvent| {
             let _ = sender.send(event);
         });
-        let started = self.shared.config.engine.start(RunId::new(), &request, sink);
+        let started = self.shared.config.engine.start(RunId::new(), request, sink);
         let handle = started.map_err(|error| Failure::permanent(error.to_string()))?;
         let mut running = Running { run: Arc::new(Mutex::new(handle)), done: false };
         self.reopen(&running.run);
@@ -177,19 +222,7 @@ impl AgentEffect<'_> {
         self.close_asks();
         let collected = followed?;
         running.done = true;
-        let place = cwd.clone();
-        let pushed = branch.clone();
-        let commit = blocking(move || {
-            let commit = git::head(&place);
-            git::push(&place, &pushed);
-            commit
-        })
-        .await?;
-        Ok(json!({
-            "text": collected.text, "session": collected.session, "output": collected.output,
-            "checkpoint": collected.checkpoint, "base": base, "commit": commit, "branch": branch, "agent": name,
-            "worktree": cwd.to_string_lossy(),
-        }))
+        Ok(collected)
     }
 
     fn ask_limit(&self) -> Duration {

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api } from '.'
-import type { Api, Branding, CallAction, CallArgs, CallResult, Connections, Item, LiveEvent, Models, Session, SessionEvent, StepView } from './contract'
+import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connections, Item, LiveEvent, Models, Session, SessionEvent, StepView } from './contract'
 
 export interface State {
   ready: boolean
@@ -10,10 +10,11 @@ export interface State {
   connections: Connections | null
   models: Models | null
   branding: Branding | null
+  applications: Application[] | null
   sessions: Record<string, Session>
 }
 
-const initial = (): State => ({ ready: false, connected: false, error: null, items: [], connections: null, models: null, branding: null, sessions: {} })
+const initial = (): State => ({ ready: false, connected: false, error: null, items: [], connections: null, models: null, branding: null, applications: null, sessions: {} })
 
 let state: State = initial()
 const listeners = new Set<() => void>()
@@ -87,8 +88,8 @@ export function applyLive(e: LiveEvent) {
 
 async function reload(a: Api) {
   try {
-    const [items, connections, models, branding] = await Promise.all([a.items(), a.connections(), a.models(), a.branding()])
-    set({ items, connections, models, branding, ready: true, error: null })
+    const [items, connections, models, branding, applications] = await Promise.all([a.items(), a.connections(), a.models(), a.branding(), a.applications().catch(() => [])])
+    set({ items, connections, models, branding, applications, ready: true, error: null })
     const ids = Object.keys(state.sessions)
     const sessions = await Promise.all(ids.map((id) => a.session(id).catch(() => null)))
     set((s) => ({ sessions: { ...s.sessions, ...Object.fromEntries(sessions.filter((x): x is Session => !!x).map((x) => [x.id, x])) } }))
@@ -119,6 +120,10 @@ export function setItems(update: (items: Item[]) => Item[]) {
 
 export function setBranding(branding: Branding) {
   set({ branding })
+}
+
+export function setApplications(update: (applications: Application[]) => Application[]) {
+  set((s) => ({ applications: update(s.applications ?? []) }))
 }
 
 export function setConnections(connections: Connections) {

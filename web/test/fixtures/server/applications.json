@@ -1,0 +1,45 @@
+[
+  {
+    "id": "app-0",
+    "name": "repo",
+    "repositories": [
+      {
+        "code": null,
+        "directory": "/projetos/repo",
+        "id": "repo-0-0",
+        "run": "",
+        "verify": []
+      }
+    ],
+    "tracker": null
+  },
+  {
+    "id": "app-1",
+    "name": "Loja nova",
+    "repositories": [
+      {
+        "code": {
+          "connection": "c1",
+          "repo": "acme/web"
+        },
+        "directory": "/projetos/web",
+        "id": "repo-1-0",
+        "run": "bun dev",
+        "verify": [
+          "bun test"
+        ]
+      },
+      {
+        "code": null,
+        "directory": "/projetos/api",
+        "id": "repo-1-1",
+        "run": "",
+        "verify": []
+      }
+    ],
+    "tracker": {
+      "connection": "c1",
+      "project": "APP"
+    }
+  }
+]

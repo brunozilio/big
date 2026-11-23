@@ -134,7 +134,8 @@ async fn a_review_already_carrying_the_key_is_not_submitted_again() {
         200,
         &json!([{"id": 3, "state": "APPROVED", "body": body}]).to_string(),
     );
-    let answer = call(&http, code_actions::SUBMIT_REVIEW, json!({"pr": "acme/app#7", "verdict": "approve"}), "rk").await;
+    let answer =
+        call(&http, code_actions::SUBMIT_REVIEW, json!({"pr": "acme/app#7", "verdict": "approve"}), "rk").await;
     assert_eq!(answer, Ok(json!({"id": "3", "verdict": "approve", "created": false})));
 }
 
@@ -153,8 +154,7 @@ async fn a_review_with_lines_is_submitted_with_its_event() {
     let sent = http.sent()[1].body_json();
     assert_eq!(sent["event"], "REQUEST_CHANGES");
     assert_eq!(sent["comments"][0], json!({"path": "src/a.rs", "line": 3, "body": "aqui", "side": "RIGHT"}));
-    let wrong =
-        call(&http, code_actions::SUBMIT_REVIEW, json!({"pr": "acme/app#7", "verdict": "nah"}), "").await;
+    let wrong = call(&http, code_actions::SUBMIT_REVIEW, json!({"pr": "acme/app#7", "verdict": "nah"}), "").await;
     assert_eq!(wrong.map_err(|e| e.class), Err(ErrorClass::Permanent));
 }
 
@@ -176,7 +176,10 @@ async fn review_threads_and_their_resolution_go_through_graphql() {
     let read = call(&http, code_actions::REVIEW_COMMENTS, json!({"pr": "acme/app#7"}), "").await;
     let Ok(read) = read else { panic!("{read:?}") };
     assert_eq!((read[0]["author"].as_str(), read[0]["thread"].as_str()), (Some("ana"), Some("T1")));
-    assert_eq!((read[0]["path"].as_str(), read[0]["line"].as_u64(), read[0]["resolved"].as_bool()), (Some("a.rs"), Some(2), Some(false)));
+    assert_eq!(
+        (read[0]["path"].as_str(), read[0]["line"].as_u64(), read[0]["resolved"].as_bool()),
+        (Some("a.rs"), Some(2), Some(false))
+    );
     assert_eq!(http.sent()[0].body_json()["variables"], json!({"owner": "acme", "name": "app", "number": 7}));
     let resolved = call(&http, code_actions::RESOLVE_THREAD, json!({"thread": "T1"}), "k").await;
     assert_eq!(resolved, Ok(json!({"thread": "T1", "resolved": true})));
@@ -221,7 +224,10 @@ async fn a_run_is_the_job_graph_with_needs_and_steps() {
     let answer = call(&http, pipeline_actions::RUN, json!({"run": "acme/app/runs/5"}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!((answer["ref"].as_str(), answer["state"].as_str()), (Some("acme/app/runs/5"), Some("running")));
-    assert_eq!((answer["jobs"][0]["state"].as_str(), answer["jobs"][1]["state"].as_str()), (Some("passed"), Some("queued")));
+    assert_eq!(
+        (answer["jobs"][0]["state"].as_str(), answer["jobs"][1]["state"].as_str()),
+        (Some("passed"), Some("queued"))
+    );
     assert_eq!(answer["jobs"][0]["steps"][0]["state"], "passed");
     assert_eq!(answer["jobs"][0]["steps"][0]["name"], "checkout");
     assert_eq!(answer["jobs"][1]["key"], "test");
@@ -305,7 +311,10 @@ async fn events_come_from_pulls_reviews_and_runs_changed_since_the_cursor_and_et
     assert_eq!(batch.events[2].subject, "acme/app#7");
     assert_eq!(batch.events[2].data["state"], "merged");
     assert_eq!(batch.events[0].subject, "acme/app/runs/5");
-    assert_eq!((batch.events[0].data["run"].as_str(), batch.events[0].data["state"].as_str()), (Some("acme/app/runs/5"), Some("failed")));
+    assert_eq!(
+        (batch.events[0].data["run"].as_str(), batch.events[0].data["state"].as_str()),
+        (Some("acme/app/runs/5"), Some("failed"))
+    );
     assert_eq!(batch.events[0].capability.as_str(), "pipelines");
     let next: events::Cursor = serde_json::from_str(&batch.cursor).unwrap_or_else(|_| panic!("bad cursor"));
     assert_eq!(next.since.to_string(), "2024-01-02T05:00:00Z");
@@ -318,4 +327,43 @@ async fn events_come_from_pulls_reviews_and_runs_changed_since_the_cursor_and_et
     let quiet = source.poll(&http, &creds(), Some(&batch.cursor)).await;
     assert!(quiet.is_ok_and(|b| b.events.is_empty()));
     assert_eq!(http.sent()[0].header_value("if-none-match"), Some("\"p1\""));
+}
+
+fn repos_page(from: u64, count: u64) -> String {
+    let repos: Vec<Value> = (from..from + count)
+        .map(|n| {
+            json!({ "id": n, "full_name": format!("acme/r{n}"), "name": format!("r{n}"), "private": n % 2 == 0,
+            "html_url": format!("https://github.com/acme/r{n}"), "default_branch": "main" })
+        })
+        .collect();
+    Value::Array(repos).to_string()
+}
+
+#[tokio::test]
+async fn the_repositories_are_listed_page_by_page_until_a_short_page() {
+    let http = FakeHttp::new().once(Method::Get, "/user/repos?per_page=100&page=1&", 200, &repos_page(0, 100)).once(
+        Method::Get,
+        "/user/repos?per_page=100&page=2&",
+        200,
+        &repos_page(100, 3),
+    );
+    let answer = call(&http, code_actions::REPOS, json!({}), "k").await;
+    let Ok(answer) = answer else { panic!("{answer:?}") };
+    let listed = answer.as_array().expect("list");
+    assert_eq!(listed.len(), 103);
+    assert_eq!(
+        listed[101],
+        json!({ "id": "101", "ref": "acme/r101", "name": "r101", "url": "https://github.com/acme/r101",
+        "default_branch": "main", "private": false })
+    );
+    assert_eq!(http.sent().len(), 2);
+}
+
+#[tokio::test]
+async fn the_repositories_can_be_filtered_by_name() {
+    let http = FakeHttp::new().once(Method::Get, "/user/repos?per_page=100&page=1&", 200, &repos_page(0, 12));
+    let answer = call(&http, code_actions::REPOS, json!({ "query": "R1" }), "k").await;
+    let Ok(answer) = answer else { panic!("{answer:?}") };
+    let names: Vec<&str> = answer.as_array().expect("list").iter().filter_map(|repo| repo["ref"].as_str()).collect();
+    assert_eq!(names, ["acme/r1", "acme/r10", "acme/r11"]);
 }

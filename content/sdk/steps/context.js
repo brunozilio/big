@@ -63,6 +63,70 @@ export function pullRequestOf(ctx, opts) {
   return found.pr ? found : null;
 }
 
+export function pullRequestsOf(ctx, opts) {
+  if (typeof opts.pr === "string") return [{ ...source(ctx, opts, "pr"), prs: undefined, pr: opts.pr }];
+  const found = source(ctx, opts, "pr");
+  if (Array.isArray(found.prs) && found.prs.length > 0) return found.prs.filter((entry) => entry && entry.pr);
+  return found.pr ? [found] : [];
+}
+
+function folderName(directory) {
+  const parts = String(directory ?? "").split(/[\\/]/).filter(Boolean);
+  return parts[parts.length - 1] ?? "";
+}
+
+export function nameOf(repository) {
+  const code = object(object(repository).code);
+  return code.repo || folderName(object(repository).directory);
+}
+
+export function repositoriesOf(ctx) {
+  const application = object(ctx.item.application);
+  const listed = Array.isArray(application.repositories) ? application.repositories : [];
+  return listed
+    .filter((repository) => repository && repository.id)
+    .map((repository) => ({ ...repository, name: nameOf(repository), code: repository.code ?? null }));
+}
+
+function touched(changes, target) {
+  const found = changes.find((entry) => entry.id === target.id);
+  return !found || found.changed !== false;
+}
+
+export function codeTargets(ctx, opts) {
+  const repositories = repositoriesOf(ctx);
+  if (repositories.length === 0) return [{ id: "", name: "", code: null }];
+  const coded = repositories.filter((repository) => repository.code && repository.code.repo);
+  if (coded.length === 0) return repositories.length === 1 ? [{ ...repositories[0], code: null }] : [];
+  const changes = source(ctx, opts, "develop").repositories;
+  if (!Array.isArray(changes)) return coded;
+  const changed = coded.filter((target) => touched(changes, target));
+  return changed.length > 0 ? changed : coded;
+}
+
+export function codeOptions(opts, target) {
+  const code = object(object(target).code);
+  return { ...opts, connection: opts.connection ?? code.connection };
+}
+
+export function pipelineOptions(opts, target) {
+  const code = object(object(target).code);
+  return { ...opts, connection: opts.connection ?? (code.pipelines ? code.connection : undefined) };
+}
+
+export function repoOf(target) {
+  return object(object(target).code).repo ?? undefined;
+}
+
+export function targetFields(target) {
+  return defined({ repository: target.id || target.repository, name: target.name, code: target.code });
+}
+
+export async function eachOf(ctx, targets, work) {
+  if (targets.length === 1) return [await work(ctx, targets[0], 0)];
+  return ctx.all(targets.map((target, index) => (branch) => work(branch, target, index)));
+}
+
 export function waitOptions(opts) {
   return defined({ timeout: opts.waitTimeout });
 }
@@ -85,7 +149,7 @@ export function feedbackText(from) {
 }
 
 export async function findRun(ctx, opts, wanted) {
-  const args = defined({ ref: wanted.ref, pipeline: opts.pipeline, limit: 10 });
+  const args = defined({ ref: wanted.ref, repo: wanted.repo, pipeline: opts.pipeline, limit: 10 });
   for (;;) {
     const runs = await ctx.call("pipelines", "runs", args, effects(opts));
     const fresh = (Array.isArray(runs) ? runs : []).find((run) => !wanted.seen.includes(run.ref));
