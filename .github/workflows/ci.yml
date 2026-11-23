@@ -108,8 +108,6 @@ jobs:
           - sse_stream
           - mcp_messages
           - config_schema
-          - tunnel_frame
-          - tunnel_handshake
     env:
       NIGHTLY: nightly-2026-11-01
       FUZZ_SECONDS: ${{ github.event_name == 'push' && '30' || inputs.seconds || '600' }}

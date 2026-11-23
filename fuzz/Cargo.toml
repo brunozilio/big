@@ -22,7 +22,6 @@ agent-engine = { path = "../crates/agent-engine" }
 llm-providers = { path = "../crates/llm-providers" }
 code-map = { path = "../crates/code-map" }
 platform = { path = "../crates/platform" }
-tunnel = { path = "../crates/tunnel" }
 
 [profile.release]
 debug = 1
@@ -86,20 +85,6 @@ bench = false
 [[bin]]
 name = "config_schema"
 path = "fuzz_targets/config_schema.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "tunnel_frame"
-path = "fuzz_targets/tunnel_frame.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "tunnel_handshake"
-path = "fuzz_targets/tunnel_handshake.rs"
 test = false
 doc = false
 bench = false
