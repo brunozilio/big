@@ -1,16 +1,13 @@
 import { useEffect, useId, useState, type ReactNode } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import type { AskQuestion, AskResponse } from '@/api/contract'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Kbd } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
-import { Textarea } from '@/ui/form'
 import { Icon } from '@/ui/icon'
-import { AnimatePresence, Collapse, motion, springPop, springSnap, tween, tweenClose } from '@/ui/motion'
+import { AnimatePresence, motion, springPop, springSnap, tween, tweenClose } from '@/ui/motion'
 import { RiskPill } from '@/ui/pill'
-import { AgentMark, type Ev } from './events'
+import type { Ev } from './events'
 
 export type Respond = (event: string, response: AskResponse) => Promise<void>
 
@@ -37,7 +34,7 @@ export function ActionBlock({ tone, title, icon, children, collapsed }: { tone: 
   )
 }
 
-function ResolvedCheck({ tone = 'success' }: { tone?: 'success' | 'danger' }) {
+export function ResolvedCheck({ tone = 'success' }: { tone?: 'success' | 'danger' }) {
   return (
     <motion.span initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} transition={springPop} className={cn('flex size-[18px] items-center justify-center rounded-full text-white', tone === 'success' ? 'bg-success' : 'bg-danger')}>
       <Icon name={tone === 'success' ? 'check' : 'close'} size={11} strokeWidth={3} />
@@ -205,7 +202,7 @@ export function AskUserCard({ questions, onSubmit, disabled }: { questions: AskQ
 }
 
 
-function useSend(respond: Respond) {
+export function useSend(respond: Respond) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const send = (event: string, response: AskResponse) => {
@@ -218,7 +215,7 @@ function useSend(respond: Respond) {
   return { busy, error, send }
 }
 
-function Failure({ text }: { text: string | null }) {
+export function Failure({ text }: { text: string | null }) {
   if (!text) return null
   return (
     <p role="alert" className="mt-3 flex items-center gap-1.5 text-sm text-danger-fg">
@@ -310,57 +307,5 @@ export function PermissionBlock({ event, readOnly, bypass, respond }: { event: E
       </div>
       <Failure text={error} />
     </ActionBlock>
-  )
-}
-
-export function PlanBlock({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: boolean; respond: Respond }) {
-  const { busy, error, send } = useSend(respond)
-  const [revising, setRevising] = useState(false)
-  const [feedback, setFeedback] = useState('')
-  const pending = event.resolution === 'pending'
-  return (
-    <div className="space-y-3">
-      <div className="group flex gap-3">
-        <span className="mt-[3px]"><AgentMark size={18} agent={event.agent} /></span>
-        <div className={cn('prose-chat min-w-0 flex-1', event.resolution === 'revised' && 'opacity-60')}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.text}</ReactMarkdown>
-        </div>
-      </div>
-      {pending ? (
-        <ActionBlock tone="info" title="Aprovar o plano?" icon={<Icon name="sPlan" size={17} strokeWidth={2} />}>
-          <p className="text-base text-muted">O desenvolvimento só começa depois que você aprovar.</p>
-          <Collapse open={revising}>
-            <Textarea rows={3} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="O que precisa mudar no plano?" className="mt-3 bg-surface" />
-          </Collapse>
-          <div className="mt-4 flex flex-wrap gap-2">
-            {revising ? (
-              <>
-                <Button size="sm" variant="primary" disabled={readOnly || busy || !feedback.trim()} onClick={() => send(event.id, { kind: 'plan', decision: 'revise', feedback: feedback.trim() })}>
-                  Enviar ajustes
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setRevising(false)}>
-                  Cancelar
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button size="sm" variant="primary" icon={<Icon name="check" size={15} />} disabled={readOnly || busy} onClick={() => send(event.id, { kind: 'plan', decision: 'approve' })}>
-                  Aprovar plano
-                </Button>
-                <Button size="sm" disabled={readOnly || busy} onClick={() => setRevising(true)}>
-                  Pedir mudanças
-                </Button>
-              </>
-            )}
-          </div>
-          <Failure text={error} />
-        </ActionBlock>
-      ) : (
-        <p className="flex items-center gap-2 text-md text-muted">
-          <ResolvedCheck tone={event.resolution === 'approved' ? 'success' : 'danger'} />
-          {event.resolution === 'approved' ? 'Plano aprovado' : `Mudanças pedidas${event.feedback ? `: ${event.feedback}` : ''}`}
-        </p>
-      )}
-    </div>
   )
 }

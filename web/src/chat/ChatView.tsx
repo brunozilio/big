@@ -6,9 +6,10 @@ import { cn } from '@/ui/cn'
 import { EmptyState, Spinner } from '@/ui/display'
 import { Icon } from '@/ui/icon'
 import { AnimatePresence, Collapse, motion, tween, tweenClose } from '@/ui/motion'
-import { AskBlock, PermissionBlock, PlanBlock, type Respond } from './actionBlocks'
+import { AskBlock, PermissionBlock, type Respond } from './actionBlocks'
 import { BackgroundWork, hasWork } from './BackgroundWork'
 import { Composer } from './Composer'
+import { PlanBlock } from './PlanCard'
 import { AgentMark, AgentsContext, AssistantMessage, StatusLine, ThinkingSteps, ToolRunSummary, TurnHeader, UserMessage } from './events'
 
 interface Turn {

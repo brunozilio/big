@@ -67,6 +67,8 @@ export interface ItemStep {
   label: string
   icon: string
   logo?: string
+  needs?: string
+  provider?: string
   state: StepState
   attempts: number
   seconds: number

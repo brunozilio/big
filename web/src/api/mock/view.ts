@@ -37,7 +37,7 @@ function changeRef(it: SimItem): ChangeRef | null {
 }
 
 function steps(it: SimItem): ItemStep[] {
-  return STEPS.map((s) => ({ id: s.id, label: s.label, icon: s.icon, logo: s.logo, state: wireState(it.states[s.id]), attempts: it.attempts[s.id].length, seconds: it.attempts[s.id].reduce((n, a) => n + a.ticks, 0) * 60 }))
+  return STEPS.map((s) => ({ id: s.id, label: s.label, icon: s.icon, logo: s.logo, needs: s.needs, provider: s.logo ? mark(s.logo).name : undefined, state: wireState(it.states[s.id]), attempts: it.attempts[s.id].length, seconds: it.attempts[s.id].reduce((n, a) => n + a.ticks, 0) * 60 }))
 }
 
 function needMark(s: Step): ProviderMark | null {
@@ -70,7 +70,7 @@ export function toItem(it: SimItem): Omit<Item, 'updatedAt'> {
     workflow: 'sdlc',
     group: it.done ? 'delivered' : withYou(it) ? 'you' : 'running',
     status: it.done ? 'Done' : it.cur >= IDX.review ? 'In Review' : 'In Progress',
-    issue: issueRef(it),
+    issue: it.linked || it.states.ticket === 'passed' ? issueRef(it) : null,
     change: changeRef(it),
     steps: steps(it),
     current: cur?.id ?? null,

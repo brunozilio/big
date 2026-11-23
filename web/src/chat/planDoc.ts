@@ -1,0 +1,84 @@
+export type PlanKind = 'context' | 'steps' | 'files' | 'risks' | 'checks' | 'other'
+
+export interface PlanSection {
+  kind: PlanKind
+  heading: string
+  body: string
+  items: string[]
+}
+
+export interface PlanDoc {
+  title: string | null
+  intro: string
+  sections: PlanSection[]
+}
+
+const kinds: [PlanKind, RegExp][] = [
+  ['context', /^(contexto|context|problema|objetivo|resumo|summary)/i],
+  ['steps', /^(abordagem|approach|passos|steps|implementa|plano de implementa)/i],
+  ['files', /^(arquivos|critical files|files)/i],
+  ['risks', /^(riscos|risks)/i],
+  ['checks', /^(verifica|verification|testes|como verificar)/i],
+]
+
+const kindOf = (heading: string): PlanKind => kinds.find(([, re]) => re.test(heading))?.[0] ?? 'other'
+
+const headingOf = (line: string): { heading: string; rest: string } | null => {
+  const hashed = /^#{2,4}\s+(.+?)\s*#*\s*$/.exec(line)
+  if (hashed) return { heading: hashed[1].replace(/\*\*/g, '').replace(/:$/, '').trim(), rest: '' }
+  const bold = /^\*\*([^*]+?):?\*\*:?\s*(.*)$/.exec(line.trim())
+  if (!bold) return null
+  const heading = bold[1].replace(/:$/, '').trim()
+  if (bold[2] && kindOf(heading) === 'other') return null
+  return { heading, rest: bold[2] }
+}
+
+const bullet = /^\s{0,3}(?:[-*+]|\d+[.)])\s+(.*)$/
+
+export function listItems(body: string): string[] {
+  const items: string[] = []
+  let loose = false
+  for (const line of body.split('\n')) {
+    const hit = bullet.exec(line)
+    if (hit) items.push(hit[1].trim())
+    else if (line.trim() && items.length > 0 && /^\s+/.test(line)) items[items.length - 1] += `\n${line.trim()}`
+    else if (line.trim()) loose = true
+  }
+  return loose ? [] : items
+}
+
+export function parsePlan(text: string): PlanDoc {
+  const lines = text.replace(/\r\n/g, '\n').split('\n')
+  let title: string | null = null
+  const intro: string[] = []
+  const sections: { heading: string; lines: string[] }[] = []
+  let fence = false
+  for (const line of lines) {
+    if (/^\s*```/.test(line)) fence = !fence
+    const top = fence ? null : /^#\s+(.+)$/.exec(line)
+    if (top && title === null && sections.length === 0) {
+      title = top[1].trim()
+      continue
+    }
+    const heading = fence ? null : headingOf(line)
+    if (heading) sections.push({ heading: heading.heading, lines: heading.rest ? [heading.rest] : [] })
+    else if (sections.length > 0) sections[sections.length - 1].lines.push(line)
+    else intro.push(line)
+  }
+  return {
+    title,
+    intro: intro.join('\n').trim(),
+    sections: sections.map((s) => {
+      const body = s.lines.join('\n').trim()
+      return { kind: kindOf(s.heading), heading: s.heading, body, items: listItems(body) }
+    }),
+  }
+}
+
+export const structured = (doc: PlanDoc) => doc.sections.filter((s) => s.kind !== 'other').length >= 2
+
+export function fileEntry(item: string): { path: string; note: string } {
+  const hit = /^\*{0,2}`?([^`\s*]+)`?\*{0,2}:?(?:\s+(?:[—–-]\s+)?(.*))?$/s.exec(item.trim())
+  if (!hit) return { path: item.trim(), note: '' }
+  return { path: hit[1], note: (hit[2] ?? '').trim() }
+}

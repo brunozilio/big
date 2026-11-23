@@ -40,9 +40,14 @@ fn step_json(known: &Known<'_>, step: &StepSummary) -> Value {
         "attempts": step.attempts,
         "seconds": step.seconds,
     });
-    let logo = meta["needs"].as_str().and_then(|needs| serving(known.connections, needs));
-    if let Some(record) = logo {
-        value["logo"] = mark_of(known.descriptors, &record.provider)["logo"].clone();
+    if let Some(needs) = meta["needs"].as_str() {
+        value["needs"] = json!(needs);
+    }
+    let serves = meta["needs"].as_str().and_then(|needs| serving(known.connections, needs));
+    if let Some(record) = serves {
+        let mark = mark_of(known.descriptors, &record.provider);
+        value["logo"] = mark["logo"].clone();
+        value["provider"] = mark["name"].clone();
     }
     value
 }

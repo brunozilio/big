@@ -39,6 +39,8 @@
       "id": "approve",
       "label": "Aprovação",
       "logo": "<svg/>",
+      "needs": "tracker",
+      "provider": "Fake",
       "seconds": 0,
       "state": "waiting_human"
     }

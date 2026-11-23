@@ -112,7 +112,14 @@ export const withYou = (it: SimItem) => isBlocked(it) || isPlanWaiting(it) || is
 
 export function planText(it: SimItem, revision: number) {
   const extra = revision > 0 ? `\n4. ${it.reasons.filter((r) => r.kind === 'plan')[revision - 1]?.text ?? 'Ajustar conforme pedido'}` : ''
-  return `Plano para **${it.title}**:\n\n1. Ajustar \`${fileOf(it)}\`\n2. Cobrir \`${moduleOf(it)}\` com teste\n3. Rodar a suíte do módulo${extra}`
+  return [
+    `# ${it.title}`,
+    `## Contexto\nO comportamento de \`${moduleOf(it)}\` não cobre este pedido. Ao final, o fluxo funciona de ponta a ponta e fica coberto por teste.`,
+    `## Abordagem\n1. Ajustar \`${fileOf(it)}\`\n2. Cobrir \`${moduleOf(it)}\` com teste\n3. Rodar a suíte do módulo${extra}`,
+    `## Arquivos críticos\n- \`${fileOf(it)}\` — a mudança principal\n- \`${moduleOf(it)}\` — testes novos`,
+    `## Riscos\n- Chamadores antigos dependem do formato atual; manter a assinatura pública.`,
+    `## Verificação\n- \`cargo nextest run -p ${moduleOf(it).split('/')[0] || 'server'}\`\n- Abrir o fluxo no app e conferir o resultado`,
+  ].join('\n\n')
 }
 
 interface Seed { key: string; title: string; at?: number; elapsed?: number; fail?: Partial<Record<StepId, number>>; skipPlan?: boolean; done?: boolean; pause?: Pause['kind']; planWaiting?: boolean }

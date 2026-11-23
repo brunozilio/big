@@ -7,6 +7,7 @@ import { errorText, useStepView } from '@/api/store'
 import { BlockContext } from '@/blocks/context'
 import { BlockView, fillsPanel } from '@/blocks/registry'
 import { ChatView } from '@/chat/ChatView'
+import { PlanTarget, type PlanDestination } from '@/chat/PlanCard'
 import { IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Card, Spinner } from '@/ui/display'
@@ -113,7 +114,23 @@ function RunPicker({ view, onPick }: { view: StepView; onPick: (n: number | null
   )
 }
 
-export function StepPanel({ it, step }: { it: Item; step: string }) {
+export function planDestination(it: Item, step: string): PlanDestination | null {
+  if (it.issue) return null
+  const at = it.steps.findIndex((s) => s.id === step)
+  const next = it.steps.slice(at + 1).find((s) => s.needs === 'tracker')
+  if (at < 0 || !next?.provider || next.state !== 'pending') return null
+  return { name: next.provider, logo: next.logo }
+}
+
+export function StepPanel(props: { it: Item; step: string }) {
+  return (
+    <PlanTarget.Provider value={planDestination(props.it, props.step)}>
+      <StepContent {...props} />
+    </PlanTarget.Provider>
+  )
+}
+
+function StepContent({ it, step }: { it: Item; step: string }) {
   const [attempt, setAttempt] = useState<number | null>(null)
   useEffect(() => setAttempt(null), [it.id, step])
   const { data: view, error } = useStepView(it, step, attempt)
