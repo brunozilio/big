@@ -132,8 +132,9 @@ async fn a_new_workflow_in_the_repository_changes_the_steps_and_the_statuses_sen
 
     hub.write("workflows/default.ts", LEAN);
     let server = hub.start().await;
-    let parked = server.until(&old, "the old item stops", |item| item["impediment"].is_object()).await;
-    assert_eq!(parked["group"], "you");
+    let kept = server.until(&old, "the old item keeps its own workflow", |item| waiting_on(item, "review")).await;
+    assert!(kept["impediment"].is_null(), "{kept}");
+    assert!(kept["steps"].as_array().is_some_and(|steps| steps.iter().any(|step| step["id"] == "ci")), "{kept}");
     let id = server.create(new_item("Depois da troca")).await;
     let created = server.item(&id).await;
     let ids: Vec<&str> =

@@ -238,3 +238,26 @@ async fn an_answer_given_before_the_resumed_agent_asks_again_is_applied_to_the_n
     let answers = world.engine.state.answers.lock().expect("lock").clone();
     assert!(answers.iter().any(|(ask, _)| ask.0 != "ask-1"), "the new question got the early answer: {answers:?}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_item_goes_on_with_the_workflow_code_it_started_with_after_the_code_changes() {
+    let world = World::new();
+    let before = "await ctx.sleep(1); const r = await ctx.waitHuman([]); return ctx.pass({ by: \"antigo\", r });";
+    world.workflow("pinned", &single("pinned", before));
+    let kernel = world.start().await;
+    let id = kernel.create_item("pinned", json!({ "title": "t" })).expect("item");
+    until(&kernel, &id, |item| item.steps.iter().any(|run| run.state == StepState::WaitingHuman)).await;
+    crash(kernel).await;
+    let after = "const r = await ctx.call(\"tracker\", \"issue\", { issue: \"K\" }); return ctx.pass({ by: \"novo\", r });";
+    world.workflow("pinned", &single("pinned", after));
+    let kernel = world.start().await;
+    let waiting = until(&kernel, &id, |item| item.steps.iter().any(|run| run.state == StepState::WaitingHuman)).await;
+    assert!(waiting.impediment.is_none(), "the history still replays: {:?}", waiting.impediment);
+    let ask = waiting.effects.values().find(|entry| matches!(entry.request.effect, Effect::WaitHuman { .. })).expect("ask");
+    kernel.human_input(&id, &ask.request.key.step, "ok", json!({})).expect("answer");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item)["data"]["by"], "antigo");
+    let fresh = kernel.create_item("pinned", json!({ "title": "t" })).expect("new item");
+    let made = ended(&kernel, &fresh).await;
+    assert_eq!(output(&made)["data"]["by"], "novo", "a new item takes the new code");
+}

@@ -40,3 +40,13 @@ fn applications_are_kept_in_order_changed_in_place_and_removed() {
     assert!(!store.delete_application("a").expect("removed"));
     assert_eq!(store.application("a").expect("read"), None);
 }
+
+#[test]
+fn an_item_keeps_the_workflow_code_it_was_pinned_to() {
+    let store = Store::in_memory(0).expect("the store answers");
+    assert_eq!(store.pinned_workflow("i1").expect("read"), None);
+    store.pin_workflow("i1", "v1", "codigo 1").expect("pinned");
+    store.pin_workflow("i2", "v1", "outro texto com a mesma versão").expect("pinned");
+    assert_eq!(store.pinned_workflow("i1").expect("read"), Some(("v1".to_owned(), "codigo 1".to_owned())));
+    assert_eq!(store.pinned_workflow("i2").expect("read"), Some(("v1".to_owned(), "codigo 1".to_owned())), "a version is kept once");
+}

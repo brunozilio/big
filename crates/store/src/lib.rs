@@ -3,6 +3,7 @@ mod branding;
 mod connections;
 mod error;
 mod log;
+mod pins;
 mod schema;
 mod sync;
 

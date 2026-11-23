@@ -144,23 +144,6 @@ async fn cancelling_a_parent_cancels_its_waiting_child() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_changed_workflow_pauses_the_item_instead_of_failing_it() {
-    let world = World::new();
-    let waits = "import { workflow } from \"sdk\";\nexport default workflow({ name: \"w\", async run(ctx) { await ctx.exec(\"true\"); return await ctx.waitHuman([]); } });";
-    world.workflow("w", waits);
-    let kernel = world.start().await;
-    let id = kernel.create_item("w", json!({})).expect("item");
-    until(&kernel, &id, |item| item.pending_effects().count() == 1 && item.effects.len() == 2).await;
-    crash(kernel).await;
-    world.workflow("w", &waits.replace("ctx.exec(\"true\")", "ctx.sleep(1)"));
-    let kernel = world.start().await;
-    let item = until(&kernel, &id, |item| item.impediment.is_some()).await;
-    assert!(!item.is_ended());
-    let reason = item.impediment.and_then(|found| found.reason).unwrap_or_default();
-    assert!(reason.contains("mudou"), "{reason}");
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn an_agent_question_reaches_the_human_and_the_answer_reaches_the_agent() {
     let world = World::new();
     world.engine.state.ask.store(true, Ordering::SeqCst);
