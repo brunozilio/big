@@ -252,6 +252,9 @@ impl Provider for Jira {
             };
             options.push(AccountOption { label: site_label(site), settings: site_settings(site, &projects), id });
         }
+        if let Ok(catalog) = mcp.catalog().await {
+            tracing::warn!(%catalog, "ferramentas do MCP da Atlassian");
+        }
         Ok(options)
     }
 
