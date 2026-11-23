@@ -487,6 +487,27 @@ export default workflow({
 }
 
 #[test]
+fn a_developer_that_stops_without_a_commit_is_told_to_go_on_in_the_same_session() {
+    let mut fake = Fake::default();
+    let mut developed = 0;
+    let (result, asked) = drive(&default_workflow(), &item(json!("T-1")), |command| {
+        let mut reply = fake.reply(command)?;
+        if command["kind"] == "agent" && command["args"]["name"] == "developer" {
+            developed += 1;
+            reply["base"] = json!("b0");
+            reply["commit"] = json!(if developed == 1 { "b0" } else { "c1" });
+        }
+        Some(reply)
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    let developers: Vec<&Value> =
+        of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "developer").collect();
+    let nudge = &developers[1]["args"]["input"];
+    assert!(nudge["prompt"].as_str().is_some_and(|prompt| prompt.starts_with("Você encerrou sem nenhum commit")), "{nudge}");
+    assert_eq!(nudge["session"], "dev-1");
+}
+
+#[test]
 fn a_develop_run_that_left_no_commit_fails_there_instead_of_at_the_pull_request() {
     let mut fake = Fake::default();
     let (result, asked) = drive(&default_workflow(), &item(json!("T-1")), |command| {

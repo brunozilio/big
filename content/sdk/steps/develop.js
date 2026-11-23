@@ -18,6 +18,14 @@ function uncommitted(result, branch) {
   return `o agente terminou sem nenhum commit na branch ${branch}`;
 }
 
+const NUDGE = "Você encerrou sem nenhum commit. Continue o trabalho agora: implemente o plano, rode os testes e faça commit na branch do item. Não pare antes de ter commits.";
+
+function stalled(result) {
+  const trees = Array.isArray(result.repositories) && result.repositories.length > 0 ? result.repositories : [result];
+  const known = trees.filter((tree) => tree && typeof tree === "object" && tree.commit);
+  return known.length > 0 && known.every((tree) => tree.commit === tree.base);
+}
+
 export default step({
   name: "develop",
   label: "Develop",
@@ -38,7 +46,11 @@ export default step({
       session: previous.session,
     });
     const worktree = opts.worktree ?? branch ?? ctx.item.id;
-    const result = await ctx.agent(opts.agent ?? "developer", input, agentOptions(opts, { worktree }));
+    const agent = opts.agent ?? "developer";
+    let result = await ctx.agent(agent, input, agentOptions(opts, { worktree }));
+    for (let nudged = 0; nudged < (opts.nudges ?? 2) && stalled(result); nudged += 1) {
+      result = await ctx.agent(agent, { prompt: NUDGE, session: result.session }, agentOptions(opts, { worktree }));
+    }
     const output = object(result.output);
     const missing = uncommitted(result, output.branch ?? branch);
     if (missing) return ctx.fail({ error: missing, session: result.session });

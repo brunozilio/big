@@ -104,6 +104,7 @@ export interface TicketOutput {
 }
 
 export interface DevelopOptions extends AgentStepOptions {
+  nudges?: number;
   plan?: string;
   title?: string;
   issue?: string;
