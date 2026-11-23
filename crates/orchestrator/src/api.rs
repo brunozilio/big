@@ -7,7 +7,7 @@ use domain::effect::EffectOutcome;
 use domain::workflow::{ItemId, WorkItem, WorkflowEvent};
 use domain::{AskId, Decision};
 use serde_json::{Value, json};
-use sync::{Health, ReconcilePolicy, StoreView, SyncConfig, Synchronizer};
+use sync::{Health, ReconcilePolicy, StoreView, Synchronizer};
 use tokio::sync::broadcast;
 
 use crate::agent::rewind_session;
@@ -363,7 +363,7 @@ fn start_sync(shared: &Arc<Shared>) {
         Arc::clone(&shared.config.connectors),
         sink,
         view,
-        SyncConfig::from_brand(),
+        shared.config.sync_config.clone(),
     ));
     if shared.sync.set(Arc::clone(&synchronizer)).is_ok() {
         shared.spawn(async move { synchronizer.run().await });

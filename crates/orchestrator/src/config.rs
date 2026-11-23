@@ -78,6 +78,7 @@ pub struct Config {
     pub data: PathBuf,
     pub limits: Limits,
     pub sync: bool,
+    pub sync_config: sync::SyncConfig,
 }
 
 impl fmt::Debug for Config {
@@ -103,6 +104,7 @@ impl Config {
             data,
             limits: Limits::from_config(),
             sync: true,
+            sync_config: sync::SyncConfig::from_brand(),
         }
     }
 
@@ -122,6 +124,12 @@ impl Config {
     #[must_use]
     pub fn without_sync(mut self) -> Config {
         self.sync = false;
+        self
+    }
+
+    #[must_use]
+    pub fn with_sync_config(mut self, sync_config: sync::SyncConfig) -> Config {
+        self.sync_config = sync_config;
         self
     }
 
