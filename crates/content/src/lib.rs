@@ -6,14 +6,14 @@ mod embedded {
 
 #[cfg(test)]
 mod bundle;
+#[cfg(test)]
+mod factory_tests;
 mod install;
 mod render;
 #[cfg(test)]
 mod sdk_tests;
 #[cfg(test)]
 mod stdlib_tests;
-#[cfg(test)]
-mod factory_tests;
 
 pub use install::{Installed, MANIFEST, install_files, install_once};
 

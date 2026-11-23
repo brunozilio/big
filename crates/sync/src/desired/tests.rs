@@ -106,3 +106,28 @@ fn a_pending_event_wait_makes_its_connection_hot() {
     assert!(!desired.waits_on(&connection("host", &["tracker"])));
     assert!(desired.waits_for("code") && !desired.waits_for("pipelines"));
 }
+
+#[test]
+fn the_sources_of_the_input_bring_the_issue_and_the_pull_requests() {
+    let sources = json!([
+        {"kind": "pull_request", "connection": "host", "subject": "o/r#4", "repository": "web"},
+        {"kind": "issue", "connection": "trk", "subject": "K-2"},
+        {"kind": "branch", "connection": null, "subject": "feature/x"},
+    ]);
+    let mut events = vec![created(json!({"sources": sources}))];
+    events.extend(call(1, code::PULL_REQUEST, None, json!({"pr": "o/r#4"}), json!({"ref": "o/r#4", "state": "open"})));
+    let desired = desired_of(&replay(&events), ReconcilePolicy::default());
+    assert_eq!(desired.issue, Some(IssueRef { issue: "K-2".into(), connection: Some("trk".into()) }));
+    assert_eq!(desired.pulls.len(), 1);
+    assert_eq!(desired.pulls[0].state.as_deref(), Some("open"));
+    assert_eq!(desired.pulls[0].connection.as_deref(), Some("host"));
+    assert_eq!(desired.subjects(), ["K-2", "o/r#4"]);
+    assert!(desired.uses("trk") && desired.uses("host"));
+}
+
+#[test]
+fn the_legacy_issue_learns_its_connection_from_the_matching_source() {
+    let input = json!({"issue": "K-9", "sources": [{"kind": "issue", "connection": "trk", "subject": "K-9"}]});
+    let desired = desired_of(&replay(&[created(input)]), ReconcilePolicy::default());
+    assert_eq!(desired.issue, Some(IssueRef { issue: "K-9".into(), connection: Some("trk".into()) }));
+}

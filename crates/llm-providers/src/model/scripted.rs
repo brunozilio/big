@@ -18,7 +18,13 @@ impl ScriptedModel {
     pub fn reply(blocks: Vec<Block>) -> Result<Reply, ModelError> {
         let message = Message::assistant(blocks);
         let stop = if message.tool_uses().next().is_some() { StopReason::ToolUse } else { StopReason::EndTurn };
-        Ok(Reply { message, stop, usage: Usage { input: 10, output: 5, ..Usage::default() }, served: None })
+        Ok(Reply {
+            message,
+            stop,
+            usage: Usage { input: 10, output: 5, ..Usage::default() },
+            served: None,
+            account: None,
+        })
     }
 
     pub fn asked(&self) -> Vec<TurnRequest> {

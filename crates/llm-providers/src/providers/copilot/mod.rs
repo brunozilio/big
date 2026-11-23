@@ -1,5 +1,6 @@
 mod body;
 pub mod device;
+pub mod limits;
 pub mod models;
 mod sign_in;
 
@@ -80,6 +81,12 @@ impl Shape for Provider {
     }
     fn page(&self, value: &Value) -> Result<Page, ProviderError> {
         Ok(Page { models: catalog::items(value, "data")?.iter().filter_map(models::model).collect(), next: None })
+    }
+    fn limits(&self, config: &Config) -> Option<Call> {
+        Some(limits::call(config))
+    }
+    fn windows(&self, value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
+        limits::windows(value)
     }
     fn sign_in(&self, host: &dyn Host) -> Result<Config, ProviderError> {
         sign_in::sign_in(host)

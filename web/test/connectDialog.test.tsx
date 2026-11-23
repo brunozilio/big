@@ -12,13 +12,14 @@ afterEach(() => {
   localStorage.removeItem('mock:signIn')
 })
 
-async function opened(provider: string) {
+async function opened(provider: string, resume?: (api: ReturnType<typeof mockApi>) => Promise<string>, onClose: () => void = () => undefined) {
   const api = mockApi({ tickMs: 0, delayMs: 0 })
   setApi(api)
   await act(() => boot(api))
+  const flow = resume ? await resume(api) : null
   const view = render(
     <TooltipProvider>
-      <ConnectDialog provider={provider} onClose={() => undefined} />
+      <ConnectDialog provider={provider} resume={flow} onClose={onClose} />
     </TooltipProvider>,
   )
   return within(view.baseElement.querySelector('[role="dialog"]') as HTMLElement)
@@ -56,5 +57,15 @@ describe('diálogo de conexão', () => {
     expect(await dialog.findByText(/Aguardando a autorização/, {}, wait)).toBeTruthy()
     expect((await dialog.findByRole('alert', {}, wait)).textContent).toContain('recusada')
     expect(dialog.getByRole('button', { name: /Continuar na Atlassian/ })).toBeTruthy()
+  }, 10000)
+
+  test('a volta do login na mesma aba conclui a entrada e fecha o diálogo', async () => {
+    let closed = false
+    const dialog = await opened('chatgpt', async (api) => (await api.startSignIn('chatgpt', {})).flow, () => {
+      closed = true
+    })
+    expect(dialog.getByText(/Concluindo a conexão/)).toBeTruthy()
+    for (let i = 0; i < 60 && !closed; i++) await act(() => new Promise((r) => setTimeout(r, 100)))
+    expect(closed).toBe(true)
   }, 10000)
 })

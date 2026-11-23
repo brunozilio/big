@@ -248,12 +248,14 @@ async fn an_item_goes_on_with_the_workflow_code_it_started_with_after_the_code_c
     let id = kernel.create_item("pinned", json!({ "title": "t" })).expect("item");
     until(&kernel, &id, |item| item.steps.iter().any(|run| run.state == StepState::WaitingHuman)).await;
     crash(kernel).await;
-    let after = "const r = await ctx.call(\"tracker\", \"issue\", { issue: \"K\" }); return ctx.pass({ by: \"novo\", r });";
+    let after =
+        "const r = await ctx.call(\"tracker\", \"issue\", { issue: \"K\" }); return ctx.pass({ by: \"novo\", r });";
     world.workflow("pinned", &single("pinned", after));
     let kernel = world.start().await;
     let waiting = until(&kernel, &id, |item| item.steps.iter().any(|run| run.state == StepState::WaitingHuman)).await;
     assert!(waiting.impediment.is_none(), "the history still replays: {:?}", waiting.impediment);
-    let ask = waiting.effects.values().find(|entry| matches!(entry.request.effect, Effect::WaitHuman { .. })).expect("ask");
+    let ask =
+        waiting.effects.values().find(|entry| matches!(entry.request.effect, Effect::WaitHuman { .. })).expect("ask");
     kernel.human_input(&id, &ask.request.key.step, "ok", json!({})).expect("answer");
     let item = ended(&kernel, &id).await;
     assert_eq!(output(&item)["data"]["by"], "antigo");

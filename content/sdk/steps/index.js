@@ -1,5 +1,6 @@
 export { default as plan } from "./plan.js";
 export { default as ticket } from "./ticket.js";
+export { default as cases } from "./cases.js";
 export { default as develop } from "./develop.js";
 export { default as checks } from "./checks.js";
 export { default as pr } from "./pr.js";

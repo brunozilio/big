@@ -22,6 +22,13 @@ export const spec = {
           "type": "string"
         },
         "type": "array"
+      },
+      "e2e": {
+        "description": "The commands that run this repository's end-to-end tests, for the API and for the screens.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
       }
     },
     "required": [
@@ -29,7 +36,7 @@ export const spec = {
     ],
     "type": "object"
   },
-  description: `Add a repository to the application this task belongs to, or update the one already registered at that directory. Call it whenever you create a new repository or service for the application, or learn how one is run or verified, so the next steps of this task and later tasks in {{NAME}} work in it too. Fields you leave out keep their current value.`,
+  description: `Add a repository to the application this task belongs to, or update the one already registered at that directory. Call it whenever you create a new repository or service for the application, or learn how one is run, verified or tested end to end, so the next steps of this task and later tasks in {{NAME}} work in it too. Fields you leave out keep their current value.`,
 };
 
 /**

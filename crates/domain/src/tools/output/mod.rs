@@ -23,7 +23,11 @@ pub struct Shaping {
 
 impl Shaping {
     pub fn configured() -> Self {
-        Self { cleanup: on(flags::OUTPUT_CLEANUP), filters: on(flags::OUTPUT_FILTERS), savings: on(flags::OUTPUT_SAVINGS) }
+        Self {
+            cleanup: on(flags::OUTPUT_CLEANUP),
+            filters: on(flags::OUTPUT_FILTERS),
+            savings: on(flags::OUTPUT_SAVINGS),
+        }
     }
 }
 

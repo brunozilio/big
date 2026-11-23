@@ -1,5 +1,5 @@
 import type { Ctx, Json, Run, RunSummary, StepEntry } from "../index";
-import type { AgentStepOptions, ApplicationRepository, EffectStepOptions, HumanStepOptions, PerRepository, PipelineStepOptions, PrOutput, PullRequestEntry } from "./types";
+import type { AgentStepOptions, ApplicationRepository, EffectStepOptions, GitHead, ItemSource, ItemSourceKind, HumanStepOptions, PerRepository, PipelineStepOptions, PrOutput, PullRequestEntry } from "./types";
 
 export declare const FINISHED: string[];
 export declare function defined<T extends Record<string, unknown>>(fields: T): Partial<T>;
@@ -9,6 +9,10 @@ export declare function tail(text: unknown, limit?: number): string;
 export declare function object(value: unknown): Record<string, any>;
 export declare function source(ctx: Ctx, opts: EffectStepOptions, kind: string): Record<string, any>;
 export declare function planOf(ctx: Ctx, opts: { title?: string; plan?: string } & EffectStepOptions): { title: string; text: string };
+export declare function sourcesOf(ctx: Ctx, kind: ItemSourceKind): ItemSource[];
+export declare function gitOf(ctx: Ctx, repository: string | null | undefined): Partial<GitHead>;
+export declare function sourcePullRequestOf(ctx: Ctx, target: Partial<ApplicationRepository> | null): ItemSource | null;
+export declare function sourcePullRequests(ctx: Ctx): (PerRepository & { pr: string; head?: string; base?: string })[];
 export declare function issueOf(ctx: Ctx, opts: { issue?: string } & EffectStepOptions): string | null;
 export declare function branchOf(ctx: Ctx, opts: { branch?: string } & EffectStepOptions): string | null;
 export declare function pullRequestOf(ctx: Ctx, opts: { pr?: string } & EffectStepOptions): Partial<PrOutput> & { pr: string } | null;

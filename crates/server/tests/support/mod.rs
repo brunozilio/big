@@ -10,10 +10,10 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use connectors::descriptor::object;
-use connectors::oauth::Dialect;
+use connectors::oauth::{Dialect, TokenBody};
 use connectors::{
     AccountOption, ActionError, ActionSpec, AuthSpec, Connectors, Credentials, DeviceApp, FakeHttp, FixedClock, Grant,
-    Http, Provider, ProviderDescriptor, TokenKeeper, TokenStore,
+    Http, OAuthApp, Provider, ProviderDescriptor, TokenKeeper, TokenStore,
 };
 use domain::connection::{Capability, ConnectionId, ProviderKey};
 use domain::{EngineEvent, ModelOption, SessionId};
@@ -174,6 +174,37 @@ impl Provider for Picky {
     }
 }
 
+#[derive(Debug, Default)]
+pub struct Web;
+
+#[async_trait]
+impl Provider for Web {
+    fn descriptor(&self) -> ProviderDescriptor {
+        let mut descriptor = Picky.descriptor();
+        descriptor.key = ProviderKey::from("web");
+        descriptor.name = "Web".into();
+        descriptor.auth = AuthSpec::Redirect(OAuthApp {
+            client_id: "c".into(),
+            client_secret: None,
+            redirect: "http://127.0.0.1:{port}/oauth/callback".into(),
+            authorize_endpoint: "https://login.test/authorize".into(),
+            token_endpoint: "https://login.test/token".into(),
+            scopes: Vec::new(),
+            extra_authorize: Vec::new(),
+            token_body: TokenBody::Form,
+        });
+        descriptor
+    }
+
+    async fn call(&self, _: &dyn Http, _: &Credentials, _: &str, _: &Value, _: &str) -> Result<Value, ActionError> {
+        Ok(json!({}))
+    }
+
+    async fn accounts(&self, _: &dyn Http, _: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
+        Ok(Vec::new())
+    }
+}
+
 pub struct World {
     pub store: Arc<Store>,
     pub connectors: Arc<Connectors>,
@@ -239,8 +270,9 @@ impl World {
         let provider: &'static FakeProvider = Box::leak(Box::new(FakeProvider::default()));
         let fake: &'static dyn Provider = provider;
         let picky: &'static dyn Provider = &Picky;
+        let web: &'static dyn Provider = &Web;
         let sink = Arc::new(server::StoredSettings(Arc::clone(&store)));
-        let connectors = Arc::new(Connectors::with_providers(&[fake, picky], http, keeper).with_sink(sink));
+        let connectors = Arc::new(Connectors::with_providers(&[fake, picky, web], http, keeper).with_sink(sink));
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();
         let builtin: orchestrator::Builtin = Arc::new(content::builtin_text);
         let resources = Resources::new(Some(repo(dir.path()).join(brand::DIR)), None, builtin).listing(listed);

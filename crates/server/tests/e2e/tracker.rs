@@ -161,6 +161,9 @@ fn answer(state: &mut State, action: &str, args: &Value, key: &str) -> Result<Va
             let issues: Vec<Value> = state.issues.iter().map(|(key, issue)| summary(key, issue)).collect();
             Ok(json!({ "issues": issues, "cursor": null }))
         }
+        "tests.create_case" => Ok(json!({ "ref": "K-T1", "title": args["title"], "url": "" })),
+        "tests.create_cycle" => Ok(json!({ "ref": "K-R1", "url": "" })),
+        "tests.record" => Ok(json!({ "ref": "K-E1" })),
         other => Err(ActionError::permanent(format!("the fake tracker does not know {other}"))),
     }
 }
@@ -172,7 +175,10 @@ impl Provider for Tracker {
             key: ProviderKey::from(KEY),
             name: "Tracker".into(),
             logo: "<svg/>".into(),
-            capabilities: vec![Capability::from(connectors::contracts::TRACKER)],
+            capabilities: vec![
+                Capability::from(connectors::contracts::TRACKER),
+                Capability::from(connectors::contracts::TESTS),
+            ],
             auth: AuthSpec::Device(DeviceApp {
                 client_id: "c".into(),
                 client_secret: None,
@@ -182,7 +188,7 @@ impl Provider for Tracker {
                 start_fields: Vec::new(),
                 dialect: Dialect::Form,
             }),
-            actions: connectors::contracts::tracker(),
+            actions: [connectors::contracts::tracker(), connectors::contracts::tests()].concat(),
         }
     }
 

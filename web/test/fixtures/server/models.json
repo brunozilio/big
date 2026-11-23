@@ -1,21 +1,6 @@
 {
-  "default": "auto",
+  "default": "m1",
   "models": [
-    {
-      "description": "Escolhe o modelo de cada etapa",
-      "efforts": [
-        "low",
-        "medium",
-        "high",
-        "xhigh",
-        "max"
-      ],
-      "fast": false,
-      "id": "auto",
-      "logo": "",
-      "name": "Auto",
-      "provider": "auto"
-    },
     {
       "efforts": [],
       "fast": false,

@@ -84,11 +84,8 @@ pub(in crate::engine) fn verification(
     settings: &Settings,
     roles: &ModelRoles,
 ) -> Result<Option<Verification>, String> {
-    let project = settings
-        .project_criteria
-        .clone()
-        .filter(|_| on(flags::PROJECT_CRITERIA))
-        .map(domain::Criteria::project);
+    let project =
+        settings.project_criteria.clone().filter(|_| on(flags::PROJECT_CRITERIA)).map(domain::Criteria::project);
     let asked = request.policy.verification.clone().or(project);
     let Some(criteria) = asked.filter(|_| request.policy.permission != domain::PermissionMode::Plan) else {
         return Ok(None);

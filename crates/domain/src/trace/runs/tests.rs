@@ -21,6 +21,7 @@ fn spent(input: u64, cache_read: u64, output: u64, cost: f64) -> EngineEvent {
         estimated_cost_usd: Some(cost),
         basis: String::new(),
         price_date: String::new(),
+        ..ModelUsage::default()
     })
 }
 

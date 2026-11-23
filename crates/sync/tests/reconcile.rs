@@ -112,15 +112,9 @@ async fn a_pull_request_closed_outside_wakes_whoever_waits_for_it() {
 async fn a_finished_run_resolves_the_wait_even_if_its_event_was_lost() {
     let h = harness().await;
     standard_item(&h, "i1");
-    let mut events = call(
-        "i1",
-        2,
-        pipelines::RUN,
-        HOST_CONNECTION,
-        json!({"run": "o/r/runs/42"}),
-        json!({"state": "running"}),
-    )
-    .to_vec();
+    let mut events =
+        call("i1", 2, pipelines::RUN, HOST_CONNECTION, json!({"run": "o/r/runs/42"}), json!({"state": "running"}))
+            .to_vec();
     events.push(wait("i1", 3, "pipelines.run.finished", json!({"subject": "o/r/runs/42"})));
     h.add("i1", &events);
     h.sink.wait_on("o/r/runs/42");
@@ -138,14 +132,8 @@ async fn a_finished_run_resolves_the_wait_even_if_its_event_was_lost() {
 async fn runs_are_left_alone_when_nothing_waits_for_a_pipeline() {
     let h = harness().await;
     standard_item(&h, "i1");
-    let events = call(
-        "i1",
-        2,
-        pipelines::RUN,
-        HOST_CONNECTION,
-        json!({"run": "o/r/runs/42"}),
-        json!({"state": "running"}),
-    );
+    let events =
+        call("i1", 2, pipelines::RUN, HOST_CONNECTION, json!({"run": "o/r/runs/42"}), json!({"state": "running"}));
     h.add("i1", &events);
     h.fake.world().runs.insert("o/r/runs/42".into(), "passed".into());
     h.sync.reconcile_now().await.unwrap();

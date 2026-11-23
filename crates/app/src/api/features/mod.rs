@@ -29,15 +29,8 @@ pub enum FeatureName {
 }
 
 impl FeatureName {
-    pub const ALL: [Self; 7] = [
-        Self::CodeMap,
-        Self::Memory,
-        Self::OutputSavings,
-        Self::Sessions,
-        Self::Shell,
-        Self::Trace,
-        Self::Workspace,
-    ];
+    pub const ALL: [Self; 7] =
+        [Self::CodeMap, Self::Memory, Self::OutputSavings, Self::Sessions, Self::Shell, Self::Trace, Self::Workspace];
 
     pub fn name(self) -> &'static str {
         match self {

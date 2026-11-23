@@ -55,7 +55,8 @@ impl Pooled {
                 last.as_ref().err().and_then(ModelError::failure).is_some_and(domain::account_pool::hands_over);
             if !hands_over || wrote {
                 self.current.store(at, Ordering::Relaxed);
-                return last;
+                let label = &self.accounts[at].0;
+                return last.map(|reply| Reply { account: Some(label.clone()), ..reply });
             }
             if let Err(error) = &last {
                 tracing::warn!(%error, account = %self.accounts[at].0, "the account is busy or signed out");

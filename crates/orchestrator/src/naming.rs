@@ -5,6 +5,7 @@ use std::time::Duration;
 use agent_engine::EventSink;
 use domain::workflow::{ItemId, WorkflowEvent};
 use domain::{ChoreAnswer, EngineEvent, ModelOption, PromptRequest, RunId, SessionCommand};
+use serde_json::Value;
 use tokio::sync::mpsc;
 
 use crate::shared::Shared;
@@ -13,7 +14,8 @@ const WAIT: Duration = Duration::from_secs(60);
 
 fn chosen(shared: &Shared, wanted: Option<&str>) -> ModelOption {
     let models = shared.config.engine.models();
-    let exact = wanted.filter(|wanted| *wanted != "auto").and_then(|wanted| models.iter().find(|model| model.id == wanted));
+    let exact =
+        wanted.filter(|wanted| *wanted != "auto").and_then(|wanted| models.iter().find(|model| model.id == wanted));
     let near = || wanted.and_then(|wanted| models.iter().find(|model| model.id.starts_with(wanted)));
     exact.or_else(near).or(models.first()).cloned().unwrap_or_else(|| {
         let id = wanted.unwrap_or("auto").to_owned();
@@ -56,4 +58,10 @@ pub fn name(shared: &Arc<Shared>, item: ItemId, text: String, cwd: PathBuf, want
             tracing::warn!(%error, "the item's title could not be kept");
         }
     });
+}
+
+pub fn titled(input: &Value) -> bool {
+    let issue = input["issue"].as_str().is_some_and(|issue| !issue.is_empty());
+    let sources = input["sources"].as_array().map(Vec::as_slice).unwrap_or_default();
+    issue || sources.iter().any(|source| matches!(source["kind"].as_str(), Some("issue" | "pull_request")))
 }

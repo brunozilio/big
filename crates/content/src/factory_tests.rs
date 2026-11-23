@@ -62,7 +62,8 @@ fn finding() -> Value {
         "detail": { "caught": { "body": "quebrou o login" } } })
 }
 
-const CASE: &str = r#"{ "name": "login", "origin": "orig:checks:1:escape:review:1", "commit": "bad1", "command": "test login" }"#;
+const CASE: &str =
+    r#"{ "name": "login", "origin": "orig:checks:1:escape:review:1", "commit": "bad1", "command": "test login" }"#;
 
 #[derive(Default)]
 struct Host {
@@ -109,7 +110,9 @@ fn the_meta_loop_writes_a_case_checks_it_promotes_it_into_the_base_factory_and_h
     let source = source("workflows/factory-evals.ts");
     let host = Host { detector_catches: true, listed: format!(".big/evals/login.json\t{CASE}\n") };
     let (result, asked) =
-        drive(&source, &json!({ "workflow": "factory-evals" }), &item("near", json!([finding()])), |command| host.reply(command));
+        drive(&source, &json!({ "workflow": "factory-evals" }), &item("near", json!([finding()])), |command| {
+            host.reply(command)
+        });
     assert_eq!(result["state"], "completed", "{result}");
     let agents = of_kind(&asked, "agent");
     assert_eq!(agents.len(), 1);
@@ -119,7 +122,10 @@ fn the_meta_loop_writes_a_case_checks_it_promotes_it_into_the_base_factory_and_h
     assert_eq!(of_kind(&asked, "wait.human").len(), 1, "near the loop, a human approves only the promotion");
     let execs = of_kind(&asked, "exec");
     assert!(execs.iter().any(|command| command["args"]["env"]["COMMIT"] == "bad1"));
-    assert!(execs.iter().any(|command| command["args"]["command"] == "test login"), "the detector passes on the current code");
+    assert!(
+        execs.iter().any(|command| command["args"]["command"] == "test login"),
+        "the detector passes on the current code"
+    );
     let inherit = execs.iter().find(|command| command["args"]["env"]["TARGET"].is_string()).expect("inherited");
     assert_eq!(inherit["args"]["env"]["TARGET"], "/home/u/.big/factories/acme");
     assert_eq!(inherit["args"]["env"]["BASE"], "base0");

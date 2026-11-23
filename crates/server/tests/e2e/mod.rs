@@ -124,7 +124,7 @@ impl Hub {
             provider: tracker::KEY.into(),
             label: "Tarefas".into(),
             account: Some("agente".into()),
-            capabilities: vec!["tracker".into()],
+            capabilities: vec!["tracker".into(), "tests".into()],
             settings: json!({ "project": "K" }),
         };
         for record in [code, issues] {
@@ -251,6 +251,17 @@ impl Server {
         assert!(matches!(ask.ask.kind, domain::AskKind::Plan { .. }), "{ask:?}");
         self.until(id, "the plan asks", |item| item["group"] == "you").await;
         self.respond(&ask, json!({ "kind": "plan", "decision": "approve" })).await;
+        self.approve_cases(id).await;
+    }
+
+    pub async fn approve_cases(&self, id: &str) {
+        let item = self.item(id).await;
+        let has = item["steps"].as_array().is_some_and(|steps| steps.iter().any(|step| step["id"] == "cases"));
+        if !has {
+            return;
+        }
+        self.until(id, "the test cases wait", |item| waiting_on(item, "cases")).await;
+        self.input(id, "cases", "approve_cases", json!({})).await;
     }
 
     pub async fn stop(self) {

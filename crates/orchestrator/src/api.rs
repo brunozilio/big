@@ -126,7 +126,7 @@ impl Orchestrator {
             crate::factory::stamp(&self.shared, &resources, &mut input)?;
         }
         let id = ItemId::new();
-        let named = parent.is_none() && input["issue"].as_str().is_none_or(str::is_empty);
+        let named = parent.is_none() && !crate::naming::titled(&input);
         let text = input["text"].as_str().or(input["title"].as_str()).unwrap_or_default().to_owned();
         let wanted = input["model"].as_str().map(str::to_owned);
         let home = self.shared.home(&input).unwrap_or_else(|| self.shared.config.data.clone());
@@ -352,14 +352,18 @@ impl Orchestrator {
     pub fn trigger(&self, event: &ExternalEvent) -> Result<usize> {
         let value = serde_json::to_value(event).unwrap_or(Value::Null);
         let existing = self.shared.store.items()?;
+        let kind = source_kind(event.kind.split('.').next().unwrap_or(event.capability.as_str()));
         let mut created = 0;
         for workflow in self.triggered(&event.kind, &value) {
-            let known =
-                existing.iter().any(|item| item.workflow == workflow && item.input["issue"] == event.subject.as_str());
+            let known = existing.iter().any(|item| item.workflow == workflow && mentions(&item.input, &event.subject));
             if !known {
                 let title = value["data"]["title"].as_str().unwrap_or(&event.subject).to_owned();
-                let input =
-                    json!({ "title": title, "issue": event.subject, "connection": event.connection, "event": value });
+                let source = json!({ "kind": kind, "connection": event.connection, "subject": event.subject });
+                let mut input = json!({ "title": title, "sources": [source], "event": value });
+                if kind == ISSUE {
+                    input["issue"] = json!(event.subject);
+                    input["connection"] = json!(event.connection);
+                }
                 self.create_with(&workflow, input, None)?;
                 created += 1;
             }
@@ -367,12 +371,22 @@ impl Orchestrator {
         Ok(created)
     }
 
+    fn shape(&self, workflow: &str) -> Option<Value> {
+        let script = self.shared.script(workflow).ok()?;
+        let shapes = script.described["workflows"].as_array().cloned().unwrap_or_default();
+        shapes.into_iter().find(|shape| shape["name"] == script.target["workflow"])
+    }
+
+    pub fn accepts(&self, workflow: &str) -> Vec<String> {
+        let Some(shape) = self.shape(workflow) else { return Vec::new() };
+        let listed = shape["accepts"].as_array().cloned().unwrap_or_default();
+        listed.iter().filter_map(Value::as_str).map(str::to_owned).collect()
+    }
+
     pub(crate) fn triggered(&self, kind: &str, event: &Value) -> Vec<String> {
         let mut fired = Vec::new();
         for workflow in self.workflows() {
-            let Ok(script) = self.shared.script(&workflow) else { continue };
-            let shapes = script.described["workflows"].as_array().cloned().unwrap_or_default();
-            let Some(shape) = shapes.iter().find(|shape| shape["name"] == script.target["workflow"]) else { continue };
+            let Some(shape) = self.shape(&workflow) else { continue };
             let triggers = shape["triggers"].as_array().cloned().unwrap_or_default();
             if triggers.iter().any(|on| on["kind"] == kind && event_matches(&on["filter"], event)) {
                 fired.push(workflow);
@@ -386,6 +400,21 @@ impl Orchestrator {
         self.shared.wake(id, Wake::Poke);
         Ok(())
     }
+}
+
+const ISSUE: &str = "issue";
+
+fn source_kind(capability: &str) -> &str {
+    match capability {
+        "tracker" => ISSUE,
+        "code" => "pull_request",
+        other => other,
+    }
+}
+
+fn mentions(input: &Value, subject: &str) -> bool {
+    let sources = input["sources"].as_array().map(Vec::as_slice).unwrap_or_default();
+    input["issue"] == subject || sources.iter().any(|source| source["subject"] == subject)
 }
 
 fn start_sync(shared: &Arc<Shared>) {

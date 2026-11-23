@@ -109,6 +109,7 @@ impl SignIn for FakeSignIn {
     fn sign_in(
         &self,
         provider: ModelProvider,
+        _back: Option<&str>,
         _stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, llm_providers::ProviderError> {

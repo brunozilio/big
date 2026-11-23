@@ -7,7 +7,13 @@ use super::*;
 use crate::transcript::{Message, StopReason, Usage};
 
 fn reply() -> Reply {
-    Reply { message: Message::assistant(Vec::new()), stop: StopReason::EndTurn, usage: Usage::default(), served: None }
+    Reply {
+        message: Message::assistant(Vec::new()),
+        stop: StopReason::EndTurn,
+        usage: Usage::default(),
+        served: None,
+        account: None,
+    }
 }
 
 fn request() -> TurnRequest {

@@ -2,6 +2,7 @@ import type { ComponentType } from 'react'
 import type { Block, BlockType } from '@/api/contract'
 import { ChatView } from '@/chat/ChatView'
 import { Icon } from '@/ui/icon'
+import { CasesBlock } from './cases'
 import { ChangeBlock, MergeBlock } from './change'
 import { IssueBlock } from './issue'
 import { PipelineBlock } from './pipeline'
@@ -28,6 +29,7 @@ export const registry: { [K in BlockType]: ComponentType<{ block: Of<K> }> } = {
   pipeline: PipelineBlock,
   merge: MergeBlock,
   markdown: MarkdownBlock,
+  cases: CasesBlock,
   logs: LogsBlock,
   form: FormBlock,
   actions: ActionsBlock,

@@ -3,13 +3,13 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use agent_engine::EventSink;
-use domain::effect::{ErrorClass, IdempotencyKey};
-use domain::workflow::{ItemId, WorkflowEvent};
 use agent_engine::tools::builtin::schedules;
 use agent_engine::tools::clients::{self, Waiting};
+use domain::effect::{ErrorClass, IdempotencyKey};
+use domain::workflow::{ItemId, WorkflowEvent};
 use domain::{
-    AgentAsk, AskKind, EngineEvent, FailureKind, MainAgentSpec, ModelOption, PermissionMode, Prompt, PromptRequest, RunId, SessionCommand,
-    SessionId,
+    AgentAsk, AskKind, EngineEvent, FailureKind, MainAgentSpec, ModelOption, PermissionMode, Prompt, PromptRequest,
+    RunId, SessionCommand, SessionId,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -17,8 +17,8 @@ use tokio::sync::mpsc;
 use crate::asks::{PendingAsk, SharedRun};
 use crate::events::OrchestratorEvent;
 use crate::git;
-use crate::repos::{self, Checkout, Worktree};
 use crate::protocol::Command;
+use crate::repos::{self, Checkout, Worktree};
 use crate::shared::{Shared, now_ms};
 
 pub const RESUME: &str = "A execução anterior foi interrompida. Continue de onde parou e termine a tarefa.";
@@ -79,21 +79,31 @@ pub async fn blocking<T: Send + 'static>(work: impl FnOnce() -> T + Send + 'stat
     tokio::task::spawn_blocking(work).await.map_err(|error| Failure::Class(ErrorClass::Transient, error.to_string()))
 }
 
-pub async fn worktree(shared: &Shared, checkout: Checkout, branch: &str) -> Result<Worktree, Failure> {
+pub async fn worktree(
+    shared: &Shared,
+    checkout: Checkout,
+    branch: &str,
+    base: Option<String>,
+) -> Result<Worktree, Failure> {
     let (data, branch) = (shared.config.data.clone(), branch.to_owned());
     let folder = repos::folder(&branch, &checkout.id);
-    let repo = checkout.directory.clone();
-    let path = blocking(move || git::worktree(repo.as_deref(), &data, &branch, &folder))
+    let (repo, named) = (checkout.directory.clone(), branch.clone());
+    let path = blocking(move || git::worktree(repo.as_deref(), &data, &named, base.as_deref(), &folder))
         .await?
         .map_err(|error| Failure::Class(ErrorClass::Transient, format!("the worktree could not be made: {error}")))?;
-    Ok(Worktree { checkout, path })
+    Ok(Worktree { checkout, path, branch })
 }
 
-pub async fn worktrees(shared: &Shared, item: &ItemId, branch: &str) -> Result<Vec<Worktree>, Failure> {
+pub async fn worktrees(shared: &Shared, item: &ItemId, wanted: Option<&str>) -> Result<Vec<Worktree>, Failure> {
     let state = shared.item(item).map_err(|error| Failure::permanent(error.to_string()))?;
+    let checkouts = shared.checkouts(&state);
+    let usual = checkouts.first().map_or_else(|| git::head_of(&state, ""), |first| git::head_of(&state, &first.id));
+    let chosen = wanted.filter(|name| *name != usual);
     let mut made = Vec::new();
-    for checkout in shared.checkouts(&state) {
-        made.push(worktree(shared, checkout, branch).await?);
+    for checkout in checkouts {
+        let branch = chosen.map_or_else(|| git::head_of(&state, &checkout.id), str::to_owned);
+        let base = git::base_of(&state, &checkout.id);
+        made.push(worktree(shared, checkout, &branch, base).await?);
     }
     Ok(made)
 }
@@ -103,14 +113,11 @@ async fn heads(worktrees: &[Worktree]) -> Result<Vec<Option<String>>, Failure> {
     blocking(move || places.iter().map(|place| git::head(place)).collect()).await
 }
 
-pub fn branch_of(command: &Command, item: &ItemId) -> String {
-    command.args["worktree"]
-        .as_str()
-        .filter(|name| !name.is_empty())
-        .map_or_else(|| git::branch_name(item.as_str()), str::to_owned)
+pub fn branch_of(command: &Command) -> Option<&str> {
+    command.args["worktree"].as_str().filter(|name| !name.is_empty())
 }
 
-fn model(shared: &Shared, wanted: &str) -> (ModelOption, bool) {
+fn model(shared: &Shared, wanted: Option<&str>) -> ModelOption {
     let models = shared.config.engine.models();
     let named = |id: &str| ModelOption {
         id: id.to_owned(),
@@ -119,10 +126,12 @@ fn model(shared: &Shared, wanted: &str) -> (ModelOption, bool) {
         window: None,
         capabilities: None,
     };
-    if wanted == "auto" {
-        return (models.first().cloned().unwrap_or_else(|| named(wanted)), true);
-    }
-    (models.iter().find(|option| option.id == wanted).cloned().unwrap_or_else(|| named(wanted)), false)
+    wanted
+        .filter(|wanted| *wanted != "auto")
+        .and_then(|wanted| models.iter().find(|option| option.id == wanted))
+        .cloned()
+        .or_else(|| models.first().cloned())
+        .unwrap_or_else(|| named(wanted.unwrap_or("unknown")))
 }
 
 fn prompt_of(input: &Value) -> String {
@@ -134,12 +143,11 @@ fn prompt_of(input: &Value) -> String {
 
 fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, resume: Option<&str>) -> PromptRequest {
     let input = &command.args["input"];
-    let wanted = command.args["model"].as_str().or(profile.model.as_deref()).unwrap_or("auto");
-    let (option, auto) = model(shared, wanted);
+    let wanted = command.args["model"].as_str().or(profile.model.as_deref());
+    let option = model(shared, wanted);
     let carried = input.get("session").and_then(Value::as_str);
     let text = if resume.is_some() { RESUME.to_owned() } else { prompt_of(input) };
     let mut request = PromptRequest::plain(cwd.to_path_buf(), text, option);
-    request.session.auto_pick = auto;
     if let Some(effort) = command.args["effort"].as_str().and_then(domain::Effort::named) {
         request.session.effort = effort;
     }
@@ -221,8 +229,7 @@ impl AgentEffect<'_> {
         let definition =
             resources.agent(&name).ok_or_else(|| Failure::permanent(format!("there is no agent named {name}")))?;
         let profile = Profile::parse(&definition.text);
-        let branch = branch_of(self.command, self.item);
-        let trees = worktrees(self.shared, self.item, &branch).await?;
+        let trees = worktrees(self.shared, self.item, branch_of(self.command)).await?;
         let first = trees.first().ok_or_else(|| Failure::permanent("the item has no repository"))?;
         let cwd = first.path.clone();
         let bases = heads(&trees).await?;
@@ -241,10 +248,11 @@ impl AgentEffect<'_> {
             request.session.append_system = Some(if system.is_empty() { text } else { format!("{system}\n\n{text}") });
         }
         let collected = self.drive(&request).await?;
-        let pushed = (trees.iter().map(|tree| tree.path.clone()).collect::<Vec<_>>(), branch.clone());
+        let pushed: Vec<(PathBuf, String)> =
+            trees.iter().map(|tree| (tree.path.clone(), tree.branch.clone())).collect();
         blocking(move || {
-            for place in &pushed.0 {
-                git::push(place, &pushed.1);
+            for (place, branch) in &pushed {
+                git::push(place, branch);
             }
         })
         .await?;
@@ -257,7 +265,7 @@ impl AgentEffect<'_> {
         Ok(json!({
             "text": collected.text, "session": collected.session, "output": collected.output, "plan": collected.plan,
             "checkpoint": collected.checkpoint, "base": bases.first().cloned().flatten(),
-            "commit": commits.first().cloned().flatten(), "branch": branch, "agent": name,
+            "commit": commits.first().cloned().flatten(), "branch": first.branch, "agent": name,
             "worktree": cwd.to_string_lossy(), "repositories": summaries,
         }))
     }
@@ -472,7 +480,7 @@ async fn sleep_for(duration: Option<Duration>) {
 }
 
 pub async fn rewind_session(shared: &Shared, cwd: PathBuf, session: &str, checkpoint: u32) -> bool {
-    let (option, _) = model(shared, "auto");
+    let option = model(shared, None);
     let mut request = PromptRequest::plain(cwd, String::new(), option);
     request.session.resume = Some(SessionId(session.to_owned()));
     request.session.command = Some(SessionCommand::Rewind(checkpoint));

@@ -89,6 +89,20 @@ async fn a_call_without_a_connection_becomes_an_impediment() {
     assert_eq!(item.impediment.and_then(|found| found.reason).as_deref(), Some("conecte uma conta para cloud"));
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn an_optional_call_without_a_connection_resolves_to_null() {
+    let world = World::new();
+    world.workflow(
+        "maybe",
+        "import { workflow } from \"sdk\";\nexport default workflow({ name: \"maybe\", async run(ctx) { const r = await ctx.call(\"cloud\", \"identity\", {}, { optional: true }); return { got: r }; } });",
+    );
+    let kernel = world.start().await;
+    let id = kernel.create_item("maybe", json!({})).expect("item");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item), json!({ "got": null }));
+    assert!(item.impediment.is_none());
+}
+
 const STEPS: &str = r#"
 import { workflow, step } from "sdk";
 const prepare = step({ name: "prepare", async run(ctx) { await ctx.exec("true"); return ctx.pass(); } });
@@ -256,6 +270,29 @@ async fn a_trigger_creates_one_item_per_subject_and_the_sync_reports_health() {
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].title, "Nova");
     assert_eq!(items[0].issue.as_deref(), Some("K-9"));
+    let kept = kernel.item(&items[0].id).expect("store").expect("item");
+    assert_eq!(kept.input["sources"], json!([{ "kind": "issue", "connection": "c1", "subject": "K-9" }]));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pull_request_trigger_keeps_a_typed_source_and_no_issue() {
+    let world = World::new();
+    world.workflow(
+        "reviews",
+        "import { workflow, on } from \"sdk\";\nexport default workflow({ name: \"reviews\", triggers: [on(\"code.pr.opened\")], async run(ctx) { return await ctx.waitHuman([]); } });",
+    );
+    let kernel = world.start().await;
+    let mut opened = super::restart::event("p1", "code.pr.opened", json!({ "title": "Ajustar cache" }));
+    opened.subject = "o/r#12".into();
+    assert_eq!(kernel.trigger(&opened).expect("trigger"), 1);
+    assert_eq!(kernel.trigger(&opened).expect("trigger"), 0, "one item per pull request");
+    let items = kernel.items().expect("items");
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].title, "Ajustar cache");
+    assert_eq!(items[0].issue, None);
+    let kept = kernel.item(&items[0].id).expect("store").expect("item");
+    assert_eq!(kept.input["sources"], json!([{ "kind": "pull_request", "connection": "c1", "subject": "o/r#12" }]));
+    assert!(kept.input["issue"].is_null() && kept.input["connection"].is_null());
 }
 
 const SKIPS: &str = r#"

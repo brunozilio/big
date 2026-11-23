@@ -122,4 +122,3 @@ fn source_of<'s, 'a>(statement: &'s mut Statement<'a>) -> Option<&'s mut StringL
         _ => None,
     }
 }
-

@@ -7,19 +7,12 @@ use serde_json::{Value, json};
 use crate::error::{ApiError, ApiResult, json as reply};
 use crate::state::{Ctx, Shared};
 
-pub const AUTO: &str = "auto";
-
 pub const NONE: &str = "Nenhum modelo disponível: conecte um provedor de IA.";
 
 pub fn listing(models: &[app::Model]) -> Value {
     if models.is_empty() {
         return json!({ "models": [], "default": null });
     }
-    let auto = json!({
-        "id": AUTO, "name": "Auto", "provider": AUTO, "logo": "",
-        "description": "Escolhe o modelo de cada etapa",
-        "efforts": app::Effort::ALL.map(app::Effort::cli_value), "fast": false,
-    });
     let listed = models.iter().map(|model| {
         let provider = model.provider.id();
         json!({
@@ -27,7 +20,7 @@ pub fn listing(models: &[app::Model]) -> Value {
             "efforts": app::efforts(model), "fast": false,
         })
     });
-    json!({ "models": std::iter::once(auto).chain(listed).collect::<Vec<_>>(), "default": AUTO })
+    json!({ "models": listed.collect::<Vec<_>>(), "default": models.first().map(|model| &model.id) })
 }
 
 const MAKERS: [(&str, &str); 7] = [
@@ -79,15 +72,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn without_models_there_is_no_auto_and_no_default() {
+    fn without_models_there_is_no_default() {
         assert_eq!(listing(&[]), json!({ "models": [], "default": null }));
     }
 
     #[test]
     fn a_model_lists_the_efforts_of_its_family() {
         let listed = listing(&[app::Model::new("anthropic:claude-opus-5-5", "Claude Opus 5.5")]);
-        assert_eq!(listed["models"][1]["efforts"], json!(["low", "medium", "high", "xhigh", "max"]));
-        assert_eq!(listed["models"][1]["fast"], false);
+        assert_eq!(listed["default"], "anthropic:claude-opus-5-5");
+        assert_eq!(listed["models"][0]["efforts"], json!(["low", "medium", "high", "xhigh", "max"]));
+        assert_eq!(listed["models"][0]["fast"], false);
     }
 
     #[test]
@@ -100,8 +94,18 @@ mod tests {
             ..Default::default()
         });
         let listed = listing(&[opus, app::Model::new("kiro-subscription:claude-sonnet-4.5", "Claude Sonnet 4.5")]);
-        assert_eq!(listed["models"][1]["efforts"], json!(["low", "medium", "high", "max"]));
-        assert_eq!(listed["models"][2]["efforts"], json!([]));
+        assert_eq!(listed["models"][0]["efforts"], json!(["low", "medium", "high", "max"]));
+        assert_eq!(listed["models"][1]["efforts"], json!([]));
+    }
+
+    #[test]
+    fn a_provider_native_auto_is_listed_like_any_other_model() {
+        let native = app::Model::new("kiro-subscription:auto", "Auto")
+            .served_by(domain::ModelProvider::new("kiro-subscription"));
+        let listed = listing(&[native]);
+        assert_eq!(listed["models"][0]["id"], "kiro-subscription:auto");
+        assert_eq!(listed["models"][0]["provider"], "kiro-subscription");
+        assert_eq!(listed["models"][0]["logo"], "kiro");
     }
 
     #[test]

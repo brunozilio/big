@@ -165,6 +165,14 @@ export function AccountChoice({ poll, choice, onChoice }: { poll: ChoosePoll; ch
   )
 }
 
+export function Resuming() {
+  return (
+    <Panel>
+      <Waiting text="Concluindo a conexão…" />
+    </Panel>
+  )
+}
+
 export function SignedIn({ connection }: { connection: Connection }) {
   return (
     <Panel>

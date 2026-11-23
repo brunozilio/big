@@ -26,7 +26,8 @@ pub fn offer(client: u64, store: &Arc<Store>, application: String) {
     tools::hosted::offer(
         client,
         Arc::new(move || {
-            vec![Box::new(AddRepository { store: Arc::clone(&store), application: application.clone() }) as Box<dyn Tool>]
+            vec![Box::new(AddRepository { store: Arc::clone(&store), application: application.clone() })
+                as Box<dyn Tool>]
         }),
     );
 }
@@ -37,26 +38,38 @@ struct Wanted {
     repo: Option<String>,
     run: Option<String>,
     verify: Option<Vec<String>>,
+    e2e: Option<Vec<String>>,
 }
 
 fn text(input: &Value, name: &str) -> Option<String> {
     input[name].as_str().map(str::trim).map(str::to_owned)
 }
 
+fn lines(input: &Value, name: &str) -> Option<Vec<String>> {
+    input[name].as_array().map(|lines| {
+        lines
+            .iter()
+            .filter_map(Value::as_str)
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .map(str::to_owned)
+            .collect()
+    })
+}
+
 fn wanted(input: &Value, workspace: &Workspace) -> Result<Wanted, String> {
-    let directory = text(input, "directory").filter(|dir| !dir.is_empty()).ok_or("Diga o `directory` do repositório.")?;
+    let directory =
+        text(input, "directory").filter(|dir| !dir.is_empty()).ok_or("Diga o `directory` do repositório.")?;
     let directory = workspace.resolve(&directory);
     if !directory.is_dir() {
         return Err(format!("{} não é uma pasta.", directory.display()));
     }
-    let verify = input["verify"].as_array().map(|lines| {
-        lines.iter().filter_map(Value::as_str).map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect()
-    });
     Ok(Wanted {
         directory: directory.to_string_lossy().into_owned(),
         repo: text(input, "repo").filter(|repo| !repo.is_empty()),
         run: text(input, "run"),
-        verify,
+        verify: lines(input, "verify"),
+        e2e: lines(input, "e2e"),
     })
 }
 
@@ -97,6 +110,9 @@ fn apply(application: &mut Application, mut wanted: Wanted) -> bool {
     if let Some(verify) = wanted.verify {
         repository.verify = verify;
     }
+    if let Some(e2e) = wanted.e2e {
+        repository.e2e = e2e;
+    }
     added
 }
 
@@ -111,8 +127,13 @@ fn described(application: &Application, directory: &str, added: bool) -> String 
         if !repository.verify.is_empty() {
             let _ = write!(text, "\nPara verificar: {}", repository.verify.join(", "));
         }
+        if !repository.e2e.is_empty() {
+            let _ = write!(text, "\nTestes E2E: {}", repository.e2e.join(", "));
+        }
     }
-    text.push_str("\nOs próximos passos desta tarefa já recebem uma worktree dele; neste passo, trabalhe na própria pasta.");
+    text.push_str(
+        "\nOs próximos passos desta tarefa já recebem uma worktree dele; neste passo, trabalhe na própria pasta.",
+    );
     text
 }
 
@@ -162,7 +183,11 @@ mod tests {
     #[test]
     fn an_item_s_worktree_updates_the_repository_it_was_made_from() {
         let mut application = Application {
-            repositories: vec![Repository { id: "565e".into(), directory: "/code/demo".into(), ..Repository::default() }],
+            repositories: vec![Repository {
+                id: "565e".into(),
+                directory: "/code/demo".into(),
+                ..Repository::default()
+            }],
             ..Application::default()
         };
         let worktree = "/data/worktrees/big_92ec--565e";

@@ -62,6 +62,8 @@ pub enum ClientCommand {
     },
     SignInProvider {
         provider: ModelProvider,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        back: Option<String>,
     },
     CloseAndSignIn {
         provider: ModelProvider,
@@ -164,7 +166,11 @@ mod tests {
             },
             ClientCommand::ListProviders,
             ClientCommand::ConnectProvider { provider: ModelProvider::new("keyed"), key: "sk".into() },
-            ClientCommand::SignInProvider { provider: ModelProvider::new("browser-sub") },
+            ClientCommand::SignInProvider { provider: ModelProvider::new("browser-sub"), back: None },
+            ClientCommand::SignInProvider {
+                provider: ModelProvider::new("browser-sub"),
+                back: Some("http://127.0.0.1:7999/settings".into()),
+            },
             ClientCommand::CloseAndSignIn { provider: ModelProvider::new("browser-sub"), port: 49153, pid: 998 },
             ClientCommand::DisconnectProvider { provider: ModelProvider::new("keyed") },
             ClientCommand::UseProviderAccount { provider: ModelProvider::new("keyed"), account: "2".into() },

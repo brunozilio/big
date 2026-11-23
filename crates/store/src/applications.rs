@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Result, Store};
 
-
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrackerChoice {
     pub connection: String,
@@ -27,6 +26,8 @@ pub struct Repository {
     pub run: String,
     #[serde(default)]
     pub verify: Vec<String>,
+    #[serde(default)]
+    pub e2e: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

@@ -79,6 +79,7 @@ fn a_sub_agent_shows_its_own_steps_and_usage_counts_tokens() {
         estimated_cost_usd: None,
         basis: String::new(),
         price_date: String::new(),
+        ..ModelUsage::default()
     };
     transcript.apply(&EngineEvent::Usage(usage));
     transcript.apply(&EngineEvent::Cancelled);

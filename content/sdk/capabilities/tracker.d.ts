@@ -23,6 +23,7 @@ export interface IssueComment {
 
 export interface IssueSummary {
   ref: IssueRef;
+  id?: string;
   title: string;
   status: string;
   url: string;

@@ -1,6 +1,7 @@
 use rusqlite::{Connection, TransactionBehavior};
 
-const MIGRATIONS: &[&str] = &["
+const MIGRATIONS: &[&str] = &[
+    "
     CREATE TABLE work_events (
         item TEXT NOT NULL,
         seq INTEGER NOT NULL,
@@ -44,7 +45,8 @@ const MIGRATIONS: &[&str] = &["
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );
-", "
+",
+    "
     CREATE TABLE applications (
         id TEXT PRIMARY KEY,
         position INTEGER NOT NULL,
@@ -54,7 +56,8 @@ const MIGRATIONS: &[&str] = &["
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );
-", "
+",
+    "
     CREATE TABLE factory_findings (
         id TEXT PRIMARY KEY,
         item TEXT NOT NULL,
@@ -72,7 +75,8 @@ const MIGRATIONS: &[&str] = &["
         files TEXT NOT NULL,
         first_seen INTEGER NOT NULL
     );
-"];
+",
+];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
     let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;

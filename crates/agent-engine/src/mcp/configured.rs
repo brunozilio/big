@@ -304,7 +304,11 @@ mod tests {
 
         assert_eq!(
             servers(request.folder(), &sources),
-            [stdio("jira", "jira-mcp", &[]), stdio("sonar", "sonar-mcp", &[]), stdio("notes", "notes-mcp", &[("KEY", "dflt")])],
+            [
+                stdio("jira", "jira-mcp", &[]),
+                stdio("sonar", "sonar-mcp", &[]),
+                stdio("notes", "notes-mcp", &[("KEY", "dflt")])
+            ],
             "the project's server wins its name; reserved names never start"
         );
         sources.approval.disabled = vec!["jira".into(), "sonar".into()];

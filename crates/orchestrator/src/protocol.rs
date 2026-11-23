@@ -32,6 +32,8 @@ pub struct Command {
     pub retry: Option<Value>,
     #[serde(default)]
     pub timeout: Option<u64>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub optional: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]

@@ -104,10 +104,7 @@ pub fn launch(launching: &Launching<'_>) -> Result<(), String> {
     let (path, spec) = &planned.spec;
     platform::store::Document::at(path).write(spec).map_err(|error| error.to_string())?;
     let mut command = Command::new(&planned.program);
-    command
-        .args(&planned.args)
-        .current_dir(launching.cwd)
-        .stdin(Stdio::null());
+    command.args(&planned.args).current_dir(launching.cwd).stdin(Stdio::null());
     let Some(log) = &planned.log else {
         let opener = planned.program.display();
         let placed = command.output().map_err(|error| format!("{opener} could not be started: {error}"))?;

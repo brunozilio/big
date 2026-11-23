@@ -22,6 +22,7 @@ fn usage(output: u64) -> EngineEvent {
         estimated_cost_usd: Some(0.01),
         basis: String::new(),
         price_date: String::new(),
+        ..ModelUsage::default()
     })
 }
 

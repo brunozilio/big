@@ -47,6 +47,7 @@ export const review = (pr, options) => block("review", options && options.sessio
 export const pipeline = (run) => block("pipeline", { run });
 export const merge = (pr, methods) => block("merge", { pr, methods: methods || [] });
 export const markdown = (text) => block("markdown", { text: String(text === undefined ? "" : text) });
+export const testCases = (list) => block("cases", { cases: Array.isArray(list) ? list : [] });
 export const logs = (input) =>
   Array.isArray(input) ? block("logs", { commands: input }) : block("logs", { text: String(input === undefined ? "" : input) });
 export const form = (fields) => block("form", { fields: fields || [] });
@@ -124,7 +125,7 @@ class Runtime {
     const seq = this.next();
     const waiting = deferred();
     const command = { seq, kind, branch: scope.branch, step: scope.step, attempt: scope.attempt, args };
-    for (const key of ["connection", "retry", "timeout"]) {
+    for (const key of ["connection", "retry", "timeout", "optional"]) {
       if (options && options[key] !== undefined) command[key] = options[key];
     }
     this.commands.set(seq, { command, waiting, resolved: false });
@@ -517,6 +518,7 @@ export function workflow(definition) {
     statuses: definition.statuses || [],
     triggers: definition.triggers || [],
     reconcile: definition.reconcile || {},
+    accepts: Array.isArray(definition.accepts) ? definition.accepts : [],
     steps,
     run,
     code: typeof definition.run === "function",
@@ -602,6 +604,7 @@ function describe() {
       statuses: found.statuses,
       triggers: found.triggers,
       reconcile: found.reconcile,
+      accepts: found.accepts,
       steps: found.steps,
       code: found.code,
     })),

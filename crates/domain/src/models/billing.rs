@@ -35,6 +35,10 @@ pub struct ModelUsage {
     pub estimated_cost_usd: Option<f64>,
     pub basis: String,
     pub price_date: String,
+    #[serde(default)]
+    pub provider: String,
+    #[serde(default)]
+    pub account: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -64,6 +68,36 @@ pub fn cache_hit_rate(usage: &ModelUsage) -> Option<f64> {
     (prompt > 0).then(|| usage.cache_read as f64 / prompt as f64)
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlanUsage {
+    pub plan: Option<String>,
+    pub windows: Vec<PlanWindow>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+pub struct PlanWindow {
+    pub id: String,
+    pub label: String,
+    pub used_percent: f64,
+    pub resets_at: Option<String>,
+    #[serde(default)]
+    pub starts_at: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum PlanLimits {
+    Known(PlanUsage),
+    Unsupported,
+    Failed(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct AccountLimits {
+    pub provider: crate::ModelProvider,
+    pub account: String,
+    pub limits: PlanLimits,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -78,6 +112,8 @@ mod tests {
             estimated_cost_usd: cost,
             basis: String::new(),
             price_date: String::new(),
+            provider: String::new(),
+            account: String::new(),
         }
     }
 

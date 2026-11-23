@@ -15,7 +15,7 @@ import { SegmentedControl } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { springPop, tweenClose } from '@/ui/motion'
 import { Dialog, Menu, MenuContent, MenuItem, MenuTrigger } from '@/ui/overlay'
-import { ChangeChip, IssueKey, Node, nodeState, RowRight, stateLabel } from './parts'
+import { ChangeChip, IssueKey, Node, nodeState, Origins, RowRight, stateLabel } from './parts'
 
 export function followed(before: string | null, now: string | null, viewing: string | null): string | null {
   return before && now && now !== before && viewing === before ? now : null
@@ -47,6 +47,7 @@ export function ItemModal({ it, step, onStep, onClose, onConnect }: { it: Item |
             <ItemMenu it={it} step={step ?? it.current} onClose={onClose} />
             <IconButton tooltip="Fechar" onClick={onClose}><Icon name="close" size={18} /></IconButton>
           </div>
+          <Origins it={it} />
           <ItemDetail it={it} step={step ?? it.current ?? it.steps[0]?.id ?? ''} onStep={onStep} />
         </div>
       )}
@@ -82,9 +83,10 @@ function ItemDetail({ it, step, onStep }: { it: Item; step: string; onStep: (s: 
               const st = nodeState(it, x)
               const t = Math.round(x.seconds / 60)
               const active = x.id === step
+              const locked = st === 'pending' && !active
               return (
                 <li key={x.id}>
-                  <button onClick={() => onStep(x.id)} className={cn('relative flex h-9 w-full items-center gap-2.5 rounded-control-sm px-2 text-left text-base transition-colors', active ? 'text-fg' : 'text-fg2 hover:bg-hover')}>
+                  <button disabled={locked} onClick={() => onStep(x.id)} className={cn('relative flex h-9 w-full items-center gap-2.5 rounded-control-sm px-2 text-left text-base transition-colors', active ? 'text-fg' : locked ? 'cursor-default text-fg2' : 'text-fg2 hover:bg-hover')}>
                     {active && <motion.span layoutId={`step-sel-${it.id}`} transition={springPop} className="absolute inset-0 rounded-control-sm bg-surface shadow-card" />}
                     <span className="relative flex"><Node s={x} state={st} size={20} /></span>
                     <span className={cn('relative flex-1 truncate leading-none', st === 'pending' && 'text-muted')}>{x.label}</span>

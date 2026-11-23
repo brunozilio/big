@@ -178,6 +178,7 @@ fn cut(blocks: Vec<Block>) -> Result<agent_engine::model::Reply, ModelError> {
         stop: agent_engine::transcript::StopReason::MaxTokens,
         usage: agent_engine::transcript::Usage::default(),
         served: None,
+        account: None,
     })
 }
 
@@ -211,6 +212,7 @@ fn output_token_limit_continues_without_reporting_a_truncated_success() {
             stop: StopReason::MaxTokens,
             usage: Usage::default(),
             served: None,
+            account: None,
         }),
         ScriptedModel::reply(vec![Block::Text("Completed part.".into())]),
     ]);

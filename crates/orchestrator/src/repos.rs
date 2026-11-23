@@ -12,16 +12,27 @@ pub struct Checkout {
     pub directory: Option<PathBuf>,
     pub run: String,
     pub verify: Vec<String>,
+    pub e2e: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Worktree {
     pub checkout: Checkout,
     pub path: PathBuf,
+    pub branch: String,
 }
 
 fn text(value: &Value, name: &str) -> String {
     value[name].as_str().map(str::trim).unwrap_or_default().to_owned()
+}
+
+fn commands(value: &Value, name: &str) -> Vec<String> {
+    let listed = value[name].as_array().map(Vec::as_slice).unwrap_or_default();
+    listed.iter().filter_map(Value::as_str).map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect()
+}
+
+fn quoted(commands: &[String]) -> String {
+    commands.iter().map(|command| format!("`{command}`")).collect::<Vec<_>>().join(", ")
 }
 
 fn checkout(repository: &Value) -> Checkout {
@@ -29,19 +40,13 @@ fn checkout(repository: &Value) -> Checkout {
     let named = text(&repository["code"], "repo");
     let folder = directory.as_deref().and_then(Path::file_name).map(|name| name.to_string_lossy().into_owned());
     let name = if named.is_empty() { folder.unwrap_or_default() } else { named };
-    let verify = repository["verify"].as_array().map(Vec::as_slice).unwrap_or_default();
     Checkout {
         id: text(repository, "id"),
         name,
         directory,
         run: text(repository, "run"),
-        verify: verify
-            .iter()
-            .filter_map(Value::as_str)
-            .map(str::trim)
-            .filter(|line| !line.is_empty())
-            .map(str::to_owned)
-            .collect(),
+        verify: commands(repository, "verify"),
+        e2e: commands(repository, "e2e"),
     }
 }
 
@@ -57,6 +62,7 @@ pub fn of_input(input: &Value, fallback: Option<&Path>) -> Vec<Checkout> {
         directory: fallback.map(Path::to_path_buf),
         run: String::new(),
         verify: Vec::new(),
+        e2e: Vec::new(),
     }]
 }
 
@@ -84,8 +90,10 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
             let _ = write!(text, "\n  - Para rodar: `{}`", checkout.run);
         }
         if !checkout.verify.is_empty() {
-            let commands: Vec<String> = checkout.verify.iter().map(|command| format!("`{command}`")).collect();
-            let _ = write!(text, "\n  - Para verificar: {}", commands.join(", "));
+            let _ = write!(text, "\n  - Para verificar: {}", quoted(&checkout.verify));
+        }
+        if !checkout.e2e.is_empty() {
+            let _ = write!(text, "\n  - Testes E2E: {}", quoted(&checkout.e2e));
         }
     }
     let _ = write!(
@@ -100,7 +108,7 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
 pub fn summary(worktree: &Worktree, base: Option<&str>, commit: Option<&str>) -> Value {
     json!({
         "id": worktree.checkout.id, "name": worktree.checkout.name, "worktree": worktree.path.to_string_lossy(),
-        "base": base, "commit": commit, "changed": base != commit,
+        "branch": worktree.branch, "base": base, "commit": commit, "changed": base != commit,
     })
 }
 
@@ -120,21 +128,24 @@ mod tests {
     fn the_application_s_repositories_come_in_order_with_their_commands() {
         let input = json!({ "application": { "repositories": [
             { "id": "web", "directory": "/src/web", "code": { "connection": "c", "repo": "acme/web" },
-              "run": "bun dev", "verify": ["bun test", " "] },
+              "run": "bun dev", "verify": ["bun test", " "], "e2e": [" npx playwright test", ""] },
             { "id": "api", "directory": "/src/api" },
         ] } });
         let found = of_input(&input, Some(Path::new("/padrao")));
         assert_eq!(found.iter().map(|found| found.name.as_str()).collect::<Vec<_>>(), ["acme/web", "api"]);
         assert_eq!(found[0].verify, ["bun test"]);
+        assert_eq!(found[0].e2e, ["npx playwright test"]);
+        assert!(found[1].e2e.is_empty());
         assert_eq!(home(&input, None), Some(PathBuf::from("/src/web")));
         assert_eq!(folder("cmd/i1", "web"), "cmd_i1--web");
         assert_eq!(folder("cmd/i1", ""), "cmd_i1");
         let worktrees: Vec<Worktree> = found
             .into_iter()
-            .map(|checkout| Worktree { path: PathBuf::from("/w").join(&checkout.id), checkout })
+            .map(|checkout| Worktree { path: PathBuf::from("/w").join(&checkout.id), branch: String::new(), checkout })
             .collect();
         let text = described(&worktrees).expect("described");
         assert!(text.contains("acme/web: /w/web") && text.contains("`bun dev`") && text.contains("`bun test`"));
+        assert!(text.contains("  - Testes E2E: `npx playwright test`"));
         assert!(text.contains("`AddRepository`"));
     }
 }

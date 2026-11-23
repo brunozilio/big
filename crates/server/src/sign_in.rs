@@ -122,7 +122,7 @@ fn missing_client(found: &ProviderDescriptor, auth: &AuthSpec) -> Option<String>
         .then(|| format!("Falta o client id do {}: preencha a seção [connectors] do config.toml.", found.name))
 }
 
-pub async fn start(shared: &Shared, provider: &str, fields: &Value, method: Option<&str>) -> ApiResult<Value> {
+pub async fn start(shared: &crate::state::Ctx, provider: &str, fields: &Value, method: Option<&str>) -> ApiResult<Value> {
     let found = descriptor(shared, provider)?;
     let auth = chosen_auth(shared, &found, method)?;
     if let Some(told) = missing_client(&found, &auth) {
@@ -133,11 +133,14 @@ pub async fn start(shared: &Shared, provider: &str, fields: &Value, method: Opti
     let redirect = |exchanger: Exchanger, authorization: Authorization| -> ApiResult<Value> {
         let url = authorization.url.clone();
         let flow = opened(Waiting::Redirect { exchanger, authorization })?;
-        Ok(json!({ "flow": flow, "kind": "redirect", "url": url, "paste": false }))
+        Ok(json!({ "flow": flow, "kind": "redirect", "url": url, "paste": false, "returns": true }))
     };
     match &auth {
         AuthSpec::Redirect(app) => redirect(Exchanger::App(app.clone()), app.begin(shared.port)?),
         AuthSpec::Loopback(sign_in) => {
+            if let Some(port) = sign_in.0.callback_port().filter(|port| *port != shared.port) {
+                crate::callback_port::open(shared, port).await?;
+            }
             let authorization = sign_in.0.begin(http, shared.port).await?;
             redirect(Exchanger::Loopback(sign_in.clone()), authorization)
         }
@@ -172,9 +175,21 @@ async fn device(
     Ok(answer)
 }
 
-pub async fn callback(shared: &Shared, state: &str, code: &str) -> ApiResult<()> {
+pub fn back_to(provider: &str, id: &str) -> String {
+    format!("/settings/connections?connect={provider}&flow={id}")
+}
+
+pub fn refused(shared: &Shared, state: &str, told: &str) -> ApiResult<String> {
     let id = shared.flows.by_state(state).ok_or_else(|| ApiError::missing("Essa entrada expirou."))?;
-    let Some(Flow { stage: Stage::Waiting(Waiting::Redirect { exchanger, authorization }), .. }) =
+    let provider = shared.flows.get(&id).map(|flow| flow.provider).unwrap_or_default();
+    let message = if told.is_empty() { "A entrada foi recusada." } else { told };
+    shared.flows.set(&id, Stage::Failed(message.to_owned()));
+    Ok(back_to(&provider, &id))
+}
+
+pub async fn callback(shared: &Shared, state: &str, code: &str) -> ApiResult<String> {
+    let id = shared.flows.by_state(state).ok_or_else(|| ApiError::missing("Essa entrada expirou."))?;
+    let Some(Flow { provider, stage: Stage::Waiting(Waiting::Redirect { exchanger, authorization }), .. }) =
         shared.flows.get(&id)
     else {
         return Err(ApiError::missing("Essa entrada expirou."));
@@ -189,7 +204,7 @@ pub async fn callback(shared: &Shared, state: &str, code: &str) -> ApiResult<()>
         Ok(grant) => shared.flows.set(&id, Stage::Granted(grant)),
         Err(error) => shared.flows.set(&id, Stage::Failed(error.message)),
     }
-    Ok(())
+    Ok(back_to(&provider, &id))
 }
 
 pub async fn poll(shared: &Shared, flow_id: &str, choice: Option<&str>) -> ApiResult<Value> {

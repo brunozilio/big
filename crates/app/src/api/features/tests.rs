@@ -14,18 +14,7 @@ fn refused<T: serde::de::DeserializeOwned>(json: serde_json::Value) -> bool {
 #[test]
 fn every_feature_has_a_name_in_one_fixed_order() {
     let names: Vec<&str> = FeatureName::ALL.iter().map(|feature| feature.name()).collect();
-    assert_eq!(
-        names,
-        [
-            "code_map",
-            "memory",
-            "output_savings",
-            "sessions",
-            "shell",
-            "trace",
-            "workspace",
-        ]
-    );
+    assert_eq!(names, ["code_map", "memory", "output_savings", "sessions", "shell", "trace", "workspace",]);
     for feature in FeatureName::ALL {
         assert_eq!(serde_json::to_value(feature).expect("json"), json!(feature.name()));
     }

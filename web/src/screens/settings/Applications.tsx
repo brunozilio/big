@@ -66,7 +66,7 @@ export function suggestedCode(ref: string | null, repos: Record<string, CodeRepo
 }
 
 function blankRepository(): ApplicationRepository {
-  return { id: '', code: null, directory: '', run: '', verify: [] }
+  return { id: '', code: null, directory: '', run: '', verify: [], e2e: [] }
 }
 
 function draftOf(application: Application | null): ApplicationDraft {
@@ -116,6 +116,9 @@ function RepositoryCard({ value, index, removable, repos, sources, onChange, onR
         <Field label="Verificação">
           <Textarea aria-label="Verificação" rows={2} className="font-mono text-sm" value={value.verify.join('\n')} placeholder="bun test" onChange={(e) => onChange({ ...value, verify: e.target.value.split('\n') })} />
         </Field>
+        <Field label="Testes E2E">
+          <Textarea aria-label="Testes E2E" rows={2} className="font-mono text-sm" value={value.e2e.join('\n')} placeholder="npx playwright test" onChange={(e) => onChange({ ...value, e2e: e.target.value.split('\n') })} />
+        </Field>
       </div>
     </Card>
   )
@@ -154,7 +157,7 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
   const save = () => {
     setBusy(true)
     setError(null)
-    const clean = { ...draft, repositories: draft.repositories.map((r) => ({ ...r, verify: r.verify.map((v) => v.trim()).filter(Boolean) })) }
+    const clean = { ...draft, repositories: draft.repositories.map((r) => ({ ...r, verify: r.verify.map((v) => v.trim()).filter(Boolean), e2e: r.e2e.map((v) => v.trim()).filter(Boolean) })) }
     const sent = application ? api().saveApplication({ ...clean, id: application.id }) : api().createApplication(clean)
     sent
       .then((saved) => {

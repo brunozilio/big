@@ -122,9 +122,9 @@ impl CommandHandler {
             }
             ClientCommand::ListProviders => providers.list(),
             ClientCommand::ConnectProvider { provider, key } => providers.connect(provider, &key),
-            ClientCommand::SignInProvider { provider } => {
+            ClientCommand::SignInProvider { provider, back } => {
                 self.flows.began(replies);
-                providers.sign_in(provider, replies);
+                providers.sign_in_returning(provider, back, replies);
                 return None;
             }
             ClientCommand::CloseAndSignIn { provider, port, pid } => {

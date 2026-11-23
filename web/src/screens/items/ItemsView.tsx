@@ -6,7 +6,7 @@ import { cn } from '@/ui/cn'
 import { StatusIcon, type StatusGlyph } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { Collapse, stagger, tween } from '@/ui/motion'
-import { IssueKey, LiveDot, RowRight, stop } from './parts'
+import { IssueKey, LiveDot, RowRight, SourceChip, stop } from './parts'
 
 export const GROUP_LABEL: Record<BoardGroup, string> = { you: 'Com você', running: 'Em andamento', delivered: 'Entregue' }
 const GROUP_GLYPH: Record<BoardGroup, StatusGlyph> = { you: 'in_review', running: 'in_progress', delivered: 'done' }
@@ -76,7 +76,7 @@ function Row({ it, fresh, onOpen, onConnect }: { it: Item; fresh: boolean; onOpe
         }}
         className="group flex h-[52px] w-full cursor-pointer items-center gap-3 rounded-control px-2.5 text-left transition-colors hover:bg-hover"
       >
-        {it.issue && <IssueKey issue={it.issue} />}
+        {it.issue ? <IssueKey issue={it.issue} /> : <OriginChip it={it} />}
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate text-md text-fg" title={it.title}>{it.title}</span>
           {it.live && <LiveDot />}
@@ -87,4 +87,9 @@ function Row({ it, fresh, onOpen, onConnect }: { it: Item; fresh: boolean; onOpe
       </div>
     </div>
   )
+}
+
+function OriginChip({ it }: { it: Item }) {
+  const source = (it.sources ?? []).find((s) => s.kind === 'branch' || (s.kind === 'pull_request' && !it.change))
+  return source ? <SourceChip source={source} /> : null
 }

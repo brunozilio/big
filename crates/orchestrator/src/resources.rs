@@ -63,7 +63,13 @@ impl Resources {
     #[must_use]
     pub fn in_repo(&self, repo: &Path) -> Resources {
         let (layers, chain) = layered(Some(&repo.join(brand::DIR)), self.user.as_deref());
-        Resources { layers, chain, user: self.user.clone(), builtin: Arc::clone(&self.builtin), listed: self.listed.clone() }
+        Resources {
+            layers,
+            chain,
+            user: self.user.clone(),
+            builtin: Arc::clone(&self.builtin),
+            listed: self.listed.clone(),
+        }
     }
 
     pub fn chain(&self) -> &[String] {

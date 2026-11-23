@@ -5,9 +5,9 @@ use crate::engine::job::Job;
 use crate::engine::stop::Stop;
 use crate::mcp::McpServer;
 use crate::tools::subagent::{self, AgentTool, FoundAgent};
-use domain::MainAgentSpec;
 use crate::tools::subagent_config::AgentConfig;
 use crate::tools::{self, Tool, Workspace};
+use domain::MainAgentSpec;
 
 pub(in crate::engine) struct Toolbox {
     pub(in crate::engine) tools: Vec<Box<dyn Tool>>,

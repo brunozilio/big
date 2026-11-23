@@ -81,18 +81,7 @@ mod tests {
         let features: Vec<crate::api::FeatureName> = ALL.iter().map(|(feature, _)| *feature).collect();
         assert_eq!(features, crate::api::FeatureName::ALL, "one entry per feature the protocol names");
         let names: Vec<&str> = features.iter().map(|feature| feature.name()).collect();
-        assert_eq!(
-            names,
-            [
-                "code_map",
-                "memory",
-                "output_savings",
-                "sessions",
-                "shell",
-                "trace",
-                "workspace",
-            ]
-        );
+        assert_eq!(names, ["code_map", "memory", "output_savings", "sessions", "shell", "trace", "workspace",]);
     }
 
     #[test]

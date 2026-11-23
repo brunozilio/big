@@ -14,6 +14,9 @@ fn a_turn_goes_to_the_messages_api_signed_in() {
     assert_eq!(sent.url, "https://api.anthropic.com/v1/messages");
     assert!(header(&sent, "x-api-key").is_none());
     assert_eq!(header(&sent, "anthropic-beta").as_deref(), Some("claude-code-20250219,oauth-2025-04-20"));
+    assert_eq!(header(&sent, "anthropic-client-platform").as_deref(), Some("claude_code_cli"));
+    assert_eq!(header(&sent, "anthropic-client-version").as_deref(), Some("2.1.330"));
+    assert_eq!(header(&sent, "user-agent").as_deref(), Some("claude-cli/2.1.330 (external, cli)"));
     assert_eq!(body["system"][0]["text"], "You are Claude Code, Anthropic's official CLI for Claude.");
     assert_eq!(body["system"][1]["text"], "Help the user.");
 }

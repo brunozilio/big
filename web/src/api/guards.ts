@@ -27,8 +27,18 @@ export function isItem(v: unknown): v is Item {
     (v.impediment === null || (obj(v.impediment) && str(v.impediment.reason))) &&
     (v.attention === null || obj(v.attention)) &&
     (v.activity === null || (obj(v.activity) && str(v.activity.text) && str(v.activity.since))) &&
+    arr(v.sources, isSource) &&
+    arr(v.git, isGit) &&
     arr(v.steps, isItemStep)
   )
+}
+
+function isSource(v: unknown): v is Item['sources'][number] {
+  return obj(v) && str(v.kind) && str(v.key) && strOrNull(v.connection) && strOrNull(v.repository) && strOrNull(v.provider) && strOrNull(v.name) && strOrNull(v.logo) && strOrNull(v.url)
+}
+
+function isGit(v: unknown): v is Item['git'][number] {
+  return obj(v) && str(v.repository) && str(v.name) && strOrNull(v.base) && strOrNull(v.head)
 }
 
 function isRef(v: unknown): boolean {
@@ -39,6 +49,14 @@ function isItemStep(v: unknown): v is Item['steps'][number] {
   return obj(v) && str(v.id) && str(v.label) && str(v.icon) && STEP_STATES.includes(v.state as Item['steps'][number]['state']) && num(v.attempts) && num(v.seconds)
 }
 
+function isCaseStep(v: unknown): boolean {
+  return obj(v) && str(v.action) && strOrNull(v.data) && str(v.expected)
+}
+
+function isCase(v: unknown): v is Shape {
+  return obj(v) && str(v.title) && (v.kind === 'api' || v.kind === 'ui') && strOrNull(v.objective) && strOrNull(v.precondition) && strOrNull(v.ref) && strOrNull(v.url) && arr(v.steps, (s): s is Shape => isCaseStep(s))
+}
+
 const blockChecks: Record<BlockType, (b: Shape) => boolean> = {
   chat: (b) => str(b.session) && bool(b.composer),
   issue: (b) => str(b.connection) && str(b.key) && bool(b.comment),
@@ -47,6 +65,7 @@ const blockChecks: Record<BlockType, (b: Shape) => boolean> = {
   pipeline: (b) => str(b.connection) && str(b.run) && (b.gate === null || (obj(b.gate) && str(b.gate.approve) && str(b.gate.reject))),
   merge: (b) => str(b.connection) && str(b.change) && bool(b.ready) && Array.isArray(b.methods) && str(b.action) && Array.isArray(b.checks),
   markdown: (b) => str(b.text),
+  cases: (b) => arr(b.cases, isCase),
   logs: (b) => Array.isArray(b.commands),
   form: (b) => Array.isArray(b.fields) && obj(b.submit) && str(b.submit.action),
   actions: (b) => arr(b.buttons, (x): x is Shape => obj(x) && str(x.action) && str(x.label)),

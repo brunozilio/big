@@ -8,6 +8,27 @@ use sync::ReconcilePolicy;
 use crate::git;
 use crate::ledger::Ledger;
 use crate::protocol::{AGENT, WAIT_HUMAN, kind_of};
+use crate::repos;
+
+fn repositories(item: &WorkItem) -> Vec<String> {
+    repos::of_input(&item.input, None).into_iter().map(|checkout| checkout.id).collect()
+}
+
+pub fn branch(item: &WorkItem) -> String {
+    repositories(item).first().map_or_else(|| git::head_of(item, ""), |first| git::head_of(item, first))
+}
+
+fn heads(item: &WorkItem) -> Value {
+    let resolved = repositories(item)
+        .into_iter()
+        .filter(|id| !id.is_empty())
+        .map(|id| {
+            let pair = json!({ "base": git::base_of(item, &id), "head": git::head_of(item, &id) });
+            (id, pair)
+        })
+        .collect();
+    Value::Object(resolved)
+}
 
 pub fn item_json(item: &WorkItem) -> Value {
     let input = &item.input;
@@ -19,7 +40,8 @@ pub fn item_json(item: &WorkItem) -> Value {
     fields.insert("title".into(), json!(title));
     fields
         .insert("labels".into(), input.get("labels").filter(|labels| labels.is_array()).cloned().unwrap_or(json!([])));
-    fields.insert("branch".into(), json!(git::branch_name(item.id.as_str())));
+    fields.insert("branch".into(), json!(branch(item)));
+    fields.insert("git".into(), heads(item));
     fields.insert("issue".into(), json!(text("issue")));
     fields.insert("description".into(), json!(text("description").or_else(|| text("text"))));
     fields.insert("input".into(), input.clone());
@@ -129,7 +151,7 @@ pub fn summary(
         group: group_of(item, asks > 0),
         status: item.status.clone(),
         issue: linked_issue(item),
-        branch: git::branch_name(item.id.as_str()),
+        branch: branch(item),
         impediment: item.impediment.clone(),
         asks,
         plans: 0,
@@ -247,4 +269,37 @@ pub fn view_state(item: &WorkItem, ledger: &Ledger, step: &str, chosen: Option<&
         fields.insert("session".into(), json!(session));
     }
     Value::Object(fields)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(input: Value) -> WorkItem {
+        WorkItem { id: "i1".into(), input, ..WorkItem::default() }
+    }
+
+    #[test]
+    fn scripts_see_the_head_and_base_of_each_repository() {
+        let repositories = json!([{ "id": "api" }, { "id": "web" }]);
+        let found = item_json(&item(json!({
+            "application": { "repositories": repositories },
+            "git": { "api": { "base": "develop", "head": "feature/x" } },
+        })));
+        assert_eq!(found["branch"], "feature/x");
+        assert_eq!(
+            found["git"],
+            json!({
+                "api": { "base": "develop", "head": "feature/x" },
+                "web": { "base": null, "head": git::branch_name("i1") },
+            })
+        );
+    }
+
+    #[test]
+    fn an_item_without_repositories_keeps_the_generated_branch() {
+        let found = item_json(&item(json!({ "title": "x" })));
+        assert_eq!(found["branch"], git::branch_name("i1"));
+        assert_eq!(found["git"], json!({}));
+    }
 }

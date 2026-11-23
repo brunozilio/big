@@ -2,7 +2,7 @@ import * as RPopover from '@radix-ui/react-popover'
 import { AnimatePresence, animate, motion, useMotionValue } from 'framer-motion'
 import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AUTO_MODEL, EFFORTS, type Effort, type Model } from '@/api/contract'
+import { EFFORTS, type Effort, type Model } from '@/api/contract'
 import { useStore } from '@/api/store'
 import { cn } from '@/ui/cn'
 import { ProviderLogo } from '@/ui/domain'
@@ -31,9 +31,31 @@ export function fittedEffort(levels: readonly Effort[], effort: Effort): Effort 
   return below ?? levels[0] ?? effort
 }
 
-function ModelGlyph({ model, size = 14 }: { model: Model; size?: number }) {
-  if (model.id === AUTO_MODEL || !model.logo) return <Icon name="sparkles" size={size} className="text-fg2" />
+function ModelGlyph({ model, size = 14, aligned }: { model: Model; size?: number; aligned?: boolean }) {
+  if (!model.logo) return aligned ? <span aria-hidden style={{ width: size, height: size }} className="shrink-0" /> : null
   return <ProviderLogo logo={model.logo} name={model.name} size={size} />
+}
+
+export interface ModelGroup {
+  provider: string
+  name: string | null
+  models: Model[]
+}
+
+export function groupByProvider(models: readonly Model[], names: ReadonlyMap<string, string>): ModelGroup[] {
+  const groups: ModelGroup[] = []
+  for (const model of models) {
+    const provider = model.provider
+    const found = groups.find((g) => g.provider === provider)
+    if (found) found.models.push(model)
+    else groups.push({ provider, name: names.get(provider) ?? provider, models: [model] })
+  }
+  return groups
+}
+
+function useProviderNames() {
+  const providers = useStore((s) => s.connections?.providers)
+  return new Map((providers ?? []).map((p) => [p.key, p.name]))
 }
 
 export function useModels() {
@@ -60,6 +82,7 @@ export function ModelPicker({
   const [view, setView] = useState<View>('effort')
   const navigate = useNavigate()
   const { loaded, list, defaultId } = useModels()
+  const names = useProviderNames()
   const current = list.find((m) => m.id === (value ?? defaultId)) ?? list[0]
 
   useEffect(() => {
@@ -166,14 +189,18 @@ export function ModelPicker({
                   ) : (
                     <motion.div key="model" initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 8 }} transition={swap} className="w-[244px]">
                       <div className="scrollbar-thin max-h-[300px] overflow-y-auto p-1.5">
-                        <p className="px-2.5 pb-1 pt-1 text-xs text-muted">Selecionar modelo</p>
-                        {list.map((m) => (
-                          <ModelRow key={m.id} selected={m.id === current.id} onSelect={() => choose(m)}>
-                            <span className={cn('flex items-center gap-2 text-base', m.id === AUTO_MODEL ? 'text-fg' : 'text-fg2')}>
-                              <ModelGlyph model={m} />
-                              <span title={m.name} className="truncate">{m.name}</span>
-                            </span>
-                          </ModelRow>
+                        {groupByProvider(list, names).map((group) => (
+                          <div key={group.provider} role="group" aria-label={group.name ?? undefined} className="[&+&]:mt-1">
+                            {group.name && <p className="px-2.5 pb-1 pt-1.5 text-xs text-muted">{group.name}</p>}
+                            {group.models.map((m) => (
+                              <ModelRow key={m.id} selected={m.id === current.id} onSelect={() => choose(m)}>
+                                <span className="flex items-center gap-2 text-base text-fg2">
+                                  <ModelGlyph model={m} aligned />
+                                  <span title={m.name} className="truncate">{m.name}</span>
+                                </span>
+                              </ModelRow>
+                            ))}
+                          </div>
                         ))}
                       </div>
                     </motion.div>

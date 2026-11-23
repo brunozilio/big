@@ -1,5 +1,6 @@
 import { step, logs, chat } from "sdk";
 import { agentOptions, branchOf, defined, eachOf, inLanguage, planOf, repositoriesOf, tail } from "./context.js";
+import { endToEnd, e2eLines } from "./e2e.js";
 
 function groupsOf(ctx, opts) {
   const repositories = repositoriesOf(ctx);
@@ -32,6 +33,7 @@ function checked(s) {
   const results = Array.isArray(s.results) && s.results.length > 0 ? s.results : [s];
   const many = results.length > 1;
   const commands = results.flatMap((result) => (Array.isArray(result.ran) ? result.ran : []).map((entry) => (many && result.name ? { ...entry, name: `${result.name}: ${entry.name}` } : entry)));
+  commands.push(...e2eLines(s.e2e));
   if (s.session) {
     const state = s.verdict === undefined ? "running" : s.approved === false ? "failed" : "done";
     commands.push({ name: "Verificador: critérios de aceite", state, seconds: null, log: s.verdict ?? "" });
@@ -67,7 +69,8 @@ export default step({
   view: (s) => {
     const commands = checked(s);
     if (commands.length === 0) return [logs(s.output ?? NOTHING)];
-    return [logs(commands), ...(s.session ? [chat(s.session)] : [])];
+    const sessions = [s.e2e && s.e2e.session, s.session].filter(Boolean);
+    return [logs(commands), ...sessions.map((session) => chat(session))];
   },
   async run(ctx, opts) {
     const groups = groupsOf(ctx, opts);
@@ -78,9 +81,13 @@ export default step({
     const commands = results.flatMap((result) => result.ran ?? []);
     const failed = results.find((result) => result.command);
     if (failed) return ctx.fail({ output, ran: commands, command: failed.command, code: failed.code, ...listed });
-    if (!opts.agent) return ctx.pass({ output: ran ? output : NOTHING, ran: commands, ...listed });
-    const check = await verified(ctx, opts, output);
-    const data = { output, ran: commands, session: check.session, verdict: check.verdict, approved: check.approved, ...listed };
+    const e2e = await endToEnd(ctx, opts, verify);
+    const both = e2e && e2e.output ? tail(`${output}\n${e2e.output}`) : output;
+    const extra = e2e ? { e2e } : {};
+    if (e2e && e2e.error) return ctx.fail({ output: both, ran: commands, error: e2e.error, ...listed, ...extra });
+    if (!opts.agent) return ctx.pass({ output: ran || e2e ? both : NOTHING, ran: commands, ...listed, ...extra });
+    const check = await verified(ctx, opts, both);
+    const data = { output: both, ran: commands, session: check.session, verdict: check.verdict, approved: check.approved, ...listed, ...extra };
     if (!check.approved) return ctx.fail({ ...data, error: "o verificador reprovou a entrega" });
     return ctx.pass(data);
   },

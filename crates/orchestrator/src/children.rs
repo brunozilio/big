@@ -26,8 +26,12 @@ pub fn start(shared: &Arc<Shared>, parent: &ItemId, command: &Command, key: &Ide
                 fields.insert("application".to_owned(), application.clone());
             }
         }
-        let created =
-            WorkflowEvent::ItemCreated { id: id.clone(), workflow: workflow.clone(), parent: Some(parent.clone()), input };
+        let created = WorkflowEvent::ItemCreated {
+            id: id.clone(),
+            workflow: workflow.clone(),
+            parent: Some(parent.clone()),
+            input,
+        };
         shared.append(&id, &[created])?;
     }
     if !shared.item(parent)?.children.iter().any(|link| link.id == id) {

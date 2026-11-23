@@ -18,7 +18,8 @@ fn steady(listed: &Value) -> Value {
         application["id"] = json!(format!("app-{at}"));
         for (place, repository) in application["repositories"].as_array_mut().into_iter().flatten().enumerate() {
             repository["id"] = json!(format!("repo-{at}-{place}"));
-            let name = repository["directory"].as_str().and_then(|dir| dir.rsplit('/').next()).unwrap_or_default().to_owned();
+            let name =
+                repository["directory"].as_str().and_then(|dir| dir.rsplit('/').next()).unwrap_or_default().to_owned();
             repository["directory"] = json!(format!("/projetos/{name}"));
         }
     }
@@ -42,7 +43,7 @@ async fn applications_are_created_changed_checked_and_removed() {
         "name": " Loja ", "tracker": { "connection": "c1", "project": "APP" },
         "repositories": [
             { "code": { "connection": "c1", "repo": "acme/web" }, "directory": web, "run": "bun dev",
-              "verify": ["bun test", " "] },
+              "verify": ["bun test", " "], "e2e": [" npx playwright test ", ""] },
             { "code": null, "directory": api, "run": "", "verify": [] },
         ],
     });
@@ -50,6 +51,8 @@ async fn applications_are_created_changed_checked_and_removed() {
     assert_eq!(status, StatusCode::OK, "{made}");
     assert_eq!(made["name"], "Loja");
     assert_eq!(made["repositories"][0]["verify"], json!(["bun test"]));
+    assert_eq!(made["repositories"][0]["e2e"], json!(["npx playwright test"]));
+    assert_eq!(made["repositories"][1]["e2e"], json!([]));
     let ids: Vec<&str> =
         made["repositories"].as_array().expect("repos").iter().filter_map(|repo| repo["id"].as_str()).collect();
     assert!(ids.len() == 2 && ids[0] != ids[1] && !ids[0].is_empty());

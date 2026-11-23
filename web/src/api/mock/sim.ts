@@ -1,3 +1,6 @@
+import type { ItemGit, ItemSource } from '../contract'
+
+
 export type StepId = 'plan' | 'ticket' | 'develop' | 'checks' | 'pr' | 'ci' | 'review' | 'merge' | 'release'
 export type SimState = 'pending' | 'running' | 'waiting' | 'passed' | 'failed' | 'skipped' | 'blocked'
 export type Need = 'ai' | 'tracker' | 'code' | 'cloud'
@@ -59,6 +62,7 @@ export interface SimItem {
   issueComments: { id: string; body: string; tick: number }[]
   reviewComments: Note[]
   model: string
+  origin?: { sources: ItemSource[]; git: ItemGit[] }
 }
 
 export interface ConnectionState { id: string; provider: string; label: string; account: string; capabilities: string[]; status?: 'ok' | 'error' }
@@ -131,7 +135,7 @@ function makeItem(o: Seed): SimItem {
     id, key: o.key, title: o.title, branch: `feat/${o.key.toLowerCase()}-${slug(o.title)}`, pr: null,
     states: {} as SimItem['states'], attempts: {} as SimItem['attempts'], cur: at, elapsed: 0, fail: { ...(o.fail ?? {}) }, bounce: 0, done: false, reasons: [],
     h: hash(o.key), waitedAt: 0, doneAt: 0, createdAt: store.clock - 120, approvedBy: null, approvedAt: 0, gate: false, deployApproved: false, rejected: false,
-    linked: false, instructions: '', plans: [], pause: o.pause ? { kind: o.pause, at: 4, answer: null, decision: null } : null, planChat: [], reviewChat: [], issueComments: [], reviewComments: [], model: 'auto',
+    linked: false, instructions: '', plans: [], pause: o.pause ? { kind: o.pause, at: 4, answer: null, decision: null } : null, planChat: [], reviewChat: [], issueComments: [], reviewComments: [], model: 'claude-opus',
   }
   let t = store.clock - 90
   STEPS.forEach((s, i) => {

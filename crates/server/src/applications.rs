@@ -15,6 +15,10 @@ fn trimmed(text: &str) -> String {
     text.trim().to_owned()
 }
 
+fn lines(found: &[String]) -> Vec<String> {
+    found.iter().map(|line| trimmed(line)).filter(|line| !line.is_empty()).collect()
+}
+
 fn repository(found: Repository) -> ApiResult<Repository> {
     let directory = trimmed(&found.directory);
     if directory.is_empty() {
@@ -28,8 +32,14 @@ fn repository(found: Repository) -> ApiResult<Repository> {
         .code
         .map(|code| CodeChoice { connection: trimmed(&code.connection), repo: trimmed(&code.repo) })
         .filter(|code| !code.connection.is_empty() && !code.repo.is_empty());
-    let verify = found.verify.iter().map(|line| trimmed(line)).filter(|line| !line.is_empty()).collect();
-    Ok(Repository { id, code, directory, run: trimmed(&found.run), verify })
+    Ok(Repository {
+        id,
+        code,
+        directory,
+        run: trimmed(&found.run),
+        verify: lines(&found.verify),
+        e2e: lines(&found.e2e),
+    })
 }
 
 pub fn checked(mut application: Application) -> ApiResult<Application> {

@@ -19,11 +19,13 @@
     "createdAt": "2026-01-01T00:00:00Z",
     "current": "approve",
     "doneAt": null,
+    "git": [],
     "group": "you",
     "id": "item-1",
     "impediment": null,
     "issue": null,
     "live": false,
+    "sources": [],
     "status": null,
     "steps": [
       {

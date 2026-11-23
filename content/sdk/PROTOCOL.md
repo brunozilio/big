@@ -75,7 +75,7 @@ Laço do host:
 
 ## 4. Comandos e sinais
 
-Campos comuns de um comando: `seq`, `kind`, `branch`, `step` (id da etapa ou `null`), `attempt` (tentativa da etapa, 0 fora de etapa), `args` e, quando dados, `connection`, `retry` e `timeout`.
+Campos comuns de um comando: `seq`, `kind`, `branch`, `step` (id da etapa ou `null`), `attempt` (tentativa da etapa, 0 fora de etapa), `args` e, quando dados, `connection`, `retry`, `timeout` e `optional`. Um `call` com `optional: true` e sem `connection` resolve com `null` quando nenhuma conexão oferece a capacidade, em vez de bloquear o item.
 
 | `ctx` | `kind` | `args` | resolve com |
 |---|---|---|---|

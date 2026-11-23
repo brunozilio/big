@@ -19,6 +19,7 @@ export interface EffectOptions {
 
 export interface CallOptions extends EffectOptions {
   connection?: string;
+  optional?: boolean;
 }
 
 export type ErrorKind =
@@ -65,6 +66,7 @@ export type Block =
   | { type: "pipeline"; run: string }
   | { type: "merge"; pr: string; methods: string[] }
   | { type: "markdown"; text: string }
+  | { type: "cases"; cases: CaseBlockEntry[] }
   | { type: "logs"; text: string }
   | { type: "logs"; commands: LogCommand[] }
   | { type: "form"; fields: FormField[] }
@@ -79,6 +81,16 @@ export declare function review(pr: string, options?: { session?: string }): Bloc
 export declare function pipeline(run: string): Block;
 export declare function merge(pr: string, methods: string[]): Block;
 export declare function markdown(text: string): Block;
+export interface CaseBlockEntry {
+  title: string;
+  kind: "api" | "ui";
+  objective?: string;
+  precondition?: string;
+  steps: { action: string; data?: string; expected: string }[];
+  ref?: string;
+  url?: string | null;
+}
+export declare function testCases(cases: CaseBlockEntry[]): Block;
 export interface LogCommand {
   name: string;
   state: "done" | "failed" | "running" | "todo";
@@ -297,11 +309,14 @@ export interface Reconcile {
   [field: string]: ReconcilePolicy | undefined;
 }
 
+export type SourceKind = "issue" | "pull_request" | "branch" | "text";
+
 export interface WorkflowDefinition {
   name: string;
   statuses?: string[];
   triggers?: Trigger[];
   reconcile?: Reconcile;
+  accepts?: SourceKind[];
   steps?: (StepCall<unknown> | StepType<unknown>)[];
   run?(ctx: Ctx, item: WorkItem): Promise<Outcome | Json | void>;
 }
@@ -312,6 +327,7 @@ export interface Workflow {
   statuses: string[];
   triggers: Trigger[];
   reconcile: Reconcile;
+  accepts: SourceKind[];
   steps: StepCall<unknown>[];
   code: boolean;
 }
@@ -328,6 +344,7 @@ export interface Command {
   connection?: string;
   retry?: RetryPolicy;
   timeout?: number;
+  optional?: boolean;
 }
 
 export interface Signal {

@@ -1,4 +1,4 @@
-import type { Attempt as WireAttempt, Attention, Block, ChangeRef, Command, ExternalRef, Item, ItemStep, ProviderMark, StepState, StepView } from '../contract'
+import type { Application, Attempt as WireAttempt, Attention, Block, ChangeRef, Command, ExternalRef, Item, ItemGit, ItemSource, ItemStep, NewItem, ProviderMark, StepState, StepView } from '../contract'
 import { NEED_PROVIDER, PEOPLE, PROVIDERS } from './fixtures'
 import {
   IDX, REPO, STEPS, diffOf, fileOf, isBlocked, isGate, isMergeReady, isPaused, isPlanWaiting, isReviewWaiting, store, testName, withYou,
@@ -34,6 +34,26 @@ function changeRef(it: SimItem): ChangeRef | null {
   const ci = it.states.ci
   const checks = ci === 'passed' ? 'passed' : ci === 'failed' ? 'failed' : ci === 'running' ? 'running' : 'pending'
   return { ...mark('github'), connection: connectionOf('github'), key: `#${it.pr}`, url: prUrl(it.pr), checks, merged: it.states.merge === 'passed' }
+}
+
+export function originOf(input: NewItem, app: Application | undefined): { sources: ItemSource[]; git: ItemGit[] } {
+  const sources = (input.sources ?? [])
+    .filter((s) => s.kind !== 'issue')
+    .map((s): ItemSource => {
+      const provider = s.kind === 'pull_request' ? mark('github') : { provider: null, name: null, logo: null }
+      return { ...provider, kind: s.kind, key: s.subject, connection: s.connection ?? (s.kind === 'pull_request' ? connectionOf('github') : null), repository: s.repository ?? null, url: null }
+    })
+  const git = Object.entries(input.git ?? {}).map(([repository, b]): ItemGit => {
+    const repo = app?.repositories.find((r) => r.id === repository)
+    return { repository, name: repo?.code?.repo ?? repo?.directory ?? repository, base: b.base ?? null, head: b.head ?? null }
+  })
+  return { sources, git }
+}
+
+function sourcesOf(it: SimItem): ItemSource[] {
+  const linked = it.linked || it.states.ticket === 'passed'
+  const issue: ItemSource[] = linked ? [{ ...issueRef(it), kind: 'issue', repository: null }] : []
+  return [...issue, ...(it.origin?.sources ?? [])]
 }
 
 function steps(it: SimItem): ItemStep[] {
@@ -72,6 +92,8 @@ export function toItem(it: SimItem): Omit<Item, 'updatedAt'> {
     status: it.done ? 'Done' : it.cur >= IDX.review ? 'In Review' : 'In Progress',
     issue: it.linked || it.states.ticket === 'passed' ? issueRef(it) : null,
     change: changeRef(it),
+    sources: sourcesOf(it),
+    git: it.origin?.git ?? [],
     steps: steps(it),
     current: cur?.id ?? null,
     live: !it.done && !it.bounce && !!cur && (cur.id === 'plan' || cur.id === 'develop') && it.states[cur.id] === 'running',

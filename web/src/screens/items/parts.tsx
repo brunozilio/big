@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ago, mins, minutesSince } from '@/api/clock'
-import type { ChangeRef, ExternalRef, Item, ItemStep, StepState } from '@/api/contract'
+import type { ChangeRef, ExternalRef, Item, ItemGit, ItemSource, ItemStep, StepState } from '@/api/contract'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Badge, Spinner } from '@/ui/display'
@@ -80,10 +80,11 @@ export function Pipeline({ it, onStep }: { it: Item; onStep: (s: string) => void
       {it.steps.map((s, i) => {
         const st = nodeState(it, s)
         const next = it.steps[i + 1]
+        const locked = st === 'pending'
         return (
           <span key={s.id} className="flex items-center">
             <Tooltip content={`${s.label} · ${stateLabel[st]}`}>
-              <button aria-label={`${s.label}: ${stateLabel[st]}`} onClick={() => onStep(s.id)} className="flex rounded-full transition-transform duration-150 hover:scale-110 active:scale-95">
+              <button aria-label={`${s.label}: ${stateLabel[st]}`} aria-disabled={locked} onClick={() => !locked && onStep(s.id)} className={cn('flex rounded-full', locked ? 'cursor-default' : 'transition-transform duration-150 hover:scale-110 active:scale-95')}>
                 <Node s={s} state={st} />
               </button>
             </Tooltip>
@@ -179,5 +180,52 @@ export function RowRight({ it, onStep, onConnect }: { it: Item; onStep: (s: stri
       <Pipeline it={it} onStep={onStep} />
       <StepText it={it} />
     </>
+  )
+}
+
+const SOURCE_LABEL: Record<string, string> = { issue: 'Issue', pull_request: 'Pull request', branch: 'Branch' }
+
+export function sourceLabel(source: ItemSource): string {
+  return `${SOURCE_LABEL[source.kind] ?? source.kind} ${source.key}`
+}
+
+export function SourceChip({ source }: { source: ItemSource }) {
+  const glyph = source.kind === 'branch' ? 'branch' : source.kind === 'pull_request' ? 'hGitPullRequest' : 'sTicket'
+  const body = (
+    <>
+      {source.logo && source.name ? <ProviderLogo logo={source.logo} name={source.name} size={13} className="text-fg" /> : <Icon name={glyph} size={13} />}
+      <span className="truncate tabular-nums">{source.key}</span>
+    </>
+  )
+  const cls = 'inline-flex h-6 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-control-sm bg-inset px-2 text-sm leading-none text-fg2'
+  if (!source.url) return <span aria-label={sourceLabel(source)} className={cls}>{body}</span>
+  return (
+    <a href={source.url} target="_blank" rel="noreferrer" aria-label={sourceLabel(source)} {...stop} className={cn(cls, 'transition-colors hover:bg-active hover:text-fg')}>{body}</a>
+  )
+}
+
+export function BranchLine({ git }: { git: ItemGit }) {
+  const base = git.base ?? 'padrão do repositório'
+  const head = git.head ?? 'branch novo'
+  return (
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-fg2" aria-label={`${git.name}: ${base} para ${head}`}>
+      <Icon name="branch" size={13} className="shrink-0 text-muted" />
+      {git.name && <span className="truncate text-muted">{git.name}</span>}
+      <span className="truncate">{base}</span>
+      <Icon name="right" size={12} className="shrink-0 text-faint" />
+      <span className="truncate">{head}</span>
+    </span>
+  )
+}
+
+export function Origins({ it }: { it: Item }) {
+  const sources = it.sources ?? []
+  const git = it.git ?? []
+  if (!sources.some((s) => s.kind !== 'issue') && git.length === 0) return null
+  return (
+    <div className="flex flex-wrap items-center gap-2 px-5 pb-3" aria-label="Origens">
+      {sources.map((s) => <SourceChip key={`${s.kind}:${s.key}`} source={s} />)}
+      {git.map((g) => <BranchLine key={g.repository} git={g} />)}
+    </div>
   )
 }

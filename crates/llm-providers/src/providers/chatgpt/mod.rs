@@ -1,3 +1,5 @@
+pub mod limits;
+
 use base64::Engine;
 use base64::engine::general_purpose::{URL_SAFE, URL_SAFE_NO_PAD};
 use domain::{Access, ModelOption};
@@ -114,6 +116,12 @@ impl Shape for Provider {
             Some(model)
         });
         Ok(Page { models: models.collect(), next: None })
+    }
+    fn limits(&self, config: &Config) -> Option<Call> {
+        Some(limits::call(self, config))
+    }
+    fn windows(&self, value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
+        limits::windows(value)
     }
     fn refresh(&self, previous: &Tokens) -> Option<TokenRequest> {
         let pairs = [("grant_type", "refresh_token"), ("refresh_token", previous.refresh_token.as_str())];

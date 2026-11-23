@@ -72,9 +72,9 @@ fn connected(provider: &str, listed: &[ProviderSummary]) -> Result<Value, String
     connections_of(summary).into_iter().last().ok_or_else(|| "O provedor não ficou conectado.".to_owned())
 }
 
-fn run(client: &app::Client, provider: ModelProvider, flow: &AiFlow) {
+fn run(client: &app::Client, provider: ModelProvider, back: &str, flow: &AiFlow) {
     let progress = Arc::clone(&flow.progress);
-    let signed = client.sign_in(provider, |url, code| {
+    let signed = client.sign_in_returning(provider, back, |url, code| {
         held(&progress).authorize = Some((url.to_owned(), code.map(str::to_owned)));
     });
     let ended = match signed {
@@ -85,15 +85,29 @@ fn run(client: &app::Client, provider: ModelProvider, flow: &AiFlow) {
     held(&flow.progress).ended = Some(ended);
 }
 
-pub fn start(shared: &Shared, provider: &str) -> ApiResult<Value> {
+fn is_local(host: &str) -> bool {
+    let name = host.rsplit_once(':').map_or(host, |(name, port)| if port.ends_with(']') { host } else { name });
+    matches!(name, "localhost" | "127.0.0.1" | "[::1]")
+}
+
+fn origin(shared: &Shared, host: Option<&str>) -> String {
+    match host.filter(|host| is_local(host)) {
+        Some(host) => format!("http://{host}"),
+        None => format!("http://127.0.0.1:{}", shared.port),
+    }
+}
+
+pub fn start(shared: &Shared, provider: &str, host: Option<&str>) -> ApiResult<Value> {
     let summary = known(shared, provider)?;
     let client = shared.backend.client.sibling().map_err(ApiError::failed)?;
     let flow = AiFlow::default();
+    let id = shared.flows.open(provider, Waiting::Ai(flow.clone()))?;
+    let back = format!("{}{}", origin(shared, host), crate::sign_in::back_to(provider, &id));
     let running = flow.clone();
     let chosen = summary.provider;
     std::thread::Builder::new()
         .name("ai-sign-in".into())
-        .spawn(move || run(&client, chosen, &running))
+        .spawn(move || run(&client, chosen, &back, &running))
         .map_err(ApiError::failed)?;
     let began = Instant::now();
     while began.elapsed() < FIRST_STEP {
@@ -105,12 +119,11 @@ pub fn start(shared: &Shared, provider: &str) -> ApiResult<Value> {
             return Err(ApiError::upstream(message));
         }
         if let Some((url, code)) = authorize {
-            let id = shared.flows.open(provider, Waiting::Ai(flow))?;
             return Ok(match code {
                 Some(code) => {
                     json!({ "flow": id, "kind": "device", "url": url, "code": code, "expiresIn": 900, "interval": 2 })
                 }
-                None => json!({ "flow": id, "kind": "redirect", "url": url, "paste": false }),
+                None => json!({ "flow": id, "kind": "redirect", "url": url, "paste": false, "returns": true }),
             });
         }
         std::thread::sleep(Duration::from_millis(50));
@@ -142,4 +155,19 @@ pub fn disconnect(shared: &Shared, id: &str) -> ApiResult<()> {
         client.disconnect_provider(summary.provider)
     };
     removed.map(|_| ()).map_err(ApiError::failed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_local;
+
+    #[test]
+    fn only_the_local_machine_is_a_place_to_come_back_to() {
+        assert!(is_local("127.0.0.1:7999"));
+        assert!(is_local("localhost:5173"));
+        assert!(is_local("localhost"));
+        assert!(is_local("[::1]:7999"));
+        assert!(!is_local("evil.test:7999"));
+        assert!(!is_local("localhost.evil.test"));
+    }
 }

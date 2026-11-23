@@ -203,7 +203,12 @@ impl AgentEngine for FakeEngine {
         Vec::new()
     }
 
-    fn start(&self, _run: RunId, request: &PromptRequest, sink: Arc<dyn EventSink>) -> Result<Box<dyn RunHandle>, EngineError> {
+    fn start(
+        &self,
+        _run: RunId,
+        request: &PromptRequest,
+        sink: Arc<dyn EventSink>,
+    ) -> Result<Box<dyn RunHandle>, EngineError> {
         let number = {
             let mut requests = self.state.requests.lock().expect("lock");
             requests.push(request.clone());
@@ -233,7 +238,8 @@ impl AgentEngine for FakeEngine {
                 std::thread::sleep(Duration::from_millis(10));
             }
             if state.ask.load(Ordering::SeqCst) {
-                let ask = AgentAsk { id: AskId(format!("ask-{number}")), kind: AskKind::Plan { plan: "o plano".into() } };
+                let ask =
+                    AgentAsk { id: AskId(format!("ask-{number}")), kind: AskKind::Plan { plan: "o plano".into() } };
                 sink.emit(run, EngineEvent::Asked(ask));
                 while !stop.load(Ordering::SeqCst) && answers.recv_timeout(Duration::from_millis(10)).is_err() {}
             }
@@ -269,7 +275,8 @@ pub struct World {
 
 pub const SERVER: &str = "http://127.0.0.1:9";
 
-pub const WORKER: &str = "---\nname: worker\npermissionMode: bypass\nmodel: auto\ntools: [Read, Edit]\n---\nVocê trabalha.";
+pub const WORKER: &str =
+    "---\nname: worker\npermissionMode: bypass\nmodel: auto\ntools: [Read, Edit]\n---\nVocê trabalha.";
 
 impl World {
     pub fn new() -> World {
@@ -304,7 +311,8 @@ impl World {
         let repo = self.repo();
         std::fs::write(repo.join("README"), "oi").expect("write");
         for args in [vec!["init", "-q", "-b", "main"], vec!["add", "-A"], vec!["commit", "-qm", "início"]] {
-            let done = platform::git::command(&repo).args(["-c", "user.email=a@b", "-c", "user.name=a"]).args(args).output();
+            let done =
+                platform::git::command(&repo).args(["-c", "user.email=a@b", "-c", "user.name=a"]).args(args).output();
             assert!(done.is_ok_and(|done| done.status.success()));
         }
         self.git = true;
@@ -363,7 +371,11 @@ pub fn limits() -> Limits {
             multiplier: 2.0,
             jitter: 0.1,
         },
-        timeouts: Timeouts { agent: Duration::from_secs(60), exec: Duration::from_secs(60), call: Duration::from_secs(60) },
+        timeouts: Timeouts {
+            agent: Duration::from_secs(60),
+            exec: Duration::from_secs(60),
+            call: Duration::from_secs(60),
+        },
         ask_timeout: Duration::from_secs(60),
     }
 }

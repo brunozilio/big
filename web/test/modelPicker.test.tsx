@@ -5,7 +5,7 @@ import { setApi } from '../src/api'
 import { mockApi } from '../src/api/mock'
 import { boot, stop } from '../src/api/store'
 import { Composer } from '../src/chat/Composer'
-import { fittedEffort } from '../src/chat/ModelPicker'
+import { fittedEffort, groupByProvider } from '../src/chat/ModelPicker'
 import { TooltipProvider } from '../src/ui/overlay'
 
 afterEach(() => {
@@ -37,18 +37,38 @@ describe('seletor de modelo', () => {
     expect(fittedEffort([], 'max')).toBe('max')
   })
 
-  test('mostra Auto com o esforço padrão', async () => {
+  test('mostra o primeiro modelo disponível com o esforço padrão', async () => {
     await started()
     const view = composer()
-    expect(view.getByLabelText('Modelo: Auto').textContent).toContain('Médio')
+    expect(view.getByLabelText('Modelo: Claude Opus').textContent).toContain('Médio')
   })
 
   test('sem provedor de IA pede conexão e bloqueia o envio', async () => {
     await started(['c-claude', 'c-copilot'])
     const view = composer()
-    expect(view.queryByLabelText('Modelo: Auto')).toBeNull()
+    expect(view.queryByLabelText('Modelo: Claude Opus')).toBeNull()
     expect(view.getByText('Conecte um provedor de IA')).toBeTruthy()
     fireEvent.change(view.getByLabelText('Mensagem'), { target: { value: 'algo' } })
     expect((view.getByLabelText('Enviar') as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
+describe('agrupamento por provedor', () => {
+  const model = (id: string, provider: string) => ({ id, name: id, provider, logo: provider, efforts: [], fast: false })
+
+  test('modelos, inclusive os autos nativos, seguem por provedor', () => {
+    const groups = groupByProvider(
+      [model('kiro-subscription:auto', 'kiro-subscription'), model('opus', 'claude-subscription'), model('gpt', 'openai-subscription'), model('sonnet', 'claude-subscription')],
+      new Map([['kiro-subscription', 'Kiro'], ['claude-subscription', 'Claude'], ['openai-subscription', 'ChatGPT']]),
+    )
+    expect(groups.map((g) => [g.name, g.models.map((m) => m.id)])).toEqual([
+      ['Kiro', ['kiro-subscription:auto']],
+      ['Claude', ['opus', 'sonnet']],
+      ['ChatGPT', ['gpt']],
+    ])
+  })
+
+  test('provedor sem nome conhecido usa o id', () => {
+    expect(groupByProvider([model('x', 'kiro-subscription')], new Map())[0]?.name).toBe('kiro-subscription')
   })
 })

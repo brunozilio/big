@@ -74,10 +74,11 @@ describe('aba Aplicações', () => {
     await waitFor(() => expect(name.value).toBe('web'))
     expect((await view.findByRole('combobox', { name: 'Repositório' }, { timeout: 3000 })).textContent).toContain('acme/web')
     fireEvent.change(view.getByLabelText('Verificação'), { target: { value: 'bun test\n\nbun run lint' } })
+    fireEvent.change(view.getByLabelText('Testes E2E'), { target: { value: ' npx playwright test \n' } })
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(getState().applications?.length).toBe(2))
     const made = getState().applications?.[1]
-    expect(made?.repositories[0]).toMatchObject({ directory: `${MOCK_HOME}/projetos/web`, code: { connection: 'c-github', repo: 'acme/web' }, verify: ['bun test', 'bun run lint'] })
+    expect(made?.repositories[0]).toMatchObject({ directory: `${MOCK_HOME}/projetos/web`, code: { connection: 'c-github', repo: 'acme/web' }, verify: ['bun test', 'bun run lint'], e2e: ['npx playwright test'] })
     await waitFor(() => expect(view.getByRole('button', { name: 'Remover web' })).toBeTruthy())
     fireEvent.click(view.getByRole('button', { name: 'Remover web' }))
     await waitFor(() => expect(getState().applications?.length).toBe(1))
@@ -121,7 +122,7 @@ describe('aplicações no composer', () => {
     }
     await started(spy)
     await act(async () => {
-      await base.createApplication({ name: 'Infra', tracker: { connection: 'c-jira', project: 'OPS' }, repositories: [{ id: '', code: null, directory: `${MOCK_HOME}/projetos/infra`, run: '', verify: [] }] })
+      await base.createApplication({ name: 'Infra', tracker: { connection: 'c-jira', project: 'OPS' }, repositories: [{ id: '', code: null, directory: `${MOCK_HOME}/projetos/infra`, run: '', verify: [], e2e: [] }] })
       await boot(spy)
     })
     const view = render(<MemoryRouter><TooltipProvider><NewItem onCreated={() => undefined} /></TooltipProvider></MemoryRouter>)

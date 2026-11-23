@@ -2,13 +2,13 @@ import { setClock } from '../clock'
 import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
 import { CODE_REPOS, checkedApplication, initialApplications, listDirs } from './applications'
-import { INITIAL_CONNECTIONS, MODELS, PROVIDERS } from './fixtures'
+import { INITIAL_CONNECTIONS, MODELS, PROVIDERS, usageFixture, usageLimitsFixture } from './fixtures'
 import { itemOfSession, sessionById } from './sessions'
 import {
   approveDeploy, approvePlan, cancelItem, chat, connect, createItem, disconnect, isStepId, mergePr, onChange, rejectDeploy, rerunFrom, reset, resolvePause, revisePlan, store, submitReview, tick,
   type Note, type SimItem,
 } from './sim'
-import { EPOCH, TICK_MS, stepView, toItem } from './view'
+import { EPOCH, TICK_MS, originOf, stepView, toItem } from './view'
 
 export interface MockOptions {
   tickMs?: number
@@ -24,7 +24,7 @@ export function wireModels(): Models {
   const connected = new Set(store.connections.map((c) => c.provider))
   const served = MODELS.filter((m) => connected.has(m.provider))
   if (!served.length) return { models: [], default: null }
-  return { models: MODELS.filter((m) => m.provider === 'auto' || connected.has(m.provider)), default: 'auto' }
+  return { models: served, default: served[0]?.id ?? null }
 }
 
 interface Flow { provider: string; polls: number; chosen: string | null; started: number }
@@ -204,7 +204,12 @@ export function mockApi(options: MockOptions = {}): Api {
       const app = applications.find((x) => x.id === input.application)
       if (input.application && !app) throw new Error('Essa aplicação não existe mais.')
       const space = app?.tracker?.project ?? null
-      return item(createItem(input.text, input.issue?.key ?? null, input.model, space))
+      const issueKey = input.issue?.key ?? input.sources?.find((s) => s.kind === 'issue')?.subject ?? null
+      const pull = input.sources?.find((s) => s.kind === 'pull_request')
+      const text = input.text || (pull && !issueKey ? `Pull request ${pull.subject}` : '')
+      const made = createItem(text, issueKey, input.model, space)
+      made.origin = originOf(input, app)
+      return item(made)
     }, 600),
     rerun: (id, step) => wait(() => {
       const it = findItem(id)
@@ -248,6 +253,8 @@ export function mockApi(options: MockOptions = {}): Api {
       publish({ type: 'connections', connections: wireConnections() })
     }),
     models: () => wait(wireModels),
+    usage: (days) => wait(() => usageFixture(days, new Date())),
+    usageLimits: () => wait(() => usageLimitsFixture(Date.now()), delay * 4),
     branding: () => wait(() => branding),
     saveBranding: (patch) => wait(() => {
       branding = { ...branding, ...patch }

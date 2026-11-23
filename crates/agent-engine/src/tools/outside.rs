@@ -131,7 +131,10 @@ mod tests {
         let workspace = Workspace::new(project.path());
         let skill = folder.join("skills/code-review/medium.md");
         assert!(workspace.may_read(&skill), "an agent reads its own skills");
-        assert!(workspace.bounds().guard(&workspace.place(&skill.display().to_string()).real).is_some(), "writing there still asks");
+        assert!(
+            workspace.bounds().guard(&workspace.place(&skill.display().to_string()).real).is_some(),
+            "writing there still asks"
+        );
         assert!(!workspace.may_read(&folder.join("mcp.json")), "the owner's settings stay outside");
     }
 

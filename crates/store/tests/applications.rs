@@ -13,6 +13,7 @@ fn application(id: &str, name: &str) -> Application {
                 directory: "/src/web".into(),
                 run: "bun dev".into(),
                 verify: vec!["bun test".into(), "bun run lint".into()],
+                e2e: vec!["npx playwright test".into()],
             },
             Repository {
                 id: "r2".into(),
@@ -20,6 +21,7 @@ fn application(id: &str, name: &str) -> Application {
                 directory: "/src/api".into(),
                 run: String::new(),
                 verify: vec![],
+                e2e: vec![],
             },
         ],
     }
@@ -49,7 +51,19 @@ fn an_item_keeps_the_workflow_code_it_was_pinned_to() {
     store.pin_workflow("i1", "v1", "codigo 1").expect("pinned");
     store.pin_workflow("i2", "v1", "outro texto com a mesma versão").expect("pinned");
     assert_eq!(store.pinned_workflow("i1").expect("read"), Some(("v1".to_owned(), "codigo 1".to_owned())));
-    assert_eq!(store.pinned_workflow("i2").expect("read"), Some(("v1".to_owned(), "codigo 1".to_owned())), "a version is kept once");
+    assert_eq!(
+        store.pinned_workflow("i2").expect("read"),
+        Some(("v1".to_owned(), "codigo 1".to_owned())),
+        "a version is kept once"
+    );
+}
+
+#[test]
+fn a_repository_saved_before_e2e_existed_reads_with_no_e2e_commands() {
+    let old = r#"{ "directory": "/src/web", "verify": ["bun test"] }"#;
+    let found: Repository = serde_json::from_str(old).expect("parsed");
+    assert!(found.e2e.is_empty());
+    assert_eq!(found.verify, ["bun test"]);
 }
 
 #[test]

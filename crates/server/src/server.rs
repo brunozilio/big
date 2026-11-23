@@ -12,7 +12,6 @@ use crate::sign_in::Flows;
 use crate::stamps::Stamps;
 use crate::state::{Ctx, Shared};
 
-
 pub fn bind(port: u16) -> std::io::Result<TcpListener> {
     let listener = match TcpListener::bind((Ipv4Addr::LOCALHOST, port)) {
         Ok(listener) => listener,
@@ -39,6 +38,7 @@ pub fn app(backend: Backend, bundle: &'static [page::Asset], port: u16) -> (Rout
         answered: Mutex::new(HashMap::new()),
         nudge,
         port,
+        callbacks: Mutex::new(std::collections::HashSet::new()),
         bundle,
     });
     let weak = Arc::downgrade(&ctx);

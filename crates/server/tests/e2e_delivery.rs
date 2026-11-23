@@ -13,6 +13,7 @@ async fn approve_plan(server: &Server, id: &str) {
     let item = server.until(id, "the plan asks", |item| item["group"] == "you").await;
     assert_eq!(item["attention"]["badge"]["text"], "Plano pronto", "a plan to approve is not a question");
     server.respond(&ask, json!({ "kind": "plan", "decision": "approve" })).await;
+    server.approve_cases(id).await;
 }
 
 async fn approve_review_merge_and_deploy(server: &Server, id: &str) {

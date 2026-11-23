@@ -38,7 +38,7 @@ fn browser() -> ModelProvider {
 }
 
 fn sign_in() -> ClientCommand {
-    ClientCommand::SignInProvider { provider: browser() }
+    ClientCommand::SignInProvider { provider: browser(), back: None }
 }
 
 fn opened(reply: Reply) -> Option<Result<usize, String>> {

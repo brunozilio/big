@@ -177,7 +177,8 @@ mod tests {
     #[test]
     fn the_product_s_names_are_read_before_the_first_section_only() {
         let root = tempfile::tempdir().expect("root");
-        let text = "name = \"Nova\"\ncommand = \"nova\"\ncompany = \"Acme\"\nauthor = \"Ana\"\n\n[server]\nname = \"other\"\n";
+        let text =
+            "name = \"Nova\"\ncommand = \"nova\"\ncompany = \"Acme\"\nauthor = \"Ana\"\n\n[server]\nname = \"other\"\n";
         std::fs::write(root.path().join("config.toml"), text).expect("config.toml");
         assert_eq!(Brand::read(root.path()).expect("read").name, "Nova");
         std::fs::write(root.path().join("config.toml"), "[server]\nname = \"Nova\"\n").expect("config.toml");

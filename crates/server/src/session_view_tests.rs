@@ -78,13 +78,35 @@ fn a_workflow_plan_approved_hands_off_instead_of_implementing() {
 #[test]
 fn a_subagent_shows_its_steps_and_the_session_lists_its_tasks_and_background_work() {
     let event = |at_ms: u64, event: EngineEvent| Record::Event { at_ms, event };
-    let read = ToolCall { id: "r1".into(), name: "Read".into(), summary: "src/a.rs".into(), output: None, failed: false, input: None };
+    let read = ToolCall {
+        id: "r1".into(),
+        name: "Read".into(),
+        summary: "src/a.rs".into(),
+        output: None,
+        failed: false,
+        input: None,
+    };
     let records = vec![
         Record::Prompted { at_ms: 1_000, prompt: "investigue".into() },
-        event(2_000, EngineEvent::AgentSpawned { index: 0, kind: "explore".into(), summary: "procura o bug".into(), prompt: String::new() }),
+        event(
+            2_000,
+            EngineEvent::AgentSpawned {
+                index: 0,
+                kind: "explore".into(),
+                summary: "procura o bug".into(),
+                prompt: String::new(),
+            },
+        ),
         event(2_100, EngineEvent::AgentEvent { index: 0, event: Box::new(EngineEvent::ToolStarted(read)) }),
         event(2_200, EngineEvent::BackgroundStarted { id: "bash_1".into() }),
-        event(2_300, EngineEvent::Tasks(vec![domain::events::TaskItem { id: "1".into(), subject: "rodar os testes".into(), status: "in_progress".into() }])),
+        event(
+            2_300,
+            EngineEvent::Tasks(vec![domain::events::TaskItem {
+                id: "1".into(),
+                subject: "rodar os testes".into(),
+                status: "in_progress".into(),
+            }]),
+        ),
     ];
     let shown = Shown::of(&records);
     let listed = events(&shown, None);

@@ -58,7 +58,7 @@ describe('respostas reais do servidor', () => {
       expect(typeof a.id === 'string' && typeof a.name === 'string' && Array.isArray(a.repositories)).toBe(true)
       expect(a.tracker === null || (typeof a.tracker.connection === 'string' && typeof a.tracker.project === 'string')).toBe(true)
       for (const r of a.repositories) {
-        expect(typeof r.id === 'string' && typeof r.directory === 'string' && typeof r.run === 'string' && Array.isArray(r.verify)).toBe(true)
+        expect(typeof r.id === 'string' && typeof r.directory === 'string' && typeof r.run === 'string' && Array.isArray(r.verify) && Array.isArray(r.e2e)).toBe(true)
         expect(r.code === null || (typeof r.code.connection === 'string' && typeof r.code.repo === 'string')).toBe(true)
       }
     }

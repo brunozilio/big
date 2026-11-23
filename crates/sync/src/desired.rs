@@ -148,6 +148,21 @@ impl Desired {
         }
     }
 
+    fn learn_sources(&mut self, sources: &Value) {
+        for source in sources.as_array().map(Vec::as_slice).unwrap_or_default() {
+            let (subject, connection) = (text(source, "subject"), text(source, "connection"));
+            match source["kind"].as_str() {
+                Some("issue") => self.learn_issue(subject, connection),
+                Some("pull_request") => {
+                    if let Some(reference) = subject {
+                        self.learn_pull(PullRef { reference, state: None, connection });
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
     fn learn_output(&mut self, output: &Value) {
         if self.issue.is_none() {
             self.learn_issue(text(output, "issue"), None);
@@ -245,6 +260,7 @@ pub fn desired_of(item: &WorkItem, policy: ReconcilePolicy) -> Desired {
         waits: Vec::new(),
         policy,
     };
+    desired.learn_sources(&item.input["sources"]);
     let entries = ordered(item);
     for entry in &entries {
         match (&entry.request.effect, &entry.outcome) {

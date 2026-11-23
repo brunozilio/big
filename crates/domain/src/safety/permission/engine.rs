@@ -38,7 +38,10 @@ impl PolicyEngine {
 
 fn only_commands(call: &Call<'_>) -> bool {
     let runs = call.effects.iter().any(|effect| matches!(effect, Effect::Exec(_)));
-    let only = call.effects.iter().all(|effect| matches!(effect, Effect::Exec(_)) || !(effect.acts() || effect.changes_files()));
+    let only = call
+        .effects
+        .iter()
+        .all(|effect| matches!(effect, Effect::Exec(_)) || !(effect.acts() || effect.changes_files()));
     runs && only
 }
 

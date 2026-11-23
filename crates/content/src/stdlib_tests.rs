@@ -13,9 +13,10 @@ impl script::Host for NoHost {
     }
 }
 
-const STEPS: [&str; 9] = ["plan", "ticket", "develop", "checks", "pr", "ci", "review", "merge", "release"];
+const STEPS: [&str; 10] = ["plan", "ticket", "cases", "develop", "checks", "pr", "ci", "review", "merge", "release"];
 
-const PROVIDERS: [&str; 7] = ["jira", "github", "aws", "atlassian", "gitlab", "bitbucket", "amazon"];
+const PROVIDERS: [&str; 9] =
+    ["jira", "github", "aws", "atlassian", "gitlab", "bitbucket", "amazon", "zephyr", "smartbear"];
 
 const CUSTOM: &str = r#"
 import { workflow, step, markdown, actions } from "sdk";
@@ -161,6 +162,13 @@ impl Fake {
                 { "id": "c2", "thread": "t2", "path": "src/b.rs", "line": 1, "author": "ana", "body": "resolvido", "resolved": true, "at": "" }
             ]),
             (Some("code"), Some("merge")) => json!({ "merged": true, "sha": "abc" }),
+            (Some("tracker"), Some("issue")) => {
+                json!({ "ref": inner["issue"], "id": "10009", "title": "x", "status": "A fazer", "url": "" })
+            }
+            (Some("tests"), Some("create_case")) => {
+                json!({ "ref": "Z-T1", "title": inner["title"], "url": "https://tests/Z-T1" })
+            }
+            (Some("tests"), Some("create_cycle")) => json!({ "ref": "Z-R1", "url": "https://tests/Z-R1" }),
             _ => json!({ "ok": true }),
         }
     }
@@ -191,6 +199,9 @@ impl Fake {
         if has("merge") {
             return json!({ "action": "merge", "values": { "method": "squash" }, "by": "ana" });
         }
+        if offers("approve_cases") {
+            return json!({ "action": "approve_cases", "values": {}, "by": "ana" });
+        }
         if offers("approve_deploy") {
             let action = if self.reject_deploy { "reject_deploy" } else { "approve_deploy" };
             return json!({ "action": action, "values": {}, "by": "ana" });
@@ -207,8 +218,20 @@ fn agent(args: &Value) -> Value {
         Some("developer") => json!({ "text": "feito", "session": "dev-1", "output": { "branch": "item/i1" } }),
         Some("release") => json!({ "text": "", "session": "rel-1", "output": { "notes": "## Notas\n- x corrigido" } }),
         Some("verifier") => json!({ "text": "✓ x\nVEREDITO: APROVADO", "session": "ver-1", "output": null }),
+        Some("tester") => tester(args),
         _ => json!({ "text": "", "session": "other", "output": null }),
     }
+}
+
+fn tester(args: &Value) -> Value {
+    let prompt = args["input"]["prompt"].as_str().unwrap_or_default();
+    if prompt.starts_with("Automatize") {
+        let results = json!([{ "case": "Z-T1", "status": "passed", "evidence": "api.spec.ts passou" }]);
+        return json!({ "text": "", "session": "test-2", "output": { "results": results } });
+    }
+    let steps = json!([{ "action": "POST /clientes", "data": "nome=Ana", "expected": "201" }]);
+    let cases = json!([{ "title": "Cadastrar cliente pela API", "kind": "api", "objective": "salva", "steps": steps }]);
+    json!({ "text": "", "session": "test-1", "output": { "cases": cases } })
 }
 
 fn item(issue: Value) -> Value {
@@ -235,7 +258,9 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
             "sdk/steps/types.d.ts",
             "sdk/steps/context.js",
             "sdk/steps/context.d.ts",
+            "sdk/steps/e2e.js",
             "workflows/default.ts",
+            "workflows/pull-request.ts",
         ]
         .map(str::to_owned),
     );
@@ -247,13 +272,15 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
         }
         assert!(!text.contains("//") || text.contains("://"), "{path} has no comments");
     }
-    assert!(super::builtin_files("sdk/steps/").len() >= paths.len() - 1);
+    assert!(
+        super::builtin_files("sdk/steps/").len() >= paths.iter().filter(|path| path.starts_with("sdk/steps/")).count()
+    );
     let index = super::builtin_text("sdk/steps/index.js").expect("index");
     assert!(STEPS.iter().all(|step| index.contains(&format!("default as {step} "))));
 }
 
 #[test]
-fn the_default_workflow_describes_its_statuses_and_the_nine_steps_in_order() {
+fn the_default_workflow_describes_its_statuses_and_the_ten_steps_in_order() {
     let described = call(&default_workflow(), "host.describe", &[]);
     let workflow = &described["workflows"][0];
     assert_eq!(workflow["name"], "entrega");
@@ -261,10 +288,12 @@ fn the_default_workflow_describes_its_statuses_and_the_nine_steps_in_order() {
     let ids: Vec<&str> =
         workflow["steps"].as_array().expect("steps").iter().filter_map(|call| call["id"].as_str()).collect();
     assert_eq!(ids, STEPS);
-    assert_eq!(workflow["steps"][3]["options"]["onFail"], "develop");
-    assert_eq!(workflow["steps"][3]["options"]["agent"], "verifier");
-    assert_eq!(workflow["steps"][5]["options"]["onFail"], "develop");
-    assert_eq!(workflow["steps"][6]["options"]["onChanges"], "develop");
+    assert_eq!(workflow["steps"][2]["options"]["agent"], "tester");
+    assert_eq!(workflow["steps"][4]["options"]["onFail"], "develop");
+    assert_eq!(workflow["steps"][4]["options"]["agent"], "verifier");
+    assert_eq!(workflow["steps"][4]["options"]["tester"], "tester");
+    assert_eq!(workflow["steps"][6]["options"]["onFail"], "develop");
+    assert_eq!(workflow["steps"][7]["options"]["onChanges"], "develop");
     assert_eq!(described["steps"], json!(STEPS));
 }
 
@@ -876,4 +905,290 @@ fn a_custom_workflow_composes_steps_with_conditions_branches_and_races() {
     assert_eq!(cancelled["state"], "cancelled", "{cancelled}");
     assert_eq!(cancelled["reason"], "cancelado no tracker");
     assert_eq!(cancelled["cancel"], json!([of_kind(&asked, "wait.human")[0]["seq"]]));
+}
+
+#[test]
+fn test_cases_are_written_reviewed_by_a_person_and_created_linked_to_the_issue() {
+    let mut fake = Fake::default();
+    let mut answers = 0;
+    let (result, asked) = drive(&default_workflow(), &item(Value::Null), |command| {
+        let offers = command["args"]["view"].as_array().is_some_and(|view| {
+            view.iter().any(|block| {
+                block["buttons"].as_array().is_some_and(|all| all.iter().any(|b| b["id"] == "approve_cases"))
+            })
+        });
+        if command["kind"] == "wait.human" && offers {
+            answers += 1;
+            if answers == 1 {
+                return Some(
+                    json!({ "action": "submit", "values": { "changes": "inclua o caso de tela" }, "by": "ana" }),
+                );
+            }
+        }
+        fake.reply(command)
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    let testers: Vec<&Value> =
+        of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "tester").collect();
+    assert_eq!(testers.len(), 4, "draft, redraft after the changes, then an E2E run per passing checks");
+    assert_eq!(testers[3]["args"]["input"]["session"], "test-2", "the E2E run goes on in its own session");
+    assert_eq!(testers[0]["args"]["mode"], "plan");
+    assert_eq!(testers[1]["args"]["input"]["session"], "test-1");
+    assert!(
+        testers[1]["args"]["input"]["prompt"].as_str().is_some_and(|prompt| prompt.contains("inclua o caso de tela"))
+    );
+    let created = &calls(&asked, "create_case")[0]["args"]["args"];
+    assert_eq!(created["title"], "Cadastrar cliente pela API");
+    assert_eq!(created["labels"], json!(["e2e", "api"]));
+    assert_eq!(created["issue"], "T-9");
+    assert_eq!(created["issue_id"], "10009");
+    assert_eq!(created["steps"], json!([{ "action": "POST /clientes", "data": "nome=Ana", "expected": "201" }]));
+    assert_eq!(calls(&asked, "create_cycle")[0]["args"]["args"]["issue_id"], "10009");
+    let run = testers[2]["args"]["input"]["prompt"].as_str().expect("prompt");
+    assert!(run.contains("Z-T1") && run.contains("Cadastrar cliente pela API"), "{run}");
+    assert_eq!(testers[2]["args"]["worktree"], "item/i1");
+    let recorded = &calls(&asked, "record")[0]["args"]["args"];
+    assert_eq!(
+        *recorded,
+        json!({ "case": "Z-T1", "cycle": "Z-R1", "status": "passed", "comment": "api.spec.ts passou" })
+    );
+}
+
+const E2E_ONLY: &str = r#"
+import { workflow } from "sdk";
+import { checks } from "sdk/steps";
+export default workflow({
+  name: "so-e2e",
+  async run(ctx) {
+    try {
+      const checked = await checks(ctx, { commands: [] });
+      return { outcome: checked.outcome, data: checked.data };
+    } catch (error) {
+      return { outcome: "failed", data: error.outcome.data };
+    }
+  },
+});
+"#;
+
+#[test]
+fn checks_run_the_e2e_commands_and_a_failing_one_fails_with_the_command() {
+    let mut chosen = item(json!("T-1"));
+    chosen["e2e"] = json!(["npx playwright test"]);
+    let (result, asked) = drive(&source("workflows/so-e2e.ts", E2E_ONLY), &chosen, |command| {
+        Some(match command["kind"].as_str() {
+            Some("exec") => json!({ "code": 1, "output": "1 failed", "stdout": "", "stderr": "" }),
+            _ => Value::Null,
+        })
+    });
+    assert_eq!(of_kind(&asked, "exec")[0]["args"]["command"], "npx playwright test");
+    assert!(of_kind(&asked, "agent").is_empty(), "without created cases only the commands run");
+    assert_eq!(result["result"]["outcome"], "failed", "{result}");
+    let error = result["result"]["data"]["error"].as_str().expect("error");
+    assert!(error.contains("npx playwright test"), "{error}");
+}
+
+const CASES_THEN_CHECKS: &str = r#"
+import { workflow } from "sdk";
+import { cases, checks } from "sdk/steps";
+export default workflow({
+  name: "casos",
+  steps: [cases({ approve: "auto" }), checks({ commands: [], tester: "tester" })],
+});
+"#;
+
+#[test]
+fn a_case_the_tester_saw_fail_is_recorded_and_fails_the_checks_with_its_evidence() {
+    let mut fake = Fake::default();
+    let (result, asked) = drive(&source("workflows/casos.ts", CASES_THEN_CHECKS), &item(json!("T-1")), |command| {
+        let prompt = command["args"]["input"]["prompt"].as_str().unwrap_or_default();
+        if command["kind"] == "agent" && prompt.starts_with("Automatize") {
+            let results = json!([{ "case": "Z-T1", "status": "failed", "evidence": "esperava 201, veio 500" }]);
+            return Some(json!({ "text": "", "session": "test-2", "output": { "results": results } }));
+        }
+        fake.reply(command)
+    });
+    let views: Vec<String> = of_kind(&asked, "wait.human").iter().map(|command| command["args"].to_string()).collect();
+    assert!(views.iter().all(|view| !view.contains("approve_cases")), "approve auto skips the person: {views:?}");
+    assert_ne!(result["state"], "completed", "{result} {views:?}");
+    assert_eq!(calls(&asked, "record")[0]["args"]["args"]["status"], "failed");
+    let text = result.to_string();
+    assert!(text.contains("Z-T1") && text.contains("esperava 201, veio 500"), "{text}");
+}
+
+const ONLY_TICKET: &str = r#"
+import { workflow } from "sdk";
+import { ticket } from "sdk/steps";
+export default workflow({
+  name: "so-ticket",
+  async run(ctx) {
+    const done = await ticket(ctx, {});
+    return { outcome: done.outcome, data: done.data };
+  },
+});
+"#;
+
+#[test]
+fn a_ticket_without_any_tracker_is_skipped_with_a_reason_instead_of_blocking() {
+    let (result, asked) = drive(&source("workflows/so-ticket.ts", ONLY_TICKET), &item(Value::Null), |command| {
+        match (command["kind"].as_str(), command["optional"].as_bool()) {
+            (Some("call"), Some(true)) => Some(Value::Null),
+            _ => None,
+        }
+    });
+    let created = calls(&asked, "create_issue");
+    assert_eq!(created.len(), 1);
+    assert_eq!(created[0].get("connection"), None);
+    assert_eq!(result["result"]["outcome"], "skipped", "{result}");
+    let reason = result["result"]["data"]["reason"].as_str().expect("a reason");
+    assert!(reason.contains("rastreador"), "{reason}");
+    let shown = step_view("ticket", result["result"]["data"].clone());
+    assert_eq!(shown[0]["type"], "markdown", "{shown}");
+}
+
+#[test]
+fn a_ticket_with_a_chosen_tracker_still_blocks_when_it_is_missing() {
+    let mut fake = Fake::default();
+    let mut chosen = item(Value::Null);
+    chosen["connection"] = json!("c9");
+    let (result, asked) = drive(&source("workflows/so-ticket.ts", ONLY_TICKET), &chosen, |command| fake.reply(command));
+    let created = calls(&asked, "create_issue");
+    assert_eq!(created[0]["connection"], "c9");
+    assert_eq!(created[0].get("optional"), None, "a chosen connection is never optional");
+    assert_eq!(result["result"]["data"]["issue"], "T-9", "{result}");
+}
+
+const ONLY_PR: &str = r#"
+import { workflow } from "sdk";
+import { pr } from "sdk/steps";
+export default workflow({
+  name: "so-pr",
+  async run(ctx) {
+    const done = await pr(ctx, {});
+    return { outcome: done.outcome, data: done.data };
+  },
+});
+"#;
+
+fn step_view(step: &str, state: Value) -> Value {
+    call(&default_workflow(), "host.view", &[json!({ "step": step, "state": state })])
+}
+
+fn one_repository_item() -> Value {
+    let mut chosen = item(Value::Null);
+    chosen["application"] = json!({ "id": "app", "name": "Loja", "repositories": [
+        { "id": "web", "directory": "/src/web", "code": { "connection": "cw", "repo": "acme/web", "pipelines": true } },
+    ] });
+    chosen
+}
+
+#[test]
+fn the_pull_request_opens_from_the_item_s_head_into_its_base() {
+    let mut fake = Fake::default();
+    let mut chosen = one_repository_item();
+    chosen["git"] = json!({ "web": { "base": "release/1", "head": "fix/x" } });
+    let (result, asked) = drive(&source("workflows/so-pr.ts", ONLY_PR), &chosen, |command| fake.reply(command));
+    let opened = calls(&asked, "open_pull_request");
+    assert_eq!(opened[0]["args"]["args"]["base"], "release/1");
+    assert_eq!(opened[0]["args"]["args"]["head"], "fix/x");
+    assert_eq!(result["result"]["data"]["base"], "main", "{result}");
+}
+
+#[test]
+fn a_pull_request_with_a_remote_default_base_sends_no_base() {
+    let mut fake = Fake::default();
+    let mut chosen = one_repository_item();
+    chosen["git"] = json!({ "web": { "base": null, "head": "fix/x" } });
+    let (_, asked) = drive(&source("workflows/so-pr.ts", ONLY_PR), &chosen, |command| fake.reply(command));
+    let opened = calls(&asked, "open_pull_request");
+    assert_eq!(opened[0]["args"]["args"].get("base"), None);
+}
+
+fn pull_request_item() -> Value {
+    let mut chosen = one_repository_item();
+    chosen["input"] = json!({ "sources": [
+        { "kind": "pull_request", "connection": "cx", "subject": "acme/web#42", "repository": "web" },
+    ] });
+    chosen["git"] = json!({ "web": { "base": "main", "head": "feature/y" } });
+    chosen["branch"] = json!("feature/y");
+    chosen
+}
+
+#[test]
+fn an_item_started_from_a_pull_request_reuses_it_instead_of_opening_another() {
+    let (result, asked) =
+        drive(&source("workflows/so-pr.ts", ONLY_PR), &pull_request_item(), |command| match command["args"]["action"]
+            .as_str()
+        {
+            Some("pull_request") => Some(json!({
+                "ref": "acme/web#42", "number": 42, "title": "Ajusta y", "body": "", "url": "https://code/42",
+                "head": "feature/y", "base": "main"
+            })),
+            _ => Some(Value::Null),
+        });
+    assert!(calls(&asked, "open_pull_request").is_empty(), "the pull request already exists");
+    let read = calls(&asked, "pull_request");
+    assert_eq!(read[0]["args"]["args"]["pr"], "acme/web#42");
+    assert_eq!(read[0]["connection"], "cx");
+    let data = &result["result"]["data"];
+    assert_eq!((&data["pr"], &data["number"], &data["reused"]), (&json!("acme/web#42"), &json!(42), &json!(true)));
+}
+
+fn pull_request_workflow() -> String {
+    let text = super::builtin_text("workflows/pull-request.ts").expect("the pull request workflow is built in");
+    source("workflows/pull-request.ts", &text)
+}
+
+#[test]
+fn the_workflows_say_which_sources_they_accept() {
+    let described = call(&pull_request_workflow(), "host.describe", &[]);
+    let workflow = &described["workflows"][0];
+    assert_eq!(workflow["accepts"], json!(["pull_request"]));
+    let ids: Vec<&str> =
+        workflow["steps"].as_array().expect("steps").iter().filter_map(|call| call["id"].as_str()).collect();
+    assert_eq!(ids, ["develop", "checks", "ci", "review", "merge", "release"]);
+    let default = call(&default_workflow(), "host.describe", &[]);
+    assert_eq!(default["workflows"][0]["accepts"], json!(["issue", "text"]));
+}
+
+#[test]
+fn a_pull_request_item_fixes_its_open_comments_then_carries_the_same_pull_request_to_merge() {
+    let mut fake = Fake::default();
+    let (result, asked) = drive(&pull_request_workflow(), &pull_request_item(), |command| fake.reply(command));
+    assert_eq!(result["state"], "completed", "{result}");
+    assert!(calls(&asked, "open_pull_request").is_empty());
+    let merged = calls(&asked, "merge");
+    assert_eq!((&merged[0]["args"]["args"]["pr"], &merged[0]["connection"]), (&json!("acme/web#42"), &json!("cx")));
+    let prompts: Vec<&str> = of_kind(&asked, "agent")
+        .iter()
+        .filter(|command| command["args"]["name"] == "developer")
+        .filter_map(|command| command["args"]["input"]["prompt"].as_str())
+        .collect();
+    assert!(prompts.first().is_some_and(|prompt| prompt.contains("trate o erro")), "{prompts:?}");
+    let ci: Vec<&Value> = calls(&asked, "runs").iter().map(|command| &command["args"]["args"]["ref"]).collect();
+    assert!(ci.contains(&&json!("feature/y")), "{ci:?}");
+}
+
+#[test]
+fn a_pull_request_without_pending_work_skips_the_developer() {
+    let text = r#"
+import { workflow } from "sdk";
+import { develop } from "sdk/steps";
+export default workflow({
+  name: "so-develop",
+  async run(ctx) {
+    const done = await develop(ctx, { agent: "developer", feedbackOnly: true });
+    return { outcome: done.outcome, data: done.data };
+  },
+});
+"#;
+    let (result, asked) =
+        drive(&source("workflows/so-develop.ts", text), &pull_request_item(), |command| {
+            match command["kind"].as_str() {
+                Some("call") => Some(json!([{ "id": "c1", "body": "ok", "resolved": true }])),
+                _ => Some(Value::Null),
+            }
+        });
+    assert!(of_kind(&asked, "agent").is_empty());
+    assert_eq!(result["result"]["outcome"], "skipped", "{result}");
+    assert_eq!(step_view("develop", result["result"]["data"].clone())[0]["type"], "markdown");
 }

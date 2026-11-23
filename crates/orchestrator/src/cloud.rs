@@ -179,6 +179,7 @@ mod tests {
             connection: None,
             retry: None,
             timeout: None,
+            optional: false,
         };
         assert_eq!(wanted(&command(json!(true))).map(|call| call.connection), Some(None));
         assert_eq!(wanted(&command(json!("aws-1"))).map(|call| call.connection), Some(Some("aws-1".to_owned())));

@@ -77,7 +77,7 @@ impl McpSignIn {
         let body = json!({
             "client_name": self.client_name,
             "redirect_uris": [redirect],
-            "grant_types": ["authorization_code", "refresh_token"],
+            "grant_types": grant_types(auth),
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",
         });
@@ -107,6 +107,12 @@ impl McpSignIn {
     }
 }
 
+fn grant_types(auth: &AuthServer) -> Vec<&'static str> {
+    let offered = &auth.grant_types_supported;
+    let refreshes = offered.is_empty() || offered.iter().any(|kind| kind == "refresh_token");
+    if refreshes { vec!["authorization_code", "refresh_token"] } else { vec!["authorization_code"] }
+}
+
 fn client_fields<'a>(client: &'a RegisteredClient, resource: &'a str) -> Vec<(&'a str, &'a str)> {
     let mut fields = vec![("client_id", client.client_id.as_str()), ("resource", resource)];
     if !client.client_secret.is_empty() {
@@ -119,6 +125,13 @@ fn client_fields<'a>(client: &'a RegisteredClient, resource: &'a str) -> Vec<(&'
 impl LoopbackSignIn for McpSignIn {
     fn name(&self) -> &str {
         &self.server
+    }
+
+    fn callback_port(&self) -> Option<u16> {
+        if self.redirect.contains("{port}") {
+            return None;
+        }
+        url::Url::parse(&self.redirect).ok()?.port()
     }
 
     async fn begin(&self, http: &dyn Http, port: u16) -> Result<Authorization, ActionError> {

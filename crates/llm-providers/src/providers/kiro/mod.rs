@@ -1,6 +1,7 @@
 pub mod auth;
 pub mod effort;
 pub mod idc;
+pub mod limits;
 pub mod models;
 pub mod search;
 mod sign_in;
@@ -92,6 +93,12 @@ impl Shape for Provider {
     }
     fn search(&self, config: &Config, query: &str) -> Option<Call> {
         Some(search::call(config, query))
+    }
+    fn limits(&self, config: &Config) -> Option<Call> {
+        Some(limits::call(config))
+    }
+    fn windows(&self, value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
+        limits::windows(value)
     }
     fn hits(&self, value: &Value) -> Result<Vec<llm_providers::web_search::Hit>, ProviderError> {
         search::hits(value)

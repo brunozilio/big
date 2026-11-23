@@ -68,7 +68,8 @@ fn collect(value: &Value, found: &mut Vec<(String, String)>) {
         }
         Value::Array(items) => items.iter().for_each(|inner| collect(inner, found)),
         Value::String(text) => text.lines().for_each(|line| {
-            let words = line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|word| operation_name(word));
+            let words =
+                line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_')).filter(|word| operation_name(word));
             found.extend(words.map(|word| (word.to_owned(), line.to_lowercase())));
         }),
         _ => {}

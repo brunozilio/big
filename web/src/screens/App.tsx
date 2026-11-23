@@ -67,7 +67,7 @@ function DeliveryPage() {
   const [search, setSearch] = useSearchParams()
   const [fresh, setFresh] = useState<string | null>(null)
   const settings = location.pathname.startsWith('/settings')
-  const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'applications' ? params.tab : 'connections'
+  const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'applications' || params.tab === 'usage' ? params.tab : 'connections'
   const connecting = search.get('connect')
   const items = useStore((s) => s.items)
   const openId = params.id ?? null
@@ -114,7 +114,7 @@ function DeliveryPage() {
         </motion.div>
       </AnimatePresence>
       <ItemModal it={settings ? null : open} step={params.step ?? null} onStep={(s) => open && openItem(open.id, s)} onClose={() => navigate('/')} onConnect={goConnect} />
-      <ConnectDialog provider={settings ? connecting : null} onClose={() => setSearch({})} />
+      <ConnectDialog provider={settings ? connecting : null} resume={search.get('flow')} onClose={() => setSearch({})} />
     </div>
   )
 }

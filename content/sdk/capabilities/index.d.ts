@@ -2,17 +2,20 @@ import type { Tracker } from "./tracker";
 import type { Code } from "./code";
 import type { Pipelines } from "./pipelines";
 import type { Cloud } from "./cloud";
+import type { Tests } from "./tests";
 
 export type * from "./tracker";
 export type * from "./code";
 export type * from "./pipelines";
 export type * from "./cloud";
+export type * from "./tests";
 
 export interface Capabilities {
   tracker: Tracker;
   code: Code;
   pipelines: Pipelines;
   cloud: Cloud;
+  tests: Tests;
 }
 
 export type ActionContract = { args: unknown; result: unknown };

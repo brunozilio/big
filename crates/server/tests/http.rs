@@ -14,18 +14,20 @@ fn keys(value: &Value) -> Vec<String> {
     keys
 }
 
-const ITEM_KEYS: [&str; 17] = [
+const ITEM_KEYS: [&str; 19] = [
     "activity",
     "attention",
     "change",
     "createdAt",
     "current",
     "doneAt",
+    "git",
     "group",
     "id",
     "impediment",
     "issue",
     "live",
+    "sources",
     "status",
     "steps",
     "title",
@@ -137,6 +139,9 @@ async fn a_new_item_needs_a_text_or_an_issue_and_keeps_the_issue_and_model() {
     assert_eq!(item["issue"]["key"], "K-1");
     assert_eq!(item["issue"]["connection"], "c1");
     assert_eq!(item["issue"]["name"], "Fake");
+    assert_eq!(item["sources"][0]["kind"], "issue");
+    assert_eq!(item["sources"][0]["key"], "K-1");
+    assert_eq!(item["sources"][0]["connection"], "c1");
     world.until("the agent ran", |item| item["group"] == "you").await;
     let asked = world.engine.requests();
     assert!(asked.iter().any(|request| request.session.model.id == "m1"), "the item's model went to the agent");
@@ -241,9 +246,13 @@ async fn the_page_s_reads_go_through_the_connection() {
         .await
         .1;
     assert_eq!(found, json!([{ "key": "K-1", "title": "Corrigir", "status": "A fazer" }]));
-    let projects = world.send(Method::POST, "/api/connections/c1/call", Some(call("tracker.projects", json!({})))).await;
+    let projects =
+        world.send(Method::POST, "/api/connections/c1/call", Some(call("tracker.projects", json!({})))).await;
     assert_eq!(projects.0, StatusCode::OK, "{}", projects.1);
-    assert_eq!(projects.1[0], json!({ "id": "1", "key": "APP", "name": "Aplicativo", "avatar": "https://tracker.test/app.png" }));
+    assert_eq!(
+        projects.1[0],
+        json!({ "id": "1", "key": "APP", "name": "Aplicativo", "avatar": "https://tracker.test/app.png" })
+    );
     assert_eq!(projects.1[1]["avatar"], Value::Null);
     fixture("call-projects", &projects.1);
     let filtered = call("tracker.search", json!({ "query": "", "project": "OPS" }));
@@ -265,8 +274,10 @@ async fn the_page_s_reads_go_through_the_connection() {
         .1;
     assert_eq!(change["files"][0]["path"], "a.rs");
     fixture("call-change", &change);
-    let run =
-        world.send(Method::POST, "/api/connections/c1/call", Some(call("ci.run", json!({ "run": "o/r/runs/9" })))).await.1;
+    let run = world
+        .send(Method::POST, "/api/connections/c1/call", Some(call("ci.run", json!({ "run": "o/r/runs/9" }))))
+        .await
+        .1;
     assert_eq!(run["state"], "passed");
     let unknown = world.send(Method::POST, "/api/connections/c1/call", Some(call("x.y", json!({})))).await;
     assert_eq!(unknown.0, StatusCode::BAD_REQUEST);
@@ -279,12 +290,10 @@ async fn the_page_s_reads_go_through_the_connection() {
 async fn models_branding_and_attachments() {
     let world = World::new().await;
     let models = world.get("/api/models").await;
-    assert_eq!(models["default"], "auto");
-    assert_eq!(models["models"][0]["id"], "auto");
-    assert_eq!(models["models"][1]["id"], "m1");
-    assert_eq!(models["models"][0]["efforts"], json!(["low", "medium", "high", "xhigh", "max"]));
-    assert_eq!(models["models"][1]["efforts"], json!([]));
-    assert_eq!(models["models"][1]["fast"], false);
+    assert_eq!(models["default"], "m1");
+    assert_eq!(models["models"][0]["id"], "m1");
+    assert_eq!(models["models"][0]["efforts"], json!([]));
+    assert_eq!(models["models"][0]["fast"], false);
     fixture("models", &models);
     let branding = world.get("/api/branding").await;
     assert_eq!(branding, json!({ "name": brand::NAME, "logo": null, "theme": "system" }));
@@ -405,6 +414,26 @@ async fn a_connection_saved_without_its_choice_learns_the_only_one_and_a_sign_in
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn the_browser_comes_back_to_the_connections_screen_after_signing_in() {
+    let world = World::new().await;
+    let started = world.send(Method::POST, "/api/connections/web/start", Some(json!({ "fields": {} }))).await.1;
+    assert_eq!(started["returns"], true);
+    let flow = started["flow"].as_str().expect("flow").to_owned();
+    let url = started["url"].as_str().expect("url");
+    let state = url.split(['?', '&']).find_map(|pair| pair.strip_prefix("state=")).expect("state");
+    let request = axum::http::Request::builder()
+        .uri(format!("/oauth/callback?error=access_denied&state={state}"))
+        .body(axum::body::Body::empty())
+        .expect("request");
+    let response = tower::ServiceExt::oneshot(world.router.clone(), request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::SEE_OTHER);
+    let location = response.headers()["location"].to_str().expect("location").to_owned();
+    assert_eq!(location, format!("/settings/connections?connect=web&flow={flow}"));
+    let polled = world.send(Method::POST, "/api/connections/device/poll", Some(json!({ "flow": flow }))).await.1;
+    assert_eq!(polled["state"], "failed");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn the_factory_reports_its_generations_and_findings() {
     let world = World::new().await;
     let report = world.get("/api/factory").await;
@@ -412,4 +441,103 @@ async fn the_factory_reports_its_generations_and_findings() {
     assert!(report["current"].as_str().is_some_and(|version| version.len() == 16));
     assert!(report["generations"].is_array());
     assert!(report["findings"].is_array());
+}
+
+fn folder(world: &World, name: &str) -> String {
+    let path = world.dir.path().join(name);
+    std::fs::create_dir_all(&path).expect("dir");
+    std::fs::canonicalize(path).expect("path").to_string_lossy().into_owned()
+}
+
+async fn application(world: &World, repo: &str) -> (String, String) {
+    let body = json!({
+        "name": "Loja",
+        "repositories": [{ "code": { "connection": "c1", "repo": repo }, "directory": folder(world, "web") }],
+    });
+    let (status, made) = world.send(Method::POST, "/api/applications", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{made}");
+    let id = made["id"].as_str().expect("id").to_owned();
+    (id, made["repositories"][0]["id"].as_str().expect("repository").to_owned())
+}
+
+fn kept(world: &World, item: &Value) -> Value {
+    let id = domain::workflow::ItemId::from(item["id"].as_str().expect("id"));
+    world.handle.item(&id).expect("store").expect("item").input
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_item_needs_no_issue_and_keeps_the_base_branch_chosen_per_repository() {
+    let world = World::new().await;
+    let (app, repository) = application(&world, "acme/web").await;
+    let body = json!({
+        "text": "Exportar relatórios", "sources": [], "model": "auto", "attachments": [], "application": app,
+        "git": { repository.clone(): { "base": " release/2 ", "head": "" } },
+    });
+    let (status, item) = world.send(Method::POST, "/api/items", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    assert_eq!(item["sources"], json!([]));
+    assert_eq!(item["issue"], Value::Null);
+    assert_eq!(item["workflow"], "default");
+    assert_eq!(item["git"], json!([{ "repository": repository, "name": "acme/web", "base": "release/2", "head": null }]));
+    let input = kept(&world, &item);
+    assert_eq!(input["git"], json!({ repository.clone(): { "base": "release/2" } }));
+    assert!(input["issue"].is_null());
+
+    let stranger = json!({ "text": "x", "application": app, "git": { "nope": { "base": "main" } } });
+    assert_eq!(world.send(Method::POST, "/api/items", Some(stranger)).await.0, StatusCode::BAD_REQUEST);
+    let unknown = json!({ "text": "x", "workflow": "nenhum" });
+    assert_eq!(world.send(Method::POST, "/api/items", Some(unknown)).await.0, StatusCode::BAD_REQUEST);
+    let odd = json!({ "text": "x", "sources": [{ "kind": "ticket", "subject": "K-1" }] });
+    assert_eq!(world.send(Method::POST, "/api/items", Some(odd)).await.0, StatusCode::BAD_REQUEST);
+    let branch = json!({ "sources": [{ "kind": "branch", "subject": "feature/x" }], "application": app });
+    let (status, item) = world.send(Method::POST, "/api/items", Some(branch)).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    assert_eq!(item["title"], "feature/x");
+    assert_eq!(kept(&world, &item)["git"], json!({ repository: { "head": "feature/x" } }));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pull_request_origin_is_read_through_the_code_connection_and_finds_its_repository() {
+    let world = World::new().await;
+    let alone = json!({ "text": "", "sources": [{ "kind": "pull_request", "connection": "c1", "subject": "3" }] });
+    let (status, item) = world.send(Method::POST, "/api/items", Some(alone.clone())).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    assert_eq!(kept(&world, &item)["git"], json!({ "": { "base": "main", "head": "h" } }), "the only repository");
+    application(&world, "acme/web").await;
+    let (status, error) = world.send(Method::POST, "/api/items", Some(alone)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "no application has the repository");
+    assert!(error["error"]["message"].as_str().is_some_and(|text| text.contains("o/r")), "{error}");
+
+    let (app, repository) = application(&world, "o/r").await;
+    let body = json!({
+        "text": "", "sources": [{ "kind": "pull_request", "connection": null, "subject": "3" }],
+        "model": "auto", "attachments": [],
+    });
+    let (status, item) = world.send(Method::POST, "/api/items", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    assert_eq!(item["title"], "PR");
+    assert_eq!(item["workflow"], "pull-request", "the workflow that accepts pull requests");
+    assert_eq!(item["sources"][0]["kind"], "pull_request");
+    assert_eq!(item["sources"][0]["key"], "o/r#3");
+    assert_eq!(item["sources"][0]["repository"], repository);
+    assert_eq!(item["change"]["key"], "o/r#3");
+    assert_eq!(item["git"][0]["base"], "main");
+    assert_eq!(item["git"][0]["head"], "h");
+    let input = kept(&world, &item);
+    assert_eq!(input["application"]["id"], app, "the application of the repository");
+    assert_eq!(input["git"], json!({ repository: { "base": "main", "head": "h" } }));
+    assert!(input["issue"].is_null());
+    let asked = world.provider.calls.lock().expect("calls").clone();
+    assert!(asked.iter().any(|(action, args)| action == "code.pull_request" && args["pr"] == "3"));
+
+    let chosen = json!({
+        "text": "Revisar", "workflow": "default", "attachments": [],
+        "sources": [{ "kind": "pull_request", "subject": "3" }, { "kind": "issue", "connection": "c1", "subject": "K-1" }],
+    });
+    let (status, item) = world.send(Method::POST, "/api/items", Some(chosen)).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    assert_eq!(item["workflow"], "default");
+    assert_eq!(item["title"], "Revisar");
+    assert_eq!(item["issue"]["key"], "K-1");
+    assert_eq!(kept(&world, &item)["issue"], "K-1");
 }

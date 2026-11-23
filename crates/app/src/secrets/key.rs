@@ -112,8 +112,9 @@ fn stored(path: &Path, keychain: &dyn Keychain, key: &[u8; 32]) -> bool {
 }
 
 fn from_keychain(path: &Path, keychain: &dyn Keychain) -> Result<[u8; 32], String> {
-    let fallback =
-        format!("to keep keys in a file instead, set the {CHOICE} to file (keys saved before must then be entered again)");
+    let fallback = format!(
+        "to keep keys in a file instead, set the {CHOICE} to file (keys saved before must then be entered again)"
+    );
     match keychain.get(&account(path)) {
         Ok(Some(kept)) => read(path, &kept),
         Ok(None) => Err(format!(

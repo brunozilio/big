@@ -10,7 +10,9 @@ pub enum FailureKind {
 impl FailureKind {
     pub fn classify(message: &str, status: Option<u16>) -> Self {
         let lower = message.to_ascii_lowercase();
-        let limited = ["usage limit", "rate limit", "reached the limit", "limit reached", "quota"].iter().any(|needle| lower.contains(needle));
+        let limited = ["usage limit", "rate limit", "reached the limit", "limit reached", "quota"]
+            .iter()
+            .any(|needle| lower.contains(needle));
         if limited || status == Some(429) {
             return Self::UsageLimit { resets_at: reset_at(message) };
         }
@@ -66,7 +68,10 @@ mod tests {
             FailureKind::UsageLimit { resets_at: None }
         );
         assert_eq!(FailureKind::classify("oops", Some(429)), FailureKind::UsageLimit { resets_at: None });
-        assert_eq!(FailureKind::classify("HTTP 400: You have reached the limit.", None), FailureKind::UsageLimit { resets_at: None });
+        assert_eq!(
+            FailureKind::classify("HTTP 400: You have reached the limit.", None),
+            FailureKind::UsageLimit { resets_at: None }
+        );
     }
 
     #[test]

@@ -20,6 +20,7 @@ pub trait SignIn: Send + Sync {
     fn sign_in(
         &self,
         provider: ModelProvider,
+        back: Option<&str>,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, ProviderError>;
@@ -32,17 +33,19 @@ impl SignIn for BrowserSignIn {
     fn sign_in(
         &self,
         provider: ModelProvider,
+        back: Option<&str>,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, ProviderError> {
         let provider = agent_engine::providers::get(provider).map_err(|e| ProviderError::Invalid(e.to_string()))?;
-        provider.sign_in(&NetHost { open: Mutex::new(open), stop: Arc::clone(stop) })
+        provider.sign_in(&NetHost { open: Mutex::new(open), stop: Arc::clone(stop), back })
     }
 }
 
 struct NetHost<'a> {
     open: Mutex<&'a mut dyn FnMut(String, Option<String>)>,
     stop: Arc<AtomicBool>,
+    back: Option<&'a str>,
 }
 
 impl NetHost<'_> {
@@ -82,7 +85,7 @@ impl Host for NetHost<'_> {
         open(url, code);
     }
     fn listen(&self, port: u16, path: &str) -> Result<Box<dyn Listener>, ProviderError> {
-        Ok(Box::new(Loopback::bind_on(port, path, true)?.stopped_by(Arc::clone(&self.stop))))
+        Ok(Box::new(Loopback::bind_on(port, path, true)?.stopped_by(Arc::clone(&self.stop)).returning(self.back)))
     }
     fn random(&self, length: usize) -> Result<String, ProviderError> {
         let mut bytes = vec![0; length];

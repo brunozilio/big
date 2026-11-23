@@ -98,6 +98,10 @@ pub async fn create_issue(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Va
     let mut made = summary(api, &answer);
     made["title"] = json!(title);
     made["created"] = json!(true);
+    let id = id_of(&answer, "/id");
+    if !id.is_empty() {
+        made["id"] = json!(id);
+    }
     Ok(made)
 }
 
@@ -152,6 +156,7 @@ pub async fn issue(api: &Api<'_>, issue: &str) -> Result<Value, ActionError> {
     let kind = text_of(fields, "/issuetype/name");
     let mut found = summary(api, &answer);
     let extra = json!({
+        "id": id_of(&answer, "/id"),
         "description": markdown(&fields["description"]),
         "type": if kind.is_empty() { Value::Null } else { json!(kind) },
         "labels": fields["labels"].as_array().cloned().unwrap_or_default(),
@@ -184,7 +189,8 @@ async fn posted(api: &Api<'_>, issue: &str) -> Result<Vec<Value>, ActionError> {
 pub async fn comment(api: &Api<'_>, issue: &str, body: &str, key: &str) -> Result<Value, ActionError> {
     let issue = jql_key(issue)?;
     if !key.is_empty()
-        && let Some(found) = posted(api, issue).await?.into_iter().find(|known| same_text(&text_of(known, "/body"), body))
+        && let Some(found) =
+            posted(api, issue).await?.into_iter().find(|known| same_text(&text_of(known, "/body"), body))
     {
         let mut found = found;
         found["created"] = json!(false);
@@ -237,7 +243,8 @@ pub async fn transition(api: &Api<'_>, issue: &str, target: &str) -> Result<Valu
         return Ok(json!({ "ref": issue, "status": now, "changed": false }));
     }
     let transitions = api.transitions(issue).await?;
-    let reaches = |place: &str| transitions.iter().find(|transition| text_of(transition, place).eq_ignore_ascii_case(target));
+    let reaches =
+        |place: &str| transitions.iter().find(|transition| text_of(transition, place).eq_ignore_ascii_case(target));
     let found = reaches("/to/name")
         .or_else(|| reaches("/name"))
         .ok_or_else(|| ActionError::permanent(format!("{issue} cannot go from {now} to {target}")))?;

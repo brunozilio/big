@@ -14,9 +14,9 @@ use crate::descriptor::{AuthSpec, Presentation, ProviderDescriptor};
 use crate::error::ActionError;
 use crate::http::Http;
 use crate::mcp::{self, McpClient};
-use operations::{found_list, last_page};
 use crate::oauth::{Loopback, mcp::McpSignIn};
 use crate::provider::{AccountOption, Args, Credentials, EventSource, Provider, text_of, unknown_action};
+use operations::{found_list, last_page};
 
 pub const KEY: &str = "jira";
 pub const DEFAULT_FLAG_FIELD: &str = "customfield_10021";
@@ -33,8 +33,7 @@ const PAGE: u64 = 50;
 const MOST_PAGES: u64 = 10;
 pub const NO_SITE: &str = "Reconecte o Jira e escolha o site.";
 pub const NO_PROJECT: &str = "Escolha o projeto.";
-pub const NO_SITES: &str =
-    "Nenhum site do Jira foi encontrado nesta conta Atlassian. Confira se a conta tem acesso ao Jira e conecte de novo.";
+pub const NO_SITES: &str = "Nenhum site do Jira foi encontrado nesta conta Atlassian. Confira se a conta tem acesso ao Jira e conecte de novo.";
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Jira;
@@ -137,7 +136,11 @@ fn project_inputs(page: u64, query: Option<&str>) -> Value {
     inputs
 }
 
-pub async fn visible_projects(mcp: &McpClient<'_>, cloud: &str, query: Option<&str>) -> Result<Vec<Value>, ActionError> {
+pub async fn visible_projects(
+    mcp: &McpClient<'_>,
+    cloud: &str,
+    query: Option<&str>,
+) -> Result<Vec<Value>, ActionError> {
     let (name, mut answer) = operations::read(mcp, cloud, &operations::PROJECTS, &project_inputs(0, query)).await?;
     let mut found = Vec::new();
     for page in 1..=MOST_PAGES {

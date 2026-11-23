@@ -53,7 +53,9 @@ fn answer(world: &mut World, action: &str, args: &Value) -> Result<Value, Action
     match action {
         tracker::ISSUE => {
             let (status, flagged) = world.issues.get(&text("issue")).cloned().unwrap_or_default();
-            Ok(json!({"ref": text("issue"), "title": "", "status": status, "impediment": {"on": flagged, "reason": null}}))
+            Ok(
+                json!({"ref": text("issue"), "title": "", "status": status, "impediment": {"on": flagged, "reason": null}}),
+            )
         }
         tracker::TRANSITION => {
             let entry = world.issues.entry(text("issue")).or_default();

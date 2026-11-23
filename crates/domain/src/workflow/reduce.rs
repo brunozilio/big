@@ -3,9 +3,7 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 
 use super::event::WorkflowEvent;
-use super::item::{
-    ChildLink, EffectEntry, Ending, HumanAnswer, Impediment, Observed, StepRun, StepState, WorkItem,
-};
+use super::item::{ChildLink, EffectEntry, Ending, HumanAnswer, Impediment, Observed, StepRun, StepState, WorkItem};
 use crate::effect::{Effect, EffectOutcome, EffectRequest, IdempotencyKey};
 
 pub fn merge_patch(target: &mut Value, patch: &Value) {
@@ -125,7 +123,10 @@ fn request_effect(item: &mut WorkItem, request: &EffectRequest) {
         run.state = StepState::WaitingHuman;
         run.view = view.clone();
     }
-    item.effects.insert(request.key.to_string(), EffectEntry { request: request.clone(), outcome: None, progress: Value::Null });
+    item.effects.insert(
+        request.key.to_string(),
+        EffectEntry { request: request.clone(), outcome: None, progress: Value::Null },
+    );
 }
 
 fn resolve(item: &mut WorkItem, key: &IdempotencyKey, outcome: &EffectOutcome) {

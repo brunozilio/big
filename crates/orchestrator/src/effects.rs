@@ -171,7 +171,7 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
             effect.run().await
         }
         EXEC => exec(shared, &state, &launch.command).await,
-        CALL => connector(shared, &launch.command.call(), &key).await,
+        CALL => call(shared, &launch.command, &key).await,
         WAIT_POLL => poll(shared, &launch.command, &key).await,
         STATUS | IMPEDIMENT => push(shared, &state, &launch.command, &launch.key).await,
         other => Err(Failure::permanent(format!("the kernel does not know the command {other}"))),
@@ -215,6 +215,18 @@ pub fn connection_of(shared: &Shared, call: &Call) -> Result<(Connection, Value)
     Ok((connection, record.settings))
 }
 
+async fn call(shared: &Shared, command: &Command, key: &str) -> Result<Value, Failure> {
+    let call = command.call();
+    if command.optional && call.connection.is_none() {
+        match connection_of(shared, &call) {
+            Err(Failure::Blocked(_)) => return Ok(Value::Null),
+            Err(other) => return Err(other),
+            Ok(_) => {}
+        }
+    }
+    connector(shared, &call, key).await
+}
+
 pub async fn connector(shared: &Shared, call: &Call, key: &str) -> Result<Value, Failure> {
     let (connection, settings) = connection_of(shared, call)?;
     shared.config.connectors.call(&connection, &settings, &call.action, &call.args, key).await.map_err(|error| {
@@ -247,7 +259,8 @@ async fn exec(shared: &Shared, item: &WorkItem, command: &Command) -> Result<Val
     let checkouts = shared.checkouts(item);
     let chosen = checkouts.iter().find(|checkout| checkout.id == wanted).or(checkouts.first()).cloned();
     let checkout = chosen.ok_or_else(|| Failure::permanent("the item has no repository"))?;
-    let worktree = worktree(shared, checkout, &git::branch_name(item.id.as_str())).await?.path;
+    let (branch, base) = (git::head_of(item, &checkout.id), git::base_of(item, &checkout.id));
+    let worktree = worktree(shared, checkout, &branch, base).await?.path;
     let cwd = command.args["cwd"].as_str().map_or_else(|| worktree.clone(), |dir| worktree.join(dir));
     let mut process = tokio::process::Command::from(platform::shell(&command.text("command")));
     process.current_dir(&cwd).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);

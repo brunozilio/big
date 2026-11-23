@@ -67,7 +67,10 @@ async fn the_sites_come_from_the_accessible_resources_with_their_projects() {
     assert_eq!(options[0].settings["detail"], "Projetos APP, OPS");
     assert_eq!(http.sent()[0].header_value("authorization"), Some("Bearer at"));
     let (name, sent) = tool_calls(&http)[1].clone();
-    assert_eq!((name.as_str(), &sent["cloudId"], &sent["name"]), ("executeRead", &json!("c1"), &json!("listJiraProjects")));
+    assert_eq!(
+        (name.as_str(), &sent["cloudId"], &sent["name"]),
+        ("executeRead", &json!("c1"), &json!("listJiraProjects"))
+    );
 }
 
 #[tokio::test]
@@ -198,7 +201,7 @@ async fn statuses_are_the_distinct_statuses_seen_and_reachable() {
 
 #[tokio::test]
 async fn an_issue_reads_description_subtasks_comments_and_the_flag() {
-    let answer = json!({ "key": "BIG-1", "fields": {
+    let answer = json!({ "id": 10001, "key": "BIG-1", "fields": {
         "summary": "T", "status": {"name": "Fazendo"}, "labels": [],
         "description": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "d"}]}]},
         "subtasks": [{"key": "BIG-2", "fields": {"summary": "s", "status": {"name": "Feito", "statusCategory": {"key": "done"}}}}],
@@ -212,6 +215,7 @@ async fn an_issue_reads_description_subtasks_comments_and_the_flag() {
     let Ok(read) = read else { panic!("{read:?}") };
     assert_eq!(read["description"], "d");
     assert_eq!(read["ref"], "BIG-1");
+    assert_eq!(read["id"], "10001");
     assert_eq!(read["impediment"], json!({"on": true, "reason": null}));
     assert_eq!(
         read["subtasks"][0],
@@ -374,7 +378,7 @@ async fn projects_list_the_visible_projects_of_the_site_and_page_through_them() 
 async fn a_created_issue_goes_to_the_chosen_project_and_reads_a_wrapped_answer() {
     let http = structured(&[json!({"issues": []}), json!({"result": {"id": "10", "key": "OPS-3"}})]);
     let answer = call(&http, actions::CREATE_ISSUE, json!({"project": "OPS", "title": "T"}), "k").await;
-    assert_eq!(answer.map(|a| a["ref"].clone()), Ok(json!("OPS-3")));
+    assert_eq!(answer.map(|a| (a["ref"].clone(), a["id"].clone())), Ok((json!("OPS-3"), json!("10"))));
     assert_eq!(tool_calls(&http)[1].1["projectKey"], "OPS");
 }
 #[tokio::test]

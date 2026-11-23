@@ -1,3 +1,5 @@
+pub mod limits;
+
 use domain::{Access, ModelOption};
 use jiff::Timestamp;
 use serde_json::{Value, json};
@@ -62,10 +64,12 @@ impl Shape for Provider {
             headers.extend([
                 ("authorization".into(), format!("Bearer {}", tokens.access_token)),
                 ("anthropic-version".into(), "2023-06-01".into()),
-                ("anthropic-beta".into(), "claude-code-20250219,oauth-2025-04-20".into()),
+                ("anthropic-beta".into(), brand::claude::ANTHROPIC_BETA.into()),
                 ("anthropic-dangerous-direct-browser-access".into(), "true".into()),
+                ("anthropic-client-platform".into(), brand::claude::CLIENT_PLATFORM.into()),
+                ("anthropic-client-version".into(), brand::claude::CLIENT_VERSION.into()),
                 ("x-app".into(), "cli".into()),
-                ("user-agent".into(), "claude-cli/2.1.207 (external, cli)".into()),
+                ("user-agent".into(), brand::claude::USER_AGENT.into()),
             ]);
         }
         headers
@@ -100,6 +104,12 @@ impl Shape for Provider {
             models.extend(FALLBACK.map(|id| catalog::option(self, id, id.to_owned())));
         }
         models
+    }
+    fn limits(&self, config: &Config) -> Option<Call> {
+        Some(limits::call(self, config))
+    }
+    fn windows(&self, value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
+        limits::windows(value)
     }
     fn refresh(&self, previous: &Tokens) -> Option<TokenRequest> {
         Some(request(&[("grant_type", "refresh_token"), ("refresh_token", &previous.refresh_token)]))

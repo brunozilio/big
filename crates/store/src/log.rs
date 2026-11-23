@@ -68,8 +68,8 @@ impl Store {
 
     pub fn timed_events(&self, item: &ItemId, after: u64) -> Result<Vec<(u64, i64, WorkflowEvent)>> {
         let connection = self.locked();
-        let mut statement = connection
-            .prepare("SELECT seq, at, event FROM work_events WHERE item = ?1 AND seq > ?2 ORDER BY seq")?;
+        let mut statement =
+            connection.prepare("SELECT seq, at, event FROM work_events WHERE item = ?1 AND seq > ?2 ORDER BY seq")?;
         let rows = statement
             .query_map(params![item.as_str(), signed(after)?], |row| {
                 Ok((row.get::<_, i64>(0)?, row.get::<_, i64>(1)?, row.get::<_, String>(2)?))

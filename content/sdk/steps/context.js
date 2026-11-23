@@ -103,8 +103,18 @@ export function summaryLine(text) {
   return first ? first.split("\n")[0].slice(0, 280) : "";
 }
 
+export function sourcesOf(ctx, kind) {
+  const input = object(ctx.item.input);
+  const listed = Array.isArray(input.sources) ? input.sources : Array.isArray(ctx.item.sources) ? ctx.item.sources : [];
+  return listed.filter((entry) => entry && entry.kind === kind && typeof entry.subject === "string" && entry.subject);
+}
+
+export function gitOf(ctx, repository) {
+  return object(object(ctx.item.git)[repository ?? ""]);
+}
+
 export function issueOf(ctx, opts) {
-  return opts.issue ?? source(ctx, opts, "ticket").issue ?? ctx.item.issue ?? null;
+  return opts.issue ?? source(ctx, opts, "ticket").issue ?? ctx.item.issue ?? sourcesOf(ctx, "issue")[0]?.subject ?? null;
 }
 
 export function branchOf(ctx, opts) {
@@ -114,14 +124,40 @@ export function branchOf(ctx, opts) {
 export function pullRequestOf(ctx, opts) {
   const found = source(ctx, opts, "pr");
   if (typeof opts.pr === "string") return { ...found, pr: opts.pr };
-  return found.pr ? found : null;
+  return found.pr ? found : (sourcePullRequests(ctx)[0] ?? null);
 }
 
 export function pullRequestsOf(ctx, opts) {
   if (typeof opts.pr === "string") return [{ ...source(ctx, opts, "pr"), prs: undefined, pr: opts.pr }];
   const found = source(ctx, opts, "pr");
   if (Array.isArray(found.prs) && found.prs.length > 0) return found.prs.filter((entry) => entry && entry.pr);
-  return found.pr ? [found] : [];
+  return found.pr ? [found] : sourcePullRequests(ctx);
+}
+
+function belongs(entry, repository) {
+  return entry.repository === repository.id || (Boolean(repository.code) && entry.repository === repository.code.repo);
+}
+
+export function sourcePullRequestOf(ctx, target) {
+  const found = sourcesOf(ctx, "pull_request");
+  const known = object(target);
+  const sole = found.length === 1 && !found[0].repository && repositoriesOf(ctx).length <= 1 ? found[0] : null;
+  if (!known.id) return found.length === 1 ? found[0] : null;
+  return found.find((entry) => belongs(entry, known)) ?? sole;
+}
+
+function fromSource(ctx, entry) {
+  const repositories = repositoriesOf(ctx);
+  const sole = !entry.repository && repositories.length === 1 ? repositories[0] : null;
+  const repository = repositories.find((known) => belongs(entry, known)) ?? sole;
+  const coded = repository && repository.code ? repository.code : null;
+  const code = entry.connection ? { ...(coded ?? {}), connection: entry.connection } : coded;
+  const git = gitOf(ctx, repository ? repository.id : entry.repository);
+  return defined({ repository: repository ? repository.id : entry.repository, name: repository ? repository.name : undefined, code, pr: entry.subject, head: git.head, base: git.base });
+}
+
+export function sourcePullRequests(ctx) {
+  return sourcesOf(ctx, "pull_request").map((entry) => fromSource(ctx, entry));
 }
 
 function folderName(directory) {

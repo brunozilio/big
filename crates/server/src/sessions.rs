@@ -129,9 +129,7 @@ pub async fn open(State(ctx): State<Ctx>, Path(id): Path<String>) -> ApiResult<R
 
 fn chosen_model(shared: &Shared, wanted: Option<&str>) -> ApiResult<app::Model> {
     let models = shared.backend.client.models().map_err(ApiError::failed)?;
-    let wanted = wanted.filter(|wanted| *wanted != crate::models::AUTO);
-    domain::model::choose_model(&models, wanted)
-        .ok_or_else(|| ApiError::bad(crate::models::NONE))
+    domain::model::choose_model(&models, wanted).ok_or_else(|| ApiError::bad(crate::models::NONE))
 }
 
 fn prompt(shared: &Shared, body: &Value) -> ApiResult<String> {

@@ -61,6 +61,8 @@ pub struct Reply {
     pub usage: Usage,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub served: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
 }
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

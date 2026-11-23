@@ -31,7 +31,16 @@ impl Client {
     }
 
     pub fn sign_in(&self, provider: ModelProvider, open: impl FnMut(&str, Option<&str>)) -> Result<SignedIn, Error> {
-        self.signing_in(ClientCommand::SignInProvider { provider }, open)
+        self.signing_in(ClientCommand::SignInProvider { provider, back: None }, open)
+    }
+
+    pub fn sign_in_returning(
+        &self,
+        provider: ModelProvider,
+        back: &str,
+        open: impl FnMut(&str, Option<&str>),
+    ) -> Result<SignedIn, Error> {
+        self.signing_in(ClientCommand::SignInProvider { provider, back: Some(back.to_owned()) }, open)
     }
 
     pub fn close_and_sign_in(

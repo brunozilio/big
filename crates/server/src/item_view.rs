@@ -95,9 +95,71 @@ fn checks(known: &Known<'_>, summary: &ItemSummary, item: &WorkItem) -> Value {
         .map_or(Value::Null, |step| checks_state(step.state))
 }
 
+fn listed_sources(item: Option<&WorkItem>) -> Vec<Value> {
+    let Some(item) = item else { return Vec::new() };
+    if let Some(found) = item.input["sources"].as_array() {
+        return found.clone();
+    }
+    let legacy = text(&item.input["issue"]).map(|issue| {
+        json!({ "kind": "issue", "connection": item.input["connection"].clone(), "subject": issue })
+    });
+    legacy.into_iter().collect()
+}
+
+fn source_json(known: &Known<'_>, source: &Value) -> Value {
+    let subject = text(&source["subject"]).unwrap_or_default();
+    let connection = source["connection"].as_str();
+    let record = connection.and_then(|id| known.connections.iter().find(|record| record.id == id));
+    let mut value = match record {
+        Some(record) => reference(known.descriptors, record, &subject, None),
+        None => json!({ "provider": null, "name": null, "logo": null, "connection": connection, "key": subject, "url": null }),
+    };
+    value["kind"] = source["kind"].clone();
+    value["repository"] = json!(source["repository"].as_str());
+    value
+}
+
+fn sources(known: &Known<'_>, item: Option<&WorkItem>) -> Vec<Value> {
+    listed_sources(item).iter().map(|source| source_json(known, source)).collect()
+}
+
+fn repository_name(item: &WorkItem, id: &str) -> String {
+    let repositories = item.input["application"]["repositories"].as_array().map(Vec::as_slice).unwrap_or_default();
+    let found = repositories.iter().find(|repository| repository["id"] == id);
+    let named = found.and_then(|repository| text(&repository["code"]["repo"]).or_else(|| text(&repository["directory"])));
+    named.unwrap_or_else(|| id.to_owned())
+}
+
+fn git(item: Option<&WorkItem>) -> Vec<Value> {
+    let Some(item) = item else { return Vec::new() };
+    let wanted = item.input["git"].as_object().into_iter().flatten();
+    wanted
+        .map(|(id, branches)| {
+            json!({
+                "repository": id, "name": repository_name(item, id),
+                "base": text(&branches["base"]), "head": text(&branches["head"]),
+            })
+        })
+        .collect()
+}
+
+fn origin_change(known: &Known<'_>, item: Option<&WorkItem>) -> Value {
+    let listed = listed_sources(item);
+    let Some(pull) = listed.iter().find(|source| source["kind"] == "pull_request") else { return Value::Null };
+    let key = text(&pull["subject"]).unwrap_or_default();
+    let chosen = pull["connection"].as_str().and_then(|id| known.connections.iter().find(|record| record.id == id));
+    let Some(record) = chosen.or_else(|| serving(known.connections, "code")) else { return Value::Null };
+    let mut value = reference(known.descriptors, record, &key, None);
+    value["checks"] = Value::Null;
+    value["merged"] = json!(false);
+    value
+}
+
 fn change(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -> Value {
     let found = outputs(item);
-    let Some(opened) = found.iter().rev().find(|output| text(&output["pr"]).is_some()) else { return Value::Null };
+    let Some(opened) = found.iter().rev().find(|output| text(&output["pr"]).is_some()) else {
+        return origin_change(known, item);
+    };
     let Some(record) = serving(known.connections, "code") else { return Value::Null };
     let key = text(&opened["pr"]).unwrap_or_default();
     let merged = found.iter().any(|output| text(&output["pr"]).as_deref() == Some(&key) && output["merged"] == true);
@@ -169,7 +231,8 @@ fn attention(summary: &ItemSummary) -> Value {
         return json!({ "badge": badge, "diff": null, "action": { "label": "Abrir", "step": step } });
     }
     if let Some(found) = &summary.impediment {
-        let text = found.reason.as_deref().map_or_else(|| "Impedido".to_owned(), |reason| headline(reason, &Value::Null));
+        let text =
+            found.reason.as_deref().map_or_else(|| "Impedido".to_owned(), |reason| headline(reason, &Value::Null));
         return json!({ "badge": { "text": text, "tone": "danger" }, "diff": null, "action": null });
     }
     Value::Null
@@ -238,6 +301,8 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "status": summary.status,
         "issue": issue(known, summary, item),
         "change": change(known, summary, item),
+        "sources": sources(known, item),
+        "git": git(item),
         "steps": summary.steps.iter().map(|step| step_json(known, step)).collect::<Vec<_>>(),
         "current": summary.current,
         "live": summary.live,
@@ -280,7 +345,10 @@ mod tests {
         let jira = json!({ "provider": "jira", "name": "Jira" });
         let expired = format!("{NEEDS_RECONNECT}connector: Auth: the access could not be renewed");
         assert_eq!(headline(&expired, &jira), "Reconecte o Jira");
-        assert_eq!(headline("Develop falhou: a pasta de trabalho não é um repositório git", &Value::Null), "Develop falhou");
+        assert_eq!(
+            headline("Develop falhou: a pasta de trabalho não é um repositório git", &Value::Null),
+            "Develop falhou"
+        );
         assert_eq!(headline("o código do workflow mudou e não reproduz o histórico", &Value::Null), "O workflow mudou");
         assert!(headline(&"x".repeat(200), &Value::Null).chars().count() <= MOST_HEADLINE + 1);
     }

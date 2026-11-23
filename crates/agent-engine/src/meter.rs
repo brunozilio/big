@@ -28,6 +28,7 @@ pub struct Metered {
     pub model: domain::ModelOption,
     pub calls: Option<Calls>,
     pub budget: Option<domain::budget::Budget>,
+    pub account: String,
 }
 impl ModelApi for Metered {
     fn turn<'a>(
@@ -63,6 +64,7 @@ impl Metered {
         let cost = rates(vendor, &request.model, u.prompt())
             .map(|rate| rate.estimate(u.input, u.output, u.cache_read, u.cache_write) + searched);
         self.ledger.costs.lock().map_err(|_| ModelError::Provider("usage ledger unavailable".into()))?.push(cost);
+        let served = self.served_by(request, reply);
         self.gate.emit(spent_by(
             crate::agent::current::agent(),
             ModelUsage {
@@ -80,9 +82,20 @@ impl Metered {
                 }
                 .into(),
                 price_date: PRICE_DATE.into(),
+                provider: served.0,
+                account: served.1,
             },
         ));
         Ok(())
+    }
+
+    fn served_by(&self, request: &TurnRequest, reply: &Reply) -> (String, String) {
+        let known: Vec<&str> = crate::providers::all().iter().map(|provider| provider.id()).collect();
+        let main = self.provider.id();
+        match domain::routing::route(&request.model, &known).provider {
+            Some(other) if other != main => (other.to_owned(), reply.account.clone().unwrap_or_default()),
+            _ => (main.to_owned(), reply.account.clone().unwrap_or_else(|| self.account.clone())),
+        }
     }
 }
 fn spent_by(agent: Option<usize>, usage: ModelUsage) -> EngineEvent {
@@ -133,7 +146,26 @@ mod tests {
             model: domain::ModelOption::new("m", "M"),
             calls: None,
             budget,
+            account: "a@x.io".into(),
         }
+    }
+
+    #[test]
+    fn a_call_is_charged_to_the_account_that_answered_or_else_the_first_one() {
+        let meter = metered(None);
+        let stop = CancellationToken::new();
+        let request = TurnRequest {
+            model: "m".into(),
+            system: String::new(),
+            messages: Vec::new(),
+            tools: Vec::new(),
+            effort: domain::Effort::Medium,
+            max_tokens: 100,
+        };
+        let reply = meter.api.turn_blocking(&request, &mut |_| {}, &stop).expect("reply");
+        assert_eq!(meter.served_by(&request, &reply), ("scripted".to_owned(), "a@x.io".to_owned()));
+        let pooled = Reply { account: Some("b@x.io".into()), ..reply };
+        assert_eq!(meter.served_by(&request, &pooled), ("scripted".to_owned(), "b@x.io".to_owned()));
     }
 
     #[test]

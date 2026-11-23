@@ -11,7 +11,7 @@ impl script::Host for NoHost {
     }
 }
 
-const FILES: [&str; 8] = [
+const FILES: [&str; 9] = [
     "sdk/index.js",
     "sdk/index.d.ts",
     "sdk/PROTOCOL.md",
@@ -20,11 +20,12 @@ const FILES: [&str; 8] = [
     "sdk/capabilities/code.d.ts",
     "sdk/capabilities/pipelines.d.ts",
     "sdk/capabilities/cloud.d.ts",
+    "sdk/capabilities/tests.d.ts",
 ];
 
-const PROVIDERS: [&str; 6] = ["jira", "github", "aws", "atlassian", "gitlab", "bitbucket"];
+const PROVIDERS: [&str; 8] = ["jira", "github", "aws", "atlassian", "gitlab", "bitbucket", "zephyr", "smartbear"];
 
-const ACTIONS: [(&str, &[&str]); 4] = [
+const ACTIONS: [(&str, &[&str]); 5] = [
     ("tracker", &["create_issue", "issue", "comment", "statuses", "transition", "set_impediment", "search"]),
     (
         "code",
@@ -40,6 +41,7 @@ const ACTIONS: [(&str, &[&str]); 4] = [
     ),
     ("pipelines", &["runs", "run", "job_log", "pending_deployments", "review_deployment"]),
     ("cloud", &["identity", "accounts_and_roles"]),
+    ("tests", &["create_case", "cases", "create_cycle", "record", "projects"]),
 ];
 
 const DELIVERY: &str = r#"

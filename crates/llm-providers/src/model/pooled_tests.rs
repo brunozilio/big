@@ -40,7 +40,9 @@ fn a_busy_account_hands_the_turn_to_the_next_which_keeps_the_run() {
     let first = Arc::new(ScriptedModel::new([Err(ModelError::Overloaded("429".into())), answer("never")]));
     let second = Arc::new(ScriptedModel::new([answer("from b"), answer("b again")]));
     let pooled = pool(vec![first.clone() as Arc<dyn ModelApi>, second.clone()]);
-    assert_eq!(text(&ask(&pooled).expect("handed over")), "from b");
+    let handed = ask(&pooled).expect("handed over");
+    assert_eq!(text(&handed), "from b");
+    assert_eq!(handed.account.as_deref(), Some("b@x.io"), "the reply names the account that answered");
     assert_eq!(text(&ask(&pooled).expect("stays")), "b again");
     assert_eq!(first.asked().len(), 1, "the busy account is not asked again this run");
 }

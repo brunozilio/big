@@ -6,6 +6,7 @@ pub const TRACKER: &str = "tracker";
 pub const CODE: &str = "code";
 pub const PIPELINES: &str = "pipelines";
 pub const CLOUD: &str = "cloud";
+pub const TESTS: &str = "tests";
 
 pub mod tracker {
     pub const CREATE_ISSUE: &str = "tracker.create_issue";
@@ -42,6 +43,14 @@ pub mod cloud {
     pub const ACCOUNTS_AND_ROLES: &str = "cloud.accounts_and_roles";
 }
 
+pub mod tests {
+    pub const CREATE_CASE: &str = "tests.create_case";
+    pub const CASES: &str = "tests.cases";
+    pub const CREATE_CYCLE: &str = "tests.create_cycle";
+    pub const RECORD: &str = "tests.record";
+    pub const PROJECTS: &str = "tests.projects";
+}
+
 fn list() -> Value {
     json!({ "type": "array" })
 }
@@ -50,6 +59,7 @@ fn issue_output() -> Value {
     object(
         &[("ref", "string"), ("title", "string"), ("status", "string"), ("url", "string")],
         &[
+            ("id", "string"),
             ("description", "string"),
             ("impediment", "object"),
             ("subtasks", "array"),
@@ -60,7 +70,10 @@ fn issue_output() -> Value {
 }
 
 fn issue_summary() -> Value {
-    object(&[("ref", "string"), ("status", "string")], &[("title", "string"), ("url", "string"), ("changed", "boolean")])
+    object(
+        &[("ref", "string"), ("status", "string")],
+        &[("id", "string"), ("title", "string"), ("url", "string"), ("changed", "boolean")],
+    )
 }
 
 fn project_list() -> Value {
@@ -71,7 +84,13 @@ fn project_list() -> Value {
 pub fn tracker() -> Vec<ActionSpec> {
     let new_issue = object(
         &[("title", "string")],
-        &[("project", "string"), ("description", "string"), ("type", "string"), ("parent", "string"), ("labels", "array")],
+        &[
+            ("project", "string"),
+            ("description", "string"),
+            ("type", "string"),
+            ("parent", "string"),
+            ("labels", "array"),
+        ],
     );
     vec![
         ActionSpec::write(tracker::CREATE_ISSUE, new_issue, issue_summary(), Idempotency::Lookup),
@@ -146,8 +165,7 @@ pub fn code() -> Vec<ActionSpec> {
         &[("head", "string"), ("title", "string")],
         &[("repo", "string"), ("base", "string"), ("body", "string"), ("draft", "boolean")],
     );
-    let review =
-        object(&[("pr", "string"), ("verdict", "string")], &[("body", "string"), ("lines", "array")]);
+    let review = object(&[("pr", "string"), ("verdict", "string")], &[("body", "string"), ("lines", "array")]);
     let merge = object(&[("pr", "string")], &[("method", "string")]);
     vec![
         ActionSpec::write(code::OPEN_PULL_REQUEST, open, pull_output(), Idempotency::Lookup),
@@ -185,10 +203,8 @@ fn run_output() -> Value {
 
 pub fn pipelines() -> Vec<ActionSpec> {
     let run_ref = object(&[("run", "string")], &[]);
-    let review = object(
-        &[("run", "string"), ("decision", "string")],
-        &[("deployments", "array"), ("comment", "string")],
-    );
+    let review =
+        object(&[("run", "string"), ("decision", "string")], &[("deployments", "array"), ("comment", "string")]);
     vec![
         ActionSpec::read(
             pipelines::RUNS,
@@ -224,18 +240,68 @@ pub fn cloud() -> Vec<ActionSpec> {
     );
     vec![
         ActionSpec::read(cloud::IDENTITY, object(&[], &[("account", "string"), ("role", "string")]), credentials),
-        ActionSpec::read(cloud::ACCOUNTS_AND_ROLES, json!({ "type": "object", "properties": {} }), object(&[("accounts", "array")], &[])),
+        ActionSpec::read(
+            cloud::ACCOUNTS_AND_ROLES,
+            json!({ "type": "object", "properties": {} }),
+            object(&[("accounts", "array")], &[]),
+        ),
+    ]
+}
+
+fn with_issue_id(mut schema: Value) -> Value {
+    schema["properties"]["issue_id"] = json!({ "type": ["string", "integer"] });
+    schema
+}
+
+pub fn tests() -> Vec<ActionSpec> {
+    let new_case = with_issue_id(object(
+        &[("title", "string")],
+        &[
+            ("project", "string"),
+            ("objective", "string"),
+            ("precondition", "string"),
+            ("labels", "array"),
+            ("steps", "array"),
+            ("issue", "string"),
+            ("issue_id", "string"),
+        ],
+    ));
+    let new_cycle = with_issue_id(object(
+        &[("title", "string")],
+        &[("project", "string"), ("description", "string"), ("issue_id", "string")],
+    ));
+    let record = object(
+        &[("case", "string"), ("cycle", "string"), ("status", "string")],
+        &[("project", "string"), ("comment", "string"), ("seconds", "number")],
+    );
+    let case = object(&[("ref", "string"), ("title", "string")], &[]);
+    vec![
+        ActionSpec::write(
+            tests::CREATE_CASE,
+            new_case,
+            object(&[("ref", "string"), ("title", "string"), ("url", "string")], &[("created", "boolean")]),
+            Idempotency::Lookup,
+        ),
+        ActionSpec::read(tests::CASES, object(&[("issue", "string")], &[]), json!({ "type": "array", "items": case })),
+        ActionSpec::write(
+            tests::CREATE_CYCLE,
+            new_cycle,
+            object(&[("ref", "string"), ("url", "string")], &[]),
+            Idempotency::Native,
+        ),
+        ActionSpec::write(tests::RECORD, record, object(&[("ref", "string")], &[]), Idempotency::Native),
+        ActionSpec::read(tests::PROJECTS, object(&[], &[("query", "string")]), project_list()),
     ]
 }
 
 #[cfg(test)]
-mod tests {
+mod checks {
     use super::*;
 
     #[test]
     fn every_standard_action_is_named_after_its_capability() {
-        for (capability, actions) in [(TRACKER, tracker()), (CODE, code()), (PIPELINES, pipelines()), (CLOUD, cloud())]
-        {
+        let all = [(TRACKER, tracker()), (CODE, code()), (PIPELINES, pipelines()), (CLOUD, cloud()), (TESTS, tests())];
+        for (capability, actions) in all {
             assert!(!actions.is_empty());
             for action in actions {
                 assert_eq!(action.capability().map(|c| c.0), Some(capability.to_owned()), "{}", action.name);
@@ -246,11 +312,12 @@ mod tests {
 
     #[test]
     fn writes_declare_how_they_stay_idempotent() {
-        let all: Vec<ActionSpec> = [tracker(), code(), pipelines(), cloud()].concat();
+        let all: Vec<ActionSpec> = [tracker(), code(), pipelines(), cloud(), tests()].concat();
         let lookups: Vec<&str> =
             all.iter().filter(|a| a.idempotent == Idempotency::Lookup).map(|a| a.name.as_str()).collect();
         assert!(lookups.contains(&tracker::CREATE_ISSUE));
         assert!(lookups.contains(&code::MERGE));
+        assert!(lookups.contains(&tests::CREATE_CASE));
         assert!(all.iter().filter(|a| !a.writes).all(|a| a.idempotent == Idempotency::Native));
     }
 }

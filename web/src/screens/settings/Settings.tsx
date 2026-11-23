@@ -13,16 +13,17 @@ import { LogoUpload } from '@/ui/logoUpload'
 import { stagger, tween, tweenClose } from '@/ui/motion'
 import { ConnectionCard } from './ConnectionCard'
 import { ApplicationsView } from './Applications'
+import { UsageView } from './Usage'
 
-export type SettingsTab = 'connections' | 'applications' | 'appearance'
+export type SettingsTab = 'connections' | 'applications' | 'usage' | 'appearance'
 
 export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTab: (t: SettingsTab) => void; onConnect: (provider: string) => void }) {
   return (
     <>
-      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: 'Conexões' }, { value: 'applications', label: 'Aplicações' }, { value: 'appearance', label: 'Personalização' }]} />
+      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: 'Conexões' }, { value: 'applications', label: 'Aplicações' }, { value: 'usage', label: 'Uso' }, { value: 'appearance', label: 'Personalização' }]} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tweenClose}>
-          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'applications' ? <ApplicationsView /> : <CustomView />}
+          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : <CustomView />}
         </motion.div>
       </AnimatePresence>
     </>

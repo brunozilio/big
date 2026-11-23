@@ -158,6 +158,7 @@ impl crate::providers::SignIn for HoldsThePort {
     fn sign_in(
         &self,
         provider: ModelProvider,
+        _back: Option<&str>,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<llm_providers::Config, llm_providers::ProviderError> {
@@ -179,7 +180,7 @@ fn cancelling_a_sign_in_frees_the_port() {
     let mut services = crate::features::context::testing::services(None);
     services.providers = services.providers.with_sign_in(waiting.clone());
     let (handler, sent) = handler(services);
-    handler.handle(Envelope::local(RequestId(1), ClientCommand::SignInProvider { provider: browser }));
+    handler.handle(Envelope::local(RequestId(1), ClientCommand::SignInProvider { provider: browser, back: None }));
     assert!(matches!(answer_to(&sent, 1), Reply::Providers(ProviderEvent::AuthorizeAt { .. })));
     assert!(waiting.held.load(Ordering::SeqCst), "the sign-in is waiting on its port");
 

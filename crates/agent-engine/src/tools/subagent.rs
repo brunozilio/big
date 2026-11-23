@@ -73,8 +73,8 @@ pub fn parsed(stem: &str, text: &str, namespace: Option<&str>, privileged: bool)
                     map.remove(key);
                 }
             }
-            let config =
-                AgentConfig::parse(&front).unwrap_or_else(|error| AgentConfig { error: Some(error), ..Default::default() });
+            let config = AgentConfig::parse(&front)
+                .unwrap_or_else(|error| AgentConfig { error: Some(error), ..Default::default() });
             (front, body, config)
         }
         Err(error) => (Value::Null, "", AgentConfig { error: Some(error), ..Default::default() }),

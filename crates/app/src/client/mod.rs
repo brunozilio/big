@@ -3,6 +3,7 @@ mod catalog;
 mod chores;
 mod dispatch;
 mod features;
+mod limits;
 mod mcp_servers;
 mod memory;
 mod project;

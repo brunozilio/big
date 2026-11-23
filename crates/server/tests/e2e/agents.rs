@@ -163,6 +163,7 @@ impl AgentEngine for Agents {
         let places: Vec<PathBuf> =
             std::iter::once(request.session.cwd.clone()).chain(request.session.add_dirs.iter().cloned()).collect();
         let command = request.session.command.is_some();
+        let running = request.prompt.text.starts_with("Automatize");
         std::thread::spawn(move || {
             turn.emit(EngineEvent::SessionStarted(session));
             if command {
@@ -177,6 +178,12 @@ impl AgentEngine for Agents {
                 "reviewer" => turn.finish(json!({ "verdict": "approve", "summary": "sem problemas", "lines": [] })),
                 "release" => turn.finish(json!({ "notes": "## Notas da release" })),
                 "verifier" => say(&turn, "✓ o arquivo existe\nVEREDITO: APROVADO"),
+                "tester" if running => {
+                    turn.finish(json!({ "results": [{ "case": "K-T1", "status": "passed", "evidence": "ok" }] }))
+                }
+                "tester" => {
+                    turn.finish(json!({ "cases": [{ "title": "O arquivo existe", "kind": "api", "steps": [] }] }))
+                }
                 _ => develop(&turn, &script, &places, number),
             }
         });

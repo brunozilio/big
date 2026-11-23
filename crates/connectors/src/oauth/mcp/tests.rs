@@ -63,6 +63,25 @@ async fn the_code_and_later_refreshes_go_to_the_discovered_token_endpoint() {
 }
 
 #[tokio::test]
+async fn a_server_without_refresh_registers_for_codes_only_and_an_expired_grant_needs_a_new_sign_in() {
+    let server = r#"{"authorization_endpoint":"https://auth.test/authorize","token_endpoint":"https://auth.test/oauth/token","registration_endpoint":"https://auth.test/tenant/dcr/register","grant_types_supported":["authorization_code"]}"#;
+    let http = FakeHttp::new()
+        .once(Method::Get, "/.well-known/oauth-protected-resource/v2/mcp", 200, RESOURCE)
+        .once(Method::Get, "/.well-known/oauth-authorization-server/tenant", 200, server)
+        .once(Method::Post, "/dcr/register", 201, r#"{"client_id":"dyn1"}"#)
+        .once(Method::Post, "/oauth/token", 200, r#"{"access_token":"at","expires_in":3600}"#);
+    let flow = sign_in();
+    let Ok(started) = flow.begin(&http, 1).await else { panic!("begin failed") };
+    let registration = http.sent_to(Method::Post, "/dcr/register")[0].body_json();
+    assert_eq!(registration["grant_types"], json!(["authorization_code"]));
+    let grant = Loopback::new(flow.clone()).finish(&http, &started, &started.state, "c1", now()).await;
+    let Ok(grant) = grant else { panic!("{grant:?}") };
+    assert_eq!(grant.refresh_token, None);
+    let fresh = flow.refresh(&http, &grant, now()).await;
+    assert_eq!(fresh.map_err(|error| error.class), Err(ErrorClass::Auth));
+}
+
+#[tokio::test]
 async fn a_server_without_registration_cannot_be_signed_into() {
     let http = FakeHttp::new().once(Method::Get, "/.well-known/oauth-protected-resource/v2/mcp", 200, RESOURCE).once(
         Method::Get,
@@ -80,4 +99,12 @@ async fn an_insecure_server_is_refused_before_any_request() {
     let flow = McpSignIn { server: "http://evil.test/mcp".into(), ..sign_in() };
     assert!(flow.begin(&http, 1).await.is_err());
     assert!(http.sent().is_empty());
+}
+
+#[test]
+fn a_server_that_only_accepts_a_fixed_redirect_gets_its_own_callback_port() {
+    assert_eq!(sign_in().callback_port(), None);
+    let fixed = McpSignIn { redirect: "http://127.0.0.1:33418/oauth/callback".into(), ..sign_in() };
+    assert_eq!(fixed.callback_port(), Some(33418));
+    assert_eq!(crate::providers::zephyr::sign_in().callback_port(), Some(33418));
 }

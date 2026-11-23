@@ -11,6 +11,10 @@ use crate::http::Http;
 pub trait LoopbackSignIn: Send + Sync + std::fmt::Debug {
     fn name(&self) -> &str;
 
+    fn callback_port(&self) -> Option<u16> {
+        None
+    }
+
     async fn begin(&self, http: &dyn Http, port: u16) -> Result<Authorization, ActionError>;
 
     async fn exchange(

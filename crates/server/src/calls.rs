@@ -8,7 +8,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::marks::{iso, now_ms};
 use crate::state::Shared;
 
-fn connection(record: &ConnectionRecord) -> Connection {
+pub(crate) fn connection(record: &ConnectionRecord) -> Connection {
     Connection {
         id: ConnectionId::from(record.id.as_str()),
         provider: ProviderKey::from(record.provider.as_str()),

@@ -36,6 +36,7 @@ pub struct Shared {
     pub answered: Mutex<HashMap<String, Vec<Value>>>,
     pub nudge: mpsc::UnboundedSender<String>,
     pub port: u16,
+    pub callbacks: Mutex<std::collections::HashSet<u16>>,
     pub bundle: &'static [page::Asset],
 }
 

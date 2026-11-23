@@ -43,6 +43,8 @@ pub struct AuthServer {
     pub registration_endpoint: Option<String>,
     #[serde(default)]
     pub scopes_supported: Vec<String>,
+    #[serde(default)]
+    pub grant_types_supported: Vec<String>,
     #[serde(skip)]
     pub resource_scopes: Vec<String>,
 }
@@ -176,6 +178,7 @@ mod tests {
             token_endpoint: "https://auth.test/token".into(),
             registration_endpoint: None,
             scopes_supported: vec!["read".into(), "write".into(), "admin".into()],
+            grant_types_supported: Vec::new(),
             resource_scopes: vec!["read".into(), "write".into()],
         };
         let url = Authorize {

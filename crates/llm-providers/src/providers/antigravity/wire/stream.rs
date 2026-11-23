@@ -125,7 +125,13 @@ impl Folder {
             _ if called => StopReason::ToolUse,
             _ => StopReason::EndTurn,
         };
-        Ok(Reply { message: Message::assistant(self.blocks), stop, usage: self.usage, served: self.served })
+        Ok(Reply {
+            message: Message::assistant(self.blocks),
+            stop,
+            usage: self.usage,
+            served: self.served,
+            account: None,
+        })
     }
 }
 

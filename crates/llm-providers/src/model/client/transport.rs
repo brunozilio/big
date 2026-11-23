@@ -88,6 +88,32 @@ impl Transport {
         })
     }
 
+    pub(super) fn limits(&self) -> Result<Option<domain::billing::PlanUsage>, ModelError> {
+        if self.provider.limits(&Config::default()).is_none() {
+            return Ok(None);
+        }
+        let _turn = self.turns.take();
+        let mut response = self.limits_once(false)?;
+        if self.provider.retries_after_refresh(response.status) {
+            drop(response);
+            response = self.limits_once(true)?;
+        }
+        status(response.status)?;
+        let value: Value = serde_json::from_str(&read(response, llm_providers::limits::LIMIT)?)
+            .map_err(|_| ModelError::Provider("the plan limits answered with something other than JSON".into()))?;
+        Ok(Some(self.provider.windows(&value)?))
+    }
+
+    fn limits_once(&self, force: bool) -> Result<Response, ModelError> {
+        let config = self.config(force)?;
+        let call = self.provider.limits(&config).ok_or_else(|| ModelError::Provider("no plan limits".into()))?;
+        match &call.body {
+            Some(body) => self.http.post(&call.url, &call.headers, body),
+            None => self.http.get(&call.url, &call.headers),
+        }
+        .map_err(ModelError::Network)
+    }
+
     pub(super) async fn search(
         &self,
         query: &str,

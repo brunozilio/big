@@ -24,7 +24,9 @@ impl Store {
     pub fn pinned_workflow(&self, item: &str) -> Result<Option<(String, String)>> {
         let connection = self.locked();
         let read = |key: String| {
-            connection.query_row("SELECT value FROM preferences WHERE key = ?1", [key], |row| row.get::<_, String>(0)).optional()
+            connection
+                .query_row("SELECT value FROM preferences WHERE key = ?1", [key], |row| row.get::<_, String>(0))
+                .optional()
         };
         let Some(version) = read(format!("{PIN}{item}"))? else { return Ok(None) };
         Ok(read(format!("{CODE}{version}"))?.map(|code| (version, code)))

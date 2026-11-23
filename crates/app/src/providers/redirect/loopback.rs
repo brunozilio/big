@@ -33,6 +33,7 @@ pub struct Loopback {
     path: String,
     localhost: bool,
     stop: Option<Arc<AtomicBool>>,
+    back: Option<String>,
 }
 
 impl std::fmt::Debug for Loopback {
@@ -68,11 +69,16 @@ impl Loopback {
         let (shut, shut_down) = oneshot::channel();
         let (end, ended) = crossbeam_channel::bounded(1);
         runtime.spawn(serve(listener, to, shut_down, end));
-        Ok(Self { arrived, shut: Some(shut), ended, port, path: path.to_owned(), localhost, stop: None })
+        Ok(Self { arrived, shut: Some(shut), ended, port, path: path.to_owned(), localhost, stop: None, back: None })
     }
 
     pub fn stopped_by(mut self, stop: Arc<AtomicBool>) -> Self {
         self.stop = Some(stop);
+        self
+    }
+
+    pub fn returning(mut self, back: Option<&str>) -> Self {
+        self.back = back.map(str::to_owned);
         self
     }
 
@@ -140,7 +146,8 @@ impl Loopback {
                 let _ = request.answer.send(page(screen(false, "Not this sign-in", message), StatusCode::BAD_REQUEST));
                 continue;
             }
-            return Ok(Pending { path: path.to_owned(), query: query.to_owned(), answer: Some(request.answer) });
+            let (path, query, back) = (path.to_owned(), query.to_owned(), self.back.clone());
+            return Ok(Pending { path, query, answer: Some(request.answer), back });
         }
     }
 }
@@ -172,6 +179,7 @@ pub struct Pending {
     pub path: String,
     pub query: String,
     answer: Option<oneshot::Sender<Response>>,
+    back: Option<String>,
 }
 
 impl std::fmt::Debug for Pending {
@@ -198,14 +206,20 @@ impl Pending {
         let _ = answer.send(response);
     }
 
-    pub fn finish(self, result: Result<(), &String>) {
+    pub fn finish(mut self, result: Result<(), &String>) {
+        if let Some(back) = self.back.take() {
+            return self.redirect(&back);
+        }
         match result {
             Ok(()) => self.signed_in(None),
             Err(error) => self.respond(screen(false, "Sign-in failed", error)),
         }
     }
 
-    pub fn signed_in(self, account: Option<&str>) {
+    pub fn signed_in(mut self, account: Option<&str>) {
+        if let Some(back) = self.back.take() {
+            return self.redirect(&back);
+        }
         let back = concat!("Return to ", brand::name!(), " in your terminal to keep working.");
         let message = account.map_or_else(|| back.to_owned(), |account| format!("As {account}. {back}"));
         self.respond(screen(true, "Signed in", &message));
@@ -286,6 +300,25 @@ mod tests {
         let page = hit.join().expect("join");
         assert!(page.contains("As dev@example.com. Return to"), "{page}");
         assert!(page.contains("class=\"ok\""));
+    }
+
+    #[test]
+    fn a_sign_in_started_by_the_web_app_sends_the_browser_back_to_it() {
+        let loopback = Loopback::bind().expect("bind").returning(Some("http://127.0.0.1:7999/settings/connections"));
+        let uri = format!("{}?code=c&state=s", loopback.redirect_uri());
+        let hit = std::thread::spawn(move || {
+            let client = reqwest::blocking::Client::builder()
+                .no_proxy()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .expect("client");
+            let answer = client.get(uri).send().expect("answer");
+            (answer.status().as_u16(), answer.headers().get("location").cloned())
+        });
+        loopback.next_within("s", &[], SIGN_IN_TIMEOUT).expect("callback").signed_in(Some("dev@example.com"));
+        let (status, location) = hit.join().expect("join");
+        assert_eq!(status, 302);
+        assert_eq!(location.expect("location"), "http://127.0.0.1:7999/settings/connections");
     }
 
     #[test]

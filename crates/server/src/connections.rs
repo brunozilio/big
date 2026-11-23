@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use axum::Json;
 use axum::extract::{Path, Query, State};
-use axum::response::{Html, IntoResponse, Response};
+use axum::http::{HeaderMap, header};
+use axum::response::{Html, IntoResponse, Redirect, Response};
 use connectors::{AuthSpec, ProviderDescriptor, SettingsSink};
 use domain::connection::ConnectionId;
 use serde_json::{Value, json};
@@ -19,6 +20,7 @@ fn group(descriptor: &ProviderDescriptor) -> &'static str {
     match first {
         "tracker" => "Tarefas",
         "cloud" => "Nuvem",
+        "tests" => "Testes",
         _ => "Código",
     }
 }
@@ -115,6 +117,7 @@ fn is_connector(shared: &Shared, provider: &str) -> bool {
 pub async fn start(
     State(ctx): State<Ctx>,
     Path(provider): Path<String>,
+    headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> ApiResult<Response> {
     let body = body.map(|Json(body)| body).unwrap_or(Value::Null);
@@ -123,7 +126,8 @@ pub async fn start(
         return Ok(reply(crate::sign_in::start(&ctx, &provider, &fields, body["method"].as_str()).await?));
     }
     let shared = Arc::clone(&ctx);
-    Ok(reply(blocking(move || crate::ai::start(&shared, &provider)).await?))
+    let host = headers.get(header::HOST).and_then(|host| host.to_str().ok()).map(str::to_owned);
+    Ok(reply(blocking(move || crate::ai::start(&shared, &provider, host.as_deref())).await?))
 }
 
 pub async fn poll(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {
@@ -131,18 +135,21 @@ pub async fn poll(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<
     Ok(reply(crate::sign_in::poll(&ctx, flow, body["choice"].as_str()).await?))
 }
 
-const SIGNED_IN: &str = "<!doctype html><meta charset=\"utf-8\"><title>Conectado</title>\
-<body style=\"font-family:system-ui;margin:4rem auto;max-width:28rem;text-align:center\">\
-<h1>Pronto</h1><p>Pode fechar esta aba e voltar.</p></body>";
-
 pub async fn callback(State(ctx): State<Ctx>, Query(query): Query<HashMap<String, String>>) -> Response {
-    let (state, code) = (query.get("state"), query.get("code"));
-    let (Some(state), Some(code)) = (state, code) else {
-        let told = query.get("error_description").or(query.get("error")).cloned().unwrap_or_default();
+    answered(&ctx, &query, "").await
+}
+
+pub async fn answered(ctx: &Shared, query: &HashMap<String, String>, base: &str) -> Response {
+    let told = query.get("error_description").or(query.get("error")).cloned().unwrap_or_default();
+    let Some(state) = query.get("state") else {
         return Html(format!("<!doctype html><meta charset=\"utf-8\"><p>A entrada falhou. {told}</p>")).into_response();
     };
-    match crate::sign_in::callback(&ctx, state, code).await {
-        Ok(()) => Html(SIGNED_IN).into_response(),
+    let back = match query.get("code") {
+        Some(code) => crate::sign_in::callback(ctx, state, code).await,
+        None => crate::sign_in::refused(ctx, state, &told),
+    };
+    match back {
+        Ok(back) => Redirect::to(&format!("{base}{back}")).into_response(),
         Err(error) => error.into_response(),
     }
 }

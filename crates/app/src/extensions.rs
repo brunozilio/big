@@ -64,8 +64,7 @@ mod tests {
         .expect("agent");
         let project = dir.path().join("project");
         std::fs::create_dir_all(&project).expect("project");
-        let named =
-            |home: Option<&Path>| agents(&project, &Extensions, home).iter().any(|a| a.name == "helper");
+        let named = |home: Option<&Path>| agents(&project, &Extensions, home).iter().any(|a| a.name == "helper");
         assert!(named(Some(&home)));
         assert!(!named(None));
     }

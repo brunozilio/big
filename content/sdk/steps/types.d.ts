@@ -1,4 +1,4 @@
-import type { Json, MergeMethod, RetryPolicy, ReviewLine, StepType } from "../index";
+import type { Json, LogCommand, MergeMethod, RetryPolicy, ReviewLine, StepType } from "../index";
 
 export interface Sources {
   plan?: string;
@@ -6,6 +6,20 @@ export interface Sources {
   develop?: string;
   pr?: string;
   merge?: string;
+}
+
+export type ItemSourceKind = "issue" | "pull_request" | "branch";
+
+export interface ItemSource {
+  kind: ItemSourceKind;
+  connection: string | null;
+  subject: string;
+  repository?: string;
+}
+
+export interface GitHead {
+  base: string | null;
+  head: string;
 }
 
 export interface CodeTarget {
@@ -97,14 +111,71 @@ export interface TicketOptions extends EffectStepOptions {
 }
 
 export interface TicketOutput {
-  issue: string;
+  issue?: string;
   url?: string;
   title?: string;
   created: boolean;
+  reason?: string;
+}
+
+export type CaseKind = "api" | "ui";
+
+export interface CaseStep {
+  action: string;
+  data?: string;
+  expected: string;
+}
+
+export interface TestCase {
+  title: string;
+  kind: CaseKind;
+  objective?: string;
+  precondition?: string;
+  steps: CaseStep[];
+  ref?: string;
+  url?: string | null;
+}
+
+export interface CasesOptions extends AgentStepOptions, HumanStepOptions {
+  issue?: string;
+  project?: string;
+  labels?: string[];
+  approve?: "human" | "auto";
+  link?: boolean;
+  tracker?: string;
+}
+
+export interface CasesOutput {
+  session: string;
+  issue?: string;
+  by?: string | null;
+  cases: TestCase[];
+  cycle: string;
+  cycleUrl: string | null;
+}
+
+export type CaseStatus = "passed" | "failed" | "blocked" | "not_run";
+
+export interface CaseVerdict {
+  case: string;
+  title: string;
+  kind: CaseKind;
+  status: CaseStatus;
+  evidence: string;
+}
+
+export interface EndToEndOutput {
+  session?: string;
+  cycle?: string;
+  cases: CaseVerdict[];
+  ran: LogCommand[];
+  output: string;
+  error?: string;
 }
 
 export interface DevelopOptions extends AgentStepOptions {
   nudges?: number;
+  feedbackOnly?: boolean;
   plan?: string;
   title?: string;
   issue?: string;
@@ -113,7 +184,8 @@ export interface DevelopOptions extends AgentStepOptions {
 }
 
 export interface DevelopOutput {
-  session: string;
+  session?: string;
+  idle?: string;
   branch?: string;
   summary?: string;
   repositories?: RepositoryChange[];
@@ -121,6 +193,10 @@ export interface DevelopOutput {
 
 export interface ChecksOptions extends AgentStepOptions {
   commands?: string[];
+  e2e?: string[];
+  tester?: string | false;
+  testerMode?: string;
+  tests?: string;
   cwd?: string;
   env?: Record<string, string>;
   timeout?: number;
@@ -135,6 +211,7 @@ export interface ChecksResult extends PerRepository {
 
 export interface ChecksOutput {
   output: string;
+  e2e?: EndToEndOutput;
   command?: string;
   code?: number | null;
   results?: ChecksResult[];
@@ -158,6 +235,7 @@ export interface PullRequestEntry extends PerRepository {
   body: string;
   head: string;
   base: string | null;
+  reused?: boolean;
 }
 
 export interface PrOutput extends PullRequestEntry {
@@ -237,6 +315,7 @@ export interface ReleaseOptions
 
 export type PlanStep = StepType<PlanOptions>;
 export type TicketStep = StepType<TicketOptions>;
+export type CasesStep = StepType<CasesOptions>;
 export type DevelopStep = StepType<DevelopOptions>;
 export type ChecksStep = StepType<ChecksOptions>;
 export type PrStep = StepType<PrOptions>;

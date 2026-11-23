@@ -20,22 +20,15 @@ pub enum ServerEvent {
 pub enum Reply {
     Done,
     Models(Vec<ModelOption>),
-    Settings {
-        settings: Option<serde_json::Value>,
-    },
+    Settings { settings: Option<serde_json::Value> },
     Skills(Vec<Skill>),
     Agents(Vec<CustomAgent>),
     Notices(Notices),
     Feature(FeatureReply),
     FeatureFailed(FeatureError),
-    Permissions {
-        path: PathBuf,
-        permissions: domain::permission::PermissionsInfo,
-    },
+    Permissions { path: PathBuf, permissions: domain::permission::PermissionsInfo },
     Providers(ProviderEvent),
-    Error {
-        message: String,
-    },
+    Error { message: String },
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -187,10 +180,7 @@ mod tests {
     #[test]
     fn only_progress_leaves_a_request_open() {
         let open: Vec<Reply> = replies().into_iter().filter(|reply| !reply.is_terminal()).collect();
-        assert!(open.iter().all(|reply| matches!(
-            reply,
-            Reply::Providers(ProviderEvent::AuthorizeAt { .. })
-        )));
+        assert!(open.iter().all(|reply| matches!(reply, Reply::Providers(ProviderEvent::AuthorizeAt { .. }))));
         assert_eq!(open.len(), 2);
         assert!(Reply::done_or(Ok(())).is_terminal() && Reply::done_or(Err("no".into())).is_terminal());
     }

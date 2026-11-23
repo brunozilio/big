@@ -3,6 +3,7 @@ extern crate self as llm_providers;
 pub mod added_tools;
 pub mod catalog;
 mod config;
+pub mod limits;
 pub mod model;
 pub mod oauth;
 pub mod providers;
@@ -82,6 +83,14 @@ pub trait Provider: Sync {
 
     fn search(&self, _config: &Config, _query: &str) -> Option<Call> {
         None
+    }
+
+    fn limits(&self, _config: &Config) -> Option<Call> {
+        None
+    }
+
+    fn windows(&self, _value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
+        Err(ProviderError::Invalid(format!("{} does not report plan limits", self.name())))
     }
 
     fn hits(&self, _value: &Value) -> Result<Vec<web_search::Hit>, ProviderError> {

@@ -81,7 +81,10 @@ fn a_plan_approved_for_another_agent_ends_planning_without_implementing() {
     assert!(!rig.dir.path().join("out.txt").exists(), "the planner leaves the implementation to the next step");
     assert!(!rig.events().iter().any(|event| matches!(event, EngineEvent::ModeChanged(_))));
     let results = results(&history);
-    assert!(!results[0].1 && results[0].0.contains("approved") && results[0].0.contains("Another agent"), "{results:?}");
+    assert!(
+        !results[0].1 && results[0].0.contains("approved") && results[0].0.contains("Another agent"),
+        "{results:?}"
+    );
 }
 
 #[test]

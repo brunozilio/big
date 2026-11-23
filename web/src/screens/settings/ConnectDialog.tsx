@@ -13,6 +13,7 @@ import {
   ConnectHeader,
   ConnectedAccounts,
   DeviceCode,
+  Resuming,
   SignedIn,
   SignInError,
   SignInFields,
@@ -24,6 +25,7 @@ import {
 
 type Step =
   | { kind: 'start' }
+  | { kind: 'resume'; flow: string }
   | { kind: 'device'; start: DeviceStart }
   | { kind: 'browser'; start: RedirectStart }
   | { kind: 'choose'; flow: string; poll: ChoosePoll }
@@ -43,6 +45,7 @@ function wayOf(provider: Provider, method: string | null): Way {
 }
 
 function flowOf(step: Step): string | null {
+  if (step.kind === 'resume') return step.flow
   if (step.kind === 'device') return step.start.flow
   if (step.kind === 'browser' && !step.start.paste) return step.start.flow
   return null
@@ -56,26 +59,31 @@ interface Primary {
   icon?: boolean
 }
 
-function useSignIn(provider: Provider | null, way: Way | null, fields: Record<string, string>) {
-  const [step, setStep] = useState<Step>({ kind: 'start' })
+function firstStep(resume: string | null): Step {
+  return resume ? { kind: 'resume', flow: resume } : { kind: 'start' }
+}
+
+function useSignIn(provider: Provider | null, way: Way | null, fields: Record<string, string>, resume: string | null, onClose: () => void) {
+  const [step, setStep] = useState<Step>(() => firstStep(resume))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [choice, setChoice] = useState<string | null>(null)
   const [pasted, setPasted] = useState('')
   const key = provider?.key
   useEffect(() => {
-    setStep({ kind: 'start' })
+    setStep(firstStep(resume))
     setBusy(false)
     setError(null)
     setChoice(null)
     setPasted('')
-  }, [key])
+  }, [key, resume])
   const fail = (message: string) => {
     setError(message)
     setStep({ kind: 'start' })
   }
   const answered = (flow: string) => (answer: SignInPoll) => {
-    if (answer.state === 'done') setStep({ kind: 'done', connection: answer.connection })
+    if (answer.state === 'done' && resume) onClose()
+    else if (answer.state === 'done') setStep({ kind: 'done', connection: answer.connection })
     else if (answer.state === 'failed') fail(answer.message)
     else if (answer.state === 'choose') setStep({ kind: 'choose', flow, poll: answer })
   }
@@ -91,7 +99,7 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
     setPasted('')
     setChoice(null)
     run(api().startSignIn(provider.key, fields, way.method).then((start) => {
-      if (start.kind === 'redirect' && !start.paste && !isMock()) globalThis.open?.(start.url, '_blank', 'noopener')
+      if (start.kind === 'redirect' && !start.paste && !isMock()) leave(start)
       setStep(start.kind === 'device' ? { kind: 'device', start } : { kind: 'browser', start })
     }))
   }
@@ -106,6 +114,11 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
   return { step, busy, error, choice, setChoice, pasted, setPasted, begin, send, disconnect }
 }
 
+function leave(start: RedirectStart) {
+  if (start.returns) globalThis.location.assign(start.url)
+  else globalThis.open?.(start.url, '_blank', 'noopener')
+}
+
 function primaryOf(signIn: ReturnType<typeof useSignIn>, way: Way, ready: boolean, onClose: () => void): Primary {
   const { step, busy } = signIn
   if (step.kind === 'start') return { label: way.button, onClick: signIn.begin, disabled: !ready, loading: busy, icon: true }
@@ -117,6 +130,7 @@ function primaryOf(signIn: ReturnType<typeof useSignIn>, way: Way, ready: boolea
 
 function Body({ signIn, way, accounts, fields, onField, toggle }: { signIn: ReturnType<typeof useSignIn>; way: Way; accounts: Connection[]; fields: Record<string, string>; onField: (name: string, value: string) => void; toggle: ReactNode }) {
   const { step } = signIn
+  if (step.kind === 'resume') return <Resuming />
   if (step.kind === 'device') return <DeviceCode site={way.site} start={step.start} />
   if (step.kind === 'browser') return <BrowserWait site={way.site} start={step.start} pasted={signIn.pasted} onPasted={signIn.setPasted} />
   if (step.kind === 'choose') return <AccountChoice poll={step.poll} choice={signIn.choice} onChoice={signIn.setChoice} />
@@ -130,14 +144,14 @@ function Body({ signIn, way, accounts, fields, onField, toggle }: { signIn: Retu
   )
 }
 
-export function ConnectDialog({ provider: key, onClose }: { provider: string | null; onClose: () => void }) {
+export function ConnectDialog({ provider: key, resume, onClose }: { provider: string | null; resume?: string | null; onClose: () => void }) {
   const provider = useStore((s) => s.connections?.providers.find((p) => p.key === key) ?? null)
   const all = useStore((s) => s.connections?.connections)
   const accounts = (all ?? []).filter((c) => c.provider === key)
   const [method, setMethod] = useState<string | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
   const way = provider ? wayOf(provider, method) : null
-  const signIn = useSignIn(provider, way, fields)
+  const signIn = useSignIn(provider, way, fields, resume ?? null, onClose)
   useEffect(() => setMethod(null), [key])
   useEffect(() => {
     setFields(Object.fromEntries((way?.fields ?? []).map((f) => [f.name, f.value ?? ''])))

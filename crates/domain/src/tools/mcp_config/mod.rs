@@ -93,7 +93,11 @@ mod tests {
     fn a_server_s_state_says_why_it_does_or_does_not_start() {
         let mut approval = McpApproval::default();
         approval.read(&json!({"disabledMcpServers": ["sonar"]}));
-        assert_eq!(McpState::of(&McpOrigin::Project, "jira", &approval), McpState::Ready, "a project's mcp.json counts");
+        assert_eq!(
+            McpState::of(&McpOrigin::Project, "jira", &approval),
+            McpState::Ready,
+            "a project's mcp.json counts"
+        );
         assert_eq!(McpState::of(&McpOrigin::Project, "sonar", &approval), McpState::Off);
         assert_eq!(McpState::of(&McpOrigin::User, "new", &approval), McpState::Ready);
     }

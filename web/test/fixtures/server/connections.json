@@ -41,6 +41,19 @@
       "site": "do Picky"
     },
     {
+      "alternative": null,
+      "button": "Entrar com Web",
+      "description": "Sua conta Web",
+      "fields": [],
+      "group": "Tarefas",
+      "key": "web",
+      "logo": "<svg/>",
+      "multiple": true,
+      "name": "Web",
+      "signIn": "oauth",
+      "site": "do Web"
+    },
+    {
       "ai": true,
       "alternative": null,
       "button": "Entrar com Claude",

@@ -1,5 +1,24 @@
-import { step, chat } from "sdk";
-import { agentOptions, branchOf, defined, feedbackText, inLanguage, issueOf, object, planOf, summaryLine } from "./context.js";
+import { step, chat, markdown } from "sdk";
+import { agentOptions, branchOf, codeOptions, defined, effects, feedbackText, inLanguage, issueOf, object, planOf, pullRequestsOf, summaryLine } from "./context.js";
+
+const IDLE = "Nada a corrigir: o pull request não tem comentários de review pendentes nem falhas apontadas.";
+
+async function pending(ctx, opts) {
+  const comments = [];
+  for (const entry of pullRequestsOf(ctx, opts)) {
+    const threads = await ctx.call("code", "review_comments", { pr: entry.pr }, effects(codeOptions(opts, entry)));
+    for (const found of Array.isArray(threads) ? threads : []) {
+      if (!found.resolved && !found.outdated) comments.push(defined({ path: found.path, line: found.line, body: found.body, author: found.author }));
+    }
+  }
+  if (comments.length === 0) return null;
+  return { step: "review", outcome: "comments", data: { summary: "O pull request tem comentários de review pendentes.", comments } };
+}
+
+function shown(s) {
+  if (s.session) return [chat(s.session)];
+  return s.idle ? [markdown(s.idle)] : [];
+}
 
 function request(item, plan, issue, feedback) {
   const parts = [`Implemente o item: ${plan.title || item.title || ""}`];
@@ -31,11 +50,13 @@ export default step({
   label: "Develop",
   icon: "sCode",
   doing: "Desenvolvendo",
-  view: (s) => (s.session ? [chat(s.session)] : []),
+  view: shown,
   async run(ctx, opts) {
     const plan = planOf(ctx, opts);
     const issue = issueOf(ctx, opts);
-    const feedback = opts.feedback ?? ctx.from;
+    const given = opts.feedback ?? ctx.from;
+    const feedback = given || !opts.feedbackOnly ? given : await pending(ctx, opts);
+    if (opts.feedbackOnly && !feedback) return ctx.skip({ idle: IDLE });
     const previous = object(ctx.output(ctx.step));
     const branch = opts.branch ?? previous.branch ?? branchOf(ctx, opts);
     const input = defined({

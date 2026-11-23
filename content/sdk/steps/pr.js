@@ -1,5 +1,5 @@
 import { step, change, markdown } from "sdk";
-import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, issueOf, object, planOf, repoOf, source, summaryLine, targetFields } from "./context.js";
+import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, gitOf, issueOf, object, planOf, repoOf, source, sourcePullRequestOf, summaryLine, targetFields } from "./context.js";
 
 function describe(summary, plan, issue) {
   const parts = [summary || summaryLine(plan.story) || plan.title];
@@ -21,9 +21,30 @@ function opened(entries) {
   return entries.filter((entry) => entry.title || entry.pr).map((entry) => (entry.pr ? change(entry.pr) : shown(entry, many)));
 }
 
+function wantedOf(ctx, opts, target, wanted) {
+  const git = gitOf(ctx, target.id);
+  return { ...wanted, head: opts.branch ?? git.head ?? wanted.head, base: opts.base ?? git.base ?? undefined };
+}
+
+async function reuse(ctx, opts, target, found, wanted) {
+  const options = codeOptions(found.connection ? { ...opts, connection: opts.connection ?? found.connection } : opts, target);
+  const known = object(await ctx.call("code", "pull_request", { pr: found.subject }, effects(options)));
+  return {
+    ...targetFields(target),
+    pr: found.subject,
+    number: known.number ?? null,
+    url: known.url ?? null,
+    title: known.title ?? wanted.title,
+    body: known.body ?? wanted.body,
+    head: known.head ?? wanted.head,
+    base: known.base ?? wanted.base ?? null,
+    reused: true,
+  };
+}
+
 async function open(ctx, opts, target, wanted) {
   const options = codeOptions(opts, target);
-  const args = defined({ head: wanted.head, base: opts.base, repo: repoOf(target), title: wanted.title, body: wanted.body, draft: opts.draft });
+  const args = defined({ head: wanted.head, base: wanted.base, repo: repoOf(target), title: wanted.title, body: wanted.body, draft: opts.draft });
   const made = await ctx.call("code", "open_pull_request", args, effects(options));
   return {
     ...targetFields(target),
@@ -33,8 +54,22 @@ async function open(ctx, opts, target, wanted) {
     title: made.title ?? wanted.title,
     body: made.body ?? wanted.body,
     head: made.head ?? wanted.head,
-    base: made.base ?? opts.base ?? null,
+    base: made.base ?? wanted.base ?? null,
   };
+}
+
+function targetsOf(ctx, opts) {
+  const targets = codeTargets(ctx, opts);
+  if (Array.isArray(source(ctx, opts, "develop").repositories)) return targets;
+  const reused = targets.filter((target) => sourcePullRequestOf(ctx, target));
+  return reused.length > 0 ? reused : targets;
+}
+
+async function deliver(ctx, opts, target, wanted) {
+  const own = wantedOf(ctx, opts, target, wanted);
+  const found = sourcePullRequestOf(ctx, target);
+  if (found) return reuse(ctx, opts, target, found, own);
+  return open(ctx, opts, target, own);
 }
 
 export default step({
@@ -48,15 +83,16 @@ export default step({
     const previous = object(ctx.output(ctx.step));
     if (previous.pr) return ctx.pass(previous);
     const head = branchOf(ctx, opts);
-    if (!head) return ctx.fail({ error: "não há branch para abrir o pull request" });
-    const targets = codeTargets(ctx, opts);
+    const targets = targetsOf(ctx, opts);
     if (targets.length === 0) return ctx.fail({ error: "nenhum repositório da aplicação tem conexão de código" });
+    const known = targets.every((target) => gitOf(ctx, target.id).head || sourcePullRequestOf(ctx, target));
+    if (!head && !known) return ctx.fail({ error: "não há branch para abrir o pull request" });
     const plan = planOf(ctx, opts);
     const issue = issueOf(ctx, opts);
     const summary = summaryLine(source(ctx, opts, "develop").summary);
     const body = opts.body ?? describe(summary, plan, issue);
     const wanted = { head, title: opts.title ?? titled(plan, issue), body };
-    const prs = await eachOf(ctx, targets, (branch, target) => open(branch, opts, target, wanted));
+    const prs = await eachOf(ctx, targets, (branch, target) => deliver(branch, opts, target, wanted));
     const { repository: _repository, name: _name, code: _code, ...data } = prs[0];
     return ctx.pass(targets.length > 1 || targets[0].id ? { ...data, prs } : data);
   },

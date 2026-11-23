@@ -71,6 +71,7 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
             "action": MERGE, "checks": [], "result": null,
         }),
         "markdown" => json!({ "type": "markdown", "text": text(&raw["text"]), "muted": raw["muted"] == true }),
+        "cases" => cases(raw),
         "logs" => logs(raw),
         "form" => json!({
             "type": "form",
@@ -84,6 +85,35 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
         _ => return None,
     };
     Some(block)
+}
+
+fn optional(raw: &Value) -> Value {
+    match raw {
+        Value::String(text) if !text.trim().is_empty() => Value::String(text.clone()),
+        _ => Value::Null,
+    }
+}
+
+fn case_step(raw: &Value) -> Value {
+    json!({ "action": text(&raw["action"]), "data": optional(&raw["data"]), "expected": text(&raw["expected"]) })
+}
+
+fn case(raw: &Value) -> Value {
+    let kind = if raw["kind"] == "ui" { "ui" } else { "api" };
+    json!({
+        "title": text(&raw["title"]),
+        "kind": kind,
+        "objective": optional(&raw["objective"]),
+        "precondition": optional(&raw["precondition"]),
+        "ref": optional(&raw["ref"]),
+        "url": optional(&raw["url"]),
+        "steps": raw["steps"].as_array().map(|all| all.iter().map(case_step).collect::<Vec<_>>()).unwrap_or_default(),
+    })
+}
+
+fn cases(raw: &Value) -> Value {
+    let all = raw["cases"].as_array().map(|all| all.iter().map(case).collect::<Vec<_>>()).unwrap_or_default();
+    json!({ "type": "cases", "cases": all })
 }
 
 fn logs(raw: &Value) -> Value {
@@ -158,6 +188,22 @@ mod tests {
         assert_eq!(blocks[2]["ready"], true);
         assert_eq!(blocks[3]["commands"][0]["log"], "ok");
         assert_eq!(blocks[4]["buttons"][0]["action"], "retry");
+    }
+
+    #[test]
+    fn test_cases_keep_their_structure_for_the_page() {
+        let place = Place { connections: &[], waiting: false };
+        let raw = json!({ "type": "cases", "cases": [{
+            "title": "Criar", "kind": "ui", "precondition": " ", "ref": "T-1",
+            "steps": [{ "action": "Enviar", "data": "corpo", "expected": "201" }, { "action": "Ver", "expected": "ok" }],
+        }] });
+        let blocks = normalized(&place, &raw);
+        let first = &blocks[0]["cases"][0];
+        assert_eq!(first["kind"], "ui");
+        assert_eq!(first["precondition"], Value::Null);
+        assert_eq!(first["ref"], "T-1");
+        assert_eq!(first["steps"][0], json!({ "action": "Enviar", "data": "corpo", "expected": "201" }));
+        assert_eq!(first["steps"][1]["data"], Value::Null);
     }
 
     #[test]

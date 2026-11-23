@@ -75,6 +75,35 @@ export interface ItemStep {
   seconds: number
 }
 
+export type SourceKind = 'issue' | 'pull_request' | 'branch'
+
+export interface ItemSource {
+  kind: SourceKind | (string & {})
+  key: string
+  connection: string | null
+  repository: string | null
+  provider: string | null
+  name: string | null
+  logo: string | null
+  url: string | null
+}
+
+export interface ItemGit {
+  repository: string
+  name: string
+  base: string | null
+  head: string | null
+}
+
+export interface NewSource {
+  kind: SourceKind
+  connection: string | null
+  subject: string
+  repository?: string
+}
+
+export type NewGit = Record<string, { base?: string; head?: string }>
+
 export interface Item {
   id: string
   title: string
@@ -83,6 +112,8 @@ export interface Item {
   status: string | null
   issue: ExternalRef | null
   change: ChangeRef | null
+  sources: ItemSource[]
+  git: ItemGit[]
   steps: ItemStep[]
   current: string | null
   live: boolean
@@ -98,6 +129,9 @@ export interface NewItem {
   application?: string | null
   text: string
   issue: { connection: string; key: string } | null
+  sources?: NewSource[]
+  git?: NewGit
+  workflow?: string
   model: string
   effort: Effort
   fast: boolean
@@ -157,6 +191,22 @@ export interface DetailRow {
   note?: string
 }
 
+export interface CaseStep {
+  action: string
+  data: string | null
+  expected: string
+}
+
+export interface TestCaseView {
+  title: string
+  kind: 'api' | 'ui'
+  objective: string | null
+  precondition: string | null
+  ref: string | null
+  url: string | null
+  steps: CaseStep[]
+}
+
 export type MergeMethod = 'squash' | 'merge' | 'rebase'
 
 export type Block =
@@ -167,6 +217,7 @@ export type Block =
   | { type: 'pipeline'; connection: string; run: string; gate: { approve: string; reject: string } | null }
   | { type: 'merge'; connection: string; change: string; ready: boolean; methods: MergeMethod[]; action: string; checks: DetailRow[]; result: DetailRow[] | null }
   | { type: 'markdown'; text: string; muted?: boolean }
+  | { type: 'cases'; cases: TestCaseView[] }
   | { type: 'logs'; commands: Command[] }
   | { type: 'form'; title?: string; fields: FormField[]; submit: { action: string; label: string } }
   | { type: 'actions'; buttons: ActionButton[] }
@@ -410,8 +461,84 @@ export interface Connections {
   connections: Connection[]
 }
 
+export type UsageDays = 7 | 30 | 90
+
+export interface UsageTotals {
+  costUsd: number
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  calls: number
+  sessions: number
+}
+
+export interface UsageDay {
+  date: string
+  costUsd: number
+  tokens: number
+  calls: number
+  byProvider: Record<string, number>
+  byModel: Record<string, number>
+}
+
+export interface UsageRow {
+  id: string
+  name: string
+  costUsd: number
+  tokens: number
+  calls: number
+}
+
+export interface UsageProviderRow extends UsageRow {
+  logo: string
+}
+
+export interface UsageAccountRow {
+  id: string
+  provider: string
+  account: string
+  costUsd: number
+  tokens: number
+  calls: number
+}
+
+export interface Usage {
+  days: number
+  from: string
+  to: string
+  totals: UsageTotals
+  daily: UsageDay[]
+  byProvider: UsageProviderRow[]
+  byModel: UsageRow[]
+  byAccount: UsageAccountRow[]
+}
+
+export interface UsageWindow {
+  id: string
+  label: string
+  usedPercent: number
+  resetsAt: string | null
+  startsAt: string | null
+}
+
+export interface UsageLimitAccount {
+  provider: string
+  name: string
+  logo: string
+  account: string
+  status: 'ok' | 'unsupported' | 'error'
+  error: string | null
+  plan: string | null
+  windows: UsageWindow[]
+}
+
+export interface UsageLimits {
+  accounts: UsageLimitAccount[]
+}
+
 export type SignInStart =
-  | { flow: string; kind: 'redirect'; url: string; paste: boolean }
+  | { flow: string; kind: 'redirect'; url: string; paste: boolean; returns?: boolean }
   | { flow: string; kind: 'device'; url: string; code: string; expiresIn: number; interval: number }
 
 export interface SignInPollRequest {
@@ -445,8 +572,6 @@ export interface Models {
   default: string | null
 }
 
-export const AUTO_MODEL = 'auto'
-
 export type Theme = 'system' | 'light' | 'dark'
 
 export interface Branding {
@@ -476,6 +601,7 @@ export interface ApplicationRepository {
   directory: string
   run: string
   verify: string[]
+  e2e: string[]
 }
 
 export interface Application {
@@ -529,6 +655,8 @@ export interface Api {
   pollSignIn(request: SignInPollRequest): Promise<SignInPoll>
   disconnect(connection: string): Promise<void>
   models(): Promise<Models>
+  usage(days: UsageDays): Promise<Usage>
+  usageLimits(): Promise<UsageLimits>
   branding(): Promise<Branding>
   saveBranding(patch: BrandingPatch): Promise<Branding>
   applications(): Promise<Application[]>
@@ -557,6 +685,8 @@ export const ROUTES = {
   start: (provider: string) => `/api/connections/${encodeURIComponent(provider)}/start`,
   poll: '/api/connections/device/poll',
   models: '/api/models',
+  usage: (days: number) => `/api/usage?days=${days}`,
+  usageLimits: '/api/usage/limits',
   branding: '/api/branding',
   applications: '/api/applications',
   application: (id: string) => `/api/applications/${encodeURIComponent(id)}`,

@@ -45,13 +45,14 @@ impl SignIn for NeedsPort {
     fn sign_in(
         &self,
         provider: ModelProvider,
+        _back: Option<&str>,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, ProviderError> {
         if self.0.holder(PORT).is_some() {
             return Err(ProviderError::PortInUse(PORT));
         }
-        FakeSignIn(Ok(())).sign_in(provider, stop, open)
+        FakeSignIn(Ok(())).sign_in(provider, None, stop, open)
     }
 }
 
@@ -64,6 +65,7 @@ impl SignIn for WaitsOnThePortFirst {
     fn sign_in(
         &self,
         provider: ModelProvider,
+        _back: Option<&str>,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, ProviderError> {
@@ -71,7 +73,7 @@ impl SignIn for WaitsOnThePortFirst {
             return Err(ProviderError::PortInUse(PORT));
         }
         if self.earlier.fetch_add(1, Ordering::SeqCst) > 0 {
-            return FakeSignIn(Ok(())).sign_in(provider, stop, open);
+            return FakeSignIn(Ok(())).sign_in(provider, None, stop, open);
         }
         *self.ports.holder.lock().expect("holder") = Some(PortHolder { pid: std::process::id(), app: "this".into() });
         open("https://auth.test/never-answered".into(), None);

@@ -19,6 +19,7 @@ fn stored(web: &str) -> Arc<Store> {
             directory: web.into(),
             run: "bun dev".into(),
             verify: vec!["bun test".into()],
+            e2e: vec!["npx playwright test".into()],
         }],
     };
     store.save_application(&application).expect("saved");
