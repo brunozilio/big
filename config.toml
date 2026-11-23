@@ -4,7 +4,7 @@ company = "brunozilio"
 author = "brunozilio"
 
 [connectors]
-github_client_id = ""
+github_client_id = "178c6fc778ccc68e1d6a"
 atlassian_client_id = ""
 atlassian_client_secret = ""
 oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
