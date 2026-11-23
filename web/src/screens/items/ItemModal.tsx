@@ -8,7 +8,7 @@ import { BlockContext } from '@/blocks/context'
 import { BlockView, fillsPanel } from '@/blocks/registry'
 import { ChatView } from '@/chat/ChatView'
 import { PlanTarget, type PlanDestination } from '@/chat/PlanCard'
-import { IconButton } from '@/ui/button'
+import { Button, IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Card, Spinner } from '@/ui/display'
 import { SegmentedControl } from '@/ui/form'
@@ -182,6 +182,14 @@ function StepContent({ it, step }: { it: Item; step: string }) {
       </BlockContext.Provider>
     )
   }
+  if (current.blocks.length === 0) {
+    return (
+      <Card className="scrollbar-thin h-full overflow-y-auto p-4">
+        <RunPicker view={current} onPick={setAttempt} />
+        <EmptyStep it={it} step={step} />
+      </Card>
+    )
+  }
   return (
     <BlockContext.Provider value={host}>
       <Card className="scrollbar-thin h-full overflow-y-auto p-4">
@@ -191,5 +199,24 @@ function StepContent({ it, step }: { it: Item; step: string }) {
         </div>
       </Card>
     </BlockContext.Provider>
+  )
+}
+
+export function EmptyStep({ it, step }: { it: Item; step: string }) {
+  const [error, setError] = useState<string | null>(null)
+  const label = it.steps.find((s) => s.id === step)?.label ?? step
+  const stuck = it.impediment && it.current === step ? it.impediment.reason : null
+  if (!stuck) return <p className="text-base text-muted">Nada para mostrar nesta etapa ainda.</p>
+  return (
+    <div className="space-y-3">
+      <p className="text-base font-medium text-fg">Esta etapa parou.</p>
+      <p className="whitespace-pre-wrap break-words text-base text-fg2">{stuck}</p>
+      <p className="text-sm text-muted">Para refazer uma etapa anterior, selecione-a na lista e use o menu ⋯.</p>
+      <div className="flex flex-wrap gap-2">
+        <Button size="sm" variant="primary" icon={<Icon name="refresh" size={15} />} onClick={() => api().rerun(it.id, step).catch((e: unknown) => setError(errorText(e)))}>Rodar de novo a partir de {label}</Button>
+        {!it.doneAt && <Button size="sm" variant="secondary" icon={<Icon name="stop" size={15} />} onClick={() => api().cancel(it.id).catch((e: unknown) => setError(errorText(e)))}>Cancelar item</Button>}
+      </div>
+      {error && <p role="alert" className="text-base text-danger-fg">{error}</p>}
+    </div>
   )
 }
