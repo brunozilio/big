@@ -14,3 +14,9 @@ atlassian_client_id = ""
 atlassian_client_secret = ""
 oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
 aws_sso_region = "us-east-1"
+
+[sync]
+fast_poll_seconds = "15"
+slow_poll_seconds = "180"
+reconcile_minutes = "10"
+error_backoff_seconds = "5"

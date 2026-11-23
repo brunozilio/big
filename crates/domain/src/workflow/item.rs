@@ -95,6 +95,22 @@ pub struct HumanAnswer {
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct Observed {
+    pub id: String,
+    pub connection: String,
+    pub kind: String,
+    pub subject: String,
+    pub data: Value,
+    pub at: i64,
+}
+
+impl Observed {
+    pub fn slot(&self) -> String {
+        format!("{}@{}", self.kind, self.subject)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Ending {
     Finished { output: Value },
@@ -114,6 +130,8 @@ pub struct WorkItem {
     pub children: Vec<ChildLink>,
     pub timers: BTreeMap<String, u64>,
     pub inputs: Vec<HumanAnswer>,
+    #[serde(default)]
+    pub observed: BTreeMap<String, Observed>,
     pub ending: Option<Ending>,
     pub version: u64,
 }
@@ -141,6 +159,10 @@ impl WorkItem {
 
     pub const fn is_cancelled(&self) -> bool {
         matches!(self.ending, Some(Ending::Cancelled { .. }))
+    }
+
+    pub fn latest_observed(&self, subject: &str) -> Option<&Observed> {
+        self.observed.values().filter(|seen| seen.subject == subject).max_by_key(|seen| seen.at)
     }
 
     pub const fn is_ended(&self) -> bool {
