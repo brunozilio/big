@@ -43,19 +43,44 @@ fn read_only() -> AgentConfig {
     AgentConfig { disallowed_tools: WRITERS.map(str::to_owned).to_vec(), omit_instructions: true, ..Default::default() }
 }
 
+fn scripted(path: &str) -> Option<FoundAgent> {
+    let spec = content::value(path, "spec")?;
+    let read_only = spec["readOnly"].as_bool() == Some(true);
+    Some(FoundAgent {
+        name: spec["name"].as_str().filter(|name| !name.is_empty())?.to_owned(),
+        description: spec["description"].as_str().unwrap_or_default().to_owned(),
+        instructions: content::text(path).trim().to_owned(),
+        config: if read_only { self::read_only() } else { AgentConfig::default() },
+    })
+}
+
+fn written(path: &str) -> Option<FoundAgent> {
+    let text = content::text(path);
+    let (front, body) = crate::prompt::markdown::frontmatter(&text)
+        .inspect_err(|error| tracing::error!(%error, path, "a built-in agent has a broken header"))
+        .ok()?;
+    let config =
+        AgentConfig::parse(&front).unwrap_or_else(|error| AgentConfig { error: Some(error), ..Default::default() });
+    let stem = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".md");
+    Some(FoundAgent {
+        name: front["name"].as_str().unwrap_or(stem).trim().to_owned(),
+        description: front["description"].as_str().unwrap_or_default().trim().to_owned(),
+        instructions: body.trim().to_owned(),
+        config,
+    })
+}
+
 pub fn all() -> Vec<FoundAgent> {
     content::builtin_files("agents/")
         .into_iter()
-        .filter(|(path, _)| path.ends_with(".js"))
         .filter_map(|(path, _)| {
-            let spec = content::value(path, "spec")?;
-            let read_only = spec["readOnly"].as_bool() == Some(true);
-            Some(FoundAgent {
-                name: spec["name"].as_str().filter(|name| !name.is_empty())?.to_owned(),
-                description: spec["description"].as_str().unwrap_or_default().to_owned(),
-                instructions: content::text(path).trim().to_owned(),
-                config: if read_only { self::read_only() } else { AgentConfig::default() },
-            })
+            if path.ends_with(".js") {
+                scripted(path)
+            } else if path.ends_with(".md") {
+                written(path)
+            } else {
+                None
+            }
         })
         .collect()
 }
@@ -63,6 +88,7 @@ pub fn all() -> Vec<FoundAgent> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::PermissionMode;
 
     #[test]
     fn read_only_agents_cannot_write_and_none_names_another_product() {
@@ -76,6 +102,30 @@ mod tests {
         assert!(!explore.config.allows("Edit") && !explore.config.allows("Write") && !explore.config.allows("Agent"));
         assert!(explore.config.omit_instructions);
         assert!(named(FORK).config.allows("Edit"), "a fork keeps the parent's tools");
+    }
+
+    #[test]
+    fn the_delivery_agents_are_built_in_with_their_mode_skills_and_avatar() {
+        let named = |name: &str| all().into_iter().find(|agent| agent.name == name).expect(name);
+        for (name, label, shape, color, mode) in [
+            ("planner", "Planejador", "triangle", "#e94b9b", PermissionMode::Plan),
+            ("developer", "Desenvolvedor", "squircle", "#3b82f6", PermissionMode::Bypass),
+            ("reviewer", "Revisor", "circle", "#4fb39c", PermissionMode::Plan),
+            ("release", "Release", "cloud", "#f0a235", PermissionMode::AcceptEdits),
+        ] {
+            let agent = named(name);
+            assert_eq!(agent.config.error, None, "{name}");
+            assert_eq!(agent.config.label.as_deref(), Some(label));
+            let avatar = agent.config.avatar.as_ref().expect("avatar");
+            assert_eq!((avatar.shape.as_str(), avatar.color.as_str()), (shape, color));
+            assert_eq!(agent.config.permission, Some(mode), "{name}");
+            assert_eq!(agent.config.model, None, "{name} leaves the model on auto");
+            assert!(!agent.description.is_empty() && agent.instructions.starts_with("Você é"), "{name}");
+            assert!(agent.instructions.contains(brand::NAME) && !agent.instructions.contains("{{"), "{name}");
+        }
+        assert!(!named("planner").config.allows("Edit") && !named("reviewer").config.allows("Write"));
+        assert!(named("developer").config.allows("Edit") && named("release").config.allows("Edit"));
+        assert!(named("reviewer").config.skills.contains(&"code-review".to_owned()));
     }
 
     #[test]

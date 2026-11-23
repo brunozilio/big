@@ -262,7 +262,7 @@ export default (input) => {
 export default (input) => ({
   agents: [
     ...input.agents.filter((agent) => agent.name !== "explore"),
-    { name: "reviewer", description: "Reviews diffs", instructions: "Be strict." },
+    { name: "diff-critic", description: "Reviews diffs", instructions: "Be strict." },
   ],
   rules: [...input.rules, { path: "/team/rust.md", text: "No unwrap.", patterns: ["**/*.rs"] }],
   instructions: input.instructions.map((found) => ({ ...found, text: `${found.text} Team ACME.` })),
@@ -273,7 +273,7 @@ export default (input) => ({
             hooks.join("b-after.js"),
             r#"export const event = "Brief";
 export default (input) => ({
-  agents: input.agents.map((agent) => agent.name === "reviewer" ? { ...agent, description: "Seen by the next hook" } : agent),
+  agents: input.agents.map((agent) => agent.name === "diff-critic" ? { ...agent, description: "Seen by the next hook" } : agent),
 });"#,
         )
         .expect("hook");
@@ -285,7 +285,7 @@ export default (input) => ({
         let agents: Vec<(&str, &str)> =
             brief.agents.iter().map(|agent| (agent.name.as_str(), agent.description.as_str())).collect();
         assert!(!agents.iter().any(|(name, _)| *name == "explore"), "{agents:?}");
-        assert!(agents.contains(&("reviewer", "Seen by the next hook")), "{agents:?}");
+        assert!(agents.contains(&("diff-critic", "Seen by the next hook")), "{agents:?}");
         let rule = brief.rules.last().expect("rule");
         assert_eq!((rule.text.as_str(), rule.patterns.as_slice()), ("No unwrap.", ["**/*.rs".to_owned()].as_slice()));
         let texts: Vec<&str> = brief.instructions.iter().map(|found| found.text.as_str()).collect();

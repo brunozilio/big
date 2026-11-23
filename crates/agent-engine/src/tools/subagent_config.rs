@@ -1,5 +1,27 @@
 use domain::{Effort, ModelProvider, PermissionMode};
 use serde_json::Value;
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct Avatar {
+    pub shape: String,
+    pub color: String,
+}
+
+impl Avatar {
+    fn parse(value: &Value) -> Result<Self, String> {
+        let shape = value["shape"]
+            .as_str()
+            .filter(|shape| !shape.is_empty() && shape.chars().all(|c| c.is_ascii_lowercase() || c == '-'))
+            .ok_or("avatar.shape must be a lowercase name")?;
+        let color = value["color"]
+            .as_str()
+            .filter(|color| {
+                color.strip_prefix('#').is_some_and(|hex| hex.len() == 6 && hex.chars().all(|c| c.is_ascii_hexdigit()))
+            })
+            .ok_or("avatar.color must be a #rrggbb color")?;
+        Ok(Self { shape: shape.into(), color: color.to_ascii_lowercase() })
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct AgentConfig {
     pub tools: Option<Vec<String>>,
@@ -31,6 +53,10 @@ pub struct AgentConfig {
     pub observer_message: Option<String>,
     #[serde(default)]
     pub unobserved_subagents: bool,
+    #[serde(default)]
+    pub label: Option<String>,
+    #[serde(default)]
+    pub avatar: Option<Avatar>,
     pub error: Option<String>,
 }
 impl AgentConfig {
@@ -115,12 +141,19 @@ impl AgentConfig {
                 .as_str()
                 .filter(|s| !s.is_empty() && !s.contains(char::is_whitespace))
                 .ok_or("invalid custom-agent model")?;
-            if model != "inherit" {
+            if model != "inherit" && model != "auto" {
                 config.model = Some(model.into());
             }
         }
         if let Some(background) = value.get("background") {
             config.background = background.as_bool().ok_or("background must be boolean")?;
+        }
+        if let Some(label) = value.get("label") {
+            config.label =
+                Some(label.as_str().filter(|s| !s.trim().is_empty()).ok_or("label must be a text")?.trim().into());
+        }
+        if let Some(avatar) = value.get("avatar") {
+            config.avatar = Some(Avatar::parse(avatar)?);
         }
         config.observe(value)?;
         Ok(config)
@@ -208,6 +241,29 @@ mod tests {
         assert!(config.allows("Read") && config.allows("mcp__docs__read"));
         assert!(!config.allows("mcp__docs__write") && !config.allows("mcp__other__read"));
         assert!(config.background);
+    }
+
+    #[test]
+    fn a_label_an_avatar_and_the_auto_model_are_read_and_bad_ones_refused() {
+        let config = AgentConfig::parse(&json!({
+            "label": "Planejador",
+            "model": "auto",
+            "avatar": {"shape": "triangle", "color": "#E94B9B"}
+        }))
+        .expect("config");
+        assert_eq!(config.label.as_deref(), Some("Planejador"));
+        assert_eq!(config.model, None, "auto leaves the choice to whoever runs the agent");
+        assert_eq!(config.avatar, Some(Avatar { shape: "triangle".into(), color: "#e94b9b".into() }));
+        for value in [
+            json!({"avatar": {"shape": "triangle"}}),
+            json!({"avatar": {"shape": "triangle", "color": "pink"}}),
+            json!({"avatar": {"shape": "Round Square", "color": "#ffffff"}}),
+            json!({"avatar": "triangle"}),
+            json!({"label": ""}),
+        ] {
+            assert!(AgentConfig::parse(&value).is_err(), "{value}");
+        }
+        assert_eq!(AgentConfig::parse(&json!({})).expect("empty").avatar, None);
     }
 
     #[test]
