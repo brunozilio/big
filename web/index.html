@@ -8,6 +8,14 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap" rel="stylesheet" />
     <title></title>
+    <script>
+      (function () {
+        var theme = 'system'
+        try { theme = localStorage.getItem('theme') || 'system' } catch (e) {}
+        var dark = theme === 'dark' || (theme === 'system' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>
