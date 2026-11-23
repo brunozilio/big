@@ -7,7 +7,6 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
-tracing.workspace = true
 domain.workspace = true
 brand.workspace = true
 serde.workspace = true

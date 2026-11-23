@@ -1,9 +1,10 @@
 use domain::connection::ConnectionId;
 use serde_json::json;
 
+use super::fake::AtlassianV2;
 use super::*;
 use crate::error::ErrorClass;
-use crate::http::{FakeHttp, HttpResponse, Method};
+use crate::http::{FakeHttp, Method};
 use crate::idempotency;
 
 const MCP: &str = "/v2/mcp";
@@ -13,26 +14,12 @@ fn creds() -> Credentials {
     Credentials::new(&ConnectionId::from("jira1"), "at", settings)
 }
 
-fn session(results: &[Value]) -> FakeHttp {
-    let init = HttpResponse::new(200, r#"{"jsonrpc":"2.0","id":1,"result":{}}"#).with_header("mcp-session-id", "s1");
-    let mut http = FakeHttp::new().respond(Method::Post, MCP, init).once(Method::Post, MCP, 202, "");
-    for (index, result) in results.iter().enumerate() {
-        let content = json!({ "content": [{ "type": "text", "text": result.to_string() }] });
-        let answer = json!({ "jsonrpc": "2.0", "id": index + 2, "result": content });
-        http = http.once(Method::Post, MCP, 200, &answer.to_string());
-    }
-    http
+fn session(results: &[Value]) -> AtlassianV2 {
+    AtlassianV2::new(results)
 }
 
-fn structured(results: &[Value]) -> FakeHttp {
-    let init = HttpResponse::new(200, r#"{"jsonrpc":"2.0","id":1,"result":{}}"#).with_header("mcp-session-id", "s1");
-    let mut http = FakeHttp::new().respond(Method::Post, MCP, init).once(Method::Post, MCP, 202, "");
-    for (index, result) in results.iter().enumerate() {
-        let content = json!({ "content": [{ "type": "text", "text": "ok" }], "structuredContent": result });
-        let answer = json!({ "jsonrpc": "2.0", "id": index + 2, "result": content });
-        http = http.once(Method::Post, MCP, 200, &answer.to_string());
-    }
-    http
+fn structured(results: &[Value]) -> AtlassianV2 {
+    AtlassianV2::structured(results)
 }
 
 fn real_sites() -> Value {
@@ -42,18 +29,11 @@ fn real_sites() -> Value {
     }])
 }
 
-fn tool_calls(http: &FakeHttp) -> Vec<(String, Value)> {
-    http.sent()
-        .iter()
-        .map(|request| request.body_json())
-        .filter(|body| body["method"] == "tools/call")
-        .map(|body| {
-            (body["params"]["name"].as_str().unwrap_or_default().to_owned(), body["params"]["arguments"].clone())
-        })
-        .collect()
+fn tool_calls(http: &AtlassianV2) -> Vec<(String, Value)> {
+    http.calls()
 }
 
-async fn call(http: &FakeHttp, action: &str, args: Value, key: &str) -> Result<Value, ActionError> {
+async fn call(http: &dyn Http, action: &str, args: Value, key: &str) -> Result<Value, ActionError> {
     let answer = Jira.call(http, &creds(), action, &args, key).await;
     if let Ok(value) = &answer {
         let spec = Jira.descriptor().action(action).cloned().unwrap_or_else(|| panic!("no {action}"));
@@ -86,7 +66,8 @@ async fn the_sites_come_from_the_accessible_resources_with_their_projects() {
     assert_eq!(options[0].settings["cloud_id"], "c1");
     assert_eq!(options[0].settings["detail"], "Projetos APP, OPS");
     assert_eq!(http.sent()[0].header_value("authorization"), Some("Bearer at"));
-    assert_eq!(tool_calls(&http)[1].1["cloudId"], "c1");
+    let (name, sent) = tool_calls(&http)[1].clone();
+    assert_eq!((name.as_str(), &sent["cloudId"], &sent["name"]), ("executeRead", &json!("c1"), &json!("listJiraProjects")));
 }
 
 #[tokio::test]
@@ -119,11 +100,11 @@ async fn create_issue_creates_with_the_key_as_a_label() {
     );
     let (name, sent) = tool_calls(&http)[1].clone();
     assert_eq!(name, "createJiraIssue");
-    assert_eq!(sent["additional_fields"]["labels"], json!(["x", idempotency::label("k2")]));
-    assert_eq!(sent["issueTypeName"], "Subtask");
+    assert_eq!(sent["labels"], json!(["x", idempotency::label("k2")]));
+    assert_eq!(sent["issueType"], "Subtask");
     assert_eq!(sent["parent"], "BIG-1");
-    assert_eq!(sent["contentFormat"], "adf");
-    assert_eq!(sent["description"]["type"], "doc");
+    assert_eq!(sent["contentFormat"], "markdown");
+    assert_eq!(sent["description"], "**b**");
 }
 
 #[tokio::test]
@@ -138,14 +119,19 @@ async fn transition_to_the_current_status_is_already_done() {
 async fn transition_picks_the_transition_that_reaches_the_named_status() {
     let http = session(&[
         json!({"fields": {"status": {"name": "A fazer"}}}),
-        json!({"transitions": [{"id": "11", "to": {"name": "Fazendo"}}, {"id": "31", "to": {"name": "Feito"}}]}),
-        json!(""),
+        json!({"transitions": [{"id": "11", "to": {"name": "Fazendo"}}, {"id": 31, "to": {"name": "Feito"}}]}),
+        json!({"key": "BIG-1", "status": {"name": "Feito"}}),
     ]);
     let answer = call(&http, actions::TRANSITION, json!({"issue": "BIG-1", "status": "Feito"}), "k").await;
     assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Feito", "changed": true})));
-    let (name, sent) = tool_calls(&http)[2].clone();
+    let calls = tool_calls(&http);
+    assert_eq!(calls[1].0, "executeRead");
+    assert_eq!(calls[1].1["name"], "listJiraIssueTransitions");
+    assert_eq!(calls[1].1["inputs"], json!({"issueIdOrKey": "BIG-1"}));
+    let (name, sent) = calls[2].clone();
     assert_eq!(name, "transitionJiraIssue");
-    assert_eq!(sent["transition"], json!({"id": "31"}));
+    assert_eq!(sent["transitionId"], "31");
+    assert_eq!(sent["cloudId"], "cloud1");
 }
 
 #[tokio::test]
@@ -158,7 +144,7 @@ async fn transition_without_a_path_is_permanent() {
 #[tokio::test]
 async fn a_comment_already_posted_is_not_posted_again() {
     let known = json!({"id": "7", "body": "Oi!", "author": {"accountId": "a1", "displayName": "Ana"}, "created": "2024-01-01T00:00:00.000+0000"});
-    let http = session(&[json!({"fields": {"comment": {"comments": [known]}}})]);
+    let http = session(&[json!({"comments": [known], "isLast": true, "total": 1})]);
     let answer = call(&http, actions::COMMENT, json!({"issue": "BIG-1", "body": "oi"}), "k3").await;
     assert_eq!(
         answer,
@@ -169,23 +155,26 @@ async fn a_comment_already_posted_is_not_posted_again() {
 }
 
 #[tokio::test]
-async fn a_new_comment_is_sent_as_a_document() {
-    let http = session(&[json!({"fields": {"comment": {"comments": []}}}), json!({"id": "8"})]);
+async fn a_new_comment_is_sent_as_markdown() {
+    let http = session(&[json!({"comments": [], "isLast": true}), json!({"commentId": "8", "body": "oi"})]);
     let answer = call(&http, actions::COMMENT, json!({"issue": "BIG-1", "body": "oi"}), "k4").await;
     assert_eq!(answer, Ok(json!({"id": "8", "author": null, "body": "oi", "at": "", "created": true})));
-    let (name, sent) = tool_calls(&http)[1].clone();
-    assert_eq!(name, "addCommentToJiraIssue");
-    let body: Value = serde_json::from_str(sent["commentBody"].as_str().unwrap_or_default()).unwrap_or_default();
-    assert_eq!(body["content"][0]["content"][0]["text"], "oi");
+    let calls = tool_calls(&http);
+    assert_eq!(calls[0].0, "listJiraIssueComments");
+    let (name, sent) = calls[1].clone();
+    assert_eq!(name, "addOrEditJiraIssueComment");
+    assert_eq!((&sent["commentBody"], &sent["contentFormat"]), (&json!("oi"), &json!("markdown")));
 }
 
 #[tokio::test]
 async fn set_impediment_flags_the_issue_and_explains_why() {
-    let http = session(&[json!({}), json!({"fields": {"comment": {"comments": []}}}), json!({"id": "9"})]);
+    let http = session(&[json!({}), json!({"comments": []}), json!({"commentId": "9"})]);
     let on =
         call(&http, actions::SET_IMPEDIMENT, json!({"issue": "BIG-1", "on": true, "reason": "falta acesso"}), "k5")
             .await;
     assert_eq!(on, Ok(json!({"on": true, "reason": "falta acesso"})));
+    let names: Vec<String> = tool_calls(&http).into_iter().map(|(name, _)| name).collect();
+    assert_eq!(names, ["editJiraIssue", "listJiraIssueComments", "addOrEditJiraIssueComment"]);
     assert_eq!(tool_calls(&http)[0].1["fields"], json!({DEFAULT_FLAG_FIELD: [{"value": "Impediment"}]}));
     let http = session(&[json!({})]);
     let off = call(&http, actions::SET_IMPEDIMENT, json!({"issue": "BIG-1", "on": false}), "k6").await;
@@ -204,6 +193,7 @@ async fn statuses_are_the_distinct_statuses_seen_and_reachable() {
     let names = listed.map(|l| l.as_array().map(|s| s.iter().map(|x| x["name"].clone()).collect::<Vec<_>>()));
     assert_eq!(names, Ok(Some(vec![json!("A fazer"), json!("Feito")])));
     assert!(tool_calls(&http)[0].1["jql"].as_str().is_some_and(|jql| jql.starts_with("project = \"BIG\"")));
+    assert_eq!(tool_calls(&http)[1].1["name"], "listJiraIssueTransitions");
 }
 
 #[tokio::test]
@@ -233,6 +223,7 @@ async fn an_issue_reads_description_subtasks_comments_and_the_flag() {
     assert_eq!(read["assignee"], json!({"id": "u1", "name": "Bia"}));
     assert_eq!(read["attachments"][0]["name"], "a.png");
     assert_eq!(tool_calls(&http)[0].1["responseContentFormat"], "markdown");
+    assert_eq!(tool_calls(&http)[0].1["view"], "full");
 }
 
 #[tokio::test]
@@ -372,10 +363,11 @@ async fn projects_list_the_visible_projects_of_the_site_and_page_through_them() 
     assert_eq!(projects.len(), 51);
     assert_eq!(projects[50], json!({"id": "99", "key": "OPS", "name": "Operações", "avatar": "https://a/ops.png"}));
     let calls = tool_calls(&http);
-    assert_eq!(calls[0].0, "getVisibleJiraProjects");
+    assert_eq!(calls[0].0, "executeRead");
+    assert_eq!(calls[0].1["name"], "listJiraProjects");
     assert_eq!(calls[0].1["cloudId"], "cloud1");
-    assert_eq!(calls[0].1["searchString"], "op");
-    assert_eq!(calls[1].1["startAt"], 50);
+    assert_eq!(calls[0].1["inputs"]["query"], "op");
+    assert_eq!(calls[1].1["inputs"]["startAt"], 50);
 }
 
 #[tokio::test]
@@ -384,4 +376,71 @@ async fn a_created_issue_goes_to_the_chosen_project_and_reads_a_wrapped_answer()
     let answer = call(&http, actions::CREATE_ISSUE, json!({"project": "OPS", "title": "T"}), "k").await;
     assert_eq!(answer.map(|a| a["ref"].clone()), Ok(json!("OPS-3")));
     assert_eq!(tool_calls(&http)[1].1["projectKey"], "OPS");
+}
+#[tokio::test]
+async fn the_fake_server_refuses_the_tools_only_the_first_version_had() {
+    let http = session(&[json!({})]);
+    let mcp = McpClient::connect(&http, brand::connectors::ATLASSIAN_MCP_URL, "at").await;
+    let Ok(mcp) = mcp else { panic!("{mcp:?}") };
+    for gone in ["getVisibleJiraProjects", "getTransitionsForJiraIssue", "addCommentToJiraIssue"] {
+        let refused = mcp.call(gone, json!({"cloudId": "c1"})).await;
+        assert!(refused.as_ref().is_err_and(|e| e.message.contains("Unknown tool")), "{gone}: {refused:?}");
+    }
+    let refused = mcp.call("executeRead", json!({"cloudId": "c1", "name": "getVisibleJiraProjects"})).await;
+    assert!(refused.is_err());
+    let siteless = mcp.call("getJiraIssue", json!({"issueIdOrKey": "BIG-1"})).await;
+    assert!(siteless.is_err());
+}
+
+#[tokio::test]
+async fn projects_are_found_through_discover_when_the_operation_has_another_name() {
+    let discovered = json!(
+        "Matches:\n1. getJiraProject (executeRead): get one Jira project\n   inputs: projectIdOrKey\n\
+        2. searchJiraProjects (executeRead): search the Jira projects visible to the user\n   inputs: query, startAt, maxResults"
+    );
+    let page = json!({"values": [{"id": "1", "key": "APP", "name": "App"}], "isLast": true});
+    let http = session(&[discovered, page]).knowing(&["listJiraIssueTransitions", "searchJiraProjects"]);
+    let answer = call(&http, actions::PROJECTS, json!({}), "").await;
+    let Ok(Value::Array(projects)) = answer else { panic!("{answer:?}") };
+    assert_eq!(projects[0]["key"], "APP");
+    let calls = tool_calls(&http);
+    let names: Vec<(&str, &str)> =
+        calls.iter().map(|(tool, sent)| (tool.as_str(), sent["name"].as_str().unwrap_or_default())).collect();
+    assert_eq!(names, [("executeRead", "listJiraProjects"), ("discover", ""), ("executeRead", "searchJiraProjects")]);
+    assert_eq!(calls[1].1["query"], "list jira projects visible to the user");
+}
+
+#[tokio::test]
+async fn transitions_are_found_through_discover_and_an_unknown_answer_keeps_the_first_error() {
+    let discovered = json!({"operations": [
+        {"name": "getJiraIssue", "summary": "Get an issue"},
+        {"name": "getJiraIssueTransitions", "tool": "executeRead", "summary": "Transitions available for an issue"}
+    ]});
+    let http = session(&[
+        json!({"fields": {"status": {"name": "A fazer"}}}),
+        discovered,
+        json!({"result": {"transitions": [{"id": "5", "name": "Concluir", "to": {"name": "Feito"}}]}}),
+        json!({"key": "BIG-1"}),
+    ])
+    .knowing(&["listJiraProjects", "getJiraIssueTransitions"]);
+    let answer = call(&http, actions::TRANSITION, json!({"issue": "BIG-1", "status": "Concluir"}), "k").await;
+    assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Feito", "changed": true})));
+    let calls = tool_calls(&http);
+    assert_eq!(calls[3].1["name"], "getJiraIssueTransitions");
+    assert_eq!(calls[4].1["transitionId"], "5");
+    let http = session(&[json!({"fields": {"status": {"name": "A fazer"}}}), json!("nothing matched")]).knowing(&[]);
+    let answer = call(&http, actions::TRANSITION, json!({"issue": "BIG-1", "status": "Feito"}), "k").await;
+    assert!(answer.is_err_and(|e| e.message.contains("Unknown operation")));
+}
+
+#[test]
+fn an_operation_is_picked_from_what_discover_lists() {
+    let text =
+        json!("- getJiraProject: one project\n- listJiraProjects: projects visible to you\n  inputs: issueIdOrKey");
+    assert_eq!(operations::discovered(&text, "project", "x"), Some("listJiraProjects".to_owned()));
+    assert_eq!(operations::discovered(&text, "project", "listJiraProjects"), Some("getJiraProject".to_owned()));
+    assert_eq!(operations::discovered(&json!("transitionId is required"), "transition", "x"), None);
+    let nested = json!({"data": {"projects": [{"key": "A"}], "isLast": true}});
+    assert_eq!(operations::found_list(&nested, &["values", "projects"]), vec![json!({"key": "A"})]);
+    assert!(operations::last_page(&nested));
 }

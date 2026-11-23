@@ -110,7 +110,7 @@ impl EventSource for JiraEvents {
             for found in &issues {
                 let arguments = json!({
                     "issueIdOrKey": text_of(found, "/key"), "fields": DETAIL, "expand": "changelog",
-                    "responseContentFormat": "markdown",
+                    "view": "full", "responseContentFormat": "markdown",
                 });
                 collector.issue(&api.tool("getJiraIssue", arguments).await?);
             }
