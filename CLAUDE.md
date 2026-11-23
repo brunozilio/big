@@ -8,6 +8,7 @@
 - O nome do produto vem só do `config.toml`, pelo crate `brand`. Nenhum código, texto ou rota escreve o nome.
 - Provedores (Jira, GitHub, AWS, IA) nunca são acoplados: tudo passa por interfaces comuns no crate `connectors`.
 - Configuração fica no `config.toml`, não em variáveis de ambiente.
+- Nunca inicie, pare ou reinicie o servidor do app (`big`) sem o usuário pedir.
 - O plano completo está em `/Users/bruno/.claude/plans/esse-um-projeto-gentle-hummingbird-of-25226a84-897b-43cb-a1a4-ba0d2e6a2449.md`.
 
 ## Verificação
