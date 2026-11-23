@@ -199,7 +199,7 @@ impl Fake {
         if has("merge") {
             return json!({ "action": "merge", "values": { "method": "squash" }, "by": "ana" });
         }
-        if offers("approve_cases") {
+        if view.iter().any(|block| block["approve"] == "approve_cases") {
             return json!({ "action": "approve_cases", "values": {}, "by": "ana" });
         }
         if offers("approve_deploy") {
@@ -912,11 +912,9 @@ fn test_cases_are_written_reviewed_by_a_person_and_created_linked_to_the_issue()
     let mut fake = Fake::default();
     let mut answers = 0;
     let (result, asked) = drive(&default_workflow(), &item(Value::Null), |command| {
-        let offers = command["args"]["view"].as_array().is_some_and(|view| {
-            view.iter().any(|block| {
-                block["buttons"].as_array().is_some_and(|all| all.iter().any(|b| b["id"] == "approve_cases"))
-            })
-        });
+        let offers = command["args"]["view"]
+            .as_array()
+            .is_some_and(|view| view.iter().any(|block| block["approve"] == "approve_cases"));
         if command["kind"] == "wait.human" && offers {
             answers += 1;
             if answers == 1 {

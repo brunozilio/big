@@ -66,7 +66,7 @@ export type Block =
   | { type: "pipeline"; run: string }
   | { type: "merge"; pr: string; methods: string[] }
   | { type: "markdown"; text: string }
-  | { type: "cases"; cases: CaseBlockEntry[] }
+  | { type: "cases"; cases: CaseBlockEntry[]; session: string | null; approve: string | null; changes: string | null }
   | { type: "logs"; text: string }
   | { type: "logs"; commands: LogCommand[] }
   | { type: "form"; fields: FormField[] }
@@ -90,7 +90,7 @@ export interface CaseBlockEntry {
   ref?: string;
   url?: string | null;
 }
-export declare function testCases(cases: CaseBlockEntry[]): Block;
+export declare function testCases(cases: CaseBlockEntry[], options?: { session?: string; approve?: string; changes?: string }): Block;
 export interface LogCommand {
   name: string;
   state: "done" | "failed" | "running" | "todo";

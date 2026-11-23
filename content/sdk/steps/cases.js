@@ -1,9 +1,11 @@
-import { step, actions, chat, form, testCases } from "sdk";
+import { step, testCases } from "sdk";
 import { agentOptions, defined, effects, inLanguage, issueOf, object, planOf, waitOptions } from "./context.js";
 
 const KINDS = { api: "API", ui: "Tela" };
 
 const APPROVE = "approve_cases";
+
+const CHANGES = "change_cases";
 
 function steps(found) {
   return (Array.isArray(found) ? found : [])
@@ -79,12 +81,7 @@ async function drafted(ctx, opts, issue, session, feedback) {
 
 async function judged(ctx, opts, draft) {
   if (opts.approve === "auto") return { approved: true };
-  const view = [
-    testCases(draft.cases),
-    chat(draft.session),
-    form([{ id: "changes", label: "O que mudar nos casos", kind: "textarea" }]),
-    actions([{ id: APPROVE, label: "Criar casos" }]),
-  ];
+  const view = [testCases(draft.cases, defined({ session: draft.session, approve: APPROVE, changes: CHANGES }))];
   for (;;) {
     const answer = await ctx.waitHuman(view, waitOptions(opts));
     if (answer.action === APPROVE) return { approved: true, by: answer.by ?? null };
@@ -132,7 +129,7 @@ export default step({
   icon: "hNoteEdit",
   needs: "tests",
   doing: "Escrevendo casos de teste",
-  view: (s) => [...(Array.isArray(s.cases) ? [testCases(s.cases)] : []), ...(s.session ? [chat(s.session)] : [])],
+  view: (s) => (Array.isArray(s.cases) ? [testCases(s.cases, defined({ session: s.session }))] : []),
   async run(ctx, opts) {
     const issue = issueOf(ctx, opts);
     let draft = await drafted(ctx, opts, issue, undefined, undefined);

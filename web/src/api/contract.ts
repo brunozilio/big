@@ -217,7 +217,7 @@ export type Block =
   | { type: 'pipeline'; connection: string; run: string; gate: { approve: string; reject: string } | null }
   | { type: 'merge'; connection: string; change: string; ready: boolean; methods: MergeMethod[]; action: string; checks: DetailRow[]; result: DetailRow[] | null }
   | { type: 'markdown'; text: string; muted?: boolean }
-  | { type: 'cases'; cases: TestCaseView[] }
+  | { type: 'cases'; cases: TestCaseView[]; session: string | null; editable: boolean; approve: string | null; changes: string | null }
   | { type: 'logs'; commands: Command[] }
   | { type: 'form'; title?: string; fields: FormField[]; submit: { action: string; label: string } }
   | { type: 'actions'; buttons: ActionButton[] }

@@ -47,7 +47,13 @@ export const review = (pr, options) => block("review", options && options.sessio
 export const pipeline = (run) => block("pipeline", { run });
 export const merge = (pr, methods) => block("merge", { pr, methods: methods || [] });
 export const markdown = (text) => block("markdown", { text: String(text === undefined ? "" : text) });
-export const testCases = (list) => block("cases", { cases: Array.isArray(list) ? list : [] });
+export const testCases = (list, options) =>
+  block("cases", {
+    cases: Array.isArray(list) ? list : [],
+    session: (options && options.session) || null,
+    approve: (options && options.approve) || null,
+    changes: (options && options.changes) || null,
+  });
 export const logs = (input) =>
   Array.isArray(input) ? block("logs", { commands: input }) : block("logs", { text: String(input === undefined ? "" : input) });
 export const form = (fields) => block("form", { fields: fields || [] });

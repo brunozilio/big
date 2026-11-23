@@ -65,7 +65,7 @@ const blockChecks: Record<BlockType, (b: Shape) => boolean> = {
   pipeline: (b) => str(b.connection) && str(b.run) && (b.gate === null || (obj(b.gate) && str(b.gate.approve) && str(b.gate.reject))),
   merge: (b) => str(b.connection) && str(b.change) && bool(b.ready) && Array.isArray(b.methods) && str(b.action) && Array.isArray(b.checks),
   markdown: (b) => str(b.text),
-  cases: (b) => arr(b.cases, isCase),
+  cases: (b) => arr(b.cases, isCase) && strOrNull(b.session) && bool(b.editable) && strOrNull(b.approve) && strOrNull(b.changes),
   logs: (b) => Array.isArray(b.commands),
   form: (b) => Array.isArray(b.fields) && obj(b.submit) && str(b.submit.action),
   actions: (b) => arr(b.buttons, (x): x is Shape => obj(x) && str(x.action) && str(x.label)),

@@ -23,9 +23,9 @@ export interface Note {
 
 const me: Person = { id: 'you', name: 'Você', avatar: null, you: true }
 
-const noteComment = (n: Note): Comment => ({ id: n.id, author: me, body: n.body, at: new Date(now()).toISOString(), kind: 'comment' })
+export const noteComment = (n: Note): Comment => ({ id: n.id, author: me, body: n.body, at: new Date(now()).toISOString(), kind: 'comment' })
 
-function NoteForm({ onSave, onCancel }: { onSave: (body: string) => void; onCancel: () => void }) {
+export function NoteForm({ onSave, onCancel }: { onSave: (body: string) => void; onCancel: () => void }) {
   const [text, setText] = useState('')
   return (
     <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={tween} className="mx-3 my-2 font-sans">

@@ -7,7 +7,7 @@ import { BlockView, registry } from '../src/blocks/registry'
 
 afterEach(cleanup)
 
-const TYPES: BlockType[] = ['chat', 'issue', 'change', 'review', 'pipeline', 'merge', 'markdown', 'logs', 'form', 'actions']
+const TYPES: BlockType[] = ['chat', 'issue', 'change', 'review', 'pipeline', 'merge', 'markdown', 'cases', 'logs', 'form', 'actions']
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -38,5 +38,14 @@ describe('registro de blocos', () => {
     const names = /jira|github|atlassian|aws|gitlab|linear/i
     const offenders = files(join(import.meta.dir, '../src/blocks')).filter((f) => names.test(readFileSync(f, 'utf8')))
     expect(offenders).toEqual([])
+  })
+})
+
+describe('revisão de casos de teste', () => {
+  test('comentários nos passos viram o pedido de mudança para o testador', async () => {
+    const { feedback } = await import('../src/blocks/cases')
+    const cases = [{ title: 'Criar cliente', kind: 'api' as const, objective: 'Persiste', precondition: null, ref: null, url: null, steps: [{ action: 'Enviar', data: null, expected: '201' }] }]
+    const text = feedback(cases, 'Faltou tela', [{ id: 'n', file: '0', line: 0, body: 'checar Location' }, { id: 'm', file: '0', line: -2, body: 'mais claro' }])
+    expect(text).toBe('Faltou tela\n\n### 1. Criar cliente\n- Passo 1 (Enviar): checar Location\n- Objetivo (Persiste): mais claro')
   })
 })

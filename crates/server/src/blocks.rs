@@ -71,7 +71,7 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
             "action": MERGE, "checks": [], "result": null,
         }),
         "markdown" => json!({ "type": "markdown", "text": text(&raw["text"]), "muted": raw["muted"] == true }),
-        "cases" => cases(raw),
+        "cases" => cases(place, raw),
         "logs" => logs(raw),
         "form" => json!({
             "type": "form",
@@ -111,9 +111,15 @@ fn case(raw: &Value) -> Value {
     })
 }
 
-fn cases(raw: &Value) -> Value {
+fn cases(place: &Place<'_>, raw: &Value) -> Value {
     let all = raw["cases"].as_array().map(|all| all.iter().map(case).collect::<Vec<_>>()).unwrap_or_default();
-    json!({ "type": "cases", "cases": all })
+    let approve = optional(&raw["approve"]);
+    let changes = optional(&raw["changes"]);
+    let editable = place.waiting && !approve.is_null();
+    json!({
+        "type": "cases", "cases": all, "session": optional(&raw["session"]),
+        "editable": editable, "approve": approve, "changes": changes,
+    })
 }
 
 fn logs(raw: &Value) -> Value {
@@ -198,6 +204,7 @@ mod tests {
             "steps": [{ "action": "Enviar", "data": "corpo", "expected": "201" }, { "action": "Ver", "expected": "ok" }],
         }] });
         let blocks = normalized(&place, &raw);
+        assert_eq!(blocks[0]["editable"], false);
         let first = &blocks[0]["cases"][0];
         assert_eq!(first["kind"], "ui");
         assert_eq!(first["precondition"], Value::Null);
