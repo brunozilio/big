@@ -25,6 +25,7 @@ console = { path = "crates/console" }
 page = { path = "crates/page" }
 tunnel = { path = "crates/tunnel" }
 relay = { path = "crates/relay" }
+store = { path = "crates/store" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
