@@ -148,6 +148,7 @@ pub struct EngineState {
     pub requests: Mutex<Vec<PromptRequest>>,
     pub hold: AtomicBool,
     pub ask: AtomicBool,
+    pub limited: AtomicBool,
     pub write: Mutex<Option<String>>,
     pub answers: Mutex<Vec<(AskId, Decision)>>,
 }
@@ -237,6 +238,11 @@ impl AgentEngine for FakeEngine {
                 while !stop.load(Ordering::SeqCst) && answers.recv_timeout(Duration::from_millis(10)).is_err() {}
             }
             if stop.load(Ordering::SeqCst) {
+                return;
+            }
+            if state.limited.load(Ordering::SeqCst) {
+                sink.emit(run, EngineEvent::Failure(domain::FailureKind::UsageLimit { resets_at: None }));
+                sink.emit(run, EngineEvent::Failed("HTTP 400: You have reached the limit.".into()));
                 return;
             }
             if request.prompt.text.contains("chame a equipe") {

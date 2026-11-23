@@ -277,6 +277,19 @@ async fn a_step_that_skips_itself_shows_as_skipped_and_the_next_one_runs() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn an_ai_provider_out_of_quota_stops_the_item_with_the_reason_instead_of_failing_the_step() {
+    let world = World::new();
+    world.engine.state.limited.store(true, Ordering::SeqCst);
+    world.workflow("limited", "import { workflow } from \"sdk\";\nexport default workflow({ name: \"limited\", async run(ctx) { return (await ctx.agent(\"worker\", \"faça\")).text; } });");
+    let kernel = world.start().await;
+    let id = kernel.create_item("limited", json!({})).expect("item");
+    let item = until(&kernel, &id, |item| item.impediment.is_some()).await;
+    assert!(!item.is_ended());
+    let reason = item.impediment.and_then(|found| found.reason).unwrap_or_default();
+    assert_eq!(reason, "o provedor de IA atingiu o limite de uso: HTTP 400: You have reached the limit.");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_step_tried_again_after_a_failure_is_the_current_one() {
     let world = World::new();
     world.provider.then("tracker.issue", Reply::Fail(ActionError::permanent("404")));

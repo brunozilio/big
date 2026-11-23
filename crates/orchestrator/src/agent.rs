@@ -8,7 +8,7 @@ use domain::workflow::{ItemId, WorkflowEvent};
 use agent_engine::tools::builtin::schedules;
 use agent_engine::tools::clients::{self, Waiting};
 use domain::{
-    AgentAsk, AskKind, EngineEvent, MainAgentSpec, ModelOption, PermissionMode, Prompt, PromptRequest, RunId, SessionCommand,
+    AgentAsk, AskKind, EngineEvent, FailureKind, MainAgentSpec, ModelOption, PermissionMode, Prompt, PromptRequest, RunId, SessionCommand,
     SessionId,
 };
 use serde_json::{Value, json};
@@ -29,6 +29,16 @@ pub const WAITING_ANSWER: &str = "o agente espera uma resposta";
 pub enum Failure {
     Class(ErrorClass, String),
     Blocked(String),
+}
+
+pub const USAGE_LIMIT: &str = "o provedor de IA atingiu o limite de uso: ";
+
+fn failed(kind: Option<FailureKind>, message: String) -> Failure {
+    match kind {
+        Some(FailureKind::UsageLimit { .. }) => Failure::Blocked(format!("{USAGE_LIMIT}{message}")),
+        Some(FailureKind::Unavailable) => Failure::Class(ErrorClass::Transient, message),
+        _ => Failure::permanent(message),
+    }
 }
 
 impl Failure {
@@ -148,6 +158,7 @@ struct Collected {
     output: Value,
     checkpoint: Option<u32>,
     plan: Option<String>,
+    failure: Option<FailureKind>,
 }
 
 impl Collected {
@@ -358,8 +369,8 @@ impl AgentEffect<'_> {
                 }
             }
             EngineEvent::Completed { .. } => return Some(Ok(())),
-            EngineEvent::Failed(message) => return Some(Err(Failure::permanent(message))),
-            EngineEvent::Failure(kind) => return Some(Err(Failure::permanent(format!("{kind:?}")))),
+            EngineEvent::Failed(message) => return Some(Err(failed(collected.failure, message))),
+            EngineEvent::Failure(kind) => collected.failure = Some(kind),
             EngineEvent::Cancelled => return Some(Err(Failure::permanent("the agent run was cancelled"))),
             _ => {}
         }
