@@ -15,7 +15,7 @@ import { SegmentedControl } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { springPop, tweenClose } from '@/ui/motion'
 import { Dialog, Menu, MenuContent, MenuItem, MenuTrigger } from '@/ui/overlay'
-import { ChangeChip, IssueKey, Node, nodeState, RowRight } from './parts'
+import { ChangeChip, IssueKey, Node, nodeState, RowRight, stateLabel } from './parts'
 
 export function followed(before: string | null, now: string | null, viewing: string | null): string | null {
   return before && now && now !== before && viewing === before ? now : null
@@ -112,7 +112,17 @@ export function dockedChat(blocks: Block[]) {
   return { chat: first, rest }
 }
 
-const attemptTone = (st: StepState) => (st === 'failed' ? 'text-danger' : st === 'passed' ? 'text-success' : 'text-info')
+const ATTEMPT_GLYPH: Partial<Record<StepState, 'close' | 'check' | 'skip'>> = { failed: 'close', passed: 'check', skipped: 'skip' }
+const ATTEMPT_TONE: Partial<Record<StepState, string>> = { failed: 'text-danger', passed: 'text-success', skipped: 'text-faint' }
+
+export function AttemptMark({ state }: { state: StepState }) {
+  const glyph = ATTEMPT_GLYPH[state]
+  return (
+    <span className={cn('flex', ATTEMPT_TONE[state] ?? 'text-info')} aria-label={stateLabel[state]}>
+      {glyph ? <Icon name={glyph} size={12} strokeWidth={2.4} /> : <Spinner size={11} className="text-info" />}
+    </span>
+  )
+}
 
 function RunPicker({ view, onPick }: { view: StepView; onPick: (n: number | null) => void }) {
   if (view.attempts.length < 2) return null
@@ -124,7 +134,7 @@ function RunPicker({ view, onPick }: { view: StepView; onPick: (n: number | null
         size="sm"
         value={String(view.attempt)}
         onChange={(v) => onPick(Number(v) === last ? null : Number(v))}
-        options={view.attempts.map((a) => ({ value: String(a.n), label: `#${a.n}`, icon: <span className={cn('flex', attemptTone(a.state))}>{a.state === 'failed' ? <Icon name="close" size={12} strokeWidth={2.4} /> : a.state === 'passed' ? <Icon name="check" size={12} strokeWidth={2.4} /> : <Spinner size={11} className="text-info" />}</span> }))}
+        options={view.attempts.map((a) => ({ value: String(a.n), label: `#${a.n}`, icon: <AttemptMark state={a.state} /> }))}
       />
     </div>
   )

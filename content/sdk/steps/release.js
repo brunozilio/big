@@ -89,7 +89,7 @@ async function narrate(ctx, opts, runs, failed) {
 const NONE = "none";
 
 function shown(s) {
-  if (s.state === NONE) return [markdown(`Nenhum pipeline de deploy rodou para \`${s.ref ?? ""}\`. O repositório não parece ter deploy configurado; o merge já entregou a mudança.`)];
+  if (s.state === NONE) return [markdown("Nenhum pipeline de deploy configurado.")];
   const runs = (Array.isArray(s.runs) && s.runs.length > 0 ? s.runs : s.run ? [s] : []).map((run) => pipeline(run.run));
   return [...runs, ...(s.notes ? [markdown(s.notes)] : []), ...(s.session ? [chat(s.session)] : [])];
 }

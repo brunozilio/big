@@ -21,7 +21,7 @@ async function follow(ctx, opts, target, seen) {
 }
 
 function shown(run) {
-  if (run.state === NONE) return markdown(`Nenhum pipeline de CI rodou para a branch \`${run.head ?? ""}\`. O repositório não parece ter CI configurado, então a etapa seguiu sem ele.`);
+  if (run.state === NONE) return markdown("Nenhum pipeline de CI configurado.");
   return pipeline(run.run);
 }
 
