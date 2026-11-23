@@ -17,8 +17,9 @@ export function applyTheme(theme: Theme) {
 }
 
 export function useThemeSync() {
-  const theme = useStore((s) => s.branding?.theme ?? 'system')
+  const theme = useStore((s) => s.branding?.theme)
   useEffect(() => {
+    if (!theme) return
     applyTheme(theme)
     const media = globalThis.matchMedia?.('(prefers-color-scheme: dark)')
     const onChange = () => applyTheme(theme)

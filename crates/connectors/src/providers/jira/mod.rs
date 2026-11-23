@@ -208,10 +208,13 @@ impl Provider for Jira {
 
     async fn accounts(&self, http: &dyn Http, creds: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
         let mcp = McpClient::connect(http, brand::connectors::ATLASSIAN_MCP_URL, &creds.access_token).await?;
-        let sites = mcp.call("getAccessibleAtlassianResources", json!({})).await?;
+        let raw = mcp.call("getAccessibleAtlassianResources", json!({})).await?;
         let sites: Vec<Value> =
-            listed(&sites, "resources").into_iter().filter(|site| !text_of(site, "/id").is_empty()).collect();
+            listed(&raw, "resources").into_iter().filter(|site| !text_of(site, "/id").is_empty()).collect();
         if sites.is_empty() {
+            let tools = mcp.tools().await.unwrap_or_default();
+            let raw: String = raw.to_string().chars().take(2000).collect();
+            tracing::warn!(%raw, tools = %tools.join(","), "nenhum site do Jira na resposta do MCP");
             return Err(ActionError::permanent(NO_SITES));
         }
         let mut options = Vec::new();

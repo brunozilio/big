@@ -173,7 +173,6 @@ export function ModelPicker({
                               <ModelGlyph model={m} />
                               <span title={m.name} className="truncate">{m.name}</span>
                             </span>
-                            {m.description && <span className="block pl-[22px] text-xs text-muted">{m.description}</span>}
                           </ModelRow>
                         ))}
                       </div>
