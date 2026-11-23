@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '@/api'
-import type { Session, SessionEvent } from '@/api/contract'
+import type { SessionEvent } from '@/api/contract'
 import { useSession } from '@/api/store'
 import { cn } from '@/ui/cn'
 import { EmptyState, Spinner } from '@/ui/display'
@@ -82,7 +82,7 @@ export function ChatView({ sessionId, composer, dock }: { sessionId: string; com
                     </motion.div>
                   )}
                   <TurnWork live={live} started={started} ended={ended ?? started} events={turn.events} render={(e) => {
-                    const node = <EventView session={session} event={e} respond={respond} />
+                    const node = <EventView event={e} respond={respond} />
                     return <motion.div key={e.id} data-event={e.type} {...enterFor(e.id)}>{node}</motion.div>
                   }} />
                 </section>
@@ -124,7 +124,7 @@ export function ChatView({ sessionId, composer, dock }: { sessionId: string; com
   )
 }
 
-export function EventView({ session, event, respond }: { session: Session; event: SessionEvent; respond: Respond }) {
+export function EventView({ event, respond }: { event: SessionEvent; respond: Respond }) {
   switch (event.type) {
     case 'user':
       return <UserMessage event={event} />
