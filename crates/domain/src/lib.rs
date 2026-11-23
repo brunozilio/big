@@ -1,4 +1,5 @@
 pub mod command;
+pub mod connection;
 pub mod features;
 pub mod identity;
 pub mod knowledge;
