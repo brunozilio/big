@@ -134,6 +134,10 @@ function ApplicationStage({ draft, onChange, onFolder, projects, repos }: { draf
   )
 }
 
+function resumeProps(flow: string | null): Record<string, unknown> {
+  return flow ? { resume: flow } : {}
+}
+
 export function stageOf(provider: string | null, providers: { key: string; ai?: boolean }[]): Stage {
   return providers.find((p) => p.key === provider)?.ai ? 'ai' : 'connections'
 }
@@ -221,7 +225,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
           </div>
         </div>
       </div>
-      <ConnectDialog provider={connecting} resume={flow} onClose={() => {
+      <ConnectDialog provider={connecting} {...resumeProps(flow)} onClose={() => {
         setConnecting(null)
         setFlow(null)
         onResumed?.()

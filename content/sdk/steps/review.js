@@ -1,4 +1,4 @@
-import { step, actions, chat, markdown, review as changes } from "sdk";
+import { step, actions, markdown, review as changes } from "sdk";
 import { agentOptions, codeOptions, defined, effects, inLanguage, object, planOf, pullRequestsOf, waitOptions } from "./context.js";
 
 const VERDICTS = ["approve", "request_changes", "comment"];
@@ -27,7 +27,11 @@ async function changesAsked(ctx, opts, pr, answer) {
 
 async function judge(ctx, opts, entry, many, session) {
   const pr = entry.pr;
-  const view = [...(many && entry.name ? [markdown(`**${entry.name}**`)] : []), changes(pr), actions(opts.actions ?? VERDICTS)];
+  const view = [
+    ...(many && entry.name ? [markdown(`**${entry.name}**`)] : []),
+    changes(pr, { session }),
+    ...(opts.actions ? [actions(opts.actions)] : []),
+  ];
   for (;;) {
     const answer = await ctx.waitHuman(view, waitOptions(opts));
     const values = object(answer.values);
@@ -49,7 +53,7 @@ export default step({
   icon: "sReview",
   needs: "code",
   doing: "Esperando review",
-  view: (s) => [...(Array.isArray(s.prs) ? s.prs : s.pr ? [s.pr] : []).map((pr) => changes(pr)), ...(s.session ? [chat(s.session)] : [])],
+  view: (s) => (Array.isArray(s.prs) ? s.prs : s.pr ? [s.pr] : []).map((pr) => changes(pr, { session: s.session })),
   async run(ctx, opts) {
     const prs = pullRequestsOf(ctx, opts);
     if (prs.length === 0) return ctx.fail({ error: "não há pull request para revisar" });

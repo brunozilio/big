@@ -278,6 +278,17 @@ fn the_ticket_goes_to_the_project_and_connection_chosen_for_the_item() {
     assert_eq!(created[0]["connection"], "c9");
 }
 
+fn shows_the_reviewer_and_asks_for_portuguese(asked: &[Value]) {
+    let has_review = |command: &&Value| command["args"]["view"].as_array().is_some_and(|view| view.iter().any(|block| block["type"] == "review"));
+    let reviewing = of_kind(asked, "wait.human").into_iter().find(has_review).expect("a review waits for a person");
+    let view = reviewing["args"]["view"].as_array().expect("view");
+    assert_eq!(view.iter().find(|block| block["type"] == "review").map(|block| &block["session"]), Some(&json!("other")));
+    assert!(view.iter().all(|block| block["type"] != "actions"), "the review block has its own buttons: {view:?}");
+    let agents = of_kind(asked, "agent");
+    let prompts: Vec<&str> = agents.iter().filter_map(|command| command["args"]["input"]["prompt"].as_str()).collect();
+    assert!(!prompts.is_empty() && prompts.iter().all(|prompt| prompt.ends_with("português do Brasil.")), "{prompts:?}");
+}
+
 #[test]
 fn the_default_workflow_delivers_an_item_end_to_end() {
     let mut fake = Fake::default();
@@ -289,9 +300,7 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     let planner = &of_kind(&asked, "agent")[0];
     assert_eq!(planner["args"]["name"], "planner");
     assert_eq!(planner["args"]["mode"], "plan");
-    let agents = of_kind(&asked, "agent");
-    let prompts: Vec<&str> = agents.iter().filter_map(|command| command["args"]["input"]["prompt"].as_str()).collect();
-    assert!(!prompts.is_empty() && prompts.iter().all(|prompt| prompt.ends_with("português do Brasil.")), "{prompts:?}");
+    shows_the_reviewer_and_asks_for_portuguese(&asked);
     let created = calls(&asked, "create_issue");
     assert_eq!(created.len(), 1);
     assert_eq!(created[0]["args"]["args"], json!({ "title": "Corrigir x", "description": "1. mudar x" }), "no format, the whole plan");
@@ -578,6 +587,7 @@ fn each_step_view_is_made_of_blocks() {
     assert_eq!(view("pr", json!({ "title": "T", "body": "B" })), json!([{ "type": "markdown", "text": "# T\n\nB" }]));
     assert_eq!(view("ci", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));
     assert_eq!(view("review", json!({ "pr": "P" })), json!([{ "type": "review", "pr": "P" }]));
+    assert_eq!(view("review", json!({ "pr": "P", "session": "r1" })), json!([{ "type": "review", "pr": "P", "session": "r1" }]));
     assert_eq!(
         view("merge", json!({ "pr": "P", "methods": ["squash"] })),
         json!([{ "type": "merge", "pr": "P", "methods": ["squash"] }])
