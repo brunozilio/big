@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import type { Item } from '@/api/contract'
 import { EmptyStep } from '@/screens/items/ItemModal'
 
@@ -18,6 +18,10 @@ describe('etapa sem conteúdo', () => {
   test('uma etapa rodando sem conteúdo diz que está em andamento', () => {
     render(<EmptyStep it={item(null, 'running')} step="pr" />)
     expect(screen.getByText('Em andamento…')).toBeTruthy()
+    cleanup()
+    const waiting = { ...item(null, 'running'), activity: { text: 'Aguardando CI', since: new Date().toISOString() } } as unknown as Item
+    render(<EmptyStep it={waiting} step="pr" />)
+    expect(screen.getByText('Aguardando CI…')).toBeTruthy()
   })
 
   test('sem impedimento avisa que ainda não há nada', () => {

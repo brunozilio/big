@@ -340,7 +340,7 @@ import { ci } from "sdk/steps";
 export default workflow({
   name: "so-ci",
   async run(ctx) {
-    const done = await ci(ctx, { ref: "big/x", patience: 3 });
+    const done = await ci(ctx, { ref: "big/x", patience: 10 });
     return { outcome: done.outcome, state: done.data.state };
   },
 });
@@ -349,8 +349,32 @@ export default workflow({
         Some("call") => Some(json!([])),
         _ => Some(Value::Null),
     });
-    assert_eq!(calls(&asked, "runs").len(), 3, "it asked three times, then gave up");
+    let runs = calls(&asked, "runs");
+    assert_eq!(runs.len(), 3, "twice for the branch, then once for the whole repository");
+    assert_eq!(runs[2]["args"]["args"].get("ref"), None, "the repository never ran any pipeline");
     assert_eq!(result["result"], json!({ "outcome": "skipped", "state": "none" }), "{result}");
+}
+
+#[test]
+fn ci_keeps_waiting_when_the_repository_has_pipelines() {
+    let text = r#"
+import { workflow } from "sdk";
+import { ci } from "sdk/steps";
+export default workflow({
+  name: "so-ci",
+  async run(ctx) {
+    const done = await ci(ctx, { ref: "big/x", patience: 4 });
+    return { outcome: done.outcome, state: done.data.state };
+  },
+});
+"#;
+    let (result, asked) = drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
+        Some("call") if command["args"]["args"].get("ref").is_none() => Some(json!([{ "ref": "old", "state": "passed" }])),
+        Some("call") => Some(json!([])),
+        _ => Some(Value::Null),
+    });
+    assert_eq!(calls(&asked, "runs").len(), 5, "four for the branch and one look at the repository");
+    assert_eq!(result["result"]["state"], "none", "{result}");
 }
 
 #[test]

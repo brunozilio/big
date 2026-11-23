@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
-import { mins } from '@/api/clock'
+import { mins, minutesSince } from '@/api/clock'
 import type { Block, Item, StepState, StepView } from '@/api/contract'
 import { errorText, useStepView } from '@/api/store'
 import { BlockContext } from '@/blocks/context'
@@ -215,7 +215,16 @@ export function EmptyStep({ it, step }: { it: Item; step: string }) {
   const label = it.steps.find((s) => s.id === step)?.label ?? step
   const stuck = it.impediment && it.current === step ? it.impediment : null
   const running = it.steps.find((s) => s.id === step)?.state === 'running'
-  if (!stuck && running) return <p className="flex items-center gap-2 text-base text-muted"><Spinner size={14} />Em andamento…</p>
+  if (!stuck && running) {
+    const doing = it.current === step && it.activity ? it.activity : null
+    return (
+      <p className="flex items-center gap-2 text-base text-muted">
+        <Spinner size={14} />
+        <span>{doing ? doing.text : 'Em andamento'}…</span>
+        {doing && <span className="tabular-nums text-faint">{mins(minutesSince(doing.since))}</span>}
+      </p>
+    )
+  }
   if (!stuck) return <p className="text-base text-muted">Nada para mostrar nesta etapa ainda.</p>
   return (
     <div className="space-y-3">

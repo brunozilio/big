@@ -204,6 +204,10 @@ export async function findRun(ctx, opts, wanted) {
     const fresh = (Array.isArray(runs) ? runs : []).find((run) => !wanted.seen.includes(run.ref));
     if (fresh) return fresh;
     if (wanted.optional && tries >= patience) return null;
+    if (wanted.optional && tries === 2) {
+      const ever = await ctx.call("pipelines", "runs", defined({ repo: wanted.repo, pipeline: opts.pipeline, limit: 1 }), effects(opts));
+      if (!Array.isArray(ever) || ever.length === 0) return null;
+    }
     await ctx.sleep(opts.every ?? 30000);
   }
 }
