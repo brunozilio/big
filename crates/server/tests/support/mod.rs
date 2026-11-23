@@ -49,7 +49,7 @@ const approve = step({
   async run(ctx) {
     const answer = await ctx.waitHuman([markdown("Aprovar?"), actions(["approve"])]);
     const issue = await ctx.call("tracker", "issue", { issue: "K-1" });
-    return ctx.pass({ by: answer.action, issue: issue.key, url: issue.url, pr: "o/r#3" });
+    return ctx.pass({ by: answer.action, issue: issue.ref, url: issue.url, pr: "o/r#3" });
   },
 });
 
@@ -108,19 +108,19 @@ impl Provider for FakeProvider {
         self.calls.lock().expect("lock").push((action.to_owned(), args.clone()));
         Ok(match action {
             "tracker.issue" => {
-                json!({ "key": "K-1", "url": "https://tracker.test/K-1", "title": "Corrigir", "status": "A fazer",
+                json!({ "ref": "K-1", "url": "https://tracker.test/K-1", "title": "Corrigir", "status": "A fazer",
                 "description": "texto", "subtasks": [], "attachments": [], "comments": [] })
             }
-            "tracker.search" => json!({ "issues": [{ "key": "K-1", "title": "Corrigir", "status": "A fazer" }] }),
+            "tracker.search" => json!({ "issues": [{ "ref": "K-1", "title": "Corrigir", "status": "A fazer" }] }),
             "tracker.comment" => json!({ "id": "9", "created": true }),
             "code.pull_request" => {
-                json!({ "number": 3, "title": "PR", "url": "https://code.test/3", "state": "open", "head": "h", "base": "main", "reviews": [] })
+                json!({ "ref": "o/r#3", "number": 3, "title": "PR", "url": "https://code.test/3", "state": "open", "head": "h", "base": "main", "reviews": [] })
             }
             "code.files_diff" => {
-                json!({ "files": [{ "path": "a.rs", "additions": 1, "deletions": 0, "patch": "@@ -0,0 +1 @@\n+x" }] })
+                json!([{ "path": "a.rs", "change": "added", "additions": 1, "deletions": 0, "patch": "@@ -0,0 +1 @@\n+x" }])
             }
-            "code.review_comments" => json!({ "threads": [] }),
-            "pipelines.run" => json!({ "name": "CI", "status": "completed", "conclusion": "success", "jobs": [] }),
+            "code.review_comments" => json!([]),
+            "pipelines.run" => json!({ "ref": "o/r/runs/9", "pipeline": "CI", "state": "passed", "jobs": [] }),
             _ => json!({}),
         })
     }

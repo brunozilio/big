@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
 use super::Api;
+use super::refs::{pull_ref, run_ref};
+use super::states::{state, verdict};
 use crate::contracts;
 use crate::error::ActionError;
 use crate::http::{Http, Method};
@@ -70,15 +72,14 @@ impl Poll<'_> {
         let fresh = pulls.iter().filter(|pull| timestamp(&text_of(pull, "/updated_at")).is_some_and(|at| at > since));
         for pull in fresh {
             let number = pull["number"].as_u64().unwrap_or_default();
-            let subject = format!("{repo}#{number}");
-            let data =
-                json!({ "repo": repo, "number": number, "head": text_of(pull, "/head/ref"), "state": pull["state"] });
+            let subject = pull_ref(repo, number);
             let updated = text_of(pull, "/updated_at");
-            let (kind, at) = match (pull["merged_at"].as_str(), pull["state"].as_str()) {
-                (Some(merged), _) => ("code.pr.merged", merged.to_owned()),
-                (None, Some("closed")) => ("code.pr.closed", text_of(pull, "/closed_at")),
-                _ => ("code.pr.updated", updated.clone()),
+            let (kind, at, state) = match (pull["merged_at"].as_str(), pull["state"].as_str()) {
+                (Some(merged), _) => ("code.pr.merged", merged.to_owned(), "merged"),
+                (None, Some("closed")) => ("code.pr.closed", text_of(pull, "/closed_at"), "closed"),
+                _ => ("code.pr.updated", updated.clone(), "open"),
             };
+            let data = json!({ "pr": subject, "repo": repo, "number": number, "head": text_of(pull, "/head/ref"), "state": state });
             let id = format!("github:{repo}:pr:{number}:{kind}:{at}");
             self.push(contracts::CODE, kind, id, subject.clone(), data, &at);
             self.reviews(repo, number, &subject).await?;
@@ -90,10 +91,11 @@ impl Poll<'_> {
         let reviews = self.api.get(&format!("/repos/{repo}/pulls/{number}/reviews?per_page=100")).await?;
         for review in reviews.as_array().map(Vec::as_slice).unwrap_or_default() {
             let data = json!({
+                "pr": subject,
                 "repo": repo,
                 "number": number,
-                "state": review["state"],
-                "user": text_of(review, "/user/login"),
+                "verdict": verdict(&review["state"]),
+                "author": text_of(review, "/user/login"),
                 "body": review["body"],
             });
             let id = format!("github:{repo}:review:{}", review["id"]);
@@ -119,15 +121,15 @@ impl Poll<'_> {
                 _ => continue,
             };
             let id = format!("github:{repo}:run:{}:{}:{kind}", run["id"], run["run_attempt"]);
+            let subject = run_ref(repo, run["id"].as_u64().unwrap_or_default());
             let data = json!({
+                "run": subject,
                 "repo": repo,
-                "run": run["id"],
-                "name": run["name"],
-                "ref": run["head_branch"],
+                "pipeline": run["name"],
+                "head": run["head_branch"],
                 "sha": run["head_sha"],
-                "conclusion": run["conclusion"],
+                "state": state(&run["status"], &run["conclusion"]),
             });
-            let subject = format!("{repo}/actions/runs/{}", run["id"]);
             self.push(contracts::PIPELINES, kind, id, subject, data, &text_of(run, "/updated_at"));
         }
         Ok(())

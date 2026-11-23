@@ -49,10 +49,10 @@ async fn create_issue_finds_the_issue_already_marked_with_the_key() {
         { "id": "2", "key": "BIG-2", "properties": property("k1") },
     ]});
     let http = FakeHttp::new().once(Method::Post, "/search/jql", 200, &found.to_string());
-    let answer = call(&http, actions::CREATE_ISSUE, json!({"project": "BIG", "title": "Fix it!"}), "k1").await;
+    let answer = call(&http, actions::CREATE_ISSUE, json!({"title": "Fix it!"}), "k1").await;
     assert_eq!(
         answer,
-        Ok(json!({"id": "2", "key": "BIG-2", "url": "https://acme.atlassian.net/browse/BIG-2", "created": false}))
+        Ok(json!({"id": "2", "ref": "BIG-2", "url": "https://acme.atlassian.net/browse/BIG-2", "title": "Fix it!", "status": "", "created": false}))
     );
     let search = http.sent()[0].body_json();
     assert_eq!(search["jql"], "project = \"BIG\" AND summary ~ \"Fix it\" ORDER BY created DESC");
@@ -70,7 +70,7 @@ async fn create_issue_creates_with_the_key_as_an_entity_property() {
     );
     let args = json!({"project": "BIG", "title": "T", "description": "**b**", "parent": "BIG-1", "labels": ["x"]});
     let answer = call(&http, actions::CREATE_ISSUE, args, "k2").await;
-    assert_eq!(answer.map(|a| (a["key"].clone(), a["created"].clone())), Ok((json!("BIG-10"), json!(true))));
+    assert_eq!(answer.map(|a| (a["ref"].clone(), a["created"].clone())), Ok((json!("BIG-10"), json!(true))));
     let sent = http.sent()[1].body_json();
     assert_eq!(sent["properties"][0]["key"], idempotency::property_key());
     assert_eq!(sent["properties"][0]["value"]["key"], "k2");
@@ -89,7 +89,7 @@ async fn transition_to_the_current_status_is_already_done() {
         r#"{"fields":{"status":{"name":"Fazendo"}}}"#,
     );
     let answer = call(&http, actions::TRANSITION, json!({"issue": "BIG-1", "status": "fazendo"}), "k").await;
-    assert_eq!(answer, Ok(json!({"status": "Fazendo", "changed": false})));
+    assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Fazendo", "changed": false})));
     assert_eq!(http.sent().len(), 1);
 }
 
@@ -101,7 +101,7 @@ async fn transition_picks_the_transition_that_reaches_the_named_status() {
         .once(Method::Get, "/issue/BIG-1/transitions", 200, transitions)
         .once(Method::Post, "/issue/BIG-1/transitions", 204, "");
     let answer = call(&http, actions::TRANSITION, json!({"issue": "BIG-1", "status": "Feito"}), "k").await;
-    assert_eq!(answer, Ok(json!({"status": "Feito", "changed": true})));
+    assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Feito", "changed": true})));
     assert_eq!(http.sent()[2].body_json(), json!({"transition": {"id": "31"}}));
 }
 
@@ -119,7 +119,7 @@ async fn a_comment_already_marked_with_the_key_is_not_posted_again() {
     let listed = json!({ "comments": [{ "id": "7", "properties": [{ "key": idempotency::property_key(), "value": { "key": "k3" } }] }] });
     let http = FakeHttp::new().once(Method::Get, "/issue/BIG-1/comment?expand=properties", 200, &listed.to_string());
     let answer = call(&http, actions::COMMENT, json!({"issue": "BIG-1", "body": "oi"}), "k3").await;
-    assert_eq!(answer, Ok(json!({"id": "7", "created": false})));
+    assert_eq!(answer.map(|a| (a["id"].clone(), a["body"].clone(), a["created"].clone())), Ok((json!("7"), json!("oi"), json!(false))));
 }
 
 #[tokio::test]
@@ -128,7 +128,7 @@ async fn a_new_comment_carries_the_invisible_key() {
         .once(Method::Get, "/issue/BIG-1/comment?expand=properties", 200, r#"{"comments":[]}"#)
         .once(Method::Post, "/issue/BIG-1/comment", 201, r#"{"id":"8"}"#);
     let answer = call(&http, actions::COMMENT, json!({"issue": "BIG-1", "body": "oi"}), "k4").await;
-    assert_eq!(answer, Ok(json!({"id": "8", "created": true})));
+    assert_eq!(answer.map(|a| (a["id"].clone(), a["created"].clone())), Ok((json!("8"), json!(true))));
     let sent = http.sent()[1].body_json();
     assert_eq!(sent["properties"][0]["value"]["key"], "k4");
     assert_eq!(sent["body"]["content"][0]["content"][0]["text"], "oi");
@@ -144,10 +144,10 @@ async fn set_impediment_flags_the_issue_and_explains_why() {
     let on =
         call(&http, actions::SET_IMPEDIMENT, json!({"issue": "BIG-1", "on": true, "reason": "falta acesso"}), "k5")
             .await;
-    assert_eq!(on, Ok(json!({"impediment": true})));
+    assert_eq!(on, Ok(json!({"on": true, "reason": "falta acesso"})));
     assert_eq!(http.sent()[0].body_json(), json!({"fields": {DEFAULT_FLAG_FIELD: [{"value": "Impediment"}]}}));
     let off = call(&http, actions::SET_IMPEDIMENT, json!({"issue": "BIG-1", "on": false}), "k6").await;
-    assert_eq!(off, Ok(json!({"impediment": false})));
+    assert_eq!(off, Ok(json!({"on": false, "reason": null})));
     assert_eq!(http.sent()[3].body_json(), json!({"fields": {DEFAULT_FLAG_FIELD: null}}));
 }
 
@@ -156,9 +156,8 @@ async fn statuses_are_the_distinct_statuses_of_the_project() {
     let answer = r#"[{"name":"Task","statuses":[{"id":"1","name":"A fazer","statusCategory":{"key":"new"}},{"id":"3","name":"Feito","statusCategory":{"key":"done"}}]},
                      {"name":"Bug","statuses":[{"id":"1","name":"A fazer","statusCategory":{"key":"new"}}]}]"#;
     let http = FakeHttp::new().once(Method::Get, "/project/BIG/statuses", 200, answer);
-    let listed = call(&http, actions::STATUSES, json!({"project": "BIG"}), "").await;
-    let names =
-        listed.map(|l| l["statuses"].as_array().map(|s| s.iter().map(|x| x["name"].clone()).collect::<Vec<_>>()));
+    let listed = call(&http, actions::STATUSES, json!({}), "").await;
+    let names = listed.map(|l| l.as_array().map(|s| s.iter().map(|x| x["name"].clone()).collect::<Vec<_>>()));
     assert_eq!(names, Ok(Some(vec![json!("A fazer"), json!("Feito")])));
 }
 
@@ -167,7 +166,7 @@ async fn an_issue_reads_description_subtasks_comments_and_the_flag() {
     let answer = json!({ "key": "BIG-1", "fields": {
         "summary": "T", "status": {"name": "Fazendo"}, "labels": [],
         "description": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "d"}]}]},
-        "subtasks": [{"key": "BIG-2", "fields": {"summary": "s", "status": {"name": "Feito"}}}],
+        "subtasks": [{"key": "BIG-2", "fields": {"summary": "s", "status": {"name": "Feito", "statusCategory": {"key": "done"}}}}],
         "attachment": [{"filename": "a.png", "size": 3, "content": "https://f"}],
         "comment": {"comments": [{"id": "5", "author": {"displayName": "Ana"}, "body": "texto", "created": "2024-01-01T00:00:00.000+0000"}]},
         DEFAULT_FLAG_FIELD: [{"value": "Impediment"}],
@@ -176,9 +175,11 @@ async fn an_issue_reads_description_subtasks_comments_and_the_flag() {
     let read = call(&http, actions::ISSUE, json!({"issue": "BIG-1"}), "").await;
     let Ok(read) = read else { panic!("{read:?}") };
     assert_eq!(read["description"], "d");
-    assert_eq!(read["impediment"], true);
+    assert_eq!(read["ref"], "BIG-1");
+    assert_eq!(read["impediment"], json!({"on": true, "reason": null}));
     assert_eq!(read["subtasks"][0]["status"], "Feito");
-    assert_eq!(read["comments"][0]["author"], "Ana");
+    assert_eq!(read["subtasks"][0]["done"], true);
+    assert_eq!(read["comments"][0]["author"]["name"], "Ana");
     assert_eq!(read["attachments"][0]["name"], "a.png");
 }
 

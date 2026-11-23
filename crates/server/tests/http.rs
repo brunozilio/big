@@ -246,7 +246,7 @@ async fn the_page_s_reads_go_through_the_connection() {
     assert_eq!(change["files"][0]["path"], "a.rs");
     fixture("call-change", &change);
     let run =
-        world.send(Method::POST, "/api/connections/c1/call", Some(call("ci.run", json!({ "run": "o/r#9" })))).await.1;
+        world.send(Method::POST, "/api/connections/c1/call", Some(call("ci.run", json!({ "run": "o/r/runs/9" })))).await.1;
     assert_eq!(run["state"], "passed");
     let unknown = world.send(Method::POST, "/api/connections/c1/call", Some(call("x.y", json!({})))).await;
     assert_eq!(unknown.0, StatusCode::BAD_REQUEST);

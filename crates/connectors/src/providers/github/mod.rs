@@ -1,6 +1,8 @@
 mod code;
 mod events;
 mod pipelines;
+mod refs;
+mod states;
 mod workflow;
 
 use async_trait::async_trait;
@@ -40,12 +42,17 @@ struct Api<'a> {
     http: &'a dyn Http,
     base: String,
     token: &'a str,
+    creds: &'a Credentials,
 }
 
 impl<'a> Api<'a> {
     fn new(http: &'a dyn Http, creds: &'a Credentials) -> Api<'a> {
         let base = creds.setting("api").unwrap_or(API).trim_end_matches('/').to_owned();
-        Api { http, base, token: &creds.access_token }
+        Api { http, base, token: &creds.access_token, creds }
+    }
+
+    fn default_repo(&self) -> Option<String> {
+        self.creds.setting("repo").map(str::to_owned).or_else(|| self.creds.settings_list("repos").into_iter().next())
     }
 
     fn request(&self, method: Method, path: &str) -> HttpRequest {
@@ -76,8 +83,7 @@ impl<'a> Api<'a> {
     }
 }
 
-pub fn repo(args: Args<'_>) -> Result<&str, ActionError> {
-    let repo = args.text("repo")?;
+pub fn valid_repo(repo: &str) -> Result<String, ActionError> {
     let part = |part: &str| {
         !part.is_empty()
             && part != "."
@@ -85,7 +91,7 @@ pub fn repo(args: Args<'_>) -> Result<&str, ActionError> {
             && part.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
     };
     match repo.split_once('/') {
-        Some((owner, name)) if part(owner) && part(name) => Ok(repo),
+        Some((owner, name)) if part(owner) && part(name) => Ok(repo.to_owned()),
         _ => Err(ActionError::permanent(format!("{repo:?} is not owner/name"))),
     }
 }

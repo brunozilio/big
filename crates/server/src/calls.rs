@@ -39,25 +39,17 @@ fn text(value: &Value) -> String {
     }
 }
 
-fn person(name: &str) -> Value {
-    json!({ "id": name, "name": name, "avatar": null })
+fn person(found: &Value) -> Value {
+    let name = match found {
+        Value::Object(_) => text(&found["name"]),
+        other => text(other),
+    };
+    let id = found.get("id").map(text).filter(|id| !id.is_empty()).unwrap_or_else(|| name.clone());
+    json!({ "id": id, "name": name, "avatar": null })
 }
 
 fn arg<'a>(args: &'a Value, name: &str) -> ApiResult<&'a str> {
     args[name].as_str().filter(|text| !text.is_empty()).ok_or_else(|| ApiError::bad(format!("Falta {name}.")))
-}
-
-pub fn reference(raw: &str, settings: &Value) -> ApiResult<(String, u64)> {
-    let (repo, number) = match raw.rsplit_once('#') {
-        Some((repo, number)) => (repo.to_owned(), number),
-        None => (settings["repo"].as_str().unwrap_or_default().to_owned(), raw),
-    };
-    let number =
-        number.trim().parse::<u64>().map_err(|_| ApiError::bad(format!("{raw} não é uma referência válida.")))?;
-    if repo.is_empty() {
-        return Err(ApiError::bad(format!("{raw} não diz o repositório.")));
-    }
-    Ok((repo, number))
 }
 
 pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args: &Value) -> ApiResult<Value> {
@@ -79,11 +71,10 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
 
 async fn search(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
     let query = args["query"].as_str().unwrap_or_default();
-    let found = caller.call(tracker::SEARCH, json!({ "text": query, "limit": 20 })).await?;
-    let issues = found["issues"].as_array().map(Vec::as_slice).unwrap_or_default();
-    let listed: Vec<Value> = issues
+    let found = caller.call(tracker::SEARCH, json!({ "query": query, "limit": 20 })).await?;
+    let listed: Vec<Value> = list(&found, "issues")
         .iter()
-        .map(|issue| json!({ "key": text(&issue["key"]), "title": text(&issue["title"]), "status": issue["status"].as_str() }))
+        .map(|issue| json!({ "key": text(&issue["ref"]), "title": text(&issue["title"]), "status": issue["status"].as_str() }))
         .collect();
     Ok(json!(listed))
 }
@@ -92,9 +83,12 @@ fn list<'a>(value: &'a Value, name: &str) -> &'a [Value] {
     value[name].as_array().map(Vec::as_slice).unwrap_or_default()
 }
 
+fn items(value: &Value) -> &[Value] {
+    value.as_array().map(Vec::as_slice).unwrap_or_default()
+}
+
 fn comment(raw: &Value, kind: &str) -> Value {
-    let author = text(&raw["author"]);
-    json!({ "id": text(&raw["id"]), "author": person(&author), "body": text(&raw["body"]), "at": text(&raw["at"]), "kind": kind })
+    json!({ "id": text(&raw["id"]), "author": person(&raw["author"]), "body": text(&raw["body"]), "at": text(&raw["at"]), "kind": kind })
 }
 
 pub fn issue(raw: &Value) -> Value {
@@ -105,22 +99,21 @@ pub fn issue(raw: &Value) -> Value {
     let subtasks: Vec<Value> = list(raw, "subtasks")
         .iter()
         .map(|task| {
-            let done = matches!(task["status"].as_str(), Some("Done" | "Feito" | "Concluído" | "Closed"));
-            json!({ "key": text(&task["key"]), "title": text(&task["title"]), "done": done, "byAgent": false })
+            let done = task["done"].as_bool().unwrap_or(false);
+            json!({ "key": text(&task["ref"]), "title": text(&task["title"]), "done": done, "byAgent": false })
         })
         .collect();
     let comments: Vec<Value> = list(raw, "comments").iter().map(|found| comment(found, "comment")).collect();
-    let assignee = raw["assignee"].as_str().map(person);
+    let assignee = if raw["assignee"].is_null() { Value::Null } else { person(&raw["assignee"]) };
     json!({
-        "key": text(&raw["key"]), "url": raw["url"].as_str(), "title": text(&raw["title"]),
+        "key": text(&raw["ref"]), "url": raw["url"].as_str(), "title": text(&raw["title"]),
         "status": raw["status"].as_str(), "assignee": assignee, "description": text(&raw["description"]),
         "attachments": attachments, "subtasks": subtasks, "comments": comments,
     })
 }
 
 async fn change(caller: &Caller<'_>, raw: &str) -> ApiResult<Value> {
-    let (repo, number) = reference(raw, &caller.record.settings)?;
-    let args = json!({ "repo": repo, "number": number });
+    let args = json!({ "pr": raw });
     let pull = caller.call(code::PULL_REQUEST, args.clone()).await?;
     let files = caller.call(code::FILES_DIFF, args.clone()).await?;
     let threads = caller.call(code::REVIEW_COMMENTS, args).await?;
@@ -133,8 +126,16 @@ fn first_line(patch: &str) -> u64 {
     added.trim_start_matches('+').split(',').next().and_then(|line| line.parse().ok()).unwrap_or(1)
 }
 
+fn review_kind(verdict: &Value) -> &'static str {
+    match verdict.as_str() {
+        Some("approve") => "approved",
+        Some("request_changes") => "changes",
+        _ => "comment",
+    }
+}
+
 pub fn change_data(key: &str, pull: &Value, files: &Value, threads: &Value) -> Value {
-    let files: Vec<Value> = list(files, "files")
+    let files: Vec<Value> = items(files)
         .iter()
         .map(|file| {
             let patch = text(&file["patch"]);
@@ -146,25 +147,14 @@ pub fn change_data(key: &str, pull: &Value, files: &Value, threads: &Value) -> V
         .collect();
     let mut comments: Vec<Value> = list(pull, "reviews")
         .iter()
-        .filter(|review| !text(&review["body"]).is_empty() || review["state"] != "COMMENTED")
-        .map(|review| {
-            let kind = match review["state"].as_str() {
-                Some("APPROVED") => "approved",
-                Some("CHANGES_REQUESTED") => "changes",
-                _ => "comment",
-            };
-            let raw =
-                json!({ "id": review["id"], "author": review["user"], "body": review["body"], "at": review["at"] });
-            comment(&raw, kind)
-        })
+        .filter(|review| !text(&review["body"]).is_empty() || review["verdict"] != "comment")
+        .map(|review| comment(review, review_kind(&review["verdict"])))
         .collect();
-    for thread in list(threads, "threads") {
-        for found in list(thread, "comments") {
-            let mut shown = comment(found, "comment");
-            shown["file"] = thread["path"].clone();
-            shown["line"] = thread["line"].clone();
-            comments.push(shown);
-        }
+    for found in items(threads) {
+        let mut shown = comment(found, "comment");
+        shown["file"] = found["path"].clone();
+        shown["line"] = found["line"].clone();
+        comments.push(shown);
     }
     let state = match pull["state"].as_str() {
         Some("merged") => "merged",
@@ -173,32 +163,40 @@ pub fn change_data(key: &str, pull: &Value, files: &Value, threads: &Value) -> V
     };
     json!({
         "key": key, "number": pull["number"].as_u64().unwrap_or(0), "title": text(&pull["title"]),
-        "url": pull["url"].as_str(), "state": state, "author": person(&text(&pull["author"])),
+        "url": pull["url"].as_str(), "state": state, "author": person(&pull["author"]),
         "head": text(&pull["head"]), "base": text(&pull["base"]), "body": text(&pull["body"]),
         "files": files, "comments": comments,
     })
 }
 
 async fn pipeline(caller: &Caller<'_>, raw: &str) -> ApiResult<Value> {
-    let (repo, run) = reference(raw, &caller.record.settings)?;
-    let found = caller.call(pipelines::RUN, json!({ "repo": repo, "run": run })).await?;
+    let found = caller.call(pipelines::RUN, json!({ "run": raw })).await?;
     Ok(pipeline_run(raw, &found))
 }
 
-fn job_state(status: &Value, conclusion: &Value) -> &'static str {
-    match (status.as_str(), conclusion.as_str()) {
-        (_, Some("success")) => "passed",
-        (_, Some("failure" | "timed_out" | "cancelled" | "startup_failure")) => "failed",
-        (_, Some("skipped" | "neutral")) => "skipped",
-        (Some("waiting"), _) => "waiting",
-        (Some("in_progress"), _) => "running",
+fn shown_state(state: &Value) -> &'static str {
+    match state.as_str() {
+        Some("passed") => "passed",
+        Some("failed" | "cancelled") => "failed",
+        Some("skipped") => "skipped",
+        Some("waiting") => "waiting",
+        Some("running") => "running",
         _ => "queued",
     }
 }
 
-fn seconds(started: &Value, completed: &Value) -> Value {
+fn command_state(state: &Value) -> &'static str {
+    match shown_state(state) {
+        "passed" | "skipped" => "done",
+        "failed" => "failed",
+        "running" => "running",
+        _ => "todo",
+    }
+}
+
+fn seconds(started: &Value, finished: &Value) -> Value {
     let parse = |value: &Value| value.as_str().and_then(|text| text.parse::<jiff::Timestamp>().ok());
-    match (parse(started), parse(completed)) {
+    match (parse(started), parse(finished)) {
         (Some(start), Some(end)) => json!((end.as_second() - start.as_second()).max(0)),
         _ => Value::Null,
     }
@@ -222,36 +220,31 @@ fn staged(jobs: &mut [Value]) {
     }
 }
 
-pub fn pipeline_run(key: &str, raw: &Value) -> Value {
-    let mut jobs: Vec<Value> = list(raw, "jobs")
+fn job(found: &Value) -> Value {
+    let steps: Vec<Value> = list(found, "steps")
         .iter()
-        .map(|job| {
-            let state = job_state(&job["status"], &job["conclusion"]);
-            let steps: Vec<Value> = list(job, "steps")
-                .iter()
-                .map(|step| {
-                    let state = match job_state(&step["status"], &step["conclusion"]) {
-                        "passed" | "skipped" => "done",
-                        "failed" => "failed",
-                        "running" => "running",
-                        _ => "todo",
-                    };
-                    json!({ "name": text(&step["name"]), "state": state, "seconds": null, "log": "" })
-                })
-                .collect();
-            let id = job["key"].as_str().map_or_else(|| text(&job["id"]), str::to_owned);
+        .map(|step| {
             json!({
-                "id": id, "name": text(&job["name"]), "stage": 0, "needs": job["needs"].as_array().cloned().unwrap_or_default(),
-                "state": state, "seconds": seconds(&job["started"], &job["completed"]), "condition": null,
-                "gate": null, "waitingSince": null, "steps": steps,
+                "name": text(&step["name"]), "state": command_state(&step["state"]),
+                "seconds": seconds(&step["started"], &step["finished"]), "log": "",
             })
         })
         .collect();
+    let id = found["key"].as_str().map_or_else(|| text(&found["id"]), str::to_owned);
+    json!({
+        "id": id, "name": text(&found["name"]), "stage": 0, "needs": found["needs"].as_array().cloned().unwrap_or_default(),
+        "state": shown_state(&found["state"]), "seconds": seconds(&found["started"], &found["finished"]),
+        "condition": null, "gate": null, "waitingSince": null, "steps": steps,
+    })
+}
+
+pub fn pipeline_run(key: &str, raw: &Value) -> Value {
+    let mut jobs: Vec<Value> = list(raw, "jobs").iter().map(job).collect();
     staged(&mut jobs);
     json!({
-        "id": key, "title": text(&raw["name"]), "file": text(&raw["workflow"]),
-        "number": raw["attempt"].as_u64().unwrap_or(1), "event": text(&raw["event"]), "ref": text(&raw["ref"]),
-        "url": raw["url"].as_str(), "state": job_state(&raw["status"], &raw["conclusion"]), "jobs": jobs,
+        "id": key, "title": text(&raw["pipeline"]), "file": text(&raw["file"]),
+        "number": raw["attempt"].as_u64().unwrap_or(1), "event": text(&raw["event"]), "ref": text(&raw["head"]),
+        "url": raw["url"].as_str(), "state": shown_state(&raw["state"]), "jobs": jobs,
     })
 }
 

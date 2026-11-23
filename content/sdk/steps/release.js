@@ -1,5 +1,5 @@
 import { step, actions, markdown, pipeline } from "sdk";
-import { FINISHED, effects, findRun, object, pullRequestOf, settle, source, waitOptions } from "./context.js";
+import { FINISHED, SUCCEEDED, effects, findRun, object, pullRequestOf, settle, source, waitOptions } from "./context.js";
 
 const WAITING = [...FINISHED, "waiting"];
 
@@ -42,7 +42,7 @@ export default step({
     for (;;) {
       const events = ["pipelines.run.finished", "pipelines.deployment.waiting"];
       const current = await settle(ctx, opts, found.ref, WAITING, events);
-      if (current.state === "passed") return ctx.pass({ ...data, state: current.state });
+      if (SUCCEEDED.includes(current.state)) return ctx.pass({ ...data, state: current.state });
       if (FINISHED.includes(current.state)) {
         return ctx.fail({ ...data, state: current.state, summary: `A release terminou como ${current.state}.` });
       }
@@ -52,7 +52,7 @@ export default step({
         await ctx.impediment(true, reason, effects(opts));
         return ctx.fail({ ...data, state: "rejected", rejected: true, error: reason });
       }
-      await ctx.sleep(opts.every ?? 30000);
+      if (decision === null) await ctx.sleep(opts.every ?? 30000);
     }
   },
 });

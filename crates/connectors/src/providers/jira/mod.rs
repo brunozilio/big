@@ -45,6 +45,7 @@ struct Api<'a> {
     site: String,
     token: &'a str,
     flag_field: String,
+    project: Option<String>,
 }
 
 impl<'a> Api<'a> {
@@ -57,6 +58,7 @@ impl<'a> Api<'a> {
             site: creds.setting("site_url").unwrap_or_default().trim_end_matches('/').to_owned(),
             token: &creds.access_token,
             flag_field: creds.setting("flag_field").unwrap_or(DEFAULT_FLAG_FIELD).to_owned(),
+            project: creds.setting("project").map(str::to_owned),
         })
     }
 
@@ -118,7 +120,7 @@ impl Provider for Jira {
             actions::CREATE_ISSUE => tracker::create_issue(&api, args, idempotency_key).await,
             actions::ISSUE => tracker::issue(&api, args.text("issue")?).await,
             actions::COMMENT => tracker::comment(&api, args.text("issue")?, args.text("body")?, idempotency_key).await,
-            actions::STATUSES => tracker::statuses(&api, args.text("project")?).await,
+            actions::STATUSES => tracker::statuses(&api, args).await,
             actions::TRANSITION => tracker::transition(&api, args.text("issue")?, args.text("status")?).await,
             actions::SET_IMPEDIMENT => tracker::set_impediment(&api, args, idempotency_key).await,
             actions::SEARCH => tracker::search(&api, args).await,
