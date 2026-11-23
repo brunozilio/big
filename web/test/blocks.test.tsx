@@ -44,8 +44,8 @@ describe('registro de blocos', () => {
 describe('revisão de casos de teste', () => {
   test('comentários nos passos viram o pedido de mudança para o testador', async () => {
     const { feedback } = await import('../src/blocks/cases')
-    const cases = [{ title: 'Criar cliente', kind: 'api' as const, objective: 'Persiste', precondition: null, ref: null, url: null, steps: [{ action: 'Enviar', data: null, expected: '201' }] }]
-    const text = feedback(cases, 'Faltou tela', [{ id: 'n', file: '0', line: 0, body: 'checar Location' }, { id: 'm', file: '0', line: -2, body: 'mais claro' }])
-    expect(text).toBe('Faltou tela\n\n### 1. Criar cliente\n- Passo 1 (Enviar): checar Location\n- Objetivo (Persiste): mais claro')
+    const cases = [{ title: 'Criar cliente', kind: 'api' as const, objective: 'Persiste', ref: null, url: null, given: ['nenhum cliente'], when: ['envio POST'], then: ['201', 'grava'] }]
+    const text = feedback(cases, 'Faltou tela', [{ id: 'n', file: '0', line: 3, body: 'checar Location' }, { id: 'm', file: '0', line: -1, body: 'mais claro' }])
+    expect(text).toBe('Faltou tela\n\n### 1. Criar cliente\n- E grava: checar Location\n- Objetivo: mais claro')
   })
 })

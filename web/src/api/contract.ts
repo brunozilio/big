@@ -191,20 +191,15 @@ export interface DetailRow {
   note?: string
 }
 
-export interface CaseStep {
-  action: string
-  data: string | null
-  expected: string
-}
-
 export interface TestCaseView {
   title: string
   kind: 'api' | 'ui'
   objective: string | null
-  precondition: string | null
   ref: string | null
   url: string | null
-  steps: CaseStep[]
+  given: string[]
+  when: string[]
+  then: string[]
 }
 
 export type MergeMethod = 'squash' | 'merge' | 'rebase'

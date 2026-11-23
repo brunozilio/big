@@ -49,12 +49,8 @@ function isItemStep(v: unknown): v is Item['steps'][number] {
   return obj(v) && str(v.id) && str(v.label) && str(v.icon) && STEP_STATES.includes(v.state as Item['steps'][number]['state']) && num(v.attempts) && num(v.seconds)
 }
 
-function isCaseStep(v: unknown): boolean {
-  return obj(v) && str(v.action) && strOrNull(v.data) && str(v.expected)
-}
-
 function isCase(v: unknown): v is Shape {
-  return obj(v) && str(v.title) && (v.kind === 'api' || v.kind === 'ui') && strOrNull(v.objective) && strOrNull(v.precondition) && strOrNull(v.ref) && strOrNull(v.url) && arr(v.steps, (s): s is Shape => isCaseStep(s))
+  return obj(v) && str(v.title) && (v.kind === 'api' || v.kind === 'ui') && strOrNull(v.objective) && strOrNull(v.ref) && strOrNull(v.url) && arr(v.given, str) && arr(v.when, str) && arr(v.then, str)
 }
 
 const blockChecks: Record<BlockType, (b: Shape) => boolean> = {

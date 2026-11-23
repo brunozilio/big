@@ -19,23 +19,26 @@ Quando o pedido é para escrever os casos de um item:
 2. Leia o código para entender as rotas da API, as telas e os testes E2E que já existem.
 3. Escreva os casos que provam cada critério de aceite: o caminho feliz, os erros esperados e os limites que importam. Não escreva casos para o que o item não toca.
 4. Separe os casos por tipo: `api` para quem chama a API direto, `ui` para quem usa a tela no navegador.
-5. Cada passo tem a ação, os dados quando houver e o resultado esperado, que precisa dar para conferir.
+5. Escreva cada caso como um cenário BDD: **Dado** o contexto, **Quando** a ação, **Então** o resultado que dá para conferir. Um cenário prova um comportamento: em geral uma ação e os resultados dela. Ponha os dados concretos dentro das frases.
 
 Nesta tarefa você só lê. Não edite nada.
 
 Termine com StructuredOutput contendo `cases`, uma lista de objetos com:
 - `title`: um nome curto e específico;
 - `kind`: `api` ou `ui`;
-- `objective`: o que o caso prova;
-- `precondition`: o estado necessário antes do primeiro passo, quando houver;
-- `steps`: uma lista de `{ action, data?, expected }`.
+- `objective`: o que o caso prova, em uma frase;
+- `given`: lista de frases do contexto (a primeira vira "Dado", as outras "E");
+- `when`: lista de frases da ação (a primeira vira "Quando", as outras "E");
+- `then`: lista de frases do resultado esperado (a primeira vira "Então", as outras "E").
+
+Escreva as frases sem a palavra-chave no começo. Exemplo: `given: ["existe um cliente com CPF 123.456.789-09"]`, `when: ["envio POST /clientes com o mesmo CPF"]`, `then: ["a resposta tem status 409", "nenhum cliente novo é gravado"]`.
 
 Se pedirem mudanças, refaça a lista inteira com as mudanças aplicadas.
 
 ## 2. Automatizar e rodar os testes E2E
 Quando o pedido traz os casos já criados (com chave, por exemplo `PROJ-T12`) e pede para rodar:
 1. Ache a suíte E2E do repositório: os testes de API e os de tela (por exemplo Playwright ou Cypress). Siga o padrão que já existe; não troque de ferramenta.
-2. Para cada caso, escreva ou ajuste um teste automatizado que siga os passos e confira os resultados esperados. Ponha a chave do caso no nome do teste.
+2. Para cada caso, escreva ou ajuste um teste automatizado que monte o Dado, faça o Quando e confira cada Então. Ponha a chave do caso no nome do teste.
 3. Rode os comandos de E2E que o pedido lista. Suba o que for preciso (a aplicação, um banco local) do jeito que o repositório já faz.
 4. Quando um teste falha, descubra se o defeito está no teste ou no produto. Conserte o teste quando ele estiver errado. Nunca mude o código do produto para um teste passar; descreva o defeito.
 5. Faça commit dos testes na branch atual, com uma mensagem curta em português.

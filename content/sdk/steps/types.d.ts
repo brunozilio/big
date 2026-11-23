@@ -120,18 +120,13 @@ export interface TicketOutput {
 
 export type CaseKind = "api" | "ui";
 
-export interface CaseStep {
-  action: string;
-  data?: string;
-  expected: string;
-}
-
 export interface TestCase {
   title: string;
   kind: CaseKind;
   objective?: string;
-  precondition?: string;
-  steps: CaseStep[];
+  given: string[];
+  when: string[];
+  then: string[];
   ref?: string;
   url?: string | null;
 }

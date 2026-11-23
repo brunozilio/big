@@ -94,8 +94,10 @@ fn optional(raw: &Value) -> Value {
     }
 }
 
-fn case_step(raw: &Value) -> Value {
-    json!({ "action": text(&raw["action"]), "data": optional(&raw["data"]), "expected": text(&raw["expected"]) })
+fn clauses(raw: &Value) -> Value {
+    let lines =
+        raw.as_array().map(|all| all.iter().map(text).filter(|line| !line.trim().is_empty()).collect::<Vec<_>>());
+    json!(lines.unwrap_or_default())
 }
 
 fn case(raw: &Value) -> Value {
@@ -104,10 +106,11 @@ fn case(raw: &Value) -> Value {
         "title": text(&raw["title"]),
         "kind": kind,
         "objective": optional(&raw["objective"]),
-        "precondition": optional(&raw["precondition"]),
         "ref": optional(&raw["ref"]),
         "url": optional(&raw["url"]),
-        "steps": raw["steps"].as_array().map(|all| all.iter().map(case_step).collect::<Vec<_>>()).unwrap_or_default(),
+        "given": clauses(&raw["given"]),
+        "when": clauses(&raw["when"]),
+        "then": clauses(&raw["then"]),
     })
 }
 
@@ -200,17 +203,17 @@ mod tests {
     fn test_cases_keep_their_structure_for_the_page() {
         let place = Place { connections: &[], waiting: false };
         let raw = json!({ "type": "cases", "cases": [{
-            "title": "Criar", "kind": "ui", "precondition": " ", "ref": "T-1",
-            "steps": [{ "action": "Enviar", "data": "corpo", "expected": "201" }, { "action": "Ver", "expected": "ok" }],
+            "title": "Criar", "kind": "ui", "objective": " ", "ref": "T-1",
+            "given": ["um cliente"], "when": ["envio", ""], "then": ["201", "o corpo traz o id"],
         }] });
         let blocks = normalized(&place, &raw);
         assert_eq!(blocks[0]["editable"], false);
         let first = &blocks[0]["cases"][0];
         assert_eq!(first["kind"], "ui");
-        assert_eq!(first["precondition"], Value::Null);
+        assert_eq!(first["objective"], Value::Null);
         assert_eq!(first["ref"], "T-1");
-        assert_eq!(first["steps"][0], json!({ "action": "Enviar", "data": "corpo", "expected": "201" }));
-        assert_eq!(first["steps"][1]["data"], Value::Null);
+        assert_eq!(first["when"], json!(["envio"]));
+        assert_eq!(first["then"], json!(["201", "o corpo traz o id"]));
     }
 
     #[test]

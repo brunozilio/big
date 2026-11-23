@@ -229,8 +229,8 @@ fn tester(args: &Value) -> Value {
         let results = json!([{ "case": "Z-T1", "status": "passed", "evidence": "api.spec.ts passou" }]);
         return json!({ "text": "", "session": "test-2", "output": { "results": results } });
     }
-    let steps = json!([{ "action": "POST /clientes", "data": "nome=Ana", "expected": "201" }]);
-    let cases = json!([{ "title": "Cadastrar cliente pela API", "kind": "api", "objective": "salva", "steps": steps }]);
+    let cases = json!([{ "title": "Cadastrar cliente pela API", "kind": "api", "objective": "salva",
+        "given": ["nenhum cliente Ana"], "when": ["envio POST /clientes com nome=Ana"], "then": ["a resposta tem status 201", "Ana fica gravada"] }]);
     json!({ "text": "", "session": "test-1", "output": { "cases": cases } })
 }
 
@@ -940,7 +940,9 @@ fn test_cases_are_written_reviewed_by_a_person_and_created_linked_to_the_issue()
     assert_eq!(created["labels"], json!(["e2e", "api"]));
     assert_eq!(created["issue"], "T-9");
     assert_eq!(created["issue_id"], "10009");
-    assert_eq!(created["steps"], json!([{ "action": "POST /clientes", "data": "nome=Ana", "expected": "201" }]));
+    assert_eq!(created["precondition"], "Dado nenhum cliente Ana");
+    let step = json!({ "action": "Quando envio POST /clientes com nome=Ana", "expected": "Então a resposta tem status 201\nE Ana fica gravada" });
+    assert_eq!(created["steps"], json!([step]));
     assert_eq!(calls(&asked, "create_cycle")[0]["args"]["args"]["issue_id"], "10009");
     let run = testers[2]["args"]["input"]["prompt"].as_str().expect("prompt");
     assert!(run.contains("Z-T1") && run.contains("Cadastrar cliente pela API"), "{run}");

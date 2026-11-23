@@ -7,26 +7,50 @@ const APPROVE = "approve_cases";
 
 const CHANGES = "change_cases";
 
-function steps(found) {
-  return (Array.isArray(found) ? found : [])
-    .map((entry) => object(entry))
-    .filter((entry) => entry.action)
-    .map((entry) => defined({ action: String(entry.action), data: entry.data ? String(entry.data) : undefined, expected: String(entry.expected ?? "") }));
+const KEYWORDS = /^(dado|quando|então|entao|e|mas|given|when|then|and|but)\s+/i;
+
+function clauses(found) {
+  const list = Array.isArray(found) ? found : found ? [found] : [];
+  return list.map((line) => String(line ?? "").trim().replace(KEYWORDS, "")).filter((line) => line.length > 0);
+}
+
+function fromSteps(entry) {
+  const steps = (Array.isArray(entry.steps) ? entry.steps : []).map((one) => object(one)).filter((one) => one.action);
+  return {
+    given: clauses(entry.precondition),
+    when: steps.map((one) => (one.data ? `${one.action} (${one.data})` : String(one.action))),
+    then: steps.map((one) => String(one.expected ?? "")).filter((line) => line.length > 0),
+  };
+}
+
+export function scenario(entry) {
+  const found = object(entry);
+  const source = found.given || found.when || found.then ? found : object(found.scenario);
+  if (source.given || source.when || source.then) return { given: clauses(source.given), when: clauses(source.when), then: clauses(source.then) };
+  return fromSteps(found);
+}
+
+export function bdd(entry) {
+  const found = object(entry);
+  return defined({
+    title: String(found.title),
+    kind: found.kind === "ui" ? "ui" : "api",
+    objective: found.objective ? String(found.objective) : undefined,
+    ...scenario(found),
+    ref: found.ref ?? undefined,
+    url: found.url ?? undefined,
+  });
 }
 
 function written(found) {
   return (Array.isArray(found) ? found : [])
     .map((entry) => object(entry))
     .filter((entry) => entry.title)
-    .map((entry) =>
-      defined({
-        title: String(entry.title),
-        kind: entry.kind === "ui" ? "ui" : "api",
-        objective: entry.objective ? String(entry.objective) : undefined,
-        precondition: entry.precondition ? String(entry.precondition) : undefined,
-        steps: steps(entry.steps),
-      }),
-    );
+    .map(bdd);
+}
+
+function gherkin(keyword, lines) {
+  return lines.map((line, index) => `${index === 0 ? keyword : "E"} ${line}`).join("\n");
 }
 
 function fenced(text) {
@@ -47,12 +71,12 @@ export function casesOf(result) {
 }
 
 function described(entry) {
-  const head = `### ${entry.ref ? `${entry.ref} · ` : ""}${entry.title} (${KINDS[entry.kind] ?? entry.kind})`;
+  const one = bdd(entry);
+  const head = `### ${one.ref ? `${one.ref} · ` : ""}${one.title} (${KINDS[one.kind] ?? one.kind})`;
   const parts = [head];
-  if (entry.objective) parts.push(entry.objective);
-  if (entry.precondition) parts.push(`**Pré-condição:** ${entry.precondition}`);
-  const lines = (entry.steps ?? []).map((one, index) => `${index + 1}. ${one.action}${one.data ? ` (${one.data})` : ""} → ${one.expected}`);
-  if (lines.length > 0) parts.push(lines.join("\n"));
+  if (one.objective) parts.push(one.objective);
+  const lines = [gherkin("Dado", one.given), gherkin("Quando", one.when), gherkin("Então", one.then)].filter((text) => text.length > 0);
+  parts.push(["```gherkin", `Cenário: ${one.title}`, ...lines.join("\n").split("\n").map((line) => `  ${line}`), "```"].join("\n"));
   return parts.join("\n\n");
 }
 
@@ -105,13 +129,14 @@ async function created(ctx, opts, cases, issue) {
   const labels = Array.isArray(opts.labels) ? opts.labels : ["e2e"];
   const made = [];
   for (const entry of cases) {
+    const precondition = gherkin("Dado", entry.given);
     const args = defined({
       project: opts.project,
       title: entry.title,
       objective: entry.objective,
-      precondition: entry.precondition,
+      precondition: precondition || undefined,
       labels: [...labels, entry.kind === "ui" ? "tela" : "api"],
-      steps: entry.steps,
+      steps: [{ action: gherkin("Quando", entry.when), expected: gherkin("Então", entry.then) }],
       issue: issue ?? undefined,
       issue_id: issueId,
     });
@@ -129,7 +154,7 @@ export default step({
   icon: "hNoteEdit",
   needs: "tests",
   doing: "Escrevendo casos de teste",
-  view: (s) => (Array.isArray(s.cases) ? [testCases(s.cases, defined({ session: s.session }))] : []),
+  view: (s) => (Array.isArray(s.cases) ? [testCases(s.cases.map(bdd), defined({ session: s.session }))] : []),
   async run(ctx, opts) {
     const issue = issueOf(ctx, opts);
     let draft = await drafted(ctx, opts, issue, undefined, undefined);

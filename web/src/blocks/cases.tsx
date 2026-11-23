@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { Block, CaseStep, TestCaseView } from '@/api/contract'
+import type { Block, TestCaseView } from '@/api/contract'
 import { ChatView } from '@/chat/ChatView'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
@@ -14,23 +14,38 @@ type Of<T extends Block['type']> = Extract<Block, { type: T }>
 
 const KINDS = { api: { label: 'API', icon: 'server' }, ui: { label: 'Tela', icon: 'computer' } } as const
 
+type Part = 'objective' | 'given' | 'when' | 'then'
+
 interface Row {
   line: number
-  label: string
+  part: Part
+  keyword: string
   text: string
-  data: string | null
-  expected: string | null
 }
+
+const PARTS: { part: Exclude<Part, 'objective'>; keyword: string }[] = [
+  { part: 'given', keyword: 'Dado' },
+  { part: 'when', keyword: 'Quando' },
+  { part: 'then', keyword: 'Então' },
+]
 
 function rowsOf(entry: TestCaseView): Row[] {
-  const head: Row[] = []
-  if (entry.objective) head.push({ line: -2, label: 'Objetivo', text: entry.objective, data: null, expected: null })
-  if (entry.precondition) head.push({ line: -1, label: 'Pré-condição', text: entry.precondition, data: null, expected: null })
-  const steps = entry.steps.map((s: CaseStep, i): Row => ({ line: i, label: String(i + 1), text: s.action, data: s.data, expected: s.expected }))
-  return [...head, ...steps]
+  const rows: Row[] = entry.objective ? [{ line: -1, part: 'objective', keyword: 'Objetivo', text: entry.objective }] : []
+  let line = 0
+  for (const { part, keyword } of PARTS) {
+    entry[part].forEach((text, i) => rows.push({ line: line++, part, keyword: i === 0 ? keyword : 'E', text }))
+  }
+  return rows
 }
 
-const rowName = (row: Row) => (row.line < 0 ? row.label : `Passo ${row.label}`)
+const rowName = (row: Row) => (row.part === 'objective' ? 'Objetivo' : `${row.keyword} ${row.text}`)
+
+const keywordTone: Record<Part, string> = {
+  objective: 'text-faint text-xs uppercase tracking-wide',
+  given: 'text-info-fg',
+  when: 'text-accent-fg',
+  then: 'text-success-fg',
+}
 
 function KindBadge({ kind }: { kind: TestCaseView['kind'] }) {
   const meta = KINDS[kind]
@@ -47,10 +62,11 @@ interface Notes {
 function CaseRow({ file, row, notes }: { file: string; row: Row; notes: Notes }) {
   const [writing, setWriting] = useState(false)
   const here = notes.notes.filter((n) => n.file === file && n.line === row.line)
-  const step = row.line >= 0
+  const head = row.part === 'objective'
+  const first = row.keyword !== 'E'
   return (
     <>
-      <div onDoubleClick={() => notes.editable && setWriting(true)} className={cn('group/line flex gap-3 py-2 pr-4', !step && 'bg-subtle')}>
+      <div onDoubleClick={() => notes.editable && setWriting(true)} className={cn('group/line flex gap-3 pr-4', head ? 'bg-subtle py-2' : first ? 'pb-1 pt-2.5' : 'py-1')}>
         <span className="flex w-7 shrink-0 justify-center pt-0.5">
           {notes.editable && (
             <button aria-label={`Comentar ${rowName(row)}`} onClick={() => setWriting(true)} className="flex size-[18px] items-center justify-center rounded-[5px] bg-info text-white opacity-0 shadow-card transition-opacity group-hover/line:opacity-100 focus-visible:opacity-100">
@@ -58,18 +74,8 @@ function CaseRow({ file, row, notes }: { file: string; row: Row; notes: Notes })
             </button>
           )}
         </span>
-        <span className={cn('shrink-0 select-none pt-px text-right text-sm tabular-nums text-faint', step ? 'w-6' : 'w-[104px] whitespace-nowrap text-left text-xs font-medium uppercase tracking-wide')}>{row.label}</span>
-        {step ? (
-          <div className="grid min-w-0 flex-1 gap-x-6 gap-y-1.5 sm:grid-cols-2">
-            <div className="min-w-0 space-y-1">
-              <p className="text-base text-fg">{row.text}</p>
-              {row.data && <p className="font-mono text-[13px] leading-5 text-fg2"><span className="font-sans text-muted">Dados · </span>{row.data}</p>}
-            </div>
-            <p className="flex min-w-0 gap-2 text-base text-fg2"><Icon name="checkCircle" size={15} className="mt-[3px] shrink-0 text-success-fg" />{row.expected}</p>
-          </div>
-        ) : (
-          <p className="min-w-0 flex-1 text-base text-fg2">{row.text}</p>
-        )}
+        <span className={cn('w-[72px] shrink-0 select-none pt-px text-right font-medium', head ? 'text-left' : 'text-sm', keywordTone[row.part], !first && 'text-faint')}>{row.keyword}</span>
+        <p className={cn('min-w-0 flex-1 text-base', head ? 'text-fg2' : 'text-fg')}>{row.text}</p>
       </div>
       {here.map((n) => (
         <div key={n.id} className="mx-3 my-2 flex items-start gap-2 rounded-control border bg-surface px-3 py-1">
@@ -95,8 +101,7 @@ function CaseFile({ entry, index, viewed, onViewed, notes }: { entry: TestCaseVi
           <span className="shrink-0 text-sm tabular-nums text-faint">{index + 1}</span>
           <span className="min-w-0 truncate text-base font-medium text-fg" title={entry.title}>{entry.title}</span>
           <KindBadge kind={entry.kind} />
-          <span className="shrink-0 text-xs tabular-nums text-muted">{entry.steps.length} {entry.steps.length === 1 ? 'passo' : 'passos'}</span>
-          {count > 0 && <span className="flex items-center gap-1 text-xs text-muted"><Icon name="comment" size={13} />{count}</span>}
+                    {count > 0 && <span className="flex items-center gap-1 text-xs text-muted"><Icon name="comment" size={13} />{count}</span>}
         </button>
         {entry.ref && (
           <a href={entry.url ?? undefined} target="_blank" rel="noreferrer" className={cn('flex items-center gap-1 text-sm text-muted', entry.url && 'hover:text-fg')}>
@@ -111,7 +116,7 @@ function CaseFile({ entry, index, viewed, onViewed, notes }: { entry: TestCaseVi
         )}
       </div>
       <Collapse open={open}>
-        <div className="divide-y border-t">{rowsOf(entry).map((row) => <CaseRow key={row.line} file={file} row={row} notes={notes} />)}</div>
+        <div className="border-t pb-2.5">{rowsOf(entry).map((row) => <CaseRow key={row.line} file={file} row={row} notes={notes} />)}</div>
       </Collapse>
     </div>
   )
@@ -124,7 +129,7 @@ export function feedback(cases: TestCaseView[], body: string, notes: Note[]): st
     if (mine.length === 0) return
     const lines = mine.map((n) => {
       const row = rowsOf(entry).find((r) => r.line === n.line)
-      return `- ${row ? `${rowName(row)} (${row.text})` : 'Caso'}: ${n.body}`
+      return `- ${row ? rowName(row) : 'Caso'}: ${n.body}`
     })
     parts.push(`### ${index + 1}. ${entry.title}\n${lines.join('\n')}`)
   })

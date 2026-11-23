@@ -85,8 +85,9 @@ export interface CaseBlockEntry {
   title: string;
   kind: "api" | "ui";
   objective?: string;
-  precondition?: string;
-  steps: { action: string; data?: string; expected: string }[];
+  given: string[];
+  when: string[];
+  then: string[];
   ref?: string;
   url?: string | null;
 }
