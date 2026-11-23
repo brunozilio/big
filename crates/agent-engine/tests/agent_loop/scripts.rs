@@ -19,7 +19,7 @@ export function run(input, ctx) {
 "#;
 
 fn script_tools(home: &std::path::Path, project: &std::path::Path) -> Vec<Box<dyn Tool>> {
-    let trusted = agent_engine::trust::Gate::at(project, Some(home), domain::trust::Trust::Trusted);
+    let trusted = agent_engine::scope::Scope::at(project, Some(home));
     load(&trusted).into_iter().map(|tool| Box::new(tool) as Box<dyn Tool>).collect()
 }
 
@@ -55,19 +55,6 @@ fn model() -> ScriptedModel {
         ScriptedModel::reply(vec![tool_use("m", "Mark", json!({}))]),
         ScriptedModel::reply(vec![Block::Text("Ok.".into())]),
     ])
-}
-
-#[test]
-fn a_project_s_tool_asks_the_first_time_even_when_bypassing_and_a_refusal_stops_it() {
-    let rig = Rig::new(PermissionMode::Bypass);
-    let home = tempfile::tempdir().expect("home");
-    let folder = rig.dir.path().join(brand::DIR).join("tools");
-    std::fs::create_dir_all(&folder).expect("tools");
-    std::fs::write(folder.join("mark.js"), TOOL).expect("tool");
-    let answerer = answer_every_ask(&rig, Decision::Deny);
-    rig.run_with(&model(), &mut vec![Message::user("mark")], script_tools(home.path(), rig.dir.path())).expect("run");
-    assert_eq!(answerer.join().expect("answerer"), 1, "asked once");
-    assert!(!rig.dir.path().join("mark.txt").exists(), "a refused tool never runs");
 }
 
 fn project_tool_run(rig: &Rig) -> String {
@@ -281,17 +268,6 @@ fn a_declared_exec_the_user_allows_runs() {
     assert_eq!(answerer.join().expect("answerer"), 1);
     assert_eq!(said[0], "exit 0", "{said:?}");
     assert!(rig.dir.path().join("made.txt").exists());
-}
-
-#[test]
-fn a_declared_exec_a_deny_rule_names_is_refused_without_asking() {
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
-    rig.workspace.policy.permissions = domain::permission_rules::PermissionRules::default()
-        .with(domain::permission_rules::RuleKind::Deny, "Bash(echo:*)");
-    let said = run_runner(&rig, r#", capabilities: ["exec"]"#);
-    assert!(said[0].starts_with("refused: "), "{said:?}");
-    assert!(asked_for(&rig).is_empty());
-    assert!(!rig.dir.path().join("made.txt").exists());
 }
 
 #[test]

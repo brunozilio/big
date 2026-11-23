@@ -34,7 +34,6 @@ pub struct Memories {
     store: Arc<dyn MemoryStore>,
     books: Arc<Mutex<Books>>,
     homes: Arc<dyn crate::Homes>,
-    trusts: crate::trust::Trusts,
 }
 
 impl std::fmt::Debug for Memories {
@@ -46,7 +45,7 @@ impl std::fmt::Debug for Memories {
 pub fn forget(_client: u64) {}
 
 pub fn of(services: &LocalServices) -> Memories {
-    services.memories.clone().with_homes(Arc::clone(&services.homes)).with_trusts(services.extensions.trusts.clone())
+    services.memories.clone().with_homes(Arc::clone(&services.homes))
 }
 
 fn keep<'a>(books: &'a mut MutexGuard<Books>, project: &Path, changed: Revised) -> &'a mut MemoryBook {
@@ -57,21 +56,11 @@ fn keep<'a>(books: &'a mut MutexGuard<Books>, project: &Path, changed: Revised) 
 
 impl Memories {
     pub fn new(store: Arc<dyn MemoryStore>) -> Self {
-        Self {
-            store,
-            books: Arc::default(),
-            homes: Arc::new(crate::OwnerHome::none()),
-            trusts: crate::trust::Trusts::default(),
-        }
+        Self { store, books: Arc::default(), homes: Arc::new(crate::OwnerHome::none()) }
     }
 
-    pub fn with_trusts(mut self, trusts: crate::trust::Trusts) -> Self {
-        self.trusts = trusts;
-        self
-    }
-
-    fn gate(&self, project: &Path) -> agent_engine::trust::Gate {
-        self.trusts.gate(project, self.home().as_deref())
+    fn gate(&self, project: &Path) -> agent_engine::scope::Scope {
+        agent_engine::scope::Scope::at(project, self.home().as_deref())
     }
 
     pub(crate) fn kept_in(db: crate::db::Db) -> Self {

@@ -105,20 +105,14 @@ mod tests {
         .expect("config");
         let cwd = repo.path().join("src");
         std::fs::create_dir_all(&cwd).expect("cwd");
+        std::fs::create_dir_all(repo.path().join(".git")).expect("a repository, so src is inside the project");
         let host = Extensions::default();
         let list = || states(list(&cwd, &host, Some(home.path())));
-        assert_eq!(
-            list(),
-            [("jira".into(), McpOrigin::Project, McpState::Untrusted)],
-            "an untrusted folder's servers are shown as skipped"
-        );
         assert!(known(&cwd, &host, Some(home.path()), "jira").is_ok());
         assert_eq!(
             known(&cwd, &host, Some(home.path()), "ghost"),
             Err("No MCP server `ghost` here; known: jira".into())
         );
-        std::fs::create_dir_all(repo.path().join(".git")).expect("a repository, so src is inside the project");
-        host.trusts.set(&cwd, Some(home.path()), true).expect("trusted");
         assert_eq!(list(), [("jira".into(), McpOrigin::Project, McpState::Pending)]);
 
         approve(&cwd, Some(home.path()), "jira", true).expect("approve");

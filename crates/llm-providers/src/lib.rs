@@ -3,7 +3,6 @@ extern crate self as llm_providers;
 pub mod added_tools;
 pub mod catalog;
 mod config;
-pub mod declared;
 pub mod model;
 pub mod oauth;
 pub mod providers;

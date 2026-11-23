@@ -5,7 +5,6 @@ pub mod builtin_agents;
 #[cfg(test)]
 mod builtin_skills;
 pub mod checked;
-pub mod host_judge;
 pub mod inbox;
 mod lsp;
 pub mod names;
@@ -18,7 +17,6 @@ pub mod progress;
 pub mod raw_text;
 pub mod read_files;
 pub mod repl;
-mod rule_target;
 pub(crate) mod script_bridge;
 pub(crate) mod script_io;
 pub mod script_tool;
@@ -45,10 +43,9 @@ pub use domain::permission::{Declared, Effect, SpawnKind};
 pub use llm_providers::web_search::WEB_SEARCH;
 pub use lsp::Lsp;
 pub(crate) use outside::settled;
-pub(crate) use workspace::from_domain;
 pub use workspace::{
-    Confiner, Launch, Launcher, Models, Network, OnThisMachine, Policy, Verification, WebSearcher, Workspace,
-    confinement_of, data_folders, env_secrets, temp_folders,
+    Launch, Launcher, Models, Network, OnThisMachine, Policy, Starter, Verification, WebSearcher, Workspace,
+    env_secrets,
 };
 
 use crate::model::ToolSpec;
@@ -64,8 +61,6 @@ pub struct Outcome {
     pub edited: Option<Box<domain::changes::Edited>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub background: Option<Box<domain::events::BackgroundChange>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub carried_from: Option<Box<String>>,
 }
 
 impl Outcome {
@@ -74,12 +69,7 @@ impl Outcome {
     }
 
     fn new(content: String, is_error: bool, images: Vec<domain::Image>) -> Self {
-        Self { content, is_error, images, shown: None, edited: None, background: None, carried_from: None }
-    }
-
-    pub fn carried_from(mut self, sources: Option<String>) -> Self {
-        self.carried_from = sources.map(Box::new);
-        self
+        Self { content, is_error, images, shown: None, edited: None, background: None }
     }
 
     pub fn in_the_background(mut self, change: domain::events::BackgroundChange) -> Self {

@@ -50,8 +50,8 @@ impl HostCall<'_> {
                     .map_err(|error| format!("{}: {error}", path.display()))
             }
             Capability::Exec => {
-                let confine = workspace.confiner();
-                crate::tools::script_io::exec(&workspace.cwd, arguments, &workspace.stop, &confine)
+                let starter = workspace.starter();
+                crate::tools::script_io::exec(&workspace.cwd, arguments, &workspace.stop, &starter)
             }
             Capability::Fetch => crate::tools::script_io::fetch(arguments, self.origin, workspace.stop.token()),
         }

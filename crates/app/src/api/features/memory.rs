@@ -25,6 +25,7 @@ pub enum MemoryOp {
     Seed,
     KeepSeeds { picked: Vec<usize> },
     Optimize { run: RunId, model: ModelOption },
+    KeepInstruction { line: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -44,6 +45,7 @@ pub enum MemoryReply {
     Score { path: PathBuf, report: String },
     Seeds { path: PathBuf, candidates: Vec<Candidate> },
     Optimizing { run: RunId },
+    InstructionKept { path: PathBuf, file: PathBuf },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

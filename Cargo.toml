@@ -15,6 +15,7 @@ brand = { path = "crates/brand" }
 content = { path = "crates/content" }
 script = { path = "crates/script" }
 domain = { path = "crates/domain" }
+connectors = { path = "crates/connectors" }
 app = { path = "crates/app", default-features = false }
 platform = { path = "crates/platform" }
 agent-engine = { path = "crates/agent-engine", default-features = false }
@@ -23,6 +24,9 @@ llm-providers = { path = "crates/llm-providers", default-features = false }
 code-map = { path = "crates/code-map" }
 console = { path = "crates/console" }
 page = { path = "crates/page" }
+store = { path = "crates/store" }
+orchestrator = { path = "crates/orchestrator" }
+sync = { path = "crates/sync" }
 
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

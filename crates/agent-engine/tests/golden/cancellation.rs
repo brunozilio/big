@@ -63,7 +63,7 @@ fn cancelling_while_an_edit_waits_for_permission_ends_in_cancelled_and_saves_the
         Checkpoint(0)
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
         ToolStarted w1 Write "out.txt" input="{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
-        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true, rule: None }
+        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true }
         ToolFinished w1
         ToolResult w1 failed "Not run: the run was stopped while waiting for the user's answer, so Write did not run and nothing was changed."
         Cancelled
@@ -102,7 +102,7 @@ fn cancelling_while_a_shell_command_runs_ends_in_cancelled_and_saves_the_stopped
     let stage = Stage::new();
     stage.script([call("b1", "Bash", json!({"command": "echo started; sleep 600"})), says("never asked")]);
     let mut request = stage.request("Wait a while");
-    request.policy.allowed_tools = vec!["Bash".into()];
+    request.policy.permission = domain::PermissionMode::Bypass;
 
     let mut run = stage.start(&request);
     run.until(|event| matches!(event, EngineEvent::ToolProgress { line, .. } if line.contains("started")));
@@ -123,7 +123,7 @@ fn cancelling_while_a_shell_command_runs_ends_in_cancelled_and_saves_the_stopped
         == prompt: conversation ==
         user:
           text "Wait a while"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nThe user enabled autonomous execution. Stay within the authorized task and verify the result.\nCollect background agent reports before completing. U…
         assistant:
           tool_use b1 Bash "{\"command\":\"echo started; sleep 600\"}"
         user:

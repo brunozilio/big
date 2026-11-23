@@ -136,7 +136,6 @@ mod tests {
             tool_name: "Bash".into(),
             description: "npm run deploy".into(),
             rememberable: false,
-            rule: None,
         };
         team.send(LEAD, "tester", &request.text(), None).expect("send");
         team.send("tester", LEAD, "unrelated work", None).expect("send");

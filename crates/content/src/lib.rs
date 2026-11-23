@@ -4,8 +4,14 @@ mod embedded {
     include!(concat!(env!("OUT_DIR"), "/content.rs"));
 }
 
+#[cfg(test)]
+mod bundle;
 mod install;
 mod render;
+#[cfg(test)]
+mod sdk_tests;
+#[cfg(test)]
+mod stdlib_tests;
 
 pub use install::{Installed, MANIFEST, install_files, install_once};
 

@@ -94,38 +94,6 @@ pub fn other_keys(providers: &ModelProviders, model: &ModelOption) -> Vec<(Model
         .collect()
 }
 
-pub fn declare_providers(gate: &agent_engine::trust::Gate) -> Vec<String> {
-    use agent_engine::declared_providers::{Loaded, load};
-    let approved =
-        agent_engine::prompt::settings::load(gate, &[]).map(|settings| settings.enabled_providers).unwrap_or_default();
-    let described: Vec<(bool, String)> = load(gate, &approved)
-        .into_iter()
-        .map(|loaded| match loaded {
-            Loaded::Ready(provider) => (true, format!("{provider} loaded")),
-            Loaded::Untrusted { path } => (
-                false,
-                format!("{}: the project's provider is skipped: {}", path.display(), domain::trust::NOT_TRUSTED),
-            ),
-            Loaded::Unapproved { path, id } => (
-                false,
-                format!(
-                    "{}: the project's provider {id} waits: add it to enabledProviders in your settings",
-                    path.display()
-                ),
-            ),
-            Loaded::Broken { path, why } => (false, format!("{}: left out: {why}", path.display())),
-        })
-        .collect();
-    for (ok, line) in &described {
-        if *ok {
-            tracing::info!("{line}");
-        } else {
-            tracing::warn!("{line}");
-        }
-    }
-    described.into_iter().map(|(_, line)| line).collect()
-}
-
 pub fn build(sessions: Arc<FileSessions>, language_servers: PathBuf) -> Engine {
     let apis = ProviderApis::new(Arc::new(NetHttp));
     let servers = LspPool::installing(Processes, IDLE, language_servers, Downloads(agent_engine::NetFetch));

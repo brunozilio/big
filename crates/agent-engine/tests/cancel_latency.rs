@@ -61,11 +61,8 @@ impl Project {
     fn request(&self) -> PromptRequest {
         let mut request = PromptRequest::plain(self.repo.path().into(), "go", ModelOption::new("m", "M"));
         request.policy.permission = PermissionMode::Bypass;
-        request.host.extensions = Some(domain::Extensions {
-            home: Some(self.home.path().into()),
-            trust: domain::trust::Trust::Trusted,
-            ..Default::default()
-        });
+        request.host.extensions =
+            Some(domain::Extensions { home: Some(self.home.path().into()), ..Default::default() });
         request
     }
 }

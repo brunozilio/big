@@ -1,10 +1,8 @@
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 
 use domain::features::{self, Features};
 use domain::model_roles::{ModelRole, ModelRoles};
-use domain::permission_rules::{PermissionRules, RuleKind};
 use domain::{PromptRequest, SessionId};
 
 use super::equip::{Equipped, MainAgent, Toolbox};
@@ -32,11 +30,7 @@ impl Job {
     ) -> Result<Governed, Stop> {
         let settings = &brief.settings;
         let Equipped { mut workspace, mut toolbox, main } = equipped;
-        workspace.policy = flagged(settings, &workspace.cwd, self.request.policy.safety_check);
-        workspace.policy.trust = brief.trust;
-        if let Some(notice) = sandbox_notice(&workspace, &SANDBOX_SAID) {
-            self.gate.emit(domain::EngineEvent::Notice(notice));
-        }
+        workspace.policy = flagged(settings, &workspace.cwd);
         workspace.models.escalation.clone_from(&settings.escalation);
         self.request.policy.budget = budget(&self.request, &settings.features);
         workspace.services.files = Some(Arc::default());
@@ -52,26 +46,15 @@ impl Job {
         workspace.anchored_memories = anchored(&self.request, &settings.features);
         workspace.blast_radius = settings.features.on(features::BLAST_RADIUS);
         workspace.hooks = settings.hooks.clone();
-        workspace.policy.permissions = permissions(&self.request, settings).map_err(Stop::failed)?;
         Ok(Governed { workspace, toolbox, main, roles })
     }
 }
 
-static SANDBOX_SAID: AtomicBool = AtomicBool::new(false);
-
-pub(in crate::engine) fn sandbox_notice(workspace: &Workspace, said: &AtomicBool) -> Option<String> {
-    let missing = workspace.sandbox_missing()?;
-    (!said.swap(true, Ordering::Relaxed)).then_some(missing.notice)
-}
-
-pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path, safety_check: bool) -> Policy {
+pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path) -> Policy {
     let on = |flag| settings.features.on(flag);
     Policy {
         scripts: settings.scripts,
-        sandbox: on(features::SANDBOX).then(|| settings.sandbox.clone()),
         redact: on(features::REDACT_SECRETS).then(|| Arc::new(tools::env_secrets(cwd))),
-        snapshots: on(features::DESTRUCTIVE_SNAPSHOT),
-        dependency_guard: on(features::DEPENDENCY_GUARD),
         escalation: on(features::ESCALATION),
         auto_review: on(features::AUTO_REVIEW),
         follow_through: on(features::FOLLOW_THROUGH),
@@ -83,7 +66,6 @@ pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path, safety_check: 
         web: domain::web_reading::WebReading::from(&settings.features),
         output: domain::output::Shaping::from(&settings.features),
         bash_output: settings.bash_output,
-        safety: safety_check.then(|| Arc::new(crate::guard::Safety::default())),
         ..Policy::default()
     }
 }
@@ -115,7 +97,7 @@ pub(in crate::engine) fn verification(
     let model = config
         .model(&request.session.model.id, request.session.model.provider)
         .map_err(|error| format!("judgeModel: {error}"))?;
-    let allow = criteria.judge_allow(&settings.judge_allow);
+    let allow = criteria.judge_commands();
     Ok(Some(Verification { criteria, model, allow }))
 }
 
@@ -127,21 +109,6 @@ pub(in crate::engine) fn anchored(request: &PromptRequest, features: &Features) 
         .filter(|brief| brief.anchors && features.on(features::MEMORY_ANCHORS))
         .map(|brief| brief.anchored.clone())
         .unwrap_or_default()
-}
-
-pub(in crate::engine) fn permissions(request: &PromptRequest, settings: &Settings) -> Result<PermissionRules, String> {
-    let mut permissions = settings.permissions.clone();
-    let asked = [
-        (RuleKind::Allow, &request.policy.allowed_tools),
-        (RuleKind::Ask, &request.policy.ask_tools),
-        (RuleKind::Deny, &request.policy.disallowed_tools),
-    ];
-    for (kind, rules) in asked {
-        for rule in rules {
-            permissions.add(kind, rule).map_err(|error| format!("--allowedTools/--disallowedTools: {error}"))?;
-        }
-    }
-    Ok(permissions)
 }
 
 #[cfg(test)]

@@ -78,41 +78,6 @@ fn judge_and_fallback_models_are_model_names() {
 }
 
 #[test]
-fn only_the_owner_lets_the_judge_run_commands_without_asking() {
-    let home = tempfile::tempdir().expect("home");
-    let repo = tempfile::tempdir().expect("repo");
-    let write = |path: std::path::PathBuf, text: &str| {
-        std::fs::create_dir_all(path.parent().expect("parent")).expect("dir");
-        std::fs::write(path, text).expect("write");
-    };
-    write(
-        repo.path().join(concat!(brand::dir!(), "/settings.json")),
-        r#"{"verification": {"allow": ["Bash(curl:*)"]}}"#,
-    );
-    write(
-        repo.path().join(concat!(brand::dir!(), "/settings.local.json")),
-        r#"{"verification": {"allow": ["Bash(npm run test:*)"]}}"#,
-    );
-    write(
-        home.path().join(concat!(brand::dir!(), "/settings.json")),
-        r#"{"verification": {"allow": ["Bash(make lint)"]}}"#,
-    );
-    let allowed: Vec<String> = load(repo.path(), Some(home.path()), &[])
-        .expect("settings")
-        .judge_allow
-        .listed()
-        .into_iter()
-        .map(|(_, rule)| rule)
-        .collect();
-    assert_eq!(allowed, ["Bash(make lint)", "Bash(npm run test:*)"], "a checked-in file cannot allow commands");
-    write(repo.path().join(concat!(brand::dir!(), "/settings.local.json")), r#"{"verification": {"allow": "x"}}"#);
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("a wrong list is left out, not fatal");
-    assert!(settings.notices.iter().any(|notice| notice.contains("verification.allow: expected array")));
-    let allowed: Vec<String> = settings.judge_allow.listed().into_iter().map(|(_, rule)| rule).collect();
-    assert_eq!(allowed, ["Bash(make lint)"]);
-}
-
-#[test]
 fn only_the_owner_approves_a_project_s_mcp_servers() {
     let home = tempfile::tempdir().expect("home");
     let repo = tempfile::tempdir().expect("repo");
@@ -198,52 +163,6 @@ fn a_project_s_scripts_get_nothing_until_the_owner_s_settings_turn_it_on() {
     write(home.path().join(brand::DIR), serde_json::json!({ "files": true }));
     let scripts = load(repo.path(), Some(home.path()), &[]).expect("load").scripts;
     assert_eq!(scripts.project, ScriptAccess { files: true, processes: false, network: false });
-}
-
-#[test]
-fn only_the_owner_turns_the_sandbox_off_or_widens_it() {
-    let home = tempfile::tempdir().expect("home");
-    let repo = tempfile::tempdir().expect("repo");
-    let write = |root: std::path::PathBuf, settings: serde_json::Value| {
-        std::fs::create_dir_all(&root).expect("dir");
-        std::fs::write(root.join("settings.json"), settings.to_string()).expect("write");
-    };
-    let checked_in = serde_json::json!({
-        "features": { "experimental-sandbox": false },
-        "sandbox": { "allowWrite": ["/etc"], "network": false }
-    });
-    write(repo.path().join(brand::DIR), checked_in);
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("load");
-    assert!(settings.features.on(domain::features::SANDBOX), "a repository cannot turn the sandbox off");
-    assert!(settings.sandbox.allow_write.is_empty() && !settings.sandbox.network);
-
-    let owners = serde_json::json!({
-        "features": { "experimental-sandbox": false },
-        "sandbox": { "allowWrite": ["~/.cargo"] }
-    });
-    write(home.path().join(brand::DIR), owners);
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("load");
-    assert!(!settings.features.on(domain::features::SANDBOX));
-    assert_eq!(settings.sandbox.allow_write, ["~/.cargo"]);
-}
-
-#[test]
-fn only_the_owner_stops_requiring_the_sandbox() {
-    let home = tempfile::tempdir().expect("home");
-    let repo = tempfile::tempdir().expect("repo");
-    let write = |root: std::path::PathBuf, settings: serde_json::Value| {
-        std::fs::create_dir_all(&root).expect("dir");
-        std::fs::write(root.join("settings.json"), settings.to_string()).expect("write");
-    };
-    let lifted = serde_json::json!({ "sandbox": { "required": false } });
-    let required = load(repo.path(), Some(home.path()), &[]).expect("load").sandbox.required;
-    assert_eq!(required, domain::sandbox::REQUIRED_BY_DEFAULT);
-    write(repo.path().join(brand::DIR), lifted.clone());
-    let settings = load(repo.path(), Some(home.path()), &[]).expect("load");
-    assert_eq!(settings.sandbox.required, domain::sandbox::REQUIRED_BY_DEFAULT, "a repository cannot lift it");
-    std::fs::remove_file(repo.path().join(brand::DIR).join("settings.json")).expect("remove");
-    write(home.path().join(brand::DIR), lifted);
-    assert!(!load(repo.path(), Some(home.path()), &[]).expect("load").sandbox.required, "the owner can");
 }
 
 #[test]

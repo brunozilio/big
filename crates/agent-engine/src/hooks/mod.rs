@@ -13,7 +13,7 @@ pub use self::scripts::BUILTIN as BUILTIN_SCRIPT;
 pub(crate) use self::validate::TIMEOUT_SECONDS;
 use crate::tools::Workspace;
 pub use domain::hooks::{HandlerKind, HookEvent};
-use domain::permission_rules::PermissionDecision;
+use domain::permission::RuleKind as PermissionDecision;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -129,7 +129,7 @@ impl Handler {
 }
 
 impl Hooks {
-    pub fn listed(&self) -> Vec<domain::permission_rules::HookInfo> {
+    pub fn listed(&self) -> Vec<domain::permission::HookInfo> {
         let mut listed = Vec::new();
         for (event, groups) in &self.0 {
             for group in groups {
@@ -143,11 +143,7 @@ impl Hooks {
                         }
                         HandlerKind::Command | HandlerKind::Script => handler.command.clone(),
                     };
-                    listed.push(domain::permission_rules::HookInfo {
-                        event: *event,
-                        matcher: group.matcher.clone(),
-                        runs,
-                    });
+                    listed.push(domain::permission::HookInfo { event: *event, matcher: group.matcher.clone(), runs });
                 }
             }
         }

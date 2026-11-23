@@ -36,5 +36,21 @@ pub fn handle(context: &Context<'_>, request: MemoryRequest) -> Result<MemoryRep
             (context.submit)(run, memories.optimization(&path, model))?;
             Ok(MemoryReply::Optimizing { run })
         }
+        MemoryOp::KeepInstruction { line } => {
+            let file = keep_instruction(&path, &line)?;
+            Ok(MemoryReply::InstructionKept { path, file })
+        }
     }
+}
+
+fn keep_instruction(cwd: &std::path::Path, line: &str) -> Result<std::path::PathBuf, String> {
+    let root = cwd.join(brand::INSTRUCTIONS);
+    let nested = cwd.join(brand::DIR).join(brand::INSTRUCTIONS);
+    let file = if !root.exists() && nested.exists() { nested } else { root };
+    let kept = platform::store::Document::hand_edited(&file).try_update_text(|text| {
+        *text = domain::learning::with_learned(text, line)?;
+        Ok::<(), String>(())
+    });
+    kept.map_err(|error| error.to_string())??;
+    Ok(file)
 }

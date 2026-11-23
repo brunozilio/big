@@ -53,7 +53,7 @@ impl Fixture {
 
     fn connect(&self, request: &PromptRequest) -> Vec<Arc<McpServer>> {
         let http: Arc<dyn Http> = Arc::new(NetHttp);
-        self.pool.connect(request, &McpSources::default(), &http, &platform::Stop::new(), &Arc::default())
+        self.pool.connect(request, &McpSources::default(), &http, &platform::Stop::new())
     }
 
     fn started(&self) -> Vec<String> {

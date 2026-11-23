@@ -11,14 +11,6 @@ impl Random {
     pub(crate) fn below(&mut self, most: usize) -> usize {
         usize::try_from(self.next() % most.max(1) as u64).unwrap_or_default()
     }
-
-    pub(crate) fn pick<'a>(&mut self, from: &[&'a str]) -> &'a str {
-        from[self.below(from.len())]
-    }
-
-    pub(crate) fn chance(&mut self, one_in: usize) -> bool {
-        self.below(one_in) == 0
-    }
 }
 
 pub(crate) fn cases() -> usize {

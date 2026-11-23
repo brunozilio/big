@@ -20,7 +20,7 @@ fn client(engine: &FakeEngine, data: &std::path::Path) -> app::Client {
 fn asked() -> EngineEvent {
     EngineEvent::Asked(AgentAsk {
         id: AskId("a1".into()),
-        kind: AskKind::Permission { tool: "Bash".into(), subject: "cargo test".into(), rememberable: true, rule: None },
+        kind: AskKind::Permission { tool: "Bash".into(), subject: "cargo test".into(), rememberable: true },
     })
 }
 

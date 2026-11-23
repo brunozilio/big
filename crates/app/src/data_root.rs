@@ -150,7 +150,6 @@ impl DataRoot {
         };
         if self.keeps_nothing() {
             return Stores {
-                trusts: Arc::new(crate::trust::InMemoryTrustStore::default()),
                 settings: Arc::new(InMemorySettingsStore::default()),
                 catalog,
                 memories,
@@ -165,7 +164,6 @@ impl DataRoot {
             _ => crate::secrets::secrets_in(self.secrets().as_deref()),
         };
         Stores {
-            trusts: Arc::new(crate::trust::FileTrustStore::new(self.users())),
             settings: Arc::new(FileSettingsStore::new(self.users())),
             catalog,
             memories,
@@ -182,7 +180,6 @@ fn in_memory() -> Option<Db> {
 }
 
 pub(crate) struct Stores {
-    pub trusts: Arc<dyn crate::trust::TrustStore>,
     pub settings: Arc<dyn SettingsStore>,
     pub catalog: Arc<dyn SessionCatalog>,
     pub memories: Memories,

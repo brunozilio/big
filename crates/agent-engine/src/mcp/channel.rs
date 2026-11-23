@@ -122,7 +122,6 @@ done
             command: "/bin/sh".into(),
             args: vec!["-c".into(), SERVER.into()],
             env: vec![],
-            sandbox: Default::default(),
         };
         let http: Arc<dyn Http> = Arc::new(ScriptedHttp::new([]));
         let server = open(&spec, &http, 9501).expect("channel");
@@ -153,7 +152,6 @@ done
             command: "/bin/sh".into(),
             args: vec!["-c".into(), SERVER.into()],
             env: vec![],
-            sandbox: Default::default(),
         };
         let http: Arc<dyn Http> = Arc::new(ScriptedHttp::new([]));
         let local = Bridge::local(&open(&spec, &http, 9503).expect("channel"));
@@ -192,7 +190,6 @@ done
             command: "/bin/sh".into(),
             args: vec!["-c".into(), plain.into()],
             env: vec![],
-            sandbox: Default::default(),
         };
         let http: Arc<dyn Http> = Arc::new(ScriptedHttp::new([]));
         let error = open(&spec, &http, 9502).expect_err("not a channel");

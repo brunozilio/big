@@ -125,16 +125,6 @@ pub enum ClientCommand {
         path: PathBuf,
         name: String,
     },
-    Trust {
-        path: PathBuf,
-        trusted: bool,
-    },
-    TrustForThisProcess {
-        path: PathBuf,
-    },
-    TrustState {
-        path: PathBuf,
-    },
     CancelRequest {
         request: RequestId,
     },
@@ -176,9 +166,6 @@ impl ClientCommand {
             Self::RemoveMcpServer { .. } => "remove_mcp_server",
             Self::SignInMcpServer { .. } => "sign_in_mcp_server",
             Self::SignOutMcpServer { .. } => "sign_out_mcp_server",
-            Self::Trust { .. } => "trust",
-            Self::TrustForThisProcess { .. } => "trust_for_this_process",
-            Self::TrustState { .. } => "trust_state",
             Self::CancelRequest { .. } => "cancel_request",
         }
     }
@@ -237,7 +224,6 @@ mod tests {
                         tool_name: "Bash".into(),
                         description: "npm test".into(),
                         rememberable: true,
-                        rule: None,
                     },
                 },
                 decision: domain::Decision::Allow,
@@ -255,9 +241,6 @@ mod tests {
             ClientCommand::RemoveMcpServer { path: "/repo".into(), name: "atlassian".into() },
             ClientCommand::SignInMcpServer { path: "/repo".into(), name: "linear".into() },
             ClientCommand::SignOutMcpServer { path: "/repo".into(), name: "linear".into() },
-            ClientCommand::Trust { path: "/repo".into(), trusted: true },
-            ClientCommand::TrustForThisProcess { path: "/repo".into() },
-            ClientCommand::TrustState { path: "/repo".into() },
             ClientCommand::CancelRequest { request: RequestId(7) },
         ];
         for command in commands {

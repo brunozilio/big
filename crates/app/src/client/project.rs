@@ -1,18 +1,15 @@
 use std::path::{Path, PathBuf};
 
 use crate::api::features::code_map::CodeMapRequest;
-use crate::api::features::declared_providers::DeclaredProvidersRequest;
 use crate::api::features::flags::{FlagsRequest, ListedFlag};
+use crate::api::features::memory::{MemoryOp, MemoryReply, MemoryRequest};
 use crate::api::features::plugins::{PluginsReply, PluginsRequest};
 use crate::api::features::schedules::{SchedulesReply, SchedulesRequest};
 use crate::api::features::shell::{BackgroundCommand, ShellReply, ShellRequest};
-use crate::api::features::suggested_rules::{SuggestedRulesReply, SuggestedRulesRequest};
 use crate::api::features::trace::{TraceReply, TraceRequest};
 use domain::SessionId;
 use domain::output::Saving;
-use domain::permission_rules::RuleKind;
 use domain::schedule::{Scheduled, When};
-use domain::suggested_rules::Suggestion;
 
 use crate::client::features::unexpected;
 use crate::{Client, Error};
@@ -76,25 +73,11 @@ impl Client {
         self.ask_schedules(SchedulesRequest::Create { prompt: prompt.to_owned(), when })
     }
 
-    pub fn suggested_rules(&self, cwd: &Path) -> Result<Vec<Suggestion>, Error> {
-        match self.ask_suggested_rules(SuggestedRulesRequest::List { cwd: cwd.to_path_buf() })? {
-            SuggestedRulesReply::Suggested(suggestions) => Ok(suggestions),
-            _ => Err(unexpected()),
-        }
-    }
-
-    pub fn keep_rule(&self, cwd: &Path, kind: RuleKind, rule: &str) -> Result<(), Error> {
-        let request = SuggestedRulesRequest::KeepRule { cwd: cwd.to_path_buf(), kind, rule: rule.to_owned() };
-        match self.ask_suggested_rules(request)? {
-            SuggestedRulesReply::RuleKept => Ok(()),
-            _ => Err(unexpected()),
-        }
-    }
-
     pub fn keep_instruction(&self, cwd: &Path, line: &str) -> Result<PathBuf, Error> {
-        let request = SuggestedRulesRequest::KeepInstruction { cwd: cwd.to_path_buf(), line: line.to_owned() };
-        match self.ask_suggested_rules(request)? {
-            SuggestedRulesReply::InstructionKept { file } => Ok(file),
+        let request =
+            MemoryRequest { path: cwd.to_path_buf(), op: MemoryOp::KeepInstruction { line: line.to_owned() } };
+        match self.ask_memory(request)? {
+            MemoryReply::InstructionKept { file, .. } => Ok(file),
             _ => Err(unexpected()),
         }
     }
@@ -124,10 +107,6 @@ impl Client {
     pub fn code_map(&self, cwd: &Path, prompt: &str) -> Result<Option<String>, Error> {
         let request = CodeMapRequest { path: cwd.to_path_buf(), prompt: prompt.to_owned() };
         self.ask_code_map(request).map(|reply| reply.map)
-    }
-
-    pub fn declare_providers(&self, cwd: &Path) -> Result<Vec<String>, Error> {
-        self.ask_declared_providers(DeclaredProvidersRequest { path: cwd.to_path_buf() }).map(|reply| reply.lines)
     }
 
     pub fn output_savings(&self) -> Result<Vec<Saving>, Error> {

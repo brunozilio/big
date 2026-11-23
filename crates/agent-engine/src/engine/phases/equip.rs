@@ -57,24 +57,14 @@ impl Job {
         self.control = self.control.reconfigured(main.config.permission, main.config.dont_ask);
         workspace.stop = self.control.shared_stop();
         workspace.observing = main.config.observing();
-        let judge = Arc::new(self.host_judge());
-        workspace.services.judge = Some(Arc::clone(&judge));
         let stop = self.control.stop_flag();
-        let servers = self.live.connect(&self.request, &brief.mcp(), &self.mcp, stop, &judge);
+        let servers = self.live.connect(&self.request, &brief.mcp(), &self.mcp, stop);
         tools.extend(crate::mcp::tools_of(&servers, stop));
         tools::script_tool::join(&mut tools, self.live.scripts(brief, &self.request.session.cwd));
         if let Some(expanded) = crate::mcp::extras::expand_prompt(&servers, &self.request.prompt.text, stop) {
             self.request.prompt.text = expanded.map_err(Stop::failed)?;
         }
         Ok(Equipped { workspace, toolbox: Toolbox { tools, servers }, main })
-    }
-
-    fn host_judge(&self) -> tools::host_judge::HostJudge {
-        let gate = self.gate.clone();
-        let emit: tools::host_judge::Emit = Arc::new(move |event| {
-            gate.emit(event);
-        });
-        tools::host_judge::HostJudge::attended(Arc::clone(&self.control), emit)
     }
 
     fn offer_language_servers(&self, brief: &Brief, workspace: &mut Workspace, tools: &mut Vec<Box<dyn Tool>>) {

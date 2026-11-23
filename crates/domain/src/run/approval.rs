@@ -11,17 +11,9 @@ pub struct AgentAsk {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AskKind {
-    Permission {
-        tool: String,
-        subject: String,
-        rememberable: bool,
-        #[serde(default, skip_serializing_if = "Option::is_none")]
-        rule: Option<String>,
-    },
+    Permission { tool: String, subject: String, rememberable: bool },
     Questions(Vec<Question>),
-    Plan {
-        plan: String,
-    },
+    Plan { plan: String },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

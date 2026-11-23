@@ -7,10 +7,10 @@ use agent_engine::transcript::Block;
 use domain::{EngineEvent, PromptRequest};
 
 use crate::plugins::SERVER;
-use crate::{Source, finish, model, start};
+use crate::{Source, finish, start};
 
 fn offered(repo: &std::path::Path) -> Vec<String> {
-    offered_to(&crate::trusted(repo, "hi"))
+    offered_to(&crate::asked_in(repo, "hi"))
 }
 
 fn offered_to(request: &PromptRequest) -> Vec<String> {
@@ -41,9 +41,4 @@ fn a_project_server_reaches_a_run_once_approved() {
     )
     .expect("approve");
     assert!(offered(repo.path()).contains(&"mcp__jira__ping".to_owned()));
-    let untrusted = PromptRequest::plain(repo.path().into(), "hi", model());
-    assert!(
-        !offered_to(&untrusted).iter().any(|name| name.starts_with("mcp__jira__")),
-        "approved in a file of a folder nobody trusted: not started"
-    );
 }

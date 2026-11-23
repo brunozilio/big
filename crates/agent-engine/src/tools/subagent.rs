@@ -22,7 +22,7 @@ pub struct FoundAgent {
 
 pub fn discover(folder: Folder<'_>, home: Option<&Path>) -> Vec<FoundAgent> {
     let cwd = folder.cwd;
-    let gate = crate::trust::Gate::within(folder, home);
+    let gate = crate::scope::Scope::within(folder, home);
     let project_folders = cwd.ancestors().count();
     let mut sources: Vec<(PathBuf, Option<String>)> = Vec::new();
     for directory in cwd.ancestors() {
@@ -159,7 +159,10 @@ mod tests {
         let folder = Folder { cwd: repo.path(), extensions: None };
         let tool = AgentTool { agents: discover(folder, None) };
         let description = tool.spec().description;
-        assert!(description.contains("- reviewer: Reviews diffs.\n- Explore: "), "project agents first: {description}");
+        assert!(
+            description.contains("- reviewer: Reviews diffs.\n- developer: "),
+            "project agents first: {description}"
+        );
         assert!(description.contains("- fork: "));
         let reviewer = tool.chosen(&json!({ "subagent_type": "reviewer" })).expect("known").expect("custom");
         assert_eq!(reviewer.instructions, "Be strict.");

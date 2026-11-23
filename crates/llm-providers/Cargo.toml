@@ -7,8 +7,6 @@ publish.workspace = true
 license.workspace = true
 
 [features]
-default = ["subscription-providers"]
-subscription-providers = []
 test-support = []
 
 [dependencies]

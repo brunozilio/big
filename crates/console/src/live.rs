@@ -55,11 +55,7 @@ pub struct Live {
 
 impl Default for Live {
     fn default() -> Self {
-        Self {
-            board: Arc::default(),
-            updates: broadcast::channel(KEPT_UPDATES).0,
-            desk: Desk::default(),
-        }
+        Self { board: Arc::default(), updates: broadcast::channel(KEPT_UPDATES).0, desk: Desk::default() }
     }
 }
 

@@ -20,7 +20,7 @@ pub fn start(workspace: &Workspace, path: &Path) -> String {
         shells::kill(client, &id);
         crate::tools::inbox::withdraw(client, &shells::ended_source(&id));
     }
-    let mut shell = workspace.confined(platform::shell(&run.command));
+    let mut shell = workspace.launched(platform::shell(&run.command));
     shell.current_dir(&run.folder).envs(run.env.iter().cloned()).stdin(Stdio::null());
     match shells::start(workspace, &label, &mut shell) {
         Ok(id) => {

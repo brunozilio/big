@@ -19,15 +19,15 @@ fn client(data: &std::path::Path, off: &[&str]) -> Client {
 #[test]
 fn a_feature_that_is_turned_off_is_an_error_of_its_own_that_says_how_to_turn_it_on() {
     let data = tempfile::tempdir().expect("data");
-    let client = client(data.path(), &[domain::features::MEMORY_SEARCH, domain::features::SUGGESTED_RULES]);
+    let client = client(data.path(), &[domain::features::MEMORY_SEARCH, domain::features::SCHEDULES]);
 
-    let refused = client.suggested_rules(data.path()).expect_err("off");
+    let refused = client.scheduled().expect_err("off");
 
     assert!(
-        matches!(&refused, Error::Feature(FeatureError::FeatureOff { feature: FeatureName::SuggestedRules })),
+        matches!(&refused, Error::Feature(FeatureError::FeatureOff { feature: FeatureName::Schedules })),
         "{refused:?}"
     );
-    assert_eq!(refused.to_string(), "suggested_rules is turned off (/features suggested-rules on)");
+    assert_eq!(refused.to_string(), "schedules is turned off (/features schedules on)");
     assert!(client.notices(true).expect("notices").is_empty());
 }
 
@@ -62,9 +62,8 @@ fn each_feature_answers_its_typed_call() {
     assert!(client.flags(cwd).expect("flags").iter().any(|listed| listed.flag.name == "budget" && listed.flag.on));
     assert!(client.scheduled().expect("scheduled").is_empty());
     assert!(client.take_due_schedules().expect("due").is_empty());
-    assert!(client.suggested_rules(cwd).expect("rules").is_empty());
+    assert!(client.keep_instruction(cwd, "Run the tests first.").is_ok());
     assert_eq!(client.trace_of_every_session().expect("trace")["sessions"], serde_json::json!([]));
     assert_eq!(client.code_map(cwd, "hello").expect("code map"), None);
-    assert!(client.declare_providers(cwd).is_ok());
     assert!(client.output_savings().expect("savings").is_empty());
 }

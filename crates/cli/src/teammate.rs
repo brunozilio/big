@@ -113,14 +113,13 @@ impl Mailbox {
         let request_id = format!("{}-{nanos:x}", self.me.name);
         let from = self.me.name.clone();
         let (request, summary) = match &ask.kind {
-            app::AskKind::Permission { tool, subject, rememberable, rule } => (
+            app::AskKind::Permission { tool, subject, rememberable } => (
                 Protocol::PermissionRequest {
                     request_id: request_id.clone(),
                     from,
                     tool_name: tool.clone(),
                     description: subject.clone(),
                     rememberable: *rememberable,
-                    rule: rule.clone(),
                 },
                 format!("may I use {tool}?"),
             ),
@@ -221,7 +220,6 @@ mod tests {
                 tool: "Bash".into(),
                 subject: "npm run deploy".into(),
                 rememberable: true,
-                rule: None,
             },
         };
         let answered = |decision: app::Decision| {
@@ -257,12 +255,7 @@ mod tests {
         team.send("tester", LEAD, &asked.text(), None).expect("send");
         let ask = app::AgentAsk {
             id: app::AskId("ask-1".into()),
-            kind: app::AskKind::Permission {
-                tool: "Bash".into(),
-                subject: "x".into(),
-                rememberable: false,
-                rule: None,
-            },
+            kind: app::AskKind::Permission { tool: "Bash".into(), subject: "x".into(), rememberable: false },
         };
 
         assert_eq!(mailbox.forward(&ask), Some(app::Decision::Deny));

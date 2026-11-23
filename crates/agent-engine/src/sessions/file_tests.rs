@@ -103,7 +103,7 @@ fn recording_into_a_conversation_saved_in_the_old_format_keeps_the_conversation(
     store.record(&request, &id, &prompted).expect("record");
     assert_eq!(store.load_for(&request, &id), Some(vec![Message::user("old")]));
     assert_eq!(store.entries(&request, &id).expect("entries"), [Entry::Message(Message::user("old")), prompted]);
-    assert!(legacy.exists(), "the trace has its own file, so the old conversation is left as it was");
+    assert!(!legacy.exists(), "the trace joins the session file, which takes the old conversation in first");
 }
 
 #[test]

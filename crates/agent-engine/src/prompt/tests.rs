@@ -28,7 +28,6 @@ fn knows_that_configuring_means_its_own_files() {
         assert!(prompt.contains(&format!("~/{}/", brand::DIR)), "names the user's folder");
         assert!(prompt.contains(file), "names {file}");
     }
-    assert!(prompt.contains("`configure` skill"));
     assert!(prompt.contains("Never edit another app's configuration"));
 }
 
@@ -149,18 +148,6 @@ fn finds_brand_md_first_then_agents_md() {
             (Scope::Local, "local".into()),
         ]
     );
-}
-
-#[cfg(unix)]
-#[test]
-fn the_snapshot_of_a_repository_runs_nothing_its_config_names() {
-    let hostile = crate::hostile_repository::Hostile::new();
-
-    let found = snapshot(hostile.path()).expect("snapshot");
-
-    assert!(found.status.contains("a.txt"), "{found:?}");
-    assert_eq!(hostile.ran(), None, "the repository's fsmonitor, filter or hook ran");
-    assert!(hostile.plain_git_runs_it(), "the same repository does run them through plain git");
 }
 
 #[test]

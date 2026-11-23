@@ -6,7 +6,6 @@ use domain::mcp::{McpEndpoint, respond, text_result};
 use serde_json::{Value, json};
 
 use super::ServerSpec;
-use crate::tools::host_judge::{Grounds, HostJudge};
 use crate::tools::script_io::StandaloneHost;
 use crate::tools::script_tool::{Capabilities, Declaration};
 pub use crate::tools::script_tool::{Origin, ScriptAccess};
@@ -15,7 +14,6 @@ pub use crate::tools::script_tool::{Origin, ScriptAccess};
 pub struct Granted {
     pub access: ScriptAccess,
     pub origin: Origin,
-    pub confinement: Option<platform::sandbox::Confinement>,
 }
 
 pub fn found(folder: &Path, cwd: &Path, granted: &Granted) -> Vec<ServerSpec> {
@@ -32,8 +30,6 @@ pub fn found(folder: &Path, cwd: &Path, granted: &Granted) -> Vec<ServerSpec> {
                 cwd: cwd.to_path_buf(),
                 access: granted.access,
                 origin: granted.origin,
-                confinement: granted.confinement.clone(),
-                judge: crate::tools::host_judge::SharedJudge::default(),
             })
         })
         .collect();
@@ -48,11 +44,10 @@ pub struct ScriptServer {
     cwd: PathBuf,
     access: ScriptAccess,
     origin: Origin,
-    confine: crate::tools::Confiner,
+    starter: crate::tools::Starter,
     busy: std::time::Duration,
     tools: Vec<Value>,
     capabilities: Capabilities,
-    judge: Arc<HostJudge>,
 }
 
 impl std::fmt::Debug for ScriptServer {
@@ -81,16 +76,9 @@ impl ScriptServer {
         let capabilities = Capabilities::listed(exported.get("capabilities"), Declaration::ServerExport)
             .map_err(|error| format!("{shown}: {error}"))?;
         let (name, path, cwd) = (name.to_owned(), path.to_path_buf(), cwd.to_path_buf());
-        let confine = crate::tools::Confiner::default();
+        let starter = crate::tools::Starter::default();
         let busy = script::MOST_BUSY;
-        let judge = Arc::default();
-        Ok(Self { name, path, source, cwd, access, origin: Origin::Project, confine, busy, tools, capabilities, judge })
-    }
-
-    #[must_use]
-    pub fn judged_by(mut self, judge: Arc<HostJudge>) -> Self {
-        self.judge = judge;
-        self
+        Ok(Self { name, path, source, cwd, access, origin: Origin::Project, starter, busy, tools, capabilities })
     }
 
     #[cfg(test)]
@@ -106,12 +94,6 @@ impl ScriptServer {
         self
     }
 
-    #[must_use]
-    pub fn confined_to(mut self, confinement: Option<platform::sandbox::Confinement>) -> Self {
-        self.confine = crate::tools::Confiner::within(confinement);
-        self
-    }
-
     fn call(&self, tool: &str, arguments: &Value) -> Value {
         if !self.tools.iter().any(|known| known["name"] == tool) {
             return text_result(format!("{} has no tool {tool}", self.name), true);
@@ -121,13 +103,11 @@ impl ScriptServer {
             cwd: self.cwd.clone(),
             access: self.access,
             origin: self.origin,
-            confine: self.confine.clone(),
+            starter: self.starter.clone(),
             stop: Arc::clone(&stop),
             cancel: crate::model::CancellationToken::new(),
             script: format!("the MCP server {}", self.name),
             capabilities: self.capabilities.clone(),
-            judge: Arc::clone(&self.judge),
-            grounds: self.judge.settled().unwrap_or_else(|| Grounds::at(&self.cwd)),
         });
         let data = json!({ "cwd": self.cwd.display().to_string(), "server": self.name });
         let export = format!("default.tools.{tool}.run");
@@ -173,49 +153,12 @@ mod tests {
         assert_eq!(added["result"]["content"][0]["text"], "5");
         let failed = server.handle(&call("fail")).expect("answer");
         assert_eq!(failed["result"]["isError"], true);
-        let granted = Granted { access: ScriptAccess::default(), origin: Origin::Owner, confinement: None };
+        let granted = Granted { access: ScriptAccess::default(), origin: Origin::Owner };
         assert_eq!(found(dir.path(), dir.path(), &granted).len(), 1);
     }
 
     #[test]
-    fn a_javascript_server_s_commands_run_in_the_sandbox_it_was_given() {
-        if !platform::sandbox::supported() {
-            return;
-        }
-        let project = tempfile::tempdir().expect("project");
-        let elsewhere = tempfile::tempdir().expect("elsewhere");
-        let outside = elsewhere.path().join("made.txt");
-        let file = project.path().join("writer.js");
-        let source = format!(
-            r#"export default {{ capabilities: ["exec"], tools: {{ write: {{ run: (input, ctx) => String(ctx.exec("echo x > '{}'").code) }} }} }};"#,
-            outside.display()
-        );
-        std::fs::write(&file, source).expect("server");
-        let confinement = platform::sandbox::Confinement {
-            writable: vec![project.path().to_path_buf()],
-            network: true,
-            ..platform::sandbox::Confinement::default()
-        };
-        let judge = Arc::new(HostJudge::unattended());
-        let mut grounds = Grounds::at(project.path());
-        grounds.rules = domain::permission_rules::PermissionRules::default()
-            .with(domain::permission_rules::RuleKind::Allow, "Bash");
-        judge.settle(grounds);
-        let server = ScriptServer::open("writer", &file, project.path(), ScriptAccess::default())
-            .expect("open")
-            .confined_to(Some(confinement))
-            .judged_by(judge);
-        let ran = server.handle(&json!({ "jsonrpc": "2.0", "id": 0, "method": "tools/call", "params": { "name": "write", "arguments": {} } }));
-        let ran = ran.expect("answer");
-        assert!(!ran["result"]["content"][0]["text"].as_str().is_some_and(|t| t.contains("refused")), "{ran}");
-        let call = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "write", "arguments": {} } });
-        let answer = server.handle(&call).expect("answer");
-        assert_ne!(answer["result"]["content"][0]["text"], "0", "{answer}");
-        assert!(!outside.exists(), "the sandbox kept the write inside the project");
-    }
-
-    #[test]
-    fn a_javascript_server_declares_what_it_calls_and_each_call_is_judged_by_the_run_s_rules() {
+    fn a_javascript_server_declares_what_it_calls_and_runs_only_that() {
         let dir = tempfile::tempdir().expect("dir");
         let call = |tool: &str| json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": tool, "arguments": {} } });
         let said = |server: &ScriptServer, tool: &str| {
@@ -240,19 +183,8 @@ mod tests {
             r#"export default { capabilities: ["exec"], tools: { go: { run: (input, ctx) => String(ctx.exec("touch made.txt").code) } } };"#,
         )
         .expect("server");
-        let judge = Arc::new(HostJudge::unattended());
-        judge.settle(Grounds::at(dir.path()));
-        let server = ScriptServer::open("declared", &declared, dir.path(), ScriptAccess::default())
-            .expect("open")
-            .judged_by(Arc::clone(&judge));
-        let refused = said(&server, "go");
-        assert!(refused.contains("nobody can be asked") && refused.contains("the MCP server declared"), "{refused}");
-        assert!(!dir.path().join("made.txt").exists());
-        let mut grounds = Grounds::at(dir.path());
-        grounds.rules = domain::permission_rules::PermissionRules::default()
-            .with(domain::permission_rules::RuleKind::Allow, "Bash(touch:*)");
-        judge.settle(grounds);
-        assert_eq!(said(&server, "go"), "0", "the run's rules, settled after the server started, apply");
+        let server = ScriptServer::open("declared", &declared, dir.path(), ScriptAccess::default()).expect("open");
+        assert_eq!(said(&server, "go"), "0", "a declared call runs");
         assert!(dir.path().join("made.txt").exists());
         assert!(ScriptServer::open("bad", &write_bad(dir.path()), dir.path(), ScriptAccess::default()).is_err());
     }

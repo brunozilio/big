@@ -19,10 +19,6 @@ export const spec = {
       "timeout": {
         "description": "Milliseconds before it is stopped.",
         "type": "integer"
-      },
-      "unsandboxed": {
-        "description": "Run outside the sandbox. Only after the sandbox refused a command the task truly needs; the user is always asked.",
-        "type": "boolean"
       }
     },
     "required": [

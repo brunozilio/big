@@ -145,7 +145,6 @@ mod log;
 mod records;
 mod repair;
 mod seq;
-mod trace_file;
 
 pub use durable::Written;
 pub use file::FileSessions;

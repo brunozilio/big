@@ -4,7 +4,7 @@ use crate::{AgentAsk, AskId, AskKind, EngineEvent, FailureKind};
 fn permission(id: &str) -> AgentAsk {
     AgentAsk {
         id: AskId(id.into()),
-        kind: AskKind::Permission { tool: "Bash".into(), subject: "make".into(), rememberable: true, rule: None },
+        kind: AskKind::Permission { tool: "Bash".into(), subject: "make".into(), rememberable: true },
     }
 }
 

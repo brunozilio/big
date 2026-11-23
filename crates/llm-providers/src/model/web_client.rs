@@ -1,7 +1,7 @@
 use std::net::{IpAddr, SocketAddr, ToSocketAddrs};
 use std::sync::Arc;
 
-use domain::permission_rules::is_private_address;
+use domain::site::is_private_address;
 
 const PROXY_VARIABLES: [&str; 6] = ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"];
 

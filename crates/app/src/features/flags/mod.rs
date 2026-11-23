@@ -20,18 +20,15 @@ pub fn handle(context: &Context<'_>, request: FlagsRequest) -> Result<FlagsReply
 pub fn forget(_client: u64) {}
 
 fn listed(context: &Context<'_>, cwd: &Path, home: &Path) -> Result<FlagsReply, String> {
-    let settings = settings::load(&context.services.extensions.trusts.gate(cwd, Some(home)), &[])?;
+    let settings = settings::load(&agent_engine::scope::Scope::at(cwd, Some(home)), &[])?;
     context.services.off.follow(&settings.features);
-    let flags = settings.features.listed().into_iter().map(|flag| {
-        let available = !flag.name.eq(domain::features::SANDBOX) || platform::sandbox::supported();
-        ListedFlag { flag, available }
-    });
+    let flags = settings.features.listed().into_iter().map(|flag| ListedFlag { flag });
     Ok(FlagsReply { flags: flags.collect() })
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::api::features::suggested_rules::SuggestedRulesRequest;
+    use crate::api::features::schedules::SchedulesRequest;
     use crate::api::features::workspace::{WorkspaceOp, WorkspaceReply, WorkspaceRequest};
     use crate::api::{FeatureError, FeatureName, FeatureReply, FeatureRequest};
 
@@ -53,13 +50,12 @@ mod tests {
         let flags = |request: FlagsRequest| testing::with(1, &services, |context| handle(context, request));
 
         let listed = flags(FlagsRequest::List { cwd: cwd.clone() }).expect("listed").flags;
-        assert_eq!((listed[0].flag.name.as_str(), listed[0].flag.on), (domain::features::SANDBOX, true));
-        assert_eq!(listed[0].available, platform::sandbox::supported());
+        assert_eq!((listed[0].flag.name.as_str(), listed[0].flag.on), (domain::features::OUTPUT_CLEANUP, true));
 
-        let off = FlagsRequest::Set { cwd: cwd.clone(), name: domain::features::SANDBOX.into(), on: false };
+        let off = FlagsRequest::Set { cwd: cwd.clone(), name: domain::features::OUTPUT_CLEANUP.into(), on: false };
         assert!(!flags(off).expect("turned off").flags[0].flag.on);
         let kept = std::fs::read_to_string(owner_settings::path(home.path())).expect("settings");
-        assert!(kept.contains("\"experimental-sandbox\": false"), "{kept}");
+        assert!(kept.contains("\"experimental-output-cleanup\": false"), "{kept}");
 
         assert!(flags(FlagsRequest::Set { cwd, name: "nothing".into(), on: false }).is_err());
         assert!(testing::local(1, |context| handle(context, FlagsRequest::List { cwd: "/".into() })).is_err());
@@ -72,7 +68,7 @@ mod tests {
         let services = at_home(home.path());
         let cwd = repo.path().to_path_buf();
         let ask = |request: FeatureRequest| testing::with(1, &services, |c| crate::features::handle(c, request));
-        let rules = || ask(FeatureRequest::SuggestedRules(SuggestedRulesRequest::List { cwd: cwd.clone() }));
+        let rules = || ask(FeatureRequest::Schedules(SchedulesRequest::List));
         let offer = || {
             let request = WorkspaceRequest { path: cwd.clone(), op: WorkspaceOp::GitOffer };
             ask(FeatureRequest::Workspace(request))
@@ -85,11 +81,11 @@ mod tests {
 
         assert!(rules().is_ok(), "on until turned off");
         assert_eq!(offer(), offered(true));
-        set(domain::features::SUGGESTED_RULES, false);
+        set(domain::features::SCHEDULES, false);
         set(domain::features::GIT_OFFER, false);
-        assert_eq!(rules(), Err(FeatureError::FeatureOff { feature: FeatureName::SuggestedRules }));
+        assert_eq!(rules(), Err(FeatureError::FeatureOff { feature: FeatureName::Schedules }));
         assert_eq!(offer(), offered(false), "what a feature asks about another flag follows it too");
-        set(domain::features::SUGGESTED_RULES, true);
+        set(domain::features::SCHEDULES, true);
         assert!(rules().is_ok(), "and back on without a restart");
         assert_eq!(offer(), offered(false), "the other flag stays as it was set");
     }

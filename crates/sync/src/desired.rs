@@ -1,0 +1,284 @@
+use connectors::ExternalEvent;
+use connectors::contracts::{code, pipelines, tracker};
+use domain::connection::Connection;
+use domain::effect::{Call, Effect, EffectOutcome};
+use domain::workflow::{EffectEntry, Impediment, ItemId, WorkItem};
+use serde_json::Value;
+
+use crate::policy::ReconcilePolicy;
+
+pub mod kinds {
+    pub const STATUS_CHANGED: &str = "tracker.status.changed";
+    pub const IMPEDIMENT_CHANGED: &str = "tracker.impediment.changed";
+    pub const PR_MERGED: &str = "code.pr.merged";
+    pub const PR_CLOSED: &str = "code.pr.closed";
+    pub const PR_UPDATED: &str = "code.pr.updated";
+    pub const RUN_FINISHED: &str = "pipelines.run.finished";
+    pub const DEPLOYMENT_WAITING: &str = "pipelines.deployment.waiting";
+}
+
+pub const MERGED: &str = "merged";
+pub const CLOSED: &str = "closed";
+pub const COMPLETED: &str = "completed";
+pub const WAITING: &str = "waiting";
+
+pub fn pull_subject(repo: &str, number: u64) -> String {
+    format!("{repo}#{number}")
+}
+
+pub fn run_subject(repo: &str, run: u64) -> String {
+    format!("{repo}/actions/runs/{run}")
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct IssueRef {
+    pub issue: String,
+    pub connection: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct PullRef {
+    pub repo: String,
+    pub number: u64,
+    pub state: Option<String>,
+    pub connection: Option<String>,
+}
+
+impl PullRef {
+    pub fn subject(&self) -> String {
+        pull_subject(&self.repo, self.number)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RunRef {
+    pub repo: String,
+    pub run: u64,
+    pub status: Option<String>,
+    pub connection: Option<String>,
+}
+
+impl RunRef {
+    pub fn subject(&self) -> String {
+        run_subject(&self.repo, self.run)
+    }
+
+    pub fn finished(&self) -> bool {
+        self.status.as_deref() == Some(COMPLETED)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Wait {
+    pub kind: String,
+    pub filter: Value,
+}
+
+impl Wait {
+    pub fn capability(&self) -> &str {
+        self.kind.split_once('.').map_or(self.kind.as_str(), |(capability, _)| capability)
+    }
+
+    pub fn connection(&self) -> Option<&str> {
+        self.filter.get("connection").and_then(Value::as_str)
+    }
+
+    pub fn subject(&self) -> Option<&str> {
+        self.filter.get("subject").and_then(Value::as_str)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Desired {
+    pub item: ItemId,
+    pub workflow: String,
+    pub status: Option<String>,
+    pub impediment: Option<Impediment>,
+    pub issue: Option<IssueRef>,
+    pub pulls: Vec<PullRef>,
+    pub runs: Vec<RunRef>,
+    pub waits: Vec<Wait>,
+    pub policy: ReconcilePolicy,
+}
+
+impl Desired {
+    pub fn subjects(&self) -> Vec<String> {
+        let issue = self.issue.iter().map(|issue| issue.issue.clone());
+        let pulls = self.pulls.iter().map(PullRef::subject);
+        issue.chain(pulls).chain(self.runs.iter().map(RunRef::subject)).collect()
+    }
+
+    pub fn concerns(&self, event: &ExternalEvent) -> bool {
+        self.subjects().contains(&event.subject)
+    }
+
+    pub fn waits_on(&self, connection: &Connection) -> bool {
+        self.waits.iter().any(|wait| {
+            connection.offers(&wait.capability().into())
+                && wait.connection().is_none_or(|id| id == connection.id.as_str())
+        })
+    }
+
+    pub fn waits_for(&self, capability: &str) -> bool {
+        self.waits.iter().any(|wait| wait.capability() == capability)
+    }
+
+    pub fn uses(&self, connection: &str) -> bool {
+        let issue = self.issue.iter().filter_map(|issue| issue.connection.as_deref());
+        let pulls = self.pulls.iter().filter_map(|pull| pull.connection.as_deref());
+        let runs = self.runs.iter().filter_map(|run| run.connection.as_deref());
+        issue.chain(pulls).chain(runs).any(|id| id == connection)
+    }
+
+    fn learn_call(&mut self, call: &Call, value: &Value) {
+        let args = &call.args;
+        let connection = call.connection.clone();
+        match call.action.as_str() {
+            tracker::CREATE_ISSUE => self.learn_issue(text(value, "key"), connection),
+            action if action.starts_with("tracker.") => self.learn_issue(text(args, "issue"), connection),
+            code::OPEN_PULL_REQUEST | code::PULL_REQUEST | code::MERGE => {
+                let merged = call.action == code::MERGE && value.get("merged") == Some(&Value::Bool(true));
+                let state = if merged { Some(MERGED.to_owned()) } else { text(value, "state") };
+                let number = number(value, "number").or_else(|| number(args, "number"));
+                if let (Some(repo), Some(number)) = (text(args, "repo"), number) {
+                    self.learn_pull(PullRef { repo, number, state, connection });
+                }
+            }
+            pipelines::RUN => {
+                if let (Some(repo), Some(run)) = (text(args, "repo"), number(args, "run")) {
+                    self.learn_run(RunRef { repo, run, status: text(value, "status"), connection });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    fn learn_output(&mut self, output: &Value) {
+        if self.issue.is_none() {
+            self.learn_issue(text(output, "issue"), None);
+        }
+        let pull = &output["pull_request"];
+        if let (Some(repo), Some(number)) = (text(pull, "repo"), number(pull, "number")) {
+            self.learn_pull(PullRef { repo, number, state: text(pull, "state"), connection: text(pull, "connection") });
+        }
+        let run = &output["run"];
+        if let (Some(repo), Some(id)) = (text(run, "repo"), number(run, "run")) {
+            self.learn_run(RunRef { repo, run: id, status: text(run, "status"), connection: text(run, "connection") });
+        }
+    }
+
+    fn learn_issue(&mut self, issue: Option<String>, connection: Option<String>) {
+        if let Some(issue) = issue {
+            match &mut self.issue {
+                Some(known) if known.issue == issue => {
+                    known.connection = known.connection.take().or(connection);
+                }
+                Some(_) => {}
+                None => self.issue = Some(IssueRef { issue, connection }),
+            }
+        }
+    }
+
+    fn learn_pull(&mut self, pull: PullRef) {
+        match self.pulls.iter_mut().find(|known| known.repo == pull.repo && known.number == pull.number) {
+            Some(known) => {
+                known.state = pull.state.or(known.state.take());
+                known.connection = known.connection.take().or(pull.connection);
+            }
+            None => self.pulls.push(pull),
+        }
+    }
+
+    fn learn_run(&mut self, run: RunRef) {
+        match self.runs.iter_mut().find(|known| known.repo == run.repo && known.run == run.run) {
+            Some(known) => {
+                known.status = run.status.or(known.status.take());
+                known.connection = known.connection.take().or(run.connection);
+            }
+            None => self.runs.push(run),
+        }
+    }
+
+    pub fn observe(&mut self, kind: &str, subject: &str, data: &Value) {
+        let pull_state = match kind {
+            kinds::PR_MERGED => Some(MERGED.to_owned()),
+            kinds::PR_CLOSED => Some(CLOSED.to_owned()),
+            kinds::PR_UPDATED => text(data, "state"),
+            _ => None,
+        };
+        if let Some(state) = pull_state
+            && let Some(pull) = self.pulls.iter_mut().find(|pull| pull.subject() == subject)
+        {
+            pull.state = Some(state);
+        }
+        let run_status = match kind {
+            kinds::RUN_FINISHED => Some(COMPLETED),
+            kinds::DEPLOYMENT_WAITING => Some(WAITING),
+            _ => None,
+        };
+        if let Some(status) = run_status
+            && let Some(run) = self.runs.iter_mut().find(|run| run.subject() == subject)
+        {
+            run.status = Some(status.to_owned());
+        }
+    }
+}
+
+fn text(value: &Value, name: &str) -> Option<String> {
+    value.get(name).and_then(Value::as_str).filter(|text| !text.is_empty()).map(str::to_owned)
+}
+
+fn number(value: &Value, name: &str) -> Option<u64> {
+    let found = value.get(name)?;
+    found.as_u64().or_else(|| found.as_str().and_then(|text| text.parse().ok()))
+}
+
+fn ordered(item: &WorkItem) -> Vec<&EffectEntry> {
+    let mut entries: Vec<&EffectEntry> = item.effects.values().collect();
+    entries.sort_by_key(|entry| entry.request.key.seq);
+    entries
+}
+
+fn event_of(outcome: Option<&EffectOutcome>) -> Option<(String, String, Value)> {
+    let Some(EffectOutcome::Ok { value }) = outcome else { return None };
+    Some((text(value, "kind")?, text(value, "subject")?, value.get("data").cloned().unwrap_or(Value::Null)))
+}
+
+pub fn desired_of(item: &WorkItem, policy: ReconcilePolicy) -> Desired {
+    let mut desired = Desired {
+        item: item.id.clone(),
+        workflow: item.workflow.clone(),
+        status: item.status.clone(),
+        impediment: item.impediment.clone(),
+        issue: text(&item.input, "issue").map(|issue| IssueRef { issue, connection: None }),
+        pulls: Vec::new(),
+        runs: Vec::new(),
+        waits: Vec::new(),
+        policy,
+    };
+    let entries = ordered(item);
+    for entry in &entries {
+        match (&entry.request.effect, &entry.outcome) {
+            (Effect::ConnectorCall(call), Some(EffectOutcome::Ok { value })) => desired.learn_call(call, value),
+            (Effect::WaitEvent { kind, filter, .. }, None) => {
+                desired.waits.push(Wait { kind: kind.clone(), filter: filter.clone() });
+            }
+            _ => {}
+        }
+    }
+    item.steps.iter().for_each(|step| desired.learn_output(&step.output));
+    let waited = entries
+        .iter()
+        .filter(|entry| matches!(entry.request.effect, Effect::WaitEvent { .. }))
+        .filter_map(|entry| event_of(entry.outcome.as_ref()));
+    for (kind, subject, data) in waited {
+        desired.observe(&kind, &subject, &data);
+    }
+    let mut seen: Vec<_> = item.observed.values().collect();
+    seen.sort_by_key(|seen| seen.at);
+    seen.iter().for_each(|seen| desired.observe(&seen.kind, &seen.subject, &seen.data));
+    desired
+}
+
+#[cfg(test)]
+mod tests;

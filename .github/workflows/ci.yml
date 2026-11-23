@@ -100,8 +100,6 @@ jobs:
       matrix:
         target:
           - shell_parse
-          - shell_deny
-          - wildcards
           - web_page
           - code_map
           - session_log

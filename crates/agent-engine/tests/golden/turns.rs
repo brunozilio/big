@@ -122,7 +122,7 @@ fn a_tool_turn_starts_finishes_and_reports_the_tool_before_the_answer() {
 }
 
 #[test]
-fn a_tool_turn_keeps_the_conversation_in_one_file_and_the_trace_in_another() {
+fn a_tool_turn_keeps_the_conversation_and_the_trace_in_one_file_in_order() {
     let stage = Stage::new();
     stage.file("notes.txt", "alpha\n");
     stage.script([call("r1", "Read", json!({"file_path": "notes.txt"})), says("It says alpha.")]);
@@ -132,25 +132,24 @@ fn a_tool_turn_keeps_the_conversation_in_one_file_and_the_trace_in_another() {
 
     stage.assert(
         r##"
-        == after the run: conversation file ==
+        == after the run: session file ==
+        trace prompted (numbered)
+        trace event SessionStarted (numbered)
+        trace opened (numbered)
+        trace event Checkpoint (numbered)
         message user (numbered)
+        trace called (numbered)
+        trace event Usage (numbered)
         message assistant (numbered)
+        trace event ToolStarted (numbered)
+        trace event ToolFinished (numbered)
+        trace event ToolResult (numbered)
         message user (numbered)
+        trace event TextDelta (numbered)
+        trace called (numbered)
+        trace event Usage (numbered)
         message assistant (numbered)
-        == after the run: trace file ==
-        prompted (numbered)
-        event SessionStarted (numbered)
-        opened (numbered)
-        event Checkpoint (numbered)
-        called (numbered)
-        event Usage (numbered)
-        event ToolStarted (numbered)
-        event ToolFinished (numbered)
-        event ToolResult (numbered)
-        event TextDelta (numbered)
-        called (numbered)
-        event Usage (numbered)
-        event Completed (numbered)
+        trace event Completed (numbered)
         "##,
     );
 }

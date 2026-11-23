@@ -2,14 +2,12 @@ use std::path::Path;
 use std::sync::Arc;
 
 use crate::api::features::code_map::CodeMapRequest;
-use crate::api::features::declared_providers::DeclaredProvidersRequest;
 use crate::api::features::flags::FlagsRequest;
 use crate::api::features::memory::{MemoryOp, MemoryRequest};
 use crate::api::features::plugins::PluginsRequest;
 use crate::api::features::schedules::SchedulesRequest;
 use crate::api::features::sessions::SessionsRequest;
 use crate::api::features::shell::ShellRequest;
-use crate::api::features::suggested_rules::SuggestedRulesRequest;
 use crate::api::features::trace::TraceRequest;
 use crate::api::features::workspace::{WorkspaceOp, WorkspaceRequest};
 use crate::api::{FeatureError, FeatureName, FeatureReply, FeatureRequest};
@@ -22,7 +20,6 @@ fn a_request_to(feature: FeatureName, cwd: &Path) -> FeatureRequest {
     let path = cwd.to_path_buf();
     match feature {
         FeatureName::CodeMap => FeatureRequest::CodeMap(CodeMapRequest { path, prompt: "retry".into() }),
-        FeatureName::DeclaredProviders => FeatureRequest::DeclaredProviders(DeclaredProvidersRequest { path }),
         FeatureName::Flags => FeatureRequest::Flags(FlagsRequest::List { cwd: path }),
         FeatureName::Memory => FeatureRequest::Memory(MemoryRequest { path, op: MemoryOp::List }),
         FeatureName::OutputSavings => FeatureRequest::OutputSavings,
@@ -30,7 +27,6 @@ fn a_request_to(feature: FeatureName, cwd: &Path) -> FeatureRequest {
         FeatureName::Schedules => FeatureRequest::Schedules(SchedulesRequest::List),
         FeatureName::Sessions => FeatureRequest::Sessions(SessionsRequest::List),
         FeatureName::Shell => FeatureRequest::Shell(ShellRequest::List),
-        FeatureName::SuggestedRules => FeatureRequest::SuggestedRules(SuggestedRulesRequest::List { cwd: path }),
         FeatureName::Trace => FeatureRequest::Trace(TraceRequest::EverySession),
         FeatureName::Workspace => FeatureRequest::Workspace(WorkspaceRequest { path, op: WorkspaceOp::GitOffer }),
     }

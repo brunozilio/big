@@ -27,7 +27,7 @@ fn spent(input: u64, cache_read: u64, output: u64, cost: f64) -> EngineEvent {
 fn asked(id: &str, tool: &str) -> EngineEvent {
     EngineEvent::Asked(AgentAsk {
         id: AskId(id.into()),
-        kind: AskKind::Permission { tool: tool.into(), subject: "cargo test".into(), rememberable: true, rule: None },
+        kind: AskKind::Permission { tool: tool.into(), subject: "cargo test".into(), rememberable: true },
     })
 }
 

@@ -95,10 +95,10 @@ fn encode(text: &str) -> String {
 }
 
 pub fn endpoint_ok(url: &str) -> bool {
-    let Some(host) = crate::permission_rules::site(url) else { return false };
+    let Some(host) = crate::site::site(url) else { return false };
     let loopback = host == "localhost" || host.parse::<std::net::IpAddr>().is_ok_and(|address| address.is_loopback());
     match url.split_once("://").map(|(scheme, _)| scheme.to_ascii_lowercase()).as_deref() {
-        Some("https") => loopback || !crate::permission_rules::is_private(&host),
+        Some("https") => loopback || !crate::site::is_private(&host),
         Some("http") => loopback,
         _ => false,
     }

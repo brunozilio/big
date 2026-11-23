@@ -1,5 +1,4 @@
 pub mod code_map;
-pub mod declared_providers;
 pub mod flags;
 pub mod memory;
 pub mod output_savings;
@@ -7,14 +6,12 @@ pub mod plugins;
 pub mod schedules;
 pub mod sessions;
 pub mod shell;
-pub mod suggested_rules;
 pub mod trace;
 pub mod workspace;
 
 use serde::{Deserialize, Serialize};
 
 use self::code_map::{CodeMapReply, CodeMapRequest};
-use self::declared_providers::{DeclaredProvidersReply, DeclaredProvidersRequest};
 use self::flags::{FlagsReply, FlagsRequest};
 use self::memory::{MemoryReply, MemoryRequest};
 use self::output_savings::OutputSavingsReply;
@@ -22,7 +19,6 @@ use self::plugins::{PluginsReply, PluginsRequest};
 use self::schedules::{SchedulesReply, SchedulesRequest};
 use self::sessions::{SessionsReply, SessionsRequest};
 use self::shell::{ShellReply, ShellRequest};
-use self::suggested_rules::{SuggestedRulesReply, SuggestedRulesRequest};
 use self::trace::{TraceReply, TraceRequest};
 use self::workspace::{WorkspaceReply, WorkspaceRequest};
 
@@ -30,7 +26,6 @@ use self::workspace::{WorkspaceReply, WorkspaceRequest};
 #[serde(rename_all = "snake_case")]
 pub enum FeatureName {
     CodeMap,
-    DeclaredProviders,
     Flags,
     Memory,
     OutputSavings,
@@ -38,15 +33,13 @@ pub enum FeatureName {
     Schedules,
     Sessions,
     Shell,
-    SuggestedRules,
     Trace,
     Workspace,
 }
 
 impl FeatureName {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 10] = [
         Self::CodeMap,
-        Self::DeclaredProviders,
         Self::Flags,
         Self::Memory,
         Self::OutputSavings,
@@ -54,7 +47,6 @@ impl FeatureName {
         Self::Schedules,
         Self::Sessions,
         Self::Shell,
-        Self::SuggestedRules,
         Self::Trace,
         Self::Workspace,
     ];
@@ -62,7 +54,6 @@ impl FeatureName {
     pub fn name(self) -> &'static str {
         match self {
             Self::CodeMap => "code_map",
-            Self::DeclaredProviders => "declared_providers",
             Self::Flags => "flags",
             Self::Memory => "memory",
             Self::OutputSavings => "output_savings",
@@ -70,7 +61,6 @@ impl FeatureName {
             Self::Schedules => "schedules",
             Self::Sessions => "sessions",
             Self::Shell => "shell",
-            Self::SuggestedRules => "suggested_rules",
             Self::Trace => "trace",
             Self::Workspace => "workspace",
         }
@@ -80,11 +70,9 @@ impl FeatureName {
         use domain::features as flags;
         match self {
             Self::CodeMap => Some(flags::CODE_MAP),
-            Self::DeclaredProviders => Some(flags::DECLARED_PROVIDERS),
             Self::OutputSavings => Some(flags::OUTPUT_SAVINGS),
             Self::Plugins => Some(flags::PLUGINS),
             Self::Schedules => Some(flags::SCHEDULES),
-            Self::SuggestedRules => Some(flags::SUGGESTED_RULES),
             Self::Trace => Some(flags::TRACE),
             Self::Flags | Self::Memory | Self::Sessions | Self::Shell | Self::Workspace => None,
         }
@@ -101,7 +89,6 @@ impl std::fmt::Display for FeatureName {
 #[serde(tag = "feature", content = "request", rename_all = "snake_case")]
 pub enum FeatureRequest {
     CodeMap(CodeMapRequest),
-    DeclaredProviders(DeclaredProvidersRequest),
     Flags(FlagsRequest),
     Memory(MemoryRequest),
     OutputSavings,
@@ -109,7 +96,6 @@ pub enum FeatureRequest {
     Schedules(SchedulesRequest),
     Sessions(SessionsRequest),
     Shell(ShellRequest),
-    SuggestedRules(SuggestedRulesRequest),
     Trace(TraceRequest),
     Workspace(WorkspaceRequest),
 }
@@ -118,7 +104,6 @@ impl FeatureRequest {
     pub fn feature(&self) -> FeatureName {
         match self {
             Self::CodeMap(_) => FeatureName::CodeMap,
-            Self::DeclaredProviders(_) => FeatureName::DeclaredProviders,
             Self::Flags(_) => FeatureName::Flags,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings => FeatureName::OutputSavings,
@@ -126,7 +111,6 @@ impl FeatureRequest {
             Self::Schedules(_) => FeatureName::Schedules,
             Self::Sessions(_) => FeatureName::Sessions,
             Self::Shell(_) => FeatureName::Shell,
-            Self::SuggestedRules(_) => FeatureName::SuggestedRules,
             Self::Trace(_) => FeatureName::Trace,
             Self::Workspace(_) => FeatureName::Workspace,
         }
@@ -137,7 +121,6 @@ impl FeatureRequest {
 #[serde(tag = "feature", content = "reply", rename_all = "snake_case")]
 pub enum FeatureReply {
     CodeMap(CodeMapReply),
-    DeclaredProviders(DeclaredProvidersReply),
     Flags(FlagsReply),
     Memory(MemoryReply),
     OutputSavings(OutputSavingsReply),
@@ -145,7 +128,6 @@ pub enum FeatureReply {
     Schedules(SchedulesReply),
     Sessions(SessionsReply),
     Shell(ShellReply),
-    SuggestedRules(SuggestedRulesReply),
     Trace(TraceReply),
     Workspace(WorkspaceReply),
 }
@@ -154,7 +136,6 @@ impl FeatureReply {
     pub fn feature(&self) -> FeatureName {
         match self {
             Self::CodeMap(_) => FeatureName::CodeMap,
-            Self::DeclaredProviders(_) => FeatureName::DeclaredProviders,
             Self::Flags(_) => FeatureName::Flags,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings(_) => FeatureName::OutputSavings,
@@ -162,7 +143,6 @@ impl FeatureReply {
             Self::Schedules(_) => FeatureName::Schedules,
             Self::Sessions(_) => FeatureName::Sessions,
             Self::Shell(_) => FeatureName::Shell,
-            Self::SuggestedRules(_) => FeatureName::SuggestedRules,
             Self::Trace(_) => FeatureName::Trace,
             Self::Workspace(_) => FeatureName::Workspace,
         }

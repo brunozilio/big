@@ -1,6 +1,5 @@
 use std::cell::{Cell, RefCell};
 
-use domain::permission_rules::RuleKind;
 use serde_json::{Value, json};
 
 use super::Agent;
@@ -98,15 +97,7 @@ impl Agent<'_> {
         input: &Value,
     ) -> Outcome {
         let call = ScriptCall { agent: self, tool, within: Within::the_call(calling) };
-        let approved = tool.trusted || self.approved(tool, summary, input);
-        let permission = if approved { calling.permission } else { Some(RuleKind::Ask) };
-        self.permitted(calling.id, &call, summary, input, permission)
-    }
-
-    fn approved(&self, tool: &dyn Tool, summary: &str, input: &Value) -> bool {
-        let (name, effects) = (tool.spec().name, tool.effects(input, self.workspace));
-        let called = crate::agent::permission::Called { name: &name, subject: summary, input, effects: &effects };
-        matches!(self.rule_for(&called), Some((RuleKind::Allow, _)))
+        self.permitted(calling.id, &call, summary, input, calling.permission)
     }
 
     pub(in crate::agent) fn project_skill<'t>(&self, tool: &'t dyn Tool, input: &Value) -> Option<&'t FoundSkill> {
@@ -122,10 +113,8 @@ impl Agent<'_> {
         summary: &str,
         input: &Value,
     ) -> Outcome {
-        let approved = self.approved(tool, summary, input);
         let shown = format!("{summary}, the project's script {}", skill.file.display());
-        let permission = if approved { calling.permission } else { Some(RuleKind::Ask) };
-        self.permitted_as(calling.id, tool, summary, Some(&shown), input, permission)
+        self.permitted_as(calling.id, tool, summary, Some(&shown), input, calling.permission)
     }
 
     fn script_context(&self) -> Value {

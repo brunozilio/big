@@ -6,7 +6,6 @@ use agent_engine::model::ToolSpec;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::{Declared, Effect, Outcome, Tool, Workspace, inbox};
 use agent_engine::transcript::{Block, Message};
-use domain::permission_rules::{PermissionRules, RuleKind};
 use domain::{AskKind, Decision, EngineEvent, PermissionMode};
 use serde_json::{Value, json};
 
@@ -153,10 +152,9 @@ fn asked(rig: &Rig) -> bool {
     rig.events().iter().any(|event| matches!(event, EngineEvent::Asked(_)))
 }
 
-fn watch_once(mode: PermissionMode, client: u64, rules: PermissionRules) -> (Rig, Arc<AtomicUsize>) {
+fn watch_once(mode: PermissionMode, client: u64) -> (Rig, Arc<AtomicUsize>) {
     let mut rig = Rig::new(mode);
     rig.workspace.credentials.client = client;
-    rig.workspace.policy.permissions = rules;
     let calls = Arc::new(AtomicUsize::new(0));
     let issue = Issue { calls: Arc::clone(&calls), statuses: &["Em análise"] };
     let model = ScriptedModel::new([
@@ -195,21 +193,8 @@ fn deny_every_ask_after(rig: &Rig, skipped: usize) -> Arc<std::sync::atomic::Ato
 }
 
 #[test]
-fn a_deny_rule_refuses_the_watch_without_asking_or_calling_the_tool() {
-    let rules = PermissionRules::default().with(RuleKind::Deny, "mcp__jira__getIssue");
-    let (rig, calls) = watch_once(PermissionMode::Ask, 9404, rules);
-
-    let results = results(&rig);
-    assert!(results[0].0 && results[0].1.contains("refuses this"), "{results:?}");
-    assert!(!asked(&rig));
-    assert_eq!(calls.load(Ordering::Relaxed), 0);
-    assert!(agent_engine::tools::watch::list(9404).is_empty());
-}
-
-#[test]
-fn an_allow_rule_starts_the_watch_without_asking() {
-    let rules = PermissionRules::default().with(RuleKind::Allow, "mcp__jira__getIssue");
-    let (rig, calls) = watch_once(PermissionMode::Ask, 9405, rules);
+fn in_bypass_the_watch_starts_without_asking() {
+    let (rig, calls) = watch_once(PermissionMode::Bypass, 9405);
 
     let results = results(&rig);
     assert!(!results[0].0 && results[0].1.starts_with("Watching as watch_"), "{results:?}");

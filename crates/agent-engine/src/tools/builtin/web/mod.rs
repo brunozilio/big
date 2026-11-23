@@ -54,7 +54,7 @@ impl Tool for WebFetch {
     }
 
     fn effects(&self, input: &Value, _workspace: &Workspace) -> Vec<crate::tools::Effect> {
-        let host = field(input, "url").and_then(domain::permission_rules::site);
+        let host = field(input, "url").and_then(domain::site::site);
         vec![crate::tools::Effect::Net { host }]
     }
 

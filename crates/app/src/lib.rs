@@ -11,10 +11,6 @@ mod features;
 mod git;
 mod handler;
 mod homes;
-#[cfg(test)]
-#[cfg(unix)]
-#[path = "hostile_repository_tests.rs"]
-mod hostile_repository;
 mod mcp_admin;
 mod mcp_auth;
 mod permissions;
@@ -22,7 +18,6 @@ mod providers;
 mod secrets;
 mod services;
 mod settings;
-mod trust;
 mod turned_off;
 
 pub use api::features::flags::ListedFlag;
@@ -40,7 +35,6 @@ pub use domain::memory::seed::Candidate as SeedCandidate;
 pub use domain::memory::{Forgotten, Memory, MemoryEdit, MemoryId, MemoryKind, Revision};
 pub use domain::provider::{ModelProvider, PortHolder, ProviderSummary};
 pub use domain::schedule::{Scheduled, When};
-pub use domain::trust::{Contributions, Trust, TrustAnswer, TrustReport};
 pub use domain::{
     AgentAsk, AskId, AskKind, Choice, ChoreAnswer, Criteria, CriteriaSource, CustomAgent, Decision, Effort,
     EngineEvent, HeadsUp, Image, MAX_IMAGE_BYTES, ModelOption as Model, PermissionMode, Question, Rewound, SessionId,
@@ -60,5 +54,4 @@ pub mod team {
 }
 pub use services::LocalServices;
 pub use settings::{SettingsChange, SettingsError, SettingsStore};
-pub use trust::{InMemoryTrustStore, TrustError, TrustStore, Trusts};
 pub use turned_off::TurnedOff;

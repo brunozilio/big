@@ -112,12 +112,7 @@ fn a_permission_ask_belongs_to_the_tool_it_was_about() {
     let ask = |tool: &str| {
         EngineEvent::Asked(AgentAsk {
             id: AskId("a".into()),
-            kind: AskKind::Permission {
-                tool: tool.into(),
-                subject: "rm -rf build".into(),
-                rememberable: true,
-                rule: None,
-            },
+            kind: AskKind::Permission { tool: tool.into(), subject: "rm -rf build".into(), rememberable: true },
         })
     };
     let trace = build(vec![

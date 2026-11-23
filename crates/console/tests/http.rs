@@ -22,15 +22,7 @@ fn with(assets: Assets) -> axum::Router {
 }
 
 fn serving(token: &str, port: u16, assets: Assets, entries: Arc<Entries>) -> axum::Router {
-    console::router(
-        Settings {
-            token: token.into(),
-            port,
-            assets,
-            entries,
-        },
-        console::Live::default(),
-    )
+    console::router(Settings { token: token.into(), port, assets, entries }, console::Live::default())
 }
 
 fn from(host: &str, authorization: &str) -> Request<Body> {

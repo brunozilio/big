@@ -1,11 +1,11 @@
 mod anchors;
 mod blast;
 mod claims;
-mod confined;
 mod launcher;
 mod models;
 mod policy;
 mod services;
+mod starter;
 #[cfg(test)]
 mod tests;
 mod tracking;
@@ -14,19 +14,18 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
-pub(crate) use confined::from_domain;
-pub use confined::{Confiner, confinement_of, data_folders, temp_folders};
 pub use launcher::{Launch, Launcher, OnThisMachine};
 pub use models::Models;
 pub use policy::{Policy, env_secrets};
 pub use services::{Network, Services, WebSearcher};
+pub use starter::Starter;
 pub(crate) use tracking::Tracking;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Verification {
     pub criteria: domain::Criteria,
     pub model: String,
-    pub allow: domain::permission_rules::PermissionRules,
+    pub allow: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -134,7 +133,7 @@ impl Workspace {
     }
 
     pub fn language_servers(&self) -> Option<&crate::lsp::Lsp> {
-        self.services.lsp.as_ref().filter(|_| self.policy.trust == domain::trust::Trust::Trusted)
+        self.services.lsp.as_ref()
     }
 
     pub fn diagnosed(&self, path: &Path, text: &str) -> String {

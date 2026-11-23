@@ -2,3 +2,34 @@ name = "Big"
 command = "big"
 company = "brunozilio"
 author = "brunozilio"
+
+[connectors]
+github_client_id = ""
+atlassian_client_id = ""
+atlassian_client_secret = ""
+oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
+aws_sso_region = "us-east-1"
+
+[server]
+max_parallel_items = 4
+
+[retry]
+max = 5
+initial_ms = 1000
+max_interval_ms = 60000
+multiplier = 2
+jitter = 0.2
+
+[timeouts]
+agent_ms = 7200000
+exec_ms = 1800000
+call_ms = 120000
+
+[workflow]
+ask_timeout_ms = 1800000
+
+[sync]
+fast_poll_seconds = "15"
+slow_poll_seconds = "180"
+reconcile_minutes = "10"
+error_backoff_seconds = "5"
