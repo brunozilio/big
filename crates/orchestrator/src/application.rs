@@ -64,7 +64,20 @@ fn connection(application: &Application) -> Option<String> {
     application.repositories.iter().find_map(|repository| repository.code.as_ref().map(|code| code.connection.clone()))
 }
 
-fn apply(application: &mut Application, wanted: Wanted) -> bool {
+fn original(application: &Application, directory: &str) -> Option<String> {
+    let path = std::path::Path::new(directory);
+    let name = path.file_name()?.to_str()?;
+    if path.parent()?.file_name()? != "worktrees" {
+        return None;
+    }
+    let mine = |repository: &&Repository| name.ends_with(&format!("--{}", crate::git::folder_for(&repository.id)));
+    application.repositories.iter().find(mine).map(|repository| repository.directory.clone())
+}
+
+fn apply(application: &mut Application, mut wanted: Wanted) -> bool {
+    if let Some(directory) = original(application, &wanted.directory) {
+        wanted.directory = directory;
+    }
     let connection = connection(application);
     let at = application.repositories.iter().position(|repository| repository.directory == wanted.directory);
     let added = at.is_none();
@@ -113,7 +126,7 @@ impl AddRepository {
         let wanted = wanted(input, workspace)?;
         let found = self.store.application(&self.application).map_err(|error| error.to_string())?;
         let mut application = found.ok_or("A aplicação desta tarefa não existe mais.")?;
-        let directory = wanted.directory.clone();
+        let directory = original(&application, &wanted.directory).unwrap_or_else(|| wanted.directory.clone());
         let added = apply(&mut application, wanted);
         self.store.save_application(&application).map_err(|error| error.to_string())?;
         Ok(described(&application, &directory, added))
@@ -139,5 +152,27 @@ impl Tool for AddRepository {
 
     fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
         self.save(input, workspace).map_or_else(Outcome::error, Outcome::ok)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_item_s_worktree_updates_the_repository_it_was_made_from() {
+        let mut application = Application {
+            repositories: vec![Repository { id: "565e".into(), directory: "/code/demo".into(), ..Repository::default() }],
+            ..Application::default()
+        };
+        let worktree = "/data/worktrees/big_92ec--565e";
+        let wanted = Wanted { directory: worktree.into(), run: Some("npm start".into()), ..Wanted::default() };
+
+        let added = apply(&mut application, wanted);
+
+        assert!(!added);
+        assert_eq!(application.repositories.len(), 1);
+        assert_eq!(application.repositories[0].directory, "/code/demo");
+        assert_eq!(application.repositories[0].run, "npm start");
     }
 }

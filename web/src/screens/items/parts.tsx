@@ -157,7 +157,7 @@ export function RowRight({ it, onStep, onConnect }: { it: Item; onStep: (s: stri
     return (
       <>
         <ChangeChip change={it.change} />
-        <Badge icon={<Icon name="lock" size={12} />}>{it.impediment.reason}</Badge>
+        <Badge className="min-w-0" icon={<Icon name="lock" size={12} className="shrink-0" />}><span className="truncate" title={it.impediment.reason}>{it.impediment.reason}</span></Badge>
         {c && <Button size="sm" variant="secondary" icon={<ProviderLogo logo={c.logo} name={c.name} size={15} />} onClick={() => onConnect(c.provider)}>Conectar</Button>}
       </>
     )
