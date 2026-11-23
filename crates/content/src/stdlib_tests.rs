@@ -418,6 +418,27 @@ export default workflow({
 }
 
 #[test]
+fn a_release_without_a_deploy_pipeline_is_skipped_and_still_marks_the_item_done() {
+    let text = r#"
+import { workflow } from "sdk";
+import { release } from "sdk/steps";
+export default workflow({
+  name: "so-release",
+  statuses: ["Feito"],
+  steps: [release({ ref: "abc", patience: 2, doneStatus: "Feito" })],
+});
+"#;
+    let (result, asked) = drive(&source("workflows/so-release.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
+        Some("call") => Some(json!([])),
+        _ => Some(Value::Null),
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    let statuses: Vec<&Value> = of_kind(&asked, "status.set").iter().map(|command| &command["args"]["name"]).collect();
+    assert_eq!(statuses, [&json!("Feito")]);
+    assert!(of_kind(&asked, "agent").is_empty(), "nothing was deployed, so there are no notes to write");
+}
+
+#[test]
 fn checks_without_any_command_say_so_instead_of_an_empty_log() {
     let text = r#"
 import { workflow } from "sdk";

@@ -44,7 +44,8 @@ function targetsOf(ctx, opts) {
 
 async function follow(ctx, opts, target, seen) {
   const options = pipelineOptions(opts, target);
-  const found = await findRun(ctx, options, { ref: target.ref, repo: repoOf(target), seen });
+  const found = await findRun(ctx, options, { ref: target.ref, repo: repoOf(target), seen, optional: true });
+  if (!found) return { ...targetFields(target), run: null, url: null, state: NONE, ref: target.ref };
   const data = { ...targetFields(target), run: found.ref, url: found.url ?? null };
   for (;;) {
     const events = ["pipelines.run.finished", "pipelines.deployment.waiting"];
@@ -85,7 +86,10 @@ async function narrate(ctx, opts, runs, failed) {
   return defined({ session: result.session, notes: output.notes ?? output.summary ?? result.text ?? null });
 }
 
+const NONE = "none";
+
 function shown(s) {
+  if (s.state === NONE) return [markdown(`Nenhum pipeline de deploy rodou para \`${s.ref ?? ""}\`. O repositório não parece ter deploy configurado; o merge já entregou a mudança.`)];
   const runs = (Array.isArray(s.runs) && s.runs.length > 0 ? s.runs : s.run ? [s] : []).map((run) => pipeline(run.run));
   return [...runs, ...(s.notes ? [markdown(s.notes)] : []), ...(s.session ? [chat(s.session)] : [])];
 }
@@ -102,8 +106,9 @@ export default step({
     if (targets.some((target) => !target.ref)) return ctx.fail({ error: "não há commit nem branch para acompanhar a release" });
     const seen = object(ctx.output(ctx.step)).seen ?? [];
     const runs = await eachOf(ctx, targets, (branch, target) => follow(branch, opts, target, seen));
+    if (runs.every((run) => run.state === NONE)) return ctx.skip({ state: NONE, ref: runs[0].ref });
     const first = runs[0];
-    const data = { run: first.run, url: first.url, seen: [...seen, ...runs.map((run) => run.run)] };
+    const data = { run: first.run, url: first.url, seen: [...seen, ...runs.filter((run) => run.run).map((run) => run.run)] };
     const listed = runs.length > 1 || first.repository ? { ...data, runs } : data;
     const failed = runs.find((run) => !SUCCEEDED.includes(run.state));
     const told = opts.agent && !(failed && failed.rejected) ? await narrate(ctx, opts, runs, failed) : {};

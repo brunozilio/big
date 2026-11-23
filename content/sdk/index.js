@@ -399,7 +399,8 @@ async function runStep(ctx, type, call, from) {
     result = outcome("failed", { data });
   }
   if (result.outcome !== "cancelled") ctx.runtime.outputs.set(id, result.data === undefined ? null : result.data);
-  if (result.outcome === "passed" && call.options && typeof call.options.doneStatus === "string") {
+  const finished = result.outcome === "passed" || result.outcome === "skipped";
+  if (finished && call.options && typeof call.options.doneStatus === "string") {
     await scope.status(call.options.doneStatus);
   }
   ctx.runtime.signal(scope, "step.finished", { outcome: result.outcome, data: result.data === undefined ? null : result.data, to: result.to || null });
