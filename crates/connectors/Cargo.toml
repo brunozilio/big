@@ -1,0 +1,27 @@
+[package]
+name = "connectors"
+description = "Providers behind generic capability actions, OAuth flows, token keeping, error classes and rate limits."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+domain.workspace = true
+brand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+reqwest.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
+async-trait = "0.1"
+url.workspace = true
+jiff = { workspace = true, features = ["serde"] }
+sha2.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "test-util"] }
+
+[lints]
+workspace = true

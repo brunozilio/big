@@ -15,6 +15,7 @@ brand = { path = "crates/brand" }
 content = { path = "crates/content" }
 script = { path = "crates/script" }
 domain = { path = "crates/domain" }
+connectors = { path = "crates/connectors" }
 app = { path = "crates/app", default-features = false }
 platform = { path = "crates/platform" }
 agent-engine = { path = "crates/agent-engine", default-features = false }
