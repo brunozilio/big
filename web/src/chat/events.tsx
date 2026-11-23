@@ -73,6 +73,7 @@ export function AssistantMessage({ event }: { event: Ev<'assistant'> }) {
 export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
   const [open, setOpen] = useState(event.live)
   const shown = open || event.live
+  const written = visibleSteps(event.steps)
   return (
     <div>
       <motion.button layout whileTap={{ scale: 0.97 }} transition={springSnap} onClick={() => setOpen(!open)} className="inline-flex h-8 items-center gap-2 rounded-full bg-surface pl-2.5 pr-3 text-base shadow-card transition-colors hover:bg-hover">
@@ -96,12 +97,14 @@ export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
           <Icon name="down" size={14} />
         </motion.span>
       </motion.button>
-      <Collapse open={shown}>
-        <StepList steps={event.steps} live={event.live} />
+      <Collapse open={shown && written.length > 0}>
+        <StepList steps={written} live={event.live} />
       </Collapse>
     </div>
   )
 }
+
+export const visibleSteps = (steps: ThinkingStep[]) => steps.filter((s) => s.text.trim().length > 0)
 
 function StepList({ steps, live }: { steps: ThinkingStep[]; live: boolean }) {
   return (
