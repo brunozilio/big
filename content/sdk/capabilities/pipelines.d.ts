@@ -27,6 +27,7 @@ export interface RunSummary {
   pipeline: string;
   file: string;
   event: string;
+  actor: string;
   head: string;
   sha: string;
   state: RunState;

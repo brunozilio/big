@@ -2,6 +2,7 @@ use store::{Application, CodeChoice, Repository, Store, TrackerChoice};
 
 fn application(id: &str, name: &str) -> Application {
     Application {
+        skip_dependabot: true,
         id: id.into(),
         name: name.into(),
         tracker: Some(TrackerChoice { connection: "c-tracker".into(), project: "APP".into() }),
@@ -49,4 +50,12 @@ fn an_item_keeps_the_workflow_code_it_was_pinned_to() {
     store.pin_workflow("i2", "v1", "outro texto com a mesma versão").expect("pinned");
     assert_eq!(store.pinned_workflow("i1").expect("read"), Some(("v1".to_owned(), "codigo 1".to_owned())));
     assert_eq!(store.pinned_workflow("i2").expect("read"), Some(("v1".to_owned(), "codigo 1".to_owned())), "a version is kept once");
+}
+
+#[test]
+fn an_application_saved_before_the_dependabot_flag_skips_its_runs() {
+    let old: Application = serde_json::from_str(r#"{"id":"a","name":"Loja","repositories":[]}"#).expect("old data");
+    assert!(old.skip_dependabot);
+    let off: Application = serde_json::from_str(r#"{"name":"Loja","skipDependabot":false}"#).expect("turned off");
+    assert!(!off.skip_dependabot);
 }

@@ -6,7 +6,7 @@ import { errorText, setApplications, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card, EmptyState } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
-import { Field, Input, Select, Textarea } from '@/ui/form'
+import { Checkbox, Field, Input, Select, Textarea } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { stagger, tween } from '@/ui/motion'
 import { Dialog } from '@/ui/overlay'
@@ -70,7 +70,7 @@ function blankRepository(): ApplicationRepository {
 }
 
 function draftOf(application: Application | null): ApplicationDraft {
-  return application ? structuredClone(application) : { name: '', tracker: null, repositories: [blankRepository()] }
+  return application ? structuredClone(application) : { name: '', tracker: null, repositories: [blankRepository()], skipDependabot: true }
 }
 
 export function choiceKey(connection: string, key: string): string {
@@ -190,6 +190,7 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
               }} />
             </Field>
           </div>
+          <Checkbox label="Ignorar pipelines do dependabot[bot] no CI e na release" checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} />
           <div className="space-y-3">
             {draft.repositories.map((r, i) => (
               <RepositoryCard key={r.id || `novo-${i}`} value={r} index={i} removable={draft.repositories.length > 1} repos={repos} sources={coders} onChange={(next) => change(i, next)} onRemove={() => setDraft((d) => ({ ...d, repositories: d.repositories.filter((_, at) => at !== i) }))} onFolder={() => setFolderFor(i)} />

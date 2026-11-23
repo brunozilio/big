@@ -483,6 +483,7 @@ export interface Application {
   name: string
   tracker: TrackerChoice | null
   repositories: ApplicationRepository[]
+  skipDependabot?: boolean
 }
 
 export type ApplicationDraft = Omit<Application, 'id'> & { id?: string }

@@ -141,7 +141,8 @@ async fn a_review_already_carrying_the_key_is_not_submitted_again() {
 
 #[tokio::test]
 async fn a_verdict_on_one_s_own_pull_request_goes_as_a_comment_with_the_same_text() {
-    let refused = r#"{"message":"Unprocessable Entity","errors":["Review Can not request changes on your own pull request"]}"#;
+    let refused =
+        r#"{"message":"Unprocessable Entity","errors":["Review Can not request changes on your own pull request"]}"#;
     let http = FakeHttp::new()
         .once(Method::Get, "/pulls/7/reviews", 200, "[]")
         .once(Method::Post, "/pulls/7/reviews", 422, refused)
@@ -258,13 +259,14 @@ async fn runs_filter_by_branch_or_sha() {
             Method::Get,
             "/actions/runs?per_page=5&branch=big%2Fx",
             200,
-            r#"{"workflow_runs":[{"id":1,"status":"completed"}]}"#,
+            r#"{"workflow_runs":[{"id":1,"status":"completed","triggering_actor":{"login":"dependabot[bot]"}}]}"#,
         )
         .once(Method::Get, "/actions/workflows/ci.yml/runs?per_page=20&head_sha=", 200, r#"{"workflow_runs":[]}"#)
         .once(Method::Get, "/actions/runs?per_page=1", 200, r#"{"workflow_runs":[]}"#);
     let answer = call(&http, pipeline_actions::RUNS, json!({"ref": "big/x", "limit": 5}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!((answer[0]["ref"].as_str(), answer[0]["state"].as_str()), (Some("acme/app/runs/1"), Some("failed")));
+    assert_eq!(answer[0]["actor"], "dependabot[bot]");
     let sha = "a".repeat(40);
     let answer = call(&http, pipeline_actions::RUNS, json!({"ref": sha, "pipeline": "ci.yml"}), "").await;
     assert_eq!(answer, Ok(json!([])));

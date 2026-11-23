@@ -504,6 +504,38 @@ export default workflow({
     assert_eq!(result["result"], json!({ "outcome": "skipped", "state": "none" }), "{result}");
 }
 
+fn ci_with_a_dependabot_run(skip: Value) -> (Value, Vec<Value>) {
+    let text = r#"
+import { workflow } from "sdk";
+import { ci } from "sdk/steps";
+export default workflow({
+  name: "so-ci",
+  async run(ctx) {
+    const done = await ci(ctx, { ref: "big/x", patience: 3 });
+    return { outcome: done.outcome, state: done.data.state };
+  },
+});
+"#;
+    let mut chosen = item(json!("T-1"));
+    chosen["application"] = json!({ "id": "app", "name": "Loja", "repositories": [], "skipDependabot": skip });
+    let bot = json!([{ "ref": "B1", "state": "passed", "event": "pull_request", "actor": "dependabot[bot]" }]);
+    drive(&source("workflows/so-ci.ts", text), &chosen, |command| match command["kind"].as_str() {
+        Some("call") => Some(bot.clone()),
+        Some("wait.poll") => Some(json!({ "ref": "B1", "state": "passed", "jobs": [] })),
+        Some("event") => None,
+        _ => Some(Value::Null),
+    })
+}
+
+#[test]
+fn the_application_s_flag_decides_whether_dependabot_runs_count_for_the_ci() {
+    let (skipped, _) = ci_with_a_dependabot_run(json!(true));
+    assert_eq!(skipped["result"], json!({ "outcome": "skipped", "state": "none" }), "{skipped}");
+    let (followed, asked) = ci_with_a_dependabot_run(json!(false));
+    assert_eq!(followed["result"], json!({ "outcome": "passed", "state": "passed" }), "{followed}");
+    assert!(!of_kind(&asked, "wait.poll").is_empty());
+}
+
 #[test]
 fn checks_without_any_command_say_so_instead_of_an_empty_log() {
     let text = r#"

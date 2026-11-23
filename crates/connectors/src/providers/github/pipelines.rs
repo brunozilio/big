@@ -30,6 +30,7 @@ pub fn run_summary(repo: &str, run: &Value) -> Value {
         "pipeline": text_of(run, "/name"),
         "file": text_of(run, "/path"),
         "event": text_of(run, "/event"),
+        "actor": text_of(run, "/triggering_actor/login"),
         "head": text_of(run, "/head_branch"),
         "sha": text_of(run, "/head_sha"),
         "state": state,
