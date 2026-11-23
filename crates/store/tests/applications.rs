@@ -40,19 +40,3 @@ fn applications_are_kept_in_order_changed_in_place_and_removed() {
     assert!(!store.delete_application("a").expect("removed"));
     assert_eq!(store.application("a").expect("read"), None);
 }
-
-#[test]
-fn the_defaults_are_seeded_only_on_the_first_run() {
-    let dir = tempfile::tempdir().expect("dir");
-    let path = dir.path().join("app.db");
-    {
-        let store = Store::open(&path, 0).expect("the store answers");
-        assert!(!store.applications_seeded().expect("read"));
-        assert!(store.seed_applications(&[application("a", "Web")]).expect("seeded"));
-        assert!(store.delete_application("a").expect("removed"));
-    }
-    let store = Store::open(&path, 0).expect("the store answers");
-    assert!(store.applications_seeded().expect("read"));
-    assert!(!store.seed_applications(&[application("b", "Outra")]).expect("seeded"));
-    assert!(store.applications().expect("listed").is_empty());
-}

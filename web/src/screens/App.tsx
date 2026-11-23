@@ -12,12 +12,28 @@ import { Tooltip } from '@/ui/overlay'
 import { ItemModal } from './items/ItemModal'
 import { ItemsView } from './items/ItemsView'
 import { NewItem } from './items/NewItem'
+import { needsOnboarding, Onboarding } from './onboarding/Onboarding'
 import { ConnectDialog } from './settings/ConnectDialog'
 import { SettingsView, type SettingsTab } from './settings/Settings'
 
 export function App() {
   useThemeSync()
   useBrandTitle()
+  const location = useLocation()
+  const navigate = useNavigate()
+  const ready = useStore((s) => s.ready)
+  const applications = useStore((s) => s.applications)
+  const [, setSettled] = useState(0)
+  if (!location.pathname.startsWith('/settings') && needsOnboarding(ready, applications)) {
+    return (
+      <div className="scrollbar-thin h-full overflow-y-auto">
+        <Onboarding onDone={() => {
+          setSettled((n) => n + 1)
+          navigate('/')
+        }} />
+      </div>
+    )
+  }
   return (
     <div className="flex h-full bg-subtle">
       <div className="flex min-w-0 flex-1 flex-col md:p-2">

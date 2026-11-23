@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{Result, Store};
 
-const SEEDED: &str = "applications.seeded";
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TrackerChoice {
@@ -74,35 +73,5 @@ impl Store {
 
     pub fn delete_application(&self, id: &str) -> Result<bool> {
         Ok(self.locked().execute("DELETE FROM applications WHERE id = ?1", [id])? > 0)
-    }
-
-    pub fn applications_seeded(&self) -> Result<bool> {
-        let found: Option<String> = self
-            .locked()
-            .query_row("SELECT value FROM preferences WHERE key = ?1", [SEEDED], |row| row.get(0))
-            .optional()?;
-        Ok(found.is_some())
-    }
-
-    pub fn seed_applications(&self, defaults: &[Application]) -> Result<bool> {
-        let data: Vec<(String, String)> = defaults
-            .iter()
-            .map(|application| Ok((application.id.clone(), serde_json::to_string(application)?)))
-            .collect::<Result<_>>()?;
-        self.write(|transaction| {
-            let inserted =
-                transaction.execute("INSERT OR IGNORE INTO preferences (key, value) VALUES (?1, 'true')", [SEEDED])?;
-            if inserted == 0 {
-                return Ok(false);
-            }
-            for (position, (id, data)) in data.iter().enumerate() {
-                let position = i64::try_from(position).unwrap_or(i64::MAX);
-                transaction.execute(
-                    "INSERT OR IGNORE INTO applications (id, position, data) VALUES (?1, ?2, ?3)",
-                    params![id, position, data],
-                )?;
-            }
-            Ok(true)
-        })
     }
 }

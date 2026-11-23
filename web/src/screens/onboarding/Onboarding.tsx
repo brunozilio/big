@@ -1,0 +1,255 @@
+import { AnimatePresence, motion } from 'framer-motion'
+import { useState, type ReactNode } from 'react'
+import { api } from '@/api'
+import type { Application, ApplicationRepository, CodeRepo, Connection, DirListing, Provider, TrackerProject } from '@/api/contract'
+import { errorText, setApplications, useStore } from '@/api/store'
+import { Button } from '@/ui/button'
+import { cn } from '@/ui/cn'
+import { LogoTile, ProductMark, ProviderLogo } from '@/ui/domain'
+import { Field, Input, Select } from '@/ui/form'
+import { Icon } from '@/ui/icon'
+import { tween, tweenClose } from '@/ui/motion'
+import { ConnectDialog } from '../settings/ConnectDialog'
+import { ConnectionCard } from '../settings/ConnectionCard'
+import { FolderDialog } from '../settings/FolderDialog'
+import { accountsOf } from '../settings/Settings'
+import { choiceKey, folderName, fromKey, loadProjects, loadRepos, suggestedCode, useListed, useSources } from '../settings/Applications'
+
+const SKIPPED = 'onboarding:skipped'
+const NONE = 'none'
+
+type Stage = 'connections' | 'application'
+
+export function skippedOnboarding(): boolean {
+  try {
+    return globalThis.localStorage?.getItem(SKIPPED) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function skipOnboarding() {
+  try {
+    globalThis.localStorage?.setItem(SKIPPED, 'true')
+  } catch {
+    return
+  }
+}
+
+export function needsOnboarding(ready: boolean, applications: Application[] | null): boolean {
+  return ready && applications !== null && applications.length === 0 && !skippedOnboarding()
+}
+
+interface Draft {
+  name: string
+  tracker: { connection: string; project: string } | null
+  repository: ApplicationRepository
+}
+
+const blank: Draft = { name: '', tracker: null, repository: { id: '', code: null, directory: '', run: '', verify: [] } }
+
+function Steps({ stage }: { stage: Stage }) {
+  const at = stage === 'connections' ? 0 : 1
+  return (
+    <div className="mb-6 flex items-center gap-2 text-sm text-muted">
+      {['Conexões', 'Aplicação'].map((label, i) => (
+        <span key={label} className="flex items-center gap-2">
+          {i > 0 && <span className="h-px w-6 bg-border" />}
+          <span className={cn('flex size-5 items-center justify-center rounded-full text-xs tabular-nums', i < at ? 'bg-success text-white' : i === at ? 'bg-fg text-bg' : 'bg-inset text-faint')}>
+            {i < at ? <Icon name="check" size={11} strokeWidth={2.6} /> : i + 1}
+          </span>
+          <span className={i === at ? 'text-fg' : undefined}>{label}</span>
+        </span>
+      ))}
+    </div>
+  )
+}
+
+function ConnectionsStage({ onConnect }: { onConnect: (provider: string) => void }) {
+  const data = useStore((s) => s.connections)
+  if (!data) return null
+  const groups = [...new Set(data.providers.map((p) => p.group))]
+  return (
+    <div className="space-y-5">
+      {groups.map((g) => (
+        <section key={g}>
+          <h3 className="mb-2 text-sm font-medium text-muted">{g}</h3>
+          <div className="grid gap-2">
+            {data.providers.filter((p) => p.group === g).map((p) => <ConnectionCard key={p.key} provider={p} accounts={accountsOf(p, data.connections)} onConnect={onConnect} />)}
+          </div>
+        </section>
+      ))}
+    </div>
+  )
+}
+
+function ApplicationStage({ draft, onChange, onFolder, projects, repos }: { draft: Draft; onChange: (next: Draft) => void; onFolder: () => void; projects: Record<string, TrackerProject[]>; repos: Record<string, CodeRepo[]> }) {
+  const trackers = useSources('tracker')
+  const coders = useSources('code')
+  const spaces = [
+    { value: NONE, label: 'Nenhum' },
+    ...trackers.flatMap((s) => (projects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: `${p.name} · ${p.key}`, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
+  ]
+  const codes = [
+    { value: NONE, label: 'Nenhum' },
+    ...coders.flatMap((s) => (repos[s.connection.id] ?? []).map((r) => ({ value: choiceKey(s.connection.id, r.ref), label: r.ref, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
+  ]
+  const space = draft.tracker ? choiceKey(draft.tracker.connection, draft.tracker.project) : NONE
+  const code = draft.repository.code ? choiceKey(draft.repository.code.connection, draft.repository.code.repo) : NONE
+  if (draft.repository.code && !codes.some((o) => o.value === code)) codes.push({ value: code, label: draft.repository.code.repo })
+  return (
+    <div className="space-y-5">
+      <Field label="Nome">
+        <Input aria-label="Nome" value={draft.name} placeholder="Checkout" onChange={(e) => onChange({ ...draft, name: e.target.value })} />
+      </Field>
+      <div className="space-y-2">
+        <span className="text-base font-medium text-fg">Pasta do repositório</span>
+        <button type="button" aria-label="Pasta do repositório" onClick={onFolder} className="ring-field flex h-10 w-full items-center gap-2 rounded-control bg-surface px-3 text-left shadow-card transition-colors hover:bg-hover">
+          <Icon name="folder" size={16} className="text-faint" />
+          <span className={draft.repository.directory ? 'min-w-0 flex-1 truncate font-mono text-sm text-fg' : 'min-w-0 flex-1 truncate text-base text-muted'}>{draft.repository.directory || 'Escolher pasta'}</span>
+        </button>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="Espaço">
+          <Select label="Espaço" className="w-full" value={space} options={spaces} onValueChange={(v) => {
+            const picked = fromKey(v)
+            onChange({ ...draft, tracker: picked ? { connection: picked.connection, project: picked.key } : null })
+          }} />
+        </Field>
+        <Field label="Repositório remoto">
+          <Select label="Repositório remoto" className="w-full" value={code} options={codes} onValueChange={(v) => {
+            const picked = fromKey(v)
+            onChange({ ...draft, repository: { ...draft.repository, code: picked ? { connection: picked.connection, repo: picked.key } : null } })
+          }} />
+        </Field>
+      </div>
+    </div>
+  )
+}
+
+function Row({ icon, label, children }: { icon: ReactNode; label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm">
+      <span className="flex items-center gap-2 text-muted">{icon}{label}</span>
+      <span className="flex min-w-0 items-center gap-1.5 truncate text-fg">{children}</span>
+    </div>
+  )
+}
+
+function Skeleton({ title }: { title: string }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-faint">{title}</p>
+      {[64, 48, 56].map((w) => (
+        <div key={w} className="flex items-center gap-2.5">
+          <span className="size-3 rounded-full bg-inset" />
+          <span className="h-2 rounded-full bg-inset" style={{ width: `${w}%` }} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function Preview({ draft, connections, providers }: { draft: Draft; connections: Connection[]; providers: Provider[] }) {
+  const providerOf = (connection: string | undefined) => providers.find((p) => p.key === connections.find((c) => c.id === connection)?.provider)
+  const tracker = providerOf(draft.tracker?.connection)
+  const coder = providerOf(draft.repository.code?.connection)
+  const connected = providers.filter((p) => connections.some((c) => c.provider === p.key))
+  return (
+    <div className="relative hidden h-full overflow-hidden rounded-card bg-inset md:block">
+      <div className="absolute bottom-0 left-10 right-16 top-24 space-y-8 rounded-t-card bg-subtle px-6 pt-[260px]">
+        <Skeleton title="Itens" />
+        <Skeleton title="Etapas" />
+      </div>
+      <motion.div layout transition={tween} className="absolute left-6 right-10 top-10 space-y-4 rounded-card bg-surface p-5 shadow-pop">
+        <span className="flex size-10 items-center justify-center rounded-control bg-fg text-bg"><Icon name="apps" size={20} /></span>
+        <div>
+          <p className="truncate text-lg font-medium text-fg">{draft.name || 'Sua aplicação'}</p>
+          <p className="flex items-center gap-1.5 truncate font-mono text-xs text-muted"><Icon name="folder" size={12} />{draft.repository.directory ? folderName(draft.repository.directory) : 'pasta do repositório'}</p>
+        </div>
+        <div className="space-y-2.5">
+          <Row icon={<Icon name="sTicket" size={14} />} label="Espaço">{tracker && <ProviderLogo logo={tracker.logo} name={tracker.name} size={13} />}{draft.tracker?.project ?? '—'}</Row>
+          <Row icon={<Icon name="sCode" size={14} />} label="Repositório">{coder && <ProviderLogo logo={coder.logo} name={coder.name} size={13} />}{draft.repository.code?.repo ?? '—'}</Row>
+          <Row icon={<Icon name="link" size={14} />} label="Conexões">
+            {connected.length === 0 ? '—' : connected.map((p) => <LogoTile key={p.key} logo={p.logo} name={p.name} size={20} />)}
+          </Row>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+export function Onboarding({ onDone }: { onDone: () => void }) {
+  const data = useStore((s) => s.connections)
+  const [stage, setStage] = useState<Stage>('connections')
+  const [draft, setDraft] = useState<Draft>(blank)
+  const [connecting, setConnecting] = useState<string | null>(null)
+  const [choosing, setChoosing] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const trackers = useSources('tracker')
+  const coders = useSources('code')
+  const projects = useListed<TrackerProject>(trackers, loadProjects, stage === 'application')
+  const repos = useListed<CodeRepo>(coders, loadRepos, stage === 'application')
+  const chosen = (listing: DirListing) => {
+    setDraft((d) => ({
+      ...d,
+      name: d.name.trim() ? d.name : folderName(listing.path),
+      repository: { ...d.repository, directory: listing.path, code: d.repository.code ?? suggestedCode(listing.remote.ref, repos) },
+    }))
+    setChoosing(false)
+  }
+  const create = () => {
+    setBusy(true)
+    setError(null)
+    api()
+      .createApplication({ name: draft.name.trim(), tracker: draft.tracker, repositories: [draft.repository] })
+      .then((saved) => {
+        setApplications((list) => [...list, saved])
+        onDone()
+      })
+      .catch((e: unknown) => setError(errorText(e)))
+      .finally(() => setBusy(false))
+  }
+  const skip = () => {
+    skipOnboarding()
+    onDone()
+  }
+  const ready = draft.name.trim() !== '' && draft.repository.directory !== ''
+  return (
+    <div className="flex min-h-full flex-col items-center bg-subtle px-4 py-10">
+      <ProductMark size={34} className="mb-8" />
+      <div className="grid w-full max-w-[1040px] gap-2 rounded-card bg-bg p-2 shadow-card md:h-[640px] md:grid-cols-2">
+        <div className="flex min-h-0 flex-col p-6 md:p-8">
+          <Steps stage={stage} />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
+              <h1 className="text-2xl font-medium tracking-tighter2 text-fg">{stage === 'connections' ? 'Conecte suas ferramentas' : 'Crie sua aplicação'}</h1>
+              <p className="mb-6 mt-1.5 text-base text-muted">{stage === 'connections' ? 'Gestão, código, nuvem e IA. Dá para mudar depois em Configurações.' : 'A pasta do código e onde as tarefas vivem.'}</p>
+              <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+                {stage === 'connections' ? (
+                  <ConnectionsStage onConnect={setConnecting} />
+                ) : (
+                  <ApplicationStage draft={draft} onChange={setDraft} onFolder={() => setChoosing(true)} projects={projects} repos={repos} />
+                )}
+              </div>
+            </motion.div>
+          </AnimatePresence>
+          {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
+          <div className="mt-6 flex items-center gap-2">
+            {stage === 'application' && <Button variant="ghost" icon={<Icon name="left" size={15} />} onClick={() => setStage('connections')}>Voltar</Button>}
+            <Button variant="ghost" onClick={skip}>Pular por agora</Button>
+            {stage === 'connections' ? (
+              <Button variant="primary" className="ml-auto" onClick={() => setStage('application')}>Continuar</Button>
+            ) : (
+              <Button variant="primary" className="ml-auto" loading={busy} disabled={!ready} onClick={create}>Criar aplicação</Button>
+            )}
+          </div>
+        </div>
+        <Preview draft={draft} connections={data?.connections ?? []} providers={data?.providers ?? []} />
+      </div>
+      <ConnectDialog provider={connecting} onClose={() => setConnecting(null)} />
+      <FolderDialog open={choosing} start={draft.repository.directory || null} onClose={() => setChoosing(false)} onChoose={chosen} />
+    </div>
+  )
+}

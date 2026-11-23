@@ -31,7 +31,7 @@ export function useSources(capability: string): Source[] {
   )
 }
 
-function useListed<T>(sources: Source[], load: (connection: string) => Promise<T[]>, open: boolean): Record<string, T[]> {
+export function useListed<T>(sources: Source[], load: (connection: string) => Promise<T[]>, open: boolean): Record<string, T[]> {
   const [listed, setListed] = useState<Record<string, T[]>>({})
   useEffect(() => {
     if (!open) return
@@ -49,8 +49,8 @@ function useListed<T>(sources: Source[], load: (connection: string) => Promise<T
   return listed
 }
 
-const loadProjects = (connection: string) => api().call(connection, 'tracker.projects', {})
-const loadRepos = (connection: string) => api().call(connection, 'code.repos', {})
+export const loadProjects = (connection: string) => api().call(connection, 'tracker.projects', {})
+export const loadRepos = (connection: string) => api().call(connection, 'code.repos', {})
 
 export function folderName(directory: string): string {
   return directory.split('/').filter(Boolean).pop() ?? directory
@@ -73,11 +73,11 @@ function draftOf(application: Application | null): ApplicationDraft {
   return application ? structuredClone(application) : { name: '', tracker: null, repositories: [blankRepository()] }
 }
 
-function choiceKey(connection: string, key: string): string {
+export function choiceKey(connection: string, key: string): string {
   return `${connection}::${key}`
 }
 
-function fromKey(value: string): { connection: string; key: string } | null {
+export function fromKey(value: string): { connection: string; key: string } | null {
   if (value === NONE) return null
   const at = value.indexOf('::')
   return at < 0 ? null : { connection: value.slice(0, at), key: value.slice(at + 2) }

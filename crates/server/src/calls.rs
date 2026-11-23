@@ -52,10 +52,6 @@ fn arg<'a>(args: &'a Value, name: &str) -> ApiResult<&'a str> {
     args[name].as_str().filter(|text| !text.is_empty()).ok_or_else(|| ApiError::bad(format!("Falta {name}.")))
 }
 
-pub async fn action(shared: &Shared, record: &ConnectionRecord, action: &str, args: Value) -> ApiResult<Value> {
-    Caller { shared, record }.call(action, args).await
-}
-
 async fn repos(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
     let mut wanted = json!({});
     if let Some(query) = args["query"].as_str().filter(|query| !query.is_empty()) {

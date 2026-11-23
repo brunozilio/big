@@ -26,24 +26,12 @@ fn steady(listed: &Value) -> Value {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn the_first_run_makes_the_default_application_from_the_launch_folder() {
+async fn the_first_run_starts_without_any_application() {
     let world = World::new().await;
     let launch = world.dir.path().join("repo");
-    for args in [vec!["init", "-q"], vec!["remote", "add", "origin", "git@code.test:acme/web.git"]] {
-        let done = platform::git::command(&launch).args(args).output();
-        assert!(done.is_ok_and(|done| done.status.success()));
-    }
-    let listed = world.get("/api/applications").await;
-    let all = listed.as_array().expect("list");
-    assert_eq!(all.len(), 1, "{listed}");
-    assert_eq!(all[0]["name"], "repo");
-    assert_eq!(all[0]["tracker"], Value::Null);
-    assert_eq!(all[0]["repositories"][0]["code"], json!({ "connection": "c1", "repo": "acme/web" }));
-    let directory = all[0]["repositories"][0]["directory"].as_str().expect("directory");
-    assert!(directory.ends_with("/repo"), "{directory}");
-    let id = all[0]["id"].as_str().expect("id").to_owned();
-    assert_eq!(world.send(Method::DELETE, &format!("/api/applications/{id}"), None).await.0, StatusCode::NO_CONTENT);
-    assert_eq!(world.get("/api/applications").await, json!([]));
+    let done = platform::git::command(&launch).args(["init", "-q"]).output();
+    assert!(done.is_ok_and(|done| done.status.success()));
+    assert_eq!(world.get("/api/applications").await, json!([]), "the onboarding asks for the first one");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -73,7 +61,7 @@ async fn applications_are_created_changed_checked_and_removed() {
     assert_eq!((status, saved["name"].as_str()), (StatusCode::OK, Some("Loja nova")));
     assert_eq!(saved["repositories"][0]["id"], made["repositories"][0]["id"]);
     let listed = world.get("/api/applications").await;
-    assert_eq!(listed.as_array().map(Vec::len), Some(2));
+    assert_eq!(listed.as_array().map(Vec::len), Some(1), "only what was made, nothing seeded");
     fixture("applications", &steady(&listed));
 
     let nameless = json!({ "name": " ", "repositories": body["repositories"] });
