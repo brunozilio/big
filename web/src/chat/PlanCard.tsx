@@ -9,7 +9,7 @@ import { Icon, type IconName } from '@/ui/icon'
 import { Collapse, motion, tween } from '@/ui/motion'
 import { Failure, ResolvedCheck, useSend, type Respond } from './actionBlocks'
 import { AgentMark, type Ev } from './events'
-import { fileEntry, parsePlan, structured, type PlanSection } from './planDoc'
+import { fileEntry, parsePlan, stressed, structured, subtasksOf, type PlanSection } from './planDoc'
 
 export interface PlanDestination {
   name: string
@@ -26,12 +26,12 @@ function Md({ text, className }: { text: string; className?: string }) {
   )
 }
 
-const sectionIcon: Record<PlanSection['kind'], IconName> = { context: 'info', steps: 'list', files: 'file', risks: 'alert', checks: 'checkCircle', other: 'document' }
+const sectionIcon: Record<PlanSection['kind'], IconName> = { story: 'user', criteria: 'checkCircle', subtasks: 'list', context: 'info', steps: 'list', files: 'file', risks: 'alert', checks: 'checkCircle', other: 'document' }
 
 function Heading({ section }: { section: PlanSection }) {
   return (
-    <p className="mb-2.5 flex items-center gap-2 text-sm font-medium text-muted">
-      <Icon name={sectionIcon[section.kind]} size={15} />
+    <p className="mb-2.5 flex items-center gap-2 text-base font-semibold text-fg">
+      <Icon name={sectionIcon[section.kind]} size={16} className="text-muted" />
       {section.heading}
     </p>
   )
@@ -80,8 +80,26 @@ function Marked({ items, icon, tone }: { items: string[]; icon: IconName; tone: 
   )
 }
 
+function Subtasks({ body }: { body: string }) {
+  return (
+    <ol className="space-y-2.5">
+      {subtasksOf(body).map((task, i) => (
+        <li key={i} className="flex gap-3 rounded-control bg-subtle px-3 py-2.5 shadow-[0_0_0_1px_rgb(var(--border))]">
+          <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-full bg-surface text-sm font-medium tabular-nums text-fg2 shadow-card">{i + 1}</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-base font-semibold text-fg">{task.title}</p>
+            {task.details && <Md text={task.details} className="mt-0.5 text-muted" />}
+          </div>
+        </li>
+      ))}
+    </ol>
+  )
+}
+
 function SectionBody({ section }: { section: PlanSection }) {
   const { kind, items, body } = section
+  if (kind === 'subtasks') return <Subtasks body={body} />
+  if (kind === 'criteria' && items.length > 0) return <Marked items={items.map(stressed)} icon="check" tone="text-success-fg" />
   if (items.length === 0 || kind === 'context' || kind === 'other') return <Md text={body} />
   if (kind === 'steps') return <Steps items={items} />
   if (kind === 'files') return <Files items={items} />

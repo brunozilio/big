@@ -149,7 +149,15 @@ export function StepPanel(props: { it: Item; step: string }) {
 function StepContent({ it, step }: { it: Item; step: string }) {
   const [attempt, setAttempt] = useState<number | null>(null)
   useEffect(() => setAttempt(null), [it.id, step])
-  const { data: view, error } = useStepView(it, step, attempt)
+  const [nonce, setNonce] = useState(0)
+  const { data: view, error } = useStepView(it, step, attempt, nonce)
+  const empty = !view || view.step !== step || view.blocks.length === 0
+  const running = it.steps.find((s) => s.id === step)?.state === 'running'
+  useEffect(() => {
+    if (!empty || !running) return
+    const timer = setInterval(() => setNonce((n) => n + 1), 1500)
+    return () => clearInterval(timer)
+  }, [empty, running])
   const host = { item: it.id, step, version: it.updatedAt, send: (action: string, payload: unknown) => api().input(it.id, step, { action, payload }) }
   const current = view && view.step === step && view.item === it.id ? view : null
   if (!current) {

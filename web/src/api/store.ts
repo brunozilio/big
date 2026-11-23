@@ -138,18 +138,31 @@ function refreshModels() {
     .catch(() => undefined)
 }
 
+const SESSION_TRIES = 8
+const SESSION_RETRY_MS = 1000
+
 export function useSession(id: string | null): { session: Session | null; error: string | null } {
   const session = useStore((s) => (id ? s.sessions[id] ?? null : null))
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
+    setError(null)
     if (!id || state.sessions[id]) return
     let alive = true
-    api()
-      .session(id)
-      .then((loaded) => alive && set((s) => ({ sessions: { ...s.sessions, [id]: loaded } })))
-      .catch((e) => alive && setError(errorText(e)))
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const fetchOnce = (tries: number) => {
+      api()
+        .session(id)
+        .then((loaded) => alive && set((s) => ({ sessions: { ...s.sessions, [id]: loaded } })))
+        .catch((e) => {
+          if (!alive) return
+          if (tries < SESSION_TRIES) timer = setTimeout(() => fetchOnce(tries + 1), SESSION_RETRY_MS)
+          else setError(errorText(e))
+        })
+    }
+    fetchOnce(1)
     return () => {
       alive = false
+      clearTimeout(timer)
     }
   }, [id])
   return { session, error }
@@ -180,8 +193,8 @@ export function useLoad<T>(load: (() => Promise<T>) | null, deps: unknown[]): Lo
   return result
 }
 
-export function useStepView(item: Item | null, step: string | null, attempt: number | null): Loaded<StepView> {
-  return useLoad(item && step ? () => api().step(item.id, step, attempt) : null, [item?.id, item?.updatedAt, step, attempt])
+export function useStepView(item: Item | null, step: string | null, attempt: number | null, nonce = 0): Loaded<StepView> {
+  return useLoad(item && step ? () => api().step(item.id, step, attempt) : null, [item?.id, item?.updatedAt, step, attempt, nonce])
 }
 
 export function useCall<A extends CallAction>(connection: string, action: A, args: CallArgs<A>, version: string | undefined): Loaded<CallResult<A>> {

@@ -1,4 +1,4 @@
-export type PlanKind = 'context' | 'steps' | 'files' | 'risks' | 'checks' | 'other'
+export type PlanKind = 'story' | 'criteria' | 'subtasks' | 'context' | 'steps' | 'files' | 'risks' | 'checks' | 'other'
 
 export interface PlanSection {
   kind: PlanKind
@@ -14,6 +14,9 @@ export interface PlanDoc {
 }
 
 const kinds: [PlanKind, RegExp][] = [
+  ['story', /^(descri[çc][ãa]o|hist[óo]ria|user story)/i],
+  ['criteria', /^(crit[ée]rios de aceite|acceptance criteria)/i],
+  ['subtasks', /^(subtarefas|subtasks)/i],
   ['context', /^(contexto|context|problema|objetivo|resumo|summary)/i],
   ['steps', /^(abordagem|approach|passos|steps|implementa|plano de implementa)/i],
   ['files', /^(arquivos|critical files|files)/i],
@@ -60,7 +63,9 @@ export function parsePlan(text: string): PlanDoc {
       title = top[1].trim()
       continue
     }
-    const heading = fence ? null : headingOf(line)
+    const open = sections[sections.length - 1]
+    const nested = open && kindOf(open.heading) === 'subtasks' && /^###\s+/.test(line)
+    const heading = fence || nested ? null : headingOf(line)
     if (heading) sections.push({ heading: heading.heading, lines: heading.rest ? [heading.rest] : [] })
     else if (sections.length > 0) sections[sections.length - 1].lines.push(line)
     else intro.push(line)
@@ -76,6 +81,29 @@ export function parsePlan(text: string): PlanDoc {
 }
 
 export const structured = (doc: PlanDoc) => doc.sections.filter((s) => s.kind !== 'other').length >= 2
+
+export interface Subtask {
+  title: string
+  details: string
+}
+
+export function subtasksOf(body: string): Subtask[] {
+  const titled = body.split(/^###\s+/m).map((part) => part.trim()).filter(Boolean)
+  if (titled.length > 0 && /^###\s+/m.test(body)) {
+    return titled.map((part) => {
+      const [first, ...rest] = part.split('\n')
+      return { title: first.trim(), details: rest.join('\n').trim() }
+    })
+  }
+  return listItems(body).map((item) => {
+    const [first, ...rest] = item.split('\n')
+    return { title: first.replace(/\*\*/g, '').trim(), details: rest.join('\n').trim() }
+  })
+}
+
+export function stressed(criterion: string): string {
+  return criterion.replace(/(^|[,;.]\s*)(dado que|dado|quando|então|e)(?=\s)/gi, (_, lead: string, word: string) => `${lead}**${word.charAt(0).toUpperCase()}${word.slice(1)}**`)
+}
 
 export function fileEntry(item: string): { path: string; note: string } {
   const hit = /^\*{0,2}`?([^`\s*]+)`?\*{0,2}:?(?:\s+(?:[—–-]\s+)?(.*))?$/s.exec(item.trim())

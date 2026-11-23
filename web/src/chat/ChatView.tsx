@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 're
 import { api } from '@/api'
 import type { SessionEvent } from '@/api/contract'
 import { useSession } from '@/api/store'
-import { cn } from '@/ui/cn'
+import { cn, plural } from '@/ui/cn'
 import { EmptyState, Spinner } from '@/ui/display'
 import { Icon } from '@/ui/icon'
 import { AnimatePresence, Collapse, motion, tween, tweenClose } from '@/ui/motion'
@@ -71,7 +71,7 @@ export function ChatView({ sessionId, composer, dock }: { sessionId: string; com
   if (!session) return <div className="flex h-full items-center justify-center"><Spinner /></div>
 
   const running = session.status === 'running'
-  const turns = toTurns(session.events)
+  const turns = toTurns(withoutRepeatedPlans(session.events))
   const respond: Respond = (event, response) => api().respond(session.id, event, response)
 
   return (
@@ -158,33 +158,73 @@ export function EventView({ event, running = true, respond }: { event: SessionEv
   }
 }
 
-function TurnWork({ live, started, ended, events, render }: { live: boolean; started?: string; ended: string | undefined; events: SessionEvent[]; render: (e: SessionEvent) => ReactNode }) {
-  const work = events.filter((e) => !human(e) && !emptyThinking(e, live))
-  const finals = events.filter(human)
+export type Segment = { kind: 'work'; events: SessionEvent[] } | { kind: 'human'; event: SessionEvent }
+
+export function segmentsOf(events: SessionEvent[], live: boolean): Segment[] {
+  const segments: Segment[] = []
+  for (const e of events) {
+    if (human(e)) {
+      segments.push({ kind: 'human', event: e })
+      continue
+    }
+    if (emptyThinking(e, live)) continue
+    const last = segments[segments.length - 1]
+    if (last?.kind === 'work') last.events.push(e)
+    else segments.push({ kind: 'work', events: [e] })
+  }
+  return segments
+}
+
+export function withoutRepeatedPlans(events: SessionEvent[]): SessionEvent[] {
+  return events.filter((e, i) => e.type !== 'plan' || !events.slice(i + 1).some((later) => later.type === 'plan' && later.text === e.text))
+}
+
+function workLabel(events: SessionEvent[]): string {
+  const tools = events.reduce((n, e) => n + (e.type === 'tools' ? e.calls.length : 0), 0)
+  const thought = events.some((e) => e.type === 'thinking')
+  const parts = [thought ? 'Pensou' : '', tools ? `${tools} ${plural(tools, 'ferramenta', 'ferramentas')}` : ''].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : `${events.length} ${plural(events.length, 'passo', 'passos')}`
+}
+
+function WorkGroup({ events, live, render }: { events: SessionEvent[]; live: boolean; render: (e: SessionEvent) => ReactNode }) {
   const [open, setOpen] = useState(live)
   useEffect(() => setOpen(live), [live])
   return (
+    <div>
+      <button onClick={() => setOpen(!open)} className="group flex items-center gap-1.5 text-md text-muted transition-colors hover:text-fg">
+        <span>{workLabel(events)}</span>
+        <motion.span initial={false} animate={{ rotate: open ? 90 : 0 }} transition={tween} className="flex text-faint group-hover:text-fg"><Icon name="right" size={14} /></motion.span>
+      </button>
+      <Collapse open={open}>
+        <div className="mt-4 space-y-5 border-l pl-4">
+          <AnimatePresence initial={false}>{events.map(render)}</AnimatePresence>
+        </div>
+      </Collapse>
+    </div>
+  )
+}
+
+function TurnWork({ live, started, ended, events, render }: { live: boolean; started?: string; ended: string | undefined; events: SessionEvent[]; render: (e: SessionEvent) => ReactNode }) {
+  const segments = segmentsOf(events, live)
+  const working = segments.some((segment) => segment.kind === 'work')
+  return (
     <div className="space-y-5">
-      {(work.length > 0 || live) && started && (
-        <div>
-          <button onClick={() => setOpen(!open)} className="group flex items-center gap-1.5 text-md text-muted transition-colors hover:text-fg">
-            <TurnHeader startedAt={started} endedAt={ended ?? started} live={live} />
-            <motion.span initial={false} animate={{ rotate: open ? 90 : 0 }} transition={tween} className="flex text-faint group-hover:text-fg"><Icon name="right" size={14} /></motion.span>
-          </button>
-          <Collapse open={open}>
-            <div className={cn('mt-4 space-y-5 border-l pl-4')}>
-              <AnimatePresence initial={false}>{work.map(render)}</AnimatePresence>
-              {live && work.length === 0 && (
-                <div className="flex items-center gap-3 text-md">
-                  <AgentMark size={18} spinning />
-                  <span className="text-shimmer">Preparando…</span>
-                </div>
-              )}
-            </div>
-          </Collapse>
+      {(working || live) && started && (
+        <div className="text-md text-muted"><TurnHeader startedAt={started} endedAt={ended ?? started} live={live} /></div>
+      )}
+      {segments.map((segment, i) =>
+        segment.kind === 'human' ? (
+          <AnimatePresence key={segment.event.id} initial={false}>{render(segment.event)}</AnimatePresence>
+        ) : (
+          <WorkGroup key={segment.events[0].id} events={segment.events} live={live && i === segments.length - 1} render={render} />
+        ),
+      )}
+      {live && segments[segments.length - 1]?.kind !== 'work' && (
+        <div className="flex items-center gap-3 text-md">
+          <AgentMark size={18} spinning />
+          <span className="text-shimmer">Trabalhando…</span>
         </div>
       )}
-      <AnimatePresence initial={false}>{finals.map(render)}</AnimatePresence>
     </div>
   )
 }
