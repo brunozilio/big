@@ -90,10 +90,6 @@ export function planOf(ctx, opts) {
   };
 }
 
-export function scenariosOf(ctx, opts) {
-  return opts.scenarios ?? source(ctx, opts, "tests").scenarios ?? "";
-}
-
 export function summaryLine(text) {
   const found = String(text ?? "").match(/^\**Resumo:?\**:?\s*(.+)$/im);
   if (found) return found[1].trim();

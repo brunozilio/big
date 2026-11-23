@@ -1,5 +1,5 @@
 import { step, logs, chat } from "sdk";
-import { agentOptions, branchOf, defined, eachOf, planOf, repositoriesOf, scenariosOf, tail } from "./context.js";
+import { agentOptions, branchOf, defined, eachOf, planOf, repositoriesOf, tail } from "./context.js";
 
 function groupsOf(ctx, opts) {
   const repositories = repositoriesOf(ctx);
@@ -29,8 +29,6 @@ function asked(ctx, opts, output) {
   const plan = planOf(ctx, opts);
   const parts = [`Verifique o item: ${plan.title}`];
   if (plan.story) parts.push(plan.story);
-  const scenarios = scenariosOf(ctx, opts);
-  if (scenarios) parts.push("## Cenários\n\n```gherkin\n" + scenarios + "\n```");
   if (output) parts.push("## Comandos já rodados\n\n```\n" + tail(output, 3000) + "\n```");
   return parts.join("\n\n");
 }

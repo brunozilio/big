@@ -170,7 +170,6 @@ impl AgentEngine for Agents {
                 "planner" => plan(&turn, number),
                 "reviewer" => turn.finish(json!({ "verdict": "approve", "summary": "sem problemas", "lines": [] })),
                 "release" => turn.finish(json!({ "notes": "## Notas da release" })),
-                "tester" => say(&turn, "```gherkin\nCenário: o arquivo existe\n  Então ele está no repositório\n```"),
                 "verifier" => say(&turn, "✓ o arquivo existe\nVEREDITO: APROVADO"),
                 _ => develop(&turn, &script, &places, number),
             }

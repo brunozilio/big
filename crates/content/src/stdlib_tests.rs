@@ -13,7 +13,7 @@ impl script::Host for NoHost {
     }
 }
 
-const STEPS: [&str; 10] = ["plan", "ticket", "tests", "develop", "checks", "pr", "ci", "review", "merge", "release"];
+const STEPS: [&str; 9] = ["plan", "ticket", "develop", "checks", "pr", "ci", "review", "merge", "release"];
 
 const PROVIDERS: [&str; 7] = ["jira", "github", "aws", "atlassian", "gitlab", "bitbucket", "amazon"];
 
@@ -200,7 +200,6 @@ fn agent(args: &Value) -> Value {
         }
         Some("developer") => json!({ "text": "feito", "session": "dev-1", "output": { "branch": "item/i1" } }),
         Some("release") => json!({ "text": "", "session": "rel-1", "output": { "notes": "## Notas\n- x corrigido" } }),
-        Some("tester") => json!({ "text": "```gherkin\nCenário: x\n  Dado a\n  Então b\n```", "session": "test-1", "output": null }),
         Some("verifier") => json!({ "text": "✓ x\nVEREDITO: APROVADO", "session": "ver-1", "output": null }),
         _ => json!({ "text": "", "session": "other", "output": null }),
     }
@@ -248,7 +247,7 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
 }
 
 #[test]
-fn the_default_workflow_describes_its_statuses_and_the_ten_steps_in_order() {
+fn the_default_workflow_describes_its_statuses_and_the_nine_steps_in_order() {
     let described = call(&default_workflow(), "host.describe", &[]);
     let workflow = &described["workflows"][0];
     assert_eq!(workflow["name"], "entrega");
@@ -256,10 +255,10 @@ fn the_default_workflow_describes_its_statuses_and_the_ten_steps_in_order() {
     let ids: Vec<&str> =
         workflow["steps"].as_array().expect("steps").iter().filter_map(|call| call["id"].as_str()).collect();
     assert_eq!(ids, STEPS);
-    assert_eq!(workflow["steps"][4]["options"]["onFail"], "develop");
-    assert_eq!(workflow["steps"][4]["options"]["agent"], "verifier");
-    assert_eq!(workflow["steps"][6]["options"]["onFail"], "develop");
-    assert_eq!(workflow["steps"][7]["options"]["onChanges"], "develop");
+    assert_eq!(workflow["steps"][3]["options"]["onFail"], "develop");
+    assert_eq!(workflow["steps"][3]["options"]["agent"], "verifier");
+    assert_eq!(workflow["steps"][5]["options"]["onFail"], "develop");
+    assert_eq!(workflow["steps"][6]["options"]["onChanges"], "develop");
     assert_eq!(described["steps"], json!(STEPS));
 }
 
@@ -405,7 +404,7 @@ fn the_plan_gives_the_title_the_story_goes_to_the_issue_and_the_pull_request_is_
     ]);
     let developer = of_kind(&asked, "agent").into_iter().find(|command| command["args"]["name"] == "developer").cloned();
     let prompt = developer.expect("developer")["args"]["input"]["prompt"].as_str().unwrap_or_default().to_owned();
-    assert!(prompt.contains("Cenário: x") && prompt.contains("Criar a tabela"), "{prompt}");
+    assert!(prompt.contains("Dado que estou no cadastro") && prompt.contains("Criar a tabela"), "{prompt}");
     let opened = &calls(&asked, "open_pull_request")[0]["args"]["args"];
     assert_eq!(opened["title"], "T-9 - Cadastro de clientes");
     assert_eq!(opened["body"], "Cadastra clientes pela ferramenta MCP.\n\nIssue: T-9");

@@ -83,14 +83,6 @@ export interface PlanOutput {
   subtasks: { title: string; details: string }[];
 }
 
-export interface TestsOptions extends AgentStepOptions {
-  scenarios?: string;
-}
-
-export interface TestsOutput {
-  session: string;
-  scenarios: string;
-}
 
 export interface TicketOptions extends EffectStepOptions {
   issue?: string;
@@ -244,7 +236,6 @@ export interface ReleaseOptions
 
 export type PlanStep = StepType<PlanOptions>;
 export type TicketStep = StepType<TicketOptions>;
-export type TestsStep = StepType<TestsOptions>;
 export type DevelopStep = StepType<DevelopOptions>;
 export type ChecksStep = StepType<ChecksOptions>;
 export type PrStep = StepType<PrOptions>;
