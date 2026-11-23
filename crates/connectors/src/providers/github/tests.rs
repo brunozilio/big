@@ -12,7 +12,12 @@ fn creds() -> Credentials {
 }
 
 async fn call(http: &FakeHttp, action: &str, args: Value, key: &str) -> Result<Value, ActionError> {
-    Github.call(http, &creds(), action, &args, key).await
+    let answer = Github.call(http, &creds(), action, &args, key).await;
+    if let Ok(value) = &answer {
+        let spec = Github.descriptor().action(action).cloned().unwrap_or_else(|| panic!("no {action}"));
+        assert_eq!(crate::descriptor::conforms(&spec.output_schema, value), Ok(()), "{action}: {value}");
+    }
+    answer
 }
 
 fn pull(state: &str, merged_at: Option<&str>) -> Value {

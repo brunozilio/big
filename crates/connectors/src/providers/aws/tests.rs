@@ -5,6 +5,21 @@ use super::*;
 use crate::error::ErrorClass;
 use crate::http::{FakeHttp, Method};
 
+async fn checked(
+    http: &FakeHttp,
+    creds: &Credentials,
+    action: &str,
+    args: &Value,
+    key: &str,
+) -> Result<Value, ActionError> {
+    let answer = Aws.call(http, creds, action, args, key).await;
+    if let Ok(value) = &answer {
+        let spec = Aws.descriptor().action(action).cloned().unwrap_or_else(|| panic!("no {action}"));
+        assert_eq!(crate::descriptor::conforms(&spec.output_schema, value), Ok(()), "{action}: {value}");
+    }
+    answer
+}
+
 fn creds() -> Credentials {
     Credentials::new(&ConnectionId::from("aws1"), "sso-at", json!({ "region": "eu-west-1" }))
 }
@@ -21,7 +36,7 @@ async fn accounts_and_roles_follow_every_page() {
         .once(Method::Get, "/assignment/accounts", 200, r#"{"accountList":[{"accountId":"222","accountName":"dev"}]}"#)
         .once(Method::Get, "account_id=111", 200, r#"{"roleList":[{"roleName":"Admin"},{"roleName":"ReadOnly"}]}"#)
         .once(Method::Get, "account_id=222", 200, r#"{"roleList":[]}"#);
-    let answer = Aws.call(&http, &creds(), cloud::ACCOUNTS_AND_ROLES, &json!({}), "").await;
+    let answer = checked(&http, &creds(), cloud::ACCOUNTS_AND_ROLES, &json!({}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer["accounts"][0]["roles"], json!(["Admin", "ReadOnly"]));
     assert_eq!(answer["accounts"][1]["name"], "dev");
@@ -39,7 +54,7 @@ async fn identity_buys_role_credentials() {
         200,
         r#"{"roleCredentials":{"accessKeyId":"ASIA","secretAccessKey":"s","sessionToken":"t","expiration":4102444800000}}"#,
     );
-    let answer = Aws.call(&http, &creds(), cloud::IDENTITY, &json!({"account": "111", "role": "ReadOnly"}), "").await;
+    let answer = checked(&http, &creds(), cloud::IDENTITY, &json!({"account": "111", "role": "ReadOnly"}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer["access_key_id"], "ASIA");
     assert_eq!(answer["session_token"], "t");
@@ -49,7 +64,7 @@ async fn identity_buys_role_credentials() {
 #[tokio::test]
 async fn a_refused_sso_token_is_an_auth_error() {
     let http = FakeHttp::new().once(Method::Get, "/federation/credentials", 401, "{}");
-    let refused = Aws.call(&http, &creds(), cloud::IDENTITY, &json!({"account": "1", "role": "r"}), "").await;
+    let refused = checked(&http, &creds(), cloud::IDENTITY, &json!({"account": "1", "role": "r"}), "").await;
     assert_eq!(refused.map_err(|e| e.class), Err(ErrorClass::Auth));
 }
 
@@ -77,14 +92,14 @@ const CALLER: &str = "<GetCallerIdentityResponse><GetCallerIdentityResult><Arn>a
 #[tokio::test]
 async fn console_credentials_report_their_identity_through_sts() {
     let http = FakeHttp::new().always(Method::Post, "sts.us-east-1.amazonaws.com", 200, CALLER);
-    let answer = Aws.call(&http, &console(), cloud::IDENTITY, &json!({}), "").await;
+    let answer = checked(&http, &console(), cloud::IDENTITY, &json!({}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer["account"], "123456789012");
     assert_eq!(answer["arn"], "arn:aws:iam::123456789012:user/ana");
     assert_eq!(answer["access_key_id"], "ASIA1");
     assert_eq!(answer["expires_at"], "2100-01-01T00:00:00Z");
     assert!(http.sent()[0].header_value("authorization").is_some_and(|a| a.contains("Credential=ASIA1/")));
-    let roles = Aws.call(&http, &console(), cloud::ACCOUNTS_AND_ROLES, &json!({}), "").await;
+    let roles = checked(&http, &console(), cloud::ACCOUNTS_AND_ROLES, &json!({}), "").await;
     assert_eq!(roles.map(|r| r["accounts"][0]["roles"].clone()), Ok(json!([])));
     let options = Aws.accounts(&http, &console()).await;
     assert_eq!(options.map(|o| o[0].label.clone()), Ok("ana · 1234-5678-9012".to_owned()));

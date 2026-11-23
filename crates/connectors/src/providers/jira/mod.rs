@@ -44,6 +44,7 @@ struct Api<'a> {
     cloud: String,
     site: String,
     flag_field: String,
+    project: Option<String>,
 }
 
 impl<'a> Api<'a> {
@@ -55,6 +56,7 @@ impl<'a> Api<'a> {
             cloud: cloud.to_owned(),
             site: creds.setting("site_url").unwrap_or_default().trim_end_matches('/').to_owned(),
             flag_field: creds.setting("flag_field").unwrap_or(DEFAULT_FLAG_FIELD).to_owned(),
+            project: creds.setting("project").map(str::to_owned),
         })
     }
 
@@ -72,6 +74,11 @@ impl<'a> Api<'a> {
             arguments["nextPageToken"] = json!(token);
         }
         self.tool("searchJiraIssuesUsingJql", arguments).await
+    }
+
+    fn project<'p>(&'p self, args: Args<'p>) -> Result<&'p str, ActionError> {
+        let project = args.optional_text("project").or(self.project.as_deref());
+        jql_key(project.ok_or_else(|| ActionError::missing("project"))?)
     }
 
     fn browse(&self, key: &str) -> String {
@@ -145,7 +152,7 @@ impl Provider for Jira {
             actions::CREATE_ISSUE => tracker::create_issue(&api, args, idempotency_key).await,
             actions::ISSUE => tracker::issue(&api, args.text("issue")?).await,
             actions::COMMENT => tracker::comment(&api, args.text("issue")?, args.text("body")?, idempotency_key).await,
-            actions::STATUSES => tracker::statuses(&api, args.text("project")?).await,
+            actions::STATUSES => tracker::statuses(&api, api.project(args)?).await,
             actions::TRANSITION => tracker::transition(&api, args.text("issue")?, args.text("status")?).await,
             actions::SET_IMPEDIMENT => tracker::set_impediment(&api, args, idempotency_key).await,
             actions::SEARCH => tracker::search(&api, args).await,

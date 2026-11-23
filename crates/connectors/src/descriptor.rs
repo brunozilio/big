@@ -120,6 +120,39 @@ pub fn object(required: &[(&str, &str)], optional: &[(&str, &str)]) -> Value {
     json!({ "type": "object", "properties": properties, "required": names })
 }
 
+fn of_kind(kind: &str, value: &Value) -> bool {
+    match kind {
+        "string" => value.is_string(),
+        "integer" => value.is_i64() || value.is_u64(),
+        "number" => value.is_number(),
+        "boolean" => value.is_boolean(),
+        "array" => value.is_array(),
+        "object" => value.is_object(),
+        _ => true,
+    }
+}
+
+pub fn conforms(schema: &Value, value: &Value) -> Result<(), String> {
+    let kind = schema["type"].as_str().unwrap_or_default();
+    if !of_kind(kind, value) {
+        return Err(format!("expected {kind}, got {value}"));
+    }
+    let required: Vec<&str> = schema["required"].as_array().into_iter().flatten().filter_map(Value::as_str).collect();
+    let properties = schema["properties"].as_object().into_iter().flatten();
+    for (name, property) in properties {
+        let field = &value[name.as_str()];
+        let needed = required.contains(&name.as_str());
+        if field.is_null() && !needed {
+            continue;
+        }
+        let kind = property["type"].as_str().unwrap_or_default();
+        if !of_kind(kind, field) {
+            return Err(format!("`{name}` should be {kind}, got {field}"));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

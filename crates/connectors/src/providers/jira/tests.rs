@@ -36,7 +36,12 @@ fn tool_calls(http: &FakeHttp) -> Vec<(String, Value)> {
 }
 
 async fn call(http: &FakeHttp, action: &str, args: Value, key: &str) -> Result<Value, ActionError> {
-    Jira.call(http, &creds(), action, &args, key).await
+    let answer = Jira.call(http, &creds(), action, &args, key).await;
+    if let Ok(value) = &answer {
+        let spec = Jira.descriptor().action(action).cloned().unwrap_or_else(|| panic!("no {action}"));
+        assert_eq!(crate::descriptor::conforms(&spec.output_schema, value), Ok(()), "{action}: {value}");
+    }
+    answer
 }
 
 #[test]
@@ -68,11 +73,14 @@ async fn the_sites_come_from_the_accessible_resources_with_their_projects() {
 
 #[tokio::test]
 async fn create_issue_finds_the_issue_already_labelled_with_the_key() {
-    let http = session(&[json!({ "issues": [{ "id": "2", "key": "BIG-2" }] })]);
-    let answer = call(&http, actions::CREATE_ISSUE, json!({"project": "BIG", "title": "Fix it!"}), "k1").await;
+    let found = json!({ "issues": [{ "id": "2", "key": "BIG-2", "fields": {"summary": "Fix it!", "status": {"name": "A fazer"}} }] });
+    let http = session(&[found]);
+    let answer = call(&http, actions::CREATE_ISSUE, json!({"title": "Fix it!"}), "k1").await;
     assert_eq!(
         answer,
-        Ok(json!({"id": "2", "key": "BIG-2", "url": "https://acme.atlassian.net/browse/BIG-2", "created": false}))
+        Ok(
+            json!({"ref": "BIG-2", "title": "Fix it!", "status": "A fazer", "url": "https://acme.atlassian.net/browse/BIG-2", "created": false})
+        )
     );
     let calls = tool_calls(&http);
     assert_eq!(calls.len(), 1);
@@ -87,7 +95,10 @@ async fn create_issue_creates_with_the_key_as_a_label() {
     let http = session(&[json!({ "issues": [] }), json!({"id": "10", "key": "BIG-10"})]);
     let args = json!({"project": "BIG", "title": "T", "description": "**b**", "parent": "BIG-1", "labels": ["x"]});
     let answer = call(&http, actions::CREATE_ISSUE, args, "k2").await;
-    assert_eq!(answer.map(|a| (a["key"].clone(), a["created"].clone())), Ok((json!("BIG-10"), json!(true))));
+    assert_eq!(
+        answer.map(|a| (a["ref"].clone(), a["title"].clone(), a["created"].clone())),
+        Ok((json!("BIG-10"), json!("T"), json!(true)))
+    );
     let (name, sent) = tool_calls(&http)[1].clone();
     assert_eq!(name, "createJiraIssue");
     assert_eq!(sent["additional_fields"]["labels"], json!(["x", idempotency::label("k2")]));
@@ -101,7 +112,7 @@ async fn create_issue_creates_with_the_key_as_a_label() {
 async fn transition_to_the_current_status_is_already_done() {
     let http = session(&[json!({"key": "BIG-1", "fields": {"status": {"name": "Fazendo"}}})]);
     let answer = call(&http, actions::TRANSITION, json!({"issue": "BIG-1", "status": "fazendo"}), "k").await;
-    assert_eq!(answer, Ok(json!({"status": "Fazendo", "changed": false})));
+    assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Fazendo", "changed": false})));
     assert_eq!(tool_calls(&http).len(), 1);
 }
 
@@ -113,7 +124,7 @@ async fn transition_picks_the_transition_that_reaches_the_named_status() {
         json!(""),
     ]);
     let answer = call(&http, actions::TRANSITION, json!({"issue": "BIG-1", "status": "Feito"}), "k").await;
-    assert_eq!(answer, Ok(json!({"status": "Feito", "changed": true})));
+    assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Feito", "changed": true})));
     let (name, sent) = tool_calls(&http)[2].clone();
     assert_eq!(name, "transitionJiraIssue");
     assert_eq!(sent["transition"], json!({"id": "31"}));
@@ -128,16 +139,22 @@ async fn transition_without_a_path_is_permanent() {
 
 #[tokio::test]
 async fn a_comment_already_posted_is_not_posted_again() {
-    let http = session(&[json!({"fields": {"comment": {"comments": [{"id": "7", "body": "Oi!"}]}}})]);
+    let known = json!({"id": "7", "body": "Oi!", "author": {"accountId": "a1", "displayName": "Ana"}, "created": "2024-01-01T00:00:00.000+0000"});
+    let http = session(&[json!({"fields": {"comment": {"comments": [known]}}})]);
     let answer = call(&http, actions::COMMENT, json!({"issue": "BIG-1", "body": "oi"}), "k3").await;
-    assert_eq!(answer, Ok(json!({"id": "7", "created": false})));
+    assert_eq!(
+        answer,
+        Ok(
+            json!({"id": "7", "author": {"id": "a1", "name": "Ana"}, "body": "Oi!", "at": "2024-01-01T00:00:00.000+0000", "created": false})
+        )
+    );
 }
 
 #[tokio::test]
 async fn a_new_comment_is_sent_as_a_document() {
     let http = session(&[json!({"fields": {"comment": {"comments": []}}}), json!({"id": "8"})]);
     let answer = call(&http, actions::COMMENT, json!({"issue": "BIG-1", "body": "oi"}), "k4").await;
-    assert_eq!(answer, Ok(json!({"id": "8", "created": true})));
+    assert_eq!(answer, Ok(json!({"id": "8", "author": null, "body": "oi", "at": "", "created": true})));
     let (name, sent) = tool_calls(&http)[1].clone();
     assert_eq!(name, "addCommentToJiraIssue");
     let body: Value = serde_json::from_str(sent["commentBody"].as_str().unwrap_or_default()).unwrap_or_default();
@@ -150,11 +167,11 @@ async fn set_impediment_flags_the_issue_and_explains_why() {
     let on =
         call(&http, actions::SET_IMPEDIMENT, json!({"issue": "BIG-1", "on": true, "reason": "falta acesso"}), "k5")
             .await;
-    assert_eq!(on, Ok(json!({"impediment": true})));
+    assert_eq!(on, Ok(json!({"on": true, "reason": "falta acesso"})));
     assert_eq!(tool_calls(&http)[0].1["fields"], json!({DEFAULT_FLAG_FIELD: [{"value": "Impediment"}]}));
     let http = session(&[json!({})]);
     let off = call(&http, actions::SET_IMPEDIMENT, json!({"issue": "BIG-1", "on": false}), "k6").await;
-    assert_eq!(off, Ok(json!({"impediment": false})));
+    assert_eq!(off, Ok(json!({"on": false, "reason": null})));
     assert_eq!(tool_calls(&http)[0].1["fields"], json!({DEFAULT_FLAG_FIELD: null}));
 }
 
@@ -165,10 +182,10 @@ async fn statuses_are_the_distinct_statuses_seen_and_reachable() {
         json!({"issues": [{"key": "BIG-1", "fields": {"status": status("1", "A fazer")}}, {"key": "BIG-2", "fields": {"status": status("1", "A fazer")}}]}),
         json!({"transitions": [{"id": "5", "to": status("3", "Feito")}]}),
     ]);
-    let listed = call(&http, actions::STATUSES, json!({"project": "BIG"}), "").await;
-    let names =
-        listed.map(|l| l["statuses"].as_array().map(|s| s.iter().map(|x| x["name"].clone()).collect::<Vec<_>>()));
+    let listed = call(&http, actions::STATUSES, json!({}), "").await;
+    let names = listed.map(|l| l.as_array().map(|s| s.iter().map(|x| x["name"].clone()).collect::<Vec<_>>()));
     assert_eq!(names, Ok(Some(vec![json!("A fazer"), json!("Feito")])));
+    assert!(tool_calls(&http)[0].1["jql"].as_str().is_some_and(|jql| jql.starts_with("project = \"BIG\"")));
 }
 
 #[tokio::test]
@@ -176,7 +193,8 @@ async fn an_issue_reads_description_subtasks_comments_and_the_flag() {
     let answer = json!({ "key": "BIG-1", "fields": {
         "summary": "T", "status": {"name": "Fazendo"}, "labels": [],
         "description": {"type": "doc", "version": 1, "content": [{"type": "paragraph", "content": [{"type": "text", "text": "d"}]}]},
-        "subtasks": [{"key": "BIG-2", "fields": {"summary": "s", "status": {"name": "Feito"}}}],
+        "subtasks": [{"key": "BIG-2", "fields": {"summary": "s", "status": {"name": "Feito", "statusCategory": {"key": "done"}}}}],
+        "issuetype": {"name": "Story"}, "assignee": {"accountId": "u1", "displayName": "Bia"},
         "attachment": [{"filename": "a.png", "size": 3, "content": "https://f"}],
         "comment": {"comments": [{"id": "5", "author": {"displayName": "Ana"}, "body": "texto", "created": "2024-01-01T00:00:00.000+0000"}]},
         DEFAULT_FLAG_FIELD: [{"value": "Impediment"}],
@@ -185,9 +203,16 @@ async fn an_issue_reads_description_subtasks_comments_and_the_flag() {
     let read = call(&http, actions::ISSUE, json!({"issue": "BIG-1"}), "").await;
     let Ok(read) = read else { panic!("{read:?}") };
     assert_eq!(read["description"], "d");
-    assert_eq!(read["impediment"], true);
-    assert_eq!(read["subtasks"][0]["status"], "Feito");
+    assert_eq!(read["ref"], "BIG-1");
+    assert_eq!(read["impediment"], json!({"on": true, "reason": null}));
+    assert_eq!(
+        read["subtasks"][0],
+        json!({"ref": "BIG-2", "title": "s", "status": "Feito", "url": "https://acme.atlassian.net/browse/BIG-2", "done": true})
+    );
     assert_eq!(read["comments"][0]["body"], "texto");
+    assert_eq!(read["comments"][0]["author"], json!({"id": "Ana", "name": "Ana"}));
+    assert_eq!(read["type"], "Story");
+    assert_eq!(read["assignee"], json!({"id": "u1", "name": "Bia"}));
     assert_eq!(read["attachments"][0]["name"], "a.png");
     assert_eq!(tool_calls(&http)[0].1["responseContentFormat"], "markdown");
 }
@@ -231,10 +256,39 @@ async fn the_first_poll_starts_the_cursor_and_later_polls_read_changes_since_it(
     let kinds: Vec<&str> = batch.events.iter().map(|e| e.kind.as_str()).collect();
     assert_eq!(kinds, ["tracker.comment.added", "tracker.status.changed"]);
     assert_eq!(batch.events[0].data["body"], "novo");
+    assert_eq!(batch.events[0].data["author"], json!({"id": "Ana", "name": "Ana"}));
     assert_eq!(batch.events[1].data["to"], "Feito");
     assert_eq!(batch.events[1].id, "jira:BIG-1:status:h1");
     assert_eq!(batch.cursor, "2024-01-02T10:00:00Z");
     let calls = tool_calls(&http);
     assert_eq!(calls[0].1["jql"], "project = \"BIG\" AND updated >= \"2024-01-01 09:00\" ORDER BY updated ASC");
     assert_eq!(calls[1].1["expand"], "changelog");
+}
+
+#[tokio::test]
+async fn search_reads_the_query_falls_back_to_the_connection_project_and_pages_by_cursor() {
+    let page = json!({ "isLast": false, "nextPageToken": "t2", "issues": [{"key": "BIG-3", "fields": {"summary": "x", "status": {"name": "Feito"}}}] });
+    let http = session(&[page]);
+    let found = call(&http, actions::SEARCH, json!({"query": "login!", "limit": 5, "cursor": "t1"}), "").await;
+    assert_eq!(
+        found,
+        Ok(
+            json!({"issues": [{"ref": "BIG-3", "title": "x", "status": "Feito", "url": "https://acme.atlassian.net/browse/BIG-3"}], "cursor": "t2"})
+        )
+    );
+    let sent = tool_calls(&http)[0].1.clone();
+    assert_eq!(sent["jql"], "project = \"BIG\" AND text ~ \"login\" ORDER BY updated DESC");
+    assert_eq!(sent["nextPageToken"], "t1");
+}
+
+#[test]
+fn a_flag_change_in_the_history_is_an_impediment_event_with_booleans() {
+    let creds = creds();
+    let since = jiff::Timestamp::from_second(0).unwrap_or(jiff::Timestamp::UNIX_EPOCH);
+    let mut collector = events::Collector { creds: &creds, since, events: Vec::new() };
+    let history = json!({"id": "h2", "created": "2024-01-02T10:00:00.000+0000", "author": {"displayName": "Ana"},
+        "items": [{"field": "Flagged", "fromString": "", "toString": "Impediment"}]});
+    collector.history("BIG-1", &history);
+    assert_eq!(collector.events[0].kind, "tracker.impediment.changed");
+    assert_eq!(collector.events[0].data, json!({"from": false, "to": true, "author": "Ana"}));
 }

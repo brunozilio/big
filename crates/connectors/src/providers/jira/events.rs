@@ -3,7 +3,7 @@ use domain::connection::Capability;
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Value, json};
 
-use super::tracker::markdown;
+use super::tracker::comment_of;
 use super::{Api, jql_key, listed};
 use crate::contracts;
 use crate::error::ActionError;
@@ -23,10 +23,10 @@ pub fn events_jql(project: &str, since: Timestamp) -> Result<String, ActionError
     Ok(format!("project = \"{}\" AND updated >= \"{day}\" ORDER BY updated ASC", jql_key(project)?))
 }
 
-struct Collector<'a> {
-    creds: &'a Credentials,
-    since: Timestamp,
-    events: Vec<ExternalEvent>,
+pub(super) struct Collector<'a> {
+    pub(super) creds: &'a Credentials,
+    pub(super) since: Timestamp,
+    pub(super) events: Vec<ExternalEvent>,
 }
 
 impl Collector<'_> {
@@ -46,37 +46,36 @@ impl Collector<'_> {
     fn issue(&mut self, issue: &Value) {
         let key = text_of(issue, "/key");
         let fields = &issue["fields"];
-        let summary = json!({ "title": text_of(fields, "/summary"), "status": text_of(fields, "/status/name") });
+        let summary =
+            json!({ "ref": key, "title": text_of(fields, "/summary"), "status": text_of(fields, "/status/name") });
         self.push(format!("jira:{key}:created"), "tracker.issue.created", &key, summary, &text_of(fields, "/created"));
         for history in issue["changelog"]["histories"].as_array().map(Vec::as_slice).unwrap_or_default() {
             self.history(&key, history);
         }
         for comment in fields["comment"]["comments"].as_array().map(Vec::as_slice).unwrap_or_default() {
-            let data = json!({
-                "id": text_of(comment, "/id"),
-                "author": text_of(comment, "/author/displayName"),
-                "body": markdown(&comment["body"]),
-            });
+            let data = comment_of(comment);
             let id = format!("jira:{key}:comment:{}", text_of(comment, "/id"));
             self.push(id, "tracker.comment.added", &key, data, &text_of(comment, "/created"));
         }
     }
 
-    fn history(&mut self, key: &str, history: &Value) {
+    pub(super) fn history(&mut self, key: &str, history: &Value) {
         let at = text_of(history, "/created");
         let author = text_of(history, "/author/displayName");
         for item in history["items"].as_array().map(Vec::as_slice).unwrap_or_default() {
             let field = text_of(item, "/field");
-            let kind = match field.to_ascii_lowercase().as_str() {
-                "status" => "tracker.status.changed",
-                "flagged" => "tracker.impediment.changed",
+            let flag = |name: &str| !text_of(item, name).trim().is_empty();
+            let (kind, data) = match field.to_ascii_lowercase().as_str() {
+                "status" => (
+                    "tracker.status.changed",
+                    json!({ "from": item["fromString"], "to": item["toString"], "author": author }),
+                ),
+                "flagged" => (
+                    "tracker.impediment.changed",
+                    json!({ "from": flag("/fromString"), "to": flag("/toString"), "author": author }),
+                ),
                 _ => continue,
             };
-            let data = json!({
-                "from": item["fromString"],
-                "to": item["toString"],
-                "author": author,
-            });
             let id = format!("jira:{key}:{field}:{}", text_of(history, "/id"));
             self.push(id, kind, key, data, &at);
         }
