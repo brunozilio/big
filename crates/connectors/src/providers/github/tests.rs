@@ -140,6 +140,23 @@ async fn a_review_already_carrying_the_key_is_not_submitted_again() {
 }
 
 #[tokio::test]
+async fn a_verdict_on_one_s_own_pull_request_goes_as_a_comment_with_the_same_text() {
+    let refused = r#"{"message":"Unprocessable Entity","errors":["Review Can not request changes on your own pull request"]}"#;
+    let http = FakeHttp::new()
+        .once(Method::Get, "/pulls/7/reviews", 200, "[]")
+        .once(Method::Post, "/pulls/7/reviews", 422, refused)
+        .once(Method::Post, "/pulls/7/reviews", 200, r#"{"id":5,"state":"COMMENTED"}"#);
+    let args = json!({"pr": "acme/app#7", "verdict": "request_changes", "body": "corrija",
+                      "lines": [{"path": "src/a.rs", "line": 3, "body": "aqui"}]});
+    let answer = call(&http, code_actions::SUBMIT_REVIEW, args, "rk3").await;
+    assert_eq!(answer, Ok(json!({"id": "5", "verdict": "request_changes", "created": true, "as": "comment"})));
+    let again = http.sent()[2].body_json();
+    assert_eq!(again["event"], "COMMENT");
+    assert!(again["body"].as_str().is_some_and(|body| body.starts_with("corrija")));
+    assert_eq!(again["comments"][0]["body"], "aqui");
+}
+
+#[tokio::test]
 async fn a_review_with_lines_is_submitted_with_its_event() {
     let http = FakeHttp::new().once(Method::Get, "/pulls/7/reviews", 200, "[]").once(
         Method::Post,

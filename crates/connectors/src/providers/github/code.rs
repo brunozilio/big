@@ -197,8 +197,20 @@ pub async fn submit_review(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<V
     if !comments.is_empty() {
         body["comments"] = json!(comments);
     }
-    let made = api.send(Method::Post, &format!("/repos/{repo}/pulls/{number}/reviews"), &body).await?;
-    Ok(json!({ "id": made["id"].to_string(), "verdict": chosen, "created": true }))
+    let path = format!("/repos/{repo}/pulls/{number}/reviews");
+    match api.send(Method::Post, &path, &body).await {
+        Ok(made) => Ok(json!({ "id": made["id"].to_string(), "verdict": chosen, "created": true })),
+        Err(error) if event != "COMMENT" && own_pull_request(&error) => {
+            body["event"] = json!("COMMENT");
+            let made = api.send(Method::Post, &path, &body).await?;
+            Ok(json!({ "id": made["id"].to_string(), "verdict": chosen, "created": true, "as": "comment" }))
+        }
+        Err(error) => Err(error),
+    }
+}
+
+fn own_pull_request(error: &ActionError) -> bool {
+    error.class == ErrorClass::Permanent && error.message.contains("your own pull request")
 }
 
 pub async fn resolve_thread(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
