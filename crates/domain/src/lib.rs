@@ -1,4 +1,6 @@
+pub mod board;
 pub mod command;
+pub mod effect;
 pub mod features;
 pub mod identity;
 pub mod knowledge;
@@ -8,6 +10,7 @@ pub mod safety;
 pub mod session;
 pub mod tools;
 pub mod trace;
+pub mod workflow;
 
 pub use identity::{account_pool, credentials, ids, legacy, provider, provider_book};
 pub use knowledge::{learning, memory};
