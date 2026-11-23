@@ -9,6 +9,11 @@ export function applyTheme(theme: Theme) {
   const isDark = theme === 'dark' || (theme === 'system' && dark())
   document.documentElement.dataset.theme = isDark ? 'dark' : 'light'
   document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.setAttribute('content', isDark ? '#161617' : '#ffffff'))
+  try {
+    localStorage.setItem('theme', theme)
+  } catch {
+    return
+  }
 }
 
 export function useThemeSync() {

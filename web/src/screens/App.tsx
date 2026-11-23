@@ -5,7 +5,6 @@ import { retry, useStore } from '@/api/store'
 import { useBrandTitle, useThemeSync } from '@/app/theme'
 import { Button, IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
-import { Spinner } from '@/ui/display'
 import { ProductMark } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { tween, tweenClose } from '@/ui/motion'
@@ -33,7 +32,7 @@ export function App() {
 function LoadState() {
   const ready = useStore((s) => s.ready)
   const error = useStore((s) => s.error)
-  if (!ready) return <div className="flex justify-center py-16"><Spinner /></div>
+  if (!ready) return null
   if (!error) return null
   return (
     <div className="mb-8 flex items-center gap-3 rounded-card bg-danger-soft px-4 py-3 text-base text-danger-fg">

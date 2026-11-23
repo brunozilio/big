@@ -5,11 +5,9 @@ import { RouterProvider } from 'react-router-dom'
 import { loadApi } from './api'
 import { boot } from './api/store'
 import { createRouter } from './app/router'
-import { applyTheme } from './app/theme'
 import { TooltipProvider } from './ui/overlay'
 import './ui/tokens.css'
 
-applyTheme('system')
 
 const root = document.getElementById('root')
 if (root) {
