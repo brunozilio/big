@@ -206,6 +206,19 @@ async fn a_status_is_kept_and_sent_to_the_tracker_of_the_item_s_issue() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_status_the_tracker_board_does_not_have_does_not_stop_the_item() {
+    let world = World::new();
+    world.provider.then("tracker.transition", Reply::Fail(ActionError::permanent("K-7 cannot go from Fazendo to Revisando")));
+    world.workflow("status", "import { workflow } from \"sdk\";\nexport default workflow({ name: \"status\", async run(ctx) { await ctx.status(\"Revisando\"); return \"seguiu\"; } });");
+    let kernel = world.start().await;
+    let id = kernel.create_item("status", json!({ "issue": "K-7" })).expect("item");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item), json!("seguiu"));
+    assert_eq!(item.status.as_deref(), Some("Revisando"), "the item keeps its own status");
+    assert!(item.impediment.is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn at_most_the_configured_number_of_items_work_at_once() {
     let mut world = World::new();
     world.parallel = 1;

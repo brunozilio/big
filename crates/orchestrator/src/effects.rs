@@ -186,6 +186,10 @@ async fn push(shared: &Shared, item: &WorkItem, command: &Command, key: &Idempot
     match sync::push(&shared.config.connectors, &shared.store, item, &request).await {
         Ok(Pushed::Done(_) | Pushed::NoIssue | Pushed::NotSynced) => Ok(Value::Null),
         Ok(Pushed::NoConnection) => Err(Failure::Blocked(format!("{NEEDS_CONNECTION}{}", contracts::TRACKER))),
+        Err(error) if matches!(request.effect, Effect::StatusSet { .. }) && error.class() == ErrorClass::Permanent => {
+            tracing::warn!(%error, "the tracker refused the status; the item keeps it here");
+            Ok(json!({ "unsynced": error.to_string() }))
+        }
         Err(error) => Err(Failure::Class(error.class(), error.to_string())),
     }
 }
