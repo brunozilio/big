@@ -8,7 +8,7 @@ import { cn, plural } from '@/ui/cn'
 import { CodeBlock, DiffView, Spinner } from '@/ui/display'
 import { PersonAvatar, personName, ProviderLogo } from '@/ui/domain'
 import { Icon, type IconName } from '@/ui/icon'
-import { AnimatePresence, Collapse, IconSwap, motion, springSnap, stagger, tween } from '@/ui/motion'
+import { AnimatePresence, Collapse, IconSwap, motion, stagger, tween } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
 
 export type Ev<T extends SessionEvent['type']> = Extract<SessionEvent, { type: T }>
@@ -70,36 +70,38 @@ export function AssistantMessage({ event }: { event: Ev<'assistant'> }) {
   )
 }
 
+const TAIL = 280
+
+export function thoughtText(steps: ThinkingStep[], live: boolean): string {
+  const written = visibleSteps(steps).map((s) => s.text.trim())
+  if (!live) return written.join('\n')
+  const last = written[written.length - 1] ?? ''
+  return last.length > TAIL ? `…${last.slice(-TAIL).trimStart()}` : last
+}
+
 export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
-  const [open, setOpen] = useState(event.live)
-  const shown = open || event.live
-  const written = visibleSteps(event.steps)
+  const [open, setOpen] = useState(false)
+  const text = thoughtText(event.steps, event.live)
+  const long = !event.live && (text.length > TAIL || text.split('\n').length > 3)
   return (
-    <div>
-      <motion.button layout whileTap={{ scale: 0.97 }} transition={springSnap} onClick={() => setOpen(!open)} className="inline-flex h-8 items-center gap-2 rounded-full bg-surface pl-2.5 pr-3 text-base shadow-card transition-colors hover:bg-hover">
-        <IconSwap k={event.live ? 'l' : 'd'}>
-          {event.live ? (
-            <Spinner size={15} className="text-fg2" />
-          ) : (
-            <span className="flex size-[15px] items-center justify-center rounded-full bg-fg2 text-bg">
-              <Icon name="check" size={10} strokeWidth={3} />
-            </span>
-          )}
-        </IconSwap>
-        <span className={cn(event.live ? 'text-shimmer font-medium' : 'text-fg2')}>
-          {event.live ? 'Pensando…' : (
-            <>
-              Pensou <span className="tabular-nums">{event.seconds}s</span>
-            </>
-          )}
-        </span>
-        <motion.span animate={{ rotate: shown ? 180 : 0 }} transition={tween} className="flex text-muted">
-          <Icon name="down" size={14} />
-        </motion.span>
-      </motion.button>
-      <Collapse open={shown && written.length > 0}>
-        <StepList steps={written} live={event.live} />
-      </Collapse>
+    <div className="flex gap-2.5">
+      <motion.span animate={event.live ? { opacity: [0.45, 1, 0.45] } : { opacity: 1 }} transition={event.live ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : tween} className={cn('mt-[3px] flex shrink-0', event.live ? 'text-warning-fg' : 'text-muted')}>
+        <Icon name="idea" size={16} />
+      </motion.span>
+      <div className="min-w-0 flex-1 text-md leading-6 text-muted">
+        {text ? (
+          <>
+            <p className={cn('whitespace-pre-wrap break-words', !open && 'line-clamp-3', event.live && 'text-shimmer')}>{text}</p>
+            {long && (
+              <button onClick={() => setOpen(!open)} className="mt-1 text-sm text-faint transition-colors hover:text-fg">
+                {open ? 'Mostrar menos' : 'Mostrar tudo'}
+              </button>
+            )}
+          </>
+        ) : (
+          <p className="text-shimmer">Pensando…</p>
+        )}
+      </div>
     </div>
   )
 }
@@ -107,24 +109,6 @@ export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
 export const visibleSteps = (steps: ThinkingStep[]) => steps.filter((s) => s.text.trim().length > 0)
 
 export const emptyThinking = (e: SessionEvent, running = true) => e.type === 'thinking' && (!e.live || !running) && visibleSteps(e.steps).length === 0
-
-function StepList({ steps, live }: { steps: ThinkingStep[]; live: boolean }) {
-  return (
-    <ol className="relative ml-[13px] mt-3 space-y-3 pb-1 pl-5">
-      <motion.span className="absolute left-0 top-1.5 w-px origin-top bg-line-strong" initial={{ scaleY: 0 }} animate={{ scaleY: 1 }} style={{ bottom: 6 }} transition={tween} />
-      <AnimatePresence initial={false}>
-        {steps.map((s, i) => (
-          <motion.li key={i} initial={{ opacity: 0, x: -6, filter: 'blur(2px)' }} animate={{ opacity: 1, x: 0, filter: 'blur(0px)' }} transition={tween} className="relative text-md leading-5 text-muted">
-            <span className="absolute -left-[24px] top-[3px] flex size-[9px] items-center justify-center rounded-full bg-bg">
-              {s.done || !live ? <motion.span initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={tween} className="size-[7px] rounded-full bg-line-strong" /> : <Spinner size={11} className="text-fg2" />}
-            </span>
-            <span className={cn(!s.done && live && 'text-shimmer')}>{s.text}</span>
-          </motion.li>
-        ))}
-      </AnimatePresence>
-    </ol>
-  )
-}
 
 const toolIcons: Record<ToolCall['kind'], IconName> = { command: 'terminal', edit: 'edit', read: 'read', search: 'search', call: 'plug', subagent: 'users' }
 
