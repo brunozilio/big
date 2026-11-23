@@ -163,10 +163,19 @@ export type Branch<T> = Promise<T> | ((ctx: Ctx) => Promise<T> | T);
 
 type Settled<T> = T extends Branch<infer R> ? R : never;
 
+export interface StepEntry {
+  step: string;
+  outcome: "failed" | "goto";
+  data: Json;
+}
+
 export interface Ctx {
   readonly branch: string;
   readonly step: string | null;
   readonly attempt: number;
+  readonly item: WorkItem;
+  readonly from: StepEntry | null;
+  output<T = Json>(step: string): T | null;
   agent(name: string, input: string | AgentInput, options?: AgentOptions): Promise<AgentResult>;
   exec(command: string, options?: ExecOptions): Promise<ExecResult>;
   call<C extends CapabilityName, A extends ActionName<C>>(
@@ -202,6 +211,7 @@ export interface Ctx {
 export interface StepOptions {
   id?: string;
   status?: string;
+  doneStatus?: string;
   onFail?: string;
   retries?: number;
   [key: string]: unknown;
