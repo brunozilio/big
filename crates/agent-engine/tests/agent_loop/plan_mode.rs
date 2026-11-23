@@ -70,6 +70,21 @@ fn an_approved_plan_switches_the_mode_and_the_agent_implements_it_in_the_same_ru
 }
 
 #[test]
+fn a_plan_approved_for_another_agent_ends_planning_without_implementing() {
+    let rig = Rig::new(PermissionMode::Plan);
+    let answerer = answering(&rig, Decision::Approve(PermissionMode::Plan));
+    let mut history = vec![Message::user("plan it")];
+    rig.run(&write_after_plan(), &mut history).expect("run");
+    answerer.join().expect("answerer");
+
+    assert_eq!(rig.control.mode(), PermissionMode::Plan);
+    assert!(!rig.dir.path().join("out.txt").exists(), "the planner leaves the implementation to the next step");
+    assert!(!rig.events().iter().any(|event| matches!(event, EngineEvent::ModeChanged(_))));
+    let results = results(&history);
+    assert!(!results[0].1 && results[0].0.contains("approved") && results[0].0.contains("Another agent"), "{results:?}");
+}
+
+#[test]
 fn keeping_on_planning_leaves_the_agent_read_only() {
     let rig = Rig::new(PermissionMode::Plan);
     let answerer = answering(&rig, Decision::Deny);

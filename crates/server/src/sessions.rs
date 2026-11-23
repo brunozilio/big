@@ -163,6 +163,7 @@ fn answer_now(shared: &Shared, session: &str, event: &str, response: &Value) -> 
     let ask = from_kernel.clone().or_else(|| shared.chats.pending(session).filter(|ask| ask.id.0 == event));
     let ask = ask.ok_or_else(|| ApiError::missing("Esse pedido já foi respondido ou não existe."))?;
     let decision = session_view::decision(&ask.kind, response)
+        .map(|decision| if from_kernel.is_some() { session_view::handed_off(decision) } else { decision })
         .ok_or_else(|| ApiError::bad("Essa resposta não serve a esse pedido."))?;
     let resolved = session_view::resolved(session_view::ask_event(&ask, now_ms()), response);
     match from_kernel {

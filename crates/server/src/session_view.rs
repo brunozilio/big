@@ -259,6 +259,13 @@ pub fn decision(kind: &AskKind, response: &Value) -> Option<Decision> {
     }
 }
 
+pub fn handed_off(decision: Decision) -> Decision {
+    match decision {
+        Decision::Approve(_) => Decision::Approve(PermissionMode::Plan),
+        other => other,
+    }
+}
+
 pub fn resolved(mut event: Value, response: &Value) -> Value {
     match event["type"].as_str() {
         Some("ask") => event["answers"] = response["answers"].clone(),

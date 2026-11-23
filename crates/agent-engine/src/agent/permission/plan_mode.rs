@@ -21,7 +21,12 @@ impl Agent<'_> {
         };
         self.notify("plan_approval", concat!(brand::name!(), "'s plan is ready for your review"));
         match self.asked(id, AskKind::Plan { plan: plan.to_owned() }) {
-            Ok(Decision::Approve(mode)) if mode != PermissionMode::Plan => {
+            Ok(Decision::Approve(PermissionMode::Plan)) => Outcome::ok(
+                "The user approved your plan and planning is over. Another agent carries it out, so do not \
+                 implement anything: change no file and run no command. End your turn now, with the approved plan, \
+                 unchanged, as your final message.",
+            ),
+            Ok(Decision::Approve(mode)) => {
                 self.control.set_mode(mode);
                 let mode = self.control.mode();
                 (self.emit)(EngineEvent::ModeChanged(mode));
@@ -39,9 +44,7 @@ impl Agent<'_> {
                 "The user wants to keep planning and did not approve the plan. Do not implement anything. They \
                  said: {note}"
             )),
-            Ok(
-                Decision::Approve(_) | Decision::Deny | Decision::Allow | Decision::AllowAlways | Decision::Answer(_),
-            ) => Outcome::error(
+            Ok(Decision::Deny | Decision::Allow | Decision::AllowAlways | Decision::Answer(_)) => Outcome::error(
                 "The user wants to keep planning and did not approve the plan. Do not implement anything. Stop \
                      here and wait for them to say what to change.",
             ),

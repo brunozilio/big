@@ -70,6 +70,12 @@ fn plans_and_permissions_take_the_page_s_decisions() {
 }
 
 #[test]
+fn a_workflow_plan_approved_hands_off_instead_of_implementing() {
+    assert_eq!(handed_off(Decision::Approve(PermissionMode::AcceptEdits)), Decision::Approve(PermissionMode::Plan));
+    assert_eq!(handed_off(Decision::DenyWith("menor".into())), Decision::DenyWith("menor".into()));
+}
+
+#[test]
 fn a_subagent_shows_its_steps_and_the_session_lists_its_tasks_and_background_work() {
     let event = |at_ms: u64, event: EngineEvent| Record::Event { at_ms, event };
     let read = ToolCall { id: "r1".into(), name: "Read".into(), summary: "src/a.rs".into(), output: None, failed: false, input: None };
