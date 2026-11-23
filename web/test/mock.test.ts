@@ -1,0 +1,131 @@
+import { describe, expect, test } from 'bun:test'
+import type { Block, LiveEvent } from '../src/api/contract'
+import { isBlock, isItem, isLiveEvent, isSession, isStepView } from '../src/api/guards'
+import { mockApi } from '../src/api/mock'
+import { store, tick } from '../src/api/mock/sim'
+
+const fresh = () => mockApi({ tickMs: 0, delayMs: 0 })
+const byKey = (key: string) => {
+  const it = store.items.find((x) => x.key === key)
+  if (!it) throw new Error(key)
+  return String(it.id)
+}
+
+describe('adaptador mock', () => {
+  test('itens seguem o contrato e caem nos três grupos', async () => {
+    const api = fresh()
+    const items = await api.items()
+    expect(items.length).toBeGreaterThan(5)
+    expect(items.every(isItem)).toBe(true)
+    expect(new Set(items.map((i) => i.group))).toEqual(new Set(['you', 'running', 'delivered']))
+  })
+
+  test('toda view de etapa é feita de blocos válidos', async () => {
+    const api = fresh()
+    const items = await api.items()
+    for (const it of items) {
+      for (const s of it.steps) {
+        const view = await api.step(it.id, s.id, null)
+        expect(isStepView(view)).toBe(true)
+        view.blocks.forEach((b: Block) => expect(isBlock(b)).toBe(true))
+      }
+    }
+  })
+
+  test('plano pronto espera aprovação no chat e segue depois de aprovado', async () => {
+    const api = fresh()
+    const id = byKey('APP-253')
+    const before = (await api.items()).find((i) => i.id === id)
+    expect(before?.group).toBe('you')
+    const view = await api.step(id, 'plan', null)
+    expect(view.blocks[0]).toMatchObject({ type: 'chat', composer: true })
+    const session = await api.session(`s-${id}`)
+    expect(isSession(session)).toBe(true)
+    const plan = session.events.find((e) => e.type === 'plan')
+    expect(plan).toMatchObject({ resolution: 'pending' })
+    await api.respond(session.id, plan?.id ?? '', { kind: 'plan', decision: 'approve' })
+    const after = (await api.items()).find((i) => i.id === id)
+    expect(after?.steps.find((s) => s.id === 'plan')?.state).toBe('passed')
+    expect((await api.step(id, 'plan', null)).blocks[0]).toMatchObject({ type: 'chat', composer: false })
+  })
+
+  test('pergunta do agente pausa o develop e a resposta retoma', async () => {
+    const api = fresh()
+    const id = byKey('APP-240')
+    tick()
+    const session = await api.session(`s-${id}`)
+    const ask = session.events.find((e) => e.type === 'ask')
+    expect(ask).toMatchObject({ answers: null })
+    expect((await api.items()).find((i) => i.id === id)?.group).toBe('you')
+    await api.respond(session.id, ask?.id ?? '', { kind: 'ask', answers: ['3 tentativas'] })
+    const answered = (await api.session(`s-${id}`)).events.find((e) => e.type === 'ask')
+    expect(answered).toMatchObject({ answers: ['3 tentativas'] })
+    expect((await api.items()).find((i) => i.id === id)?.group).toBe('running')
+  })
+
+  test('permissão aparece mesmo em bypass', async () => {
+    const api = fresh()
+    const id = byKey('APP-238')
+    tick()
+    const session = await api.session(`s-${id}`)
+    expect(session.mode).toBe('bypass')
+    expect(session.events.find((e) => e.type === 'permission')).toMatchObject({ resolution: 'pending' })
+  })
+
+  test('review aprovado leva ao merge e o merge avança', async () => {
+    const api = fresh()
+    const id = byKey('APP-228')
+    await api.input(id, 'review', { action: 'review', payload: { verdict: 'approve', body: '', notes: [] } })
+    let it = (await api.items()).find((i) => i.id === id)
+    expect(it?.current).toBe('merge')
+    expect(it?.attention?.action?.step).toBe('merge')
+    await api.input(id, 'merge', { action: 'merge', payload: { method: 'squash' } })
+    it = (await api.items()).find((i) => i.id === id)
+    expect(it?.steps.find((s) => s.id === 'merge')?.state).toBe('passed')
+  })
+
+  test('chamadas de conexão devolvem issue, mudança e execução', async () => {
+    const api = fresh()
+    const id = byKey('APP-228')
+    const item = (await api.items()).find((i) => i.id === id)
+    const issue = await api.call('c-jira', 'tracker.issue', { key: 'APP-228' })
+    expect(issue.subtasks.length).toBe(3)
+    const change = await api.call('c-github', 'code.change', { change: item?.change?.key ?? '' })
+    expect(change.files.length).toBeGreaterThan(0)
+    const run = await api.call('c-github', 'ci.run', { run: `ci:${id}:1` })
+    expect(run.jobs.length).toBeGreaterThan(0)
+    expect((await api.call('c-jira', 'tracker.search', { query: '' })).length).toBeGreaterThan(0)
+  })
+
+  test('conectar a nuvem destrava o item parado e avisa pelo feed', async () => {
+    const api = fresh()
+    const events: LiveEvent[] = []
+    api.live((e) => events.push(e), () => undefined)
+    const id = byKey('APP-231')
+    expect((await api.items()).find((i) => i.id === id)?.impediment?.connect?.provider).toBe('aws')
+    const start = await api.startSignIn('aws', { startUrl: 'https://x', region: 'us-east-1' })
+    expect(start.kind).toBe('device')
+    let poll = await api.pollSignIn({ flow: start.flow })
+    while (poll.state === 'pending') poll = await api.pollSignIn({ flow: start.flow })
+    expect(poll.state).toBe('choose')
+    poll = await api.pollSignIn({ flow: start.flow, choice: 'prod' })
+    expect(poll.state).toBe('done')
+    expect((await api.items()).find((i) => i.id === id)?.impediment).toBeNull()
+    expect(events.some((e) => e.type === 'connections')).toBe(true)
+    expect(events.every(isLiveEvent)).toBe(true)
+  })
+
+  test('criar item a partir de issue pula a etapa do tracker', async () => {
+    const api = fresh()
+    const it = await api.createItem({ text: '', issue: { connection: 'c-jira', key: 'APP-251' }, model: 'auto', attachments: [] })
+    expect(it.steps.find((s) => s.id === 'ticket')?.state).toBe('skipped')
+    expect((await api.models()).models.some((m) => m.id === 'auto')).toBe(true)
+  })
+
+  test('branding guarda logo e tema sem nome fixo na página', async () => {
+    const api = fresh()
+    const saved = await api.saveBranding({ theme: 'dark', logo: 'data:image/png;base64,AA==' })
+    expect(saved.theme).toBe('dark')
+    expect(saved.logo).toContain('data:')
+  })
+})
