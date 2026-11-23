@@ -1,0 +1,262 @@
+use crate::{Effort, PermissionMode};
+
+mod slash;
+mod sub;
+pub use slash::{closest, mistyped_slash, slash_name};
+pub use sub::{McpCommand, MemoryCommand, RoleChange, VerificationCommand};
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    Help(Option<String>),
+    New,
+    Model(Option<String>),
+    ModelRoles,
+    ModelRole(crate::model_roles::ModelRole, RoleChange),
+    ModelFallbacks(RoleChange),
+    Mode(Option<PermissionMode>),
+    Effort(Option<Effort>),
+    EffortAuto,
+    Compact(Option<String>),
+    Rewind,
+    Retry,
+    Diff,
+    Diffs,
+    Btw(Option<String>),
+    AddDir(Option<String>),
+    Permissions,
+    Todos,
+    Context,
+    Vim,
+    Resume(Option<String>),
+    Fleet,
+    Fork,
+    Export(Option<String>),
+    Copy,
+    Status,
+    Logout,
+    Accounts { removing: bool },
+    AccountsBalance(Option<crate::account_pool::Balance>),
+    TerminalSetup,
+    OutputStyle(Option<String>),
+    Hooks,
+    StatusLine(Option<String>),
+    Doctor,
+    Skills,
+    Agents,
+    NewAgent(String),
+    NewSkill(String),
+    Config,
+    Reload,
+    Mcp(McpCommand),
+    Cost,
+    Login,
+    Exit,
+}
+
+impl Command {
+    pub const HELP: [(&'static str, &'static str); 37] = [
+        ("help", "Show the commands and keys"),
+        ("clear", "Clear the conversation and start fresh (also /new, /reset)"),
+        ("resume", "Go back to an earlier conversation of this folder, /resume <words> searches the titles"),
+        ("fleet", "Show every session, running or earlier, and switch between them (← on an empty prompt)"),
+        ("fork", "Go on in a copy of this conversation, leaving it as it is"),
+        (
+            "model",
+            "Pick the model, or /model <id>; /model <role> [model] per role, /model roles lists them, /model fallbacks <model…>",
+        ),
+        ("mode", "Pick ask, edits, plan or bypass"),
+        ("effort", "Set low, medium, high, xhigh or max, or auto to pick the model and effort per request"),
+        ("output-style", "How the agent talks: default, concise, proactive, explanatory, learning"),
+        ("compact", "Summarize the conversation to free context, /compact <what to keep>"),
+        ("rewind", "Go back to an earlier prompt: its files and the conversation"),
+        ("retry", "Send the last prompt again, from where it started"),
+        ("diff", "Show the project's uncommitted changes"),
+        ("diffs", "Browse the changes full screen: uncommitted, staged or branch"),
+        ("btw", "Ask a side question without interrupting: /btw <question>"),
+        ("add-dir", "Let the agent read a folder like the project: /add-dir <path>"),
+        ("permissions", "Show the allow, ask and deny rules the agent follows here"),
+        ("hooks", "Show the hooks a run here fires"),
+        ("statusline", "Draw the status line with your command, or /statusline off"),
+        ("todos", "Show the agent's task list (Ctrl+T shows or hides it)"),
+        ("context", "Show what fills the context window and what is left"),
+        ("vim", "Turn vim keys in the prompt on or off"),
+        ("skills", "List skills and commands, /skills new <what it does> writes one"),
+        ("agents", "List agents, /agents new <what it does> writes one"),
+        ("config", "Change the chat's settings"),
+        ("reload", concat!("Reread ~/", brand::dir!(), " and the project: plugins, skills, agents, MCP")),
+        ("mcp", "List MCP servers, or /mcp approve|deny|login|logout <name>"),
+        ("cost", "Show this session's cost (also /usage)"),
+        ("status", "Show the model, mode, folders, session and version"),
+        ("export", "Write the conversation as Markdown, /export <path>"),
+        ("copy", "Copy the agent's last answer"),
+        ("logout", "Forget a provider's credentials"),
+        (
+            "accounts",
+            "Switch which account of a provider is used; /accounts remove forgets one, /accounts balance <off|failover|round-robin>",
+        ),
+        ("doctor", "Check that this installation can work here"),
+        ("terminal-setup", "How to make Shift+Enter add a line in this terminal"),
+        ("login", "Connect a provider (API key or subscription)"),
+        ("exit", "Quit (also /quit)"),
+    ];
+
+    pub const ALIASES: [(&'static str, &'static str); 14] = [
+        ("plan", "mode plan"),
+        ("new", "clear"),
+        ("reset", "clear"),
+        ("continue", "resume"),
+        ("branch", "fork"),
+        ("undo", "rewind"),
+        ("allowed-tools", "permissions"),
+        ("tasks", "todos"),
+        ("commands", "skills"),
+        ("settings", "config"),
+        ("usage", "cost"),
+        ("quit", "exit"),
+        ("?", "help"),
+        ("sessions", "fleet"),
+    ];
+
+    pub const GROUPS: [(&'static str, &'static [&'static str]); 4] = [
+        ("Conversation", &["clear", "resume", "fleet", "fork", "compact", "rewind", "retry", "btw", "export", "copy"]),
+        ("Model and mode", &["model", "mode", "effort", "output-style"]),
+        (
+            "Project",
+            &[
+                "diff",
+                "diffs",
+                "add-dir",
+                "permissions",
+                "hooks",
+                "todos",
+                "context",
+                "skills",
+                "agents",
+                "mcp",
+                "reload",
+            ],
+        ),
+        (
+            "App",
+            &[
+                "cost",
+                "status",
+                "config",
+                "statusline",
+                "vim",
+                "login",
+                "logout",
+                "accounts",
+                "doctor",
+                "terminal-setup",
+                "help",
+                "exit",
+            ],
+        ),
+    ];
+
+    pub fn parse(text: &str) -> Option<Self> {
+        let text = text.trim().strip_prefix('/')?;
+        let (name, rest) = text.split_once(char::is_whitespace).unwrap_or((text, ""));
+        let rest = rest.trim();
+        let argument = (!rest.is_empty()).then(|| rest.to_owned());
+        let bare = |command: Self| argument.is_none().then_some(command);
+        match name.to_ascii_lowercase().as_str() {
+            "help" | "?" => Some(Self::Help(argument.map(|name| name.trim_start_matches('/').to_owned()))),
+            "clear" | "new" | "reset" => bare(Self::New),
+            "model" => Some(sub::model_command(argument)),
+            "plan" => bare(Self::Mode(Some(PermissionMode::Plan))),
+            "mode" => match &argument {
+                None => Some(Self::Mode(None)),
+                Some(mode) => mode_named(mode).map(|mode| Self::Mode(Some(mode))),
+            },
+            "effort" => match &argument {
+                None => Some(Self::Effort(None)),
+                Some(level) if level.eq_ignore_ascii_case("auto") => Some(Self::EffortAuto),
+                Some(level) => level_named(level).map(|level| Self::Effort(Some(level))),
+            },
+            "compact" => Some(Self::Compact(argument)),
+            "rewind" | "undo" => bare(Self::Rewind),
+            "retry" => bare(Self::Retry),
+            "diff" => bare(Self::Diff),
+            "diffs" => bare(Self::Diffs),
+            "btw" => Some(Self::Btw(argument)),
+            "add-dir" => Some(Self::AddDir(argument)),
+            "permissions" | "allowed-tools" => bare(Self::Permissions),
+            "todos" | "tasks" => bare(Self::Todos),
+            "context" => bare(Self::Context),
+            "vim" => bare(Self::Vim),
+            "resume" | "continue" => Some(Self::Resume(argument)),
+            "fleet" | "sessions" => bare(Self::Fleet),
+            "fork" | "branch" => bare(Self::Fork),
+            "skills" | "commands" | "agents" => match argument.as_deref().map(|a| a.split_once(' ').unwrap_or((a, "")))
+            {
+                None if name.eq_ignore_ascii_case("agents") => Some(Self::Agents),
+                None => Some(Self::Skills),
+                Some(("new", what)) if !what.trim().is_empty() && name.eq_ignore_ascii_case("agents") => {
+                    Some(Self::NewAgent(what.trim().to_owned()))
+                }
+                Some(("new", what)) if !what.trim().is_empty() => Some(Self::NewSkill(what.trim().to_owned())),
+                Some(_) => None,
+            },
+            "config" | "settings" => bare(Self::Config),
+            "reload" => bare(Self::Reload),
+            "mcp" => McpCommand::parse(argument.as_deref()).map(Self::Mcp),
+            "cost" | "usage" => bare(Self::Cost),
+            "status" => bare(Self::Status),
+            "export" => Some(Self::Export(argument)),
+            "copy" => bare(Self::Copy),
+            "logout" => bare(Self::Logout),
+            "accounts" => sub::accounts_command(argument.as_deref()),
+            "terminal-setup" => bare(Self::TerminalSetup),
+            "output-style" => Some(Self::OutputStyle(argument)),
+            "hooks" => bare(Self::Hooks),
+            "statusline" => Some(Self::StatusLine(argument)),
+            "doctor" => bare(Self::Doctor),
+            "login" => bare(Self::Login),
+            "exit" | "quit" => bare(Self::Exit),
+            _ => None,
+        }
+    }
+}
+
+pub const fn mode_label(mode: PermissionMode) -> &'static str {
+    match mode {
+        PermissionMode::Ask => "ask",
+        PermissionMode::AcceptEdits => "edits",
+        PermissionMode::Plan => "plan",
+        PermissionMode::Bypass => "bypass",
+    }
+}
+
+pub const MODE_ALIASES: [(&str, PermissionMode); 6] = [
+    ("default", PermissionMode::Ask),
+    ("acceptedits", PermissionMode::AcceptEdits),
+    ("accept-edits", PermissionMode::AcceptEdits),
+    ("bypasspermissions", PermissionMode::Bypass),
+    ("bypass-permissions", PermissionMode::Bypass),
+    ("yolo", PermissionMode::Bypass),
+];
+
+pub fn mode_named(name: &str) -> Option<PermissionMode> {
+    let name = name.trim().to_ascii_lowercase();
+    PermissionMode::ALL
+        .into_iter()
+        .map(|mode| (mode_label(mode), mode))
+        .chain(MODE_ALIASES)
+        .find_map(|(spelled, mode)| (spelled == name).then_some(mode))
+}
+
+pub fn level_named(name: &str) -> Option<Effort> {
+    Some(match name.to_ascii_lowercase().as_str() {
+        "low" => Effort::Low,
+        "medium" => Effort::Medium,
+        "high" => Effort::High,
+        "xhigh" => Effort::XHigh,
+        "max" => Effort::Max,
+        _ => return None,
+    })
+}
+
+#[cfg(test)]
+mod tests;

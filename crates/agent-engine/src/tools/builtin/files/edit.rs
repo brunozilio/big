@@ -1,0 +1,200 @@
+use serde_json::Value;
+
+use crate::model::ToolSpec;
+use crate::tools::read_files::Freshness;
+use crate::tools::{Outcome, Tool, Workspace, field, required, shown};
+
+#[derive(Debug)]
+pub struct Edit;
+
+impl Tool for Edit {
+    fn spec(&self) -> ToolSpec {
+        crate::tools::declared("Edit", &serde_json::Value::Null)
+    }
+
+    fn effects(&self, input: &Value, workspace: &Workspace) -> Vec<crate::tools::Effect> {
+        crate::tools::writes(field(input, "file_path"), workspace)
+    }
+
+    fn summary(&self, input: &Value) -> String {
+        field(input, "file_path").unwrap_or_default().to_owned()
+    }
+
+    fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
+        let fields = (required(input, "file_path"), required(input, "old_string"), required(input, "new_string"));
+        let (path, old, new) = match fields {
+            (Ok(path), Ok(old), Ok(new)) => (workspace.resolve(path), old, new),
+            (Err(error), ..) | (_, Err(error), _) | (.., Err(error)) => return error,
+        };
+        let all = input.get("replace_all").and_then(Value::as_bool).unwrap_or(false);
+        let name = shown(&path, workspace);
+        if old.is_empty() {
+            return Outcome::error(
+                "`old_string` is empty; give the exact text to replace, or use Write to create or overwrite the file.",
+            );
+        }
+        if old == new {
+            return Outcome::error("`old_string` and `new_string` are the same; nothing to change.");
+        }
+        match workspace.freshness(&path) {
+            Freshness::Unread => return Outcome::error(format!("Read {name} before editing it.")),
+            Freshness::Changed => return Outcome::error(super::changed_since_read(&name)),
+            Freshness::Partial | Freshness::Current => {}
+        }
+        let text = match std::fs::read_to_string(&path) {
+            Ok(text) => text,
+            Err(error) => return Outcome::error(format!("Could not read {name}: {error}")),
+        };
+        let replacement = domain::changes::line_endings::replacement_in(&text, old, new);
+        let (old, new) = (replacement.old.as_str(), replacement.new.as_str());
+        if old == new {
+            return Outcome::error("`old_string` and `new_string` differ only in line endings; nothing to change.");
+        }
+        let count = text.matches(old).count();
+        let changed = match (count, all) {
+            (0, _) => {
+                return Outcome::error(format!(
+                    "`old_string` was not found in {name}. Read the file again and copy the text exactly."
+                ));
+            }
+            (1, _) | (_, true) => text.replace(old, new),
+            (count, false) => {
+                return Outcome::error(format!(
+                    "`old_string` appears {count} times in {name}. Include more surrounding text to make it unique, \
+                     or set `replace_all`."
+                ));
+            }
+        };
+        let before = text.find(old).map_or("", |at| &text[..at]);
+        let shown = super::shown_diff::edit(&format!("Edited {name}"), before, old, new);
+        let not_kept = workspace.before_write(&path).unwrap_or_default();
+        match platform::atomic::write(&path, changed.as_bytes()) {
+            Ok(_) => {
+                workspace.mark_read(&path);
+                let said = if count == 1 {
+                    format!("Edited {name}.")
+                } else {
+                    format!("Edited {name} ({count} replacements).")
+                };
+                let edited = domain::changes::Edited::replaced(path.clone(), before, old, new);
+                let tests = crate::tools::builtin::shell::affected::start(workspace, &path);
+                let others = workspace.claim(&path);
+                let remembered = workspace.anchored(&path);
+                let callers = workspace.callers(&path, &text, &changed);
+                let notes = [workspace.diagnosed(&path, &changed), callers, tests, others, remembered, not_kept];
+                Outcome::ok(said + &notes.concat()).showing(shown).editing(edited)
+            }
+            Err(error) => Outcome::error(format!("Could not write {name}: {error}")),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    fn setup(text: &str) -> (tempfile::TempDir, Workspace) {
+        let dir = tempfile::tempdir().expect("dir");
+        std::fs::write(dir.path().join("f.rs"), text).expect("write");
+        let workspace = Workspace::new(dir.path());
+        workspace.mark_read(&dir.path().join("f.rs"));
+        (dir, workspace)
+    }
+
+    fn content(dir: &tempfile::TempDir) -> String {
+        std::fs::read_to_string(dir.path().join("f.rs")).expect("read")
+    }
+
+    #[test]
+    fn replaces_a_unique_string() {
+        let (dir, workspace) = setup("let a = 1;\nlet b = 2;\n");
+        let outcome = Edit.run(&json!({"file_path": "f.rs", "old_string": "b = 2", "new_string": "b = 3"}), &workspace);
+        assert_eq!(outcome.content, "Edited f.rs.");
+        assert_eq!(content(&dir), "let a = 1;\nlet b = 3;\n");
+    }
+
+    #[test]
+    fn an_edit_written_with_lf_lines_matches_a_crlf_file_and_keeps_it_crlf() {
+        let (dir, workspace) = setup("fn a() {\r\n    1\r\n}\r\n");
+        let edit = json!({"file_path": "f.rs", "old_string": "{\n    1\n}", "new_string": "{\n    2\n    3\n}"});
+        let outcome = Edit.run(&edit, &workspace);
+        assert_eq!(outcome.content, "Edited f.rs.");
+        assert_eq!(content(&dir), "fn a() {\r\n    2\r\n    3\r\n}\r\n");
+        let crlf_only =
+            Edit.run(&json!({"file_path": "f.rs", "old_string": "3\n}", "new_string": "3\r\n}"}), &workspace);
+        assert!(crlf_only.is_error && crlf_only.content.contains("line endings"), "{crlf_only:?}");
+        assert_eq!(content(&dir), "fn a() {\r\n    2\r\n    3\r\n}\r\n");
+    }
+
+    #[test]
+    fn an_lf_file_and_one_without_a_trailing_newline_stay_as_they_were() {
+        let (dir, workspace) = setup("a\nb");
+        let outcome = Edit.run(&json!({"file_path": "f.rs", "old_string": "a\nb", "new_string": "c\nd"}), &workspace);
+        assert!(!outcome.is_error, "{outcome:?}");
+        assert_eq!(content(&dir), "c\nd");
+    }
+
+    #[test]
+    fn refuses_ambiguous_missing_and_unread() {
+        let (dir, workspace) = setup("x x");
+        let twice = Edit.run(&json!({"file_path": "f.rs", "old_string": "x", "new_string": "y"}), &workspace);
+        assert!(twice.content.contains("2 times"));
+        let missing = Edit.run(&json!({"file_path": "f.rs", "old_string": "z", "new_string": "y"}), &workspace);
+        assert!(missing.content.contains("not found"));
+        assert_eq!(content(&dir), "x x");
+
+        let all = Edit
+            .run(&json!({"file_path": "f.rs", "old_string": "x", "new_string": "y", "replace_all": true}), &workspace);
+        assert_eq!(all.content, "Edited f.rs (2 replacements).");
+
+        std::fs::write(dir.path().join("g.rs"), "x").expect("write");
+        let unread = Edit.run(&json!({"file_path": "g.rs", "old_string": "x", "new_string": "y"}), &workspace);
+        assert!(unread.content.starts_with("Read g.rs"));
+    }
+
+    #[test]
+    fn an_empty_old_string_is_refused_whether_or_not_every_match_is_replaced() {
+        let (dir, workspace) = setup("ab");
+        for all in [true, false] {
+            let edit = json!({"file_path": "f.rs", "old_string": "", "new_string": "-", "replace_all": all});
+            let outcome = Edit.run(&edit, &workspace);
+            assert!(outcome.is_error && outcome.content.contains("`old_string` is empty"), "{all}: {outcome:?}");
+            assert_eq!(content(&dir), "ab", "replace_all {all}");
+        }
+    }
+
+    #[test]
+    fn a_file_changed_since_it_was_read_must_be_read_again_but_its_own_edits_do_not_count() {
+        let (dir, workspace) = setup("a = 1\n");
+        let first = Edit.run(&json!({"file_path": "f.rs", "old_string": "1", "new_string": "2"}), &workspace);
+        let second = Edit.run(&json!({"file_path": "f.rs", "old_string": "2", "new_string": "3"}), &workspace);
+        assert!(!first.is_error && !second.is_error, "{second:?}");
+        std::fs::write(dir.path().join("f.rs"), "a = 3\nb = 4\n").expect("the user edits");
+        let stale = Edit.run(&json!({"file_path": "f.rs", "old_string": "3", "new_string": "5"}), &workspace);
+        assert!(stale.is_error && stale.content.contains("changed on disk since you last read it"), "{stale:?}");
+        assert_eq!(content(&dir), "a = 3\nb = 4\n");
+    }
+
+    #[test]
+    fn the_language_server_s_errors_follow_the_edit_and_the_diff_stays_the_same() {
+        let (dir, mut workspace) = setup("let a: u32 = 1;\n");
+        let server = crate::lsp::fake::ScriptedServer::answering([]);
+        *server.diagnostics.lock().expect("diagnostics") =
+            Some(vec![json!({"severity": 1, "message": "mismatched types",
+            "range": {"start": {"line": 0, "character": 13}, "end": {"line": 0, "character": 16}}})]);
+        workspace.services.lsp = Some(server.lsp());
+        workspace.policy.trust = domain::trust::Trust::Trusted;
+        let edit = json!({"file_path": "f.rs", "old_string": "1", "new_string": "\"one\""});
+        let outcome = Edit.run(&edit, &workspace);
+        assert_eq!(outcome.content, "Edited f.rs.\n\n<diagnostics>\nf.rs:1:14 error: mismatched types\n</diagnostics>");
+        assert!(!outcome.shown.unwrap_or_default().contains("diagnostics"));
+        let synced = server.synced.lock().expect("synced");
+        assert_eq!(synced[0], (dir.path().join("f.rs"), "rust".to_owned(), "let a: u32 = \"one\";\n".to_owned()));
+        drop(synced);
+        *server.diagnostics.lock().expect("diagnostics") = Some(Vec::new());
+        let clean = Edit.run(&json!({"file_path": "f.rs", "old_string": "\"one\"", "new_string": "2"}), &workspace);
+        assert_eq!(clean.content, "Edited f.rs.");
+    }
+}

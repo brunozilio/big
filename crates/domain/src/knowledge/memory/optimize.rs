@@ -1,0 +1,58 @@
+use super::Memory;
+
+pub fn optimize_prompt(memories: &[Memory]) -> String {
+    let mut out = String::from(
+        "You maintain this project's long-term memory. It is listed below, one memory per line as \
+         [id] kind (tags): text. Tidy it without losing anything that still matters:\n\
+         - Merge memories that say the same thing: revise one to hold the merged text and forget the others.\n\
+         - Forget memories that are trivial, obsolete or contradicted by newer ones.\n\
+         - Reclassify memories filed under the wrong kind: episodic is what happened, semantic is a durable \
+         fact about the project or the user, procedural is how to do something here.\n\
+         - Fold many small episodic memories about one topic into a single semantic or episodic summary.\n\
+         - Make wordy memories short and precise; keep names, paths, commands and numbers exact.\n\
+         - Memories marked \"from the user\" are what the user said. When one conflicts with an agent's memory, \
+         the user's own words win: forget or revise the agent's, never the user's, and keep the user's wording \
+         when merging.\n\
+         Never invent facts, and do not look at or change the project's files. If the memory is already \
+         tidy, change nothing. Write every change to the memory file described at the end; do not add a \
+         memory about this tidying itself.\n\nMemory:",
+    );
+    for m in memories {
+        let tags = if m.tags.is_empty() { String::new() } else { format!(" ({})", m.tags.join(", ")) };
+        let said = if m.author == crate::Author::User { ", from the user" } else { "" };
+        out.push_str(&format!("\n[{}] {}{tags}{said}: {}", m.id.0, m.kind.key(), m.text));
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Author, MemoryId, MemoryKind};
+
+    #[test]
+    fn every_memory_is_listed_with_its_id_kind_and_tags() {
+        let memory = |id, kind, tags: &[&str]| Memory {
+            id: MemoryId(id),
+            kind,
+            text: format!("m{id}"),
+            tags: tags.iter().map(|t| (*t).to_owned()).collect(),
+            created: 0,
+            origin: None,
+            author: Author::Agent,
+            history: Vec::new(),
+            uses: 0,
+            last_used: 0,
+            touches: Vec::new(),
+            credit: None,
+        };
+        let prompt =
+            optimize_prompt(&[memory(3, MemoryKind::Semantic, &["ci", "lint"]), memory(7, MemoryKind::Episodic, &[])]);
+        assert!(prompt.contains("\n[3] semantic (ci, lint): m3\n[7] episodic: m7"));
+        assert!(prompt.contains("Merge memories"));
+        let said = Memory { author: Author::User, ..memory(9, MemoryKind::Semantic, &[]) };
+        let prompt = optimize_prompt(&[said]);
+        assert!(prompt.contains("\n[9] semantic, from the user: m9"), "{prompt}");
+        assert!(prompt.contains("the user's own words win"), "{prompt}");
+    }
+}

@@ -1,0 +1,153 @@
+use super::*;
+
+const RECORDED: &str = include_str!("../../../../tests/fixtures/responses_tool_use.sse");
+
+fn fold(lines: &[&str]) -> (Result<Reply, ModelError>, Vec<Delta>) {
+    let mut folder = Folder::new();
+    let mut seen = Vec::new();
+    for line in lines {
+        if let Err(error) = folder.event(line, &mut |delta| seen.push(delta)) {
+            return (Err(error), seen);
+        }
+    }
+    (folder.finish(), seen)
+}
+
+fn recorded() -> Vec<&'static str> {
+    RECORDED.lines().filter_map(|line| line.strip_prefix("data: ")).collect()
+}
+
+#[test]
+fn a_recorded_answer_folds_into_reasoning_text_and_a_call() {
+    let (reply, seen) = fold(&recorded());
+    let reply = reply.expect("reply");
+    assert_eq!(reply.stop, StopReason::ToolUse);
+    assert!(matches!(&reply.message.blocks[0], Block::Thinking { signature: Some(s), .. } if s == "gAAAA"));
+    assert_eq!(reply.message.blocks[1], Block::Text("Let me look.".into()));
+    assert_eq!(
+        reply.message.blocks[2],
+        Block::ToolUse {
+            id: "call_1".into(),
+            name: "Read".into(),
+            input: serde_json::json!({"file_path": "src/main.rs"})
+        }
+    );
+    assert_eq!(seen[0], Delta::Thinking("Look first.".into()));
+    assert!(seen.contains(&Delta::ToolInput { name: "Read".into(), piece: "{\"file_path\":\"src/main.rs\"}".into() }));
+}
+
+#[test]
+fn cached_input_counts_as_cache_reads_not_input() {
+    let (reply, _) = fold(&recorded());
+    assert_eq!(
+        reply.expect("reply").usage,
+        Usage { input: 12, output: 87, cache_read: 4000, cache_write: 0, searches: 0 }
+    );
+}
+
+#[test]
+fn an_answer_cut_before_completion_is_a_network_error() {
+    let lines = recorded();
+    let (reply, _) = fold(&lines[..lines.len() - 1]);
+    assert!(matches!(reply, Err(ModelError::Network(_))));
+}
+
+#[test]
+fn text_only_given_at_completion_is_still_shown() {
+    let (reply, seen) = fold(&[
+        r#"{"type":"response.completed","response":{"status":"completed","output":[{"id":"m","type":"message","content":[{"type":"output_text","text":"Done."}]}]}}"#,
+    ]);
+    assert_eq!(reply.expect("reply").message.text(), "Done.");
+    assert_eq!(seen, vec![Delta::Text("Done.".into())]);
+}
+
+#[test]
+fn a_cut_off_answer_stops_at_max_tokens() {
+    let (reply, _) = fold(&[
+        r#"{"type":"response.output_text.delta","delta":"Half"}"#,
+        r#"{"type":"response.incomplete","response":{"usage":{"input_tokens":5,"output_tokens":9}}}"#,
+    ]);
+    assert_eq!(reply.expect("reply").stop, StopReason::MaxTokens);
+}
+
+#[test]
+fn failures_say_what_kind_of_failure_it_was() {
+    let failed = |code: &str| {
+        let event = format!(r#"{{"type":"response.failed","response":{{"error":{{"code":"{code}","message":"m"}}}}}}"#);
+        fold(&[&event]).0
+    };
+    assert!(matches!(failed("rate_limit_exceeded"), Err(ModelError::Overloaded(_))));
+    assert!(matches!(failed("context_length_exceeded"), Err(ModelError::TooLong(_))));
+    assert!(matches!(failed("invalid_api_key"), Err(ModelError::Unauthorized(_))));
+    assert!(matches!(failed("other"), Err(ModelError::Provider(_))));
+}
+
+#[test]
+fn an_empty_answer_is_refused() {
+    let (reply, _) = fold(&[r#"{"type":"response.completed","response":{"status":"completed"}}"#]);
+    assert!(matches!(reply, Err(ModelError::Provider(why)) if why == "empty_response"));
+}
+
+#[test]
+fn done_only_events_and_final_output_fold_without_duplicates() {
+    use crate::transcript::Block;
+    use serde_json::json;
+    let mut folder = Folder::new();
+    let mut observed = Vec::new();
+    folder
+        .event(&json!({"type":"response.output_text.done","text":"done-only"}).to_string(), &mut |_| {})
+        .expect("done text");
+    folder
+        .event(
+            &json!({"type":"response.done","response":{"output":[],"usage":{"input_tokens":12,"output_tokens":2}}})
+                .to_string(),
+            &mut |delta| observed.push(delta),
+        )
+        .expect("done");
+    assert_eq!(observed, vec![Delta::Text("done-only".into())]);
+    assert_eq!(folder.finish().expect("reply").message.blocks, vec![Block::Text("done-only".into())]);
+    let item = json!({"id":"fc1","type":"function_call","call_id":"call1","name":"Read","arguments":"{}"});
+    let mut folder = Folder::new();
+    folder.event(&json!({"type":"response.output_item.done","item":item}).to_string(), &mut |_| {}).expect("item");
+    folder
+        .event(&json!({"type":"response.completed","response":{"output":[item],"usage":{}}}).to_string(), &mut |_| {})
+        .expect("completed");
+    assert_eq!(folder.finish().expect("reply").message.tool_uses().count(), 1);
+}
+
+#[test]
+fn a_web_search_call_is_kept_whole_and_shown_as_a_search() {
+    let lines = [
+        r#"{"type":"response.output_item.done","item":{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"rust 2026"}}}"#,
+        r#"{"type":"response.completed","response":{"status":"completed","usage":{"input_tokens":3,"output_tokens":2}}}"#,
+    ];
+    let (reply, seen) = fold(&lines);
+    let reply = reply.expect("reply");
+    assert!(matches!(&reply.message.blocks[0], Block::Native { item, .. } if item["id"] == "ws_1"));
+    assert_eq!(reply.usage.searches, 1);
+    assert_eq!(
+        seen,
+        [
+            Delta::Searching { id: "ws_1".into(), query: "rust 2026".into() },
+            Delta::Searched { id: "ws_1".into(), found: "completed".into() },
+        ]
+    );
+}
+
+#[test]
+fn reasoning_summaries_stream_apart_as_they_are_kept() {
+    let (_, seen) = fold(&[
+        r#"{"type":"response.reasoning_summary_part.added","summary_index":0}"#,
+        r#"{"type":"response.reasoning_summary_text.delta","summary_index":0,"delta":"**Plan**"}"#,
+        r#"{"type":"response.reasoning_summary_part.added","summary_index":1}"#,
+        r#"{"type":"response.reasoning_summary_text.delta","summary_index":1,"delta":"**Design**"}"#,
+    ]);
+    let thought: String = seen
+        .iter()
+        .filter_map(|delta| match delta {
+            Delta::Thinking(text) => Some(text.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(thought, "**Plan**\n\n**Design**");
+}

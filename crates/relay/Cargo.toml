@@ -1,0 +1,22 @@
+[package]
+name = "relay"
+description = "The remote control's relay: serves the page to phones and pairs each phone's WebSocket with its machine's, forwarding frames it cannot read."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+brand.workspace = true
+page.workspace = true
+tunnel.workspace = true
+serde_json.workspace = true
+axum = { workspace = true, features = ["ws"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time", "signal"] }
+futures-util.workspace = true
+
+[dev-dependencies]
+tokio-tungstenite.workspace = true
+
+[lints]
+workspace = true

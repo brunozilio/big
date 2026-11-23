@@ -1,0 +1,13 @@
+/target
+**/*.rs.bk
+.DS_Store
+.env
+.env.*
+.claude/settings.local.json
+
+# Agent worktrees
+.claude/worktrees/
+
+web/node_modules
+web/dist
+web/.build.lock

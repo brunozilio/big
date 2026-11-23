@@ -1,0 +1,139 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to fuzz each target
+        default: "600"
+
+concurrency:
+  group: ci-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  gate:
+    name: gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: format
+        run: cargo fmt --all -- --check
+      - name: tests
+        run: cargo nextest run --workspace --locked
+      - name: doctests
+        run: cargo test --doc --workspace --locked
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: lint
+        run: cargo run -q -p xtask -- lint
+
+  deny:
+    name: deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
+          arguments: --locked
+
+  windows:
+    name: tests (windows-latest)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-nextest
+      - name: clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: tests
+        run: cargo nextest run --workspace --locked --no-fail-fast
+
+  web:
+    name: web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: build
+        run: cargo run -q -p xtask -- web
+      - name: test
+        working-directory: web
+        run: bun test
+      - name: release check
+        run: cargo run -q -p xtask -- check-release
+
+  fuzz:
+    name: fuzz (${{ matrix.target }})
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - shell_parse
+          - shell_deny
+          - wildcards
+          - web_page
+          - code_map
+          - session_log
+          - sse_stream
+          - mcp_messages
+          - config_schema
+          - tunnel_frame
+          - tunnel_handshake
+    env:
+      NIGHTLY: nightly-2026-11-01
+      FUZZ_SECONDS: ${{ github.event_name == 'push' && '30' || inputs.seconds || '600' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: nightly-2026-11-01
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-fuzz@0.13.2
+      - name: fuzz
+        working-directory: fuzz
+        run: |
+          mkdir -p "work/${{ matrix.target }}"
+          cargo "+$NIGHTLY" fuzz run --sanitizer none "${{ matrix.target }}" "work/${{ matrix.target }}" "corpus/${{ matrix.target }}" -- \
+            -max_total_time="$FUZZ_SECONDS" -rss_limit_mb=4096 -timeout=10
+      - name: upload crashes
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuzz-crashes-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore

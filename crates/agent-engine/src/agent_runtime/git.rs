@@ -1,0 +1,41 @@
+use std::ffi::OsStr;
+use std::path::Path;
+use std::sync::atomic::AtomicBool;
+use std::time::Duration;
+
+use platform::{Bounds, Ended};
+
+use crate::tools::Workspace;
+
+const TIMEOUT: Duration = Duration::from_secs(30);
+const MAX_OUTPUT: usize = 128 * 1024;
+
+pub(crate) fn git(cwd: &Path, args: &[&OsStr]) -> Result<String, String> {
+    output(cwd, args, &AtomicBool::new(false)).map(|out| out.trim().to_owned())
+}
+
+pub(crate) fn git_stopped(workspace: &Workspace, cwd: &Path, args: &[&OsStr]) -> Result<String, String> {
+    output(cwd, args, &workspace.stop).map(|out| out.trim().to_owned())
+}
+
+pub(crate) fn has_commit(workspace: &Workspace) -> Result<bool, String> {
+    let mut command = platform::git::command(&workspace.cwd);
+    command.args(["rev-parse", "--verify", "HEAD"]);
+    let bounds = Bounds { timeout: TIMEOUT, max_output: MAX_OUTPUT, stop: &workspace.stop, input: None };
+    match platform::bounded::run(&mut command, bounds).map_err(|e| e.to_string())?.ended {
+        Ended::Exited(status) => Ok(status.success()),
+        Ended::Stopped | Ended::TimedOut => Err("git operation cancelled or timed out".into()),
+    }
+}
+
+pub(crate) fn output(cwd: &Path, args: &[&OsStr], stop: &AtomicBool) -> Result<String, String> {
+    let mut command = platform::git::command(cwd);
+    command.args(args);
+    let bounds = Bounds { timeout: TIMEOUT, max_output: MAX_OUTPUT, stop, input: None };
+    let done = platform::bounded::run(&mut command, bounds).map_err(|e| e.to_string())?;
+    match done.ended {
+        Ended::Exited(status) if status.success() => Ok(done.stdout),
+        Ended::Exited(_) => Err(format!("git failed: {}", done.stderr)),
+        Ended::Stopped | Ended::TimedOut => Err("git operation cancelled or timed out".into()),
+    }
+}

@@ -1,0 +1,136 @@
+use std::io::Write as _;
+use std::path::{Path, PathBuf};
+use std::process::{Command, Stdio};
+
+use super::app::{App, Msg};
+use super::transcript::{Entry, ToolState};
+
+pub fn write(app: &mut App, path: Option<String>) {
+    let title = app.session.title.clone();
+    let target = match path {
+        Some(path) => app.cwd.join(path),
+        None => default_path(&app.cwd, title.as_deref()),
+    };
+    let text = markdown(title.as_deref(), &app.transcript.entries);
+    app.spawn(move |_| match std::fs::write(&target, text) {
+        Ok(()) => Msg::Notice(format!("Wrote the conversation to {}.", target.display())),
+        Err(error) => Msg::Error(format!("{}: {error}", target.display())),
+    });
+}
+
+pub fn copy_last_answer(app: &mut App) {
+    let Some(answer) = last_answer(&app.transcript.entries).map(str::to_owned) else {
+        return app.transcript.notice("No answer to copy yet.");
+    };
+    app.spawn(move |_| match copy(&answer) {
+        Ok(()) => Msg::Notice("Copied the last answer.".into()),
+        Err(error) => Msg::Error(error),
+    });
+}
+
+pub fn copy_selection(app: &App, text: String) {
+    app.spawn(move |_| match copy(&text) {
+        Ok(()) => Msg::Nothing,
+        Err(error) => Msg::Error(error),
+    });
+}
+
+pub fn markdown(title: Option<&str>, entries: &[Entry]) -> String {
+    let mut out = format!("# {}\n", title.unwrap_or(concat!(brand::name!(), " conversation")));
+    for entry in entries {
+        let block = match entry {
+            Entry::User(text) => text.lines().map(|line| format!("> {line}")).collect::<Vec<_>>().join("\n"),
+            Entry::Assistant(text) => text.trim().to_owned(),
+            Entry::Tool { name, summary, state, .. } => {
+                let failed = if *state == ToolState::Failed { " (failed)" } else { "" };
+                format!("- `{name}` {summary}{failed}")
+            }
+            Entry::Agent { kind, summary, .. } => format!("- agent `{kind}`: {summary}"),
+            Entry::Plan { plan, .. } => format!("**Plan**\n\n{}", plan.trim()),
+            Entry::Diff { diff, .. } => format!("```diff\n{}\n```", diff.trim_end()),
+            Entry::Thinking { .. }
+            | Entry::Notice(_)
+            | Entry::Finished { .. }
+            | Entry::Interrupted
+            | Entry::Compacted { .. }
+            | Entry::Scheduled { .. }
+            | Entry::Rewound { .. }
+            | Entry::Branched
+            | Entry::HeadsUp { .. }
+            | Entry::Recap(_)
+            | Entry::Lesson { .. }
+            | Entry::Held { .. }
+            | Entry::Passing(_)
+            | Entry::Error(_)
+            | Entry::Attached { .. }
+            | Entry::Refused { .. }
+            | Entry::Repeated { .. } => continue,
+        };
+        out.push('\n');
+        out.push_str(&block);
+        out.push('\n');
+    }
+    out
+}
+
+pub fn default_path(cwd: &Path, title: Option<&str>) -> PathBuf {
+    let name: String = title
+        .unwrap_or("conversation")
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() { c.to_ascii_lowercase() } else { '-' })
+        .collect();
+    let name = name.split('-').filter(|part| !part.is_empty()).collect::<Vec<_>>().join("-");
+    cwd.join(format!("{}.md", if name.is_empty() { "conversation" } else { &name }))
+}
+
+pub fn last_answer(entries: &[Entry]) -> Option<&str> {
+    entries.iter().rev().find_map(|entry| match entry {
+        Entry::Assistant(text) => Some(text.as_str()),
+        _ => None,
+    })
+}
+
+pub fn copy(text: &str) -> Result<(), String> {
+    let tries: [(&str, &[&str]); 3] = [("pbcopy", &[]), ("wl-copy", &[]), ("xclip", &["-selection", "clipboard"])];
+    for (program, args) in tries {
+        let Ok(mut child) = Command::new(program).args(args).stdin(Stdio::piped()).spawn() else { continue };
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(text.as_bytes()).map_err(|e| e.to_string())?;
+        }
+        return match child.wait() {
+            Ok(status) if status.success() => Ok(()),
+            _ => Err(format!("{program} could not take the text")),
+        };
+    }
+    Err("no clipboard tool found (pbcopy, wl-copy or xclip)".into())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_conversation_reads_as_markdown_without_notices() {
+        let entries = vec![
+            Entry::User("fix it\nplease".into()),
+            Entry::Tool {
+                id: "t".into(),
+                name: "Edit".into(),
+                summary: "src/a.rs".into(),
+                state: ToolState::Done,
+                output: None,
+            },
+            Entry::Notice("Mode: plan".into()),
+            Entry::Assistant("Done.\n".into()),
+        ];
+        assert_eq!(
+            markdown(Some("Login page"), &entries),
+            "# Login page\n\n> fix it\n> please\n\n- `Edit` src/a.rs\n\nDone.\n"
+        );
+        assert_eq!(last_answer(&entries), Some("Done.\n"));
+        assert_eq!(
+            default_path(Path::new("/p"), Some("Fix the Login page!")),
+            PathBuf::from("/p/fix-the-login-page.md")
+        );
+    }
+}

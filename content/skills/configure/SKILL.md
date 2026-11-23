@@ -1,0 +1,224 @@
+---
+name: configure
+description: Change how {{NAME}} itself behaves by editing its own settings, MCP servers and hooks — adding an MCP server (e.g. "configure the Jira MCP"), model fallback between providers (e.g. "fall back to my other subscription"), routing sub-agents to another model, the small, advisor or judge model, permissions, and enabled providers. Use whenever the user asks to configure, set up, add or change an MCP server, a model, fallback, routing, hook or setting without naming another app.
+---
+
+# Configure {{NAME}}
+
+You change {{NAME}}'s own configuration by editing its files. Settings
+are read again at the start of every prompt, so a change applies from
+the user's next message; nothing needs a restart.
+
+## Where settings live
+
+Files are JSON objects, read in this order (later wins, key by key):
+
+1. `~/{{DIR}}/settings.json` — the user's own settings, every project.
+2. `<project>/{{DIR}}/settings.json` — checked in, shared with the team.
+3. `<project>/{{DIR}}/settings.local.json` — this user, this project, not
+   committed.
+
+Pick the file by scope: personal model choices go in
+`~/{{DIR}}/settings.json`, or in `{{DIR}}/settings.local.json` when the
+user wants it for this project only. Write to the checked-in
+`settings.json` only when the user says the team should share it.
+
+Before editing, Read the file (it may not exist; then create it with
+just your keys). Keep every key already there. Show the user the final
+snippet you wrote and the file's path.
+
+## Naming models
+
+A model is named `provider:model`, for example `main-provider:big-model` or
+`backup-provider:other-model` (ids from `{{COMMAND}} models`). The provider is the id of a connected provider;
+a name without a provider stays on the run's provider. Never guess a
+model id: run `{{COMMAND}} models` and pick from its list, or ask the
+user. If a provider is not connected, tell the user to run
+`{{COMMAND}} login` (or `/login` in the chat) for it.
+
+## Model fallback
+
+### Simple: `fallbackModel`
+
+```json
+{ "fallbackModel": ["backup-provider:other-model", "third-provider:model"] }
+```
+
+One model or a list. When the run's model stays overloaded (after the
+provider's own retries), the run hands over to the first model of the
+list it has not tried yet and keeps going on it. The list alone answers
+only overloads; for auth, network or provider errors use a hook.
+`--fallback-model` sets one model for one `{{COMMAND}} -p` run.
+
+Use it when the user's main model is on one provider and they want
+backups on others: main `main-provider:…`, `fallbackModel` `["backup-provider:…"]`.
+
+### Any error, any policy: a `ModelError` hook
+
+A `ModelError` hook intercepts every failed model call, before the
+`fallbackModel` list. A script in `{{DIR}}/hooks/` (project) or
+`~/{{DIR}}/hooks/` (user) gets as input `model`, `kind` (`main` or
+`sub-agent`), `mode`, `messages`, `error`, `errorKind` (`overloaded`,
+`unauthorized`, `network`, `provider`, `too_long`), `attempt`, `tried`
+(models that failed since the last answer) and `fallbacks` (the
+settings' list). It answers one of:
+
+- `{ hookSpecificOutput: { model: "backup-provider:…" } }`: forward the call there.
+- `{ decision: "block", reason: "…" }`: stop, the run fails with the error.
+- nothing: the `fallbackModel` list decides.
+
+```js
+export const event = "ModelError";
+export const matcher = "main";
+const chain = ["backup-provider:other-model", "third-provider:model"];
+export default function (input) {
+  if (input.errorKind === "too_long") return;
+  const next = chain.find((model) => !input.tried.includes(model));
+  if (next) return { hookSpecificOutput: { model: next } };
+}
+```
+
+A model already in `tried` is never tried again before a call
+succeeds, and a streak stops after a few switches, so a hook cannot
+loop forever.
+
+### Choosing the model per call: a `ModelRequest` hook
+
+`ModelRequest` runs before every model call with the same input (no
+`error`). Its matcher is `main` or `sub-agent`, so sub-agents can go to
+a cheaper provider:
+
+```js
+export const event = "ModelRequest";
+export const matcher = "sub-agent";
+export default () => ({ hookSpecificOutput: { model: "cheap-provider:small-model" } });
+```
+
+A `ModelRequest` hook may also answer `effort` (`low` … `max`),
+`additionalContext` (appended to the system prompt of that call) or
+`{ decision: "block", reason }` to stop the run.
+
+### Checking replies: a `ModelResponse` hook
+
+`ModelResponse` runs when a reply arrives, before it is shown or acted
+on. Its input adds `text`, `toolCalls` (`name`, `input`), `stopReason`,
+`usage` and `rejections`. It may answer `{ hookSpecificOutput: { text } }`
+to replace the text (for example to redact a secret), or
+`{ decision: "block", reason }` to drop the reply and have the model
+answer again with that reason; after a couple of rejections the run
+fails. While one is configured, reply text appears when the hook has
+answered instead of streaming.
+
+```js
+export const event = "ModelResponse";
+export default (input) => {
+  const text = input.text.replace(/sk-[A-Za-z0-9]{8,}/g, "[redacted]");
+  if (text !== input.text) return { hookSpecificOutput: { text } };
+};
+```
+
+Hooks can also live under `"hooks"` in a settings file, in the same
+shape as the other hook events.
+
+## MCP servers
+
+{{NAME}}'s own MCP servers live in `mcp.json`, never in another app's
+file:
+
+- `~/{{DIR}}/mcp.json`: the user's servers, every project. Start right
+  away.
+- `<project>/{{DIR}}/mcp.json`: the project's, checked in. Each one
+  starts only after the owner approves it: `{{COMMAND}} mcp approve
+  <name>`, or `"enabledMcpServers": ["<name>"]` in the user's own
+  settings (`"enableAllProjectMcpServers": true` approves them all).
+
+Prefer the command; it validates and writes the user's file:
+
+```bash
+{{COMMAND}} mcp add tracker https://mcp.example.com/mcp
+{{COMMAND}} mcp add -H 'Authorization: Bearer ${API_TOKEN}' docs https://docs.example.com/mcp
+{{COMMAND}} mcp add -e GITHUB_TOKEN='${GITHUB_TOKEN}' github -- npx -y @modelcontextprotocol/server-github
+{{COMMAND}} mcp list
+```
+
+Editing the file by hand, keep this shape. A server with a `url` is
+remote (`"type": "http"`; write `"sse"` for the older transport); one
+with a `command` is a local process:
+
+```json
+{
+  "mcpServers": {
+    "tracker": { "type": "http", "url": "https://mcp.example.com/mcp" },
+    "github": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-github"],
+      "env": { "GITHUB_TOKEN": "${GITHUB_TOKEN}" }
+    }
+  }
+}
+```
+
+`${VAR}` is read from the environment when the server starts: never
+write a secret into the file. A remote server that uses OAuth signs in
+with `{{COMMAND}} mcp login <name>` (or `/mcp login <name>` in the chat);
+the user signs in, in their browser. It saves the sign-in outside the
+project, so run it with `unsandboxed` set and a timeout of 300000, one
+server per call, or ask the user to run `/mcp login <name>`. A
+server that does not let applications register themselves cannot sign in
+that way: it takes a token the service issues, passed as a header read
+from the environment (`-H 'Authorization: Bearer ${TOKEN}'`, single
+quotes so the shell keeps `${TOKEN}` for the file). `{{COMMAND}} mcp add`
+refuses a secret written out. The variable must be set where
+{{NAME}} starts: for GitHub, the user can `export GITHUB_TOKEN="$(gh auth
+token)"` in their shell profile. Never read a token yourself to put it
+anywhere. Names starting with `{{COMMAND}}_`
+are reserved. New servers are picked up on the next prompt.
+
+Vendors that host their own remote server sign in with OAuth, and the
+sign-in picks the account and the site: do not ask the user for their
+site's address, a token or which product edition they have. Add the
+server, run the login, and check it with `{{COMMAND}} mcp list`:
+
+| Asked for | Name | URL |
+|---|---|---|
+| Jira, Confluence, Atlassian | `atlassian` | `https://mcp.atlassian.com/v2/mcp` |
+| GitHub | `github` | `https://api.githubcopilot.com/mcp/` (token header, see above) |
+| Linear | `linear` | `https://mcp.linear.app/mcp` |
+| Notion | `notion` | `https://mcp.notion.com/mcp` |
+| Sentry | `sentry` | `https://mcp.sentry.dev/mcp` |
+
+```bash
+{{COMMAND}} mcp add atlassian https://mcp.atlassian.com/v2/mcp
+{{COMMAND}} mcp login atlassian
+```
+
+For anything else, find the server's URL or package in the vendor's own
+documentation, and tell the user which one you used. If a listed URL
+stops answering, look it up the same way.
+
+## Other model settings
+
+- `smallModel`: runs the `Explore` agent when it names no model, and reads
+  the pages WebFetch fetches. Usually leave it unset: each run picks the
+  small model of the session's provider (the vendor's own, such as Haiku,
+  if the account offers it, else the cheapest priced model it lists).
+  Set it only to override that; an alias such as `haiku` works, and a model
+  the provider does not offer is ignored with a warning in the log.
+- `advisorModel`, `judgeModel`: the advisor and the verification judge.
+- `enabledProviders`: `["groq"]` lets a provider declared by the project
+  in `{{DIR}}/providers/*.js` start. Only the user's own files
+  (`~/{{DIR}}/settings.json`, `settings.local.json`) can enable one.
+
+## Permissions
+
+`permissions.allow`, `permissions.ask` and `permissions.deny` take rules
+such as `Bash(cargo test:*)`, `Edit(src/**)` or `mcp__server`. Only the
+user's own files can allow; the checked-in file can only restrict.
+
+## After the change
+
+Confirm what will happen in one or two sentences, e.g. "From your next
+message, when main-provider is overloaded the run continues on
+backup-provider:other-model." If the request cannot be expressed with these
+settings and hooks, say exactly which part is not supported rather than
+writing something that will not take effect.

@@ -1,0 +1,25 @@
+/** @type {import("../types").ToolSpec} */
+export const spec = {
+  name: "ToolSearch",
+  input: {
+    "additionalProperties": false,
+    "properties": {
+      "query": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "query"
+    ],
+    "type": "object"
+  },
+  description: (ctx) => `Load the schemas of tools that are listed in a system reminder but not yet callable, then call them. Query \`select:name1,name2\` for tools you know by name, or keywords to find them.`,
+};
+
+/**
+ * @param {import("../types").ToolInput} input
+ * @param {import("../types").ToolContext} ctx
+ */
+export function execute(input, ctx) {
+  return ctx.builtin(input);
+}

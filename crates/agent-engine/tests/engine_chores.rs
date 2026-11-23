@@ -1,0 +1,113 @@
+#![allow(clippy::expect_used, reason = "a failed setup step stops the test")]
+
+use std::sync::{Arc, Mutex};
+
+use crossbeam_channel::{Receiver, unbounded};
+use std::time::Duration;
+
+use agent_engine::AgentEngine;
+use agent_engine::model::scripted::ScriptedModel;
+use agent_engine::model::{ModelApi, ModelError};
+use agent_engine::sessions::{InMemorySessions, Sessions};
+use agent_engine::transcript::{Block, Message};
+use agent_engine::{ApiSource, Engine};
+use domain::{ChoreAnswer, EngineEvent, ModelOption, PromptRequest, RunId, SessionCommand};
+
+struct Source(Mutex<Vec<Arc<ScriptedModel>>>);
+
+impl ApiSource for Source {
+    fn api(&self, _request: &PromptRequest) -> Result<Arc<dyn ModelApi>, ModelError> {
+        Ok(self.0.lock().expect("models").remove(0))
+    }
+}
+
+fn finish(engine: &Engine, request: &PromptRequest) -> Vec<EngineEvent> {
+    let (send, receive): (_, Receiver<EngineEvent>) = unbounded();
+    let send = Mutex::new(send);
+    let sink = Arc::new(move |_run: RunId, event: EngineEvent| {
+        let _ = send.lock().expect("send").send(event);
+    });
+    engine.start(RunId::new(), request, sink).expect("start");
+    let mut seen = Vec::new();
+    while let Ok(event) = receive.recv_timeout(Duration::from_secs(10)) {
+        let terminal = event.is_terminal();
+        seen.push(event);
+        if terminal {
+            break;
+        }
+    }
+    seen
+}
+
+fn says(text: &str) -> Arc<ScriptedModel> {
+    Arc::new(ScriptedModel::new([ScriptedModel::reply(vec![Block::Text(text.into())])]))
+}
+
+fn model() -> ModelOption {
+    ModelOption::new("claude-opus-5-5", "Opus 5.5")
+}
+
+#[test]
+fn a_title_needs_no_session_and_keeps_none() {
+    let dir = tempfile::tempdir().expect("dir");
+    let titler = says("{\"title\": \"Login page\"}");
+    let sessions = Arc::new(InMemorySessions::default());
+    let engine = Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&titler)]))), sessions);
+    let mut request = PromptRequest::plain(dir.path().into(), "fix the login page please", model());
+    request.session.command = Some(SessionCommand::Title);
+    let events = finish(&engine, &request);
+    assert!(events.contains(&EngineEvent::Chore(ChoreAnswer::Title("Login page".into()))), "{events:?}");
+    assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })));
+    assert!(!events.iter().any(|e| matches!(e, EngineEvent::SessionStarted(_))), "a title starts no session");
+    let asked = &titler.asked()[0];
+    assert!(asked.tools.is_empty());
+    assert!(asked.messages[0].text().contains("<session>\nfix the login page please\n</session>"));
+}
+
+#[test]
+fn a_suggestion_reads_the_kept_session() {
+    let dir = tempfile::tempdir().expect("dir");
+    let sessions = Arc::new(InMemorySessions::default());
+    let mut request = PromptRequest::plain(dir.path().into(), "", model());
+    let id = domain::SessionId("kept".into());
+    let history = vec![Message::user("fix the bug"), Message::assistant(vec![Block::Text("Fixed it.".into())])];
+    sessions.save_for(&request.session.cwd, &id, &history).expect("save");
+    let guesser = says("run the tests");
+    let engine = Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&guesser)]))), sessions);
+    request.session.resume = Some(id);
+    request.session.command = Some(SessionCommand::Suggest);
+    let events = finish(&engine, &request);
+    assert!(events.contains(&EngineEvent::Chore(ChoreAnswer::Suggestion("run the tests".into()))), "{events:?}");
+    let asked = &guesser.asked()[0];
+    assert_eq!(&asked.messages[..2], &history[..]);
+    assert!(asked.messages[2].text().starts_with("[SUGGESTION MODE"));
+}
+
+#[test]
+fn the_style_picked_in_settings_reaches_the_prompt() {
+    let dir = tempfile::tempdir().expect("dir");
+    let model_api = says("Done.");
+    let engine =
+        Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&model_api)]))), Arc::new(InMemorySessions::default()));
+    let mut request = PromptRequest::plain(dir.path().into(), "hi", model());
+    request.session.output_style = Some("concise".into());
+    finish(&engine, &request);
+    let asked = &model_api.asked()[0];
+    assert!(asked.system.contains("# Concise style"), "the style's text");
+    let reminded = format!("{:?}", asked.messages.last().map(|m| &m.blocks));
+    assert!(reminded.contains("Be concise: lead with the result"), "and its turn reminder: {reminded}");
+}
+
+#[test]
+fn a_side_question_on_a_session_not_kept_yet_is_answered_not_reported_lost() {
+    let dir = tempfile::tempdir().expect("dir");
+    let answerer = says("Nothing has been said yet.");
+    let engine =
+        Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&answerer)]))), Arc::new(InMemorySessions::default()));
+    let mut request = PromptRequest::plain(dir.path().into(), "what is it doing?", model());
+    request.session.resume = Some(domain::SessionId("first-run".into()));
+    request.session.command = Some(SessionCommand::Side);
+    let events = finish(&engine, &request);
+    assert!(!events.iter().any(|e| matches!(e, EngineEvent::Diagnosed(_))), "{events:?}");
+    assert!(events.contains(&EngineEvent::Chore(ChoreAnswer::Side("Nothing has been said yet.".into()))));
+}

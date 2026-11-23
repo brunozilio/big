@@ -1,0 +1,40 @@
+[package]
+name = "app"
+description = "The application API: the client the terminal calls, the command handler behind it, and the messages between them, in process."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[features]
+default = ["subscription-providers"]
+subscription-providers = ["agent-engine/subscription-providers", "llm-providers/subscription-providers"]
+
+[dependencies]
+platform.workspace = true
+brand.workspace = true
+domain.workspace = true
+llm-providers.workspace = true
+crossbeam-channel.workspace = true
+agent-engine.workspace = true
+code-map.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+rusqlite.workspace = true
+axum.workspace = true
+tokio = { workspace = true, features = ["rt", "net", "sync", "macros"] }
+base64.workspace = true
+chacha20poly1305 = "0.10"
+getrandom.workspace = true
+jiff.workspace = true
+
+[dev-dependencies]
+agent-engine = { workspace = true, features = ["test-support"] }
+tempfile.workspace = true
+reqwest = { workspace = true, features = ["blocking"] }
+
+[lints]
+workspace = true

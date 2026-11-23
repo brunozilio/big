@@ -1,0 +1,192 @@
+pub(crate) mod git;
+
+use self::git::{git, git_stopped};
+use crate::tools::{Workspace, subagent_config::AgentConfig};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::{io::Read, path::PathBuf};
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Setup {
+    pub cwd: PathBuf,
+    pub memory_dir: Option<PathBuf>,
+    pub memory: String,
+    pub worktree_root: Option<PathBuf>,
+    pub context: Option<crate::brief::Brief>,
+    pub base_commit: Option<String>,
+}
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct WorktreeState {
+    pub cwd: PathBuf,
+    pub root: PathBuf,
+    pub base_commit: String,
+}
+impl Setup {
+    pub fn worktree_state(&self) -> Option<WorktreeState> {
+        Some(WorktreeState {
+            cwd: self.cwd.clone(),
+            root: self.worktree_root.clone()?,
+            base_commit: self.base_commit.clone()?,
+        })
+    }
+}
+pub fn resume(config: &AgentConfig, name: &str, state: &WorktreeState, workspace: &Workspace) -> Result<Setup, String> {
+    let root =
+        PathBuf::from(git_stopped(workspace, &workspace.cwd, &["rev-parse".as_ref(), "--show-toplevel".as_ref()])?)
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+    let expected = state.root.canonicalize().map_err(|e| e.to_string())?;
+    let actual =
+        state.cwd.canonicalize().map_err(|_| "The session worktree no longer exists; restore it before resuming")?;
+    if root != expected
+        || actual.parent() != Some(root.join(concat!(brand::dir!(), "/worktrees")).as_path())
+        || actual.file_name().and_then(|s| s.to_str()).and_then(|s| uuid::Uuid::parse_str(s).ok()).is_none()
+    {
+        return Err("saved worktree is outside the session project".into());
+    }
+    let declared = PathBuf::from(git_stopped(workspace, &actual, &["rev-parse".as_ref(), "--show-toplevel".as_ref()])?)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if declared != actual {
+        return Err("saved worktree is not a registered checkout".into());
+    }
+    let common = PathBuf::from(git_stopped(workspace, &actual, &["rev-parse".as_ref(), "--git-common-dir".as_ref()])?);
+    let common =
+        if common.is_absolute() { common } else { actual.join(common) }.canonicalize().map_err(|e| e.to_string())?;
+    let expected_common =
+        PathBuf::from(git_stopped(workspace, &root, &["rev-parse".as_ref(), "--git-common-dir".as_ref()])?);
+    let expected_common = if expected_common.is_absolute() { expected_common } else { root.join(expected_common) }
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if common != expected_common {
+        return Err("saved worktree belongs to a different repository".into());
+    }
+    let mut memory_config = config.clone();
+    memory_config.worktree = false;
+    let mut setup = prepare_as(&memory_config, name, workspace)?;
+    setup.cwd = actual;
+    setup.worktree_root = Some(root);
+    setup.base_commit = Some(state.base_commit.clone());
+    setup.context = Some(brief_in(&setup.cwd, workspace)?);
+    Ok(setup)
+}
+
+fn brief_in(cwd: &std::path::Path, workspace: &Workspace) -> Result<crate::brief::Brief, String> {
+    let extensions =
+        domain::Extensions { home: workspace.home.clone(), trust: workspace.policy.trust, ..Default::default() };
+    crate::brief::Brief::load(domain::Folder::at(cwd, &extensions)).map_err(String::from)
+}
+
+pub const RAN_WITHOUT_ISOLATION: &str =
+    "Ran without isolation: this folder is not a git repository with a commit, so no worktree was made.";
+
+pub fn can_isolate(workspace: &Workspace) -> Result<bool, String> {
+    git::has_commit(workspace)
+}
+
+pub fn prepare(config: &AgentConfig, name: &str, workspace: &Workspace) -> Result<Setup, String> {
+    if config.memory.is_none() && !config.worktree {
+        return Ok(Setup { cwd: workspace.cwd.clone(), ..Default::default() });
+    }
+    prepare_as(config, name, workspace)
+}
+
+fn owner_folder() -> Result<String, String> {
+    let tag = serde_json::to_string(domain::legacy::LEGACY_OWNER_TAG).map_err(|e| e.to_string())?;
+    Ok(format!("{:x}", Sha256::digest(tag.as_bytes())))
+}
+
+fn prepare_as(config: &AgentConfig, name: &str, workspace: &Workspace) -> Result<Setup, String> {
+    if name.is_empty() || !name.chars().all(|c| c.is_ascii_alphanumeric() || "_-:".contains(c)) {
+        return Err("agent name must be a filesystem-safe name".into());
+    }
+    let mut setup = Setup { cwd: workspace.cwd.clone(), ..Default::default() };
+    let project = workspace.cwd.ancestors().find(|path| path.join(".git").exists()).unwrap_or(&workspace.cwd);
+    if let Some(scope) = &config.memory {
+        let base = match scope.as_str() {
+            "user" => {
+                workspace.home.as_deref().ok_or("user home unavailable")?.join(concat!(brand::dir!(), "/agent-memory"))
+            }
+            "project" => project.join(concat!(brand::dir!(), "/agent-memory")),
+            "local" => project.join(concat!(brand::dir!(), "/agent-memory-local")),
+            _ => return Err("invalid memory scope".into()),
+        };
+        let name_key = format!("{}-{:x}", name.replace(':', "--"), Sha256::digest(name.as_bytes()));
+        let dir = base.join(owner_folder()?).join(name_key);
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        platform::make_private_dir(&dir).map_err(|e| e.to_string())?;
+        let mut bytes = Vec::new();
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true);
+        platform::nonblocking(&mut options);
+        match options.open(dir.join("MEMORY.md")) {
+            Ok(file) => {
+                if !file.metadata().map_err(|e| e.to_string())?.is_file() {
+                    return Err("agent memory index must be a regular file".into());
+                }
+                file.take(25_000).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+        setup.memory = String::from_utf8_lossy(&bytes).lines().take(200).collect::<Vec<_>>().join("\n");
+        setup.memory_dir = Some(dir.canonicalize().map_err(|e| e.to_string())?);
+    }
+    if config.worktree && git::has_commit(workspace)? {
+        let root =
+            PathBuf::from(git_stopped(workspace, &workspace.cwd, &["rev-parse".as_ref(), "--show-toplevel".as_ref()])?);
+        let base = git_stopped(workspace, &root, &["rev-parse".as_ref(), "--verify".as_ref(), "HEAD".as_ref()])?;
+        let target = root.join(concat!(brand::dir!(), "/worktrees")).join(uuid::Uuid::new_v4().to_string());
+        std::fs::create_dir_all(target.parent().ok_or("worktree parent missing")?).map_err(|e| e.to_string())?;
+        setup.base_commit = Some(base.clone());
+        setup.cwd = target.clone();
+        setup.worktree_root = Some(root.clone());
+        if let Err(error) = git_stopped(
+            workspace,
+            &root,
+            &["worktree".as_ref(), "add".as_ref(), "--detach".as_ref(), target.as_os_str(), base.as_ref()],
+        ) {
+            return Err(match cleanup(&setup) {
+                Ok(None) => error,
+                Ok(Some(path)) => format!("{error}; partial checkout retained at {}", path.display()),
+                Err(cleanup) => format!("{error}; inspect partial checkout {}: {cleanup}", target.display()),
+            });
+        }
+        setup.context = match brief_in(&setup.cwd, workspace) {
+            Ok(brief) => Some(brief),
+            Err(error) => {
+                let _ = cleanup(&setup);
+                return Err(error);
+            }
+        };
+    }
+    Ok(setup)
+}
+pub fn cleanup(setup: &Setup) -> Result<Option<PathBuf>, String> {
+    let Some(root) = &setup.worktree_root else { return Ok(None) };
+    if !managed(root, &setup.cwd) {
+        return Err("invalid managed worktree".into());
+    }
+    let head = git(&setup.cwd, &["rev-parse".as_ref(), "HEAD".as_ref()])?;
+    if setup.base_commit.as_deref() == Some(head.as_str())
+        && git(&setup.cwd, &["status".as_ref(), "--porcelain".as_ref(), "--untracked-files=all".as_ref()])?.is_empty()
+    {
+        git(root, &["worktree".as_ref(), "remove".as_ref(), setup.cwd.as_os_str()])?;
+        Ok(None)
+    } else {
+        Ok(Some(setup.cwd.clone()))
+    }
+}
+
+fn managed(root: &std::path::Path, path: &std::path::Path) -> bool {
+    path.parent() == Some(root.join(concat!(brand::dir!(), "/worktrees")).as_path())
+        && path.file_name().and_then(|s| s.to_str()).and_then(|s| uuid::Uuid::parse_str(s).ok()).is_some()
+}
+
+mod session_worktree;
+mod worktree_lease;
+pub use session_worktree::{Entered, Relocation, enter, removable, remove};
+pub use worktree_lease::WorktreeLease;
+
+#[cfg(test)]
+mod tests;

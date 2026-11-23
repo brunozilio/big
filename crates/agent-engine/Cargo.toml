@@ -1,0 +1,44 @@
+[package]
+name = "agent-engine"
+description = "The agent engine:the agent loop and its tools, in process; models are reached through llm-providers."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[features]
+default = ["subscription-providers"]
+subscription-providers = ["llm-providers/subscription-providers"]
+test-support = ["llm-providers/test-support", "language-servers/test-support"]
+
+[dependencies]
+script.workspace = true
+content.workspace = true
+brand.workspace = true
+domain.workspace = true
+platform.workspace = true
+language-servers.workspace = true
+llm-providers.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde-saphyr = { version = "2.1", default-features = false, features = ["deserialize"] }
+thiserror.workspace = true
+tracing.workspace = true
+ignore.workspace = true
+globset = "0.4"
+regex = "1"
+base64.workspace = true
+sha2.workspace = true
+jsonschema = { version = "0.33", default-features = false }
+jiff.workspace = true
+url.workspace = true
+uuid.workspace = true
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "sync", "time", "macros"] }
+crossbeam-channel.workspace = true
+
+[dev-dependencies]
+agent-engine = { path = ".", default-features = false, features = ["test-support"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

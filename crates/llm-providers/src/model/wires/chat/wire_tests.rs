@@ -1,0 +1,204 @@
+use std::sync::Arc;
+
+use crate::model::http::ScriptedHttp;
+use crate::model::wires::chat::{Chat, Endpoint, Endpoints};
+use crate::model::{BlockingTurn, CancellationToken, Delta, ModelError, ToolSpec, TurnRequest};
+use crate::transcript::{Block, Message, StopReason};
+use domain::Effort;
+use serde_json::{Value, json};
+
+struct Fixed(Result<Endpoint, ModelError>);
+
+impl Endpoints for Fixed {
+    fn endpoint(&self, _model: &str) -> Result<Endpoint, ModelError> {
+        self.0.clone()
+    }
+}
+
+fn served() -> Arc<Fixed> {
+    Arc::new(Fixed(Ok(Endpoint { base_url: "http://127.0.0.1:8080".into(), model: "/models/qwen".into() })))
+}
+
+fn request() -> TurnRequest {
+    TurnRequest {
+        model: "mlx-community/Qwen3-8B".into(),
+        system: concat!("You are ", brand::name!(), "'s agent.").into(),
+        messages: vec![Message::user("Read src/main.rs")],
+        tools: vec![ToolSpec {
+            name: "Read".into(),
+            description: "Reads a file.".into(),
+            schema: json!({"type": "object", "properties": {"file_path": {"type": "string"}}}),
+        }],
+        effort: Effort::Medium,
+        max_tokens: 4_096,
+    }
+}
+
+#[test]
+fn folds_thinking_text_and_a_call_from_a_streamed_answer() {
+    let http =
+        Arc::new(ScriptedHttp::new([(200, include_str!("../../../../tests/fixtures/chat_tool_use.sse").to_owned())]));
+    let mut deltas = Vec::new();
+    let reply = Chat::new(http.clone(), served())
+        .turn_blocking(&request(), &mut |delta| deltas.push(delta), &CancellationToken::new())
+        .expect("reply");
+    assert_eq!(reply.stop, StopReason::ToolUse);
+    assert_eq!(
+        reply.message.blocks,
+        vec![
+            Block::Thinking {
+                text: "Read it first.".into(),
+                signature: None,
+                origin: Some(crate::model::wires::chat::ORIGIN)
+            },
+            Block::Text("Let me look.".into()),
+            Block::ToolUse { id: "call_1".into(), name: "Read".into(), input: json!({"file_path": "src/main.rs"}) },
+        ]
+    );
+    let thinking: String =
+        deltas.iter().filter_map(|d| if let Delta::Thinking(t) = d { Some(t.as_str()) } else { None }).collect();
+    let text: String =
+        deltas.iter().filter_map(|d| if let Delta::Text(t) = d { Some(t.as_str()) } else { None }).collect();
+    assert_eq!((thinking.as_str(), text.as_str()), ("Read it first.", "Let me look."));
+    assert_eq!((reply.usage.input, reply.usage.output), (120, 40));
+}
+
+#[test]
+fn folds_a_recorded_chat_answer_with_reasoning_and_a_tool_call() {
+    let stream = include_str!("../../../../tests/fixtures/chat_reasoning_tool_call.sse").to_owned();
+    let http = Arc::new(ScriptedHttp::new([(200, stream)]));
+    let reply =
+        Chat::new(http, served()).turn_blocking(&request(), &mut |_| {}, &CancellationToken::new()).expect("reply");
+    assert_eq!(reply.stop, StopReason::ToolUse);
+    assert_eq!(
+        reply.message.blocks,
+        vec![
+            Block::Thinking {
+                text: "The user is asking me to list the files in the current directory. Let's run the ls command."
+                    .into(),
+                signature: None,
+                origin: Some(crate::model::wires::chat::ORIGIN)
+            },
+            Block::ToolUse {
+                id: "6a0e1e76-3e23-43de-b714-0892ec3343a0".into(),
+                name: "Bash".into(),
+                input: json!({"command": "ls -la"}),
+            },
+        ]
+    );
+    assert_eq!((reply.usage.input, reply.usage.output), (324, 52));
+}
+
+#[test]
+fn asks_the_served_model_with_the_whole_conversation_and_the_tools() {
+    let http =
+        Arc::new(ScriptedHttp::new([(200, include_str!("../../../../tests/fixtures/chat_tool_use.sse").to_owned())]));
+    let mut request = request();
+    request.messages.push(Message::assistant(vec![
+        Block::Thinking { text: "hm".into(), signature: None, origin: Some(crate::model::wires::chat::ORIGIN) },
+        Block::Text("Reading.".into()),
+        Block::ToolUse { id: "call_0".into(), name: "Read".into(), input: json!({"file_path": "a"}) },
+    ]));
+    request.messages.push(crate::transcript::Message {
+        role: crate::transcript::Role::User,
+        blocks: vec![Block::ToolResult { id: "call_0".into(), content: "no such file".into(), is_error: true }],
+    });
+    Chat::new(http.clone(), served()).turn_blocking(&request, &mut |_| {}, &CancellationToken::new()).expect("reply");
+    let sent = http.sent();
+    assert_eq!(sent[0].url, "http://127.0.0.1:8080/v1/chat/completions");
+    assert!(sent[0].headers.iter().all(|(name, _)| name != "authorization"), "a local server takes no key");
+    let body: Value = serde_json::from_str(&sent[0].body).expect("json");
+    assert_eq!(body["model"], "/models/qwen");
+    assert_eq!((body["stream"].clone(), body["stream_options"]["include_usage"].clone()), (json!(true), json!(true)));
+    assert_eq!(body["max_tokens"], 4_096);
+    assert_eq!(
+        body["messages"],
+        json!([
+            {"role": "system", "content": concat!("You are ", brand::name!(), "'s agent.")},
+            {"role": "user", "content": "Read src/main.rs"},
+            {"role": "assistant", "content": "Reading.", "tool_calls": [
+                {"id": "call_0", "type": "function", "function": {"name": "Read", "arguments": "{\"file_path\":\"a\"}"}}
+            ]},
+            {"role": "tool", "tool_call_id": "call_0", "content": "Error: no such file"},
+        ])
+    );
+    assert_eq!(body["tools"][0]["function"]["name"], "Read");
+    assert_eq!(body["tools"][0]["function"]["parameters"]["properties"]["file_path"]["type"], "string");
+}
+
+#[test]
+fn a_model_still_loading_is_busy_and_a_refused_request_says_why() {
+    let loading = Arc::new(Fixed(Err(ModelError::Overloaded("qwen is still starting".into()))));
+    let http = Arc::new(ScriptedHttp::new([]));
+    let error = Chat::new(http.clone(), loading)
+        .without_backoff()
+        .turn_blocking(&request(), &mut |_| {}, &CancellationToken::new())
+        .expect_err("loading");
+    assert_eq!(error, ModelError::Overloaded("qwen is still starting".into()));
+    assert!(http.sent().is_empty());
+
+    let refused = r#"{"error":{"message":"context length exceeded"}}"#;
+    let http = Arc::new(ScriptedHttp::new([(400, refused.to_owned())]));
+    let error = Chat::new(http, served())
+        .turn_blocking(&request(), &mut |_| {}, &CancellationToken::new())
+        .expect_err("refused");
+    assert_eq!(error, ModelError::TooLong("context length exceeded".into()), "so the run compacts and goes on");
+}
+
+#[test]
+fn an_answer_cut_off_by_its_length_says_so() {
+    let stream = concat!(
+        "data: {\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Half\"},\"finish_reason\":null}]}\n\n",
+        "data: {\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"length\"}]}\n\n",
+        "data: [DONE]\n\n",
+    );
+    let http = Arc::new(ScriptedHttp::new([(200, stream.to_owned())]));
+    let reply =
+        Chat::new(http, served()).turn_blocking(&request(), &mut |_| {}, &CancellationToken::new()).expect("reply");
+    assert_eq!((reply.stop, reply.message.text()), (StopReason::MaxTokens, "Half".to_owned()));
+}
+
+fn with_image(image: &domain::Image) -> TurnRequest {
+    TurnRequest {
+        model: "fixture".into(),
+        system: "system".into(),
+        messages: vec![
+            Message::user("inspect"),
+            Message::assistant(vec![Block::ToolUse {
+                id: "read".into(),
+                name: "Read".into(),
+                input: json!({"file_path":"image.png"}),
+            }]),
+            crate::transcript::Message {
+                role: crate::transcript::Role::User,
+                blocks: vec![Block::ToolResultRich {
+                    id: "read".into(),
+                    content: "screenshot".into(),
+                    images: vec![image.clone()],
+                    is_error: false,
+                }],
+            },
+        ],
+        tools: vec![],
+        effort: Effort::Low,
+        max_tokens: 100,
+    }
+}
+
+fn pixel() -> domain::Image {
+    domain::Image::from_mcp(
+        "image/png",
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a6wAAAABJRU5ErkJggg==",
+    )
+    .expect("valid test fixture")
+}
+
+#[test]
+fn an_image_in_a_tool_result_is_sent_visually() {
+    let image = pixel();
+    let body = super::body(&with_image(&image), "fixture");
+    let visual =
+        body["messages"].as_array().expect("messages").iter().find(|m| m["content"].is_array()).expect("parts");
+    let parts = visual["content"].as_array().expect("parts");
+    assert!(parts.iter().any(|part| part["type"] == "image_url" && part["image_url"]["url"] == image.data_url()));
+}

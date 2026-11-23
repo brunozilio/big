@@ -1,0 +1,280 @@
+use super::{Instructions, Scope};
+use std::{
+    collections::HashSet,
+    io::Read,
+    path::{Path, PathBuf},
+};
+const MAX_FILE: usize = 100_000;
+const MAX_TOTAL: usize = 250_000;
+const NAMES: [&str; 4] =
+    [brand::INSTRUCTIONS, concat!(brand::dir!(), "/", brand::instructions!()), "AGENTS.md", brand::LOCAL_INSTRUCTIONS];
+fn network(path: &Path) -> bool {
+    let s = path.to_string_lossy();
+    s.starts_with("\\\\") || s.starts_with("//") || s.starts_with("/net/") || s.starts_with("/Network/")
+}
+fn trust_root(cwd: &Path) -> PathBuf {
+    cwd.ancestors().find(|p| p.join(".git").exists()).unwrap_or(cwd).canonicalize().unwrap_or_else(|_| cwd.into())
+}
+struct Loader<'a> {
+    seen: HashSet<PathBuf>,
+    bytes: usize,
+    home: Option<&'a Path>,
+}
+impl Loader<'_> {
+    fn read(&mut self, path: &Path, allowed: &Path, depth: usize) -> Result<String, String> {
+        if depth > 5 {
+            return Err("instruction import exceeds five levels".into());
+        }
+        if network(path) {
+            return Err("network instruction paths are not loaded".into());
+        }
+        let canonical = path.canonicalize().map_err(|_| "instruction file could not be read")?;
+        if !canonical.starts_with(allowed) {
+            return Err("instruction import is outside the trusted directory".into());
+        }
+        if !self.seen.insert(canonical.clone()) {
+            return Ok(String::new());
+        }
+        let mut bytes = Vec::new();
+        std::fs::File::open(&canonical)
+            .map_err(|_| "instruction file could not be opened")?
+            .take(MAX_FILE as u64 + 1)
+            .read_to_end(&mut bytes)
+            .map_err(|_| "instruction file could not be read")?;
+        if bytes.len() > MAX_FILE || self.bytes + bytes.len() > MAX_TOTAL {
+            return Err("instruction context exceeds its size budget".into());
+        }
+        self.bytes += bytes.len();
+        let text = String::from_utf8(bytes).map_err(|_| "instruction file is not UTF-8")?;
+        let import = regex::Regex::new(r#"(?:^|\s)@("[^"]+"|[^\s`]+)"#).map_err(|e| e.to_string())?;
+        let mut output = String::new();
+        let mut fence: Option<(char, usize)> = None;
+        let mut comment = false;
+        for raw in text.lines() {
+            if let Some((marker, length)) = fence {
+                output.push_str(raw);
+                output.push('\n');
+                if let Some((closing_marker, closing_length, rest)) = fence_marker(raw)
+                    && closing_marker == marker
+                    && closing_length >= length
+                    && rest.trim().is_empty()
+                {
+                    fence = None;
+                }
+                continue;
+            }
+            let clean = visible(raw, &mut comment, true);
+            let line = clean.as_str();
+            if let Some((marker, length, info)) = fence_marker(line)
+                && (marker != '`' || !info.contains('`'))
+            {
+                fence = Some((marker, length));
+                output.push_str(line);
+                output.push('\n');
+                continue;
+            }
+            output.push_str(line);
+            output.push('\n');
+            let importable = visible(line, &mut false, false);
+            {
+                for capture in import.captures_iter(&importable) {
+                    let name = capture[1].trim_matches('"').trim_end_matches([',', ';', ')']);
+                    let target = if let Some(home) = name.strip_prefix("~/") {
+                        self.home.unwrap_or(Path::new("")).join(home)
+                    } else {
+                        path.parent().unwrap_or(allowed).join(name)
+                    };
+                    match self.read(&target, allowed, depth + 1) {
+                        Ok(body) if !body.trim().is_empty() => {
+                            output.push_str(&format!("\nImported instructions from {}:\n{}\n", target.display(), body))
+                        }
+                        Ok(_) => {}
+                        Err(error) => {
+                            output.push_str(&format!("\n[Instruction import unavailable: {name}: {error}]\n"))
+                        }
+                    }
+                }
+            }
+        }
+        Ok(output.trim_end().to_owned())
+    }
+}
+pub fn load(cwd: &Path, home: Option<&Path>) -> Vec<Instructions> {
+    let mut loader = Loader { seen: HashSet::new(), bytes: 0, home };
+    let mut result = Vec::new();
+    if let Some(root) = home.map(|home| home.join(brand::DIR))
+        && let Ok(allowed) = root.canonicalize()
+        && let Ok(text) = loader.read(&root.join(brand::INSTRUCTIONS), &allowed, 0)
+        && !text.trim().is_empty()
+    {
+        result.push(Instructions { path: root.join(brand::INSTRUCTIONS), scope: Scope::User, text });
+    }
+    let trusted = trust_root(cwd);
+    let mut ancestors: Vec<_> = cwd.ancestors().collect();
+    ancestors.reverse();
+    for directory in ancestors {
+        for name in NAMES {
+            let path = directory.join(name);
+            if !path.is_file() || network(&path) {
+                continue;
+            }
+            let allowed = if directory.starts_with(&trusted) {
+                trusted.clone()
+            } else {
+                directory.canonicalize().unwrap_or_else(|_| directory.into())
+            };
+            let scope = if name.ends_with(".local.md") { Scope::Local } else { Scope::Project };
+            match loader.read(&path, &allowed, 0) {
+                Ok(text) if !text.trim().is_empty() => result.push(Instructions { path, scope, text }),
+                Ok(_) => {}
+                Err(error) => {
+                    let text = format!("[Not loaded: {error}. Tell the user so they can shorten it.]");
+                    result.push(Instructions { path, scope, text });
+                }
+            }
+        }
+    }
+    result
+}
+pub fn nested(cwd: &Path, home: Option<&Path>) -> Vec<super::rules::Rule> {
+    let trusted = trust_root(cwd);
+    let mut paths: Vec<_> = ignore::WalkBuilder::new(cwd)
+        .hidden(false)
+        .max_depth(Some(32))
+        .filter_entry(|e| {
+            !e.file_type().is_some_and(|t| t.is_dir())
+                || !matches!(e.file_name().to_str(), Some(".git" | "node_modules" | "target"))
+        })
+        .build()
+        .filter_map(Result::ok)
+        .filter(|e| {
+            e.file_type().is_some_and(|t| t.is_file())
+                && matches!(e.file_name().to_str(), Some(brand::INSTRUCTIONS | brand::LOCAL_INSTRUCTIONS | "AGENTS.md"))
+        })
+        .map(|e| e.into_path())
+        .collect();
+    paths.sort();
+    let mut result = Vec::new();
+    for path in paths {
+        let Some(mut base) = path.parent() else {
+            continue;
+        };
+        if matches!(base.file_name().and_then(|s| s.to_str()), Some(brand::DIR)) {
+            base = base.parent().unwrap_or(base);
+        }
+        if base == cwd {
+            continue;
+        }
+        let Ok(relative) = base.strip_prefix(cwd) else {
+            continue;
+        };
+        let mut loader = Loader { seen: HashSet::new(), bytes: 0, home };
+        let (text, error) = match loader.read(&path, &trusted, 0) {
+            Ok(text) => (text, None),
+            Err(error) => (String::new(), Some(error)),
+        };
+        let pattern = format!("{}/**", relative.to_string_lossy().replace('\\', "/"));
+        result.push(super::rules::Rule { path, base: Some(cwd.to_path_buf()), text, patterns: vec![pattern], error });
+    }
+    result
+}
+
+fn visible(line: &str, comment: &mut bool, keep_code: bool) -> String {
+    let mut output = String::new();
+    let mut ticks = 0;
+    let mut offset = 0;
+    while offset < line.len() {
+        let tail = &line[offset..];
+        if *comment {
+            if let Some(end) = tail.find("-->") {
+                offset += end + 3;
+                *comment = false;
+            } else {
+                break;
+            }
+        } else if ticks == 0 && tail.starts_with("<!--") {
+            *comment = true;
+            offset += 4;
+        } else if tail.starts_with('`') {
+            let count = tail.bytes().take_while(|c| *c == b'`').count();
+            if ticks == 0 {
+                ticks = count;
+            } else if ticks == count {
+                ticks = 0;
+            }
+            if keep_code {
+                output.push_str(&tail[..count]);
+            } else {
+                output.push(' ');
+            }
+            offset += count;
+        } else {
+            let Some(c) = tail.chars().next() else { break };
+            if keep_code || ticks == 0 {
+                output.push(c);
+            } else {
+                output.push(' ');
+            }
+            offset += c.len_utf8();
+        }
+    }
+    output
+}
+
+#[cfg(test)]
+mod regression_tests {
+    use super::*;
+    #[test]
+    fn inline_multiline_comments_and_code_never_expand_imports() {
+        let repo = tempfile::tempdir().expect("repo");
+        std::fs::write(repo.path().join("hidden.md"), "SHOULD_NOT_BE_IMPORTED").expect("hidden");
+        std::fs::write(repo.path().join(brand::INSTRUCTIONS),
+            "Visible. <!-- @hidden.md --> More.\n<!-- multiline\n```\n@hidden.md\n-->\n``@hidden.md`` and `<!-- @hidden.md -->`\nAfter.").expect("instructions");
+        let loaded = load(repo.path(), None);
+        let text = loaded.iter().map(|item| item.text.as_str()).collect::<Vec<_>>().join("\n");
+        assert!(text.contains("Visible.  More."));
+        assert!(text.contains("After."));
+        assert!(text.contains("`<!-- @hidden.md -->`"));
+        assert!(!text.contains("SHOULD_NOT_BE_IMPORTED"));
+        assert!(!text.contains("Imported instructions"));
+    }
+
+    #[test]
+    fn an_instruction_file_too_big_to_load_is_named_instead_of_dropped() {
+        let repo = tempfile::tempdir().expect("repo");
+        std::fs::write(repo.path().join(brand::INSTRUCTIONS), "x".repeat(MAX_FILE + 1)).expect("instructions");
+        let loaded = load(repo.path(), None);
+        assert_eq!(loaded.len(), 1);
+        assert!(loaded[0].text.starts_with("[Not loaded:") && loaded[0].text.len() < 300, "{}", &loaded[0].text[..80]);
+    }
+}
+
+fn fence_marker(line: &str) -> Option<(char, usize, &str)> {
+    let trimmed = line.trim_start_matches(' ');
+    if line.len() - trimmed.len() > 3 {
+        return None;
+    }
+    let marker = trimmed.chars().next()?;
+    if !matches!(marker, '`' | '~') {
+        return None;
+    }
+    let length = trimmed.chars().take_while(|c| *c == marker).count();
+    (length >= 3).then(|| (marker, length, &trimmed[length..]))
+}
+#[cfg(test)]
+mod fence_tests {
+    use super::*;
+    #[test]
+    fn shorter_or_annotated_fences_do_not_end_code_or_expand_imports() {
+        let repo = tempfile::tempdir().expect("repo");
+        std::fs::write(repo.path().join("hidden.md"), "SHOULD_NOT_BE_IMPORTED").expect("hidden");
+        std::fs::write(
+            repo.path().join(brand::INSTRUCTIONS),
+            "````md\n```\n@hidden.md\n````not-a-closer\n@hidden.md\n````\nAfter.",
+        )
+        .expect("instructions");
+        let text = load(repo.path(), None).into_iter().map(|item| item.text).collect::<Vec<_>>().join("\n");
+        assert!(text.contains("After."));
+        assert!(!text.contains("SHOULD_NOT_BE_IMPORTED"));
+    }
+}

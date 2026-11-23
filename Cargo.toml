@@ -1,0 +1,69 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "xtask"]
+
+[workspace.package]
+version = "0.0.1"
+license = "MIT"
+edition = "2024"
+publish = false
+authors = ["brunozilio"]
+rust-version = "1.97"
+
+[workspace.dependencies]
+brand = { path = "crates/brand" }
+content = { path = "crates/content" }
+script = { path = "crates/script" }
+domain = { path = "crates/domain" }
+app = { path = "crates/app", default-features = false }
+platform = { path = "crates/platform" }
+agent-engine = { path = "crates/agent-engine", default-features = false }
+language-servers = { path = "crates/language-servers" }
+llm-providers = { path = "crates/llm-providers", default-features = false }
+code-map = { path = "crates/code-map" }
+console = { path = "crates/console" }
+page = { path = "crates/page" }
+tunnel = { path = "crates/tunnel" }
+relay = { path = "crates/relay" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["v4", "serde"] }
+tracing = "0.1"
+tempfile = "3"
+crossbeam-channel = "0.5"
+rusqlite = { version = "0.41.1", default-features = false, features = ["bundled"] }
+base64 = "0.23"
+sha2 = "0.10"
+url = "2"
+flate2 = "1"
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2"] }
+ignore = "0.4"
+getrandom = "0.3"
+tokio = "1"
+tokio-util = { version = "0.7", default-features = false }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "rustls-tls-native-roots"] }
+jiff = "0.2.38"
+axum = "0.8"
+futures-util = { version = "0.3", default-features = false, features = ["std", "sink"] }
+tokio-tungstenite = "0.29"
+tower = "0.5"
+http-body-util = "0.1"
+keyring = { version = "3.6.3", default-features = false, features = ["apple-native", "windows-native", "async-secret-service", "async-io", "crypto-rust"] }
+
+[workspace.lints.rust]
+unsafe_code = "warn"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+expect_used = "warn"
+too_many_lines = "warn"
+cognitive_complexity = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
