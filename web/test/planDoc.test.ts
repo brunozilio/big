@@ -62,3 +62,13 @@ describe('destino do plano', () => {
     expect(planDestination(itemWith([steps[0], { ...steps[1], state: 'passed' }]), 'plan')).toBeNull()
   })
 })
+
+describe('o modal acompanha o workflow', () => {
+  test('quem olhava a etapa atual vai para a próxima quando ela começa', async () => {
+    const { followed } = await import('../src/screens/items/ItemModal')
+    expect(followed('plan', 'ticket', 'plan')).toBe('ticket')
+    expect(followed('plan', 'ticket', 'review')).toBeNull()
+    expect(followed('plan', 'plan', 'plan')).toBeNull()
+    expect(followed('plan', null, 'plan')).toBeNull()
+  })
+})

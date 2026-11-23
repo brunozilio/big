@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
 import { mins } from '@/api/clock'
 import type { Block, Item, StepState, StepView } from '@/api/contract'
@@ -17,7 +17,23 @@ import { springPop, tweenClose } from '@/ui/motion'
 import { Dialog, Menu, MenuContent, MenuItem, MenuTrigger } from '@/ui/overlay'
 import { ChangeChip, IssueKey, Node, nodeState, RowRight } from './parts'
 
+export function followed(before: string | null, now: string | null, viewing: string | null): string | null {
+  return before && now && now !== before && viewing === before ? now : null
+}
+
+function useFollowCurrent(it: Item | null, step: string | null, onStep: (s: string) => void) {
+  const was = useRef<{ id: string; current: string | null } | null>(null)
+  const current = it?.current ?? null
+  useEffect(() => {
+    const before = was.current && was.current.id === it?.id ? was.current.current : null
+    was.current = it ? { id: it.id, current } : null
+    const next = followed(before, current, step)
+    if (next) onStep(next)
+  }, [it?.id, current])
+}
+
 export function ItemModal({ it, step, onStep, onClose, onConnect }: { it: Item | null; step: string | null; onStep: (s: string) => void; onClose: () => void; onConnect: (provider: string) => void }) {
+  useFollowCurrent(it, step, onStep)
   return (
     <Dialog open={!!it} onOpenChange={(o) => !o && onClose()} size="xl" bare title={it ? `${it.issue?.key ?? ''} ${it.title}` : ''}>
       {it && (
