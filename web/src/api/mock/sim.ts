@@ -61,7 +61,7 @@ export interface SimItem {
   model: string
 }
 
-export interface ConnectionState { id: string; provider: string; label: string; account: string; capabilities: string[] }
+export interface ConnectionState { id: string; provider: string; label: string; account: string; capabilities: string[]; status?: 'ok' | 'error' }
 
 export const store = { clock: 0, items: [] as SimItem[], connections: [] as ConnectionState[] }
 

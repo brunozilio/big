@@ -1,14 +1,17 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { api } from '@/api'
-import type { SignInPoll, SignInStart } from '@/api/contract'
+import type { Connection, FormField, SignInPoll, SignInStart } from '@/api/contract'
 import { errorText } from '@/api/store'
 import { Button } from '@/ui/button'
+import { cn } from '@/ui/cn'
 import { Spinner } from '@/ui/display'
-import { Input } from '@/ui/form'
+import { LogoTile } from '@/ui/domain'
+import { Field, Input } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 
 export type DeviceStart = Extract<SignInStart, { kind: 'device' }>
 export type RedirectStart = Extract<SignInStart, { kind: 'redirect' }>
+export type ChoosePoll = Extract<SignInPoll, { state: 'choose' }>
 
 export function usePolling(flow: string | null, interval: number, onAnswer: (answer: SignInPoll) => void, onError: (message: string) => void) {
   const latest = useRef({ onAnswer, onError })
@@ -35,117 +38,151 @@ export function usePolling(flow: string | null, interval: number, onAnswer: (ans
   }, [flow, interval])
 }
 
-export function DeviceSignIn({ site, start }: { site: string; start: DeviceStart }) {
+function shortUrl(url: string) {
+  return url.replace(/^https?:\/\//, '').replace(/\?.*$/, '').replace(/\/$/, '')
+}
+
+function Panel({ children }: { children: ReactNode }) {
+  return <div className="space-y-3 rounded-card bg-subtle px-4 py-4" role="status" aria-live="polite">{children}</div>
+}
+
+function Waiting({ text }: { text: string }) {
+  return (
+    <p className="flex items-center gap-2 text-sm text-muted">
+      <Spinner size={14} />
+      {text}
+    </p>
+  )
+}
+
+function OpenLink({ url }: { url: string }) {
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 text-base font-medium text-fg underline decoration-line-strong underline-offset-4">
+      <span className="truncate">{shortUrl(url)}</span> <Icon name="arrowUpRight" size={14} />
+    </a>
+  )
+}
+
+export function ConnectHeader({ logo, name, description }: { logo: string; name: string; description: string }) {
+  return (
+    <div className="flex items-center gap-3">
+      <LogoTile logo={logo} name={name} size={44} />
+      <div className="min-w-0">
+        <p className="text-md font-medium text-fg">{name}</p>
+        <p className="truncate text-base text-muted">{description}</p>
+      </div>
+    </div>
+  )
+}
+
+export function ConnectedAccounts({ accounts, onDisconnect }: { accounts: Connection[]; onDisconnect: (id: string) => void }) {
+  if (accounts.length === 0) return null
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-fg2">Contas conectadas</p>
+      <ul className="overflow-hidden rounded-card bg-surface shadow-card">
+        {accounts.map((c) => (
+          <li key={c.id} className="flex h-11 items-center gap-3 px-3.5 [&+&]:border-t">
+            <span className={cn('flex size-[18px] items-center justify-center rounded-full text-white', c.status === 'error' ? 'bg-danger' : 'bg-success')}>
+              <Icon name={c.status === 'error' ? 'alert' : 'check'} size={11} strokeWidth={2.6} />
+            </span>
+            <span className="min-w-0 flex-1 truncate text-base text-fg">{c.account || c.label}</span>
+            <Button size="sm" variant="ghost" onClick={() => onDisconnect(c.id)}>Desconectar</Button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export function SignInFields({ fields, values, onChange }: { fields: FormField[]; values: Record<string, string>; onChange: (name: string, value: string) => void }) {
+  if (fields.length === 0) return null
+  return (
+    <div className="space-y-3">
+      {fields.map((f) => (
+        <Field key={f.name} label={f.label}>
+          <Input value={values[f.name] ?? ''} placeholder={f.placeholder} onChange={(e) => onChange(f.name, e.target.value)} className={f.mono ? 'font-mono' : undefined} />
+        </Field>
+      ))}
+    </div>
+  )
+}
+
+export function DeviceCode({ site, start }: { site: string; start: DeviceStart }) {
   const [copied, setCopied] = useState(false)
   const copy = () => {
     navigator.clipboard?.writeText(start.code).then(() => setCopied(true), () => undefined)
   }
   return (
-    <div className="space-y-3 rounded-card bg-subtle px-4 py-4" role="status" aria-live="polite">
+    <Panel>
       <p className="text-sm text-fg2">Abra a página {site}, entre com a sua conta e digite o código:</p>
       <div className="flex items-center gap-2">
         <code className="select-all rounded-md bg-surface px-3 py-1.5 font-mono text-lg font-semibold tracking-widest text-fg" aria-label="Código de verificação">
           {start.code}
         </code>
         <Button size="sm" icon={<Icon name={copied ? 'check' : 'copy'} size={14} />} onClick={copy}>
-          Copiar
+          {copied ? 'Copiado' : 'Copiar'}
         </Button>
       </div>
-      <a href={start.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-base font-medium text-fg underline decoration-line-strong underline-offset-4">
-        {start.url.replace(/^https:\/\//, '').replace(/\/$/, '').replace(/\?.*$/, '')} <Icon name="arrowUpRight" size={14} />
-      </a>
-      <p className="text-sm text-muted">Aguardando a autorização…</p>
-    </div>
+      <OpenLink url={start.url} />
+      <Waiting text="Aguardando a autorização…" />
+    </Panel>
   )
 }
 
-export function BrowserWaiting({ site }: { site: string }) {
-  return (
-    <div className="flex items-center gap-3 rounded-card bg-subtle px-4 py-4 text-base text-fg2">
-      <Spinner size={16} />
-      Autorize o acesso na página {site} que abriu no navegador…
-    </div>
-  )
-}
-
-function PasteSteps({ start, onPasted }: { start: RedirectStart; onPasted: (answer: SignInPoll) => void }) {
+export function BrowserWait({ site, start, pasted, onPasted }: { site: string; start: RedirectStart; pasted: string; onPasted: (value: string) => void }) {
   const inputId = useId()
-  const [pasted, setPasted] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [refusal, setRefusal] = useState('')
-  const finish = () => {
-    setBusy(true)
-    setRefusal('')
-    api()
-      .pollSignIn({ flow: start.flow, code: pasted.trim() })
-      .then(onPasted)
-      .catch((e: unknown) => setRefusal(errorText(e)))
-      .finally(() => setBusy(false))
-  }
   return (
-    <div className="space-y-3">
-      <Button asChild size="sm" variant="primary">
-        <a href={start.url} target="_blank" rel="noreferrer">
-          <Icon name="external" size={14} /> Abrir página de login
-        </a>
-      </Button>
-      {start.paste && (
-        <div className="space-y-2">
-          <label htmlFor={inputId} className="block font-medium text-fg">
-            Cole aqui o endereço para onde o navegador foi levado (ou o código mostrado)
-          </label>
-          <div className="flex gap-2">
-            <Input id={inputId} className="flex-1" value={pasted} onChange={(e) => setPasted(e.target.value)} placeholder="http://localhost:…/callback?code=…" />
-            <Button disabled={!pasted.trim() || busy} loading={busy} onClick={finish}>
-              Concluir
-            </Button>
-          </div>
+    <Panel>
+      <p className="text-sm text-fg2">Autorize o acesso na página {site} que abriu no navegador.</p>
+      <OpenLink url={start.url} />
+      {start.paste ? (
+        <div className="space-y-1.5">
+          <label htmlFor={inputId} className="block text-sm font-medium text-fg2">Código ou endereço de retorno</label>
+          <Input id={inputId} data-paste value={pasted} onChange={(e) => onPasted(e.target.value)} placeholder="http://localhost:…/callback?code=…" className="bg-surface font-mono" />
         </div>
+      ) : (
+        <Waiting text="Aguardando a autorização…" />
       )}
-      {refusal && (
-        <p role="alert" className="flex items-start gap-1.5 text-danger-fg">
-          <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
-          {refusal}
-        </p>
-      )}
+    </Panel>
+  )
+}
+
+export function AccountChoice({ poll, choice, onChoice }: { poll: ChoosePoll; choice: string | null; onChoice: (id: string) => void }) {
+  return (
+    <div className="space-y-2" role="radiogroup" aria-label={poll.title}>
+      <p className="text-sm font-medium text-fg2">{poll.title}</p>
+      {poll.choices.map((o) => (
+        <button key={o.id} type="button" role="radio" aria-checked={choice === o.id} data-choice onClick={() => onChoice(o.id)} className={cn('flex w-full items-center gap-3 rounded-control px-3 py-2.5 text-left shadow-card transition-colors', choice === o.id ? 'bg-active' : 'bg-surface hover:bg-hover')}>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-base text-fg">{o.label}</span>
+            {o.detail && <span className="block truncate text-sm text-muted">{o.detail}</span>}
+          </span>
+          {choice === o.id && <Icon name="check" size={16} className="text-fg" />}
+        </button>
+      ))}
     </div>
   )
 }
 
-export type AiState = { kind: 'idle' } | { kind: 'started'; start: SignInStart } | { kind: 'done' } | { kind: 'failed'; message: string }
-
-export function ProviderSignIn({ name, state, starting, onStart, onAnswer }: { name: string; state: AiState; starting: boolean; onStart: () => void; onAnswer: (answer: SignInPoll) => void }) {
+export function SignedIn({ connection }: { connection: Connection }) {
   return (
-    <div className="space-y-3">
-      <div className="space-y-2">
-        <span className="block text-base font-medium text-fg">Conta {name}</span>
-        <div className="flex flex-wrap items-center gap-3">
-          <Button onClick={onStart} loading={starting && state.kind !== 'started'}>
-            Entrar com {name}
-          </Button>
-        </div>
-      </div>
-      {state.kind !== 'idle' && (
-        <div role="status" className="rounded-control bg-inset/70 px-3 py-2.5 text-sm text-fg2">
-          {state.kind === 'done' ? (
-            <span className="flex items-center gap-1.5 text-success-fg">
-              <Icon name="checkCircle" size={15} /> Entrada concluída. Salve para criar a conta.
-            </span>
-          ) : state.kind === 'failed' ? (
-            <span className="text-danger-fg">{state.message || `Não foi possível entrar com ${name}.`}</span>
-          ) : state.start.kind === 'device' ? (
-            <span>
-              Abra{' '}
-              <a className="underline" href={state.start.url} target="_blank" rel="noreferrer">
-                {state.start.url}
-              </a>{' '}
-              e informe o código <strong className="font-mono">{state.start.code}</strong>. Esta janela atualiza sozinha quando você terminar.
-            </span>
-          ) : (
-            <PasteSteps start={state.start} onPasted={onAnswer} />
-          )}
-        </div>
-      )}
-    </div>
+    <Panel>
+      <p className="flex items-center gap-2 text-base font-medium text-success-fg">
+        <Icon name="checkCircle" size={18} />
+        Conectado
+      </p>
+      <p className="truncate text-base text-fg">{connection.account || connection.label}</p>
+    </Panel>
+  )
+}
+
+export function SignInError({ message }: { message: string | null }) {
+  if (!message) return null
+  return (
+    <p role="alert" className="flex items-start gap-1.5 rounded-control bg-danger-soft px-3 py-2.5 text-sm text-danger-fg">
+      <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
+      {message}
+    </p>
   )
 }

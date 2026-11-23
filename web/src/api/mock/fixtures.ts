@@ -1,7 +1,7 @@
 import type { Agent, Model, Person, Provider } from '../contract'
 import type { ConnectionState, Need } from './sim'
 
-export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]; choose?: { title: string; options: { id: string; label: string; detail: string }[] } })[] = [
+export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]; paste?: boolean; choose?: { title: string; options: { id: string; label: string; detail: string }[] } })[] = [
   { key: 'github', name: 'GitHub', group: 'Código', description: 'Sua conta GitHub', logo: 'github', button: 'Entrar com GitHub', site: 'do GitHub', signIn: 'device', fields: [], multiple: true, capabilities: ['code'], accounts: ['acme · 1 repositório'], choose: { title: 'Organização', options: [{ id: 'acme', label: 'acme', detail: 'acme/checkout, acme/web, acme/infra' }] } },
   { key: 'jira', name: 'Jira', group: 'Tarefas', description: 'Sua conta Atlassian', logo: 'jira', button: 'Continuar na Atlassian', site: 'da Atlassian', signIn: 'oauth', fields: [], multiple: true, capabilities: ['tracker'], accounts: ['acme.atlassian.net'], choose: { title: 'Site do Jira', options: [{ id: 'acme', label: 'acme.atlassian.net', detail: 'Projetos APP, OPS' }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: 'Projeto LAB' }] } },
   {
@@ -16,7 +16,7 @@ export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]
     choose: { title: 'Conta e papel', options: [{ id: 'prod', label: 'acme-prod · 1234-5678-9012', detail: 'DeployRole' }, { id: 'stg', label: 'acme-staging · 2109-8765-4321', detail: 'DeployRole' }] },
   },
   { key: 'claude', name: 'Claude', group: 'Provedores de IA', description: 'Sua conta Claude', logo: 'claude', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Claude Team · ti@acme.com.br'] },
-  { key: 'chatgpt', name: 'ChatGPT', group: 'Provedores de IA', description: 'Sua conta ChatGPT', logo: 'chatgpt', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['ChatGPT Business · ti@acme.com.br'] },
+  { key: 'chatgpt', name: 'ChatGPT', group: 'Provedores de IA', description: 'Sua conta ChatGPT', logo: 'chatgpt', signIn: 'browser', paste: true, fields: [], multiple: false, capabilities: ['ai'], accounts: ['ChatGPT Business · ti@acme.com.br'] },
   { key: 'copilot', name: 'GitHub Copilot', group: 'Provedores de IA', description: 'Sua conta GitHub Copilot', logo: 'copilot', signIn: 'device', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Copilot Business · acme'] },
   { key: 'grok', name: 'Grok', group: 'Provedores de IA', description: 'Sua conta Grok', logo: 'grok', signIn: 'device', fields: [], multiple: false, capabilities: ['ai'], accounts: ['SuperGrok · bruno@acme.com.br'] },
   { key: 'kiro', name: 'Kiro', group: 'Provedores de IA', description: 'Sua conta Kiro', logo: 'kiro', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Kiro Pro · AWS IAM Identity Center'] },
@@ -27,7 +27,7 @@ export const INITIAL_CONNECTIONS: ConnectionState[] = [
   { id: 'c-github', provider: 'github', label: 'acme', account: 'acme · 3 repositórios', capabilities: ['code'] },
   { id: 'c-jira', provider: 'jira', label: 'acme.atlassian.net', account: 'acme.atlassian.net · projeto APP', capabilities: ['tracker'] },
   { id: 'c-claude', provider: 'claude', label: 'Claude Team', account: 'Claude Team · ti@acme.com.br', capabilities: ['ai'] },
-  { id: 'c-copilot', provider: 'copilot', label: 'Copilot Business', account: 'Copilot Business · acme', capabilities: ['ai'] },
+  { id: 'c-copilot', provider: 'copilot', label: 'Copilot Business', account: 'Copilot Business · acme', capabilities: ['ai'], status: 'error' },
 ]
 
 export const NEED_PROVIDER: Record<Need, string> = { ai: 'claude', tracker: 'jira', code: 'github', cloud: 'aws' }

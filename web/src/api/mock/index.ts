@@ -15,8 +15,8 @@ export interface MockOptions {
 }
 
 function wireConnections(): Connections {
-  const providers = PROVIDERS.map(({ capabilities, accounts: _a, choose: _h, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
-  return { providers, connections: store.connections.map((c) => ({ ...c, status: 'ok' })) }
+  const providers = PROVIDERS.map(({ capabilities, accounts: _a, choose: _h, paste: _p, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
+  return { providers, connections: store.connections.map((c) => ({ ...c, status: c.status ?? 'ok' })) }
 }
 
 export function wireModels(): Models {
@@ -142,7 +142,7 @@ export function mockApi(options: MockOptions = {}): Api {
         const url = provider === 'aws' ? 'https://device.sso.us-east-1.amazonaws.com/' : provider === 'grok' ? 'https://accounts.x.ai/device' : 'https://github.com/login/device'
         return { flow, kind: 'device', url, code: provider === 'aws' ? 'KQTX-WMPB' : 'WDJB-MJHT', expiresIn: 900, interval: 1 }
       }
-      return { flow, kind: 'redirect', url: provider === 'jira' ? 'https://auth.atlassian.com/authorize' : `https://${provider}.example/oauth/authorize`, paste: p.signIn === 'browser' }
+      return { flow, kind: 'redirect', url: provider === 'jira' ? 'https://auth.atlassian.com/authorize' : `https://${provider}.example/oauth/authorize`, paste: !!p.paste }
     }, 500)
 
   const finish = (f: Flow, choice: string | null): Connection => {
@@ -155,6 +155,14 @@ export function mockApi(options: MockOptions = {}): Api {
     return { ...c, status: 'ok' }
   }
 
+  const failing = () => {
+    try {
+      return globalThis.localStorage?.getItem('mock:signIn') === 'failed'
+    } catch {
+      return false
+    }
+  }
+
   const pollSignIn = (req: { flow: string; code?: string; choice?: string }): Promise<SignInPoll> =>
     wait(() => {
       const f = flows.get(req.flow)
@@ -163,6 +171,10 @@ export function mockApi(options: MockOptions = {}): Api {
       f.polls++
       const ready = req.code !== undefined || f.polls >= 3
       if (!ready && req.choice === undefined) return { state: 'pending' }
+      if (failing()) {
+        flows.delete(req.flow)
+        return { state: 'failed', message: `A entrada no ${p?.name ?? f.provider} foi recusada.` }
+      }
       if (p?.choose && req.choice === undefined) return { state: 'choose', title: p.choose.title, choices: p.choose.options }
       flows.delete(req.flow)
       return { state: 'done', connection: finish(f, req.choice ?? null) }
