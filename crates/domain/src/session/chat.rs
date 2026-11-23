@@ -101,7 +101,7 @@ mod tests {
         }
         let ask = AgentAsk {
             id: AskId("a1".into()),
-            kind: AskKind::Permission { tool: "Bash".into(), subject: "ls".into(), rememberable: true, rule: None },
+            kind: AskKind::Permission { tool: "Bash".into(), subject: "ls".into(), rememberable: true },
         };
         transcript.begin();
         transcript.apply(&EngineEvent::Asked(ask));

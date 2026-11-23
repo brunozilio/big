@@ -6,7 +6,6 @@ use platform::sync::Locked;
 
 use super::{McpServer, McpSources, ServerSpec};
 use crate::model::http::Http;
-use crate::tools::host_judge::HostJudge;
 
 #[derive(Default)]
 pub struct McpPool {
@@ -27,12 +26,11 @@ impl McpPool {
         sources: &McpSources,
         http: &Arc<dyn Http>,
         stop: &platform::Stop,
-        judge: &Arc<HostJudge>,
     ) -> Vec<Arc<McpServer>> {
         let mut connected = super::in_process(request, stop);
         let mut previous = std::mem::take(&mut *self.open.locked());
         let mut kept = Vec::new();
-        for spec in super::wanted(request, sources, judge) {
+        for spec in super::wanted(request, sources) {
             if stop.load(Ordering::Relaxed) {
                 break;
             }

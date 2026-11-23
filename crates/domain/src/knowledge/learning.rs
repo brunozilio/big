@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use crate::permission_rules::RuleKind;
 use crate::{Decision, EngineEvent};
 
 const ENOUGH: usize = 2;
@@ -11,9 +10,6 @@ pub fn offered(proposal: &Proposal) -> String {
     let what = match proposal.kind {
         Lesson::Memory => format!("remember \"{}\"", proposal.text),
         Lesson::Skill => format!("write the skill `{}`: {}", proposal.name, proposal.text),
-        Lesson::Rule => {
-            format!("keep the {} rule {}", if proposal.name == "deny" { "deny" } else { "allow" }, proposal.text)
-        }
         Lesson::Instruction => format!("add to {}: {}", brand::INSTRUCTIONS, proposal.text),
     };
     format!("Lesson from this run: {what}\nWhy: {}\n/learn keep saves it, /learn skip drops it.", proposal.why)
@@ -61,7 +57,6 @@ pub fn brief(signals: &[String]) -> String {
 pub enum Lesson {
     Memory,
     Skill,
-    Rule,
     Instruction,
 }
 
@@ -76,7 +71,6 @@ pub struct Proposal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Keeping {
     Remember(String),
-    Rule { kind: RuleKind, rule: String },
     Instruction(String),
     Ask(String),
 }
@@ -108,10 +102,6 @@ pub fn with_learned(instructions: &str, line: &str) -> Result<String, String> {
 pub fn keeping(proposal: &Proposal) -> Keeping {
     match proposal.kind {
         Lesson::Memory => Keeping::Remember(proposal.text.clone()),
-        Lesson::Rule => {
-            let kind = if proposal.name == "deny" { RuleKind::Deny } else { RuleKind::Allow };
-            Keeping::Rule { kind, rule: proposal.text.clone() }
-        }
         Lesson::Instruction => Keeping::Instruction(proposal.text.clone()),
         Lesson::Skill => Keeping::Ask(format!(
             "Create or update the skill `{}` for this: {}\n\nLoad the skill-creator skill and follow it.",
@@ -173,23 +163,15 @@ mod tests {
         let proposal = parse(reply).expect("proposal");
         assert_eq!(proposal.kind, Lesson::Memory);
         assert_eq!(proposal.text, "This project uses pnpm, never npm.");
-        assert_eq!(parse(r#"{"kind": "rule", "name": "", "text": " ", "why": ""}"#), None);
+        assert_eq!(parse(r#"{"kind": "memory", "name": "", "text": " ", "why": ""}"#), None);
         assert_eq!(parse("none"), None);
     }
 
     #[test]
-    fn keeping_a_lesson_remembers_it_keeps_a_rule_or_asks_for_the_skill() {
+    fn keeping_a_lesson_remembers_it_or_asks_for_the_skill() {
         let lesson =
             |kind, name: &str, text: &str| Proposal { kind, name: name.into(), text: text.into(), why: String::new() };
         assert_eq!(keeping(&lesson(Lesson::Memory, "pm", "Use pnpm.")), Keeping::Remember("Use pnpm.".into()));
-        assert_eq!(
-            keeping(&lesson(Lesson::Rule, "deny", "Bash(git push:*)")),
-            Keeping::Rule { kind: RuleKind::Deny, rule: "Bash(git push:*)".into() }
-        );
-        assert_eq!(
-            keeping(&lesson(Lesson::Rule, "whatever", "Bash(ls)")),
-            Keeping::Rule { kind: RuleKind::Allow, rule: "Bash(ls)".into() }
-        );
         let Keeping::Ask(prompt) = keeping(&lesson(Lesson::Skill, "release", "Tag then publish.")) else {
             panic!("a skill is asked for")
         };
@@ -220,13 +202,13 @@ mod tests {
     #[test]
     fn a_lesson_says_what_would_be_kept_and_why() {
         let proposal = Proposal {
-            kind: Lesson::Rule,
-            name: "deny".into(),
-            text: "Bash(git push:*)".into(),
+            kind: Lesson::Memory,
+            name: "push".into(),
+            text: "Never push without asking.".into(),
             why: "you refused every push".into(),
         };
         let text = offered(&proposal);
-        assert!(text.starts_with("Lesson from this run: keep the deny rule Bash(git push:*)"), "{text}");
+        assert!(text.starts_with("Lesson from this run: remember \"Never push without asking.\""), "{text}");
         assert!(text.contains("Why: you refused every push") && text.contains("/learn keep"));
     }
 }

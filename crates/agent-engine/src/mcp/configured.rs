@@ -17,62 +17,13 @@ pub struct McpSources {
     pub approval: McpApproval,
     #[serde(default)]
     pub scripts: crate::tools::script_tool::ScriptGrants,
-    #[serde(default)]
-    pub trust: domain::trust::Trust,
-    #[serde(default)]
-    pub sandbox: Option<domain::sandbox::Sandbox>,
-}
-
-fn places<'a>(
-    sources: &'a McpSources,
-    cwd: &'a Path,
-    temp: &'a [PathBuf],
-    data: &'a [PathBuf],
-) -> domain::sandbox::Places<'a> {
-    domain::sandbox::Places {
-        project: cwd,
-        added: &[],
-        repository: None,
-        temp,
-        home: sources.home.as_deref(),
-        settings_dir: brand::DIR,
-        data,
-    }
-}
-
-fn confinement(sources: &McpSources, cwd: &Path) -> Option<platform::sandbox::Confinement> {
-    let sandbox = sources.sandbox.as_ref()?;
-    let (temp, data) = (crate::tools::temp_folders(), crate::tools::data_folders());
-    Some(crate::tools::confinement_of(sandbox, &places(sources, cwd, &temp, &data)))
-}
-
-pub(super) fn settled(server: ServerSpec, owner: bool, cwd: &Path, sources: &McpSources) -> ServerSpec {
-    settled_on(server, owner, cwd, sources, &platform::sandbox::support())
-}
-
-pub(super) fn settled_on(
-    server: ServerSpec,
-    owner: bool,
-    cwd: &Path,
-    sources: &McpSources,
-    support: &platform::sandbox::Support,
-) -> ServerSpec {
-    let ServerSpec::Stdio { name, command, args, env, sandbox } = server else { return server };
-    let (temp, data) = (crate::tools::temp_folders(), crate::tools::data_folders());
-    let places = places(sources, cwd, &temp, &data);
-    let settling = super::stdio_sandbox::Settled { sandbox: sources.sandbox.as_ref(), places: &places, support };
-    ServerSpec::Stdio { name, command, args, env, sandbox: sandbox.settled(owner, &settling) }
 }
 
 pub fn configured(cwd: &Path, sources: &McpSources) -> Vec<ServerSpec> {
-    configured_on(cwd, sources, &platform::sandbox::support())
-}
-
-fn configured_on(cwd: &Path, sources: &McpSources, support: &platform::sandbox::Support) -> Vec<ServerSpec> {
     origins(cwd, sources)
         .into_iter()
         .filter(|(origin, server)| McpState::of(origin, server.name(), &sources.approval) == McpState::Ready)
-        .map(|(origin, server)| settled_on(server, origin == McpOrigin::User, cwd, sources, support))
+        .map(|(_, server)| server)
         .collect()
 }
 
@@ -97,15 +48,6 @@ pub fn listing(folder: Folder<'_>) -> Result<McpListing, crate::brief::BriefErro
                 listing
                     .unreadable
                     .extend(left_out.map(|left| McpUnreadable::left_out(path.clone(), McpOrigin::Project, left)));
-                if !crate::trust::Gate::at(cwd, home, sources.trust).honours(&path) {
-                    let free = found.servers.into_iter().filter(|server| is_free_name(server.name()));
-                    listing.servers.extend(free.map(|server| McpServerInfo {
-                        name: server.name().to_owned(),
-                        origin: McpOrigin::Project,
-                        target: server.target(),
-                        state: McpState::Untrusted,
-                    }));
-                }
             }
         }
     }
@@ -135,7 +77,7 @@ pub fn project_config(cwd: &Path, home: Option<&Path>) -> Option<PathBuf> {
 }
 
 fn origins(cwd: &Path, sources: &McpSources) -> Vec<(McpOrigin, ServerSpec)> {
-    let gate = crate::trust::Gate::at(cwd, sources.home.as_deref(), sources.trust);
+    let gate = crate::scope::Scope::at(cwd, sources.home.as_deref());
     let project = project_config(cwd, sources.home.as_deref()).filter(|path| gate.honours(path));
     let project = project.map(|path| read(&path, "the project's")).unwrap_or_default();
     let user = sources
@@ -149,11 +91,7 @@ fn origins(cwd: &Path, sources: &McpSources) -> Vec<(McpOrigin, ServerSpec)> {
         if !gate.honours(&folder) {
             return Vec::new();
         }
-        let granted = super::script_server::Granted {
-            access: sources.scripts.of(origin),
-            origin,
-            confinement: confinement(sources, cwd),
-        };
+        let granted = super::script_server::Granted { access: sources.scripts.of(origin), origin };
         super::script_server::found(&folder, cwd, &granted)
     };
     let project_scripts = scripts_in(cwd, Origin::Project);
@@ -238,7 +176,6 @@ mod tests {
             command: command.into(),
             args: Vec::new(),
             env: env.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect(),
-            sandbox: crate::mcp::StdioSandbox::Unconfined,
         }
     }
 
@@ -278,7 +215,6 @@ mod tests {
         request.host.extensions = Some(Extensions {
             home: Some(home.path().to_path_buf()),
             plugins: vec![plugin.path().to_path_buf()],
-            trust: domain::trust::Trust::Trusted,
             ..Extensions::default()
         });
         let info = |name: &str, origin: McpOrigin, target: &str, state: McpState| McpServerInfo {
@@ -301,7 +237,7 @@ mod tests {
     }
 
     #[test]
-    fn the_listing_names_each_unreadable_file_and_an_untrusted_project_s_servers_as_skipped() {
+    fn the_listing_names_each_unreadable_file_and_a_project_s_servers_waiting_for_approval() {
         use domain::Extensions;
         let home = tempfile::tempdir().expect("home");
         let repo = tempfile::tempdir().expect("repo");
@@ -309,11 +245,7 @@ mod tests {
         write(user.clone(), "{broken");
         write(repo.path().join(concat!(brand::dir!(), "/mcp.json")), r#"{"mcpServers": {"jira": {"command": "j"}}}"#);
         let mut request = PromptRequest::plain(repo.path().to_path_buf(), "", ModelOption::new("", ""));
-        request.host.extensions = Some(Extensions {
-            home: Some(home.path().to_path_buf()),
-            trust: domain::trust::Trust::Untrusted,
-            ..Extensions::default()
-        });
+        request.host.extensions = Some(Extensions { home: Some(home.path().to_path_buf()), ..Extensions::default() });
         let listing = crate::mcp::listing(request.folder()).expect("listed");
         assert_eq!(
             listing.servers,
@@ -321,7 +253,7 @@ mod tests {
                 name: "jira".into(),
                 origin: McpOrigin::Project,
                 target: "j".into(),
-                state: McpState::Untrusted
+                state: McpState::of(&McpOrigin::Project, "jira", &McpApproval::default())
             }]
         );
         assert_eq!(listing.unreadable.len(), 1);
@@ -346,11 +278,7 @@ mod tests {
         let project = repo.path().join(concat!(brand::dir!(), "/mcp.json"));
         write(project.clone(), r#"{"servers": {}, "mcpServers": {"jira": {"command": "j", "env": {"N": "1"}}}}"#);
         let mut request = PromptRequest::plain(repo.path().to_path_buf(), "", ModelOption::new("", ""));
-        request.host.extensions = Some(Extensions {
-            home: Some(home.path().to_path_buf()),
-            trust: domain::trust::Trust::Trusted,
-            ..Extensions::default()
-        });
+        request.host.extensions = Some(Extensions { home: Some(home.path().to_path_buf()), ..Extensions::default() });
 
         let listing = crate::mcp::listing(request.folder()).expect("listed");
 
@@ -402,11 +330,7 @@ mod tests {
         std::fs::create_dir_all(&cwd).expect("cwd");
         std::fs::create_dir_all(repo.path().join(".git")).expect("a repository");
         let request = PromptRequest::plain(cwd, "hi", ModelOption::new("m", "M"));
-        let mut sources = McpSources {
-            home: Some(home.path().to_path_buf()),
-            trust: domain::trust::Trust::Trusted,
-            ..McpSources::default()
-        };
+        let mut sources = McpSources { home: Some(home.path().to_path_buf()), ..McpSources::default() };
 
         assert_eq!(
             servers(request.folder(), &sources),
@@ -419,61 +343,6 @@ mod tests {
             [stdio("jira", "jira-mcp", &[]), stdio("notes", "notes-mcp", &[("KEY", "dflt")])],
             "the approved project server wins its name; reserved names never start"
         );
-        sources.trust = domain::trust::Trust::Untrusted;
-        assert_eq!(
-            servers(request.folder(), &sources),
-            [stdio("jira", "user-jira", &[]), stdio("notes", "notes-mcp", &[("KEY", "dflt")])],
-            "approval alone starts nothing from a folder that is not trusted"
-        );
-    }
-
-    #[test]
-    fn stdio_servers_start_in_the_sandbox_and_only_the_user_s_own_entry_opts_one_out() {
-        use crate::mcp::StdioSandbox;
-        let home = tempfile::tempdir().expect("home");
-        let repo = tempfile::tempdir().expect("repo");
-        write(
-            home.path().join(concat!(brand::dir!(), "/mcp.json")),
-            r#"{"mcpServers": {
-                "mine": {"command": "mine-mcp", "sandbox": false},
-                "notes": {"command": "notes-mcp", "sandbox": {"writable": ["~/.local/share/notes"]}}
-            }}"#,
-        );
-        write(
-            repo.path().join(concat!(brand::dir!(), "/mcp.json")),
-            r#"{"mcpServers": {"theirs": {"command": "theirs-mcp", "sandbox": false}, "bad": {"command": "x", "sandbox": "off"}}}"#,
-        );
-        let mut sources = McpSources {
-            home: Some(home.path().to_path_buf()),
-            trust: domain::trust::Trust::Trusted,
-            sandbox: Some(domain::sandbox::Sandbox::default()),
-            ..McpSources::default()
-        };
-        sources.approval.enabled = vec!["theirs".into(), "bad".into()];
-        let settled = |sources: &McpSources, support: platform::sandbox::Support| -> Vec<(String, StdioSandbox)> {
-            configured_on(repo.path(), sources, &support)
-                .into_iter()
-                .filter_map(|server| match server {
-                    ServerSpec::Stdio { name, sandbox, .. } => Some((name, sandbox)),
-                    _ => None,
-                })
-                .collect()
-        };
-        let found = settled(&sources, platform::sandbox::Support::Available);
-        let named = |name: &str| found.iter().find(|(found, _)| found == name).map(|(_, sandbox)| sandbox.clone());
-        assert_eq!(named("bad"), None, "a sandbox entry of the wrong shape leaves the server out");
-        assert_eq!(named("mine"), Some(StdioSandbox::Unconfined), "the user's own entry may opt out");
-        assert!(matches!(named("theirs"), Some(StdioSandbox::Confined(_))), "a project's opt-out is ignored");
-        let Some(StdioSandbox::Confined(notes)) = named("notes") else { panic!("{found:?}") };
-        assert!(notes.writable.contains(&home.path().join(".local/share/notes")));
-        assert!(notes.writable.contains(&repo.path().to_path_buf()) && notes.network);
-
-        sources.sandbox = Some(domain::sandbox::Sandbox { required: true, ..Default::default() });
-        let missing = settled(&sources, platform::sandbox::Support::Missing("this kernel has no Landlock".into()));
-        assert!(
-            missing.iter().any(|(name, sandbox)| name == "theirs" && matches!(sandbox, StdioSandbox::Refused(_))),
-            "{missing:?}"
-        );
     }
 
     #[test]
@@ -484,11 +353,7 @@ mod tests {
         let server = "export default { tools: {} };";
         write(repo.path().join(concat!(brand::dir!(), "/mcp/theirs.js")), server);
         write(home.path().join(concat!(brand::dir!(), "/mcp/mine.js")), server);
-        let sources = McpSources {
-            home: Some(home.path().to_path_buf()),
-            trust: domain::trust::Trust::Trusted,
-            ..McpSources::default()
-        };
+        let sources = McpSources { home: Some(home.path().to_path_buf()), ..McpSources::default() };
         let granted: Vec<(String, ScriptAccess, Origin)> = origins(repo.path(), &sources)
             .into_iter()
             .filter_map(|(_, server)| match server {

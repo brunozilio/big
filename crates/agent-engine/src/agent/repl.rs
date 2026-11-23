@@ -57,12 +57,7 @@ impl Agent<'_> {
         let run = ScriptRun {
             number: submitted.number,
             messages: submitted.messages,
-            guarded: Guarded {
-                stop,
-                stopped_by: Mutex::default(),
-                carried: Mutex::default(),
-                images: Mutex::default(),
-            },
+            guarded: Guarded { stop, stopped_by: Mutex::default(), images: Mutex::default() },
             refused: Mutex::default(),
             lane: OnceLock::new(),
             started: Instant::now(),
@@ -95,9 +90,6 @@ impl Agent<'_> {
             let evaluation = agent.serving(&run, &Tasks::default(), &[], None).unwrap_or_else(|| gone(number));
             let mut outcome = run.report(&agent, evaluation);
             outcome.content = format!("Script #{number} ended.\n{}", outcome.content);
-            if let Some(from) = outcome.carried_from.take() {
-                outcome.content = domain::untrusted::fenced(&outcome.content, &from);
-            }
             outcome
         };
         match self.in_background(tasks, "script", Box::new(job), spawn) {
@@ -272,7 +264,6 @@ impl ScriptRun {
             refused: std::mem::take(&mut *self.refused.locked()),
             outcome,
             stopped_by,
-            carried: std::mem::take(&mut *self.guarded.carried.locked()),
         };
         self.reported(agent, &report)
     }
@@ -282,16 +273,12 @@ impl ScriptRun {
 struct Guarded {
     stop: Arc<AtomicBool>,
     stopped_by: Mutex<Option<String>>,
-    carried: Mutex<Vec<String>>,
     images: Mutex<Vec<domain::Image>>,
 }
 
 impl Guarded {
     fn settle(&self, call: HostCall, answer: impl FnOnce(&str, &Value) -> Result<Value, String>) {
         let HostCall { function, input, reply } = call;
-        if let Some(source) = domain::untrusted::mcp_source(&function) {
-            self.carried.locked().push(source);
-        }
         let answered = answer(&function, &input);
         match self.stopped_by.locked().as_ref() {
             Some(tool) => reply.send(Err(format!("the user refused {tool} at a permission prompt; the script stops"))),
@@ -333,7 +320,7 @@ impl ScriptRun {
         let text = domain::code_mode::reported(report, domain::code_mode::PART);
         let mut outcome = if report.outcome.is_ok() { Outcome::ok(text) } else { Outcome::error(text) };
         outcome.images = std::mem::take(&mut *self.guarded.images.locked());
-        outcome.carried_from(domain::code_mode::carried_from(report))
+        outcome
     }
 }
 

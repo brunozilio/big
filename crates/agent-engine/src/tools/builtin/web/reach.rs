@@ -1,4 +1,4 @@
-use domain::permission_rules::{is_private, site};
+use domain::site::{is_private, site};
 
 use crate::model::CancellationToken;
 use crate::model::http::{Http, Response, reason};

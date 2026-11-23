@@ -32,8 +32,6 @@ pub struct Session {
 #[derive(Debug, Clone, Default)]
 pub struct Headless {
     pub max_turns: Option<u32>,
-    pub allowed_tools: Vec<String>,
-    pub disallowed_tools: Vec<String>,
     pub append_system: Option<String>,
     pub fallback_model: Option<String>,
 }
@@ -236,8 +234,6 @@ impl Session {
     pub(crate) fn start(&self, mut request: PromptRequest) -> Result<Run, Error> {
         request.session.add_dirs = self.added_dirs.clone();
         request.policy.max_turns = self.headless.max_turns;
-        request.policy.allowed_tools.clone_from(&self.headless.allowed_tools);
-        request.policy.disallowed_tools.clone_from(&self.headless.disallowed_tools);
         request.session.append_system.clone_from(&self.headless.append_system);
         request.session.fallback_model.clone_from(&self.headless.fallback_model);
         request.session.roles.clone_from(&self.roles);

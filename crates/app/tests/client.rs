@@ -68,7 +68,7 @@ fn a_question_is_answered_through_the_run() {
     let data = tempfile::tempdir().expect("data");
     let ask = AgentAsk {
         id: AskId("a-1".into()),
-        kind: AskKind::Permission { tool: "Bash".into(), subject: "ls".into(), rememberable: false, rule: None },
+        kind: AskKind::Permission { tool: "Bash".into(), subject: "ls".into(), rememberable: false },
     };
     let engine = FakeEngine::new(vec![model()], script(vec![EngineEvent::Asked(ask)]))
         .with_delay(std::time::Duration::from_millis(40));
@@ -202,13 +202,7 @@ fn a_program_manages_the_owner_s_mcp_servers() {
         servers.into_iter().map(|s| (s.name, s.origin, s.state)).collect()
     };
 
-    assert_eq!(
-        states(client.mcp_servers(repo.path()).expect("list")),
-        [("jira".into(), McpOrigin::Project, McpState::Untrusted)],
-        "shown as skipped until the folder is trusted"
-    );
     assert!(client.approve_mcp_server(repo.path(), "ghost", true).is_err(), "only a server that is there");
-    assert_eq!(client.set_trust(repo.path(), true).expect("trust").trust, app::Trust::Trusted);
     assert_eq!(
         states(client.mcp_servers(repo.path()).expect("list")),
         [("jira".into(), McpOrigin::Project, McpState::Pending)]

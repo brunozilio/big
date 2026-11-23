@@ -66,13 +66,13 @@ fn the_shipped_copy_names_the_app_s_own_folder() {
 #[test]
 fn a_wrong_value_is_named_by_its_path_and_left_out_and_the_rest_is_kept() {
     let checked =
-        checked_settings(json!({ "fallbackModel": ["a", 3, "b"], "sandbox": { "network": "off", "required": true } }));
+        checked_settings(json!({ "fallbackModel": ["a", 3, "b"], "scripts": { "network": "off", "files": true } }));
 
     assert_eq!(
         checked.problems,
-        ["fallbackModel[1]: expected null or string, found 3", "sandbox.network: expected boolean, found \"off\""]
+        ["fallbackModel[1]: expected null or string, found 3", "scripts.network: expected boolean, found \"off\""]
     );
-    assert_eq!(checked.value, json!({ "fallbackModel": ["a", "b"], "sandbox": { "required": true } }));
+    assert_eq!(checked.value, json!({ "fallbackModel": ["a", "b"], "scripts": { "files": true } }));
     assert_eq!(
         checked.located(Path::new("/home/me/settings.json"))[0],
         "/home/me/settings.json: fallbackModel[1]: expected null or string, found 3"
@@ -81,10 +81,10 @@ fn a_wrong_value_is_named_by_its_path_and_left_out_and_the_rest_is_kept() {
 
 #[test]
 fn every_wrong_item_of_a_list_is_left_out_from_the_last_back() {
-    let checked = checked_settings(json!({ "permissions": { "deny": [1, "Read(.env)", 2] } }));
+    let checked = checked_settings(json!({ "permissions": { "additionalDirectories": [1, "../lib", 2] } }));
 
     assert_eq!(checked.problems.len(), 2, "{:?}", checked.problems);
-    assert_eq!(checked.value, json!({ "permissions": { "deny": ["Read(.env)"] } }));
+    assert_eq!(checked.value, json!({ "permissions": { "additionalDirectories": ["../lib"] } }));
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn an_mcp_server_with_a_wrong_value_is_left_out_whole_and_the_others_kept() {
         "$schema": "https://example.com/mcp.schema.json",
         "mcpServers": {
             "jira": { "type": "websocket", "url": "wss://jira" },
-            "github": { "command": "github-mcp", "args": ["--stdio"], "sandbox": { "network": "yes" } },
+            "github": { "command": "github-mcp", "args": ["--stdio"], "env": { "A": 1 } },
             "docs": { "url": "https://docs.example.com/mcp", "timeout": 30 }
         }
     });
@@ -138,7 +138,7 @@ fn an_mcp_server_with_a_wrong_value_is_left_out_whole_and_the_others_kept() {
         checked.problems,
         [
             "mcpServers.docs.timeout: unknown key, ignored",
-            "mcpServers.github.sandbox.network: expected boolean, found \"yes\"",
+            "mcpServers.github.env.A: expected string, found 1",
             "mcpServers.jira.type: expected one of \"stdio\", \"http\", \"sse\", found \"websocket\"",
         ]
     );

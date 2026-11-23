@@ -25,8 +25,7 @@ impl Tool for Bash {
     }
 
     fn effects(&self, input: &Value, _workspace: &Workspace) -> Vec<crate::tools::Effect> {
-        let unsandboxed = input["unsandboxed"].as_bool() == Some(true);
-        vec![crate::tools::Effect::exec(field(input, "command").unwrap_or_default(), unsandboxed)]
+        vec![crate::tools::Effect::exec(field(input, "command").unwrap_or_default())]
     }
 
     fn summary(&self, input: &Value) -> String {
@@ -43,15 +42,10 @@ impl Tool for Bash {
             .and_then(Value::as_u64)
             .map_or(DEFAULT_TIMEOUT, Duration::from_millis)
             .min(MAX_TIMEOUT);
-        let kept = super::snapshot::keep(workspace, command);
-        let mut shell = if input["unsandboxed"].as_bool() == Some(true) {
-            platform::shell(command)
-        } else {
-            shell(command, workspace)
-        };
+        let mut shell = shell(command, workspace);
         shell.current_dir(&workspace.cwd).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped());
         let inherited = std::env::var("GIT_CONFIG_COUNT").ok();
-        shell.envs(platform::git::environment(&workspace.cwd, inherited.as_deref(), git_run(command, workspace)));
+        shell.envs(platform::git::environment(&workspace.cwd, inherited.as_deref(), platform::git::Run::Approved));
         super::shaped::plain(&mut shell, workspace);
         if input.get("run_in_background").and_then(Value::as_bool) == Some(true) {
             return match super::shells::start(workspace, command, &mut shell) {
@@ -81,10 +75,8 @@ impl Tool for Bash {
             }
             Waited::Exited { output, code, .. } => {
                 let code = code.map_or_else(|| "a signal".to_owned(), |code| code.to_string());
-                let refused = workspace.sandboxed() && domain::sandbox::blocked(&output);
-                let hint = if refused { format!("\n{}", domain::sandbox::hint(brand::DIR)) } else { String::new() };
                 Outcome::error(
-                    format!("{}\n(exit code {code}){hint}", limited(&shaped(command, &output, workspace), workspace))
+                    format!("{}\n(exit code {code})", limited(&shaped(command, &output, workspace), workspace))
                         .trim_start()
                         .to_owned(),
                 )
@@ -105,7 +97,7 @@ impl Tool for Bash {
                     .to_owned(),
             ),
         };
-        for note in kept.note().into_iter().chain(not_kept) {
+        if let Some(note) = not_kept {
             outcome.content = format!("{}\n{note}", outcome.content);
         }
         outcome
@@ -121,17 +113,8 @@ fn limited(text: &str, workspace: &Workspace) -> String {
     limit.cut(text, saved.as_deref())
 }
 
-fn git_run(command: &str, workspace: &Workspace) -> platform::git::Run {
-    let home = workspace.home.as_deref().and_then(std::path::Path::to_str);
-    if domain::command_policy::runs_as_a_read(command, home) {
-        platform::git::Run::ReadOnly
-    } else {
-        platform::git::Run::Approved
-    }
-}
-
 pub(super) fn shell(command: &str, workspace: &Workspace) -> std::process::Command {
-    workspace.confined(platform::shell(command))
+    workspace.launched(platform::shell(command))
 }
 
 #[cfg(all(test, unix))]
@@ -150,57 +133,6 @@ mod tests {
         let failed = Bash.run(&json!({"command": "echo out; echo err >&2; exit 3"}), &workspace);
         assert_eq!(failed, Outcome::error("out\nerr\n(exit code 3)"));
         assert_eq!(Bash.run(&json!({"command": "true"}), &workspace).content, "(no output)");
-    }
-
-    #[test]
-    fn a_command_s_change_tracking_runs_nothing_the_repository_s_config_names() {
-        let hostile = crate::hostile_repository::Hostile::new();
-        let mut workspace = Workspace::new(hostile.path());
-        workspace.services.files = Some(std::sync::Arc::default());
-
-        let ran = Bash.run(&json!({"command": "echo three > a.txt && echo new > b.txt"}), &workspace);
-
-        assert!(!ran.is_error, "{ran:?}");
-        let recorded = workspace.services.files.as_ref().expect("files").take().files;
-        assert!(recorded.keys().any(|path| path.ends_with("a.txt")), "the change was still tracked: {recorded:?}");
-        assert_eq!(hostile.ran(), None, "the repository's fsmonitor, filter or hook ran");
-        assert!(hostile.plain_git_runs_it(), "the same repository does run them through plain git");
-    }
-
-    #[test]
-    fn the_git_reads_the_agent_runs_without_asking_run_nothing_the_repository_s_config_names() {
-        let hostile = crate::hostile_repository::Hostile::new();
-        let workspace = Workspace::new(hostile.path());
-
-        for command in ["git status", "git diff", "git log -p", "git show HEAD", "git diff HEAD --stat"] {
-            let ran = Bash.run(&json!({ "command": command }), &workspace);
-            assert!(!ran.is_error, "{command}: {ran:?}");
-        }
-
-        assert_eq!(hostile.ran(), None, "the repository's fsmonitor or filter ran");
-        assert!(hostile.plain_git_runs_it(), "the same repository does run them through plain git");
-    }
-
-    #[cfg(target_os = "macos")]
-    #[test]
-    fn a_sandboxed_command_writes_in_the_project_only_and_is_told_why_it_failed() {
-        let dir = tempfile::tempdir().expect("dir");
-        let settings = dir.path().join(brand::DIR).join("settings.json");
-        std::fs::create_dir(dir.path().join(brand::DIR)).expect("folder");
-        let mut workspace = Workspace::new(dir.path());
-        let grant = json!({"command": format!("echo granted > {}/settings.json", brand::DIR)});
-        assert!(!Bash.run(&grant, &workspace).is_error, "nothing confines a run without the sandbox");
-        std::fs::write(&settings, "{}").expect("settings");
-
-        workspace.policy.sandbox = Some(domain::sandbox::Sandbox::default());
-        let inside = Bash.run(&json!({"command": "echo kept > kept.txt && cat kept.txt"}), &workspace);
-        assert_eq!(inside, Outcome::ok("kept"));
-        let refused = Bash.run(&grant, &workspace);
-        assert!(refused.is_error && refused.content.contains("sandbox.allowWrite"), "{refused:?}");
-        assert_eq!(std::fs::read_to_string(&settings).expect("read"), "{}");
-
-        let failed = Bash.run(&json!({"command": "exit 3"}), &workspace);
-        assert_eq!(failed, Outcome::error("(exit code 3)"));
     }
 
     #[test]

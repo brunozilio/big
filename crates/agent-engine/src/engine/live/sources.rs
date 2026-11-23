@@ -21,13 +21,12 @@ struct Seen {
 }
 
 pub(in crate::engine) fn fingerprint(folder: Folder<'_>) -> Option<u64> {
-    let gate = crate::trust::Gate::of(folder);
+    let gate = crate::scope::Scope::of(folder);
     let mut seen = Seen::default();
     seen.everything(folder, gate.home()).ok()?;
     let mut hasher = DefaultHasher::new();
     folder.cwd.hash(&mut hasher);
     serde_json::to_string(&folder.extensions).unwrap_or_default().hash(&mut hasher);
-    format!("{:?}", gate.trust()).hash(&mut hasher);
     seen.records.sort();
     seen.records.hash(&mut hasher);
     Some(hasher.finish())

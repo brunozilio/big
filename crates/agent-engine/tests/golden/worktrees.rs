@@ -27,7 +27,6 @@ fn a_main_agent_isolated_in_a_worktree_writes_there_and_the_worktree_is_retained
     ]);
     let mut request = stage.request("Create the work file");
     request.policy.permission = PermissionMode::Bypass;
-    request.policy.safety_check = false;
 
     stage.play("prompt", &request);
 

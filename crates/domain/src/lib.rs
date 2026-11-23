@@ -17,14 +17,11 @@ pub use run::{
     git_offer, image, interception, observer, request, review, session_run, stuck, task_board, team, verification,
     watchdog,
 };
-pub use safety::{
-    command_policy, dependencies, destructive, egress, permission, permission_rules, redact, sandbox, shell,
-    suggested_rules, trust, untrusted,
-};
+pub use safety::{permission, redact, shell};
 pub use session::{catalog, chat, conversation, repeats, usage};
 pub use tools::{
     agents, brief_edits, channel_relay, code_mode, executable, extensions, hooks, inbox, looping, lsp, mcp, mcp_config,
-    mcp_oauth, output, schedule, skill, tool_name, watch, web_reading,
+    mcp_oauth, output, schedule, site, skill, tool_name, watch, web_reading,
 };
 
 pub use command::Command;

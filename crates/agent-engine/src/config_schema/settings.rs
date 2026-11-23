@@ -67,11 +67,6 @@ fn properties() -> Value {
         "hooks": hooks(),
         "lspServers": map_of(reference_to("languageServer"), "Adds, changes or disables language servers, by name."),
         "permissions": permissions(),
-        "verification": {
-            "type": "object",
-            "properties": { "allow": names("Rules the verification judge may run without asking.") },
-            "additionalProperties": false
-        },
         "scripts": {
             "type": "object",
             "description": "What JavaScript tools, skills, hooks and providers may do.",
@@ -82,39 +77,15 @@ fn properties() -> Value {
             },
             "additionalProperties": false
         },
-        "sandbox": {
-            "type": "object",
-            "description": "Where sandboxed commands may write and whether they reach the network.",
-            "properties": {
-                "network": switch("false blocks the network for sandboxed commands."),
-                "required": switch("true refuses commands when the sandbox cannot be provided."),
-                "allowWrite": names("Extra folders sandboxed commands may write to."),
-                "allowUnixSockets": names(
-                    "Service sockets sandboxed commands may connect to on macOS, such as the Docker socket or a tmux server's (refused by default)."
-                ),
-                "allowRead": names(
-                    "Paths sandboxed commands may read on macOS although they are credential stores (~/.ssh, ~/.aws, ~/.npmrc, ~/.gnupg, …) or the app's data folder, which are unreadable by default."
-                )
-            },
-            "additionalProperties": false
-        },
-        "features": features(),
-        domain::trust::LEGACY_OPT_IN: {
-            "type": "boolean",
-            "deprecated": true,
-            "description": "No longer does anything: a project's hooks run once you trust its folder."
-        }
+        "features": features()
     })
 }
 
 fn permissions() -> Value {
     json!({
         "type": "object",
-        "description": "Allow, ask and deny rules and extra folders.",
+        "description": "Extra folders.",
         "properties": {
-            "allow": names("Tool calls that run without asking. Read only from your own files."),
-            "ask": names("Tool calls that always ask."),
-            "deny": names("Tool calls that are refused, in every mode."),
             "additionalDirectories": names("Folders the agent reads like the project. Read only from your own files.")
         },
         "additionalProperties": false

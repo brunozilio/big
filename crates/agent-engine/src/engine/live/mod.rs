@@ -16,7 +16,6 @@ use crate::brief::Brief;
 use crate::mcp::{McpPool, McpServer, McpSources};
 use crate::model::http::Http;
 use crate::tools::Workspace;
-use crate::tools::host_judge::HostJudge;
 use crate::tools::script_tool::{self, ScriptTool};
 
 pub(super) const LIVE_SESSIONS: usize = 8;
@@ -160,11 +159,10 @@ impl Live {
         sources: &McpSources,
         http: &Arc<dyn Http>,
         stop: &platform::Stop,
-        judge: &Arc<HostJudge>,
     ) -> Vec<Arc<McpServer>> {
         match &self.entered {
-            Some(session) => session.pool.connect(request, sources, http, stop, judge),
-            None => crate::mcp::connect_judged(request, sources, http, stop, judge),
+            Some(session) => session.pool.connect(request, sources, http, stop),
+            None => crate::mcp::connect_stopped(request, sources, http, stop),
         }
     }
 

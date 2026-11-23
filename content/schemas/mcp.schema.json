@@ -1,25 +1,5 @@
 {
   "$defs": {
-    "sandbox": {
-      "additionalProperties": false,
-      "description": "Where the process may write and whether it reaches the network, or false to start it outside the sandbox.",
-      "properties": {
-        "network": {
-          "type": "boolean"
-        },
-        "writable": {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": [
-        "object",
-        "boolean",
-        "null"
-      ]
-    },
     "server": {
       "additionalProperties": false,
       "description": "A server with a url is remote; a server with a command is a local process. Text may read ${NAME} or ${NAME:-default} from the environment.",
@@ -47,9 +27,6 @@
           },
           "description": "Request headers (http and sse).",
           "type": "object"
-        },
-        "sandbox": {
-          "$ref": "#/$defs/sandbox"
         },
         "type": {
           "description": "http (Streamable HTTP), sse (HTTP + SSE) or stdio (a local process).",

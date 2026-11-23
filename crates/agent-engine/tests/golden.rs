@@ -38,8 +38,6 @@ mod structured;
 #[path = "golden/sub_agents.rs"]
 mod sub_agents;
 #[cfg(unix)]
-#[path = "golden/trust.rs"]
-mod trust;
 #[path = "golden/turns.rs"]
 mod turns;
 #[cfg(unix)]

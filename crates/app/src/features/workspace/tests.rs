@@ -100,23 +100,6 @@ fn git_is_offered_outside_a_repository_until_one_is_initialized_or_the_feature_i
 
 #[cfg(unix)]
 #[test]
-fn the_changes_and_files_of_a_repository_run_nothing_its_config_names() {
-    let hostile = crate::hostile_repository::Hostile::new();
-    let cwd = hostile.path();
-
-    for scope in [DiffScope::Uncommitted, DiffScope::Unstaged, DiffScope::Staged] {
-        changes(cwd, scope).expect("changes");
-    }
-    assert!(changes(cwd, DiffScope::Uncommitted).expect("changes").diff.contains("a.txt"));
-    ask(cwd, WorkspaceOp::Files).expect("files");
-    ask(cwd, WorkspaceOp::GitInit).expect("initialized");
-
-    assert_eq!(hostile.ran(), None, "the repository's fsmonitor, filter, diff program or hook ran");
-    assert!(hostile.plain_git_runs_it(), "the same repository does run them through plain git");
-}
-
-#[cfg(unix)]
-#[test]
 fn the_first_commit_runs_no_signing_program_the_repository_names() {
     let dir = tempfile::tempdir().expect("dir");
     let cwd = dir.path().join("project");

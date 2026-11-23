@@ -1,6 +1,5 @@
 use super::interception::Intercepted;
 use super::{Call, Exchange, Next, TurnState};
-use crate::agent::permission::egress;
 use crate::agent::{Agent, Ending};
 use crate::model::{ModelError, Reply};
 use crate::transcript::{Block, Message, StopReason, replied, told};
@@ -21,10 +20,6 @@ impl Agent<'_> {
             return Ok(Next::AskModel);
         }
         turn.reminders.observe(&calls);
-        if let Some(safety) = &self.workspace.policy.safety {
-            safety.observe(turn.history);
-        }
-        self.workspace.tracking.hear(egress::heard(turn.history));
         let said = replied(turn.history, reply.message);
         turn.counted.observe(reply.usage, turn.history.len());
         if reply.stop != StopReason::MaxTokens {

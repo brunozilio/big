@@ -141,8 +141,8 @@ impl Capability {
         match self {
             Self::ReadFile => vec![Effect::ReadPath(place(&subject))],
             Self::WriteFile => vec![Effect::WritePath(place(&subject))],
-            Self::Exec => vec![Effect::exec(&subject, false)],
-            Self::Fetch => vec![Effect::Net { host: domain::permission_rules::site(&subject) }],
+            Self::Exec => vec![Effect::exec(&subject)],
+            Self::Fetch => vec![Effect::Net { host: domain::site::site(&subject) }],
         }
     }
 
@@ -292,7 +292,7 @@ fn files(folder: &Path) -> Vec<PathBuf> {
     found
 }
 
-pub fn load(gate: &crate::trust::Gate) -> Vec<ScriptTool> {
+pub fn load(gate: &crate::scope::Scope) -> Vec<ScriptTool> {
     let mut folders: Vec<(PathBuf, bool)> =
         gate.home().map(|home| (home.join(brand::DIR).join("tools"), true)).into_iter().collect();
     let project = gate.cwd().join(brand::DIR).join("tools");
@@ -374,14 +374,11 @@ mod tests {
         std::fs::write(project_tools.join("tool.js"), r#"export const spec = { name: "Deploy", access: "read" };"#)
             .expect("write");
         std::fs::write(user_tools.join("broken.js"), "export const spec = ").expect("write");
-        let tools = load(&crate::trust::trusted(project.path(), home.path()));
+        let tools = load(&crate::scope::Scope::at(project.path(), Some(home.path())));
         let named: Vec<(&str, Option<Declared>)> =
             tools.iter().map(|tool| (tool.spec.name.as_str(), tool.declared)).collect();
         assert_eq!(named, [("Echo", None), ("Deploy", Some(Declared::Executes))]);
         assert_eq!(tools[0].spec.description, "Says it back.");
-        let untrusted = load(&crate::trust::untrusted(project.path(), home.path()));
-        let named: Vec<&str> = untrusted.iter().map(|tool| tool.spec.name.as_str()).collect();
-        assert_eq!(named, ["Echo"], "an untrusted folder's tools are not registered");
     }
 
     #[test]
@@ -459,7 +456,7 @@ mod join_tests {
         std::fs::write(project_tools.join("deploy.js"), spec("Deploy", "The project's.")).expect("write");
 
         let mut tools = crate::tools::standard();
-        join(&mut tools, load(&crate::trust::trusted(project.path(), home.path())));
+        join(&mut tools, load(&crate::scope::Scope::at(project.path(), Some(home.path()))));
 
         let described = |name: &str| -> Vec<(String, bool)> {
             tools
@@ -490,8 +487,10 @@ mod copied_content_tests {
         let bash = content::builtin("tools/Bash.js").expect("Bash ships");
         std::fs::write(user_tools.join("Bash.js"), bash).expect("copy");
         std::fs::write(user_tools.join("echo.js"), r#"export const spec = { name: "Echo" };"#).expect("write");
-        let names: Vec<String> =
-            load(&crate::trust::trusted(project.path(), home.path())).into_iter().map(|tool| tool.spec.name).collect();
+        let names: Vec<String> = load(&crate::scope::Scope::at(project.path(), Some(home.path())))
+            .into_iter()
+            .map(|tool| tool.spec.name)
+            .collect();
         assert_eq!(names, ["Echo"]);
     }
 }

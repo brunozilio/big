@@ -69,8 +69,8 @@ impl LocalServices {
         self
     }
 
-    pub fn gate(&self, cwd: &Path) -> agent_engine::trust::Gate {
-        self.extensions.trusts.gate(cwd, self.home().as_deref())
+    pub fn gate(&self, cwd: &Path) -> agent_engine::scope::Scope {
+        agent_engine::scope::Scope::at(cwd, self.home().as_deref())
     }
 
     pub fn project_settings(
@@ -101,7 +101,7 @@ impl LocalServices {
             database: stores.database,
             exporter: exporter(&stores.sessions),
             sessions: stores.sessions,
-            extensions: Extensions { trusts: crate::trust::Trusts::kept(stores.trusts), ..Extensions::default() },
+            extensions: Extensions::default(),
             providers: ModelProviders::new(stores.providers, Arc::clone(&stores.secrets)),
             homes: Arc::new(crate::OwnerHome::none()),
             mcp_auth: crate::McpAuth::new(stores.secrets, http),
@@ -128,10 +128,7 @@ impl LocalServices {
             database: stores.database,
             exporter: exporter(&stores.sessions),
             sessions: stores.sessions,
-            extensions: Extensions {
-                plugins: self.extensions.plugins,
-                trusts: crate::trust::Trusts::kept(stores.trusts),
-            },
+            extensions: Extensions { plugins: self.extensions.plugins },
             providers: self.providers.with_store(stores.providers).with_secrets(Arc::clone(&stores.secrets)),
             mcp_auth: self.mcp_auth.with_secrets(stores.secrets),
             ..self
@@ -170,13 +167,7 @@ mod tests {
         let by = domain::Provenance { author: domain::Author::User, now: 5, origin: None };
         crate::features::memory::of(&services).edit(Path::new("/work"), &[remember], by).expect("memory");
 
-        services.extensions.trusts.set(Path::new("/work/rocket"), None, true).expect("trust");
-        for kept in [
-            "users/local/settings.json",
-            "users/local/trusted-folders.json",
-            "app.db",
-            "providers/local/providers.json",
-        ] {
+        for kept in ["app.db", "providers/local/providers.json"] {
             assert!(data.path().join(kept).is_file(), "{kept}");
         }
         assert!(!data.path().join("users/local/sessions.json").exists(), "the catalog is in the database");
@@ -214,7 +205,7 @@ mod tests {
         let home = tempfile::tempdir().expect("home");
         let repo = tempfile::tempdir().expect("repo");
         std::fs::create_dir_all(home.path().join(brand::DIR)).expect("dir");
-        let settings = serde_json::json!({ "features": { "workspace": false, "trace": false, "memory": false, "suggested-rules": false } });
+        let settings = serde_json::json!({ "features": { "workspace": false, "trace": false, "memory": false, "experimental-output-savings": false } });
         std::fs::write(home.path().join(brand::DIR).join("settings.json"), settings.to_string()).expect("write");
         let mut services = LocalServices::with_engine(engine());
         services.homes = Arc::new(crate::OwnerHome::at(home.path()));
@@ -223,9 +214,9 @@ mod tests {
 
         assert!(services.off.contains(domain::features::TRACE));
         assert!(!services.off.contains("memory"), "memory is always on");
-        assert!(services.off.contains(domain::features::SUGGESTED_RULES));
+        assert!(services.off.contains(domain::features::OUTPUT_SAVINGS));
         assert!(!services.off.contains("workspace"), "not a flag: the program cannot work without it");
-        assert!(!services.off.contains("suggested_rules"), "a folder's name is not a switch, its flag is");
+        assert!(!services.off.contains("output_savings"), "a folder's name is not a switch, its flag is");
     }
 
     #[test]

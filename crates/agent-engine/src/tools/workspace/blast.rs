@@ -34,7 +34,6 @@ mod tests {
         let server = crate::lsp::fake::ScriptedServer::answering([Ok(symbols), Ok(references)]);
         let mut workspace = Workspace::new(dir.path());
         workspace.services.lsp = Some(server.lsp());
-        workspace.policy.trust = domain::trust::Trust::Trusted;
 
         assert_eq!(workspace.callers(&file, "fn retry() {}\n", "fn retry() { x }\n"), "");
 

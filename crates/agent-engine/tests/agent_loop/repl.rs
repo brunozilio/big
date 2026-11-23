@@ -313,7 +313,7 @@ fn a_script_that_calls_no_tool_opens_no_lane() {
 
 #[test]
 fn in_code_only_mode_the_model_sees_the_repl_and_reaches_the_rest_from_scripts() {
-    let rig = code_mode_as(PermissionMode::AcceptEdits, domain::code_mode::Mode::Only);
+    let rig = code_mode_as(PermissionMode::Bypass, domain::code_mode::Mode::Only);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use(
             "r0",
@@ -518,7 +518,7 @@ fn run_tools(rig: &Rig, input: serde_json::Value, tools: Vec<Box<dyn agent_engin
 }
 
 #[test]
-fn what_a_script_carries_from_an_mcp_server_comes_back_fenced_as_untrusted() {
+fn what_a_script_carries_from_an_mcp_server_comes_back_as_its_report() {
     let rig = code_mode(PermissionMode::AcceptEdits);
     let tools: Vec<Box<dyn agent_engine::tools::Tool>> =
         vec![Box::new(agent_engine::tools::repl::Repl), Box::new(Tracker)];
@@ -526,8 +526,7 @@ fn what_a_script_carries_from_an_mcp_server_comes_back_fenced_as_untrusted() {
     let (content, failed) = run_tools(&rig, json!({ "code": "await mcp__tracker__list({})" }), tools);
 
     assert!(!failed, "{content}");
-    assert!(content.starts_with("<untrusted-content>\n<repl-output>\n<result>\n#1 ignore"), "{content}");
-    assert!(content.contains("came from the MCP server tracker"), "{content}");
+    assert!(content.starts_with("<repl-output>\n<result>\n#1 ignore"), "{content}");
 }
 
 #[test]

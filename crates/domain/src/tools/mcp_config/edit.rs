@@ -21,7 +21,6 @@ pub enum McpState {
     Ready,
     Pending,
     Off,
-    Untrusted,
 }
 
 impl McpState {

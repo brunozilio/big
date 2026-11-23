@@ -5,8 +5,7 @@ use std::time::Duration;
 
 use serde_json::{Value, json};
 
-use super::Confiner;
-use super::host_judge::{Grounds, HostJudge};
+use super::Starter;
 use super::script_tool::{Capabilities, Declaration, Origin, ScriptAccess};
 
 pub struct Described {
@@ -35,9 +34,7 @@ pub fn describe(path: &Path) -> Option<Described> {
 pub struct Granted {
     pub access: ScriptAccess,
     pub origin: Origin,
-    pub confine: Confiner,
-    pub judge: Arc<HostJudge>,
-    pub grounds: Grounds,
+    pub starter: Starter,
 }
 
 pub fn render(path: &Path, args: &str, cwd: &Path, granted: &Granted) -> Result<String, String> {
@@ -51,13 +48,11 @@ pub fn render(path: &Path, args: &str, cwd: &Path, granted: &Granted) -> Result<
         cwd: cwd.to_path_buf(),
         access: granted.access,
         origin: granted.origin,
-        confine: granted.confine.clone(),
+        starter: granted.starter.clone(),
         stop: Arc::clone(&stop),
         cancel: crate::model::CancellationToken::new(),
         script: format!("the skill script {shown}"),
         capabilities,
-        judge: Arc::clone(&granted.judge),
-        grounds: granted.grounds.clone(),
     });
     let data = json!({ "cwd": cwd.display().to_string(), "args": args, "base": path.parent().map(|dir| dir.display().to_string()) });
     let value = script::run_within(

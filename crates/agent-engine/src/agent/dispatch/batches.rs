@@ -112,10 +112,6 @@ impl Agent<'_> {
             && !Handler::of(name).starts_background_work()
             && !tool.serial()
             && self.workspace.stays_inside(&effects)
-            && self
-                .workspace
-                .ruling(tool, input)
-                .is_none_or(|(kind, _)| kind == domain::permission_rules::RuleKind::Allow)
     }
 }
 

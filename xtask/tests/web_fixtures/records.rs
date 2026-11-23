@@ -94,7 +94,7 @@ fn opening(start: u64) -> Vec<Record> {
     };
     let ask = AgentAsk {
         id: AskId("a1".into()),
-        kind: AskKind::Permission { tool: "Bash".into(), subject: "cargo test".into(), rememberable: true, rule: None },
+        kind: AskKind::Permission { tool: "Bash".into(), subject: "cargo test".into(), rememberable: true },
     };
     vec![
         Record::Prompted { at_ms: start, prompt: "Fix the rounding in the invoice totals".into() },

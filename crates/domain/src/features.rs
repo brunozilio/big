@@ -10,12 +10,7 @@ pub use learnings::{
     BLAST_RADIUS, CODE_MAP, LEARNING_CHECK, MEMORY_ANCHORS, MEMORY_SCORECARD, MEMORY_SEED, STRUCTURED_LEARNINGS,
 };
 
-pub const SANDBOX: &str = "experimental-sandbox";
-
 pub const REDACT_SECRETS: &str = "redact-secrets";
-pub const DESTRUCTIVE_SNAPSHOT: &str = "destructive-snapshot";
-pub const DEPENDENCY_GUARD: &str = "experimental-dependency-guard";
-pub const SUGGESTED_RULES: &str = "suggested-rules";
 pub const BUDGET: &str = "budget";
 pub const CACHE_WARNING: &str = "cache-warning";
 pub const ESCALATION: &str = "experimental-escalation";
@@ -45,7 +40,7 @@ pub fn skill_flag(skill: &str) -> Option<&'static str> {
     (skill == "follow-pr").then_some(PR_FOLLOW)
 }
 
-const SECURITY: &[&str] = &[SANDBOX, REDACT_SECRETS, DEPENDENCY_GUARD];
+const SECURITY: &[&str] = &[REDACT_SECRETS];
 
 pub fn only_restricts(feature: &str, flag: bool) -> bool {
     flag == SECURITY.contains(&feature)
@@ -59,10 +54,6 @@ pub struct Flag {
 
 pub const KNOWN: &[Flag] = &[
     Flag {
-        name: SANDBOX,
-        about: "Confine Bash and Monitor commands to the project's folders (macOS; Linux with Landlock)",
-    },
-    Flag {
         name: OUTPUT_CLEANUP,
         about: "Bash runs commands without colours and drops escape codes, redrawn progress and repeated lines",
     },
@@ -75,15 +66,6 @@ pub const KNOWN: &[Flag] = &[
         name: REDACT_SECRETS,
         about: "Hide tokens, keys and the project's .env values in tool output before the model and the log see them",
     },
-    Flag {
-        name: DESTRUCTIVE_SNAPSHOT,
-        about: "Before rm -r, git clean, git reset --hard and the like, keep untracked files so /rewind can bring them back",
-    },
-    Flag {
-        name: DEPENDENCY_GUARD,
-        about: "Before npm, cargo or pip installs a package that is missing, brand new or a typo of a popular one, ask you",
-    },
-    Flag { name: SUGGESTED_RULES, about: "/rules offers permission rules from answers you keep giving" },
     Flag { name: BUDGET, about: "/budget stops a session's model calls once it has spent what you allow" },
     Flag {
         name: CACHE_WARNING,
@@ -254,10 +236,10 @@ mod tests {
     #[test]
     fn every_feature_is_on_until_the_owner_turns_it_off() {
         let features = Features::default();
-        assert!(features.on(SANDBOX) && features.on("insights"));
+        assert!(features.on(REDACT_SECRETS) && features.on("insights"));
 
-        let features = features.layered(&json!({ SANDBOX: false, "insights": false }), true).expect("flags");
-        assert!(!features.on(SANDBOX) && !features.on("insights"));
+        let features = features.layered(&json!({ REDACT_SECRETS: false, "insights": false }), true).expect("flags");
+        assert!(!features.on(REDACT_SECRETS) && !features.on("insights"));
     }
 
     #[test]
@@ -273,39 +255,42 @@ mod tests {
 
     #[test]
     fn a_checked_in_file_only_restricts() {
-        let owners = Features::default().layered(&json!({ SANDBOX: false, "insights": false }), true).expect("flags");
+        let owners =
+            Features::default().layered(&json!({ REDACT_SECRETS: false, "insights": false }), true).expect("flags");
         let back_on = owners.clone().layered(&json!({ "insights": true }), false).expect("flags");
         assert!(!back_on.on("insights"), "a project cannot turn on what the owner turned off");
 
-        let project = Features::default().layered(&json!({ SANDBOX: false, "insights": false }), false).expect("flags");
-        assert!(project.on(SANDBOX), "a project cannot turn a security feature off");
+        let project =
+            Features::default().layered(&json!({ REDACT_SECRETS: false, "insights": false }), false).expect("flags");
+        assert!(project.on(REDACT_SECRETS), "a project cannot turn a security feature off");
         assert!(!project.on("insights"));
 
-        let enforced = owners.layered(&json!({ SANDBOX: true }), false).expect("flags");
-        assert!(enforced.on(SANDBOX), "a project may ask for a security feature");
+        let enforced = owners.layered(&json!({ REDACT_SECRETS: true }), false).expect("flags");
+        assert!(enforced.on(REDACT_SECRETS), "a project may ask for a security feature");
     }
 
     #[test]
     fn the_known_flags_are_listed_with_their_state() {
-        let features = Features::default().layered(&json!({ SANDBOX: false, "insights": false }), true).expect("flags");
+        let features =
+            Features::default().layered(&json!({ REDACT_SECRETS: false, "insights": false }), true).expect("flags");
 
         let listed = features.listed();
-        let sandbox = listed.iter().find(|flag| flag.name == SANDBOX).expect("sandbox is known");
-        assert!(!sandbox.on && sandbox.experimental && sandbox.security);
+        let redact = listed.iter().find(|flag| flag.name == REDACT_SECRETS).expect("redaction is known");
+        assert!(!redact.on && !redact.experimental && redact.security);
         assert!(!listed.iter().any(|flag| flag.name == "insights"), "only known flags are listed");
-        assert_eq!(features.off().collect::<Vec<_>>(), ["experimental-sandbox", "insights"]);
+        assert_eq!(features.off().collect::<Vec<_>>(), ["insights", "redact-secrets"]);
     }
 
     #[test]
     fn a_flag_is_written_into_the_settings_keeping_the_rest() {
         let settings = json!({ "model": "x", "features": { "insights": false } });
 
-        let written = with_flag(settings, SANDBOX, false).expect("written");
+        let written = with_flag(settings, REDACT_SECRETS, false).expect("written");
 
-        assert_eq!(written, json!({ "model": "x", "features": { "insights": false, SANDBOX: false } }));
-        assert!(with_flag(json!([]), SANDBOX, true).is_err());
-        assert!(with_flag(json!({ "features": 1 }), SANDBOX, true).is_err());
-        assert_eq!(known(SANDBOX).map(|flag| flag.name), Some(SANDBOX));
+        assert_eq!(written, json!({ "model": "x", "features": { "insights": false, REDACT_SECRETS: false } }));
+        assert!(with_flag(json!([]), REDACT_SECRETS, true).is_err());
+        assert!(with_flag(json!({ "features": 1 }), REDACT_SECRETS, true).is_err());
+        assert_eq!(known(REDACT_SECRETS).map(|flag| flag.name), Some(REDACT_SECRETS));
         assert!(known("nothing").is_none());
     }
 
@@ -313,7 +298,7 @@ mod tests {
     fn the_command_lists_or_turns_one_flag_on_or_off() {
         assert_eq!(toggle(None), Ok(None));
         assert_eq!(toggle(Some("  ")), Ok(None));
-        assert_eq!(toggle(Some("experimental-sandbox off")), Ok(Some((SANDBOX.into(), false))));
+        assert_eq!(toggle(Some("redact-secrets off")), Ok(Some((REDACT_SECRETS.into(), false))));
         assert_eq!(toggle(Some("insights on")), Ok(Some(("insights".into(), true))));
         assert!(toggle(Some("insights maybe")).is_err());
         assert!(toggle(Some("insights")).is_err());
@@ -321,8 +306,8 @@ mod tests {
 
     #[test]
     fn a_flag_that_is_not_true_or_false_is_refused() {
-        let error = Features::default().layered(&json!({ SANDBOX: "no" }), true).expect_err("refused");
-        assert_eq!(error, "features.experimental-sandbox must be true or false");
+        let error = Features::default().layered(&json!({ REDACT_SECRETS: "no" }), true).expect_err("refused");
+        assert_eq!(error, "features.redact-secrets must be true or false");
         assert!(Features::default().layered(&json!([]), true).is_err());
     }
 }

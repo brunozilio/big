@@ -58,20 +58,12 @@ pub struct SessionConfig {
     pub append_system: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct Policy {
     #[serde(default)]
     pub permission: PermissionMode,
-    #[serde(default = "checked")]
-    pub safety_check: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_turns: Option<u32>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub allowed_tools: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub disallowed_tools: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub ask_tools: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub verification: Option<crate::verification::Criteria>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -113,10 +105,6 @@ pub struct Shown {
     pub attached: Vec<String>,
 }
 
-fn checked() -> bool {
-    true
-}
-
 impl Prompt {
     pub fn typed(text: impl Into<String>) -> Self {
         Self { text: text.into(), ..Self::default() }
@@ -139,21 +127,6 @@ impl SessionConfig {
             fallbacks: Vec::new(),
             roles: Default::default(),
             append_system: None,
-        }
-    }
-}
-
-impl Default for Policy {
-    fn default() -> Self {
-        Self {
-            permission: PermissionMode::default(),
-            safety_check: true,
-            max_turns: None,
-            allowed_tools: Vec::new(),
-            disallowed_tools: Vec::new(),
-            ask_tools: Vec::new(),
-            verification: None,
-            budget: None,
         }
     }
 }
@@ -232,7 +205,6 @@ mod tests {
         request.session.fork = true;
         request.session.fallbacks = vec!["small".into()];
         request.policy.max_turns = Some(3);
-        request.policy.allowed_tools = vec!["Read".into()];
         request.host.code_map = Some("map".into());
         let written = serde_json::to_value(&request).expect("written");
         let mut keys: Vec<&str> = written.as_object().expect("object").keys().map(String::as_str).collect();
@@ -241,7 +213,6 @@ mod tests {
             keys,
             [
                 "add_dirs",
-                "allowed_tools",
                 "code_map",
                 "command",
                 "cwd",
@@ -255,8 +226,7 @@ mod tests {
                 "output_style",
                 "permission",
                 "prompt",
-                "resume",
-                "safety_check"
+                "resume"
             ]
         );
         assert_eq!(written["prompt"], "hi");
@@ -265,6 +235,6 @@ mod tests {
             "max_turns": 3
         });
         let read: PromptRequest = serde_json::from_value(old).expect("an older request reads");
-        assert_eq!((read.policy.max_turns, read.policy.safety_check), (Some(3), true));
+        assert_eq!(read.policy.max_turns, Some(3));
     }
 }

@@ -14,10 +14,7 @@ impl Tool for Monitor {
 
     fn effects(&self, input: &Value, _workspace: &Workspace) -> Vec<crate::tools::Effect> {
         use crate::tools::{Effect, SpawnKind};
-        vec![
-            Effect::exec(field(input, "command").unwrap_or_default(), false),
-            Effect::Spawn(SpawnKind::BackgroundShell),
-        ]
+        vec![Effect::exec(field(input, "command").unwrap_or_default()), Effect::Spawn(SpawnKind::BackgroundShell)]
     }
 
     fn summary(&self, input: &Value) -> String {

@@ -25,7 +25,7 @@ pub fn keep_feature(home: &Path, name: &str, on: bool) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use domain::features::SANDBOX;
+    use domain::features::BUDGET;
 
     use super::*;
 
@@ -36,14 +36,14 @@ mod tests {
         std::fs::create_dir_all(home.path().join(brand::DIR)).expect("dir");
         std::fs::write(path(home.path()), r#"{"outputStyle":"Concise"}"#).expect("settings");
 
-        keep_feature(home.path(), SANDBOX, false).expect("kept");
+        keep_feature(home.path(), BUDGET, false).expect("kept");
 
         let settings = super::super::settings::load_trusted(repo.path(), Some(home.path()), &[]).expect("load");
-        assert!(!settings.features.on(SANDBOX));
+        assert!(!settings.features.on(BUDGET));
         assert_eq!(settings.style.map(|style| style.name), Some("Concise".into()));
-        keep_feature(home.path(), SANDBOX, true).expect("kept");
+        keep_feature(home.path(), BUDGET, true).expect("kept");
         let settings = super::super::settings::load_trusted(repo.path(), Some(home.path()), &[]).expect("load");
-        assert!(settings.features.on(SANDBOX));
+        assert!(settings.features.on(BUDGET));
     }
 
     #[cfg(unix)]
@@ -56,7 +56,7 @@ mod tests {
         std::fs::write(path(home.path()), "{}").expect("settings");
         std::fs::set_permissions(path(home.path()), std::fs::Permissions::from_mode(0o644)).expect("mode");
 
-        keep_feature(home.path(), SANDBOX, false).expect("kept");
+        keep_feature(home.path(), BUDGET, false).expect("kept");
 
         let mode = std::fs::metadata(path(home.path())).expect("metadata").permissions().mode() & 0o777;
         assert_eq!(mode, 0o644);

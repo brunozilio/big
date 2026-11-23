@@ -15,7 +15,7 @@ use super::subagents::background::Spawn;
 use crate::hooks::{HookEvent, HookOutcome};
 use crate::tools::{Outcome, Tool};
 use crate::transcript::{Block, Message};
-use domain::permission_rules::PermissionDecision;
+use domain::permission::RuleKind as PermissionDecision;
 
 pub(in crate::agent) struct Calling<'c, 'env> {
     pub(in crate::agent) id: &'c str,

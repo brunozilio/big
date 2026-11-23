@@ -35,20 +35,6 @@ doc = false
 bench = false
 
 [[bin]]
-name = "shell_deny"
-path = "fuzz_targets/shell_deny.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
-name = "wildcards"
-path = "fuzz_targets/wildcards.rs"
-test = false
-doc = false
-bench = false
-
-[[bin]]
 name = "web_page"
 path = "fuzz_targets/web_page.rs"
 test = false

@@ -88,16 +88,6 @@ impl Stage {
         request
     }
 
-    pub fn trusted(&self, prompt: &str) -> PromptRequest {
-        let mut request = self.request(prompt);
-        request.host.extensions = Some(Extensions {
-            home: Some(self.home.clone()),
-            trust: domain::trust::Trust::Trusted,
-            ..Extensions::default()
-        });
-        request
-    }
-
     pub fn resuming(&self, session: &SessionId, prompt: &str) -> PromptRequest {
         let mut request = self.request(prompt);
         request.session.resume = Some(session.clone());

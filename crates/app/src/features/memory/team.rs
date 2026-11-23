@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use agent_engine::trust::Gate;
+use agent_engine::scope::Scope;
 use domain::features::Features;
 use domain::memory::{Memory, team};
 
@@ -8,11 +8,11 @@ pub fn folder(project: &Path) -> PathBuf {
     project.join(brand::DIR).join("memory")
 }
 
-pub fn features(gate: &Gate) -> Features {
+pub fn features(gate: &Scope) -> Features {
     agent_engine::prompt::settings::load(gate, &[]).map(|settings| settings.features).unwrap_or_default()
 }
 
-pub fn load(gate: &Gate) -> Vec<Memory> {
+pub fn load(gate: &Scope) -> Vec<Memory> {
     load_if(gate.cwd(), &features(gate))
 }
 
@@ -39,7 +39,7 @@ pub fn load_if(project: &Path, features: &Features) -> Vec<Memory> {
         .collect()
 }
 
-pub fn share(gate: &Gate, memory: &Memory) -> Result<PathBuf, String> {
+pub fn share(gate: &Scope, memory: &Memory) -> Result<PathBuf, String> {
     let project = gate.cwd();
     let structured = features(gate).on(domain::features::STRUCTURED_LEARNINGS);
     let by = if structured {
@@ -82,7 +82,7 @@ mod tests {
             credit: None,
         };
 
-        let gate = Gate::at(project.path(), None, domain::trust::Trust::Untrusted);
+        let gate = Scope::at(project.path(), None);
         let path = share(&gate, &mine).expect("shared");
         let loaded = load(&gate);
 

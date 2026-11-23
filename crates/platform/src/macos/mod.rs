@@ -4,8 +4,6 @@ use std::process::Command;
 
 pub use crate::unix::*;
 
-pub(crate) mod seatbelt;
-
 pub const NAME: &str = "macOS";
 
 pub fn release_target() -> Option<&'static str> {

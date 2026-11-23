@@ -1,5 +1,5 @@
 use crate::frontmatter::parse as parse_frontmatter;
-use crate::trust::Gate;
+use crate::scope::Scope;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 pub const MANAGED: &str = "managed-settings.json";
@@ -39,17 +39,11 @@ pub struct Settings {
     pub mcp_approval: domain::mcp_config::McpApproval,
     #[serde(default)]
     pub lsp_servers: Vec<LspLayer>,
-    #[serde(skip)]
-    pub permissions: domain::permission_rules::PermissionRules,
-    #[serde(skip)]
-    pub judge_allow: domain::permission_rules::PermissionRules,
     #[serde(default)]
     pub added_dirs: Vec<String>,
     pub scripts: crate::tools::script_tool::ScriptGrants,
     #[serde(default)]
     pub features: domain::features::Features,
-    #[serde(default)]
-    pub sandbox: domain::sandbox::Sandbox,
     #[serde(default)]
     pub notices: Vec<String>,
     #[serde(default)]
@@ -73,19 +67,18 @@ fn model_names(value: &Value, key: &str) -> Result<Vec<String>, String> {
     }
 }
 
-pub fn load(gate: &Gate, plugins: &[crate::plugins::Plugin]) -> Result<Settings, String> {
-    let home = gate.home();
-    let roots = roots(gate.cwd(), home);
+pub fn load(scope: &Scope, plugins: &[crate::plugins::Plugin]) -> Result<Settings, String> {
+    let home = scope.home();
+    let roots = roots(scope.cwd(), home);
     let is_user_root = |root: &Path| home.is_some_and(|home| root == home.join(brand::DIR));
     let mut merged = Settings::default();
-    merged.hooks.extend(&crate::hooks::Hooks::gathered(home, &roots, &|file| gate.honours(file)));
+    merged.hooks.extend(&crate::hooks::Hooks::gathered(home, &roots, &|file| scope.honours(file)));
     merged.project_criteria = super::criteria_file::nearest(roots.iter().filter(|root| !is_user_root(root)));
     let mut style = String::from("Default");
-    let mut replaced_opt_in = false;
     let mut problems = Vec::new();
     let mut skipped = Vec::new();
     for (path, users) in files(&roots, home) {
-        let honoured = users || gate.honours(&path);
+        let honoured = users || scope.honours(&path);
         let owners = users || (honoured && path.file_name().is_some_and(|name| name == LOCAL));
         let value = match read(&path) {
             Ok(Some(value)) => value,
@@ -99,7 +92,6 @@ pub fn load(gate: &Gate, plugins: &[crate::plugins::Plugin]) -> Result<Settings,
         let checked = crate::config_schema::checked_settings(value);
         problems.extend(checked.located(&path));
         let value = checked.value;
-        replaced_opt_in |= users && value.get(domain::trust::LEGACY_OPT_IN).is_some();
         let layer = Layer { path: &path, value: &value, owners, runs_hooks: honoured };
         if owners {
             layer.merge_into(&mut merged, &mut style)?;
@@ -114,8 +106,7 @@ pub fn load(gate: &Gate, plugins: &[crate::plugins::Plugin]) -> Result<Settings,
     add_plugins(&mut merged, plugins);
     problems.extend(skipped.iter().map(|(path, error)| skipped_layer(path, error)));
     merged.skipped_files = skipped.into_iter().map(|(path, _)| path).collect();
-    merged.notices = gate.skipped_notice().into_iter().collect();
-    merged.notices.extend(replaced_opt_in.then(domain::trust::legacy_notice));
+    merged.notices = Vec::new();
     crate::config_schema::logged_once(&problems);
     merged.notices.extend(problems);
     merged.style = style_named(style, &roots)?;
@@ -193,21 +184,13 @@ impl Layer<'_> {
         if self.owners {
             merged.mcp_approval.read(settings);
         }
-        super::permissions::read(settings, self.owners, &mut merged.permissions, &mut merged.added_dirs)
-            .map_err(|e| self.located(e))?;
-        if self.owners {
-            super::permissions::read_judge(settings, &mut merged.judge_allow).map_err(|e| self.located(e))?;
-        }
+        super::permissions::read(settings, self.owners, &mut merged.added_dirs).map_err(|e| self.located(e))?;
         if let Some(value) = settings.get("scripts") {
             merged.scripts = merged.scripts.layered(value, self.owners)?;
         }
         if let Some(value) = settings.get("features") {
             let features = std::mem::take(&mut merged.features);
             merged.features = features.layered(value, self.owners).map_err(|e| self.located(e))?;
-        }
-        if let Some(value) = settings.get("sandbox") {
-            let sandbox = std::mem::take(&mut merged.sandbox);
-            merged.sandbox = sandbox.layered(value, self.owners).map_err(|e| self.located(e))?;
         }
         Ok(())
     }
@@ -316,7 +299,7 @@ pub(crate) fn load_trusted(
     home: Option<&Path>,
     plugins: &[crate::plugins::Plugin],
 ) -> Result<Settings, String> {
-    load(&Gate::at(cwd, home, domain::trust::Trust::Trusted), plugins)
+    load(&Scope::at(cwd, home), plugins)
 }
 #[cfg(test)]
 #[path = "settings_lsp_tests.rs"]
@@ -327,6 +310,3 @@ mod schema_tests;
 #[cfg(test)]
 #[path = "settings_tests.rs"]
 mod tests;
-#[cfg(test)]
-#[path = "settings_trust_tests.rs"]
-mod trust_tests;

@@ -28,9 +28,24 @@ pub(crate) fn settled(path: &Path) -> PathBuf {
     out
 }
 
+fn folded(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        match component {
+            Component::ParentDir => {
+                out.pop();
+            }
+            Component::CurDir => {}
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 impl Workspace {
     fn project_root(&self) -> PathBuf {
-        domain::trust::project_root(&settled(&self.cwd), &|dir| dir.join(".git").exists())
+        let cwd = settled(&self.cwd);
+        cwd.ancestors().find(|dir| dir.join(".git").exists()).map_or_else(|| cwd.clone(), Path::to_path_buf)
     }
 
     pub fn may_read(&self, path: &Path) -> bool {
@@ -56,7 +71,7 @@ impl Workspace {
 
     pub fn place(&self, path: &str) -> domain::permission::Place {
         let resolved = self.resolve(path);
-        domain::permission::Place { written: super::rule_target::folded(&resolved), real: settled(&resolved) }
+        domain::permission::Place { written: folded(&resolved), real: settled(&resolved) }
     }
 }
 

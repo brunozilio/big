@@ -9,7 +9,6 @@ use crate::api::features::plugins::PluginsRequest;
 use crate::api::features::schedules::SchedulesRequest;
 use crate::api::features::sessions::SessionsRequest;
 use crate::api::features::shell::ShellRequest;
-use crate::api::features::suggested_rules::SuggestedRulesRequest;
 use crate::api::features::trace::TraceRequest;
 use crate::api::features::workspace::{WorkspaceOp, WorkspaceRequest};
 use crate::api::{FeatureError, FeatureName, FeatureReply, FeatureRequest};
@@ -30,7 +29,6 @@ fn a_request_to(feature: FeatureName, cwd: &Path) -> FeatureRequest {
         FeatureName::Schedules => FeatureRequest::Schedules(SchedulesRequest::List),
         FeatureName::Sessions => FeatureRequest::Sessions(SessionsRequest::List),
         FeatureName::Shell => FeatureRequest::Shell(ShellRequest::List),
-        FeatureName::SuggestedRules => FeatureRequest::SuggestedRules(SuggestedRulesRequest::List { cwd: path }),
         FeatureName::Trace => FeatureRequest::Trace(TraceRequest::EverySession),
         FeatureName::Workspace => FeatureRequest::Workspace(WorkspaceRequest { path, op: WorkspaceOp::GitOffer }),
     }

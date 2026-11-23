@@ -5,8 +5,7 @@ use std::time::Duration;
 use platform::bounded::{Bounds, Ended};
 use serde_json::{Value, json};
 
-use super::Confiner;
-use super::host_judge::{Grounds, HostAsk, HostJudge};
+use super::Starter;
 use super::script_tool::{Capabilities, Capability, Origin, ScriptAccess};
 use crate::model::CancellationToken;
 use crate::model::http::{Http, NetHttp, Response, reason};
@@ -15,11 +14,11 @@ use crate::tools::builtin::web::{reach, under};
 const OUTPUT: usize = 1 << 20;
 pub const FETCHED: usize = 5 << 20;
 
-pub fn exec(cwd: &Path, arguments: &Value, stop: &AtomicBool, confine: &Confiner) -> Result<Value, String> {
+pub fn exec(cwd: &Path, arguments: &Value, stop: &AtomicBool, starter: &Starter) -> Result<Value, String> {
     let command =
         arguments["command"].as_str().filter(|command| !command.trim().is_empty()).ok_or("ctx.exec needs a command")?;
     let seconds = arguments["timeout"].as_u64().unwrap_or(120);
-    let mut process = confine.confined(platform::script_shell(command));
+    let mut process = starter.launched(platform::script_shell(command));
     process.current_dir(cwd);
     let input = arguments["input"].as_str().map(|text| text.as_bytes().to_vec());
     let bounds = Bounds { timeout: Duration::from_secs(seconds), max_output: OUTPUT, stop, input };
@@ -87,13 +86,11 @@ pub struct StandaloneHost {
     pub cwd: std::path::PathBuf,
     pub access: ScriptAccess,
     pub origin: Origin,
-    pub confine: Confiner,
+    pub starter: Starter,
     pub stop: std::sync::Arc<AtomicBool>,
     pub cancel: CancellationToken,
     pub script: String,
     pub capabilities: Capabilities,
-    pub judge: std::sync::Arc<HostJudge>,
-    pub grounds: Grounds,
 }
 
 impl StandaloneHost {
@@ -116,7 +113,7 @@ impl StandaloneHost {
                     .map(|_| Value::Null)
                     .map_err(|error| format!("{}: {error}", path.display()))
             }
-            Capability::Exec => exec(&self.cwd, arguments, &self.stop, &self.confine),
+            Capability::Exec => exec(&self.cwd, arguments, &self.stop, &self.starter),
             Capability::Fetch => fetch(arguments, self.origin, &self.cancel),
         }
     }
@@ -127,8 +124,6 @@ impl script::Host for StandaloneHost {
         if let Some(capability) = Capability::of(function) {
             self.capabilities.allows(capability, &self.script)?;
             capability.granted(self.access)?;
-            let ask = HostAsk { capability, script: &self.script, arguments: &arguments };
-            self.judge.judge(&ask, &self.grounds)?;
             return self.performed(capability, &arguments);
         }
         match function {

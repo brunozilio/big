@@ -1,4 +1,16 @@
-use crate::permission_rules::{normalized, split_command};
+use crate::shell::{SimpleCommand, simple_commands as split_command};
+
+fn normalized(part: &str) -> String {
+    let bare = SimpleCommand::bare(part);
+    let mut words = bare.split_whitespace().skip_while(|word| assigns(word));
+    let program = words.next().map(|program| program.rsplit('/').next().unwrap_or(program));
+    program.into_iter().chain(words).collect::<Vec<_>>().join(" ")
+}
+
+fn assigns(word: &str) -> bool {
+    word.split_once('=')
+        .is_some_and(|(name, _)| !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+}
 
 pub fn program(command: &str) -> String {
     let (parts, _) = split_command(command);

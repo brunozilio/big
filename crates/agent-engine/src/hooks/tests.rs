@@ -59,7 +59,7 @@ fn a_printed_decision_blocks_with_the_first_reason_it_gives() {
 fn a_permission_answer_is_kept_and_a_denial_blocks() {
     let allow = json!({"hookSpecificOutput": {"permissionDecision": "allow"}});
     let (handled, decision, _) = absorb("PreToolUse", printed(allow));
-    let allowed = Some(domain::permission_rules::PermissionDecision::Allow);
+    let allowed = Some(domain::permission::RuleKind::Allow);
     assert_eq!((handled, decision.permission), (Ok(Handled::GoOn), allowed));
     let deny = json!({"hookSpecificOutput": {"decision": {"behavior": "deny"}}});
     let (handled, decision, _) = absorb("PermissionRequest", printed(deny));

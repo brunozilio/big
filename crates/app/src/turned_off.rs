@@ -45,12 +45,12 @@ mod tests {
         off.insert("memory_search".into());
         let shared = off.clone();
 
-        off.follow(&features(json!({ "suggested-rules": false, "budget": true })));
-        assert!(shared.contains("suggested-rules"), "every clone sees it");
+        off.follow(&features(json!({ "schedules": false, "budget": true })));
+        assert!(shared.contains("schedules"), "every clone sees it");
         assert!(!shared.contains("budget"));
 
-        off.follow(&features(json!({ "suggested-rules": true })));
-        assert!(!shared.contains("suggested-rules"), "turned back on");
+        off.follow(&features(json!({ "schedules": true })));
+        assert!(!shared.contains("schedules"), "turned back on");
         assert!(shared.contains("memory_search"), "the settings never said anything about it");
     }
 
@@ -61,7 +61,7 @@ mod tests {
             json!({ "sessions": false, "suggested_rules": false, "typo": false, "memory": false, "trace": false }),
         ));
         assert!(off.contains("trace"));
-        for unknown in ["sessions", "suggested_rules", "suggested-rules", "typo", "memory"] {
+        for unknown in ["sessions", "suggested_rules", "schedules", "typo", "memory"] {
             assert!(!off.contains(unknown), "{unknown} is not a flag /features knows");
         }
     }

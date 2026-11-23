@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::trust::Gate;
+use crate::scope::Scope;
 use crate::{prompt, tools};
 use domain::Folder;
 use serde::{Deserialize, Serialize};
@@ -35,12 +35,10 @@ pub struct Brief {
     pub plugins: Vec<crate::plugins::Plugin>,
     #[serde(default)]
     pub home: Option<PathBuf>,
-    #[serde(default)]
-    pub trust: domain::trust::Trust,
 }
 impl Brief {
     pub fn load(folder: Folder<'_>) -> Result<Self, BriefError> {
-        let gate = Gate::of(folder);
+        let gate = Scope::of(folder);
         let home = gate.home();
         let plugins = crate::plugins::found(folder, home);
         let settings = prompt::settings::load(&gate, &plugins).map_err(BriefError::Settings)?;
@@ -62,7 +60,6 @@ impl Brief {
             instructions: edited.instructions,
             plugins,
             home: home.map(PathBuf::from),
-            trust: gate.trust(),
         })
     }
 
@@ -72,13 +69,11 @@ impl Brief {
             plugins: self.plugins.clone(),
             approval: self.settings.mcp_approval.clone(),
             scripts: self.settings.scripts,
-            trust: self.trust,
-            sandbox: sandbox_of(&self.settings),
         }
     }
 
-    pub fn gate(&self, cwd: &std::path::Path) -> Gate {
-        Gate::at(cwd, self.home.as_deref(), self.trust)
+    pub fn gate(&self, cwd: &std::path::Path) -> Scope {
+        Scope::at(cwd, self.home.as_deref())
     }
 }
 
@@ -94,30 +89,22 @@ fn hook_workspace(
 }
 
 pub fn mcp_sources(folder: Folder<'_>) -> Result<crate::mcp::McpSources, BriefError> {
-    let gate = Gate::of(folder);
+    let gate = Scope::of(folder);
     let plugins = crate::plugins::found(folder, gate.home());
     let settings = prompt::settings::load(&gate, &plugins).map_err(BriefError::Settings)?;
-    let sandbox = sandbox_of(&settings);
     Ok(crate::mcp::McpSources {
         home: gate.home().map(PathBuf::from),
         plugins,
         approval: settings.mcp_approval,
         scripts: settings.scripts,
-        trust: gate.trust(),
-        sandbox,
     })
 }
 
-fn sandbox_of(settings: &prompt::settings::Settings) -> Option<domain::sandbox::Sandbox> {
-    settings.features.on(domain::features::SANDBOX).then(|| settings.sandbox.clone())
-}
-
-pub fn permissions(folder: Folder<'_>) -> Result<domain::permission_rules::PermissionsInfo, BriefError> {
-    let gate = Gate::of(folder);
+pub fn permissions(folder: Folder<'_>) -> Result<domain::permission::PermissionsInfo, BriefError> {
+    let gate = Scope::of(folder);
     let plugins = crate::plugins::found(folder, gate.home());
     let settings = prompt::settings::load(&gate, &plugins).map_err(BriefError::Settings)?;
-    Ok(domain::permission_rules::PermissionsInfo {
-        rules: settings.permissions.listed(),
+    Ok(domain::permission::PermissionsInfo {
         added_dirs: settings.added_dirs,
         hooks: settings.hooks.listed(),
         notices: settings.notices,
@@ -167,7 +154,7 @@ mod tests {
     }
 
     #[test]
-    fn the_permissions_of_a_folder_are_its_settings_rules() {
+    fn the_permissions_of_a_folder_are_its_added_folders_and_hooks() {
         let home = tempfile::tempdir().expect("home");
         let repo = tempfile::tempdir().expect("repo");
         std::fs::create_dir_all(repo.path().join(brand::DIR)).expect("dir");
@@ -178,15 +165,10 @@ mod tests {
         )
         .expect("write");
         let mut request = PromptRequest::plain(repo.path().into(), "", ModelOption::new("m", "M"));
-        request.host.extensions = Some(domain::Extensions {
-            home: Some(home.path().into()),
-            trust: domain::trust::Trust::Trusted,
-            ..Default::default()
-        });
+        request.host.extensions = Some(domain::Extensions { home: Some(home.path().into()), ..Default::default() });
         let info = super::permissions(request.folder()).expect("permissions");
-        assert_eq!(info.rules, [(domain::permission_rules::RuleKind::Allow, "Bash(ls:*)".to_owned())]);
         assert_eq!(info.added_dirs, ["../lib"]);
-        let hook = domain::permission_rules::HookInfo {
+        let hook = domain::permission::HookInfo {
             event: crate::hooks::HookEvent::PreToolUse,
             matcher: "Bash".into(),
             runs: "./check.sh".into(),

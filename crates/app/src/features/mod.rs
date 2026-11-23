@@ -8,7 +8,6 @@ mod plugins;
 mod schedules;
 mod sessions;
 mod shell;
-mod suggested_rules;
 pub(crate) mod trace;
 mod workspace;
 
@@ -20,7 +19,7 @@ use crate::features::context::{Context, Finish};
 type Forget = fn(u64);
 type Prepare = fn(&Context<'_>, RunId, PromptRequest) -> (PromptRequest, Option<Finish>);
 
-const ALL: [(FeatureName, Forget); 12] = [
+const ALL: [(FeatureName, Forget); 11] = [
     (FeatureName::Channels, channels::forget),
     (FeatureName::CodeMap, code_map::forget),
     (FeatureName::Flags, flags::forget),
@@ -30,7 +29,6 @@ const ALL: [(FeatureName, Forget); 12] = [
     (FeatureName::Schedules, schedules::forget),
     (FeatureName::Sessions, sessions::forget),
     (FeatureName::Shell, shell::forget),
-    (FeatureName::SuggestedRules, suggested_rules::forget),
     (FeatureName::Trace, trace::forget),
     (FeatureName::Workspace, workspace::forget),
 ];
@@ -64,9 +62,6 @@ fn answer(context: &Context<'_>, request: FeatureRequest) -> Result<FeatureReply
         FeatureRequest::Schedules(request) => schedules::handle(context, request).map(FeatureReply::Schedules),
         FeatureRequest::Sessions(request) => sessions::handle(context, request).map(FeatureReply::Sessions),
         FeatureRequest::Shell(request) => shell::handle(context, request).map(FeatureReply::Shell),
-        FeatureRequest::SuggestedRules(request) => {
-            suggested_rules::handle(context, request).map(FeatureReply::SuggestedRules)
-        }
         FeatureRequest::Trace(request) => trace::handle(context, request).map(FeatureReply::Trace),
         FeatureRequest::Workspace(request) => workspace::handle(context, request).map(FeatureReply::Workspace),
     }
@@ -117,7 +112,6 @@ mod tests {
                 "schedules",
                 "sessions",
                 "shell",
-                "suggested_rules",
                 "trace",
                 "workspace",
             ]

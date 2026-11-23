@@ -45,7 +45,6 @@ fn a_javascript_tool_reads_through_another_tool_and_asks_the_model() {
         Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&model_api)]))), Arc::new(InMemorySessions::default()));
     let mut request = PromptRequest::plain(dir.path().into(), "Summarize the notes.", model());
     request.policy.permission = PermissionMode::Bypass;
-    request.policy.safety_check = false;
     request.host.extensions.get_or_insert_with(Default::default).home = Some(home.path().to_path_buf());
     let events = finish(&start(&engine, &request));
     assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");

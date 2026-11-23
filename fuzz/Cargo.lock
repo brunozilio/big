@@ -1483,17 +1483,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "landlock"
-version = "0.4.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4cca98e95f35b29d469dade6724c6f96cec9236640f745a0e99b0334ec320ab1"
-dependencies = [
- "enumflags2",
- "libc",
- "thiserror",
-]
-
-[[package]]
 name = "language-servers"
 version = "0.0.1"
 dependencies = [
@@ -1846,7 +1835,6 @@ dependencies = [
  "base64 0.23.1",
  "crossbeam-channel",
  "keyring",
- "landlock",
  "libc",
  "serde",
  "serde_json",

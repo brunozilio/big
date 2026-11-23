@@ -23,7 +23,7 @@ fn a_key_of_the_wrong_type_is_reported_and_the_rest_of_the_file_still_applies() 
         &json!({
             "enableAllProjectMcpServers": "no",
             "outputStyle": "Concise",
-            "permissions": { "deny": ["Bash(rm:*)", 5] }
+            "permissions": { "additionalDirectories": ["../lib", 5] }
         }),
     );
 
@@ -35,13 +35,11 @@ fn a_key_of_the_wrong_type_is_reported_and_the_rest_of_the_file_still_applies() 
         "{:?}",
         settings.notices
     );
-    assert!(settings.notices.contains(&format!("{shown}: permissions.deny[1]: expected string, found 5")));
+    assert!(
+        settings.notices.contains(&format!("{shown}: permissions.additionalDirectories[1]: expected string, found 5"))
+    );
     assert!(!settings.mcp_approval.all, "the wrong value is left out");
     assert_eq!(settings.style.map(|style| style.name), Some("Concise".into()));
-    let cwd = repo.path().to_string_lossy().into_owned();
-    let target = domain::permission_rules::Target::Command("rm -rf x");
-    let denied = settings.permissions.decide("Bash", &target, &cwd, None);
-    assert_eq!(denied, Some(domain::permission_rules::RuleKind::Deny), "the good rule beside the bad one holds");
 }
 
 #[test]
@@ -153,17 +151,9 @@ fn the_documented_full_example_reads_without_a_notice() {
         "enabledMcpServers": ["jira"],
         "disabledMcpServers": ["sonar"],
         "permissions": {
-            "allow": ["Bash(cargo test:*)", "Edit(src/**)"],
-            "ask": ["Bash(git push:*)"],
-            "deny": ["Read(*.env)"],
             "additionalDirectories": ["~/notes"]
         },
-        "verification": { "allow": ["Bash(cargo test:*)"] },
         "scripts": { "files": true, "processes": true, "network": false },
-        "sandbox": {
-            "network": true, "allowWrite": ["~/.m2"], "required": true,
-            "allowUnixSockets": ["~/.docker/run/docker.sock"], "allowRead": ["~/.ssh/known_hosts"]
-        },
         "features": { "experimental-code-map": false, "git-offer": false },
         "lspServers": {
             "zls": { "command": "zls", "args": [], "extensionToLanguage": { ".zig": "zig" },
@@ -184,7 +174,7 @@ fn the_documented_full_example_reads_without_a_notice() {
     let settings = load(repo.path(), Some(home.path()), &[]).expect("settings");
 
     assert!(settings.notices.is_empty(), "{:?}", settings.notices);
-    assert_eq!(settings.sandbox.allow_unix_sockets, ["~/.docker/run/docker.sock"]);
+    assert_eq!(settings.added_dirs, ["~/notes"]);
 }
 
 fn one_value_per_published_key() -> Vec<(&'static str, Value)> {
@@ -204,12 +194,9 @@ fn one_value_per_published_key() -> Vec<(&'static str, Value)> {
         ("disabledMcpServers", json!(["sonar"])),
         ("hooks", json!({ "Stop": [{ "hooks": [{ "type": "command", "command": "true" }] }] })),
         ("lspServers", json!({ "zls": { "command": "zls" } })),
-        ("permissions", json!({ "deny": ["Bash(rm:*)"] })),
-        ("verification", json!({ "allow": ["Bash(make)"] })),
+        ("permissions", json!({ "additionalDirectories": ["~/notes"] })),
         ("scripts", json!({ "network": false })),
-        ("sandbox", json!({ "network": false })),
         ("features", json!({ "git-offer": false })),
-        (domain::trust::LEGACY_OPT_IN, json!(true)),
     ]
 }
 

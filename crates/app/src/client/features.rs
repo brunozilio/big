@@ -7,7 +7,6 @@ use crate::api::features::plugins::{PluginsReply, PluginsRequest};
 use crate::api::features::schedules::{SchedulesReply, SchedulesRequest};
 use crate::api::features::sessions::{SessionsReply, SessionsRequest};
 use crate::api::features::shell::{ShellReply, ShellRequest};
-use crate::api::features::suggested_rules::{SuggestedRulesReply, SuggestedRulesRequest};
 use crate::api::features::trace::{TraceReply, TraceRequest};
 use crate::api::features::workspace::{WorkspaceReply, WorkspaceRequest};
 use crate::api::{ClientCommand, FeatureReply, FeatureRequest, Reply};
@@ -58,7 +57,6 @@ asks! {
     ask_schedules: Schedules(SchedulesRequest) -> SchedulesReply;
     ask_sessions: Sessions(SessionsRequest) -> SessionsReply;
     ask_shell: Shell(ShellRequest) -> ShellReply;
-    ask_suggested_rules: SuggestedRules(SuggestedRulesRequest) -> SuggestedRulesReply;
     ask_trace: Trace(TraceRequest) -> TraceReply;
     ask_workspace: Workspace(WorkspaceRequest) -> WorkspaceReply;
 }

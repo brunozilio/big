@@ -7,7 +7,6 @@ pub mod plugins;
 pub mod schedules;
 pub mod sessions;
 pub mod shell;
-pub mod suggested_rules;
 pub mod trace;
 pub mod workspace;
 
@@ -22,7 +21,6 @@ use self::plugins::{PluginsReply, PluginsRequest};
 use self::schedules::{SchedulesReply, SchedulesRequest};
 use self::sessions::{SessionsReply, SessionsRequest};
 use self::shell::{ShellReply, ShellRequest};
-use self::suggested_rules::{SuggestedRulesReply, SuggestedRulesRequest};
 use self::trace::{TraceReply, TraceRequest};
 use self::workspace::{WorkspaceReply, WorkspaceRequest};
 
@@ -38,13 +36,12 @@ pub enum FeatureName {
     Schedules,
     Sessions,
     Shell,
-    SuggestedRules,
     Trace,
     Workspace,
 }
 
 impl FeatureName {
-    pub const ALL: [Self; 12] = [
+    pub const ALL: [Self; 11] = [
         Self::Channels,
         Self::CodeMap,
         Self::Flags,
@@ -54,7 +51,6 @@ impl FeatureName {
         Self::Schedules,
         Self::Sessions,
         Self::Shell,
-        Self::SuggestedRules,
         Self::Trace,
         Self::Workspace,
     ];
@@ -70,7 +66,6 @@ impl FeatureName {
             Self::Schedules => "schedules",
             Self::Sessions => "sessions",
             Self::Shell => "shell",
-            Self::SuggestedRules => "suggested_rules",
             Self::Trace => "trace",
             Self::Workspace => "workspace",
         }
@@ -84,7 +79,6 @@ impl FeatureName {
             Self::OutputSavings => Some(flags::OUTPUT_SAVINGS),
             Self::Plugins => Some(flags::PLUGINS),
             Self::Schedules => Some(flags::SCHEDULES),
-            Self::SuggestedRules => Some(flags::SUGGESTED_RULES),
             Self::Trace => Some(flags::TRACE),
             Self::Flags | Self::Memory | Self::Sessions | Self::Shell | Self::Workspace => None,
         }
@@ -109,7 +103,6 @@ pub enum FeatureRequest {
     Schedules(SchedulesRequest),
     Sessions(SessionsRequest),
     Shell(ShellRequest),
-    SuggestedRules(SuggestedRulesRequest),
     Trace(TraceRequest),
     Workspace(WorkspaceRequest),
 }
@@ -126,7 +119,6 @@ impl FeatureRequest {
             Self::Schedules(_) => FeatureName::Schedules,
             Self::Sessions(_) => FeatureName::Sessions,
             Self::Shell(_) => FeatureName::Shell,
-            Self::SuggestedRules(_) => FeatureName::SuggestedRules,
             Self::Trace(_) => FeatureName::Trace,
             Self::Workspace(_) => FeatureName::Workspace,
         }
@@ -145,7 +137,6 @@ pub enum FeatureReply {
     Schedules(SchedulesReply),
     Sessions(SessionsReply),
     Shell(ShellReply),
-    SuggestedRules(SuggestedRulesReply),
     Trace(TraceReply),
     Workspace(WorkspaceReply),
 }
@@ -162,7 +153,6 @@ impl FeatureReply {
             Self::Schedules(_) => FeatureName::Schedules,
             Self::Sessions(_) => FeatureName::Sessions,
             Self::Shell(_) => FeatureName::Shell,
-            Self::SuggestedRules(_) => FeatureName::SuggestedRules,
             Self::Trace(_) => FeatureName::Trace,
             Self::Workspace(_) => FeatureName::Workspace,
         }

@@ -22,7 +22,7 @@ pub struct FoundAgent {
 
 pub fn discover(folder: Folder<'_>, home: Option<&Path>) -> Vec<FoundAgent> {
     let cwd = folder.cwd;
-    let gate = crate::trust::Gate::within(folder, home);
+    let gate = crate::scope::Scope::within(folder, home);
     let project_folders = cwd.ancestors().count();
     let mut sources: Vec<(PathBuf, Option<String>)> = Vec::new();
     for directory in cwd.ancestors() {

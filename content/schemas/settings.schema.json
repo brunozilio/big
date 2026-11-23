@@ -228,10 +228,6 @@
           "description": "MCP servers that stay open for the session and send messages to the agent",
           "type": "boolean"
         },
-        "destructive-snapshot": {
-          "description": "Before rm -r, git clean, git reset --hard and the like, keep untracked files so /rewind can bring them back",
-          "type": "boolean"
-        },
         "experimental-affected-tests": {
           "description": "After an edit, run the tests that cover the changed file in the background and tell the agent",
           "type": "boolean"
@@ -246,10 +242,6 @@
         },
         "experimental-code-mode": {
           "description": "REPL becomes the agent's only tool: it writes JavaScript that calls every other tool as a function, and only what the script returns reaches the model",
-          "type": "boolean"
-        },
-        "experimental-dependency-guard": {
-          "description": "Before npm, cargo or pip installs a package that is missing, brand new or a typo of a popular one, ask you",
           "type": "boolean"
         },
         "experimental-escalation": {
@@ -298,10 +290,6 @@
         },
         "experimental-pr-follow": {
           "description": "The follow-pr skill watches a pull request and wakes the agent on failing checks and new reviews",
-          "type": "boolean"
-        },
-        "experimental-sandbox": {
-          "description": "Confine Bash and Monitor commands to the project's folders (macOS; Linux with Landlock)",
           "type": "boolean"
         },
         "experimental-session-claims": {
@@ -358,10 +346,6 @@
         },
         "schedules": {
           "description": "/loop and /schedules send a prompt again later or on an interval",
-          "type": "boolean"
-        },
-        "suggested-rules": {
-          "description": "/rules offers permission rules from answers you keep giving",
           "type": "boolean"
         },
         "team-memory": {
@@ -542,7 +526,7 @@
     },
     "permissions": {
       "additionalProperties": false,
-      "description": "Allow, ask and deny rules and extra folders.",
+      "description": "Extra folders.",
       "properties": {
         "additionalDirectories": {
           "description": "Folders the agent reads like the project. Read only from your own files.",
@@ -550,63 +534,6 @@
             "type": "string"
           },
           "type": "array"
-        },
-        "allow": {
-          "description": "Tool calls that run without asking. Read only from your own files.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "ask": {
-          "description": "Tool calls that always ask.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "deny": {
-          "description": "Tool calls that are refused, in every mode.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
-    },
-    "sandbox": {
-      "additionalProperties": false,
-      "description": "Where sandboxed commands may write and whether they reach the network.",
-      "properties": {
-        "allowRead": {
-          "description": "Paths sandboxed commands may read on macOS although they are credential stores (~/.ssh, ~/.aws, ~/.npmrc, ~/.gnupg, …) or the app's data folder, which are unreadable by default.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "allowUnixSockets": {
-          "description": "Service sockets sandboxed commands may connect to on macOS, such as the Docker socket or a tmux server's (refused by default).",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "allowWrite": {
-          "description": "Extra folders sandboxed commands may write to.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "network": {
-          "description": "false blocks the network for sandboxed commands.",
-          "type": "boolean"
-        },
-        "required": {
-          "description": "true refuses commands when the sandbox cannot be provided.",
-          "type": "boolean"
         }
       },
       "type": "object"
@@ -646,24 +573,6 @@
         "iterm2",
         "auto"
       ]
-    },
-    "trustProjectHooks": {
-      "deprecated": true,
-      "description": "No longer does anything: a project's hooks run once you trust its folder.",
-      "type": "boolean"
-    },
-    "verification": {
-      "additionalProperties": false,
-      "properties": {
-        "allow": {
-          "description": "Rules the verification judge may run without asking.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      },
-      "type": "object"
     }
   },
   "title": "Settings",

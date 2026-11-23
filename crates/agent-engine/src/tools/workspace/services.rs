@@ -8,7 +8,6 @@ pub struct Services {
     pub deferred: Option<Arc<crate::tools::tool_search::Deferred>>,
     pub search: Option<WebSearcher>,
     pub launch: super::Launch,
-    pub judge: Option<Arc<crate::tools::host_judge::HostJudge>>,
 }
 
 #[derive(Clone)]
