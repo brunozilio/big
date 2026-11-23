@@ -9,7 +9,7 @@ use serde_json::{Map, Value, json};
 use crate::contracts::{self, tracker as actions};
 use crate::descriptor::{AuthSpec, Presentation, ProviderDescriptor};
 use crate::error::ActionError;
-use crate::http::Http;
+use crate::http::{Http, HttpRequest};
 use crate::mcp::{self, McpClient};
 use crate::oauth::{Loopback, mcp::McpSignIn};
 use crate::provider::{AccountOption, Args, Credentials, EventSource, Provider, text_of, unknown_action};
@@ -154,6 +154,24 @@ fn site_settings(site: &Value, projects: &[Value]) -> Value {
     settings
 }
 
+async fn probe_rest(http: &dyn Http, token: &str, cloud: &str) {
+    let urls = [
+        "https://api.atlassian.com/oauth/token/accessible-resources".to_owned(),
+        format!("https://api.atlassian.com/ex/jira/{cloud}/rest/api/3/myself"),
+        format!("https://api.atlassian.com/ex/jira/{cloud}/rest/api/3/project/search"),
+    ];
+    for url in urls {
+        let request = HttpRequest::get(url.clone()).bearer(token).header("Accept", "application/json");
+        match http.send(request).await {
+            Ok(response) => {
+                let body: String = String::from_utf8_lossy(&response.body).chars().take(300).collect();
+                tracing::warn!(%url, status = response.status, %body, "teste da API REST do Jira com o token do MCP");
+            }
+            Err(error) => tracing::warn!(%url, %error.message, "teste da API REST do Jira falhou"),
+        }
+    }
+}
+
 fn site_id(site: &Value) -> String {
     let id = text_of(site, "/cloudId");
     if id.is_empty() { text_of(site, "/id") } else { id }
@@ -220,6 +238,7 @@ impl Provider for Jira {
             tracing::warn!(%raw, "nenhum site do Jira na resposta do MCP");
             return Err(ActionError::permanent(NO_SITES));
         }
+        probe_rest(http, &creds.access_token, &site_id(&sites[0])).await;
         let mut options = Vec::new();
         for site in &sites {
             let id = site_id(site);
