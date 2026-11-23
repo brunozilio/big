@@ -8,6 +8,24 @@ use super::item::{
 };
 use crate::effect::{Effect, EffectOutcome, EffectRequest, IdempotencyKey};
 
+pub fn merge_patch(target: &mut Value, patch: &Value) {
+    let Value::Object(fields) = patch else {
+        *target = patch.clone();
+        return;
+    };
+    if !target.is_object() {
+        *target = Value::Object(serde_json::Map::new());
+    }
+    let Value::Object(kept) = target else { return };
+    for (key, value) in fields {
+        if value.is_null() {
+            kept.remove(key);
+        } else {
+            merge_patch(kept.entry(key.clone()).or_insert(Value::Null), value);
+        }
+    }
+}
+
 pub fn replay<'a>(events: impl IntoIterator<Item = &'a WorkflowEvent>) -> WorkItem {
     events.into_iter().fold(WorkItem::default(), reduce)
 }
@@ -29,7 +47,7 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
         WorkflowEvent::EffectResolved { key, outcome } => resolve(&mut item, key, outcome),
         WorkflowEvent::EffectProgress { key, data } => {
             if let Some(entry) = item.effects.get_mut(&key.to_string()) {
-                entry.progress = data.clone();
+                merge_patch(&mut entry.progress, data);
             }
         }
         WorkflowEvent::Signal { .. } => {}

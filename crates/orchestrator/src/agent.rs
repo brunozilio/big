@@ -5,7 +5,7 @@ use std::time::Duration;
 use agent_engine::EventSink;
 use domain::effect::{ErrorClass, IdempotencyKey};
 use domain::workflow::{ItemId, WorkflowEvent};
-use domain::{EngineEvent, ModelOption, PermissionMode, PromptRequest, RunId, SessionCommand, SessionId};
+use domain::{AgentAsk, EngineEvent, ModelOption, PermissionMode, PromptRequest, RunId, SessionCommand, SessionId};
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
 
@@ -169,6 +169,7 @@ impl AgentEffect<'_> {
         let started = self.shared.config.engine.start(RunId::new(), &request, sink);
         let handle = started.map_err(|error| Failure::permanent(error.to_string()))?;
         let mut running = Running { run: Arc::new(Mutex::new(handle)), done: false };
+        self.reopen(&running.run);
         let followed = self.follow(receiver, &running.run).await;
         self.close_asks();
         let collected = followed?;
@@ -253,24 +254,10 @@ impl AgentEffect<'_> {
             }
             EngineEvent::TextDelta(piece) => collected.text.push_str(&piece),
             EngineEvent::StructuredOutput(value) => collected.output = value,
-            EngineEvent::Asked(ask) => {
-                let pending = PendingAsk {
-                    item: self.item.clone(),
-                    step: self.key.step.clone(),
-                    session: collected.session.clone(),
-                    ask: ask.clone(),
-                    since: now_ms(),
-                };
-                self.shared.asks.open(pending.clone(), self.key.clone(), Arc::clone(run));
-                self.shared.emit(OrchestratorEvent::Asked {
-                    item: pending.item,
-                    step: pending.step,
-                    session: pending.session,
-                    ask,
-                });
-            }
+            EngineEvent::Asked(ask) => self.asked(ask, collected, run),
             EngineEvent::AskWithdrawn(ask) | EngineEvent::Answered { ask, .. } => {
                 if self.shared.asks.close(&ask).is_some() {
+                    self.note(json!({ "asks": { ask.0.clone(): null } }));
                     self.shared.emit(OrchestratorEvent::AskClosed { item: self.item.clone(), ask });
                 }
             }
@@ -294,9 +281,58 @@ impl AgentEffect<'_> {
     }
 
     fn close_asks(&self) {
-        for pending in self.shared.asks.forget(self.key) {
+        let gone = self.shared.asks.forget(self.key);
+        if !gone.is_empty() {
+            self.note(json!({ "asks": null }));
+        }
+        for pending in gone {
             self.shared.emit(OrchestratorEvent::AskClosed { item: self.item.clone(), ask: pending.ask.id });
         }
+    }
+
+    fn note(&self, data: Value) {
+        let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data };
+        if let Err(error) = self.shared.append(self.item, &[progress]) {
+            tracing::warn!(%error, "an ask could not be kept in the log");
+        }
+    }
+
+    fn announce(&self, pending: PendingAsk) {
+        self.shared.emit(OrchestratorEvent::Asked {
+            item: pending.item,
+            step: pending.step,
+            session: pending.session,
+            ask: pending.ask,
+        });
+    }
+
+    fn reopen(&self, run: &SharedRun) {
+        for pending in self.shared.asks.attach(self.key, run) {
+            self.announce(pending);
+        }
+    }
+
+    fn asked(&self, ask: AgentAsk, collected: &Collected, run: &SharedRun) {
+        if let Some(decision) = self.shared.asks.take_early(self.key, &ask.kind) {
+            run.lock().unwrap_or_else(PoisonError::into_inner).answer(&ask.id, &decision);
+            return;
+        }
+        let pending = PendingAsk {
+            item: self.item.clone(),
+            step: self.key.step.clone(),
+            session: collected.session.clone(),
+            ask: ask.clone(),
+            since: now_ms(),
+        };
+        let replaced = self.shared.asks.open(pending.clone(), self.key.clone(), Arc::clone(run));
+        let mut asks = serde_json::Map::new();
+        for gone in replaced.iter().filter(|gone| gone.ask.id != ask.id) {
+            asks.insert(gone.ask.id.0.clone(), Value::Null);
+            self.shared.emit(OrchestratorEvent::AskClosed { item: self.item.clone(), ask: gone.ask.id.clone() });
+        }
+        asks.insert(ask.id.0.clone(), serde_json::to_value(&pending).unwrap_or(Value::Null));
+        self.note(json!({ "asks": asks }));
+        self.announce(pending);
     }
 }
 

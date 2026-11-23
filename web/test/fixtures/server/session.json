@@ -1,5 +1,11 @@
 {
-  "agents": [],
+  "agents": [
+    {
+      "avatar": null,
+      "id": "worker",
+      "name": "worker"
+    }
+  ],
   "events": [],
   "id": "s-work",
   "mode": "accept_edits",
