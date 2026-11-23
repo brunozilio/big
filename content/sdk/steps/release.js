@@ -12,8 +12,12 @@ async function decide(ctx, opts, run, pending) {
     markdown(`Deploy aguardando aprovação: ${environments(pending)}`),
     actions(["approve_deploy", "reject_deploy"]),
   ];
-  const answer = await ctx.waitHuman(view, waitOptions(opts));
-  return answer.action === "approve_deploy" ? "approve" : "reject";
+  const raced = await ctx.race([
+    (branch) => branch.waitHuman(view, waitOptions(opts)),
+    (branch) => settle(branch, opts, run, FINISHED, ["pipelines.run.finished"]),
+  ]);
+  if (raced.index === 1) return "outside";
+  return raced.value.action === "approve_deploy" ? "approve" : "reject";
 }
 
 async function gate(ctx, opts, run) {
@@ -21,6 +25,7 @@ async function gate(ctx, opts, run) {
   const pending = (Array.isArray(listed) ? listed : []).filter((deployment) => deployment.canApprove !== false);
   if (pending.length === 0) return { decision: null, pending };
   const decision = await decide(ctx, opts, run, pending);
+  if (decision === "outside") return { decision, pending };
   const deployments = pending.map((deployment) => deployment.id);
   await ctx.call("pipelines", "review_deployment", { run, deployments, decision }, effects(opts));
   return { decision, pending };

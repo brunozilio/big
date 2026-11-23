@@ -5,12 +5,7 @@ mod e2e;
 use std::sync::atomic::Ordering;
 
 use e2e::{Hub, Server, step, waiting_on};
-use serde_json::{Value, json};
-
-async fn create(server: &Server, body: Value) -> String {
-    let item = server.post("/api/items", body).await;
-    item["id"].as_str().expect("id").to_owned()
-}
+use serde_json::json;
 
 async fn approve_plan(server: &Server, id: &str) {
     let ask = server.ask(id, "the plan").await;
@@ -35,7 +30,7 @@ async fn an_item_without_an_issue_goes_from_the_plan_to_production_through_the_a
     hub.github.fail_next_ci();
     hub.agents.script.ask_develop.store(true, Ordering::SeqCst);
     let server = hub.start().await;
-    let id = create(&server, json!({ "text": "Adicionar o arquivo de trabalho\nDetalhes", "issue": null, "model": "auto", "attachments": [] })).await;
+    let id = server.create(json!({ "text": "Adicionar o arquivo de trabalho\nDetalhes", "issue": null, "model": "auto", "attachments": [] })).await;
     approve_plan(&server, &id).await;
 
     let asked = server.ask(&id, "a permission while developing").await;
@@ -99,7 +94,7 @@ async fn an_item_from_an_existing_issue_moves_it_through_every_status_without_cr
     let server = hub.start().await;
     let body =
         json!({ "text": "", "issue": { "connection": "trk", "key": "K-7" }, "model": "auto", "attachments": [] });
-    let id = create(&server, body).await;
+    let id = server.create(body).await;
     let created = server.item(&id).await;
     assert_eq!((created["title"].as_str(), created["issue"]["key"].as_str()), (Some("K-7"), Some("K-7")));
     approve_plan(&server, &id).await;

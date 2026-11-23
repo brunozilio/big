@@ -152,10 +152,27 @@ fn title(summary: &ItemSummary) -> String {
     summary.issue.clone().unwrap_or_else(|| "Item sem título".to_owned())
 }
 
+fn collapsed(steps: &[StepSummary]) -> Vec<StepSummary> {
+    let mut kept: Vec<StepSummary> = Vec::new();
+    for step in steps.iter().filter(|step| !step.id.is_empty()) {
+        match kept.iter_mut().find(|known| known.id == step.id) {
+            Some(known) => {
+                if step.state == StepState::WaitingHuman {
+                    known.state = StepState::WaitingHuman;
+                }
+                known.attempts = known.attempts.max(step.attempts);
+            }
+            None => kept.push(step.clone()),
+        }
+    }
+    kept
+}
+
 fn shown_steps(summary: &ItemSummary) -> ItemSummary {
     let mut shown = summary.clone();
-    shown.steps.retain(|step| !step.id.is_empty());
-    let unnamed = summary.current.as_deref() == Some("") || summary.steps.iter().any(|step| step.id.is_empty() && step.state == StepState::WaitingHuman);
+    shown.steps = collapsed(&summary.steps);
+    let unnamed = summary.current.as_deref() == Some("")
+        || summary.steps.iter().any(|step| step.id.is_empty() && step.state == StepState::WaitingHuman);
     if unnamed {
         let failed = shown.steps.iter().rev().find(|step| step.state == StepState::Failed).map(|step| step.id.clone());
         shown.current = failed.or_else(|| shown.current.clone().filter(|current| !current.is_empty()));
