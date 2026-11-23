@@ -1,0 +1,14 @@
+[
+  {
+    "avatar": "https://tracker.test/app.png",
+    "id": "1",
+    "key": "APP",
+    "name": "Aplicativo"
+  },
+  {
+    "avatar": null,
+    "id": "2",
+    "key": "OPS",
+    "name": "Operações"
+  }
+]

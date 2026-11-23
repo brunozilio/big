@@ -89,6 +89,14 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
     fn alternative(&self) -> Option<AlternateAuth> {
         None
     }
+
+    fn chooses(&self) -> &'static [&'static str] {
+        &[]
+    }
+}
+
+pub trait SettingsSink: Send + Sync + std::fmt::Debug {
+    fn learned(&self, connection: &ConnectionId, settings: &Value);
 }
 
 pub fn auth_for(primary: &AuthSpec, alternative: Option<&AlternateAuth>, method: Option<&str>) -> AuthSpec {

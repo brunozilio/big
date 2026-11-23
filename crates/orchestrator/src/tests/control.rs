@@ -65,6 +65,18 @@ async fn an_auth_error_waits_for_a_human_to_reconnect_and_a_rerun_tries_again() 
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_call_the_connection_cannot_make_yet_becomes_an_impediment_with_its_reason() {
+    let world = World::new();
+    world.workflow("try", TRY);
+    world.provider.then("tracker.issue", Reply::Fail(ActionError::blocked("Escolha o projeto.")));
+    let kernel = world.start().await;
+    let id = kernel.create_item("try", json!({})).expect("item");
+    let blocked = until(&kernel, &id, |item| item.impediment.is_some()).await;
+    assert_eq!(blocked.impediment.and_then(|found| found.reason).as_deref(), Some("Escolha o projeto."));
+    assert_eq!(world.provider.count("tracker.issue"), 1, "not retried");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_call_without_a_connection_becomes_an_impediment() {
     let world = World::new();
     world.workflow(
@@ -218,7 +230,8 @@ async fn a_trigger_creates_one_item_per_subject_and_the_sync_reports_health() {
     );
     let kernel = world.start().await;
     assert!(kernel.health().is_some());
-    let mut created = super::restart::event("t1", "tracker.issue.created", json!({ "status": "A fazer", "title": "Nova" }));
+    let mut created =
+        super::restart::event("t1", "tracker.issue.created", json!({ "status": "A fazer", "title": "Nova" }));
     created.subject = "K-9".into();
     assert_eq!(kernel.trigger(&created).expect("trigger"), 1);
     assert_eq!(kernel.trigger(&created).expect("trigger"), 0, "one item per subject");

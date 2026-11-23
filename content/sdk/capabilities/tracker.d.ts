@@ -45,6 +45,13 @@ export interface Issue extends IssueSummary {
   updated: string;
 }
 
+export interface Project {
+  id: string;
+  key: string;
+  name: string;
+  avatar?: string | null;
+}
+
 export interface RemoteStatus {
   id: string;
   name: string;
@@ -65,4 +72,5 @@ export interface Tracker {
     args: { query?: string; project?: string; status?: string; limit?: number; cursor?: string };
     result: { issues: IssueSummary[]; cursor: string | null };
   };
+  projects: { args: { query?: string }; result: Project[] };
 }

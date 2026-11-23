@@ -15,6 +15,7 @@ pub mod tracker {
     pub const TRANSITION: &str = "tracker.transition";
     pub const SET_IMPEDIMENT: &str = "tracker.set_impediment";
     pub const SEARCH: &str = "tracker.search";
+    pub const PROJECTS: &str = "tracker.projects";
 }
 
 pub mod code {
@@ -61,6 +62,11 @@ fn issue_summary() -> Value {
     object(&[("ref", "string"), ("status", "string")], &[("title", "string"), ("url", "string"), ("changed", "boolean")])
 }
 
+fn project_list() -> Value {
+    let project = object(&[("id", "string"), ("key", "string"), ("name", "string")], &[("avatar", "string")]);
+    json!({ "type": "array", "items": project })
+}
+
 pub fn tracker() -> Vec<ActionSpec> {
     let new_issue = object(
         &[("title", "string")],
@@ -102,6 +108,7 @@ pub fn tracker() -> Vec<ActionSpec> {
             ),
             object(&[("issues", "array")], &[("cursor", "string")]),
         ),
+        ActionSpec::read(tracker::PROJECTS, object(&[], &[("query", "string")]), project_list()),
     ]
 }
 

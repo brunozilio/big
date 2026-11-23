@@ -260,6 +260,18 @@ fn the_default_workflow_describes_its_statuses_and_the_nine_steps_in_order() {
 }
 
 #[test]
+fn the_ticket_goes_to_the_project_and_connection_chosen_for_the_item() {
+    let mut fake = Fake::default();
+    let mut chosen = item(Value::Null);
+    chosen["project"] = json!("OPS");
+    chosen["connection"] = json!("c9");
+    let (_, asked) = drive(&default_workflow(), &chosen, |command| fake.reply(command));
+    let created = calls(&asked, "create_issue");
+    assert_eq!(created[0]["args"]["args"]["project"], "OPS");
+    assert_eq!(created[0]["connection"], "c9");
+}
+
+#[test]
 fn the_default_workflow_delivers_an_item_end_to_end() {
     let mut fake = Fake::default();
     let (result, asked) = drive(&default_workflow(), &item(Value::Null), |command| fake.reply(command));

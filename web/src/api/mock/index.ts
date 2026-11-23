@@ -1,6 +1,6 @@
 import { setClock } from '../clock'
 import type { Api, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, SessionEvent, SignInPoll, SignInStart } from '../contract'
-import { addIssueComment, changeData, issueData, pipelineRun, searchIssues } from './calls'
+import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
 import { INITIAL_CONNECTIONS, MODELS, PROVIDERS } from './fixtures'
 import { itemOfSession, sessionById } from './sessions'
 import {
@@ -110,7 +110,9 @@ export function mockApi(options: MockOptions = {}): Api {
       const a = args as Record<string, string>
       switch (action) {
         case 'tracker.search':
-          return searchIssues(a.query ?? '') as CallResult<A>
+          return searchIssues(a.query ?? '', a.project) as CallResult<A>
+        case 'tracker.projects':
+          return trackerProjects(a.query ?? '') as CallResult<A>
         case 'tracker.issue':
           return issueData(a.key) as CallResult<A>
         case 'tracker.comment':
@@ -175,7 +177,7 @@ export function mockApi(options: MockOptions = {}): Api {
       start()
       return store.items.map(item)
     }),
-    createItem: (input) => wait(() => item(createItem(input.text, input.issue?.key ?? null, input.model)), 600),
+    createItem: (input) => wait(() => item(createItem(input.text, input.issue?.key ?? null, input.model, input.project?.key ?? null)), 600),
     rerun: (id, step) => wait(() => {
       const it = findItem(id)
       const target = step && isStepId(step) ? step : 'develop'

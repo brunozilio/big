@@ -2,12 +2,12 @@ use std::process::Stdio;
 use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
-use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use connectors::contracts;
+use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use domain::effect::{Call, Effect, EffectOutcome, EffectRequest, ErrorClass, IdempotencyKey, next_retry};
-use sync::Pushed;
 use domain::workflow::{ItemId, WorkItem, WorkflowEvent};
 use serde_json::{Value, json};
+use sync::Pushed;
 use tokio::io::AsyncWriteExt;
 use tokio::task::AbortHandle;
 
@@ -213,11 +213,12 @@ fn connection_of(shared: &Shared, call: &Call) -> Result<(Connection, Value), Fa
 
 pub async fn connector(shared: &Shared, call: &Call, key: &str) -> Result<Value, Failure> {
     let (connection, settings) = connection_of(shared, call)?;
-    shared
-        .config.connectors
-        .call(&connection, &settings, &call.action, &call.args, key)
-        .await
-        .map_err(|error| Failure::Class(error.class, error.message))
+    shared.config.connectors.call(&connection, &settings, &call.action, &call.args, key).await.map_err(|error| {
+        match error.blocker() {
+            Some(reason) => Failure::Blocked(reason.to_owned()),
+            None => Failure::Class(error.class, error.message),
+        }
+    })
 }
 
 async fn poll(shared: &Shared, command: &Command, key: &str) -> Result<Value, Failure> {

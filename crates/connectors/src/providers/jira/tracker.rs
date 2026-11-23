@@ -1,7 +1,7 @@
 use serde_json::{Map, Value, json};
 
 use super::adf::{adf_to_markdown, markdown_to_adf};
-use super::{Api, jql_key, jql_text, listed};
+use super::{Api, jql_key, jql_text, listed, visible_projects};
 use crate::error::ActionError;
 use crate::idempotency;
 use crate::provider::{Args, text_of};
@@ -213,7 +213,8 @@ pub async fn transition(api: &Api<'_>, issue: &str, target: &str) -> Result<Valu
         return Ok(json!({ "ref": issue, "status": now, "changed": false }));
     }
     let page = api.tool("getTransitionsForJiraIssue", json!({ "issueIdOrKey": issue })).await?;
-    let found = listed(&page, "transitions")
+    let transitions = listed(&page, "transitions");
+    let found = transitions
         .iter()
         .find(|transition| text_of(transition, "/to/name").eq_ignore_ascii_case(target))
         .ok_or_else(|| ActionError::permanent(format!("{issue} cannot go from {now} to {target}")))?;
@@ -260,4 +261,8 @@ pub async fn search(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError>
         .collect();
     let cursor = page["nextPageToken"].as_str().filter(|_| page["isLast"] != json!(true));
     Ok(json!({ "issues": issues, "cursor": cursor }))
+}
+
+pub async fn projects(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
+    Ok(Value::Array(visible_projects(&api.mcp, &api.cloud, args.optional_text("query")).await?))
 }

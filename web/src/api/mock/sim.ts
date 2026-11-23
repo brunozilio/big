@@ -374,11 +374,18 @@ export const ISSUES: IssueSeed[] = [
   { key: 'APP-247', title: 'Filtro por data na lista de clientes', kind: 'story' },
   { key: 'APP-246', title: 'Remover feature flag do checkout antigo', kind: 'task' },
   { key: 'APP-244', title: 'Mensagem de erro do cartão recusado', kind: 'bug' },
+  { key: 'OPS-31', title: 'Alerta de fila parada no worker', kind: 'task' },
+  { key: 'OPS-28', title: 'Rotacionar chaves do bucket de backups', kind: 'task' },
 ]
 
-export function createItem(text: string, issueKey: string | null, model: string) {
+export const PROJECTS = [
+  { id: '10000', key: 'APP', name: 'Aplicativo', avatar: null },
+  { id: '10001', key: 'OPS', name: 'Operações', avatar: null },
+]
+
+export function createItem(text: string, issueKey: string | null, model: string, project: string | null = null) {
   const issue = issueKey ? ISSUES.find((i) => i.key === issueKey) : undefined
-  const it = issue ? makeItem({ key: issue.key, title: issue.title }) : makeItem({ key: `APP-${252 + seq}`, title: text.replace(/^./, (c) => c.toUpperCase()) })
+  const it = issue ? makeItem({ key: issue.key, title: issue.title }) : makeItem({ key: `${project ?? 'APP'}-${252 + seq}`, title: text.replace(/^./, (c) => c.toUpperCase()) })
   it.createdAt = store.clock
   it.model = model
   if (issue) {

@@ -4,10 +4,10 @@ use std::sync::Arc;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::response::{Html, IntoResponse, Response};
-use connectors::{AuthSpec, ProviderDescriptor};
+use connectors::{AuthSpec, ProviderDescriptor, SettingsSink};
 use domain::connection::ConnectionId;
 use serde_json::{Value, json};
-use store::ConnectionRecord;
+use store::{ConnectionRecord, Store};
 use sync::ConnectionState;
 
 use crate::error::{ApiError, ApiResult, done, json as reply};
@@ -172,4 +172,17 @@ pub async fn call(State(ctx): State<Ctx>, Path(id): Path<String>, Json(body): Js
         tracing::warn!(connection = %id, %action, message = %error.message, "a read for the page failed");
     }
     Ok(reply(result?))
+}
+
+#[derive(Debug)]
+pub struct StoredSettings(pub Arc<Store>);
+
+impl SettingsSink for StoredSettings {
+    fn learned(&self, connection: &ConnectionId, settings: &Value) {
+        let Ok(Some(mut record)) = self.0.connection(connection.as_str()) else { return };
+        record.settings = connectors::hub::filled(&record.settings, settings);
+        if let Err(error) = self.0.save_connection(&record) {
+            tracing::warn!(%error, connection = %connection, "the settings learned for a connection could not be kept");
+        }
+    }
 }

@@ -39,6 +39,42 @@ pub fn messages(response: &HttpResponse) -> Vec<Value> {
     found
 }
 
+const ENVELOPES: [&str; 6] = ["result", "results", "data", "content", "value", "structuredContent"];
+
+pub fn payload(value: Value) -> Value {
+    match value {
+        Value::String(text) => match serde_json::from_str::<Value>(text.trim()) {
+            Ok(parsed) if parsed.is_array() || parsed.is_object() => payload(parsed),
+            _ => Value::String(text),
+        },
+        Value::Object(fields) if fields.len() == 1 => {
+            let Some((key, inner)) = fields.iter().next() else { return Value::Object(fields) };
+            if inner.is_array() || (ENVELOPES.contains(&key.as_str()) && !inner.is_null()) {
+                payload(inner.clone())
+            } else {
+                Value::Object(fields)
+            }
+        }
+        other => other,
+    }
+}
+
+pub fn items(value: &Value, field: &str) -> Vec<Value> {
+    match payload(value.clone()) {
+        Value::Array(found) => found,
+        Value::Object(fields) => match fields.get(field) {
+            Some(Value::Array(found)) => found.clone(),
+            Some(Value::String(text)) => items(&Value::String(text.clone()), field),
+            _ => Vec::new(),
+        },
+        _ => Vec::new(),
+    }
+}
+
+fn structured(found: &Value) -> bool {
+    found.is_array() || found.is_object()
+}
+
 pub fn tool_value(result: &Value) -> Result<Value, ActionError> {
     let texts: Vec<&str> = result["content"]
         .as_array()
@@ -51,10 +87,18 @@ pub fn tool_value(result: &Value) -> Result<Value, ActionError> {
     if result["isError"] == json!(true) {
         return Err(tool_error(&text));
     }
-    if let Some(structured) = result.get("structuredContent").filter(|value| !value.is_null()) {
-        return Ok(structured.clone());
+    if let Some(found) = result.get("structuredContent").filter(|value| !value.is_null()) {
+        let found = payload(found.clone());
+        if structured(&found) {
+            return Ok(found);
+        }
     }
-    Ok(serde_json::from_str(&text).unwrap_or(Value::String(text)))
+    let joined = payload(Value::String(text.clone()));
+    if structured(&joined) {
+        return Ok(joined);
+    }
+    let part = texts.iter().map(|part| payload(Value::String((*part).to_owned()))).find(structured);
+    Ok(part.unwrap_or(Value::String(text)))
 }
 
 fn tool_error(text: &str) -> ActionError {
@@ -167,5 +211,40 @@ mod tests {
             tool_value(&json!({"isError": true, "content": [{"type": "text", "text": "Issue does not exist"}]}));
         assert_eq!(failed.map_err(|e| e.class), Err(ErrorClass::Permanent));
         assert_eq!(tool_value(&json!({"content": [{"type": "text", "text": "plain"}]})), Ok(json!("plain")));
+    }
+
+    fn sites() -> Value {
+        json!([{"id": "0aeb9d87", "url": "https://minhaempresa.atlassian.net", "name": "minhaempresa", "scopes": ["read:jira-work"]}])
+    }
+
+    #[test]
+    fn a_list_is_read_whether_bare_wrapped_or_written_as_text() {
+        let text = |body: String| json!({"content": [{"type": "text", "text": body}]});
+        let shapes = [
+            json!({"structuredContent": sites()}),
+            json!({"structuredContent": {"result": sites()}}),
+            json!({"structuredContent": {"resources": sites()}}),
+            json!({"structuredContent": {"result": sites().to_string()}}),
+            text(sites().to_string()),
+            text(json!({"resources": sites()}).to_string()),
+            json!({"content": [{"type": "text", "text": "Sites:"}, {"type": "text", "text": sites().to_string()}]}),
+            json!({"structuredContent": null, "content": [{"type": "text", "text": sites().to_string()}]}),
+        ];
+        for shape in shapes {
+            let found = tool_value(&shape);
+            let Ok(found) = found else { panic!("{shape}: {found:?}") };
+            assert_eq!(items(&found, "values"), sites().as_array().cloned().unwrap_or_default(), "{shape}");
+        }
+    }
+
+    #[test]
+    fn a_record_keeps_its_fields_and_a_named_list_is_found_inside_it() {
+        let issue = json!({"id": "1", "key": "BIG-1", "fields": {"summary": "x"}});
+        assert_eq!(tool_value(&json!({"structuredContent": {"result": issue.clone()}})), Ok(issue.clone()));
+        assert_eq!(tool_value(&json!({"structuredContent": {"fields": {"a": 1}}})), Ok(json!({"fields": {"a": 1}})));
+        let page = json!({"issues": [issue.clone()], "isLast": true});
+        assert_eq!(items(&page, "issues"), vec![issue.clone()]);
+        assert_eq!(items(&json!({"issues": [issue.clone()]}), "issues"), vec![issue]);
+        assert!(items(&json!({"total": 0}), "issues").is_empty());
     }
 }

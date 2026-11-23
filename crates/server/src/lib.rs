@@ -25,6 +25,7 @@ mod vault;
 
 pub use backend::Backend;
 pub use boot::{Launch, run};
+pub use connections::StoredSettings;
 pub use live::Live;
 pub use page::{Asset, embedded};
 pub use server::{app, bind, serve};

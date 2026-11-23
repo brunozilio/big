@@ -288,14 +288,20 @@ async fn accounts(shared: &Shared, flow: &Flow, mut grant: Grant) -> Stage {
     let settings = region.map_or_else(|| json!({}), |region| json!({ "region": region.trim() }));
     let listed = shared.backend.connectors.accounts(&connection(&probe, &found), &settings).await;
     let _ = keeper.store().remove(&ConnectionId::from(probe.as_str())).await;
+    let chooses = shared.backend.connectors.chooses(&found.key);
     match listed {
         Ok(options) if options.len() > 1 => Stage::Choose { grant, options },
+        Ok(options) if options.is_empty() && !chooses.is_empty() => Stage::Failed(nothing_to_choose(&found)),
         Ok(options) => {
             let fallback = AccountOption { id: String::new(), label: found.name.clone(), settings: json!({}) };
             finish(shared, provider, &grant, options.first().unwrap_or(&fallback)).await
         }
         Err(error) => Stage::Failed(error.message),
     }
+}
+
+fn nothing_to_choose(found: &ProviderDescriptor) -> String {
+    format!("A conta do {} não tem nada para escolher. Confira o acesso da conta e conecte de novo.", found.name)
 }
 
 async fn finish(shared: &Shared, provider: &str, grant: &Grant, chosen: &AccountOption) -> Stage {

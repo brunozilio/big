@@ -46,5 +46,7 @@ describe('respostas reais do servidor', () => {
     expect(Array.isArray(issue.comments) && Array.isArray(issue.subtasks) && typeof issue.title === 'string').toBe(true)
     const change = load('call-change') as CallResult<'code.change'>
     expect(change.files.every((f) => typeof f.diff === 'string' && typeof f.firstLine === 'number')).toBe(true)
+    const projects = load('call-projects') as CallResult<'tracker.projects'>
+    expect(projects.every((p) => typeof p.key === 'string' && typeof p.name === 'string' && (p.avatar === null || typeof p.avatar === 'string'))).toBe(true)
   })
 })

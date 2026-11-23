@@ -8,6 +8,7 @@ use orchestrator::{Config, Orchestrator};
 use store::Store;
 
 use crate::backend::Backend;
+use crate::connections::StoredSettings;
 use crate::vault::VaultTokens;
 
 const SNAPSHOT_EVERY: u64 = 200;
@@ -27,7 +28,8 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let http = Arc::new(ReqwestHttp::new().map_err(|error| error.message)?);
     let tokens = Arc::new(VaultTokens::new(Arc::clone(&services.secrets)));
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
-    let connectors = Arc::new(Connectors::new(http, keeper));
+    let sink = Arc::new(StoredSettings(Arc::clone(&store)));
+    let connectors = Arc::new(Connectors::new(http, keeper).with_sink(sink));
     let config = Config::new(Arc::clone(&store), Arc::clone(&connectors), engine.clone(), launch.data.clone())
         .in_repo(launch.repo.clone());
     let handle = Orchestrator::start(config).map_err(|error| error.to_string())?;
