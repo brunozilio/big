@@ -190,7 +190,13 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
               }} />
             </Field>
           </div>
-          <Checkbox label="Ignorar pipelines do dependabot[bot] no CI e na release" checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} />
+          <div className="flex items-start gap-2.5">
+            <span className="mt-0.5 flex"><Checkbox label="Ignorar pipelines do dependabot[bot]" checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} /></span>
+            <span className="flex cursor-pointer select-none flex-col gap-0.5" onClick={() => setDraft((d) => ({ ...d, skipDependabot: d.skipDependabot === false }))}>
+              <span className="text-base text-fg">Ignorar pipelines do dependabot[bot]</span>
+              <span className="text-sm text-muted">O CI e a release não esperam nem contam pipelines disparados pelo Dependabot.</span>
+            </span>
+          </div>
           <div className="space-y-3">
             {draft.repositories.map((r, i) => (
               <RepositoryCard key={r.id || `novo-${i}`} value={r} index={i} removable={draft.repositories.length > 1} repos={repos} sources={coders} onChange={(next) => change(i, next)} onRemove={() => setDraft((d) => ({ ...d, repositories: d.repositories.filter((_, at) => at !== i) }))} onFolder={() => setFolderFor(i)} />

@@ -95,5 +95,5 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
     }
   })
   const tracker = draft.tracker && draft.tracker.project && draft.tracker.connection ? draft.tracker : null
-  return { id, name, tracker, repositories }
+  return { id, name, tracker, repositories, skipDependabot: draft.skipDependabot !== false }
 }

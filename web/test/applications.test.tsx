@@ -94,6 +94,19 @@ describe('aba Aplicações', () => {
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     expect((await view.findByRole('alert')).textContent).toContain('nome')
   })
+
+  test('a opção do dependabot aparece escrita, vem ligada e desliga ao clicar no texto', async () => {
+    await started()
+    const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    const text = await view.findByText('Ignorar pipelines do dependabot[bot]')
+    const box = view.getByRole('checkbox', { name: 'Ignorar pipelines do dependabot[bot]' })
+    expect(box.getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(text)
+    await waitFor(() => expect(box.getAttribute('aria-checked')).toBe('false'))
+    fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(getState().applications?.[0]?.skipDependabot).toBe(false))
+  })
 })
 
 describe('aplicações no composer', () => {
