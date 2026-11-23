@@ -439,6 +439,22 @@ export default workflow({
 }
 
 #[test]
+fn a_reviewer_that_only_wrote_its_verdict_still_reaches_the_pull_request() {
+    let mut fake = Fake::default();
+    let written = "Vou revisar.Li os arquivos.\n## Veredito: `request_changes`\n\n## Comentários por linha\n1. src/a.ts:5 lê a env cedo";
+    let (_, asked) = drive(&default_workflow(), &item(json!("T-1")), |command| {
+        if command["kind"] == "agent" && command["args"]["name"] == "reviewer" {
+            return Some(json!({ "text": written, "session": "rev-1", "output": null }));
+        }
+        fake.reply(command)
+    });
+    let posted = calls(&asked, "submit_review");
+    let body = posted[0]["args"]["args"]["body"].as_str().expect("body");
+    assert!(body.starts_with("## Veredito") && body.contains("src/a.ts:5"), "{body}");
+    assert_eq!(posted[0]["args"]["args"]["verdict"], "comment");
+}
+
+#[test]
 fn checks_without_any_command_say_so_instead_of_an_empty_log() {
     let text = r#"
 import { workflow } from "sdk";

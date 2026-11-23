@@ -3,14 +3,21 @@ import { agentOptions, codeOptions, defined, effects, inLanguage, object, planOf
 
 const VERDICTS = ["approve", "request_changes", "comment"];
 
+export function verdictOf(text) {
+  const written = String(text ?? "");
+  const at = written.search(/^#{1,3}\s*(veredito|resumo|verdict|summary)\b/im);
+  return at < 0 ? "" : written.slice(at).trim();
+}
+
 async function automatic(ctx, opts, pr) {
   const plan = planOf(ctx, opts);
   const prompt = inLanguage(`Revise o pull request ${pr}.\n\n## Plano\n\n${plan.text}`);
   const result = await ctx.agent(opts.agent, { prompt, pr }, agentOptions(opts, { mode: opts.mode ?? "plan" }));
   const output = object(result.output);
   const lines = Array.isArray(output.lines) ? output.lines : [];
-  if (lines.length > 0 || output.body) {
-    const args = defined({ pr, verdict: "comment", body: output.body, lines });
+  const body = output.body ?? (lines.length > 0 ? undefined : verdictOf(result.text));
+  if (lines.length > 0 || body) {
+    const args = defined({ pr, verdict: "comment", body, lines: lines.length > 0 ? lines : undefined });
     await ctx.call("code", "submit_review", args, effects(opts));
   }
   return result.session;
