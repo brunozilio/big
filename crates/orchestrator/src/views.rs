@@ -113,7 +113,7 @@ pub fn summary(
         steps.push(pending);
     }
     let active = |state: StepState| matches!(state, StepState::Running | StepState::WaitingHuman);
-    let current = item.steps.iter().rev().find(|run| active(run.state)).map(|run| run.id.clone());
+    let current = item.steps.iter().rev().find(|run| !run.id.is_empty() && active(run.state)).map(|run| run.id.clone());
     let stopped = item.impediment.as_ref().is_some_and(|found| found.reason.as_deref() != Some(crate::agent::WAITING_ANSWER));
     let live = !stopped && !item.is_ended() && ledger.open().any(|request| kind_of(&request.effect) == AGENT);
     ItemSummary {
