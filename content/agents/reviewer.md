@@ -6,7 +6,7 @@ tools: [Read, Grep, Glob, Bash, LSP, WebFetch, Skill, StructuredOutput]
 disallowedTools: [Edit, Write, NotebookEdit]
 permissionMode: plan
 model: auto
-skills: [code-review, security-review, review]
+skills: [code-review, review]
 avatar:
   shape: circle
   color: "#4fb39c"
