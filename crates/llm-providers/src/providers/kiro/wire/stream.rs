@@ -10,6 +10,7 @@ pub struct Folder {
     blocks: Vec<Block>,
     text: String,
     thinking: String,
+    signature: Option<String>,
     tool: Option<(String, String, String)>,
     stop: Option<StopReason>,
     context: Option<f64>,
@@ -42,7 +43,7 @@ impl Folder {
         }
         match kind {
             "assistantResponseEvent" => self.text(text(&payload["content"]), on),
-            "reasoningContentEvent" => self.thinking(text(&payload["text"]), on),
+            "reasoningContentEvent" => self.reasoning(&payload, on),
             "toolUseEvent" => self.tool(&payload)?,
             "metadataEvent" => self.stop = payload["stopReason"].as_str().map(stop_reason).or(self.stop),
             "contextUsageEvent" => self.context = payload["contextUsagePercentage"].as_f64(),
@@ -60,6 +61,13 @@ impl Folder {
         self.output_chars += piece.chars().count() as u64;
         self.text.push_str(&piece);
         on(Delta::Text(piece));
+    }
+
+    fn reasoning(&mut self, event: &Value, on: &mut dyn FnMut(Delta)) {
+        self.thinking(text(&event["text"]), on);
+        if let Some(signature) = event["signature"].as_str().filter(|signature| !signature.is_empty()) {
+            self.signature = Some(signature.to_owned());
+        }
     }
 
     fn thinking(&mut self, piece: String, on: &mut dyn FnMut(Delta)) {
@@ -99,12 +107,9 @@ impl Folder {
     }
 
     fn close_thinking(&mut self) {
+        let signature = self.signature.take();
         if !self.thinking.is_empty() {
-            self.blocks.push(Block::Thinking {
-                text: std::mem::take(&mut self.thinking),
-                signature: None,
-                origin: None,
-            });
+            self.blocks.push(Block::Thinking { text: std::mem::take(&mut self.thinking), signature, origin: None });
         }
     }
 
@@ -239,6 +244,26 @@ mod tests {
         assert_eq!(seen, [Delta::Thinking("hm".into()), Delta::Text("ok".into())]);
         let blocks = reply.map(|r| r.message.blocks).unwrap_or_default();
         assert!(matches!(&blocks[..], [Block::Thinking { .. }, Block::Text(t)] if t == "ok"));
+    }
+
+    #[test]
+    fn streamed_reasoning_is_thinking_with_its_signature_and_never_text() {
+        let event = |kind: &str, payload: &str| encode(&[(":message-type", "event"), (":event-type", kind)], payload);
+        let mut bytes = event("reasoningContentEvent", r#"{"text":"Need the "}"#);
+        bytes.extend(event("reasoningContentEvent", r#"{"text":"file."}"#));
+        bytes.extend(event("reasoningContentEvent", r#"{"signature":"sig-1"}"#));
+        bytes.extend(event("toolUseEvent", r#"{"toolUseId":"t1","name":"Read","input":"{}","stop":true}"#));
+        bytes.extend(event("metadataEvent", r#"{"stopReason":"TOOL_USE"}"#));
+        let (reply, seen) = fold(&bytes, None);
+        assert_eq!(seen, [Delta::Thinking("Need the ".into()), Delta::Thinking("file.".into())]);
+        let reply = reply.unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(reply.message.text(), "");
+        assert_eq!(
+            reply.message.blocks[0],
+            Block::Thinking { text: "Need the file.".into(), signature: Some("sig-1".into()), origin: None }
+        );
+        assert!(matches!(&reply.message.blocks[1], Block::ToolUse { name, .. } if name == "Read"));
+        assert_eq!(reply.stop, StopReason::ToolUse);
     }
 
     #[test]

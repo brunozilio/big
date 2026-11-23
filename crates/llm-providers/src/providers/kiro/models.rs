@@ -33,9 +33,11 @@ fn model(item: &Value) -> Option<ModelOption> {
     let mut model = llm_providers::catalog::option(&super::Provider, id, label.to_owned());
     let limits = &item["tokenLimits"];
     model.window = limits["maxInputTokens"].as_u64().filter(|n| *n > 0);
+    let thinks =
+        super::effort::declared(&item["additionalModelRequestFieldsSchema"]).or_else(|| super::effort::known(id));
     model.capabilities = Some(ModelCapabilities {
         max_output_tokens: limits["maxOutputTokens"].as_u64().and_then(|n| u32::try_from(n).ok()).filter(|n| *n > 0),
-        ..ModelCapabilities::default()
+        ..thinks.unwrap_or_default()
     });
     Some(model)
 }
@@ -57,6 +59,25 @@ mod tests {
         assert_eq!(models[0].window, Some(1_000_000));
         assert_eq!(models[0].capabilities.as_ref().and_then(|c| c.max_output_tokens), Some(64_000));
         assert_eq!(next.as_deref(), Some("n2"));
+    }
+
+    #[test]
+    fn the_catalog_offers_the_efforts_each_model_accepts() {
+        let schema = json!({"properties": {"output_config": {"properties": {"effort": {
+            "enum": ["low", "medium", "high", "max"]
+        }}}}});
+        let (models, _) = page(&json!({"models": [
+            {"modelId": "claude-opus-4.6", "additionalModelRequestFieldsSchema": schema},
+            {"modelId": "claude-opus-4.8"},
+            {"modelId": "claude-sonnet-4.5"},
+            {"modelId": "claude-haiku-4.5"},
+            {"modelId": "auto"}
+        ]}))
+        .unwrap_or_default();
+        let efforts: Vec<Vec<&str>> = models.iter().map(llm_providers::efforts).collect();
+        assert_eq!(efforts[0], ["low", "medium", "high", "max"]);
+        assert_eq!(efforts[1], llm_providers::EFFORTS);
+        assert!(efforts[2..].iter().all(Vec::is_empty), "{efforts:?}");
     }
 
     #[test]

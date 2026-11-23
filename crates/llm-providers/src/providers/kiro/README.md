@@ -20,3 +20,12 @@ lives in this folder (`wire/`), since only Kiro speaks it. The catalog is
 `origin: KIRO_CLI`. Kiro has no system field, so the system prompt opens the
 first user message, and it reports context use as a share of the window,
 from which the prompt's size is estimated.
+
+The effort goes in `additionalModelRequestFields`, beside
+`conversationState`, as Kiro's own client sends it: `{output_config: {effort}}`
+or `{reasoning: {effort}}`, whichever the model's
+`additionalModelRequestFieldsSchema` in the catalog declares, with the levels
+of its `enum`. Claude Opus and Sonnet 4.6 and later take it even when the
+catalog names no schema; other models get no such field, since Kiro refuses
+it with a 400. The model's reasoning comes back as `reasoningContentEvent`
+(`text`, then a `signature`) and becomes thinking.
