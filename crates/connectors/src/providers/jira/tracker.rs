@@ -1,6 +1,7 @@
 use serde_json::{Map, Value, json};
 
-use super::adf::{adf_to_markdown, markdown_to_adf};
+use super::adf::adf_to_markdown;
+use super::operations::{found_list, id_of};
 use super::{Api, jql_key, jql_text, listed, visible_projects};
 use crate::error::ActionError;
 use crate::idempotency;
@@ -43,12 +44,17 @@ fn flagged(value: Option<&Value>) -> bool {
     value.and_then(Value::as_array).is_some_and(|flags| !flags.is_empty())
 }
 
+pub fn status_name(issue: &Value) -> String {
+    let name = text_of(issue, "/fields/status/name");
+    if name.is_empty() { text_of(issue, "/fields/status") } else { name }
+}
+
 fn summary(api: &Api<'_>, issue: &Value) -> Value {
     let key = text_of(issue, "/key");
     json!({
         "ref": key,
         "title": text_of(issue, "/fields/summary"),
-        "status": text_of(issue, "/fields/status/name"),
+        "status": status_name(issue),
         "url": api.browse(&key),
     })
 }
@@ -78,15 +84,15 @@ pub async fn create_issue(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Va
     let mut arguments = json!({
         "projectKey": project,
         "summary": title,
-        "issueTypeName": kind,
-        "description": markdown_to_adf(args.optional_text("description").unwrap_or_default()),
-        "contentFormat": "adf",
+        "issueType": kind,
+        "description": args.optional_text("description").unwrap_or_default(),
+        "contentFormat": "markdown",
     });
     if let Some(parent) = parent {
         arguments["parent"] = json!(parent);
     }
     if !labels.is_empty() {
-        arguments["additional_fields"] = json!({ "labels": labels });
+        arguments["labels"] = json!(labels);
     }
     let answer = api.tool("createJiraIssue", arguments).await?;
     let mut made = summary(api, &answer);
@@ -96,21 +102,30 @@ pub async fn create_issue(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Va
 }
 
 pub fn comment_of(comment: &Value) -> Value {
+    let id = id_of(comment, "/id");
     json!({
-        "id": text_of(comment, "/id"),
+        "id": if id.is_empty() { id_of(comment, "/commentId") } else { id },
         "author": person(&comment["author"]),
         "body": markdown(&comment["body"]),
         "at": text_of(comment, "/created"),
     })
 }
 
-fn comments(fields: &Value) -> Vec<Value> {
-    listed(&fields["comment"], "comments").iter().map(comment_of).collect()
+fn comments(issue: &Value) -> Vec<Value> {
+    let embedded = listed(&issue["fields"]["comment"], "comments");
+    let found = if embedded.is_empty() { listed(&issue["comments"], "comments") } else { embedded };
+    found.iter().map(comment_of).collect()
 }
 
 async fn read(api: &Api<'_>, issue: &str, fields: &[&str]) -> Result<Value, ActionError> {
-    let arguments = json!({ "issueIdOrKey": jql_key(issue)?, "fields": fields, "responseContentFormat": "markdown" });
+    let arguments = json!({
+        "issueIdOrKey": jql_key(issue)?, "fields": fields, "view": "full", "responseContentFormat": "markdown",
+    });
     api.tool("getJiraIssue", arguments).await
+}
+
+fn flag_of<'v>(fields: &'v Value, flag: &str) -> Option<&'v Value> {
+    fields.get(flag).filter(|value| !value.is_null()).or_else(|| fields["customFields"].get(flag))
 }
 
 fn subtask(api: &Api<'_>, task: &Value) -> Value {
@@ -141,10 +156,10 @@ pub async fn issue(api: &Api<'_>, issue: &str) -> Result<Value, ActionError> {
         "type": if kind.is_empty() { Value::Null } else { json!(kind) },
         "labels": fields["labels"].as_array().cloned().unwrap_or_default(),
         "assignee": person(&fields["assignee"]),
-        "impediment": { "on": flagged(fields.get(&api.flag_field)), "reason": null },
+        "impediment": { "on": flagged(flag_of(fields, &api.flag_field)), "reason": null },
         "subtasks": listed(fields, "subtasks").iter().map(|task| subtask(api, task)).collect::<Vec<_>>(),
         "attachments": listed(fields, "attachment").iter().map(attachment).collect::<Vec<_>>(),
-        "comments": comments(fields),
+        "comments": comments(&answer),
         "updated": text_of(fields, "/updated"),
     });
     if let (Some(target), Some(more)) = (found.as_object_mut(), extra.as_object()) {
@@ -158,21 +173,25 @@ fn same_text(left: &str, right: &str) -> bool {
     words(left) == words(right)
 }
 
+async fn posted(api: &Api<'_>, issue: &str) -> Result<Vec<Value>, ActionError> {
+    let arguments = json!({
+        "issueIdOrKey": issue, "orderBy": "-created", "maxResults": 100, "responseContentFormat": "markdown",
+    });
+    let page = api.tool("listJiraIssueComments", arguments).await?;
+    Ok(found_list(&page, &["comments", "values"]).iter().map(comment_of).collect())
+}
+
 pub async fn comment(api: &Api<'_>, issue: &str, body: &str, key: &str) -> Result<Value, ActionError> {
     let issue = jql_key(issue)?;
-    if !key.is_empty() {
-        let answer = read(api, issue, &["comment"]).await?;
-        if let Some(found) =
-            comments(&answer["fields"]).into_iter().find(|known| same_text(&text_of(known, "/body"), body))
-        {
-            let mut found = found;
-            found["created"] = json!(false);
-            return Ok(found);
-        }
+    if !key.is_empty()
+        && let Some(found) = posted(api, issue).await?.into_iter().find(|known| same_text(&text_of(known, "/body"), body))
+    {
+        let mut found = found;
+        found["created"] = json!(false);
+        return Ok(found);
     }
-    let document = markdown_to_adf(body).to_string();
-    let arguments = json!({ "issueIdOrKey": issue, "commentBody": document, "contentFormat": "adf" });
-    let answer = api.tool("addCommentToJiraIssue", arguments).await?;
+    let arguments = json!({ "issueIdOrKey": issue, "commentBody": body, "contentFormat": "markdown" });
+    let answer = api.tool("addOrEditJiraIssueComment", arguments).await?;
     let mut made = comment_of(&answer);
     made["body"] = json!(body);
     made["created"] = json!(true);
@@ -180,7 +199,7 @@ pub async fn comment(api: &Api<'_>, issue: &str, body: &str, key: &str) -> Resul
 }
 
 fn remember(seen: &mut Vec<Value>, status: &Value) {
-    let id = text_of(status, "/id");
+    let id = id_of(status, "/id");
     if !id.is_empty() && !seen.iter().any(|known| known["id"] == id.as_str()) {
         let category = text_of(status, "/statusCategory/key");
         seen.push(json!({
@@ -198,29 +217,34 @@ pub async fn statuses(api: &Api<'_>, project: &str) -> Result<Value, ActionError
     let mut seen: Vec<Value> = Vec::new();
     issues.iter().for_each(|issue| remember(&mut seen, &issue["fields"]["status"]));
     if let Some(first) = issues.first() {
-        let arguments = json!({ "issueIdOrKey": text_of(first, "/key") });
-        let page = api.tool("getTransitionsForJiraIssue", arguments).await?;
-        listed(&page, "transitions").iter().for_each(|transition| remember(&mut seen, &transition["to"]));
+        let transitions = api.transitions(&text_of(first, "/key")).await?;
+        transitions.iter().for_each(|transition| remember(&mut seen, &transition["to"]));
     }
     Ok(Value::Array(seen))
+}
+
+fn landed(answer: &Value) -> String {
+    const PLACES: [&str; 6] =
+        ["/status/name", "/fields/status/name", "/landedStatus/name", "/landedStatus", "/toStatus/name", "/status"];
+    PLACES.iter().map(|place| text_of(answer, place)).find(|name| !name.is_empty()).unwrap_or_default()
 }
 
 pub async fn transition(api: &Api<'_>, issue: &str, target: &str) -> Result<Value, ActionError> {
     let issue = jql_key(issue)?;
     let current = read(api, issue, &["status"]).await?;
-    let now = text_of(&current, "/fields/status/name");
+    let now = status_name(&current);
     if now.eq_ignore_ascii_case(target) {
         return Ok(json!({ "ref": issue, "status": now, "changed": false }));
     }
-    let page = api.tool("getTransitionsForJiraIssue", json!({ "issueIdOrKey": issue })).await?;
-    let transitions = listed(&page, "transitions");
-    let found = transitions
-        .iter()
-        .find(|transition| text_of(transition, "/to/name").eq_ignore_ascii_case(target))
+    let transitions = api.transitions(issue).await?;
+    let reaches = |place: &str| transitions.iter().find(|transition| text_of(transition, place).eq_ignore_ascii_case(target));
+    let found = reaches("/to/name")
+        .or_else(|| reaches("/name"))
         .ok_or_else(|| ActionError::permanent(format!("{issue} cannot go from {now} to {target}")))?;
-    let arguments = json!({ "issueIdOrKey": issue, "transition": { "id": text_of(found, "/id") } });
-    api.tool("transitionJiraIssue", arguments).await?;
-    Ok(json!({ "ref": issue, "status": text_of(found, "/to/name"), "changed": true }))
+    let arguments = json!({ "issueIdOrKey": issue, "transitionId": id_of(found, "/id") });
+    let answer = api.tool("transitionJiraIssue", arguments).await?;
+    let status = Some(landed(&answer)).filter(|name| !name.is_empty()).unwrap_or_else(|| text_of(found, "/to/name"));
+    Ok(json!({ "ref": issue, "status": if status.is_empty() { target.to_owned() } else { status }, "changed": true }))
 }
 
 pub async fn set_impediment(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Value, ActionError> {

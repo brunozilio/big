@@ -1,5 +1,8 @@
 mod adf;
 mod events;
+#[cfg(test)]
+mod fake;
+mod operations;
 mod tracker;
 
 use async_trait::async_trait;
@@ -9,8 +12,9 @@ use serde_json::{Map, Value, json};
 use crate::contracts::{self, tracker as actions};
 use crate::descriptor::{AuthSpec, Presentation, ProviderDescriptor};
 use crate::error::ActionError;
-use crate::http::{Http, HttpRequest};
+use crate::http::Http;
 use crate::mcp::{self, McpClient};
+use operations::{found_list, last_page};
 use crate::oauth::{Loopback, mcp::McpSignIn};
 use crate::provider::{AccountOption, Args, Credentials, EventSource, Provider, text_of, unknown_action};
 
@@ -73,12 +77,18 @@ impl<'a> Api<'a> {
 
     async fn search(&self, jql: &str, fields: &[&str], token: Option<&str>) -> Result<Value, ActionError> {
         let mut arguments = json!({
-            "jql": jql, "fields": fields, "maxResults": 100, "responseContentFormat": "markdown",
+            "jql": jql, "fields": fields, "maxResults": 100, "view": "full", "responseContentFormat": "markdown",
         });
         if let Some(token) = token {
             arguments["nextPageToken"] = json!(token);
         }
         self.tool("searchJiraIssuesUsingJql", arguments).await
+    }
+
+    async fn transitions(&self, issue: &str) -> Result<Vec<Value>, ActionError> {
+        let inputs = json!({ "issueIdOrKey": issue });
+        let (_, page) = operations::read(&self.mcp, &self.cloud, &operations::TRANSITIONS, &inputs).await?;
+        Ok(found_list(&page, &["transitions"]))
     }
 
     fn project<'p>(&'p self, args: Args<'p>) -> Result<&'p str, ActionError> {
@@ -119,22 +129,25 @@ pub fn project_of(project: &Value) -> Value {
     })
 }
 
+fn project_inputs(page: u64, query: Option<&str>) -> Value {
+    let mut inputs = json!({ "startAt": page * PAGE, "maxResults": PAGE });
+    if let Some(query) = query.map(str::trim).filter(|query| !query.is_empty()) {
+        inputs["query"] = json!(query);
+    }
+    inputs
+}
+
 pub async fn visible_projects(mcp: &McpClient<'_>, cloud: &str, query: Option<&str>) -> Result<Vec<Value>, ActionError> {
+    let (name, mut answer) = operations::read(mcp, cloud, &operations::PROJECTS, &project_inputs(0, query)).await?;
     let mut found = Vec::new();
-    for page in 0..MOST_PAGES {
-        let mut arguments = json!({
-            "cloudId": cloud, "action": "browse", "expandIssueTypes": false, "maxResults": PAGE, "startAt": page * PAGE,
-        });
-        if let Some(query) = query.map(str::trim).filter(|query| !query.is_empty()) {
-            arguments["searchString"] = json!(query);
-        }
-        let answer = mcp.call("getVisibleJiraProjects", arguments).await?;
-        let projects = listed(&answer, "values");
+    for page in 1..=MOST_PAGES {
+        let projects = found_list(&answer, &["values", "projects"]);
         let fetched = projects.len();
         found.extend(projects.iter().map(project_of).filter(|project| !text_of(project, "/key").is_empty()));
-        if answer["isLast"] == json!(true) || u64::try_from(fetched).unwrap_or(0) < PAGE {
+        if page == MOST_PAGES || last_page(&answer) || u64::try_from(fetched).unwrap_or(0) < PAGE {
             break;
         }
+        answer = operations::read_named(mcp, cloud, &name, &project_inputs(page, query)).await?;
     }
     Ok(found)
 }
@@ -152,24 +165,6 @@ fn site_settings(site: &Value, projects: &[Value]) -> Value {
         settings["project"] = json!(only);
     }
     settings
-}
-
-async fn probe_rest(http: &dyn Http, token: &str, cloud: &str) {
-    let urls = [
-        "https://api.atlassian.com/oauth/token/accessible-resources".to_owned(),
-        format!("https://api.atlassian.com/ex/jira/{cloud}/rest/api/3/myself"),
-        format!("https://api.atlassian.com/ex/jira/{cloud}/rest/api/3/project/search"),
-    ];
-    for url in urls {
-        let request = HttpRequest::get(url.clone()).bearer(token).header("Accept", "application/json");
-        match http.send(request).await {
-            Ok(response) => {
-                let body: String = String::from_utf8_lossy(&response.body).chars().take(300).collect();
-                tracing::warn!(%url, status = response.status, %body, "teste da API REST do Jira com o token do MCP");
-            }
-            Err(error) => tracing::warn!(%url, %error.message, "teste da API REST do Jira falhou"),
-        }
-    }
 }
 
 fn site_id(site: &Value) -> String {
@@ -235,25 +230,13 @@ impl Provider for Jira {
         let sites: Vec<Value> =
             listed(&raw, "resources").into_iter().filter(|site| !site_id(site).is_empty()).collect();
         if sites.is_empty() {
-            tracing::warn!(%raw, "nenhum site do Jira na resposta do MCP");
             return Err(ActionError::permanent(NO_SITES));
         }
-        probe_rest(http, &creds.access_token, &site_id(&sites[0])).await;
         let mut options = Vec::new();
         for site in &sites {
             let id = site_id(site);
-            let projects = match visible_projects(&mcp, &id, None).await {
-                Ok(projects) => projects,
-                Err(error) => {
-                    let catalog = mcp.catalog().await.unwrap_or_default();
-                    tracing::warn!(%error.message, %catalog, "projetos do Jira indisponíveis");
-                    Vec::new()
-                }
-            };
+            let projects = visible_projects(&mcp, &id, None).await.unwrap_or_default();
             options.push(AccountOption { label: site_label(site), settings: site_settings(site, &projects), id });
-        }
-        if let Ok(catalog) = mcp.catalog().await {
-            tracing::warn!(%catalog, "ferramentas do MCP da Atlassian");
         }
         Ok(options)
     }
