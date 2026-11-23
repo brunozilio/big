@@ -1,6 +1,7 @@
 import { setClock } from '../clock'
-import type { Api, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
+import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
+import { CODE_REPOS, checkedApplication, initialApplications, listDirs } from './applications'
 import { INITIAL_CONNECTIONS, MODELS, PROVIDERS } from './fixtures'
 import { itemOfSession, sessionById } from './sessions'
 import {
@@ -35,6 +36,7 @@ export function mockApi(options: MockOptions = {}): Api {
   let lastTick = Date.now()
   setClock(() => EPOCH + store.clock * TICK_MS + Math.min(TICK_MS, ((Date.now() - lastTick) / tickMs) * TICK_MS))
   let branding: Branding = { name: 'Entregas', logo: null, theme: 'system' }
+  let applications: Application[] = initialApplications()
   const flows = new Map<string, Flow>()
   const listeners = new Set<(e: LiveEvent) => void>()
   const itemSigs = new Map<string, { sig: string; updatedAt: string }>()
@@ -120,6 +122,8 @@ export function mockApi(options: MockOptions = {}): Api {
           return searchIssues(a.query ?? '', a.project) as CallResult<A>
         case 'tracker.projects':
           return trackerProjects(a.query ?? '') as CallResult<A>
+        case 'code.repos':
+          return CODE_REPOS.filter((r) => r.ref.includes((a.query ?? '').toLowerCase())) as CallResult<A>
         case 'tracker.issue':
           return issueData(a.key) as CallResult<A>
         case 'tracker.comment':
@@ -184,7 +188,11 @@ export function mockApi(options: MockOptions = {}): Api {
       start()
       return store.items.map(item)
     }),
-    createItem: (input) => wait(() => item(createItem(input.text, input.issue?.key ?? null, input.model, input.project?.key ?? null)), 600),
+    createItem: (input) => wait(() => {
+      const app = applications.find((x) => x.id === input.application)
+      if (input.application && !app) throw new Error('Essa aplicação não existe mais.')
+      return item(createItem(input.text, input.issue?.key ?? null, input.model, input.project?.key ?? app?.tracker?.project ?? null))
+    }, 600),
     rerun: (id, step) => wait(() => {
       const it = findItem(id)
       const target = step && isStepId(step) ? step : 'develop'
@@ -233,6 +241,22 @@ export function mockApi(options: MockOptions = {}): Api {
       publish({ type: 'branding', branding })
       return branding
     }),
+    applications: () => wait(() => applications),
+    createApplication: (draft) => wait(() => {
+      const made = checkedApplication(draft, `app-${Date.now()}-${applications.length}`)
+      applications = [...applications, made]
+      return made
+    }),
+    saveApplication: (application) => wait(() => {
+      if (!applications.some((x) => x.id === application.id)) throw new Error('Não há essa aplicação.')
+      const saved = checkedApplication(application, application.id)
+      applications = applications.map((x) => (x.id === saved.id ? saved : x))
+      return saved
+    }),
+    deleteApplication: (id) => wait(() => {
+      applications = applications.filter((x) => x.id !== id)
+    }),
+    dirs: (path) => wait(() => listDirs(path), 60),
     upload: (file) => wait(() => ({ id: `a-${Date.now()}`, name: file.name, size: file.size })),
     live: (onEvent, onState) => {
       listeners.add(onEvent)

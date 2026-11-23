@@ -12,6 +12,19 @@ fn folder(world: &World, name: &str) -> String {
     std::fs::canonicalize(path).expect("path").to_string_lossy().into_owned()
 }
 
+fn steady(listed: &Value) -> Value {
+    let mut kept = listed.clone();
+    for (at, application) in kept.as_array_mut().into_iter().flatten().enumerate() {
+        application["id"] = json!(format!("app-{at}"));
+        for (place, repository) in application["repositories"].as_array_mut().into_iter().flatten().enumerate() {
+            repository["id"] = json!(format!("repo-{at}-{place}"));
+            let name = repository["directory"].as_str().and_then(|dir| dir.rsplit('/').next()).unwrap_or_default().to_owned();
+            repository["directory"] = json!(format!("/projetos/{name}"));
+        }
+    }
+    kept
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_first_run_makes_the_default_application_from_the_launch_folder() {
     let world = World::new().await;
@@ -61,7 +74,7 @@ async fn applications_are_created_changed_checked_and_removed() {
     assert_eq!(saved["repositories"][0]["id"], made["repositories"][0]["id"]);
     let listed = world.get("/api/applications").await;
     assert_eq!(listed.as_array().map(Vec::len), Some(2));
-    fixture("applications", &listed);
+    fixture("applications", &steady(&listed));
 
     let nameless = json!({ "name": " ", "repositories": body["repositories"] });
     assert_eq!(world.send(Method::POST, "/api/applications", Some(nameless)).await.0, StatusCode::BAD_REQUEST);

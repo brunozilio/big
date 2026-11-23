@@ -13,16 +13,17 @@ import { Icon } from '@/ui/icon'
 import { LogoUpload } from '@/ui/logoUpload'
 import { stagger, tween, tweenClose } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
+import { ApplicationsView } from './Applications'
 
-export type SettingsTab = 'connections' | 'appearance'
+export type SettingsTab = 'connections' | 'applications' | 'appearance'
 
 export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTab: (t: SettingsTab) => void; onConnect: (provider: string) => void }) {
   return (
     <>
-      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: 'Conexões' }, { value: 'appearance', label: 'Personalização' }]} />
+      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: 'Conexões' }, { value: 'applications', label: 'Aplicações' }, { value: 'appearance', label: 'Personalização' }]} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tweenClose}>
-          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : <CustomView />}
+          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'applications' ? <ApplicationsView /> : <CustomView />}
         </motion.div>
       </AnimatePresence>
     </>

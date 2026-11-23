@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isBlock, isItem, isLiveEvent, isSession, isStepView } from '../src/api/guards'
-import type { Branding, CallResult, Connections, Models } from '../src/api/contract'
+import type { Application, Branding, CallResult, Connections, Models } from '../src/api/contract'
 
 const load = (name: string): unknown => JSON.parse(readFileSync(join(import.meta.dir, 'fixtures', 'server', `${name}.json`), 'utf8'))
 
@@ -49,5 +49,18 @@ describe('respostas reais do servidor', () => {
     expect(change.files.every((f) => typeof f.diff === 'string' && typeof f.firstLine === 'number')).toBe(true)
     const projects = load('call-projects') as CallResult<'tracker.projects'>
     expect(projects.every((p) => typeof p.key === 'string' && typeof p.name === 'string' && (p.avatar === null || typeof p.avatar === 'string'))).toBe(true)
+  })
+
+  test('aplicações', () => {
+    const applications = load('applications') as Application[]
+    expect(applications.length).toBeGreaterThan(0)
+    for (const a of applications) {
+      expect(typeof a.id === 'string' && typeof a.name === 'string' && Array.isArray(a.repositories)).toBe(true)
+      expect(a.tracker === null || (typeof a.tracker.connection === 'string' && typeof a.tracker.project === 'string')).toBe(true)
+      for (const r of a.repositories) {
+        expect(typeof r.id === 'string' && typeof r.directory === 'string' && typeof r.run === 'string' && Array.isArray(r.verify)).toBe(true)
+        expect(r.code === null || (typeof r.code.connection === 'string' && typeof r.code.repo === 'string')).toBe(true)
+      }
+    }
   })
 })

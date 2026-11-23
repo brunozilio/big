@@ -92,6 +92,7 @@ export interface Item {
 }
 
 export interface NewItem {
+  application?: string | null
   text: string
   issue: { connection: string; key: string } | null
   project?: { connection: string; key: string } | null
@@ -198,6 +199,15 @@ export interface TrackerProject {
   avatar: string | null
 }
 
+export interface CodeRepo {
+  id: string
+  ref: string
+  name: string
+  url: string | null
+  defaultBranch: string | null
+  private: boolean
+}
+
 export interface IssueData {
   key: string
   url: string | null
@@ -262,6 +272,7 @@ export interface PipelineRun {
 export type ConnectionCall =
   | { action: 'tracker.search'; args: { query: string; project?: string }; result: IssueSummary[] }
   | { action: 'tracker.projects'; args: { query?: string }; result: TrackerProject[] }
+  | { action: 'code.repos'; args: { query?: string }; result: CodeRepo[] }
   | { action: 'tracker.issue'; args: { key: string }; result: IssueData }
   | { action: 'tracker.comment'; args: { key: string; body: string }; result: Comment }
   | { action: 'code.change'; args: { change: string }; result: ChangeData }
@@ -434,6 +445,48 @@ export interface BrandingPatch {
   theme?: Theme
 }
 
+export interface TrackerChoice {
+  connection: string
+  project: string
+}
+
+export interface CodeChoice {
+  connection: string
+  repo: string
+}
+
+export interface ApplicationRepository {
+  id: string
+  code: CodeChoice | null
+  directory: string
+  run: string
+  verify: string[]
+}
+
+export interface Application {
+  id: string
+  name: string
+  tracker: TrackerChoice | null
+  repositories: ApplicationRepository[]
+}
+
+export type ApplicationDraft = Omit<Application, 'id'> & { id?: string }
+
+export interface DirEntry {
+  name: string
+  path: string
+  repo: boolean
+}
+
+export interface DirListing {
+  path: string
+  parent: string | null
+  home: string
+  repo: boolean
+  remote: { url: string | null; ref: string | null }
+  entries: DirEntry[]
+}
+
 export type LiveEvent =
   | { type: 'item'; item: Item }
   | { type: 'item.removed'; id: string }
@@ -462,6 +515,11 @@ export interface Api {
   models(): Promise<Models>
   branding(): Promise<Branding>
   saveBranding(patch: BrandingPatch): Promise<Branding>
+  applications(): Promise<Application[]>
+  createApplication(application: ApplicationDraft): Promise<Application>
+  saveApplication(application: Application): Promise<Application>
+  deleteApplication(id: string): Promise<void>
+  dirs(path: string | null): Promise<DirListing>
   upload(file: File): Promise<{ id: string; name: string; size: number }>
   live(onEvent: (event: LiveEvent) => void, onState: (connected: boolean) => void): () => void
 }
@@ -484,6 +542,9 @@ export const ROUTES = {
   poll: '/api/connections/device/poll',
   models: '/api/models',
   branding: '/api/branding',
+  applications: '/api/applications',
+  application: (id: string) => `/api/applications/${encodeURIComponent(id)}`,
+  dirs: (path: string | null) => (path ? `/api/fs/dirs?path=${encodeURIComponent(path)}` : '/api/fs/dirs'),
   attachments: '/api/attachments',
   live: '/api/live',
 } as const

@@ -55,3 +55,34 @@ export function searchTargets(connections: string[], choice: ProjectChoice | nul
 export function sameProject(a: ProjectChoice | null, b: ProjectChoice | null): boolean {
   return a?.connection === b?.connection && a?.key === b?.key
 }
+
+const APPLICATION = 'composer.application'
+
+export function rememberedApplication(): string | null {
+  try {
+    return storage()?.getItem(APPLICATION) || null
+  } catch {
+    return null
+  }
+}
+
+export function rememberApplication(id: string | null): void {
+  try {
+    const kept = storage()
+    if (!kept) return
+    if (id) kept.setItem(APPLICATION, id)
+    else kept.removeItem(APPLICATION)
+  } catch {
+    return
+  }
+}
+
+export function initialApplication<T extends { id: string }>(applications: T[]): T | null {
+  const remembered = rememberedApplication()
+  return applications.find((a) => a.id === remembered) ?? applications[0] ?? null
+}
+
+export function applicationProject(application: { tracker: { connection: string; project: string } | null } | null, connections: string[]): ProjectChoice | null {
+  const tracker = application?.tracker
+  return tracker && connections.includes(tracker.connection) ? { connection: tracker.connection, key: tracker.project } : null
+}

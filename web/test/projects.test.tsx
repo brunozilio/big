@@ -5,6 +5,7 @@ import type { Api, CallAction, CallArgs, NewItem as NewItemInput } from '../src/
 import { mockApi } from '../src/api/mock'
 import { setConnections } from '../src/api/store'
 import { NewItem } from '../src/screens/items/NewItem'
+import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '../src/ui/overlay'
 import { initialProject, rememberProject, rememberedProject, searchTargets } from '../src/screens/items/projects'
 
@@ -74,7 +75,7 @@ describe('projeto do composer', () => {
     if (!tracker) throw new Error('sem tracker no mock')
     rememberProject([tracker.id], { connection: tracker.id, key: 'OPS' })
     act(() => setConnections(connections))
-    const view = render(<TooltipProvider><NewItem onCreated={() => undefined} /></TooltipProvider>)
+    const view = render(<MemoryRouter><TooltipProvider><NewItem onCreated={() => undefined} /></TooltipProvider></MemoryRouter>)
     const trigger = await view.findByRole('button', { name: /Começar de uma issue/ })
     expect(trigger.textContent).toContain('OPS')
     fireEvent.click(trigger)

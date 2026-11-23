@@ -1,12 +1,12 @@
 [
   {
-    "id": "257d90fb6a21e70048357f77",
+    "id": "app-0",
     "name": "repo",
     "repositories": [
       {
         "code": null,
-        "directory": "/var/folders/cx/6g362kb14sb45nsk1fg33wd40000gn/T/.tmpKVYd67/repo",
-        "id": "71da53655150a74bc1704901",
+        "directory": "/projetos/repo",
+        "id": "repo-0-0",
         "run": "",
         "verify": []
       }
@@ -14,7 +14,7 @@
     "tracker": null
   },
   {
-    "id": "e2d54b9c72887420b4e14950",
+    "id": "app-1",
     "name": "Loja nova",
     "repositories": [
       {
@@ -22,8 +22,8 @@
           "connection": "c1",
           "repo": "acme/web"
         },
-        "directory": "/private/var/folders/cx/6g362kb14sb45nsk1fg33wd40000gn/T/.tmpKVYd67/web",
-        "id": "2e43068cb57dd31451ec5407",
+        "directory": "/projetos/web",
+        "id": "repo-1-0",
         "run": "bun dev",
         "verify": [
           "bun test"
@@ -31,8 +31,8 @@
       },
       {
         "code": null,
-        "directory": "/private/var/folders/cx/6g362kb14sb45nsk1fg33wd40000gn/T/.tmpKVYd67/api",
-        "id": "0dd40db650ad37a557d13dff",
+        "directory": "/projetos/api",
+        "id": "repo-1-1",
         "run": "",
         "verify": []
       }
