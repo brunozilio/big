@@ -14,8 +14,6 @@ type PlanEvent = Extract<SessionEvent, { type: 'plan' }>
 
 const isPlan = (e: SessionEvent): e is PlanEvent => e.type === 'plan'
 
-const badges = { pending: 'Aguardando', approved: 'Aprovado', revised: 'Refeito' } as const
-
 export function PlanSplit({ sessionId, composer }: { sessionId: string; composer: boolean }) {
   const { session } = useSession(sessionId)
   const plans = session?.events.filter(isPlan) ?? []
@@ -27,7 +25,7 @@ export function PlanSplit({ sessionId, composer }: { sessionId: string; composer
   if (!session || !latest) return <ChatView sessionId={sessionId} composer={composer} />
   const respond: Respond = (event, response) => api().respond(session.id, event, response)
   const options = [
-    { value: 'plan' as const, label: 'Plano', badge: <span className="text-xs text-muted">{plans.length > 1 ? `v${plans.length} · ` : ''}{badges[latest.resolution]}</span> },
+    { value: 'plan' as const, label: 'Plano' },
     { value: 'chat' as const, label: 'Conversa' },
   ]
   return (
