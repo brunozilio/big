@@ -74,6 +74,10 @@ function draftOf(application: Application | null): ApplicationDraft {
   return application ? structuredClone(application) : { name: '', tracker: null, repositories: [blankRepository()], skipDependabot: true }
 }
 
+export function projectLabel(p: TrackerProject): string {
+  return p.name && p.name !== p.key ? `${p.name} · ${p.key}` : p.key
+}
+
 export function choiceKey(connection: string, key: string): string {
   return `${connection}::${key}`
 }
@@ -144,13 +148,13 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
   }, [open, application])
   const spaces = [
     { value: NONE, label: 'Nenhum' },
-    ...trackers.flatMap((s) => (projects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: `${p.name} · ${p.key}`, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
+    ...trackers.flatMap((s) => (projects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: projectLabel(p), icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
   ]
   const space = draft.tracker ? choiceKey(draft.tracker.connection, draft.tracker.project) : NONE
   if (draft.tracker && !spaces.some((o) => o.value === space)) spaces.push({ value: space, label: draft.tracker.project })
   const suites = [
     { value: NONE, label: 'Nenhum' },
-    ...testers.flatMap((s) => (testProjects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: `${p.name} · ${p.key}`, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
+    ...testers.flatMap((s) => (testProjects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: projectLabel(p), icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
   ]
   const suite = draft.tests ? choiceKey(draft.tests.connection, draft.tests.project) : NONE
   if (draft.tests && !suites.some((o) => o.value === suite)) suites.push({ value: suite, label: draft.tests.project })
