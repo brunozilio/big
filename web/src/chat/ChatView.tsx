@@ -215,6 +215,8 @@ function TurnWork({ live, started, ended, events, render }: { live: boolean; sta
       {segments.map((segment, i) =>
         segment.kind === 'human' ? (
           <AnimatePresence key={segment.event.id} initial={false}>{render(segment.event)}</AnimatePresence>
+        ) : segment.events.length === 1 ? (
+          <AnimatePresence key={segment.events[0].id} initial={false}>{render(segment.events[0])}</AnimatePresence>
         ) : (
           <WorkGroup key={segment.events[0].id} events={segment.events} live={live && i === segments.length - 1} render={render} />
         ),

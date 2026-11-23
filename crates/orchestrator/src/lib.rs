@@ -14,6 +14,7 @@ mod events;
 mod git;
 mod ledger;
 mod matching;
+mod naming;
 mod protocol;
 mod repos;
 mod resources;

@@ -121,9 +121,16 @@ impl Orchestrator {
             return Err(Error::Script(format!("there is no workflow named {workflow}")));
         }
         let id = ItemId::new();
+        let named = parent.is_none() && input["issue"].as_str().is_none_or(str::is_empty);
+        let text = input["text"].as_str().or(input["title"].as_str()).unwrap_or_default().to_owned();
+        let wanted = input["model"].as_str().map(str::to_owned);
+        let home = self.shared.home(&input).unwrap_or_else(|| self.shared.config.data.clone());
         let created = WorkflowEvent::ItemCreated { id: id.clone(), workflow: workflow.to_owned(), parent, input };
         self.shared.append(&id, &[created])?;
         ensure(&self.shared, &id);
+        if named && !text.trim().is_empty() {
+            crate::naming::name(&self.shared, id.clone(), text, home, wanted);
+        }
         Ok(id)
     }
 

@@ -116,7 +116,11 @@ pub fn summary(
     let live = ledger.open().any(|request| kind_of(&request.effect) == AGENT);
     ItemSummary {
         id: item.id.clone(),
-        title: planned_title(item).unwrap_or_else(|| item_json(item)["title"].as_str().unwrap_or_default().to_owned()),
+        title: item
+            .name
+            .clone()
+            .or_else(|| planned_title(item))
+            .unwrap_or_else(|| item_json(item)["title"].as_str().unwrap_or_default().to_owned()),
         workflow: item.workflow.clone(),
         parent: item.parent.clone(),
         group: group_of(item, asks > 0),

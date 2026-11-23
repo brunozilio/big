@@ -27,4 +27,5 @@ pub enum WorkflowEvent {
     Finished { output: Value },
     ExternalObserved(Observed),
     Reconciled { field: String, local: Value, remote: Value, action: String },
+    Named { title: String },
 }

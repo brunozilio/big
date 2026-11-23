@@ -136,6 +136,8 @@ pub struct WorkItem {
     pub observed: BTreeMap<String, Observed>,
     pub ending: Option<Ending>,
     pub version: u64,
+    #[serde(default)]
+    pub name: Option<String>,
 }
 
 impl WorkItem {

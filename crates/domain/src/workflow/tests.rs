@@ -189,6 +189,12 @@ fn rewinding_drops_what_came_after_the_step_and_resets_it() {
 }
 
 #[test]
+fn a_named_item_keeps_its_name() {
+    let item = replay(&[created(), WorkflowEvent::Named { title: "Loja virtual".into() }]);
+    assert_eq!(item.name.as_deref(), Some("Loja virtual"));
+}
+
+#[test]
 fn rewinding_clears_the_impediment_of_the_run_it_replaces() {
     let item = replay(&[
         created(),

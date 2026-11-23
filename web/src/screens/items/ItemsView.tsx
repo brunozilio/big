@@ -81,7 +81,7 @@ function Row({ it, fresh, onOpen, onConnect }: { it: Item; fresh: boolean; onOpe
           <span className="truncate text-md text-fg" title={it.title}>{it.title}</span>
           {it.live && <LiveDot />}
         </span>
-        <span className="ml-auto flex min-w-0 max-w-[60%] items-center justify-end gap-3" {...stop}>
+        <span className="ml-auto flex max-w-[60%] shrink-0 items-center justify-end gap-3" {...stop}>
           <RowRight it={it} onStep={(s) => onOpen(s)} onConnect={onConnect} />
         </span>
       </div>

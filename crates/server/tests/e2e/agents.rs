@@ -143,16 +143,19 @@ impl AgentEngine for Agents {
         request: &PromptRequest,
         sink: Arc<dyn EventSink>,
     ) -> Result<Box<dyn RunHandle>, EngineError> {
-        let number = self.script.started.fetch_add(1, Ordering::SeqCst) + 1;
+        let titling = request.session.command == Some(domain::SessionCommand::Title);
+        let number = if titling { 0 } else { self.script.started.fetch_add(1, Ordering::SeqCst) + 1 };
         let named = request.session.agent.as_ref().map(|agent| agent.name.clone());
         let fallback = if request.policy.permission == PermissionMode::Plan { "planner" } else { "developer" };
         let role = named.unwrap_or_else(|| fallback.to_owned());
         let session = request.session.resume.clone().unwrap_or_else(|| SessionId(format!("{role}-{number}")));
-        self.script.runs.lock().unwrap_or_else(PoisonError::into_inner).push((
-            role.clone(),
-            session.0.clone(),
-            request.prompt.text.clone(),
-        ));
+        if !titling {
+            self.script.runs.lock().unwrap_or_else(PoisonError::into_inner).push((
+                role.clone(),
+                session.0.clone(),
+                request.prompt.text.clone(),
+            ));
+        }
         let cancelled = Arc::new(AtomicBool::new(false));
         let (answer, answers) = channel();
         let turn = Turn { sink, run, cancelled: Arc::clone(&cancelled), answers };
@@ -163,6 +166,9 @@ impl AgentEngine for Agents {
         std::thread::spawn(move || {
             turn.emit(EngineEvent::SessionStarted(session));
             if command {
+                if titling {
+                    turn.emit(EngineEvent::Chore(domain::ChoreAnswer::Title("Arquivo de trabalho".into())));
+                }
                 turn.emit(EngineEvent::Completed { duration_ms: 0, cost_usd: None });
                 return;
             }

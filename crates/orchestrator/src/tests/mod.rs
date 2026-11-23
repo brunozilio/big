@@ -158,7 +158,13 @@ pub struct FakeEngine {
 
 impl FakeEngine {
     pub fn requests(&self) -> Vec<PromptRequest> {
-        self.state.requests.lock().expect("lock").clone()
+        let all = self.state.requests.lock().expect("lock").clone();
+        all.into_iter().filter(|request| request.session.command != Some(domain::SessionCommand::Title)).collect()
+    }
+
+    pub fn titled(&self) -> Vec<PromptRequest> {
+        let all = self.state.requests.lock().expect("lock").clone();
+        all.into_iter().filter(|request| request.session.command == Some(domain::SessionCommand::Title)).collect()
     }
 
     pub fn runs(&self) -> usize {
@@ -199,7 +205,8 @@ impl AgentEngine for FakeEngine {
         let number = {
             let mut requests = self.state.requests.lock().expect("lock");
             requests.push(request.clone());
-            requests.len()
+            let titling = |request: &PromptRequest| request.session.command == Some(domain::SessionCommand::Title);
+            requests.iter().filter(|request| !titling(request)).count()
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         let (answer, answers) = std::sync::mpsc::channel();
@@ -210,6 +217,9 @@ impl AgentEngine for FakeEngine {
             sink.emit(run, EngineEvent::SessionStarted(session));
             sink.emit(run, EngineEvent::Checkpoint(u32::try_from(number).unwrap_or(0)));
             if request.session.command.is_some() {
+                if request.session.command == Some(domain::SessionCommand::Title) {
+                    sink.emit(run, EngineEvent::Chore(domain::ChoreAnswer::Title("Loja virtual".into())));
+                }
                 sink.emit(run, EngineEvent::Completed { duration_ms: 0, cost_usd: None });
                 return;
             }

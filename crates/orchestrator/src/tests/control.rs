@@ -219,6 +219,21 @@ async fn a_status_the_tracker_board_does_not_have_does_not_stop_the_item() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_new_item_gets_a_short_name_from_its_request() {
+    let world = World::new();
+    world.workflow("hold", "import { workflow } from \"sdk\";\nexport default workflow({ name: \"hold\", async run(ctx) { return await ctx.waitHuman([]); } });");
+    let kernel = world.start().await;
+    let text = "Criar um e-commerce básico para a nossa loja com catálogo, carrinho e checkout";
+    let id = kernel.create_item("hold", json!({ "title": text, "text": text })).expect("item");
+    let named = until(&kernel, &id, |item| item.name.is_some()).await;
+    assert_eq!(named.name.as_deref(), Some("Loja virtual"));
+    let asked: Vec<String> = world.engine.titled().into_iter().map(|request| request.prompt.text).collect();
+    assert_eq!(asked, [text.to_owned()]);
+    let summary = kernel.summary(&id).expect("summary").expect("item");
+    assert_eq!(summary.title, "Loja virtual");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn at_most_the_configured_number_of_items_work_at_once() {
     let mut world = World::new();
     world.parallel = 1;
