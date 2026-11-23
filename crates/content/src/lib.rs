@@ -6,6 +6,8 @@ mod embedded {
 
 mod install;
 mod render;
+#[cfg(test)]
+mod sdk_tests;
 
 pub use install::{Installed, MANIFEST, install_files, install_once};
 

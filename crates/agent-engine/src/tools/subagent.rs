@@ -159,7 +159,10 @@ mod tests {
         let folder = Folder { cwd: repo.path(), extensions: None };
         let tool = AgentTool { agents: discover(folder, None) };
         let description = tool.spec().description;
-        assert!(description.contains("- reviewer: Reviews diffs.\n- Explore: "), "project agents first: {description}");
+        assert!(
+            description.contains("- reviewer: Reviews diffs.\n- developer: "),
+            "project agents first: {description}"
+        );
         assert!(description.contains("- fork: "));
         let reviewer = tool.chosen(&json!({ "subagent_type": "reviewer" })).expect("known").expect("custom");
         assert_eq!(reviewer.instructions, "Be strict.");
