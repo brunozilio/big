@@ -1,11 +1,14 @@
 import { step, change, markdown } from "sdk";
-import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, issueOf, object, planOf, repoOf, targetFields } from "./context.js";
+import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, issueOf, object, planOf, repoOf, source, summaryLine, targetFields } from "./context.js";
 
-function describe(plan, issue) {
-  const parts = [];
+function describe(summary, plan, issue) {
+  const parts = [summary || summaryLine(plan.story) || plan.title];
   if (issue) parts.push(`Issue: ${issue}`);
-  if (plan.text) parts.push(plan.text);
-  return parts.join("\n\n");
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function titled(plan, issue) {
+  return issue ? `${issue} - ${plan.title}` : plan.title;
 }
 
 function shown(entry, many) {
@@ -49,8 +52,10 @@ export default step({
     const targets = codeTargets(ctx, opts);
     if (targets.length === 0) return ctx.fail({ error: "nenhum repositório da aplicação tem conexão de código" });
     const plan = planOf(ctx, opts);
-    const body = opts.body ?? describe(plan, issueOf(ctx, opts));
-    const wanted = { head, title: plan.title, body };
+    const issue = issueOf(ctx, opts);
+    const summary = summaryLine(source(ctx, opts, "develop").summary);
+    const body = opts.body ?? describe(summary, plan, issue);
+    const wanted = { head, title: opts.title ?? titled(plan, issue), body };
     const prs = await eachOf(ctx, targets, (branch, target) => open(branch, opts, target, wanted));
     const { repository: _repository, name: _name, code: _code, ...data } = prs[0];
     return ctx.pass(targets.length > 1 || targets[0].id ? { ...data, prs } : data);

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '@/api'
 import type { SessionEvent } from '@/api/contract'
 import { useSession } from '@/api/store'
@@ -49,10 +49,23 @@ export function ChatView({ sessionId, composer, dock }: { sessionId: string; com
   const eventCount = session?.events.length ?? 0
   const lastSignature = session ? JSON.stringify(session.events[session.events.length - 1] ?? null).length : 0
 
+  const placed = useRef<string | null>(null)
+  const loaded = !!session
+
+  useLayoutEffect(() => {
+    const el = scroller.current
+    if (!el || !loaded || placed.current === sessionId) return
+    placed.current = sessionId
+    el.scrollTop = el.scrollHeight
+    requestAnimationFrame(() => {
+      el.scrollTop = el.scrollHeight
+    })
+  }, [loaded, sessionId])
+
   useEffect(() => {
     const el = scroller.current
-    if (el && atBottom) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [eventCount, lastSignature, atBottom])
+    if (el && atBottom && placed.current === sessionId) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+  }, [eventCount, lastSignature, atBottom, sessionId])
 
   if (error && !session) return <EmptyState title="Sessão não encontrada" text={error} />
   if (!session) return <div className="flex h-full items-center justify-center"><Spinner /></div>

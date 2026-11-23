@@ -13,7 +13,7 @@ impl script::Host for NoHost {
     }
 }
 
-const STEPS: [&str; 9] = ["plan", "ticket", "develop", "checks", "pr", "ci", "review", "merge", "release"];
+const STEPS: [&str; 10] = ["plan", "ticket", "tests", "develop", "checks", "pr", "ci", "review", "merge", "release"];
 
 const PROVIDERS: [&str; 7] = ["jira", "github", "aws", "atlassian", "gitlab", "bitbucket", "amazon"];
 
@@ -200,6 +200,8 @@ fn agent(args: &Value) -> Value {
         }
         Some("developer") => json!({ "text": "feito", "session": "dev-1", "output": { "branch": "item/i1" } }),
         Some("release") => json!({ "text": "", "session": "rel-1", "output": { "notes": "## Notas\n- x corrigido" } }),
+        Some("tester") => json!({ "text": "```gherkin\nCenário: x\n  Dado a\n  Então b\n```", "session": "test-1", "output": null }),
+        Some("verifier") => json!({ "text": "✓ x\nVEREDITO: APROVADO", "session": "ver-1", "output": null }),
         _ => json!({ "text": "", "session": "other", "output": null }),
     }
 }
@@ -246,7 +248,7 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
 }
 
 #[test]
-fn the_default_workflow_describes_its_statuses_and_the_nine_steps_in_order() {
+fn the_default_workflow_describes_its_statuses_and_the_ten_steps_in_order() {
     let described = call(&default_workflow(), "host.describe", &[]);
     let workflow = &described["workflows"][0];
     assert_eq!(workflow["name"], "entrega");
@@ -254,9 +256,10 @@ fn the_default_workflow_describes_its_statuses_and_the_nine_steps_in_order() {
     let ids: Vec<&str> =
         workflow["steps"].as_array().expect("steps").iter().filter_map(|call| call["id"].as_str()).collect();
     assert_eq!(ids, STEPS);
-    assert_eq!(workflow["steps"][3]["options"]["onFail"], "develop");
-    assert_eq!(workflow["steps"][5]["options"]["onFail"], "develop");
-    assert_eq!(workflow["steps"][6]["options"]["onChanges"], "develop");
+    assert_eq!(workflow["steps"][4]["options"]["onFail"], "develop");
+    assert_eq!(workflow["steps"][4]["options"]["agent"], "verifier");
+    assert_eq!(workflow["steps"][6]["options"]["onFail"], "develop");
+    assert_eq!(workflow["steps"][7]["options"]["onChanges"], "develop");
     assert_eq!(described["steps"], json!(STEPS));
 }
 
@@ -285,7 +288,7 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     assert_eq!(planner["args"]["mode"], "plan");
     let created = calls(&asked, "create_issue");
     assert_eq!(created.len(), 1);
-    assert_eq!(created[0]["args"]["args"], json!({ "title": "Corrigir x", "description": "1. mudar x" }));
+    assert_eq!(created[0]["args"]["args"], json!({ "title": "Corrigir x", "description": "1. mudar x" }), "no format, the whole plan");
     let developers: Vec<&Value> =
         of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "developer").collect();
     assert_eq!(developers.len(), 3, "develop, back from checks, back from review");
@@ -368,6 +371,59 @@ export default workflow({
     assert!(of_kind(&asked, "exec").is_empty());
     assert_eq!(result["result"]["outcome"], "passed", "{result}");
     assert!(result["result"]["output"].as_str().is_some_and(|out| out.contains("Nenhum comando de verificação")), "{result}");
+}
+
+const WRITTEN_PLAN: &str = "Vou ler o código antes.\n# Cadastro de clientes\n\n**Como** atendente,\n**eu quero** cadastrar clientes,\n**para** atendê-los depois.\n\n### Critérios de aceite\n- [ ] Cadastro salva o cliente\n\n### Plano\n1. Criar a tabela\n2. Criar a ferramenta";
+
+#[test]
+fn the_plan_gives_the_title_the_story_goes_to_the_issue_and_the_pull_request_is_short() {
+    let mut fake = Fake::default();
+    let (result, asked) = drive(&default_workflow(), &item(Value::Null), |command| {
+        let name = command["args"]["name"].as_str();
+        if command["kind"] == "agent" && name == Some("planner") {
+            return Some(json!({ "text": WRITTEN_PLAN, "session": "plan-1", "output": null }));
+        }
+        let mut reply = fake.reply(command)?;
+        if command["kind"] == "agent" && name == Some("developer") {
+            reply["text"] = json!("Mudei muita coisa.\n\nResumo: Cadastra clientes pela ferramenta MCP.");
+        }
+        Some(reply)
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    let issue = &calls(&asked, "create_issue")[0]["args"]["args"];
+    assert_eq!(issue["title"], "Cadastro de clientes");
+    let story = issue["description"].as_str().expect("description");
+    assert!(story.starts_with("**Como** atendente") && story.contains("Critérios de aceite") && !story.contains("Criar a tabela"), "{story}");
+    let developer = of_kind(&asked, "agent").into_iter().find(|command| command["args"]["name"] == "developer").cloned();
+    let prompt = developer.expect("developer")["args"]["input"]["prompt"].as_str().unwrap_or_default().to_owned();
+    assert!(prompt.contains("Cenário: x") && prompt.contains("Criar a tabela"), "{prompt}");
+    let opened = &calls(&asked, "open_pull_request")[0]["args"]["args"];
+    assert_eq!(opened["title"], "T-9 - Cadastro de clientes");
+    assert_eq!(opened["body"], "Cadastra clientes pela ferramenta MCP.\n\nIssue: T-9");
+}
+
+#[test]
+fn a_verifier_that_fails_the_delivery_fails_the_checks() {
+    let text = r#"
+import { workflow } from "sdk";
+import { checks } from "sdk/steps";
+export default workflow({
+  name: "so-checks",
+  async run(ctx) {
+    try {
+      await checks(ctx, { commands: [], agent: "verifier" });
+      return { outcome: "passed" };
+    } catch (error) {
+      return { outcome: "failed", error: error.outcome.data.error };
+    }
+  },
+});
+"#;
+    let (result, asked) = drive(&source("workflows/so-checks.ts", text), &item(json!("T-1")), |command| {
+        (command["kind"] == "agent").then(|| json!({ "text": "✗ cadastro\nVEREDITO: REPROVADO", "session": "ver-1" }))
+    });
+    assert_eq!(of_kind(&asked, "agent")[0]["args"]["name"], "verifier");
+    assert_eq!(result["result"], json!({ "outcome": "failed", "error": "o verificador reprovou a entrega" }), "{result}");
 }
 
 #[test]

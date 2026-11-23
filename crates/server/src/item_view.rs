@@ -122,7 +122,33 @@ fn impediment(known: &Known<'_>, summary: &ItemSummary) -> Value {
         .map(mark)
         .or_else(|| reconnect(known, &reason))
         .unwrap_or(Value::Null);
-    json!({ "reason": reason, "connect": connect })
+    json!({ "reason": headline(&reason, &connect), "detail": reason, "connect": connect })
+}
+
+const MOST_HEADLINE: usize = 48;
+
+pub fn headline(reason: &str, connect: &Value) -> String {
+    let name = connect["name"].as_str();
+    if reason.starts_with(NEEDS_RECONNECT) {
+        return name.map_or_else(|| "Reconecte a conta".to_owned(), |name| format!("Reconecte o {name}"));
+    }
+    if reason.starts_with(NEEDS_CONNECTION) {
+        return name.map_or_else(|| "Conecte uma conta".to_owned(), |name| format!("Conecte o {name}"));
+    }
+    if reason.starts_with("o código do workflow mudou") {
+        return "O workflow mudou".to_owned();
+    }
+    let head = reason.split_once(": ").map_or(reason, |(head, _)| head).trim();
+    let mut short: String = head.chars().take(MOST_HEADLINE).collect();
+    if head.chars().count() > MOST_HEADLINE {
+        short.push('…');
+    }
+    let mut letters = short.chars();
+    letters.next().map(|first| first.to_uppercase().chain(letters).collect()).unwrap_or_default()
+}
+
+fn short_reason(known: &Known<'_>, reason: &str) -> String {
+    headline(reason, &reconnect(known, reason).unwrap_or(Value::Null))
 }
 
 fn attention(summary: &ItemSummary) -> Value {
@@ -138,7 +164,7 @@ fn attention(summary: &ItemSummary) -> Value {
         return json!({ "badge": badge, "diff": null, "action": { "label": "Abrir", "step": step } });
     }
     if let Some(found) = &summary.impediment {
-        let text = found.reason.clone().unwrap_or_else(|| "Impedido".to_owned());
+        let text = found.reason.as_deref().map_or_else(|| "Impedido".to_owned(), |reason| headline(reason, &Value::Null));
         return json!({ "badge": { "text": text, "tone": "danger" }, "diff": null, "action": null });
     }
     Value::Null
@@ -147,7 +173,7 @@ fn attention(summary: &ItemSummary) -> Value {
 fn activity(known: &Known<'_>, summary: &ItemSummary) -> Value {
     if let Some(found) = &summary.impediment {
         let since = iso(summary.updated_at);
-        let text = found.reason.clone().unwrap_or_else(|| "Impedido".to_owned());
+        let text = found.reason.as_deref().map_or_else(|| "Impedido".to_owned(), |reason| short_reason(known, reason));
         return json!({ "text": text, "since": since, "tone": "danger" });
     }
     let Some(current) = summary.steps.iter().find(|step| Some(&step.id) == summary.current.as_ref()) else {
@@ -242,5 +268,15 @@ mod tests {
         let reason = format!("{NEEDS_RECONNECT}refresh_token is invalid");
         assert_eq!(reconnect(&known, &reason).map(|found| found["provider"].clone()), Some(json!("jira")));
         assert_eq!(reconnect(&known, "outra falha"), None);
+    }
+
+    #[test]
+    fn an_impediment_reads_as_a_few_words_and_keeps_the_detail_for_the_step() {
+        let jira = json!({ "provider": "jira", "name": "Jira" });
+        let expired = format!("{NEEDS_RECONNECT}connector: Auth: the access could not be renewed");
+        assert_eq!(headline(&expired, &jira), "Reconecte o Jira");
+        assert_eq!(headline("Develop falhou: a pasta de trabalho não é um repositório git", &Value::Null), "Develop falhou");
+        assert_eq!(headline("o código do workflow mudou e não reproduz o histórico", &Value::Null), "O workflow mudou");
+        assert!(headline(&"x".repeat(200), &Value::Null).chars().count() <= MOST_HEADLINE + 1);
     }
 }

@@ -42,12 +42,36 @@ export function source(ctx, opts, kind) {
   return object(ctx.output(ids[kind] ?? kind));
 }
 
+export function parsePlan(text) {
+  const lines = String(text ?? "").split("\n");
+  const at = lines.findIndex((line) => /^# \S/.test(line));
+  if (at < 0) return { title: "", story: "", plan: String(text ?? "").trim(), text: String(text ?? "").trim() };
+  const title = lines[at].slice(2).trim();
+  const body = lines.slice(at + 1).join("\n");
+  const split = body.search(/^#{2,3} Plano\s*$/m);
+  const story = (split < 0 ? body : body.slice(0, split)).trim();
+  const plan = split < 0 ? "" : body.slice(split).replace(/^#{2,3} Plano\s*$/m, "").trim();
+  return { title, story, plan, text: lines.slice(at).join("\n").trim() };
+}
+
 export function planOf(ctx, opts) {
   const found = source(ctx, opts, "plan");
   return {
     title: opts.title ?? found.title ?? ctx.item.title ?? "",
     text: opts.plan ?? found.plan ?? "",
+    story: found.story ?? "",
   };
+}
+
+export function scenariosOf(ctx, opts) {
+  return opts.scenarios ?? source(ctx, opts, "tests").scenarios ?? "";
+}
+
+export function summaryLine(text) {
+  const found = String(text ?? "").match(/^\**Resumo:?\**:?\s*(.+)$/im);
+  if (found) return found[1].trim();
+  const first = String(text ?? "").split(/\n\s*\n/).map((part) => part.trim()).find((part) => part && !part.startsWith("#"));
+  return first ? first.split("\n")[0].slice(0, 280) : "";
 }
 
 export function issueOf(ctx, opts) {

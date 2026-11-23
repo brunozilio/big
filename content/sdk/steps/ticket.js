@@ -15,7 +15,7 @@ export default step({
     const args = defined({
       project: opts.project ?? ctx.item.project,
       title: plan.title,
-      description: opts.description ?? plan.text,
+      description: opts.description ?? (plan.story || plan.text),
       type: opts.type,
       labels: opts.labels,
       parent: opts.parent,

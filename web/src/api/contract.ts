@@ -47,6 +47,7 @@ export interface DiffSummary {
 
 export interface Impediment {
   reason: string
+  detail?: string
   connect: ProviderMark | null
 }
 

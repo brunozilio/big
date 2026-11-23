@@ -8,8 +8,9 @@ const item = (impediment: Item['impediment'], state = 'pending') =>
 
 describe('etapa sem conteúdo', () => {
   test('uma etapa parada mostra o motivo e como sair dela', () => {
-    render(<EmptyStep it={item({ reason: 'o código do workflow mudou', connect: null })} step="pr" />)
-    expect(screen.getByText('o código do workflow mudou')).toBeTruthy()
+    render(<EmptyStep it={item({ reason: 'O workflow mudou', detail: 'o código do workflow mudou e não reproduz o histórico', connect: null })} step="pr" />)
+    expect(screen.getByText('O workflow mudou')).toBeTruthy()
+    expect(screen.getByText('o código do workflow mudou e não reproduz o histórico')).toBeTruthy()
     expect(screen.getByText('Rodar de novo a partir de Pull request')).toBeTruthy()
     expect(screen.getByText('Cancelar item')).toBeTruthy()
   })

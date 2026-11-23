@@ -1,5 +1,5 @@
 import { step, chat } from "sdk";
-import { agentOptions, defined, object } from "./context.js";
+import { agentOptions, defined, object, parsePlan } from "./context.js";
 
 function request(item, opts) {
   if (opts.prompt) return opts.prompt;
@@ -22,10 +22,12 @@ export default step({
     const worktree = opts.worktree ?? item.branch ?? undefined;
     const result = await ctx.agent(opts.agent ?? "planner", input, agentOptions(opts, { mode: opts.mode ?? "plan", worktree }));
     const output = object(result.output);
-    const plan = output.plan ?? result.plan ?? result.text ?? "";
+    const written = parsePlan(output.plan ?? result.plan ?? result.text ?? "");
+    const plan = written.text;
     if (output.approved === false) {
       return ctx.fail({ session: result.session, plan, error: output.reason ?? "o plano não foi aprovado" });
     }
-    return ctx.pass({ session: result.session, plan, title: output.title ?? item.title ?? "" });
+    const title = output.title ?? (written.title || item.title || "");
+    return ctx.pass({ session: result.session, plan, title, story: written.story });
   },
 });

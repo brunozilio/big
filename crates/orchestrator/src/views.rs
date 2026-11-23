@@ -26,6 +26,13 @@ pub fn item_json(item: &WorkItem) -> Value {
     Value::Object(fields)
 }
 
+fn planned_title(item: &WorkItem) -> Option<String> {
+    item.steps.iter().rev().find_map(|run| {
+        let title = run.output.get("plan").and(run.output.get("title")).and_then(Value::as_str)?.trim();
+        (!title.is_empty()).then(|| title.to_owned())
+    })
+}
+
 pub fn linked_issue(item: &WorkItem) -> Option<String> {
     sync::desired_of(item, ReconcilePolicy::default()).issue.map(|issue| issue.issue)
 }
@@ -109,7 +116,7 @@ pub fn summary(
     let live = ledger.open().any(|request| kind_of(&request.effect) == AGENT);
     ItemSummary {
         id: item.id.clone(),
-        title: item_json(item)["title"].as_str().unwrap_or_default().to_owned(),
+        title: planned_title(item).unwrap_or_else(|| item_json(item)["title"].as_str().unwrap_or_default().to_owned()),
         workflow: item.workflow.clone(),
         parent: item.parent.clone(),
         group: group_of(item, asks > 0),

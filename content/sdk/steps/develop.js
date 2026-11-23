@@ -1,10 +1,11 @@
 import { step, chat } from "sdk";
-import { agentOptions, branchOf, defined, feedbackText, issueOf, object, planOf } from "./context.js";
+import { agentOptions, branchOf, defined, feedbackText, issueOf, object, planOf, scenariosOf, summaryLine } from "./context.js";
 
-function request(item, plan, issue, feedback) {
+function request(item, plan, issue, feedback, scenarios) {
   const parts = [`Implemente o item: ${plan.title || item.title || ""}`];
   if (issue) parts.push(`Issue: ${issue}`);
   if (plan.text) parts.push(`## Plano aprovado\n\n${plan.text}`);
+  if (scenarios) parts.push("## Cenários que precisam passar\n\n```gherkin\n" + scenarios + "\n```");
   const back = feedbackText(feedback);
   if (back) parts.push(`## O que precisa ser corrigido\n\n${back}`);
   return parts.join("\n\n");
@@ -31,7 +32,7 @@ export default step({
     const previous = object(ctx.output(ctx.step));
     const branch = opts.branch ?? previous.branch ?? branchOf(ctx, opts);
     const input = defined({
-      prompt: opts.prompt ?? request(ctx.item, plan, issue, feedback),
+      prompt: opts.prompt ?? request(ctx.item, plan, issue, feedback, scenariosOf(ctx, opts)),
       plan: plan.text,
       issue,
       feedback,
@@ -43,6 +44,6 @@ export default step({
     const missing = uncommitted(result, output.branch ?? branch);
     if (missing) return ctx.fail({ error: missing, session: result.session });
     const repositories = Array.isArray(result.repositories) && result.repositories.some((repository) => repository.id) ? result.repositories : undefined;
-    return ctx.pass(defined({ session: result.session, branch: output.branch ?? branch, summary: output.summary ?? result.text, repositories }));
+    return ctx.pass(defined({ session: result.session, branch: output.branch ?? branch, summary: output.summary ?? summaryLine(result.text), repositories }));
   },
 });

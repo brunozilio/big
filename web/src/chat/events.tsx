@@ -229,7 +229,29 @@ function prettyJson(s: string) {
   }
 }
 
+export function backgroundNotice(text: string): { command: string; ok: boolean; code: number | null } | null {
+  const found = /^\[background [^\]]+\] `([\s\S]+)` (finished|failed|was killed|stopped)(?: \(exit code (-?\d+)\))?\.?$/.exec(text.trim())
+  if (!found) return null
+  const code = found[3] === undefined ? null : Number(found[3])
+  const command = found[1].replace(/'[^']*\/worktrees\/[^/']+\/([^']*)'/g, '$1').replace(/\S*\/worktrees\/[^/\s]+\/(\S*)/g, '$1').replace(/\s+/g, ' ').trim()
+  return { command, ok: found[2] === 'finished' && code === 0, code }
+}
+
+function BackgroundDone({ notice }: { notice: NonNullable<ReturnType<typeof backgroundNotice>> }) {
+  return (
+    <p className="flex min-w-0 items-center gap-2 text-sm text-muted">
+      <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full', notice.ok ? 'bg-success text-white' : 'bg-danger text-white')}>
+        <Icon name={notice.ok ? 'check' : 'close'} size={10} strokeWidth={2.6} />
+      </span>
+      <span className="shrink-0">Tarefa em segundo plano {notice.ok ? 'concluída' : notice.code === null ? 'interrompida' : `falhou (código ${notice.code})`}</span>
+      <code className="min-w-0 truncate rounded-[5px] bg-inset px-1.5 py-0.5 font-mono text-xs text-fg2" title={notice.command}>{notice.command}</code>
+    </p>
+  )
+}
+
 export function StatusLine({ event }: { event: Ev<'status'> }) {
+  const notice = backgroundNotice(event.text)
+  if (notice) return <BackgroundDone notice={notice} />
   if (event.status !== 'error') return <p className="text-sm text-muted">{event.text}</p>
   return (
     <p className="flex items-center gap-2 text-sm text-muted">

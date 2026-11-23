@@ -205,14 +205,14 @@ function StepContent({ it, step }: { it: Item; step: string }) {
 export function EmptyStep({ it, step }: { it: Item; step: string }) {
   const [error, setError] = useState<string | null>(null)
   const label = it.steps.find((s) => s.id === step)?.label ?? step
-  const stuck = it.impediment && it.current === step ? it.impediment.reason : null
+  const stuck = it.impediment && it.current === step ? it.impediment : null
   const running = it.steps.find((s) => s.id === step)?.state === 'running'
   if (!stuck && running) return <p className="flex items-center gap-2 text-base text-muted"><Spinner size={14} />Em andamento…</p>
   if (!stuck) return <p className="text-base text-muted">Nada para mostrar nesta etapa ainda.</p>
   return (
     <div className="space-y-3">
-      <p className="text-base font-medium text-fg">Esta etapa parou.</p>
-      <p className="whitespace-pre-wrap break-words text-base text-fg2">{stuck}</p>
+      <p className="text-base font-medium text-fg">{stuck.reason}</p>
+      {stuck.detail && stuck.detail !== stuck.reason && <p className="whitespace-pre-wrap break-words text-sm text-muted">{stuck.detail}</p>}
       <p className="text-sm text-muted">Para refazer uma etapa anterior, selecione-a na lista e use o menu ⋯.</p>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="primary" icon={<Icon name="refresh" size={15} />} onClick={() => api().rerun(it.id, step).catch((e: unknown) => setError(errorText(e)))}>Rodar de novo a partir de {label}</Button>

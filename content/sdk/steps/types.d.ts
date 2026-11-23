@@ -79,6 +79,16 @@ export interface PlanOutput {
   session: string;
   plan: string;
   title: string;
+  story: string;
+}
+
+export interface TestsOptions extends AgentStepOptions {
+  scenarios?: string;
+}
+
+export interface TestsOutput {
+  session: string;
+  scenarios: string;
 }
 
 export interface TicketOptions extends EffectStepOptions {
@@ -114,7 +124,7 @@ export interface DevelopOutput {
   repositories?: RepositoryChange[];
 }
 
-export interface ChecksOptions {
+export interface ChecksOptions extends AgentStepOptions {
   commands?: string[];
   cwd?: string;
   env?: Record<string, string>;
@@ -232,6 +242,7 @@ export interface ReleaseOptions
 
 export type PlanStep = StepType<PlanOptions>;
 export type TicketStep = StepType<TicketOptions>;
+export type TestsStep = StepType<TestsOptions>;
 export type DevelopStep = StepType<DevelopOptions>;
 export type ChecksStep = StepType<ChecksOptions>;
 export type PrStep = StepType<PrOptions>;
