@@ -117,20 +117,21 @@ async fn a_finished_run_resolves_the_wait_even_if_its_event_was_lost() {
         2,
         pipelines::RUN,
         HOST_CONNECTION,
-        json!({"repo": "o/r", "run": 42}),
-        json!({"status": "in_progress"}),
+        json!({"run": "o/r/runs/42"}),
+        json!({"state": "running"}),
     )
     .to_vec();
-    events.push(wait("i1", 3, "pipelines.run.finished", json!({"subject": "o/r/actions/runs/42"})));
+    events.push(wait("i1", 3, "pipelines.run.finished", json!({"subject": "o/r/runs/42"})));
     h.add("i1", &events);
-    h.sink.wait_on("o/r/actions/runs/42");
+    h.sink.wait_on("o/r/runs/42");
     assert_eq!(h.sync.reconcile_now().await.unwrap().corrections, 0);
-    h.fake.world().runs.insert(42, "completed".into());
+    h.fake.world().runs.insert("o/r/runs/42".into(), "passed".into());
     assert_eq!(h.sync.reconcile_now().await.unwrap().corrections, 1);
     let delivered = h.sink.delivered();
     assert_eq!(delivered.len(), 1);
     assert_eq!(delivered[0].kind, "pipelines.run.finished");
-    assert_eq!(delivered[0].data["conclusion"], "success");
+    assert_eq!(delivered[0].data["state"], "passed");
+    assert_eq!(delivered[0].data["run"], "o/r/runs/42");
 }
 
 #[tokio::test]
@@ -142,11 +143,11 @@ async fn runs_are_left_alone_when_nothing_waits_for_a_pipeline() {
         2,
         pipelines::RUN,
         HOST_CONNECTION,
-        json!({"repo": "o/r", "run": 42}),
-        json!({"status": "in_progress"}),
+        json!({"run": "o/r/runs/42"}),
+        json!({"state": "running"}),
     );
     h.add("i1", &events);
-    h.fake.world().runs.insert(42, "completed".into());
+    h.fake.world().runs.insert("o/r/runs/42".into(), "passed".into());
     h.sync.reconcile_now().await.unwrap();
     let reads = h.fake.world().calls.iter().filter(|(action, _, _)| action == pipelines::RUN).count();
     assert_eq!(reads, 0);

@@ -295,7 +295,7 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     assert_eq!(opened[0]["args"]["args"]["head"], "item/i1");
     let polled: Vec<&Value> =
         of_kind(&asked, "wait.poll").iter().map(|command| &command["args"]["call"]["args"]["run"]).collect();
-    assert_eq!(polled, ["CI-1", "CI-2", "REL-1", "REL-1"], "a new run per CI attempt");
+    assert_eq!(polled, ["CI-1", "CI-2", "REL-1", "REL-1", "REL-1"], "a new run per CI attempt and the run raced with the approval");
     assert!(of_kind(&asked, "event").iter().any(|command| command["args"]["kind"] == "pipelines.run.finished"));
     let verdicts: Vec<&Value> =
         calls(&asked, "submit_review").iter().map(|command| &command["args"]["args"]["verdict"]).collect();

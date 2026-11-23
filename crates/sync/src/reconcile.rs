@@ -4,7 +4,7 @@ use domain::workflow::WorkflowEvent;
 use serde_json::{Value, json};
 
 use crate::book::{Book, Entry};
-use crate::desired::{CLOSED, COMPLETED, Desired, MERGED, PullRef, RunRef, WAITING, kinds};
+use crate::desired::{CLOSED, Desired, FINISHED, MERGED, PullRef, RunRef, WAITING, kinds};
 use crate::error::Error;
 use crate::policy::FieldPolicy;
 use crate::runner::{ReconcileReport, Synchronizer, observed, reconciled};
@@ -114,7 +114,7 @@ impl Synchronizer {
                 )
                 .await?;
         }
-        if let Some(flagged) = remote.get("impediment").and_then(Value::as_bool)
+        if let Some(flagged) = remote.pointer("/impediment/on").and_then(Value::as_bool)
             && flagged != item.impediment.is_some()
         {
             corrections += self.settle(entry, item, impediment(entry, item, issue, flagged)).await?;
@@ -124,10 +124,8 @@ impl Synchronizer {
 
     async fn reconcile_pull(&self, entry: &Entry, item: &Desired, pull: &PullRef) -> Result<usize, Error> {
         let Some(local) = pull.state.as_deref() else { return Ok(0) };
-        let args = json!({ "repo": pull.repo, "number": pull.number });
-        let remote = self.read(entry, code::PULL_REQUEST, args).await?;
-        let merged = remote.get("merged") == Some(&Value::Bool(true));
-        let Some(now) = (if merged { Some(MERGED) } else { text(&remote, "state") }) else { return Ok(0) };
+        let remote = self.read(entry, code::PULL_REQUEST, json!({ "pr": pull.reference })).await?;
+        let Some(now) = text(&remote, "state") else { return Ok(0) };
         if same(local, now) {
             return Ok(0);
         }
@@ -137,7 +135,7 @@ impl Synchronizer {
             _ => kinds::PR_UPDATED,
         };
         let subject = pull.subject();
-        let data = json!({ "repo": pull.repo, "number": pull.number, "state": now, "head": remote["head"] });
+        let data = json!({ "pr": pull.reference, "state": now, "head": remote["head"] });
         let id = format!("reconcile:{}:{subject}:{local}->{now}", item.item);
         let event = Synchronizer::synthetic(entry, CODE, kind, &subject, data, id);
         let adopt = vec![WorkflowEvent::ExternalObserved(observed(&event))];
@@ -154,20 +152,19 @@ impl Synchronizer {
     }
 
     async fn reconcile_run(&self, entry: &Entry, item: &Desired, run: &RunRef) -> Result<usize, Error> {
-        let remote = self.read(entry, pipelines::RUN, json!({ "repo": run.repo, "run": run.run })).await?;
-        let Some(now) = text(&remote, "status") else { return Ok(0) };
+        let remote = self.read(entry, pipelines::RUN, json!({ "run": run.reference })).await?;
+        let Some(now) = text(&remote, "state") else { return Ok(0) };
         let kind = match now {
-            COMPLETED => kinds::RUN_FINISHED,
+            state if FINISHED.contains(&state) => kinds::RUN_FINISHED,
             WAITING => kinds::DEPLOYMENT_WAITING,
             _ => return Ok(0),
         };
-        let local = run.status.clone().unwrap_or_default();
+        let local = run.state.clone().unwrap_or_default();
         if same(&local, now) {
             return Ok(0);
         }
         let subject = run.subject();
-        let data =
-            json!({ "repo": run.repo, "run": run.run, "ref": remote["ref"], "conclusion": remote["conclusion"] });
+        let data = json!({ "run": run.reference, "state": now, "head": remote["head"] });
         let id = format!("reconcile:{}:{subject}:{now}:{}", item.item, remote["attempt"]);
         let event = Synchronizer::synthetic(entry, PIPELINES, kind, &subject, data, id);
         let adopt = vec![WorkflowEvent::ExternalObserved(observed(&event))];

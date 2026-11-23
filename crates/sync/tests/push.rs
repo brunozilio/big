@@ -18,9 +18,9 @@ async fn a_status_set_goes_to_the_tracker_of_the_item_with_the_effect_key() {
     standard_item(&h, "i1");
     let connectors = h.sync_connectors();
     let pushed = push_status(&connectors, &h.store, &h.item("i1"), "Review", &key()).await.unwrap();
-    assert_eq!(pushed, Pushed::Done(json!({"status": "Review", "changed": true})));
+    assert_eq!(pushed, Pushed::Done(json!({"ref": "K-1", "status": "Review", "changed": true})));
     let again = push_status(&connectors, &h.store, &h.item("i1"), "Review", &key()).await.unwrap();
-    assert_eq!(again, Pushed::Done(json!({"status": "Review", "changed": false})));
+    assert_eq!(again, Pushed::Done(json!({"ref": "K-1", "status": "Review", "changed": false})));
     let writes = h.fake.writes();
     assert_eq!(writes[0], (tracker::TRANSITION.into(), json!({"issue": "K-1", "status": "Review"}), key().to_string()));
 }
@@ -35,16 +35,16 @@ async fn an_impediment_set_carries_its_reason_and_uses_the_connection_that_made_
         tracker::CREATE_ISSUE,
         TRACKER_CONNECTION,
         json!({"project": "P"}),
-        json!({"key": "P-3"}),
+        json!({"ref": "P-3"}),
     ));
     h.add("i1", &events);
     let connectors = h.sync_connectors();
     let request = EffectRequest::new(key(), Effect::ImpedimentSet { on: true, reason: Some("waiting".into()) });
     let pushed = push(&connectors, &h.store, &h.item("i1"), &request).await.unwrap();
-    assert_eq!(pushed, Pushed::Done(json!({"impediment": true})));
+    assert_eq!(pushed, Pushed::Done(json!({"on": true})));
     assert_eq!(h.fake.writes()[0].1, json!({"issue": "P-3", "on": true, "reason": "waiting"}));
     let cleared = push_impediment(&connectors, &h.store, &h.item("i1"), false, None, &key()).await.unwrap();
-    assert_eq!(cleared, Pushed::Done(json!({"impediment": false})));
+    assert_eq!(cleared, Pushed::Done(json!({"on": false})));
 }
 
 #[tokio::test]

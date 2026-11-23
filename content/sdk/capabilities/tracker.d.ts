@@ -10,6 +10,7 @@ export interface Attachment {
   name: string;
   url: string;
   mime?: string;
+  size?: number;
 }
 
 export interface IssueComment {
@@ -17,6 +18,7 @@ export interface IssueComment {
   author: Person | null;
   body: string;
   at: string;
+  created?: boolean;
 }
 
 export interface IssueSummary {
@@ -24,6 +26,11 @@ export interface IssueSummary {
   title: string;
   status: string;
   url: string;
+  created?: boolean;
+}
+
+export interface Subtask extends IssueSummary {
+  done: boolean;
 }
 
 export interface Issue extends IssueSummary {
@@ -32,7 +39,7 @@ export interface Issue extends IssueSummary {
   labels: string[];
   assignee: Person | null;
   impediment: { on: boolean; reason: string | null };
-  subtasks: IssueSummary[];
+  subtasks: Subtask[];
   attachments: Attachment[];
   comments: IssueComment[];
   updated: string;
@@ -41,7 +48,7 @@ export interface Issue extends IssueSummary {
 export interface RemoteStatus {
   id: string;
   name: string;
-  category: "todo" | "doing" | "done" | null;
+  category: string | null;
 }
 
 export interface Tracker {
@@ -52,7 +59,10 @@ export interface Tracker {
   issue: { args: { issue: IssueRef }; result: Issue };
   comment: { args: { issue: IssueRef; body: string }; result: IssueComment };
   statuses: { args: { project?: string }; result: RemoteStatus[] };
-  transition: { args: { issue: IssueRef; status: string }; result: IssueSummary };
-  set_impediment: { args: { issue: IssueRef; on: boolean; reason?: string }; result: Issue["impediment"] };
-  search: { args: { query: string; limit?: number; cursor?: string }; result: { issues: IssueSummary[]; cursor: string | null } };
+  transition: { args: { issue: IssueRef; status: string }; result: { ref: IssueRef; status: string; changed: boolean } };
+  set_impediment: { args: { issue: IssueRef; on: boolean; reason?: string }; result: { on: boolean; reason: string | null } };
+  search: {
+    args: { query?: string; project?: string; status?: string; limit?: number; cursor?: string };
+    result: { issues: IssueSummary[]; cursor: string | null };
+  };
 }

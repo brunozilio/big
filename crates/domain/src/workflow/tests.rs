@@ -261,6 +261,14 @@ fn progress_of_an_effect_is_kept_and_signals_change_nothing() {
     assert_eq!(item.effects[&key("s", 1).to_string()].progress, json!({"session": "abc"}));
     assert_eq!(item.version, before.version + 1);
     assert_eq!(item.steps, before.steps);
+    let asked = json!({"asks": {"a1": {"step": "s"}}, "answered": {"a0": {"note": 1}}});
+    let item = reduce(item, &WorkflowEvent::EffectProgress { key: key("s", 1), data: asked });
+    let closed = json!({"asks": {"a1": null}, "answered": {"a1": {"note": 2}}});
+    let item = reduce(item, &WorkflowEvent::EffectProgress { key: key("s", 1), data: closed });
+    assert_eq!(
+        item.effects[&key("s", 1).to_string()].progress,
+        json!({"session": "abc", "asks": {}, "answered": {"a0": {"note": 1}, "a1": {"note": 2}}})
+    );
 }
 
 fn observed(id: &str, subject: &str, to: &str, at: i64) -> WorkflowEvent {

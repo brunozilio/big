@@ -2,8 +2,10 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use serde_json::{Value, json};
 
+use super::Api;
+use super::refs::{repo_of, run_of, run_ref};
+use super::states::state;
 use super::workflow::{WorkflowJob, jobs, matches};
-use super::{Api, repo};
 use crate::error::{ActionError, ErrorClass};
 use crate::http::Method;
 use crate::provider::{Args, text_of};
@@ -11,20 +13,30 @@ use crate::provider::{Args, text_of};
 const DEFAULT_TAIL: u64 = 500;
 const DEFAULT_RUNS: u64 = 20;
 
-pub fn run_summary(run: &Value) -> Value {
+fn list(value: &Value) -> &[Value] {
+    value.as_array().map(Vec::as_slice).unwrap_or_default()
+}
+
+fn finished_at(run: &Value, state: &str) -> Value {
+    if matches!(state, "passed" | "failed" | "cancelled" | "skipped") { run["updated_at"].clone() } else { Value::Null }
+}
+
+pub fn run_summary(repo: &str, run: &Value) -> Value {
+    let id = run["id"].as_u64().unwrap_or_default();
+    let state = state(&run["status"], &run["conclusion"]);
     json!({
-        "id": run["id"],
-        "name": run["name"],
-        "workflow": run["path"],
-        "event": run["event"],
-        "status": run["status"],
-        "conclusion": run["conclusion"],
-        "ref": run["head_branch"],
-        "sha": run["head_sha"],
-        "attempt": run["run_attempt"],
-        "url": run["html_url"],
-        "at": run["created_at"],
-        "updated": run["updated_at"],
+        "ref": run_ref(repo, id),
+        "repo": repo,
+        "pipeline": text_of(run, "/name"),
+        "file": text_of(run, "/path"),
+        "event": text_of(run, "/event"),
+        "head": text_of(run, "/head_branch"),
+        "sha": text_of(run, "/head_sha"),
+        "state": state,
+        "attempt": run["run_attempt"].as_u64().unwrap_or(1),
+        "url": text_of(run, "/html_url"),
+        "started": run["run_started_at"].as_str().or(run["created_at"].as_str()),
+        "finished": finished_at(run, state),
     })
 }
 
@@ -32,14 +44,13 @@ fn sha_like(text: &str) -> bool {
     text.len() == 40 && text.chars().all(|c| c.is_ascii_hexdigit())
 }
 
-pub async fn runs(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
-    let repo = repo(args)?;
+fn runs_path(repo: &str, args: Args<'_>) -> Result<String, ActionError> {
     let limit = args.optional_number("limit").unwrap_or(DEFAULT_RUNS).clamp(1, 100);
-    let base = match args.optional_text("workflow") {
-        Some(workflow) if workflow.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')) => {
-            format!("/repos/{repo}/actions/workflows/{workflow}/runs")
+    let base = match args.optional_text("pipeline").or_else(|| args.optional_text("workflow")) {
+        Some(file) if file.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.')) => {
+            format!("/repos/{repo}/actions/workflows/{file}/runs")
         }
-        Some(workflow) => return Err(ActionError::permanent(format!("{workflow:?} is not a workflow file or id"))),
+        Some(file) => return Err(ActionError::permanent(format!("{file:?} is not a pipeline file or id"))),
         None => format!("/repos/{repo}/actions/runs"),
     };
     let mut url =
@@ -51,11 +62,13 @@ pub async fn runs(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
             query.append_pair(if sha_like(reference) { "head_sha" } else { "branch" }, reference);
         }
     }
-    let path = format!("{}?{}", url.path(), url.query().unwrap_or_default());
-    let answer = api.get(&path).await?;
-    let runs: Vec<Value> =
-        answer["workflow_runs"].as_array().map(Vec::as_slice).unwrap_or_default().iter().map(run_summary).collect();
-    Ok(json!({ "runs": runs }))
+    Ok(format!("{}?{}", url.path(), url.query().unwrap_or_default()))
+}
+
+pub async fn runs(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
+    let repo = repo_of(api, args)?;
+    let answer = api.get(&runs_path(&repo, args)?).await?;
+    Ok(Value::Array(list(&answer["workflow_runs"]).iter().map(|run| run_summary(&repo, run)).collect()))
 }
 
 async fn workflow_jobs(api: &Api<'_>, repo: &str, run: &Value) -> Result<Vec<WorkflowJob>, ActionError> {
@@ -76,116 +89,107 @@ async fn workflow_jobs(api: &Api<'_>, repo: &str, run: &Value) -> Result<Vec<Wor
     }
 }
 
+fn step_view(step: &Value) -> Value {
+    json!({
+        "name": text_of(step, "/name"),
+        "state": state(&step["status"], &step["conclusion"]),
+        "started": step["started_at"],
+        "finished": step["completed_at"],
+    })
+}
+
 fn job_view(job: &Value, graph: &[WorkflowJob]) -> Value {
     let name = text_of(job, "/name");
     let known = graph.iter().find(|known| matches(known, &name));
-    let steps: Vec<Value> = job["steps"]
-        .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-        .iter()
-        .map(|step| json!({ "number": step["number"], "name": step["name"], "status": step["status"], "conclusion": step["conclusion"] }))
-        .collect();
     json!({
-        "id": job["id"],
+        "id": job["id"].to_string(),
         "name": name,
         "key": known.map(|known| known.key.clone()),
         "needs": known.map(|known| known.needs.clone()).unwrap_or_default(),
-        "status": job["status"],
-        "conclusion": job["conclusion"],
+        "state": state(&job["status"], &job["conclusion"]),
         "started": job["started_at"],
-        "completed": job["completed_at"],
+        "finished": job["completed_at"],
         "url": job["html_url"],
-        "steps": steps,
+        "steps": list(&job["steps"]).iter().map(step_view).collect::<Vec<_>>(),
     })
 }
 
 pub async fn run(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
-    let repo = repo(args)?;
-    let id = args.number("run")?;
+    let (repo, id) = run_of(api, args)?;
     let run = api.get(&format!("/repos/{repo}/actions/runs/{id}")).await?;
     let listed = api.get(&format!("/repos/{repo}/actions/runs/{id}/jobs?per_page=100&filter=latest")).await?;
-    let graph = workflow_jobs(api, repo, &run).await?;
-    let jobs: Vec<Value> = listed["jobs"]
-        .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-        .iter()
-        .map(|job| job_view(job, &graph))
-        .collect();
-    let mut summary = run_summary(&run);
+    let graph = workflow_jobs(api, &repo, &run).await?;
+    let jobs: Vec<Value> = list(&listed["jobs"]).iter().map(|job| job_view(job, &graph)).collect();
+    let mut summary = run_summary(&repo, &run);
     summary["jobs"] = json!(jobs);
     Ok(summary)
 }
 
 pub async fn job_log(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
-    let repo = repo(args)?;
+    let (repo, _) = run_of(api, args)?;
     let job = args.number("job")?;
     let tail = usize::try_from(args.optional_number("tail").unwrap_or(DEFAULT_TAIL)).unwrap_or(usize::MAX);
     let log = api.raw(api.request(Method::Get, &format!("/repos/{repo}/actions/jobs/{job}/logs"))).await?.text();
     let lines: Vec<&str> = log.lines().collect();
     let kept = lines[lines.len().saturating_sub(tail)..].join("\n");
-    Ok(json!({ "log": kept, "truncated": lines.len() > tail }))
+    Ok(json!({ "text": kept, "truncated": lines.len() > tail }))
+}
+
+fn deployment_view(deployment: &Value, reference: &str) -> Value {
+    let reviewers: Vec<String> = list(&deployment["reviewers"])
+        .iter()
+        .map(|reviewer| text_of(reviewer, "/reviewer/login"))
+        .filter(|login| !login.is_empty())
+        .collect();
+    json!({
+        "id": deployment["environment"]["id"].to_string(),
+        "environment": deployment["environment"]["name"],
+        "run": reference,
+        "reviewers": reviewers,
+        "canApprove": deployment["current_user_can_approve"].as_bool().unwrap_or(false),
+    })
 }
 
 async fn pending(api: &Api<'_>, repo: &str, run: u64) -> Result<Vec<Value>, ActionError> {
     let answer = api.get(&format!("/repos/{repo}/actions/runs/{run}/pending_deployments")).await?;
-    Ok(answer
-        .as_array()
-        .map(Vec::as_slice)
-        .unwrap_or_default()
-        .iter()
-        .map(|deployment| {
-            json!({
-                "environment_id": deployment["environment"]["id"],
-                "environment": deployment["environment"]["name"],
-                "can_approve": deployment["current_user_can_approve"],
-                "wait_timer": deployment["wait_timer"],
-            })
-        })
-        .collect())
+    let reference = run_ref(repo, run);
+    Ok(list(&answer).iter().map(|deployment| deployment_view(deployment, &reference)).collect())
 }
 
 pub async fn pending_deployments(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
-    let repo = repo(args)?;
-    Ok(json!({ "deployments": pending(api, repo, args.number("run")?).await? }))
+    let (repo, run) = run_of(api, args)?;
+    Ok(Value::Array(pending(api, &repo, run).await?))
 }
 
 fn chosen(deployment: &Value, wanted: &[Value]) -> bool {
     wanted.is_empty()
         || wanted.iter().any(|want| {
-            want == &deployment["environment_id"]
-                || want == &deployment["environment"]
-                || want
-                    .as_str()
-                    .and_then(|text| text.parse::<u64>().ok())
-                    .is_some_and(|id| deployment["environment_id"].as_u64() == Some(id))
+            let text = want.as_str().map_or_else(|| want.to_string(), str::to_owned);
+            deployment["id"] == text.as_str() || deployment["environment"] == text.as_str()
         })
 }
 
 pub async fn review_deployment(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
-    let repo = repo(args)?;
-    let run = args.number("run")?;
-    let state = match args.text("decision")? {
+    let (repo, run) = run_of(api, args)?;
+    let decision = args.text("decision")?;
+    let state = match decision {
         "approve" => "approved",
         "reject" => "rejected",
         other => return Err(ActionError::permanent(format!("{other:?} is not approve or reject"))),
     };
-    let waiting: Vec<Value> = pending(api, repo, run)
-        .await?
-        .into_iter()
-        .filter(|deployment| chosen(deployment, args.list("environments")))
-        .collect();
+    let wanted = [args.list("deployments"), args.list("environments")].concat();
+    let waiting: Vec<Value> =
+        pending(api, &repo, run).await?.into_iter().filter(|deployment| chosen(deployment, &wanted)).collect();
     if waiting.is_empty() {
-        return Ok(json!({ "reviewed": [], "already": true }));
+        return Ok(json!({ "decision": decision, "deployments": [], "already": true }));
     }
-    if waiting.iter().any(|deployment| deployment["can_approve"] == false) {
+    if waiting.iter().any(|deployment| deployment["canApprove"] == false) {
         return Err(ActionError::permanent("this account cannot review the deployment"));
     }
-    let ids: Vec<&Value> = waiting.iter().map(|deployment| &deployment["environment_id"]).collect();
+    let ids: Vec<u64> = waiting.iter().filter_map(|deployment| deployment["id"].as_str()?.parse().ok()).collect();
     let body =
         json!({ "environment_ids": ids, "state": state, "comment": args.optional_text("comment").unwrap_or_default() });
     api.send(Method::Post, &format!("/repos/{repo}/actions/runs/{run}/pending_deployments"), &body).await?;
-    let names: Vec<&Value> = waiting.iter().map(|deployment| &deployment["environment"]).collect();
-    Ok(json!({ "reviewed": names, "already": false }))
+    let reviewed: Vec<&Value> = waiting.iter().map(|deployment| &deployment["id"]).collect();
+    Ok(json!({ "decision": decision, "deployments": reviewed, "already": false }))
 }

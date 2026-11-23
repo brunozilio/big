@@ -44,36 +44,36 @@ fn connection(id: &str, capabilities: &[&str]) -> Connection {
 #[test]
 fn the_issue_pull_request_and_run_come_from_effect_results_and_step_outputs() {
     let mut events = vec![created(json!({"title": "t"}))];
-    events.extend(call(1, tracker::CREATE_ISSUE, Some("trk"), json!({"project": "P"}), json!({"key": "P-1"})));
+    events.extend(call(1, tracker::CREATE_ISSUE, Some("trk"), json!({"project": "P"}), json!({"ref": "P-1"})));
     events.extend(call(
         2,
         code::OPEN_PULL_REQUEST,
         Some("host"),
-        json!({"repo": "o/r"}),
-        json!({"number": 7, "state": "open"}),
+        json!({"head": "h"}),
+        json!({"ref": "o/r#7", "state": "open"}),
     ));
-    events.extend(call(3, pipelines::RUN, None, json!({"repo": "o/r", "run": 99}), json!({"status": "in_progress"})));
+    events.extend(call(3, pipelines::RUN, None, json!({"run": "o/r/runs/99"}), json!({"state": "running"})));
     events.push(WorkflowEvent::StepFinished {
         step: "s".into(),
         branch: None,
         state: StepState::Passed,
-        output: json!({"pull_request": {"repo": "o/r", "number": 8}}),
+        output: json!({"pr": "o/r#8"}),
     });
     let desired = desired_of(&replay(&events), ReconcilePolicy::default());
     assert_eq!(desired.issue, Some(IssueRef { issue: "P-1".into(), connection: Some("trk".into()) }));
     assert_eq!(desired.pulls.len(), 2);
     assert_eq!(desired.pulls[0].state.as_deref(), Some("open"));
     assert_eq!(desired.pulls[0].connection.as_deref(), Some("host"));
-    assert_eq!(desired.runs[0].status.as_deref(), Some("in_progress"));
-    assert_eq!(desired.subjects(), ["P-1", "o/r#7", "o/r#8", "o/r/actions/runs/99"]);
+    assert_eq!(desired.runs[0].state.as_deref(), Some("running"));
+    assert_eq!(desired.subjects(), ["P-1", "o/r#7", "o/r#8", "o/r/runs/99"]);
     assert!(desired.uses("trk") && desired.uses("host") && !desired.uses("other"));
 }
 
 #[test]
 fn the_input_issue_wins_and_events_seen_later_move_the_known_state() {
     let mut events = vec![created(json!({"issue": "K-9"}))];
-    events.extend(call(1, code::MERGE, None, json!({"repo": "o/r", "number": 3}), json!({"merged": false})));
-    events.extend(call(2, pipelines::RUN, None, json!({"repo": "o/r", "run": 5}), json!({"status": "queued"})));
+    events.extend(call(1, code::MERGE, None, json!({"pr": "o/r#3"}), json!({"merged": false})));
+    events.extend(call(2, pipelines::RUN, None, json!({"run": "o/r/runs/5"}), json!({"state": "queued"})));
     events.push(WorkflowEvent::ExternalObserved(Observed {
         id: "e".into(),
         connection: "host".into(),
@@ -87,7 +87,7 @@ fn the_input_issue_wins_and_events_seen_later_move_the_known_state() {
     events.push(WorkflowEvent::EffectResolved {
         key: resolved_wait,
         outcome: EffectOutcome::Ok {
-            value: json!({"kind": kinds::RUN_FINISHED, "subject": "o/r/actions/runs/5", "data": {}}),
+            value: json!({"kind": kinds::RUN_FINISHED, "subject": "o/r/runs/5", "data": {"state": "failed"}}),
         },
     });
     let desired = desired_of(&replay(&events), ReconcilePolicy::default());

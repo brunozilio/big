@@ -14,7 +14,7 @@ mod runner;
 
 pub use book::Book;
 pub use config::SyncConfig;
-pub use desired::{Desired, IssueRef, PullRef, RunRef, Wait, desired_of, pull_subject, run_subject};
+pub use desired::{Desired, IssueRef, PullRef, RunRef, Wait, desired_of};
 pub use error::Error;
 pub use health::{ConnectionState, Health};
 pub use policy::{FieldPolicy, ReconcilePolicy};

@@ -3,6 +3,7 @@ mod agent;
 mod api;
 mod asks;
 mod bundle;
+mod cards;
 mod children;
 mod config;
 mod effects;
@@ -20,6 +21,7 @@ mod views;
 
 pub use api::{Handle, Orchestrator};
 pub use asks::PendingAsk;
+pub use cards::AgentCard;
 pub use config::{Config, Limits, Timeouts};
 pub use effects::{NEEDS_CONNECTION, NEEDS_RECONNECT};
 pub use error::{Error, Result};

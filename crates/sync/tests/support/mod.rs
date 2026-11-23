@@ -23,7 +23,7 @@ pub struct World {
     pub cursors: Vec<Option<String>>,
     pub issues: HashMap<String, (String, bool)>,
     pub pulls: HashMap<String, String>,
-    pub runs: HashMap<u64, String>,
+    pub runs: HashMap<String, String>,
     pub calls: Vec<(String, Value, String)>,
     pub fail: Option<ActionError>,
 }
@@ -53,31 +53,28 @@ fn answer(world: &mut World, action: &str, args: &Value) -> Result<Value, Action
     match action {
         tracker::ISSUE => {
             let (status, flagged) = world.issues.get(&text("issue")).cloned().unwrap_or_default();
-            Ok(json!({"key": text("issue"), "title": "", "status": status, "impediment": flagged}))
+            Ok(json!({"ref": text("issue"), "title": "", "status": status, "impediment": {"on": flagged, "reason": null}}))
         }
         tracker::TRANSITION => {
             let entry = world.issues.entry(text("issue")).or_default();
             let changed = entry.0 != text("status");
             entry.0 = text("status");
-            Ok(json!({"status": entry.0, "changed": changed}))
+            Ok(json!({"ref": text("issue"), "status": entry.0, "changed": changed}))
         }
         tracker::SET_IMPEDIMENT => {
             let on = args["on"].as_bool().unwrap_or_default();
             world.issues.entry(text("issue")).or_default().1 = on;
-            Ok(json!({"impediment": on}))
+            Ok(json!({"on": on}))
         }
         code::PULL_REQUEST => {
-            let subject = format!("{}#{}", text("repo"), args["number"]);
+            let subject = text("pr");
             let state = world.pulls.get(&subject).cloned().unwrap_or_else(|| "open".into());
-            let merged = state == "merged";
-            Ok(
-                json!({"number": args["number"], "state": state, "merged": merged, "head": "h", "base": "main", "url": ""}),
-            )
+            Ok(json!({"ref": subject, "state": state, "head": "h", "base": "main", "url": ""}))
         }
         pipelines::RUN => {
-            let id = args["run"].as_u64().unwrap_or_default();
-            let status = world.runs.get(&id).cloned().unwrap_or_else(|| "in_progress".into());
-            Ok(json!({"id": id, "status": status, "conclusion": "success", "attempt": 1, "jobs": []}))
+            let id = text("run");
+            let state = world.runs.get(&id).cloned().unwrap_or_else(|| "running".into());
+            Ok(json!({"ref": id, "state": state, "head": "h", "attempt": 1, "jobs": []}))
         }
         _ => Err(ActionError::permanent(format!("fake does not answer {action}"))),
     }
@@ -334,8 +331,8 @@ pub fn standard_item(h: &Harness, id: &str) {
         1,
         code::OPEN_PULL_REQUEST,
         HOST_CONNECTION,
-        json!({"repo": "o/r"}),
-        json!({"number": 7, "state": "open"}),
+        json!({"head": "h"}),
+        json!({"ref": "o/r#7", "number": 7, "state": "open"}),
     ));
     h.add(id, &events);
     let mut world = h.fake.world();

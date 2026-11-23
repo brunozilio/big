@@ -14,7 +14,7 @@ use tokio::task::AbortHandle;
 use crate::agent::{AgentEffect, Failure, workdir};
 use crate::events::Wake;
 use crate::git;
-use crate::matching::matches;
+use crate::matching::{event_matches, matches};
 use crate::protocol::{AGENT, CALL, CHILD, Command, EVENT, EXEC, IMPEDIMENT, SLEEP, STATUS, WAIT_HUMAN, WAIT_POLL};
 use crate::shared::{EventWait, Shared, now_ms, timeout_timer};
 
@@ -45,8 +45,15 @@ pub fn launch(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> crate::err
                 kind: launch.command.text("kind"),
                 filter: launch.command.args["filter"].clone(),
             };
-            shared.waits.lock().unwrap_or_else(PoisonError::into_inner).push(wait);
-            shared.hurry();
+            match seen_before(shared, &wait)? {
+                Some(value) => {
+                    shared.resolve(item, &launch.key, EffectOutcome::Ok { value })?;
+                }
+                None => {
+                    shared.waits.lock().unwrap_or_else(PoisonError::into_inner).push(wait);
+                    shared.hurry();
+                }
+            }
         }
         SLEEP => {
             let ms = launch.command.args["ms"].as_u64().unwrap_or(0);
@@ -56,6 +63,22 @@ pub fn launch(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> crate::err
         _ => tasks.push(perform(shared, item, launch)),
     }
     Ok(tasks)
+}
+
+fn seen_before(shared: &Shared, wait: &EventWait) -> crate::error::Result<Option<Value>> {
+    let state = shared.item(&wait.item)?;
+    let ledger = crate::ledger::Ledger::load(&shared.store, &wait.item)?;
+    let since = ledger.requested_at.get(&wait.key.seq).copied().unwrap_or(i64::MAX);
+    let mut seen: Vec<_> = state.observed.values().filter(|seen| seen.kind == wait.kind && seen.at >= since).collect();
+    seen.sort_by_key(|seen| seen.at);
+    Ok(seen.into_iter().find_map(|seen| {
+        let at = jiff::Timestamp::from_millisecond(seen.at).map(|at| at.to_string()).unwrap_or_default();
+        let value = json!({
+            "id": seen.id, "connection": seen.connection, "capability": seen.kind.split('.').next(),
+            "kind": seen.kind, "subject": seen.subject, "data": seen.data, "at": at,
+        });
+        event_matches(&wait.filter, &value).then_some(value)
+    }))
 }
 
 fn timer(shared: &Shared, item: &ItemId, id: &str, after: Duration) -> crate::error::Result<i64> {

@@ -50,8 +50,9 @@ fn title_of(row: &Row, shown: &Shown) -> String {
     if title.trim().is_empty() { "Conversa".to_owned() } else { title }
 }
 
-fn with_answered(shared: &Shared, session: &str, mut events: Vec<Value>) -> Vec<Value> {
-    let answered = held(&shared.answered).get(session).cloned().unwrap_or_default();
+fn with_answered(shared: &Shared, session: &str, mut events: Vec<Value>) -> ApiResult<Vec<Value>> {
+    let mut answered = shared.backend.orchestrator.answered(session)?;
+    answered.extend(held(&shared.answered).get(session).cloned().unwrap_or_default());
     for event in answered {
         match events.iter_mut().find(|known| known["id"] == event["id"]) {
             Some(known) => *known = event,
@@ -59,7 +60,7 @@ fn with_answered(shared: &Shared, session: &str, mut events: Vec<Value>) -> Vec<
         }
     }
     events.sort_by(|left, right| left["at"].as_str().cmp(&right["at"].as_str()));
-    events
+    Ok(events)
 }
 
 pub fn view(shared: &Shared, session: &str) -> ApiResult<Value> {
@@ -75,10 +76,25 @@ pub fn view(shared: &Shared, session: &str) -> ApiResult<Value> {
             (events, status, shown.mode.clone(), shown.model.clone())
         }
     };
-    let events = with_answered(shared, session, events);
+    let events = with_answered(shared, session, events)?;
+    let agents = agents(shared, session)?;
     Ok(
-        json!({ "id": session, "title": title, "status": status, "mode": mode, "model": model, "agents": [], "events": events }),
+        json!({ "id": session, "title": title, "status": status, "mode": mode, "model": model, "agents": agents, "events": events }),
     )
+}
+
+fn agents(shared: &Shared, session: &str) -> ApiResult<Vec<Value>> {
+    let cards = shared.backend.orchestrator.session_agents(session)?;
+    Ok(cards
+        .into_iter()
+        .map(|card| {
+            let avatar = match (card.shape, card.color) {
+                (Some(shape), Some(color)) => json!({ "kind": "agent", "shape": shape, "color": color }),
+                _ => Value::Null,
+            };
+            json!({ "id": card.id, "name": card.name, "avatar": avatar })
+        })
+        .collect())
 }
 
 async fn blocking<T: Send + 'static>(work: impl FnOnce() -> ApiResult<T> + Send + 'static) -> ApiResult<T> {
@@ -145,12 +161,14 @@ fn answer_now(shared: &Shared, session: &str, event: &str, response: &Value) -> 
     let ask = ask.ok_or_else(|| ApiError::missing("Esse pedido já foi respondido ou não existe."))?;
     let decision = session_view::decision(&ask.kind, response)
         .ok_or_else(|| ApiError::bad("Essa resposta não serve a esse pedido."))?;
-    match from_kernel {
-        Some(_) => shared.backend.orchestrator.answer_ask(&ask.id, &decision)?,
-        None => shared.chats.answer(session, event, decision)?,
-    }
     let resolved = session_view::resolved(session_view::ask_event(&ask, now_ms()), response);
-    held(&shared.answered).entry(session.to_owned()).or_default().push(resolved.clone());
+    match from_kernel {
+        Some(_) => shared.backend.orchestrator.answer_ask_with(&ask.id, &decision, resolved.clone())?,
+        None => {
+            shared.chats.answer(session, event, decision)?;
+            held(&shared.answered).entry(session.to_owned()).or_default().push(resolved.clone());
+        }
+    }
     shared.live.session_event(session, resolved);
     Ok(())
 }

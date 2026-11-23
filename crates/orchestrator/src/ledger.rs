@@ -64,7 +64,7 @@ impl Ledger {
             }
             WorkflowEvent::EffectResolved { key, outcome } => self.resolve(key, outcome, at),
             WorkflowEvent::EffectProgress { key, data } if self.current(key) => {
-                self.progress.insert(key.seq, data.clone());
+                domain::workflow::merge_patch(self.progress.entry(key.seq).or_insert(Value::Null), data);
             }
             WorkflowEvent::Rewound { to } => self.rewind(to),
             _ => {}

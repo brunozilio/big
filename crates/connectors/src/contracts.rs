@@ -40,84 +40,114 @@ pub mod cloud {
     pub const ACCOUNTS_AND_ROLES: &str = "cloud.accounts_and_roles";
 }
 
-fn list(name: &str) -> Value {
-    object(&[(name, "array")], &[])
+fn list() -> Value {
+    json!({ "type": "array" })
 }
 
 fn issue_output() -> Value {
     object(
-        &[("key", "string"), ("title", "string"), ("status", "string"), ("impediment", "boolean")],
-        &[("description", "string"), ("subtasks", "array"), ("attachments", "array"), ("comments", "array")],
+        &[("ref", "string"), ("title", "string"), ("status", "string"), ("url", "string")],
+        &[
+            ("description", "string"),
+            ("impediment", "object"),
+            ("subtasks", "array"),
+            ("attachments", "array"),
+            ("comments", "array"),
+        ],
     )
 }
 
+fn issue_summary() -> Value {
+    object(&[("ref", "string"), ("status", "string")], &[("title", "string"), ("url", "string"), ("changed", "boolean")])
+}
+
 pub fn tracker() -> Vec<ActionSpec> {
-    let created = object(&[("key", "string"), ("id", "string"), ("created", "boolean")], &[("url", "string")]);
     let new_issue = object(
-        &[("project", "string"), ("title", "string")],
-        &[("description", "string"), ("issue_type", "string"), ("parent", "string"), ("labels", "array")],
+        &[("title", "string")],
+        &[("project", "string"), ("description", "string"), ("type", "string"), ("parent", "string"), ("labels", "array")],
     );
     vec![
-        ActionSpec::write(tracker::CREATE_ISSUE, new_issue, created, Idempotency::Lookup),
+        ActionSpec::write(tracker::CREATE_ISSUE, new_issue, issue_summary(), Idempotency::Lookup),
         ActionSpec::read(tracker::ISSUE, object(&[("issue", "string")], &[]), issue_output()),
         ActionSpec::write(
             tracker::COMMENT,
             object(&[("issue", "string"), ("body", "string")], &[]),
-            object(&[("id", "string"), ("created", "boolean")], &[]),
+            object(&[("id", "string"), ("body", "string")], &[("created", "boolean")]),
             Idempotency::Lookup,
         ),
-        ActionSpec::read(tracker::STATUSES, object(&[("project", "string")], &[]), list("statuses")),
+        ActionSpec::read(tracker::STATUSES, object(&[], &[("project", "string")]), list()),
         ActionSpec::write(
             tracker::TRANSITION,
             object(&[("issue", "string"), ("status", "string")], &[]),
-            object(&[("status", "string"), ("changed", "boolean")], &[]),
+            issue_summary(),
             Idempotency::Lookup,
         ),
         ActionSpec::write(
             tracker::SET_IMPEDIMENT,
             object(&[("issue", "string"), ("on", "boolean")], &[("reason", "string")]),
-            object(&[("impediment", "boolean")], &[]),
+            object(&[("on", "boolean")], &[("reason", "string")]),
             Idempotency::Lookup,
         ),
         ActionSpec::read(
             tracker::SEARCH,
-            object(&[], &[("project", "string"), ("text", "string"), ("status", "string"), ("limit", "integer")]),
-            list("issues"),
+            object(
+                &[],
+                &[
+                    ("query", "string"),
+                    ("project", "string"),
+                    ("status", "string"),
+                    ("limit", "integer"),
+                    ("cursor", "string"),
+                ],
+            ),
+            object(&[("issues", "array")], &[("cursor", "string")]),
         ),
     ]
 }
 
 fn pull_output() -> Value {
     object(
-        &[("number", "integer"), ("state", "string"), ("url", "string"), ("head", "string"), ("base", "string")],
-        &[("created", "boolean"), ("checks", "object"), ("reviews", "array"), ("merged", "boolean")],
+        &[
+            ("ref", "string"),
+            ("repo", "string"),
+            ("number", "integer"),
+            ("state", "string"),
+            ("url", "string"),
+            ("head", "string"),
+            ("base", "string"),
+            ("title", "string"),
+        ],
+        &[("body", "string"), ("created", "boolean"), ("checks", "array"), ("reviews", "array"), ("merged", "boolean")],
     )
 }
 
 fn pull_ref() -> Value {
-    object(&[("repo", "string"), ("number", "integer")], &[])
+    object(&[("pr", "string")], &[])
 }
 
 pub fn code() -> Vec<ActionSpec> {
     let open = object(
-        &[("repo", "string"), ("head", "string"), ("base", "string"), ("title", "string")],
-        &[("body", "string"), ("draft", "boolean")],
+        &[("head", "string"), ("title", "string")],
+        &[("repo", "string"), ("base", "string"), ("body", "string"), ("draft", "boolean")],
     );
-    let review = object(
-        &[("repo", "string"), ("number", "integer"), ("event", "string")],
-        &[("body", "string"), ("comments", "array")],
-    );
-    let merge = object(&[("repo", "string"), ("number", "integer")], &[("method", "string")]);
+    let review =
+        object(&[("pr", "string"), ("verdict", "string")], &[("body", "string"), ("lines", "array")]);
+    let merge = object(&[("pr", "string")], &[("method", "string")]);
     vec![
         ActionSpec::write(code::OPEN_PULL_REQUEST, open, pull_output(), Idempotency::Lookup),
         ActionSpec::read(code::PULL_REQUEST, pull_ref(), pull_output()),
-        ActionSpec::read(code::FILES_DIFF, pull_ref(), list("files")),
-        ActionSpec::read(code::REVIEW_COMMENTS, pull_ref(), list("threads")),
-        ActionSpec::write(code::SUBMIT_REVIEW, review, object(&[("id", "integer")], &[]), Idempotency::Lookup),
+        ActionSpec::read(code::FILES_DIFF, pull_ref(), list()),
+        ActionSpec::read(code::REVIEW_COMMENTS, pull_ref(), list()),
+        ActionSpec::write(
+            code::SUBMIT_REVIEW,
+            review,
+            object(&[("id", "string"), ("verdict", "string")], &[("created", "boolean")]),
+            Idempotency::Lookup,
+        ),
         ActionSpec::write(
             code::RESOLVE_THREAD,
-            object(&[("thread", "string")], &[("repo", "string")]),
-            object(&[("resolved", "boolean")], &[]),
+            object(&[("thread", "string")], &[("pr", "string")]),
+            object(&[("thread", "string"), ("resolved", "boolean")], &[]),
             Idempotency::Native,
         ),
         ActionSpec::write(
@@ -129,29 +159,36 @@ pub fn code() -> Vec<ActionSpec> {
     ]
 }
 
+fn run_output() -> Value {
+    object(
+        &[("ref", "string"), ("state", "string")],
+        &[("pipeline", "string"), ("head", "string"), ("url", "string"), ("jobs", "array")],
+    )
+}
+
 pub fn pipelines() -> Vec<ActionSpec> {
-    let run_ref = object(&[("repo", "string"), ("run", "integer")], &[]);
+    let run_ref = object(&[("run", "string")], &[]);
     let review = object(
-        &[("repo", "string"), ("run", "integer"), ("decision", "string")],
-        &[("environments", "array"), ("comment", "string")],
+        &[("run", "string"), ("decision", "string")],
+        &[("deployments", "array"), ("comment", "string")],
     );
     vec![
         ActionSpec::read(
             pipelines::RUNS,
-            object(&[("repo", "string")], &[("ref", "string"), ("workflow", "string"), ("limit", "integer")]),
-            list("runs"),
+            object(&[("ref", "string")], &[("repo", "string"), ("pipeline", "string"), ("limit", "integer")]),
+            list(),
         ),
-        ActionSpec::read(pipelines::RUN, run_ref.clone(), object(&[("id", "integer"), ("jobs", "array")], &[])),
+        ActionSpec::read(pipelines::RUN, run_ref.clone(), run_output()),
         ActionSpec::read(
             pipelines::JOB_LOG,
-            object(&[("repo", "string"), ("job", "integer")], &[("tail", "integer")]),
-            object(&[("log", "string")], &[]),
+            object(&[("run", "string"), ("job", "string")], &[("tail", "integer")]),
+            object(&[("text", "string")], &[("truncated", "boolean")]),
         ),
-        ActionSpec::read(pipelines::PENDING_DEPLOYMENTS, run_ref, list("deployments")),
+        ActionSpec::read(pipelines::PENDING_DEPLOYMENTS, run_ref, list()),
         ActionSpec::write(
             pipelines::REVIEW_DEPLOYMENT,
             review,
-            object(&[("reviewed", "array"), ("already", "boolean")], &[]),
+            object(&[("decision", "string"), ("deployments", "array")], &[("already", "boolean")]),
             Idempotency::Lookup,
         ),
     ]
@@ -164,7 +201,7 @@ pub fn cloud() -> Vec<ActionSpec> {
     );
     vec![
         ActionSpec::read(cloud::IDENTITY, object(&[("account", "string"), ("role", "string")], &[]), credentials),
-        ActionSpec::read(cloud::ACCOUNTS_AND_ROLES, json!({ "type": "object", "properties": {} }), list("accounts")),
+        ActionSpec::read(cloud::ACCOUNTS_AND_ROLES, json!({ "type": "object", "properties": {} }), object(&[("accounts", "array")], &[])),
     ]
 }
 

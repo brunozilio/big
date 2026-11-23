@@ -1,4 +1,5 @@
-export const FINISHED = ["passed", "failed", "cancelled"];
+export const FINISHED = ["passed", "failed", "cancelled", "skipped"];
+export const SUCCEEDED = ["passed", "skipped"];
 
 const LIMIT = 8000;
 

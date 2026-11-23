@@ -7,11 +7,12 @@ use domain::effect::EffectOutcome;
 use domain::workflow::{ItemId, WorkItem, WorkflowEvent};
 use domain::{AskId, Decision};
 use serde_json::{Value, json};
-use sync::{Health, ReconcilePolicy, StoreView, SyncConfig, Synchronizer};
+use sync::{Health, ReconcilePolicy, StoreView, Synchronizer};
 use tokio::sync::broadcast;
 
 use crate::agent::rewind_session;
 use crate::asks::PendingAsk;
+use crate::cards::AgentCard;
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::events::{OrchestratorEvent, Wake};
@@ -73,6 +74,7 @@ impl Orchestrator {
         if syncing {
             start_sync(&shared);
         }
+        crate::asks::restore(&shared)?;
         for item in shared.store.items()?.into_iter().filter(|item| !item.is_ended()) {
             ensure(&shared, &item.id);
         }
@@ -248,14 +250,46 @@ impl Orchestrator {
         }
     }
 
+    pub fn session_agents(&self, session: &str) -> Result<Vec<AgentCard>> {
+        let items = self.shared.store.items()?;
+        let names = crate::cards::agents_of(&items, session);
+        Ok(names.iter().map(|name| crate::cards::card(&self.shared.config.resources, name)).collect())
+    }
+
     pub fn asks(&self) -> Vec<PendingAsk> {
         self.shared.asks.list()
     }
 
     pub fn answer_ask(&self, ask: &AskId, decision: &Decision) -> Result<()> {
+        self.answer_ask_with(ask, decision, Value::Null)
+    }
+
+    pub fn answer_ask_with(&self, ask: &AskId, decision: &Decision, note: Value) -> Result<()> {
         let answered = self.shared.asks.answer(ask, decision).ok_or_else(|| Error::UnknownAsk(ask.0.clone()))?;
-        self.shared.emit(OrchestratorEvent::AskClosed { item: answered.item, ask: ask.clone() });
+        let pending = &answered.pending;
+        let record = json!({
+            "ask": pending.ask, "session": pending.session, "decision": decision, "note": note,
+            "at": crate::shared::now_ms(),
+        });
+        let data = json!({ "asks": { ask.0.clone(): null }, "answered": { ask.0.clone(): record } });
+        self.shared.append(&pending.item, &[WorkflowEvent::EffectProgress { key: answered.key.clone(), data }])?;
+        self.shared.emit(OrchestratorEvent::AskClosed { item: pending.item.clone(), ask: ask.clone() });
         Ok(())
+    }
+
+    pub fn answered(&self, session: &str) -> Result<Vec<Value>> {
+        let items = self.shared.store.items()?;
+        let mut found: Vec<Value> = items
+            .iter()
+            .flat_map(|item| item.effects.values())
+            .filter_map(|entry| entry.progress["answered"].as_object())
+            .flat_map(|answered| answered.values())
+            .filter(|record| record["session"] == session)
+            .map(|record| record["note"].clone())
+            .filter(|note| !note.is_null())
+            .collect();
+        found.sort_by(|left, right| left["at"].as_str().cmp(&right["at"].as_str()));
+        Ok(found)
     }
 
     pub fn deliver_event(&self, event: &ExternalEvent) -> Result<usize> {
@@ -329,7 +363,7 @@ fn start_sync(shared: &Arc<Shared>) {
         Arc::clone(&shared.config.connectors),
         sink,
         view,
-        SyncConfig::from_brand(),
+        shared.config.sync_config.clone(),
     ));
     if shared.sync.set(Arc::clone(&synchronizer)).is_ok() {
         shared.spawn(async move { synchronizer.run().await });

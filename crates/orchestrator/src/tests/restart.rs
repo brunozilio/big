@@ -161,3 +161,61 @@ async fn a_child_waiting_on_a_human_survives_and_its_parent_wakes() {
     assert_eq!(output(&item), json!("go"));
     assert!(item.children[0].finished);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_pending_ask_survives_a_restart_and_its_answer_is_kept_in_the_log() {
+    let world = World::new();
+    world.engine.state.ask.store(true, std::sync::atomic::Ordering::SeqCst);
+    world.workflow("ask", &single("ask", "return ctx.pass((await ctx.agent(\"worker\", \"planeje\")).text);"));
+    let kernel = world.start().await;
+    let id = kernel.create_item("ask", json!({ "title": "t" })).expect("item");
+    for _ in 0..200 {
+        if !kernel.asks().is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    assert_eq!(kernel.asks()[0].ask.id.0, "ask-1");
+    crash(kernel).await;
+    let kernel = world.start().await;
+    let restored = kernel.asks();
+    assert_eq!(restored.len(), 1, "{restored:?}");
+    assert_eq!(restored[0].item, id);
+    assert_eq!(restored[0].session.as_deref(), Some("s1"));
+    tokio::time::sleep(Duration::from_millis(100)).await;
+    let current = kernel.asks();
+    assert_eq!(current.len(), 1, "the question asked again replaces the restored one: {current:?}");
+    let note = json!({ "id": current[0].ask.id.0, "at": "2026-01-01T00:00:00Z", "resolution": "approved" });
+    let decision = domain::Decision::Approve(domain::PermissionMode::Bypass);
+    kernel.answer_ask_with(&current[0].ask.id, &decision, note.clone()).expect("answer");
+    ended(&kernel, &id).await;
+    crash(kernel).await;
+    let kernel = world.start().await;
+    assert!(kernel.asks().is_empty());
+    assert_eq!(kernel.answered("s1").expect("answered"), [note]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_answer_given_before_the_resumed_agent_asks_again_is_applied_to_the_new_question() {
+    let world = World::new();
+    world.engine.state.ask.store(true, std::sync::atomic::Ordering::SeqCst);
+    world.workflow("ask", &single("ask", "return ctx.pass((await ctx.agent(\"worker\", \"planeje\")).text);"));
+    let kernel = world.start().await;
+    let id = kernel.create_item("ask", json!({ "title": "t" })).expect("item");
+    for _ in 0..200 {
+        if !kernel.asks().is_empty() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    crash(kernel).await;
+    let kernel = world.start().await;
+    let restored = kernel.asks();
+    assert_eq!(restored.len(), 1);
+    let decision = domain::Decision::Approve(domain::PermissionMode::Bypass);
+    kernel.answer_ask(&restored[0].ask.id, &decision).expect("answer");
+    assert!(kernel.asks().is_empty());
+    ended(&kernel, &id).await;
+    let answers = world.engine.state.answers.lock().expect("lock").clone();
+    assert!(answers.iter().any(|(ask, _)| ask.0 != "ask-1"), "the new question got the early answer: {answers:?}");
+}
