@@ -4,12 +4,12 @@ use axum::Router;
 use axum::extract::{DefaultBodyLimit, State};
 use axum::http::{StatusCode, Uri};
 use axum::response::{Html, IntoResponse, Response};
-use axum::routing::{any, delete, get, post};
+use axum::routing::{any, delete, get, post, put};
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::error::ApiError;
 use crate::state::Ctx;
-use crate::{attachments, branding, connections, items, models, sessions};
+use crate::{applications, attachments, branding, connections, folders, items, models, sessions};
 
 const MOST_BODY_BYTES: usize = 32 * 1024 * 1024;
 
@@ -33,6 +33,9 @@ fn api() -> Router<Ctx> {
         .route("/api/connections/{id}/call", post(connections::call))
         .route("/api/models", get(models::list))
         .route("/api/branding", get(branding::get).put(branding::put))
+        .route("/api/applications", get(applications::list).post(applications::create))
+        .route("/api/applications/{id}", put(applications::update).delete(applications::remove))
+        .route("/api/fs/dirs", get(folders::dirs))
         .route("/api/attachments", post(attachments::upload))
         .route("/api/live", get(live))
         .route("/api/health", get(|| async { axum::Json(serde_json::json!({ "status": "ok" })) }))

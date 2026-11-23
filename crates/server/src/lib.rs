@@ -1,4 +1,5 @@
 mod ai;
+mod applications;
 mod attachments;
 mod backend;
 mod blocks;
@@ -8,6 +9,7 @@ mod calls;
 mod chats;
 mod connections;
 mod error;
+mod folders;
 mod item_view;
 mod items;
 mod live;

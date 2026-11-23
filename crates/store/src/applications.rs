@@ -19,6 +19,7 @@ pub struct CodeChoice {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Repository {
+    #[serde(default)]
     pub id: String,
     #[serde(default)]
     pub code: Option<CodeChoice>,
@@ -31,6 +32,7 @@ pub struct Repository {
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Application {
+    #[serde(default)]
     pub id: String,
     pub name: String,
     #[serde(default)]
