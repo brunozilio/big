@@ -7,3 +7,10 @@ author = "brunozilio"
 client_id = "54d11594-84e4-41aa-b438-e81b8fa78ee7"
 redirect = "http://localhost:8976/oauth/callback"
 scopes = "account:read user:read workers:write workers_scripts:write offline_access"
+
+[connectors]
+github_client_id = ""
+atlassian_client_id = ""
+atlassian_client_secret = ""
+oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
+aws_sso_region = "us-east-1"

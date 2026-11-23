@@ -854,6 +854,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "connectors"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "base64 0.23.1",
+ "brand",
+ "domain",
+ "getrandom 0.3.4",
+ "jiff",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "url",
+]
+
+[[package]]
 name = "console"
 version = "0.0.1"
 dependencies = [
