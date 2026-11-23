@@ -88,6 +88,12 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
             let _ = write!(text, "\n  - Para verificar: {}", commands.join(", "));
         }
     }
+    let _ = write!(
+        text,
+        "\n\nSe criar um repositório ou serviço que não está nesta lista, ou descobrir como um deles roda ou é \
+         verificado, registre com `{}` antes de terminar.",
+        crate::application::ADD_REPOSITORY
+    );
     Some(text)
 }
 
@@ -129,5 +135,6 @@ mod tests {
             .collect();
         let text = described(&worktrees).expect("described");
         assert!(text.contains("acme/web: /w/web") && text.contains("`bun dev`") && text.contains("`bun test`"));
+        assert!(text.contains("`AddRepository`"));
     }
 }
