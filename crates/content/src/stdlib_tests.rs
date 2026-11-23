@@ -487,6 +487,18 @@ fn each_step_view_is_made_of_blocks() {
     assert_eq!(view("ticket", json!({ "issue": "T-1" })), json!([{ "type": "issue", "ref": "T-1" }]));
     assert_eq!(view("develop", json!({ "session": "s2" })), json!([{ "type": "chat", "session": "s2", "composer": false }]));
     assert_eq!(view("checks", json!({ "output": "erro" })), json!([{ "type": "logs", "text": "erro" }]));
+    let ran = json!([
+        { "name": "bun run lint", "state": "done", "seconds": null, "log": "ok" },
+        { "name": "bun test", "state": "done", "seconds": null, "log": "12 pass" },
+    ]);
+    let verified = json!({ "output": "x", "ran": ran, "session": "v1", "verdict": "✓ a\nVEREDITO: APROVADO", "approved": true });
+    let shown = view("checks", verified);
+    let names: Vec<&Value> = shown[0]["commands"].as_array().expect("commands").iter().map(|command| &command["name"]).collect();
+    assert_eq!(names, [&json!("bun run lint"), &json!("bun test"), &json!("Verificador: critérios de aceite")]);
+    assert_eq!(shown[0]["commands"][2]["state"], "done");
+    assert_eq!(shown[1], json!({ "type": "chat", "session": "v1", "composer": false }));
+    let running = view("checks", json!({ "session": "v1" }));
+    assert_eq!(running[0]["commands"][0]["state"], "running", "the verifier is still at it");
     assert_eq!(view("pr", json!({ "title": "T", "body": "B" })), json!([{ "type": "markdown", "text": "# T\n\nB" }]));
     assert_eq!(view("ci", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));
     assert_eq!(view("review", json!({ "pr": "P" })), json!([{ "type": "review", "pr": "P" }]));

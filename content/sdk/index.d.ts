@@ -66,6 +66,7 @@ export type Block =
   | { type: "merge"; pr: string; methods: string[] }
   | { type: "markdown"; text: string }
   | { type: "logs"; text: string }
+  | { type: "logs"; commands: LogCommand[] }
   | { type: "form"; fields: FormField[] }
   | { type: "actions"; buttons: { id: string; label: string; style?: string }[] };
 
@@ -78,7 +79,13 @@ export declare function review(pr: string): Block;
 export declare function pipeline(run: string): Block;
 export declare function merge(pr: string, methods: string[]): Block;
 export declare function markdown(text: string): Block;
-export declare function logs(text: string): Block;
+export interface LogCommand {
+  name: string;
+  state: "done" | "failed" | "running" | "todo";
+  seconds: number | null;
+  log: string;
+}
+export declare function logs(input: string | LogCommand[]): Block;
 export declare function form(fields: FormField[]): Block;
 export declare function actions(buttons: Button[]): Block;
 

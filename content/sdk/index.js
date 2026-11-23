@@ -47,7 +47,8 @@ export const review = (pr) => block("review", { pr });
 export const pipeline = (run) => block("pipeline", { run });
 export const merge = (pr, methods) => block("merge", { pr, methods: methods || [] });
 export const markdown = (text) => block("markdown", { text: String(text === undefined ? "" : text) });
-export const logs = (text) => block("logs", { text: String(text === undefined ? "" : text) });
+export const logs = (input) =>
+  Array.isArray(input) ? block("logs", { commands: input }) : block("logs", { text: String(input === undefined ? "" : input) });
 export const form = (fields) => block("form", { fields: fields || [] });
 export const actions = (buttons) =>
   block("actions", {
