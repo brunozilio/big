@@ -60,6 +60,7 @@ pub struct ItemSummary {
     pub branch: String,
     pub impediment: Option<Impediment>,
     pub asks: usize,
+    pub plans: usize,
     pub steps: Vec<StepSummary>,
     pub current: Option<String>,
     pub live: bool,
@@ -113,7 +114,8 @@ pub fn summary(
     }
     let active = |state: StepState| matches!(state, StepState::Running | StepState::WaitingHuman);
     let current = item.steps.iter().rev().find(|run| active(run.state)).map(|run| run.id.clone());
-    let live = ledger.open().any(|request| kind_of(&request.effect) == AGENT);
+    let stopped = item.impediment.as_ref().is_some_and(|found| found.reason.as_deref() != Some(crate::agent::WAITING_ANSWER));
+    let live = !stopped && !item.is_ended() && ledger.open().any(|request| kind_of(&request.effect) == AGENT);
     ItemSummary {
         id: item.id.clone(),
         title: item
@@ -129,6 +131,7 @@ pub fn summary(
         branch: git::branch_name(item.id.as_str()),
         impediment: item.impediment.clone(),
         asks,
+        plans: 0,
         steps,
         current,
         live,

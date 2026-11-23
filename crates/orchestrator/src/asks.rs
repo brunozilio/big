@@ -96,6 +96,11 @@ impl Asks {
         self.held().iter().filter(|known| &known.pending.item == item).count()
     }
 
+    pub fn plans(&self, item: &ItemId) -> usize {
+        let planned = |known: &&OpenAsk| matches!(known.pending.ask.kind, domain::AskKind::Plan { .. });
+        self.held().iter().filter(|known| &known.pending.item == item).filter(planned).count()
+    }
+
     pub fn of_key(&self, key: &IdempotencyKey) -> Vec<PendingAsk> {
         self.held().iter().filter(|known| &known.key == key).map(|known| known.pending.clone()).collect()
     }

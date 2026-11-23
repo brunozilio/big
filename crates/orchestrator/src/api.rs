@@ -152,7 +152,9 @@ impl Orchestrator {
         let times: Vec<(i64, bool)> =
             self.shared.store.timed_events(&item.id, 0)?.iter().map(|(_, at, event)| (*at, ends(event))).collect();
         let declared = self.declared(item);
-        Ok(summary(item, &ledger, &times, self.shared.asks.count(&item.id), &declared))
+        let mut found = summary(item, &ledger, &times, self.shared.asks.count(&item.id), &declared);
+        found.plans = self.shared.asks.plans(&item.id);
+        Ok(found)
     }
 
     fn declared(&self, item: &WorkItem) -> Vec<(String, Option<String>)> {

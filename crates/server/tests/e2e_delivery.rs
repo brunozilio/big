@@ -11,7 +11,7 @@ async fn approve_plan(server: &Server, id: &str) {
     let ask = server.ask(id, "the plan").await;
     assert!(matches!(ask.ask.kind, domain::AskKind::Plan { .. }), "{ask:?}");
     let item = server.until(id, "the plan asks", |item| item["group"] == "you").await;
-    assert_eq!(item["attention"]["badge"]["text"], "Pergunta do agente");
+    assert_eq!(item["attention"]["badge"]["text"], "Plano pronto", "a plan to approve is not a question");
     server.respond(&ask, json!({ "kind": "plan", "decision": "approve" })).await;
 }
 

@@ -1,4 +1,4 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { Button } from '@/ui/button'
@@ -146,10 +146,16 @@ function Decide({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: bo
   const { busy, error, send } = useSend(respond)
   const [revising, setRevising] = useState(false)
   const [feedback, setFeedback] = useState('')
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!revising) return
+    const timer = setTimeout(() => box.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 250)
+    return () => clearTimeout(timer)
+  }, [revising])
   const approve: ReactNode = target ? <>Criar no {target.name}</> : 'Aprovar plano'
   const icon = target?.logo ? <ProviderLogo logo={target.logo} name={target.name} size={15} /> : <Icon name="check" size={15} />
   return (
-    <div className="border-t bg-subtle px-5 py-4">
+    <div ref={box} className="border-t bg-subtle px-5 py-4">
       <Collapse open={revising}>
         <Textarea rows={3} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="O que precisa mudar no plano?" className="mb-3 bg-surface" />
       </Collapse>

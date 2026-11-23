@@ -154,6 +154,11 @@ fn short_reason(known: &Known<'_>, reason: &str) -> String {
 fn attention(summary: &ItemSummary) -> Value {
     let waiting = summary.steps.iter().find(|step| step.state == StepState::WaitingHuman).map(|step| step.id.clone());
     let at = summary.current.clone().or_else(|| waiting.clone());
+    if summary.asks > 0 && summary.plans == summary.asks {
+        let action = at.map(|step| json!({ "label": "Revisar plano", "icon": "sPlan", "step": step }));
+        let badge = json!({ "text": "Plano pronto", "tone": "info", "icon": "sPlan" });
+        return json!({ "badge": badge, "diff": null, "action": action });
+    }
     if summary.asks > 0 {
         let action = at.map(|step| json!({ "label": "Responder", "icon": "chat", "step": step }));
         let badge = json!({ "text": "Pergunta do agente", "tone": "warning", "icon": "help" });
