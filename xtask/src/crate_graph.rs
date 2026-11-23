@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-const ALLOWED: [(&str, &[&str]); 17] = [
+const ALLOWED: [(&str, &[&str]); 18] = [
+    ("sync", &["domain", "store", "connectors", "brand"]),
     ("connectors", &["domain", "brand"]),
     ("cli", &["platform", "content", "brand", "app", "console", "domain", "relay", "page"]),
     ("app", &["platform", "brand", "domain", "llm-providers", "agent-engine", "code-map"]),

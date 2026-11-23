@@ -4067,6 +4067,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "sync"
+version = "0.0.1"
+dependencies = [
+ "async-trait",
+ "brand",
+ "connectors",
+ "domain",
+ "jiff",
+ "serde",
+ "serde_json",
+ "store",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "sync_wrapper"
 version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
