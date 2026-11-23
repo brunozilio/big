@@ -1,11 +1,11 @@
 import { step, actions, chat, markdown, review as changes } from "sdk";
-import { agentOptions, codeOptions, defined, effects, object, planOf, pullRequestsOf, waitOptions } from "./context.js";
+import { agentOptions, codeOptions, defined, effects, inLanguage, object, planOf, pullRequestsOf, waitOptions } from "./context.js";
 
 const VERDICTS = ["approve", "request_changes", "comment"];
 
 async function automatic(ctx, opts, pr) {
   const plan = planOf(ctx, opts);
-  const prompt = `Revise o pull request ${pr}.\n\n## Plano\n\n${plan.text}`;
+  const prompt = inLanguage(`Revise o pull request ${pr}.\n\n## Plano\n\n${plan.text}`);
   const result = await ctx.agent(opts.agent, { prompt, pr }, agentOptions(opts, { mode: opts.mode ?? "plan" }));
   const output = object(result.output);
   const lines = Array.isArray(output.lines) ? output.lines : [];

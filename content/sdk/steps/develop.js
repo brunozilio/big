@@ -1,5 +1,5 @@
 import { step, chat } from "sdk";
-import { agentOptions, branchOf, defined, feedbackText, issueOf, object, planOf, summaryLine } from "./context.js";
+import { agentOptions, branchOf, defined, feedbackText, inLanguage, issueOf, object, planOf, summaryLine } from "./context.js";
 
 function request(item, plan, issue, feedback) {
   const parts = [`Implemente o item: ${plan.title || item.title || ""}`];
@@ -7,7 +7,7 @@ function request(item, plan, issue, feedback) {
   if (plan.text) parts.push(`## Plano aprovado\n\n${plan.text}`);
   const back = feedbackText(feedback);
   if (back) parts.push(`## O que precisa ser corrigido\n\n${back}`);
-  return parts.join("\n\n");
+  return inLanguage(parts.join("\n\n"));
 }
 
 function uncommitted(result, branch) {

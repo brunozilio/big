@@ -1,5 +1,5 @@
 import { step, logs, chat } from "sdk";
-import { agentOptions, branchOf, defined, eachOf, planOf, repositoriesOf, tail } from "./context.js";
+import { agentOptions, branchOf, defined, eachOf, inLanguage, planOf, repositoriesOf, tail } from "./context.js";
 
 function groupsOf(ctx, opts) {
   const repositories = repositoriesOf(ctx);
@@ -44,7 +44,7 @@ function asked(ctx, opts, output) {
   const parts = [`Verifique o item: ${plan.title}`];
   if (plan.story) parts.push(plan.story);
   if (output) parts.push("## Comandos já rodados\n\n```\n" + tail(output, 3000) + "\n```");
-  return parts.join("\n\n");
+  return inLanguage(parts.join("\n\n"));
 }
 
 async function verified(ctx, opts, output) {

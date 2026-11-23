@@ -289,6 +289,9 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     let planner = &of_kind(&asked, "agent")[0];
     assert_eq!(planner["args"]["name"], "planner");
     assert_eq!(planner["args"]["mode"], "plan");
+    let agents = of_kind(&asked, "agent");
+    let prompts: Vec<&str> = agents.iter().filter_map(|command| command["args"]["input"]["prompt"].as_str()).collect();
+    assert!(!prompts.is_empty() && prompts.iter().all(|prompt| prompt.ends_with("português do Brasil.")), "{prompts:?}");
     let created = calls(&asked, "create_issue");
     assert_eq!(created.len(), 1);
     assert_eq!(created[0]["args"]["args"], json!({ "title": "Corrigir x", "description": "1. mudar x" }), "no format, the whole plan");

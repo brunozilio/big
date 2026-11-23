@@ -3,6 +3,12 @@ export const SUCCEEDED = ["passed", "skipped"];
 
 const LIMIT = 8000;
 
+export const LANGUAGE = "Responda e escreva tudo em português do Brasil.";
+
+export function inLanguage(text) {
+  return `${text}\n\n${LANGUAGE}`;
+}
+
 export function defined(fields) {
   const chosen = {};
   for (const [key, value] of Object.entries(fields)) {

@@ -1,5 +1,5 @@
 import { step, actions, chat, markdown, pipeline } from "sdk";
-import { FINISHED, SUCCEEDED, agentOptions, defined, eachOf, effects, findRun, object, pipelineOptions, pullRequestsOf, repoOf, settle, source, targetFields, waitOptions } from "./context.js";
+import { inLanguage, FINISHED, SUCCEEDED, agentOptions, defined, eachOf, effects, findRun, object, pipelineOptions, pullRequestsOf, repoOf, settle, source, targetFields, waitOptions } from "./context.js";
 
 const WAITING = [...FINISHED, "waiting"];
 
@@ -79,7 +79,7 @@ async function narrate(ctx, opts, runs, failed) {
     merged.sha ? `Commit publicado: ${merged.sha}` : null,
     `Pipelines:\n${described(runs)}`,
   ].filter(Boolean).join("\n\n");
-  const input = defined({ prompt, prs, runs: runs.map((run) => run.run), failed: Boolean(failed) });
+  const input = defined({ prompt: inLanguage(prompt), prs, runs: runs.map((run) => run.run), failed: Boolean(failed) });
   const result = await ctx.agent(opts.agent, input, agentOptions(opts, { mode: opts.mode ?? "plan" }));
   const output = object(result.output);
   return defined({ session: result.session, notes: output.notes ?? output.summary ?? result.text ?? null });

@@ -1,12 +1,12 @@
 import { step, chat } from "sdk";
-import { agentOptions, defined, object, parsePlan } from "./context.js";
+import { agentOptions, defined, inLanguage, object, parsePlan } from "./context.js";
 
 function request(item, opts) {
   if (opts.prompt) return opts.prompt;
   const parts = [`Planeje a entrega deste item: ${item.title ?? ""}`];
   if (item.issue) parts.push(`Issue: ${item.issue}`);
   if (item.description) parts.push(String(item.description));
-  return parts.join("\n\n");
+  return inLanguage(parts.join("\n\n"));
 }
 
 export default step({
