@@ -46,9 +46,9 @@ export function ChangeBlock({ block }: { block: Of<'change'> }) {
 }
 
 const methodLabel: Record<MergeMethod, { short: string; action: string }> = {
-  squash: { short: 'Squash', action: 'Squash and merge' },
-  merge: { short: 'Merge commit', action: 'Merge pull request' },
-  rebase: { short: 'Rebase', action: 'Rebase and merge' },
+  squash: { short: 'Squash', action: 'Fazer merge com squash' },
+  merge: { short: 'Merge commit', action: 'Fazer merge' },
+  rebase: { short: 'Rebase', action: 'Fazer merge com rebase' },
 }
 
 function DetailValue({ row }: { row: Of<'merge'>['checks'][number] }) {
@@ -59,6 +59,30 @@ function DetailValue({ row }: { row: Of<'merge'>['checks'][number] }) {
       {row.person ? personName(row.person) : text}
       {row.note && <span className="text-sm text-faint">{row.note}</span>}
     </>
+  )
+}
+
+function MergeSummary({ block }: { block: Of<'merge'> }) {
+  const { version } = useBlockHost()
+  const { data: change, error } = useCall(block.connection, 'code.change', { change: block.change }, version)
+  if (!change) return <Loading error={error} />
+  const additions = change.files.reduce((n, f) => n + f.additions, 0)
+  const deletions = change.files.reduce((n, f) => n + f.deletions, 0)
+  return (
+    <div className="space-y-2">
+      <p className="text-lg font-medium text-fg">{change.title} <span className="font-normal text-faint">#{change.number}</span></p>
+      <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
+        <PersonAvatar person={change.author} size={16} />
+        <span className="text-fg2">{personName(change.author)}</span>
+        <span>quer fazer merge de</span>
+        <span className="rounded-[5px] bg-info-soft px-1.5 py-0.5 font-mono text-xs text-info-fg">{change.head}</span>
+        <span>em</span>
+        <span className="rounded-[5px] bg-info-soft px-1.5 py-0.5 font-mono text-xs text-info-fg">{change.base}</span>
+        <span className="tabular-nums">· {change.files.length} {change.files.length === 1 ? 'arquivo' : 'arquivos'}</span>
+        <span className="tabular-nums text-success-fg">+{additions}</span>
+        <span className="tabular-nums text-danger-fg">-{deletions}</span>
+      </div>
+    </div>
   )
 }
 
@@ -77,7 +101,8 @@ export function MergeBlock({ block }: { block: Of<'merge'> }) {
   if (!block.ready) return <Muted>Ainda não começou.</Muted>
   return (
     <div className="space-y-4">
-      <div className="overflow-hidden rounded-card bg-surface shadow-card">
+      <MergeSummary block={block} />
+      <div className={block.checks.length > 0 ? 'overflow-hidden rounded-card bg-surface shadow-card' : 'hidden'}>
         {block.checks.map((r) => (
           <div key={r.label} className="flex h-11 items-center gap-3 px-4 [&+&]:border-t">
             <span className="flex size-[18px] items-center justify-center rounded-full bg-success text-white"><Icon name="check" size={11} strokeWidth={2.6} /></span>

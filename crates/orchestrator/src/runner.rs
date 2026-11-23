@@ -101,7 +101,7 @@ fn signal_events(signal: &Signal) -> Vec<WorkflowEvent> {
         "step.started" => events.push(WorkflowEvent::StepStarted { step, branch }),
         "step.finished" => {
             let state = match data["outcome"].as_str() {
-                Some("failed") => StepState::Failed,
+                Some("failed" | "goto") => StepState::Failed,
                 Some("cancelled" | "skipped") => StepState::Skipped,
                 _ => StepState::Passed,
             };

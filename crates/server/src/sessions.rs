@@ -87,7 +87,8 @@ fn rendered(shared: &Shared, session: &str, row: &Row, shown: &Shown) -> ApiResu
             let pending = kernel_ask(shared, session).or_else(|| shown.transcript.ask().map(|found| found.ask.clone()));
             let events = session_view::events(shown, pending.as_ref());
             let status = session_view::status(&shown.transcript, pending.is_some());
-            (events, status, shown.mode.clone(), shown.model.clone())
+            let orphaned = status == "running" && !shared.backend.orchestrator.runs_session(session).unwrap_or(true);
+            (events, if orphaned { "idle" } else { status }, shown.mode.clone(), shown.model.clone())
         }
     };
     let events = with_answered(shared, session, events)?;

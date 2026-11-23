@@ -20,6 +20,7 @@ mod protocol;
 mod repos;
 mod resources;
 mod runner;
+mod running;
 mod shared;
 mod sink;
 mod views;

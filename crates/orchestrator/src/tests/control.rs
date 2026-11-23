@@ -328,3 +328,31 @@ async fn a_failed_step_the_person_skips_shows_as_skipped() {
     assert_eq!(item.step("only", Some("main")).map(|run| run.state), Some(StepState::Skipped));
     assert_eq!(item.step("after", Some("main")).map(|run| run.state), Some(StepState::Passed));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_step_that_sends_the_item_back_reads_as_not_approved() {
+    let world = World::new();
+    let source = "import { workflow, step } from \"sdk\";\nconst make = step({ name: \"make\", async run(ctx) { if (ctx.from) await ctx.waitHuman([]); return ctx.pass(1); } });\nconst look = step({ name: \"look\", async run(ctx) { return ctx.goto(\"make\", { body: \"refaça\" }); } });\nexport default workflow({ name: \"back\", steps: [make(), look()] });\n";
+    world.workflow("back", source);
+    let kernel = world.start().await;
+    let id = kernel.create_item("back", json!({})).expect("item");
+    let item = until(&kernel, &id, |item| item.step("make", Some("main")).is_some_and(|run| run.attempt == 2)).await;
+    assert_eq!(item.step("look", Some("main")).map(|run| run.state), Some(StepState::Failed));
+    let view = kernel.step_view(&id, "look", None).await.expect("view");
+    assert_eq!(view.attempts.last().map(|attempt| attempt.state), Some(StepState::Failed));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_session_counts_as_running_only_while_its_item_s_agent_works() {
+    let world = World::new();
+    world.engine.state.hold.store(true, Ordering::SeqCst);
+    world.workflow("hold", "import { workflow } from \"sdk\";\nexport default workflow({ name: \"hold\", async run(ctx) { return (await ctx.agent(\"worker\", \"faça\")).text; } });");
+    let kernel = world.start().await;
+    let id = kernel.create_item("hold", json!({})).expect("item");
+    until(&kernel, &id, |item| item.effects.values().any(|entry| entry.progress["session"] == "s1")).await;
+    assert!(kernel.runs_session("s1").expect("asked"));
+    assert!(!kernel.runs_session("another").expect("asked"));
+    world.engine.state.hold.store(false, Ordering::SeqCst);
+    ended(&kernel, &id).await;
+    assert!(!kernel.runs_session("s1").expect("asked"), "the run is over");
+}
