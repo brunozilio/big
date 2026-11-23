@@ -1,7 +1,7 @@
 use connectors::ProviderDescriptor;
 use domain::board::Group;
 use domain::workflow::{StepState, WorkItem};
-use orchestrator::{ItemSummary, NEEDS_CONNECTION, StepSummary};
+use orchestrator::{ItemSummary, NEEDS_CONNECTION, NEEDS_RECONNECT, StepSummary};
 use serde_json::{Value, json};
 use store::ConnectionRecord;
 
@@ -9,6 +9,7 @@ use crate::marks::{iso, mark, mark_of, offering, reference, serving};
 
 pub struct Known<'a> {
     pub connections: &'a [ConnectionRecord],
+    pub stale: &'a [String],
     pub descriptors: &'a [ProviderDescriptor],
     pub labels: &'a Value,
 }
@@ -106,13 +107,21 @@ fn change(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -> 
     value
 }
 
+fn reconnect(known: &Known<'_>, reason: &str) -> Option<Value> {
+    reason.strip_prefix(NEEDS_RECONNECT)?;
+    let lost = known.connections.iter().find(|record| known.stale.contains(&record.id))?;
+    Some(mark_of(known.descriptors, &lost.provider))
+}
+
 fn impediment(known: &Known<'_>, summary: &ItemSummary) -> Value {
     let Some(found) = &summary.impediment else { return Value::Null };
     let reason = found.reason.clone().unwrap_or_else(|| "o item está impedido".to_owned());
     let connect = reason
         .strip_prefix(NEEDS_CONNECTION)
         .and_then(|wanted| offering(known.descriptors, wanted.trim()))
-        .map_or(Value::Null, mark);
+        .map(mark)
+        .or_else(|| reconnect(known, &reason))
+        .unwrap_or(Value::Null);
     json!({ "reason": reason, "connect": connect })
 }
 
@@ -208,4 +217,30 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "updatedAt": iso(summary.updated_at),
         "doneAt": summary.ended_at.map(iso),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn record(id: &str, provider: &str) -> ConnectionRecord {
+        ConnectionRecord {
+            id: id.into(),
+            provider: provider.into(),
+            label: provider.into(),
+            account: None,
+            capabilities: vec![],
+            settings: Value::Null,
+        }
+    }
+
+    #[test]
+    fn an_expired_login_offers_to_reconnect_the_account_that_lost_it() {
+        let connections = [record("c-gh", "github"), record("c-jira", "jira")];
+        let stale = ["c-jira".to_owned()];
+        let known = Known { connections: &connections, stale: &stale, descriptors: &[], labels: &Value::Null };
+        let reason = format!("{NEEDS_RECONNECT}refresh_token is invalid");
+        assert_eq!(reconnect(&known, &reason).map(|found| found["provider"].clone()), Some(json!("jira")));
+        assert_eq!(reconnect(&known, "outra falha"), None);
+    }
 }

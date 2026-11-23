@@ -348,7 +348,7 @@ export default workflow({
         _ => Some(Value::Null),
     });
     assert_eq!(calls(&asked, "runs").len(), 3, "it asked three times, then gave up");
-    assert_eq!(result["result"], json!({ "outcome": "passed", "state": "none" }), "{result}");
+    assert_eq!(result["result"], json!({ "outcome": "skipped", "state": "none" }), "{result}");
 }
 
 #[test]

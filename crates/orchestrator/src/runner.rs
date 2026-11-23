@@ -102,7 +102,7 @@ fn signal_events(signal: &Signal) -> Vec<WorkflowEvent> {
         "step.finished" => {
             let state = match data["outcome"].as_str() {
                 Some("failed") => StepState::Failed,
-                Some("cancelled") => StepState::Skipped,
+                Some("cancelled" | "skipped") => StepState::Skipped,
                 _ => StepState::Passed,
             };
             events.push(WorkflowEvent::StepFinished { step, branch, state, output: data["data"].clone() });

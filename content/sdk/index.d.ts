@@ -93,6 +93,7 @@ export declare function on(kind: string, filter?: Record<string, Json>): Trigger
 export type Outcome =
   | { type: "outcome"; outcome: "passed"; data: Json }
   | { type: "outcome"; outcome: "failed"; data: Json }
+  | { type: "outcome"; outcome: "skipped"; data: Json }
   | { type: "outcome"; outcome: "goto"; to: string; data: Json }
   | { type: "outcome"; outcome: "cancelled"; reason: string | null };
 
@@ -217,6 +218,7 @@ export interface Ctx {
   impediment(on: boolean, reason?: string, options?: CallOptions): Promise<null>;
   pass(data?: Json): Outcome;
   fail(data?: Json): Outcome;
+  skip(data?: Json): Outcome;
   goto(step: string, data?: Json): Outcome;
   cancel(reason: string): Outcome;
   now(): number;

@@ -20,14 +20,17 @@ const MOST_TITLE: usize = 120;
 
 struct Context {
     connections: Vec<ConnectionRecord>,
+    stale: Vec<String>,
     descriptors: Vec<ProviderDescriptor>,
     labels: HashMap<String, Value>,
 }
 
 impl Context {
     fn load(shared: &Shared) -> ApiResult<Context> {
+        let connections = shared.backend.store.connections()?;
         Ok(Context {
-            connections: shared.backend.store.connections()?,
+            stale: stale(shared, &connections),
+            connections,
             descriptors: shared.backend.connectors.descriptors().into_iter().cloned().collect(),
             labels: HashMap::new(),
         })
@@ -41,10 +44,18 @@ impl Context {
     fn item(&mut self, shared: &Shared, summary: &ItemSummary) -> ApiResult<Value> {
         let labels = self.labels(shared, &summary.workflow);
         let item = shared.backend.orchestrator.item(&summary.id)?;
-        let known = Known { connections: &self.connections, descriptors: &self.descriptors, labels: &labels };
+        let known = Known { connections: &self.connections, stale: &self.stale, descriptors: &self.descriptors, labels: &labels };
         let (value, _) = shared.stamps.stamp(item_view::item(&known, summary, item.as_ref()));
         Ok(value)
     }
+}
+
+fn stale(shared: &Shared, connections: &[ConnectionRecord]) -> Vec<String> {
+    let Some(health) = shared.backend.orchestrator.health() else { return Vec::new() };
+    let lost = |record: &&ConnectionRecord| {
+        matches!(health.state(&domain::connection::ConnectionId::from(record.id.as_str())), sync::ConnectionState::NeedsReconnect { .. })
+    };
+    connections.iter().filter(lost).map(|record| record.id.clone()).collect()
 }
 
 pub fn all(shared: &Shared) -> ApiResult<Vec<Value>> {
@@ -64,7 +75,8 @@ pub fn changed(shared: &Shared, id: &ItemId) -> ApiResult<Option<Value>> {
     let mut context = Context::load(shared)?;
     let labels = context.labels(shared, &summary.workflow);
     let item = shared.backend.orchestrator.item(id)?;
-    let known = Known { connections: &context.connections, descriptors: &context.descriptors, labels: &labels };
+    let known =
+        Known { connections: &context.connections, stale: &context.stale, descriptors: &context.descriptors, labels: &labels };
     let (value, moved) = shared.stamps.stamp(item_view::item(&known, &summary, item.as_ref()));
     Ok(moved.then_some(value))
 }

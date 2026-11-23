@@ -155,7 +155,7 @@ pub struct StepView {
 fn finished_state(outcome: &str) -> StepState {
     match outcome {
         "failed" => StepState::Failed,
-        "cancelled" => StepState::Skipped,
+        "cancelled" | "skipped" => StepState::Skipped,
         _ => StepState::Passed,
     }
 }

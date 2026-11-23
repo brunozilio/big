@@ -299,6 +299,10 @@ class Ctx {
     return outcome("failed", { data: data === undefined ? null : data });
   }
 
+  skip(data) {
+    return outcome("skipped", { data: data === undefined ? null : data });
+  }
+
   goto(step, data) {
     return outcome("goto", { to: step, data: data === undefined ? null : data });
   }
@@ -474,9 +478,10 @@ async function sequence(ctx, steps) {
     if (!type) throw new TypeError(`etapa desconhecida: ${call.step}`);
     const result = await runStep(ctx, type, call, from);
     last = result;
-    from = result.outcome === "passed" ? null : { step: call.id, outcome: result.outcome, data: result.data === undefined ? null : result.data };
+    const moved = result.outcome === "passed" || result.outcome === "skipped";
+    from = moved ? null : { step: call.id, outcome: result.outcome, data: result.data === undefined ? null : result.data };
     if (result.outcome === "cancelled") return result;
-    if (result.outcome === "passed") at += 1;
+    if (moved) at += 1;
     else if (result.outcome === "goto") at = indexOf(steps, result.to);
     else {
       const used = retries.get(call.id) || 0;

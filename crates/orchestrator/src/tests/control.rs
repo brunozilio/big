@@ -244,3 +244,23 @@ async fn a_trigger_creates_one_item_per_subject_and_the_sync_reports_health() {
     assert_eq!(items[0].title, "Nova");
     assert_eq!(items[0].issue.as_deref(), Some("K-9"));
 }
+
+const SKIPS: &str = r#"
+import { workflow, step } from "sdk";
+const nothing = step({ name: "nothing", async run(ctx) { return ctx.skip({ why: "não há o que fazer" }); } });
+const after = step({ name: "after", async run(ctx) { return ctx.pass({ ran: true }); } });
+export default workflow({ name: "skips", steps: [nothing(), after()] });
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_step_that_skips_itself_shows_as_skipped_and_the_next_one_runs() {
+    let world = World::new();
+    world.workflow("skips", SKIPS);
+    let kernel = world.start().await;
+    let id = kernel.create_item("skips", json!({})).expect("item");
+    let item = ended(&kernel, &id).await;
+    let skipped = item.step("nothing", Some("main")).expect("nothing");
+    assert_eq!(skipped.state, StepState::Skipped);
+    assert_eq!(skipped.output["why"], "não há o que fazer");
+    assert_eq!(item.step("after", Some("main")).map(|run| run.state), Some(StepState::Passed));
+}

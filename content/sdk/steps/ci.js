@@ -49,6 +49,7 @@ export default step({
     const data = { run: first.run, state: first.state, url: first.url, head: first.head, seen: [...seen, ...runs.filter((run) => run.run).map((run) => run.run)] };
     const listed = runs.length > 1 || first.repository ? { ...data, runs: runs.map(({ output: _o, pipeline: _p, ...run }) => run) } : data;
     const failed = runs.filter((run) => run.state !== NONE && !SUCCEEDED.includes(run.state));
+    if (runs.every((run) => run.state === NONE)) return ctx.skip(listed);
     if (failed.length === 0) return ctx.pass(listed);
     return ctx.fail({ ...listed, state: failed[0].state, ...failure(failed) });
   },
