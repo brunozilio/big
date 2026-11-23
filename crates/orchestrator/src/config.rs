@@ -68,6 +68,8 @@ impl Limits {
     }
 }
 
+pub type Watch = Arc<dyn Fn(&str, &domain::EngineEvent) + Send + Sync>;
+
 #[derive(Clone)]
 pub struct Config {
     pub store: Arc<Store>,
@@ -80,6 +82,7 @@ pub struct Config {
     pub limits: Limits,
     pub sync: bool,
     pub sync_config: sync::SyncConfig,
+    pub watch: Arc<std::sync::OnceLock<Watch>>,
 }
 
 impl fmt::Debug for Config {
@@ -108,6 +111,7 @@ impl Config {
             limits: Limits::from_config(),
             sync: true,
             sync_config: sync::SyncConfig::from_brand(),
+            watch: Arc::default(),
         }
     }
 

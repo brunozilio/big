@@ -63,15 +63,29 @@ fn with_answered(shared: &Shared, session: &str, mut events: Vec<Value>) -> ApiR
     Ok(events)
 }
 
+pub fn watched(shared: &Shared, session: &str, event: &app::EngineEvent) {
+    let load = || row(shared, session).and_then(|row| shown(shared, session, &row.folder)).unwrap_or_default();
+    if shared.watched.see(session, event, load) {
+        shared.follow(session);
+    }
+}
+
 pub fn view(shared: &Shared, session: &str) -> ApiResult<Value> {
     let row = row(shared, session)?;
+    if let Some(live) = shared.watched.with(session, |shown| rendered(shared, session, &row, shown)) {
+        return live;
+    }
     let shown = shown(shared, session, &row.folder)?;
-    let title = title_of(&row, &shown);
+    rendered(shared, session, &row, &shown)
+}
+
+fn rendered(shared: &Shared, session: &str, row: &Row, shown: &Shown) -> ApiResult<Value> {
+    let title = title_of(row, shown);
     let (events, status, mode, model) = match shared.chats.view(session) {
         Some(going) => going,
         None => {
             let pending = kernel_ask(shared, session).or_else(|| shown.transcript.ask().map(|found| found.ask.clone()));
-            let events = session_view::events(&shown, pending.as_ref());
+            let events = session_view::events(shown, pending.as_ref());
             let status = session_view::status(&shown.transcript, pending.is_some());
             (events, status, shown.mode.clone(), shown.model.clone())
         }

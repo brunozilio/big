@@ -26,7 +26,7 @@ pub use api::{Handle, Orchestrator};
 pub use asks::PendingAsk;
 pub use cards::AgentCard;
 pub use cloud::{CREDENTIALS_COMMAND as CLOUD_CREDENTIALS_COMMAND, CREDENTIALS_PATH as CLOUD_CREDENTIALS_PATH};
-pub use config::{Config, Limits, Timeouts};
+pub use config::{Config, Limits, Timeouts, Watch};
 pub use effects::{NEEDS_CONNECTION, NEEDS_RECONNECT};
 pub use error::{Error, Result};
 pub use events::OrchestratorEvent;

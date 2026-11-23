@@ -112,6 +112,9 @@ fn develop(turn: &Turn, script: &Script, places: &[PathBuf], number: usize) {
             return;
         }
     }
+    if script.hold_develop.load(Ordering::SeqCst) {
+        turn.emit(EngineEvent::TextDelta("trabalhando".into()));
+    }
     while script.hold_develop.load(Ordering::SeqCst) && !turn.cancelled.load(Ordering::SeqCst) {
         std::thread::sleep(Duration::from_millis(10));
     }

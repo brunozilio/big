@@ -88,6 +88,10 @@ impl Orchestrator {
         }
     }
 
+    pub fn watch(&self, watch: crate::config::Watch) {
+        let _ = self.shared.config.watch.set(watch);
+    }
+
     pub fn subscribe(&self) -> broadcast::Receiver<OrchestratorEvent> {
         self.shared.events.subscribe()
     }

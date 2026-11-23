@@ -6,7 +6,14 @@
       "name": "worker"
     }
   ],
-  "events": [],
+  "events": [
+    {
+      "at": "2026-01-01T00:00:00Z",
+      "id": "e0",
+      "text": "feito",
+      "type": "assistant"
+    }
+  ],
   "id": "s-work",
   "mode": "accept_edits",
   "model": "",

@@ -337,6 +337,7 @@ impl AgentEffect<'_> {
     }
 
     fn take(&self, event: EngineEvent, collected: &mut Collected, run: &SharedRun) -> Option<Result<(), Failure>> {
+        self.watched(&event, collected);
         match event {
             EngineEvent::SessionStarted(session) => self.started(session.0, collected),
             EngineEvent::Checkpoint(index) => {
@@ -363,6 +364,17 @@ impl AgentEffect<'_> {
             _ => {}
         }
         None
+    }
+
+    fn watched(&self, event: &EngineEvent, collected: &Collected) {
+        let Some(watch) = self.shared.config.watch.get() else { return };
+        let session = match event {
+            EngineEvent::SessionStarted(started) => Some(started.0.as_str()),
+            _ => collected.session.as_deref(),
+        };
+        if let Some(session) = session {
+            watch(session, event);
+        }
     }
 
     fn started(&self, session: String, collected: &mut Collected) {

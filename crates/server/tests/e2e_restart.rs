@@ -37,6 +37,32 @@ where
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn what_a_running_step_writes_reaches_its_session_before_the_run_ends() {
+    let hub = Hub::new();
+    hub.agents.script.hold_develop.store(true, Ordering::SeqCst);
+    let server = hub.start().await;
+    let id = server.create(new_item()).await;
+    server.approve_plan(&id).await;
+    let mut session = None;
+    for _ in 0..500 {
+        let view = server.get(&format!("/api/items/{id}/steps/develop")).await;
+        session = view["blocks"][0]["session"].as_str().map(str::to_owned);
+        if session.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let session = session.expect("the develop session");
+    until_true_async("the text written so far is shown", || async {
+        let shown = server.get(&format!("/api/sessions/{session}")).await;
+        shown["status"] == "running" && shown["events"].to_string().contains("trabalhando")
+    })
+    .await;
+    hub.agents.script.hold_develop.store(false, Ordering::SeqCst);
+    server.until(&id, "develop goes on", |item| item["current"] != "develop").await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_restart_in_the_middle_of_develop_resumes_the_session_without_repeating_effects() {
     let hub = Hub::new();
     hub.agents.script.hold_develop.store(true, Ordering::SeqCst);

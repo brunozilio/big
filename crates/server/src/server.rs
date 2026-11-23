@@ -33,6 +33,7 @@ pub fn app(backend: Backend, bundle: &'static [page::Asset], port: u16) -> (Rout
         live: Live::default(),
         stamps: Stamps::default(),
         chats: Chats::default(),
+        watched: crate::watched::Watched::default(),
         flows: Flows::default(),
         followed: Mutex::new(HashMap::new()),
         answered: Mutex::new(HashMap::new()),
@@ -40,6 +41,12 @@ pub fn app(backend: Backend, bundle: &'static [page::Asset], port: u16) -> (Rout
         port,
         bundle,
     });
+    let weak = Arc::downgrade(&ctx);
+    ctx.backend.orchestrator.watch(Arc::new(move |session, event| {
+        if let Some(shared) = weak.upgrade() {
+            crate::sessions::watched(&shared, session, event);
+        }
+    }));
     tokio::spawn(crate::pump::orchestrator_loop(Arc::clone(&ctx)));
     tokio::spawn(crate::pump::health_loop(Arc::clone(&ctx)));
     tokio::spawn(crate::sessions::follow_loop(Arc::clone(&ctx), nudges));

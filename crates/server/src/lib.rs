@@ -25,6 +25,7 @@ mod sign_in;
 mod stamps;
 mod state;
 mod vault;
+mod watched;
 
 pub use backend::Backend;
 pub use boot::{Launch, run};

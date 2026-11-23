@@ -30,6 +30,7 @@ pub struct Shared {
     pub live: Live,
     pub stamps: Stamps,
     pub chats: Chats,
+    pub watched: crate::watched::Watched,
     pub flows: Flows,
     pub followed: Mutex<HashMap<String, Followed>>,
     pub answered: Mutex<HashMap<String, Vec<Value>>>,
