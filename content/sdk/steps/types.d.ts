@@ -8,6 +8,43 @@ export interface Sources {
   merge?: string;
 }
 
+export interface CodeTarget {
+  connection: string;
+  repo: string;
+  pipelines?: boolean;
+}
+
+export interface ApplicationRepository {
+  id: string;
+  directory: string;
+  code: CodeTarget | null;
+  run?: string;
+  verify?: string[];
+  name?: string;
+}
+
+export interface Application {
+  id: string;
+  name: string;
+  tracker: { connection: string; project: string } | null;
+  repositories: ApplicationRepository[];
+}
+
+export interface PerRepository {
+  repository?: string;
+  name?: string;
+  code?: CodeTarget | null;
+}
+
+export interface RepositoryChange {
+  id: string;
+  name: string;
+  worktree: string;
+  base: string | null;
+  commit: string | null;
+  changed: boolean;
+}
+
 export interface EffectStepOptions {
   connection?: string;
   timeout?: number;
@@ -72,6 +109,7 @@ export interface DevelopOutput {
   session: string;
   branch?: string;
   summary?: string;
+  repositories?: RepositoryChange[];
 }
 
 export interface ChecksOptions {
@@ -82,10 +120,17 @@ export interface ChecksOptions {
   retry?: RetryPolicy;
 }
 
+export interface ChecksResult extends PerRepository {
+  output: string;
+  command?: string;
+  code?: number | null;
+}
+
 export interface ChecksOutput {
   output: string;
   command?: string;
   code?: number | null;
+  results?: ChecksResult[];
 }
 
 export interface PrOptions extends EffectStepOptions {
@@ -98,7 +143,7 @@ export interface PrOptions extends EffectStepOptions {
   draft?: boolean;
 }
 
-export interface PrOutput {
+export interface PullRequestEntry extends PerRepository {
   pr: string;
   number: number | null;
   url: string | null;
@@ -108,9 +153,22 @@ export interface PrOutput {
   base: string | null;
 }
 
+export interface PrOutput extends PullRequestEntry {
+  prs?: PullRequestEntry[];
+}
+
 export interface CiOptions extends PipelineStepOptions {
   pr?: string;
   branch?: string;
+}
+
+export interface RunEntry extends PerRepository {
+  run: string;
+  state: string;
+  url: string | null;
+  summary?: string;
+  rejected?: boolean;
+  error?: string;
 }
 
 export interface RunOutput {
@@ -120,6 +178,7 @@ export interface RunOutput {
   seen: string[];
   summary?: string;
   output?: string;
+  runs?: RunEntry[];
 }
 
 export interface ReviewOptions extends AgentStepOptions, HumanStepOptions {
@@ -137,6 +196,7 @@ export interface ReviewOutput {
   lines?: ReviewLine[];
   by?: string | null;
   session?: string;
+  prs?: string[];
 }
 
 export interface MergeOptions extends EffectStepOptions, HumanStepOptions {
@@ -146,11 +206,18 @@ export interface MergeOptions extends EffectStepOptions, HumanStepOptions {
   manual?: boolean;
 }
 
+export interface MergeEntry extends PerRepository {
+  pr: string;
+  merged: boolean;
+  sha: string | null;
+}
+
 export interface MergeOutput {
   pr: string;
   method: MergeMethod;
   methods: MergeMethod[];
   sha: string | null;
+  merges?: MergeEntry[];
 }
 
 export interface ReleaseOptions extends PipelineStepOptions, HumanStepOptions {

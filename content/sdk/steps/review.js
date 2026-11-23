@@ -1,5 +1,5 @@
-import { step, actions, chat, review as changes } from "sdk";
-import { agentOptions, defined, effects, object, planOf, pullRequestOf, waitOptions } from "./context.js";
+import { step, actions, chat, markdown, review as changes } from "sdk";
+import { agentOptions, codeOptions, defined, effects, object, planOf, pullRequestsOf, waitOptions } from "./context.js";
 
 const VERDICTS = ["approve", "request_changes", "comment"];
 
@@ -25,31 +25,47 @@ async function changesAsked(ctx, opts, pr, answer) {
   return { pr, verdict: "request_changes", body: values.body ?? null, comments, by: answer.by ?? null };
 }
 
+async function judge(ctx, opts, entry, many, session) {
+  const pr = entry.pr;
+  const view = [...(many && entry.name ? [markdown(`**${entry.name}**`)] : []), changes(pr), actions(opts.actions ?? VERDICTS)];
+  for (;;) {
+    const answer = await ctx.waitHuman(view, waitOptions(opts));
+    const values = object(answer.values);
+    const lines = Array.isArray(values.lines) ? values.lines : [];
+    if (!VERDICTS.includes(answer.action)) continue;
+    if (answer.action === "comment" && !values.body && lines.length === 0) continue;
+    const args = defined({ pr, verdict: answer.action, body: values.body, lines: lines.length > 0 ? lines : undefined });
+    await ctx.call("code", "submit_review", args, effects(opts));
+    if (answer.action === "approve") return { approved: true, by: answer.by };
+    if (answer.action === "request_changes") {
+      return { approved: false, data: { ...(await changesAsked(ctx, opts, pr, answer)), ...defined({ session }) } };
+    }
+  }
+}
+
 export default step({
   name: "review",
   label: "Review",
   icon: "sReview",
   needs: "code",
   doing: "Esperando review",
-  view: (s) => [...(s.pr ? [changes(s.pr)] : []), ...(s.session ? [chat(s.session)] : [])],
+  view: (s) => [...(Array.isArray(s.prs) ? s.prs : s.pr ? [s.pr] : []).map((pr) => changes(pr)), ...(s.session ? [chat(s.session)] : [])],
   async run(ctx, opts) {
-    const pr = pullRequestOf(ctx, opts)?.pr;
-    if (!pr) return ctx.fail({ error: "não há pull request para revisar" });
-    const session = opts.agent ? await automatic(ctx, opts, pr) : undefined;
-    for (;;) {
-      const answer = await ctx.waitHuman([changes(pr), actions(opts.actions ?? VERDICTS)], waitOptions(opts));
-      const values = object(answer.values);
-      const lines = Array.isArray(values.lines) ? values.lines : [];
-      if (!VERDICTS.includes(answer.action)) continue;
-      if (answer.action === "comment" && !values.body && lines.length === 0) continue;
-      const args = defined({ pr, verdict: answer.action, body: values.body, lines: lines.length > 0 ? lines : undefined });
-      await ctx.call("code", "submit_review", args, effects(opts));
-      if (answer.action === "approve") return ctx.pass(defined({ pr, verdict: "approve", by: answer.by, session }));
-      if (answer.action === "request_changes") {
-        const data = { ...(await changesAsked(ctx, opts, pr, answer)), ...defined({ session }) };
+    const prs = pullRequestsOf(ctx, opts);
+    if (prs.length === 0) return ctx.fail({ error: "não há pull request para revisar" });
+    let session;
+    let by;
+    for (const entry of prs) {
+      const options = codeOptions(opts, entry);
+      if (opts.agent) session = await automatic(ctx, options, entry.pr);
+      const judged = await judge(ctx, options, entry, prs.length > 1, session);
+      if (!judged.approved) {
         const target = opts.onChanges === undefined ? "develop" : opts.onChanges;
-        return target ? ctx.goto(target, data) : ctx.pass(data);
+        return target ? ctx.goto(target, judged.data) : ctx.pass(judged.data);
       }
+      by = judged.by;
     }
+    const listed = prs.length > 1 ? { prs: prs.map((entry) => entry.pr) } : {};
+    return ctx.pass(defined({ pr: prs[0].pr, verdict: "approve", by, session, ...listed }));
   },
 });

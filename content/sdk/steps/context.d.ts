@@ -1,5 +1,5 @@
 import type { Ctx, Json, Run, RunSummary, StepEntry } from "../index";
-import type { AgentStepOptions, EffectStepOptions, HumanStepOptions, PipelineStepOptions, PrOutput } from "./types";
+import type { AgentStepOptions, ApplicationRepository, EffectStepOptions, HumanStepOptions, PerRepository, PipelineStepOptions, PrOutput, PullRequestEntry } from "./types";
 
 export declare const FINISHED: string[];
 export declare function defined<T extends Record<string, unknown>>(fields: T): Partial<T>;
@@ -12,8 +12,17 @@ export declare function planOf(ctx: Ctx, opts: { title?: string; plan?: string }
 export declare function issueOf(ctx: Ctx, opts: { issue?: string } & EffectStepOptions): string | null;
 export declare function branchOf(ctx: Ctx, opts: { branch?: string } & EffectStepOptions): string | null;
 export declare function pullRequestOf(ctx: Ctx, opts: { pr?: string } & EffectStepOptions): Partial<PrOutput> & { pr: string } | null;
+export declare function pullRequestsOf(ctx: Ctx, opts: { pr?: string } & EffectStepOptions): PullRequestEntry[];
+export declare function nameOf(repository: Partial<ApplicationRepository>): string;
+export declare function repositoriesOf(ctx: Ctx): (ApplicationRepository & { name: string })[];
+export declare function codeTargets(ctx: Ctx, opts: EffectStepOptions): (Partial<ApplicationRepository> & { id: string })[];
+export declare function codeOptions<T extends EffectStepOptions>(opts: T, target: PerRepository): T;
+export declare function pipelineOptions<T extends EffectStepOptions>(opts: T, target: PerRepository): T;
+export declare function repoOf(target: PerRepository): string | undefined;
+export declare function targetFields(target: PerRepository & { id?: string }): PerRepository;
+export declare function eachOf<T, R>(ctx: Ctx, targets: T[], work: (ctx: Ctx, target: T, index: number) => Promise<R>): Promise<R[]>;
 export declare function waitOptions(opts: HumanStepOptions): { timeout?: number };
 export declare function feedbackText(from: StepEntry | null): string;
-export declare function findRun(ctx: Ctx, opts: PipelineStepOptions, wanted: { ref: string; seen: string[] }): Promise<RunSummary>;
+export declare function findRun(ctx: Ctx, opts: PipelineStepOptions, wanted: { ref: string; repo?: string; seen: string[] }): Promise<RunSummary>;
 export declare function settle(ctx: Ctx, opts: PipelineStepOptions, run: string, until: string[], events: string[]): Promise<Run>;
 export declare function failedLogs(ctx: Ctx, opts: PipelineStepOptions, run: Run): Promise<string>;

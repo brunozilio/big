@@ -107,13 +107,24 @@ export interface AgentOptions extends CallOptions {
   worktree?: string;
 }
 
+export interface AgentRepository {
+  id: string;
+  name: string;
+  worktree: string;
+  base: string | null;
+  commit: string | null;
+  changed: boolean;
+}
+
 export interface AgentResult {
   text: string;
   session: string;
   output: Json;
+  repositories?: AgentRepository[];
 }
 
 export interface ExecOptions extends EffectOptions {
+  repository?: string;
   cwd?: string;
   env?: Record<string, string>;
   input?: string;
