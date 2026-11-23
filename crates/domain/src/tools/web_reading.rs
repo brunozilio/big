@@ -1,6 +1,6 @@
-use crate::features::{
-    Features, WEB_CLEANUP, WEB_EMPTY_PAGE_ERROR, WEB_FORMATS, WEB_LINKS, WEB_MAIN_CONTENT, WEB_SMALL_PAGES_DIRECT,
-};
+use brand::features as flags;
+
+use crate::features::on;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WebReading {
@@ -14,24 +14,22 @@ pub struct WebReading {
 
 impl Default for WebReading {
     fn default() -> Self {
-        Self::from(&Features::default())
-    }
-}
-
-impl From<&Features> for WebReading {
-    fn from(features: &Features) -> Self {
-        Self {
-            main_content: features.on(WEB_MAIN_CONTENT),
-            cleanup: features.on(WEB_CLEANUP),
-            links: features.on(WEB_LINKS),
-            small_pages_direct: features.on(WEB_SMALL_PAGES_DIRECT),
-            formats: features.on(WEB_FORMATS),
-            empty_page_error: features.on(WEB_EMPTY_PAGE_ERROR),
-        }
+        Self::configured()
     }
 }
 
 impl WebReading {
+    pub fn configured() -> Self {
+        Self {
+            main_content: on(flags::WEB_MAIN_CONTENT),
+            cleanup: on(flags::WEB_CLEANUP),
+            links: on(flags::WEB_LINKS),
+            small_pages_direct: on(flags::WEB_SMALL_PAGES_DIRECT),
+            formats: on(flags::WEB_FORMATS),
+            empty_page_error: on(flags::WEB_EMPTY_PAGE_ERROR),
+        }
+    }
+
     pub fn none() -> Self {
         Self {
             main_content: false,
@@ -46,39 +44,15 @@ impl WebReading {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
 
     #[test]
-    fn each_way_of_reading_a_page_follows_its_own_flag() {
-        assert_eq!(
-            WebReading::default(),
-            WebReading {
-                main_content: true,
-                cleanup: true,
-                links: true,
-                small_pages_direct: true,
-                formats: true,
-                empty_page_error: true
-            }
-        );
-        let features = Features::default()
-            .layered(&json!({ WEB_MAIN_CONTENT: false, WEB_SMALL_PAGES_DIRECT: false }), true)
-            .expect("flags");
-        let reading = WebReading::from(&features);
-        assert!(!reading.main_content && !reading.small_pages_direct);
-        assert!(reading.cleanup && reading.links && reading.formats && reading.empty_page_error);
-    }
-
-    #[test]
-    fn the_web_flags_are_experimental_and_listed() {
-        let listed = Features::default().listed();
-        for name in
-            [WEB_MAIN_CONTENT, WEB_CLEANUP, WEB_LINKS, WEB_SMALL_PAGES_DIRECT, WEB_FORMATS, WEB_EMPTY_PAGE_ERROR]
-        {
-            let flag = listed.iter().find(|flag| flag.name == name);
-            assert!(flag.is_some_and(|flag| flag.experimental && flag.on), "{name}");
-        }
+    fn each_way_of_reading_a_page_follows_its_own_flag_in_the_config() {
+        let reading = WebReading::default();
+        assert_eq!(reading, WebReading::configured());
+        assert_eq!(reading.main_content, on(flags::WEB_MAIN_CONTENT));
+        assert_eq!(reading.small_pages_direct, on(flags::WEB_SMALL_PAGES_DIRECT));
+        assert_eq!(reading.empty_page_error, on(flags::WEB_EMPTY_PAGE_ERROR));
+        assert_ne!(WebReading::none(), WebReading { links: true, ..WebReading::none() });
     }
 }

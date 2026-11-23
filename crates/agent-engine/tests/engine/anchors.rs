@@ -67,11 +67,12 @@ fn without_anchors_the_file_is_read_alone() {
 }
 
 #[test]
-fn a_project_that_turns_anchors_off_reads_the_file_alone_even_with_a_brief() {
+fn a_project_s_settings_cannot_turn_anchors_off() {
     let dir = tempfile::tempdir().expect("dir");
     std::fs::create_dir_all(dir.path().join(brand::DIR)).expect("settings folder");
-    let off = json!({ "features": { domain::features::MEMORY_ANCHORS: false } });
+    let off = json!({ "features": { "experimental-memory-anchors": false } });
     std::fs::write(dir.path().join(concat!(brand::dir!(), "/settings.json")), off.to_string()).expect("settings");
 
-    assert!(!run_in(dir, true).contains("Keep defaultRetryMax"));
+    let configured = domain::features::on(brand::features::MEMORY_ANCHORS);
+    assert_eq!(run_in(dir, true).contains("Keep defaultRetryMax"), configured);
 }

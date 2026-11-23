@@ -1,6 +1,5 @@
 use serde_json::json;
 
-use super::flags::FlagsRequest;
 use super::memory::{MemoryOp, MemoryRequest};
 use super::plugins::PluginsRequest;
 use super::schedules::SchedulesRequest;
@@ -61,8 +60,6 @@ fn what_used_to_take_a_silent_default_is_refused_when_it_is_missing() {
     assert!(refused::<MemoryRequest>(json!({ "path": "/repo", "op": "list", "pth": "/x" })), "an unknown field");
     assert!(refused::<WorkspaceRequest>(json!({ "path": "/repo", "op": { "mentions": {} } })));
     assert!(refused::<PluginsRequest>(json!({})), "the op is required");
-    assert!(refused::<FlagsRequest>(json!({ "set": { "cwd": "/repo", "name": "budget" } })), "the state is required");
-    assert!(refused::<FlagsRequest>(json!({ "set": { "cwd": "/repo", "on": false } })), "the name is required");
     assert!(refused::<TraceRequest>(json!({ "session": { "session": "s" } })), "the folder is required");
     assert!(refused::<SchedulesRequest>(json!({ "create": { "prompt": "x" } })));
     assert!(refused::<ShellRequest>(json!({ "run": { "command": "ls" } })), "the folder is required");
@@ -75,7 +72,6 @@ fn every_request_round_trips() {
         FeatureRequest::Workspace(WorkspaceRequest { path: "/repo".into(), op: WorkspaceOp::GitOffer }),
         FeatureRequest::Shell(ShellRequest::Kill { id: "bash_1".into() }),
         FeatureRequest::Plugins(PluginsRequest::Install { source: "git@x:a/b.git".into(), name: None }),
-        FeatureRequest::Flags(FlagsRequest::Set { cwd: "/repo".into(), name: "budget".into(), on: false }),
         FeatureRequest::Schedules(SchedulesRequest::TakeDue),
         FeatureRequest::Trace(TraceRequest::EverySession),
         FeatureRequest::OutputSavings,
@@ -87,19 +83,9 @@ fn every_request_round_trips() {
 }
 
 #[test]
-fn a_feature_that_is_off_says_how_to_turn_it_on_and_a_failure_says_what_failed() {
+fn a_feature_that_is_off_says_so_and_a_failure_says_what_failed() {
     let off = FeatureError::FeatureOff { feature: FeatureName::Schedules };
-    assert_eq!(off.to_string(), "schedules is turned off (/features schedules on)");
-    for feature in FeatureName::ALL {
-        let said = FeatureError::FeatureOff { feature }.to_string();
-        match feature.switch() {
-            Some(flag) => {
-                assert!(domain::features::known(flag).is_some(), "/features refuses {flag}, the switch of {feature}");
-                assert_eq!(said, format!("{feature} is turned off (/features {flag} on)"));
-            }
-            None => assert_eq!(said, format!("{feature} is turned off"), "no command is named that would refuse"),
-        }
-    }
+    assert_eq!(off.to_string(), "schedules is turned off");
     let failed = FeatureError::Failed { feature: FeatureName::Memory, message: "nothing to undo".into() };
     assert_eq!((failed.to_string().as_str(), failed.feature()), ("nothing to undo", FeatureName::Memory));
     assert_ne!(off, FeatureError::Failed { feature: FeatureName::Schedules, message: off.to_string() });

@@ -110,7 +110,7 @@ impl Builder {
     }
 
     pub fn build(self) -> Result<Client, Error> {
-        let mut services = self.services.unwrap_or_else(|| LocalServices::detect_in(self.cwd.as_deref()));
+        let mut services = self.services.unwrap_or_else(LocalServices::detect);
         if let Some(data) = &self.data {
             services = services.kept_in(data);
         }

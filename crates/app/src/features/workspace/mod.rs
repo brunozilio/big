@@ -9,13 +9,13 @@ use crate::features::context::Context;
 const MENTIONED: usize = 5;
 const KEPT: usize = 50_000;
 
-pub fn handle(context: &Context<'_>, request: WorkspaceRequest) -> Result<WorkspaceReply, String> {
+pub fn handle(_context: &Context<'_>, request: WorkspaceRequest) -> Result<WorkspaceReply, String> {
     let WorkspaceRequest { path, op } = request;
     match op {
         WorkspaceOp::Changes { scope } => git::changes_in(&path, scope).map(WorkspaceReply::Changes),
         WorkspaceOp::Files => Ok(WorkspaceReply::Files(git::files(&path))),
         WorkspaceOp::GitOffer => {
-            let turned_off = !context.on(domain::features::GIT_OFFER);
+            let turned_off = !domain::features::on(brand::features::GIT_OFFER);
             Ok(WorkspaceReply::GitOffer { offer: domain::git_offer::due(true, git::inside(&path), turned_off) })
         }
         WorkspaceOp::GitInit => git::init(&path).map(|committed| WorkspaceReply::GitInit { committed }),

@@ -76,8 +76,7 @@ fn properties() -> Value {
                 "network": switch("Scripts may reach the network.")
             },
             "additionalProperties": false
-        },
-        "features": features()
+        }
     })
 }
 
@@ -90,21 +89,6 @@ fn permissions() -> Value {
         },
         "additionalProperties": false
     })
-}
-
-fn features() -> Value {
-    let known: Map<String, Value> =
-        domain::features::every().map(|flag| (flag.name.to_owned(), switch(&unbranded(flag.about)))).collect();
-    json!({
-        "type": "object",
-        "description": "Turns features on or off by name.",
-        "properties": known,
-        "additionalProperties": { "type": "boolean" }
-    })
-}
-
-fn unbranded(text: &str) -> String {
-    text.replace(brand::DIR, "{{DIR}}")
 }
 
 fn language_server() -> Value {

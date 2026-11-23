@@ -180,11 +180,10 @@ impl Memories {
             return self.brief_optimization(run, request);
         }
         let budget = if tool { RecallBudget::WITH_TOOL } else { RecallBudget::default() };
-        let features = team::features(&self.gate(&request.session.cwd));
-        let anchors = features.on(domain::features::MEMORY_ANCHORS);
-        let shared = team::load_if(&request.session.cwd, &features);
-        let structured = features.on(domain::features::STRUCTURED_LEARNINGS);
-        if features.on(domain::features::MEMORY_SCORECARD) && self.holds_out(&request.session.cwd) {
+        let anchors = domain::features::on(brand::features::MEMORY_ANCHORS);
+        let shared = team::load_in(&request.session.cwd);
+        let structured = domain::features::on(brand::features::STRUCTURED_LEARNINGS);
+        if domain::features::on(brand::features::MEMORY_SCORECARD) && self.holds_out(&request.session.cwd) {
             let brief = MemoryBrief {
                 output: edits_file(run),
                 origin: brief.origin.clone(),

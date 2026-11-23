@@ -42,15 +42,17 @@ fn a_run_is_handed_the_memories_about_files_that_its_prompt_did_not_recall() {
 }
 
 #[test]
-fn a_project_that_turns_the_context_features_off_gets_none_of_them() {
+fn the_context_features_follow_the_config_whatever_the_project_s_settings_say() {
+    use brand::features as flags;
+    use domain::features::on;
     let project = tempfile::tempdir().expect("project");
     let settings = project.path().join(brand::DIR);
     std::fs::create_dir_all(&settings).expect("settings folder");
     let off = serde_json::json!({ "features": {
-        domain::features::MEMORY_ANCHORS: false,
-        domain::features::STRUCTURED_LEARNINGS: false,
-        domain::features::LEARNING_CHECK: false,
-        domain::features::MEMORY_SEED: false,
+        "experimental-memory-anchors": false,
+        "experimental-structured-learnings": false,
+        "experimental-learning-check": false,
+        "experimental-memory-seed": false,
     } });
     std::fs::write(settings.join("settings.json"), off.to_string()).expect("settings");
     let memories = Memories::new(Arc::new(InMemoryStore::default()));
@@ -61,15 +63,15 @@ fn a_project_that_turns_the_context_features_off_gets_none_of_them() {
 
     let brief = memories.brief(RunId::new(), &request, false).host.memory.expect("brief");
 
-    assert!(!brief.anchors && !brief.structured && brief.anchored.is_empty());
+    assert_eq!((brief.anchors, brief.structured), (on(flags::MEMORY_ANCHORS), on(flags::STRUCTURED_LEARNINGS)));
     let told = brief.edits_format().expect("format");
-    assert!(!told.contains("\"touches\"") && !told.contains("\"ruled_out\""), "{told}");
-    let refused = memories.check(project.path()).expect_err("off");
-    assert!(refused.contains(domain::features::LEARNING_CHECK), "{refused}");
+    assert_eq!(told.contains("\"touches\""), on(flags::MEMORY_ANCHORS), "{told}");
+    let checked = memories.check(project.path());
+    assert_ne!(checked.is_err_and(|refused| refused.contains("learning_check")), on(flags::LEARNING_CHECK));
     let services = crate::features::context::testing::services(None);
     let seeded =
         crate::features::context::testing::with(1, &services, |context| memories.offered(context, project.path()));
-    assert!(seeded.expect_err("off").contains(domain::features::MEMORY_SEED));
+    assert_ne!(seeded.is_err_and(|refused| refused.contains("memory_seed")), on(flags::MEMORY_SEED));
 }
 
 #[test]

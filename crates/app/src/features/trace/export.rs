@@ -9,8 +9,6 @@ use domain::trace::runs::{Run, Status};
 use domain::{EngineEvent, SessionId};
 use platform::sync::Locked;
 
-pub const ENDPOINT: &str = "OTLP_ENDPOINT";
-pub const HEADERS: &str = "OTLP_HEADERS";
 const QUEUED_AT_MOST: usize = 256;
 const BATCH_WAIT: Duration = Duration::from_secs(2);
 const BATCH_MOST: usize = 64;
@@ -24,12 +22,11 @@ pub struct Otlp {
 }
 
 impl Otlp {
-    pub fn from(lookup: impl Fn(&str) -> Option<String>) -> Option<Self> {
-        let endpoint = lookup(&brand::env(ENDPOINT)).map(|value| value.trim().trim_end_matches('/').to_owned());
-        let endpoint = endpoint.filter(|value| value.starts_with("http://") || value.starts_with("https://"))?;
+    pub fn from(endpoint: &str, listed: &str) -> Option<Self> {
+        let endpoint = endpoint.trim().trim_end_matches('/').to_owned();
+        let endpoint = Some(endpoint).filter(|value| value.starts_with("http://") || value.starts_with("https://"))?;
         let url = if endpoint.ends_with("/v1/traces") { endpoint } else { format!("{endpoint}/v1/traces") };
         let mut headers = vec![("content-type".to_owned(), "application/json".to_owned())];
-        let listed = lookup(&brand::env(HEADERS)).unwrap_or_default();
         headers.extend(listed.split(',').filter_map(|pair| {
             let (name, value) = pair.split_once('=')?;
             let name = name.trim();

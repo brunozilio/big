@@ -29,14 +29,11 @@ fn model() -> ModelOption {
 }
 
 fn backend(engine: FakeEngine) -> (LocalBackend, Receiver<()>) {
-    backend_with(engine, false)
+    backend_with(engine)
 }
 
-fn backend_with(engine: FakeEngine, memory_tool: bool) -> (LocalBackend, Receiver<()>) {
+fn backend_with(engine: FakeEngine) -> (LocalBackend, Receiver<()>) {
     let mut services = LocalServices::with_engine(Arc::new(engine));
-    if !memory_tool {
-        services = services.without(domain::features::MEMORY_SEARCH);
-    }
     services.providers = services.providers.with_store(Arc::new(app::InMemoryProviderStore::default()));
     let (woke_tx, woke) = crossbeam_channel::unbounded();
     let wake: Wake = Arc::new(move || {
@@ -188,7 +185,7 @@ fn queries_answer_models_skills_and_agents() {
 #[test]
 fn an_optimization_is_a_run_over_the_memory_without_the_search_tool() {
     let engine = scripted();
-    let (backend, woke) = backend_with(engine.clone(), true);
+    let (backend, woke) = backend_with(engine.clone());
     let dir = tempfile::tempdir().expect("tempdir");
     let path = dir.path().to_path_buf();
     let fact = domain::MemoryEdit::Remember {

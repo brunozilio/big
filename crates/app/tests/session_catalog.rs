@@ -25,8 +25,7 @@ fn backend(script: Vec<EngineEvent>) -> (LocalBackend, Receiver<()>) {
 fn backend_keeping(script: Vec<EngineEvent>, settings: &Value) -> (LocalBackend, Receiver<()>) {
     let data = tempfile::tempdir().expect("data").keep();
     let services = LocalServices::with_engine(Arc::new(FakeEngine::new(vec![model()], script)))
-        .kept_in(&data)
-        .without(domain::features::MEMORY_SEARCH);
+        .kept_in(&data);
     services.settings.save(settings).expect("settings");
     let (woke_tx, woke) = crossbeam_channel::unbounded();
     let wake: Wake = Arc::new(move || {

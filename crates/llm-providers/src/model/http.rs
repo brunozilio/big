@@ -42,7 +42,7 @@ pub fn idle_from(value: Option<&str>) -> Duration {
 }
 
 pub fn stream_idle() -> Duration {
-    idle_from(std::env::var(brand::env("STREAM_IDLE_SECONDS")).ok().as_deref())
+    idle_from(Some(brand::agent::STREAM_IDLE_SECONDS))
 }
 
 pub trait Http: Send + Sync {

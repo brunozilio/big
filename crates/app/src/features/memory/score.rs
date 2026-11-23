@@ -3,7 +3,7 @@ use std::path::Path;
 use domain::PromptRequest;
 use domain::memory::scorecard::RunOutcome;
 
-use super::{Memories, keep, team};
+use super::{Memories, keep};
 
 impl Memories {
     pub(super) fn holds_out(&self, project: &Path) -> bool {
@@ -24,8 +24,7 @@ impl Memories {
     }
 
     pub(super) fn keep_score(&self, request: &PromptRequest, held: bool, outcome: &RunOutcome) {
-        let features = team::features(&self.gate(&request.session.cwd));
-        if !features.on(domain::features::MEMORY_SCORECARD) {
+        if !domain::features::on(brand::features::MEMORY_SCORECARD) {
             return;
         }
         let mut books = self.lock();

@@ -6,7 +6,7 @@ use domain::memory::seed::{Candidate, candidates};
 use domain::trace::Record;
 use domain::{Author, MemoryEdit, MemoryKind, Provenance, SessionId};
 
-use super::{Memories, now, team};
+use super::{Memories, now};
 use crate::features::context::Context;
 
 const ORIGIN: &str = "seeded from past sessions";
@@ -32,8 +32,8 @@ impl Memories {
     }
 
     pub fn offered(&self, context: &Context<'_>, project: &Path) -> Result<Vec<Candidate>, String> {
-        if !team::features(&self.gate(project)).on(domain::features::MEMORY_SEED) {
-            return Err(format!("/memory seed is turned off ({}).", domain::features::MEMORY_SEED));
+        if !domain::features::on(brand::features::MEMORY_SEED) {
+            return Err("/memory seed is turned off (memory_seed).".into());
         }
         let store = context.services.sessions.as_ref();
         let sessions = crate::features::sessions::recent(context, project);

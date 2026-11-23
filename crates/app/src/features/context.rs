@@ -19,12 +19,6 @@ impl std::fmt::Debug for Context<'_> {
     }
 }
 
-impl Context<'_> {
-    pub fn on(&self, feature: &str) -> bool {
-        !self.services.off.contains(feature)
-    }
-}
-
 #[cfg(test)]
 pub mod testing {
     use std::sync::Arc;

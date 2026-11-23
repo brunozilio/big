@@ -16,12 +16,11 @@ pub struct Changes {
 
 impl Memories {
     pub fn check(&self, project: &Path) -> Result<MemoryCheck, String> {
-        let features = team::features(&self.gate(project));
-        if !features.on(domain::features::LEARNING_CHECK) {
-            return Err(format!("/check is turned off ({}).", domain::features::LEARNING_CHECK));
+        if !domain::features::on(brand::features::LEARNING_CHECK) {
+            return Err("/check is turned off (learning_check).".into());
         }
         let changes = changes(project)?;
-        let shared = team::load_if(project, &features);
+        let shared = team::load_in(project);
         let known: Vec<Memory> = {
             let mut books = self.lock();
             self.book(&mut books, project).memories.iter().cloned().chain(shared).collect()

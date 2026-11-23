@@ -13,7 +13,6 @@ use crate::settings::SettingsStore;
 pub struct LocalServices {
     pub engine: Arc<dyn AgentEngine>,
     pub root: DataRoot,
-    pub off: crate::TurnedOff,
     pub settings: Arc<dyn SettingsStore>,
     pub catalog: Arc<dyn crate::SessionCatalog>,
     pub memories: crate::features::memory::Memories,
@@ -28,7 +27,7 @@ pub struct LocalServices {
 
 fn exporter(sessions: &Arc<FileSessions>) -> Option<crate::features::trace::export::Exporter> {
     use crate::features::trace::export::{Exporter, Otlp, Traced};
-    let otlp = Otlp::from(|key| std::env::var(key).ok())?;
+    let otlp = Otlp::from(brand::traces::OTLP_ENDPOINT, brand::traces::OTLP_HEADERS)?;
     let store = Arc::clone(sessions);
     let traced: Traced = Arc::new(move |cwd, id| crate::features::trace::traced(&store, cwd, id));
     Exporter::start(otlp, traced, Arc::new(agent_engine::model::http::NetHttp))
@@ -41,32 +40,13 @@ impl std::fmt::Debug for LocalServices {
 }
 
 impl LocalServices {
-    pub fn detect_in(cwd: Option<&Path>) -> Self {
+    pub fn detect() -> Self {
         let root = DataRoot::system();
         let stores = root.stores();
         let engine = crate::engine::build(Arc::clone(&stores.sessions), root.language_servers());
         let mut services = Self::of(Arc::new(engine), root, stores);
         services.homes = Arc::new(crate::OwnerHome::system());
-        services.in_project(cwd)
-    }
-
-    pub fn in_project(self, cwd: Option<&Path>) -> Self {
-        let Some(cwd) = cwd.map(Path::to_path_buf).or_else(|| std::env::current_dir().ok()) else { return self };
-        self.follow_project(&cwd);
-        self
-    }
-
-    pub fn follow_project(&self, cwd: &Path) {
-        if let Ok(settings) = self.project_settings(cwd) {
-            self.off.follow(&settings.features);
-        }
-    }
-
-    pub fn turned_off_in(self, cwd: &Path) -> Self {
-        if let Ok(settings) = self.project_settings(cwd) {
-            self.off.follow(&settings.features);
-        }
-        self
+        services
     }
 
     pub fn gate(&self, cwd: &Path) -> agent_engine::scope::Scope {
@@ -94,7 +74,6 @@ impl LocalServices {
         Self {
             engine,
             root,
-            off: crate::TurnedOff::default(),
             settings: stores.settings,
             catalog: stores.catalog,
             memories: stores.memories,
@@ -110,11 +89,6 @@ impl LocalServices {
 
     pub fn home(&self) -> Option<PathBuf> {
         self.homes.home()
-    }
-
-    pub fn without(mut self, flag: &str) -> Self {
-        self.off.insert(flag.to_owned());
-        self
     }
 
     pub fn kept_in(self, data: &Path) -> Self {
@@ -198,43 +172,5 @@ mod tests {
         assert_eq!(services.settings.load(), Some(serde_json::json!({"model": "m"})), "kept, in memory");
         let after: Vec<bool> = system.folders().iter().map(|folder| folder.exists()).collect();
         assert_eq!(before, after, "nothing was made where the user's data lives");
-    }
-
-    #[test]
-    fn a_flag_the_owner_turned_off_is_off_for_the_backend_too_and_no_other_name_is() {
-        let home = tempfile::tempdir().expect("home");
-        let repo = tempfile::tempdir().expect("repo");
-        std::fs::create_dir_all(home.path().join(brand::DIR)).expect("dir");
-        let settings = serde_json::json!({ "features": { "workspace": false, "trace": false, "memory": false, "experimental-output-savings": false } });
-        std::fs::write(home.path().join(brand::DIR).join("settings.json"), settings.to_string()).expect("write");
-        let mut services = LocalServices::with_engine(engine());
-        services.homes = Arc::new(crate::OwnerHome::at(home.path()));
-
-        let services = services.turned_off_in(repo.path());
-
-        assert!(services.off.contains(domain::features::TRACE));
-        assert!(!services.off.contains("memory"), "memory is always on");
-        assert!(services.off.contains(domain::features::OUTPUT_SAVINGS));
-        assert!(!services.off.contains("workspace"), "not a flag: the program cannot work without it");
-        assert!(!services.off.contains("output_savings"), "a folder's name is not a switch, its flag is");
-    }
-
-    #[test]
-    fn the_folder_asked_for_decides_what_is_off_not_the_one_the_process_started_in() {
-        let home = tempfile::tempdir().expect("home");
-        let repo = tempfile::tempdir().expect("repo");
-        std::fs::create_dir_all(repo.path().join(brand::DIR)).expect("dir");
-        let settings = serde_json::json!({ "features": { "schedules": false } });
-        std::fs::write(repo.path().join(brand::DIR).join("settings.local.json"), settings.to_string()).expect("write");
-        let mut services = LocalServices::with_engine(engine());
-        services.homes = Arc::new(crate::OwnerHome::at(home.path()));
-        assert_ne!(std::env::current_dir().ok().as_deref(), Some(repo.path()));
-
-        let elsewhere = services.clone().in_project(None);
-        assert!(!elsewhere.off.contains("schedules"), "the process's own folder says nothing about it");
-
-        let asked = services.in_project(Some(repo.path()));
-        assert!(asked.off.contains("schedules"));
-        assert!(elsewhere.off.contains("schedules"), "services cloned from one another follow the same settings");
     }
 }

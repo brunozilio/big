@@ -41,8 +41,8 @@ pub fn system_secrets() -> Arc<dyn SecretStore> {
     static STORE: std::sync::OnceLock<Arc<dyn SecretStore>> = std::sync::OnceLock::new();
     Arc::clone(STORE.get_or_init(|| {
         let keychain = platform::keychain::SystemKeychain::new(brand::NAME);
-        let choice = std::env::var(key::CHOICE).ok();
-        kept_in(crate::DataRoot::system().secrets().as_deref(), system_keeper(choice.as_deref(), &keychain))
+        let keeper = system_keeper(Some(brand::secrets::BACKEND), &keychain);
+        kept_in(crate::DataRoot::system().secrets().as_deref(), keeper)
     }))
 }
 

@@ -25,10 +25,10 @@ fn managed_settings_in_the_home_have_the_last_word_over_the_project() {
     let (user, project) = (home.path().join(brand::DIR), repo.path().join(brand::DIR));
     std::fs::create_dir_all(&user).expect("user");
     std::fs::create_dir_all(&project).expect("project");
-    std::fs::write(project.join("settings.local.json"), r#"{"features":{"insights":true}}"#).expect("project");
-    std::fs::write(user.join(MANAGED), r#"{"features":{"insights":false}}"#).expect("managed");
+    std::fs::write(project.join("settings.local.json"), r#"{"smallModel":"project-small"}"#).expect("project");
+    std::fs::write(user.join(MANAGED), r#"{"smallModel":"managed-small"}"#).expect("managed");
     let settings = load(repo.path(), Some(home.path()), &[]).expect("settings");
-    assert!(!settings.features.on("insights"));
+    assert_eq!(settings.small_model.as_deref(), Some("managed-small"));
 }
 
 #[test]

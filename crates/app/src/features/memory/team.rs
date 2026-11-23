@@ -1,23 +1,20 @@
 use std::path::{Path, PathBuf};
 
 use agent_engine::scope::Scope;
-use domain::features::Features;
+use brand::features as flags;
+use domain::features::on;
 use domain::memory::{Memory, team};
 
 pub fn folder(project: &Path) -> PathBuf {
     project.join(brand::DIR).join("memory")
 }
 
-pub fn features(gate: &Scope) -> Features {
-    agent_engine::prompt::settings::load(gate, &[]).map(|settings| settings.features).unwrap_or_default()
-}
-
 pub fn load(gate: &Scope) -> Vec<Memory> {
-    load_if(gate.cwd(), &features(gate))
+    load_in(gate.cwd())
 }
 
-pub fn load_if(project: &Path, features: &Features) -> Vec<Memory> {
-    if !features.on(domain::features::TEAM_MEMORY) {
+pub fn load_in(project: &Path) -> Vec<Memory> {
+    if !on(flags::TEAM_MEMORY) {
         return Vec::new();
     }
     let mut files: Vec<PathBuf> = std::fs::read_dir(folder(project))
@@ -41,7 +38,7 @@ pub fn load_if(project: &Path, features: &Features) -> Vec<Memory> {
 
 pub fn share(gate: &Scope, memory: &Memory) -> Result<PathBuf, String> {
     let project = gate.cwd();
-    let structured = features(gate).on(domain::features::STRUCTURED_LEARNINGS);
+    let structured = on(flags::STRUCTURED_LEARNINGS);
     let by = if structured {
         team::Sharer { author: git_user(project), date: Some(agent_engine::today()), structured }
     } else {

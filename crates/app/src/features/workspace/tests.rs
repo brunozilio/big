@@ -80,15 +80,11 @@ fn mentioned_files_go_with_the_prompt_and_an_empty_prompt_stays_empty() {
 }
 
 #[test]
-fn git_is_offered_outside_a_repository_until_one_is_initialized_or_the_feature_is_off() {
+fn git_is_offered_outside_a_repository_until_one_is_initialized_if_the_config_turns_it_on() {
     let dir = tempfile::tempdir().expect("dir");
     let cwd = dir.path();
-    assert_eq!(offered(cwd), Ok(WorkspaceReply::GitOffer { offer: true }));
-
-    let services = crate::features::context::testing::services(None).without(domain::features::GIT_OFFER);
-    let off = WorkspaceRequest { path: cwd.to_path_buf(), op: WorkspaceOp::GitOffer };
-    let answered = crate::features::context::testing::with(1, &services, |context| handle(context, off));
-    assert_eq!(answered, Ok(WorkspaceReply::GitOffer { offer: false }));
+    let configured = domain::features::on(brand::features::GIT_OFFER);
+    assert_eq!(offered(cwd), Ok(WorkspaceReply::GitOffer { offer: configured }));
 
     ask(cwd, WorkspaceOp::GitInit).expect("initialized");
     assert!(cwd.join(".git").is_dir());

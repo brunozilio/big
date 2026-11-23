@@ -5,7 +5,7 @@ use platform::keychain::Keychain;
 use super::sealed::{hex, unhex};
 
 pub const IN_KEYCHAIN: &str = "keychain";
-pub const CHOICE: &str = concat!(brand::env_prefix!(), "_SECRETS");
+pub const CHOICE: &str = "backend in the [secrets] section of config.toml";
 
 #[derive(Clone, Copy)]
 pub enum Keeper<'a> {
@@ -113,7 +113,7 @@ fn stored(path: &Path, keychain: &dyn Keychain, key: &[u8; 32]) -> bool {
 
 fn from_keychain(path: &Path, keychain: &dyn Keychain) -> Result<[u8; 32], String> {
     let fallback =
-        format!("to keep keys in a file instead, set {CHOICE}=file (keys saved before must then be entered again)");
+        format!("to keep keys in a file instead, set the {CHOICE} to file (keys saved before must then be entered again)");
     match keychain.get(&account(path)) {
         Ok(Some(kept)) => read(path, &kept),
         Ok(None) => Err(format!(
@@ -147,7 +147,7 @@ fn not_taken_back(path: &Path, why: &dyn std::fmt::Display) -> String {
     format!(
         "the secrets key is in the system keychain, as {} says, and could not be taken back ({why}); \
          saved keys stay sealed and nothing was replaced; allow the keychain and start again, \
-         or set {CHOICE}={IN_KEYCHAIN}; to start over without the saved keys, remove that file and secrets.json",
+         or set the {CHOICE} to {IN_KEYCHAIN}; to start over without the saved keys, remove that file and secrets.json",
         path.display()
     )
 }

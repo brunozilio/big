@@ -94,22 +94,16 @@ fn runs_in(sent: &Value) -> Vec<u64> {
 }
 
 fn otlp(url: &str) -> Otlp {
-    let endpoint = |key: &str| (key == brand::env(ENDPOINT)).then(|| url.to_owned());
-    Otlp::from(endpoint).expect("configured")
+    Otlp::from(url, "").expect("configured")
 }
 
 const WAIT: Duration = Duration::from_secs(20);
 
 #[test]
-fn the_endpoint_and_headers_come_from_the_environment_and_nothing_is_exported_without_them() {
-    let set = |pairs: &'static [(&'static str, &'static str)]| {
-        move |key: &str| pairs.iter().find(|(name, _)| brand::env(name) == key).map(|(_, value)| (*value).to_owned())
-    };
-    assert_eq!(Otlp::from(set(&[])), None);
-    assert_eq!(Otlp::from(set(&[(ENDPOINT, "localhost:4318")])), None, "a URL with its scheme");
-    let configured =
-        Otlp::from(set(&[(ENDPOINT, "http://localhost:4318/"), (HEADERS, "x-key=abc, x-team = core,bad")]))
-            .expect("configured");
+fn the_endpoint_and_headers_come_from_the_config_and_nothing_is_exported_without_them() {
+    assert_eq!(Otlp::from("", "x-key=abc"), None);
+    assert_eq!(Otlp::from("localhost:4318", ""), None, "a URL with its scheme");
+    let configured = Otlp::from("http://localhost:4318/", "x-key=abc, x-team = core,bad").expect("configured");
     assert_eq!(configured.url, "http://localhost:4318/v1/traces");
     assert_eq!(
         configured.headers,
@@ -119,7 +113,9 @@ fn the_endpoint_and_headers_come_from_the_environment_and_nothing_is_exported_wi
             ("x-team".to_owned(), "core".to_owned())
         ]
     );
-    let full = Otlp::from(set(&[(ENDPOINT, "https://otel.example/v1/traces")])).expect("full");
+    let full = Otlp::from("https://otel.example/v1/traces", "").expect("full");
+    let shipped = Otlp::from(brand::traces::OTLP_ENDPOINT, brand::traces::OTLP_HEADERS);
+    assert_eq!(shipped.is_some(), !brand::traces::OTLP_ENDPOINT.trim().is_empty());
     assert_eq!(full.url, "https://otel.example/v1/traces");
 }
 

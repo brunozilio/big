@@ -38,3 +38,55 @@ fast_poll_seconds = "15"
 slow_poll_seconds = "180"
 reconcile_minutes = "10"
 error_backoff_seconds = "5"
+
+[agent]
+stream_idle_seconds = "300"
+
+[log]
+filter = "warn"
+
+[traces]
+otlp_endpoint = ""
+otlp_headers = ""
+
+[secrets]
+backend = "file"
+
+[features]
+redact_secrets = true
+budget = true
+cache_warning = true
+escalation = true
+project_criteria = true
+auto_review = true
+follow_through = true
+affected_tests = true
+pr_follow = true
+session_claims = true
+load_on_call = true
+output_cleanup = true
+output_filters = true
+output_savings = true
+branches = true
+git_offer = true
+team_memory = true
+learning = true
+web_main_content = true
+web_cleanup = true
+web_links = true
+web_small_pages_direct = true
+web_formats = true
+web_empty_page_error = true
+code_mode = true
+memory_anchors = true
+structured_learnings = true
+learning_check = true
+blast_radius = true
+code_map = true
+memory_seed = true
+memory_scorecard = true
+memory_search = true
+schedules = true
+plugins = true
+trace = true
+channels = true

@@ -23,7 +23,6 @@ fn script(extra: Vec<EngineEvent>) -> Vec<EngineEvent> {
 
 fn services(engine: &FakeEngine) -> LocalServices {
     let mut services = LocalServices::with_engine(Arc::new(engine.clone()));
-    services.off.insert(domain::features::MEMORY_SEARCH.into());
     let secrets = Arc::new(InMemorySecretStore::default());
     services.providers = services.providers.with_secrets(secrets);
     services

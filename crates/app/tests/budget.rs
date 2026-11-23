@@ -30,7 +30,6 @@ fn each_run_carries_the_budget_and_what_the_session_has_spent() {
     let data = tempfile::tempdir().expect("data");
     let engine = costing(0.75);
     let mut services = LocalServices::with_engine(Arc::new(engine.clone()));
-    services.off.insert(domain::features::MEMORY_SEARCH.into());
     services.providers = services.providers.with_secrets(Arc::new(InMemorySecretStore::default()));
     let client = Client::builder().data_dir(data.path()).services(services).build().expect(brand::COMMAND);
     let session = client.session(data.path(), model());

@@ -39,7 +39,6 @@ fn with_a_stuck_backend() -> (Client, Arc<Stuck>, Sender<()>, FakeEngine) {
     let (release, released) = crossbeam_channel::unbounded();
     let stuck = Arc::new(Stuck { entered: AtomicBool::new(false), released });
     let mut services = LocalServices::with_engine(Arc::new(engine.clone()));
-    services.off.insert(domain::features::MEMORY_SEARCH.into());
     services.settings = Arc::clone(&stuck) as Arc<dyn SettingsStore>;
     (Client::builder().services(services).build().expect(brand::COMMAND), stuck, release, engine)
 }

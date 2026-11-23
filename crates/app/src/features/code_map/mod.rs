@@ -18,11 +18,7 @@ pub fn forget(_client: u64) {}
 
 pub fn pointers(context: &Context<'_>, project: &Path, prompt: &str) -> Option<String> {
     let home = context.services.home();
-    let on = context
-        .services
-        .project_settings(project)
-        .is_ok_and(|settings| settings.features.on(domain::features::CODE_MAP));
-    if !on || !mapped(project, home.as_deref()) {
+    if !domain::features::on(brand::features::CODE_MAP) || !mapped(project, home.as_deref()) {
         return None;
     }
     let map = code_map::refresh(project, &cache(context, project));
@@ -91,17 +87,17 @@ mod tests {
     }
 
     #[test]
-    fn a_project_that_turns_the_code_map_off_is_never_scanned() {
+    fn a_project_s_settings_cannot_turn_the_code_map_off() {
         let dir = project();
         std::fs::create_dir_all(dir.path().join(brand::DIR)).expect("settings folder");
-        let off = serde_json::json!({ "features": { domain::features::CODE_MAP: false } });
+        let off = serde_json::json!({ "features": { "experimental-code-map": false } });
         std::fs::write(dir.path().join(brand::DIR).join("settings.json"), off.to_string()).expect("settings");
         let data = tempfile::tempdir().expect("data");
         let services = testing::services(Some(data.path()));
 
         let shown = testing::with(1, &services, |context| pointers(context, dir.path(), "merge_near_duplicates"));
 
-        assert_eq!(shown, None);
-        assert!(!data.path().join("code-map").exists());
+        let configured = domain::features::on(brand::features::CODE_MAP);
+        assert_eq!(shown.is_some_and(|map| map.contains("src/retry.rs")), configured);
     }
 }

@@ -24,7 +24,6 @@ fn a_lesson_is_asked_for_only_after_the_user_corrected_the_agent_enough() {
         ],
     );
     let mut services = LocalServices::with_engine(Arc::new(engine.clone()));
-    services.off.insert(domain::features::MEMORY_SEARCH.into());
     services.providers = services.providers.with_secrets(Arc::new(InMemorySecretStore::default()));
     let client = Client::builder().data_dir(data.path()).services(services).build().expect(brand::COMMAND);
     let session = client.session(data.path(), model());

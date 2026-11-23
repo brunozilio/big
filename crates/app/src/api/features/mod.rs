@@ -1,6 +1,5 @@
 pub mod channels;
 pub mod code_map;
-pub mod flags;
 pub mod memory;
 pub mod output_savings;
 pub mod plugins;
@@ -14,7 +13,6 @@ use serde::{Deserialize, Serialize};
 
 use self::channels::{ChannelsReply, ChannelsRequest};
 use self::code_map::{CodeMapReply, CodeMapRequest};
-use self::flags::{FlagsReply, FlagsRequest};
 use self::memory::{MemoryReply, MemoryRequest};
 use self::output_savings::OutputSavingsReply;
 use self::plugins::{PluginsReply, PluginsRequest};
@@ -29,7 +27,6 @@ use self::workspace::{WorkspaceReply, WorkspaceRequest};
 pub enum FeatureName {
     Channels,
     CodeMap,
-    Flags,
     Memory,
     OutputSavings,
     Plugins,
@@ -41,10 +38,9 @@ pub enum FeatureName {
 }
 
 impl FeatureName {
-    pub const ALL: [Self; 11] = [
+    pub const ALL: [Self; 10] = [
         Self::Channels,
         Self::CodeMap,
-        Self::Flags,
         Self::Memory,
         Self::OutputSavings,
         Self::Plugins,
@@ -59,7 +55,6 @@ impl FeatureName {
         match self {
             Self::Channels => "channels",
             Self::CodeMap => "code_map",
-            Self::Flags => "flags",
             Self::Memory => "memory",
             Self::OutputSavings => "output_savings",
             Self::Plugins => "plugins",
@@ -71,17 +66,18 @@ impl FeatureName {
         }
     }
 
-    pub fn switch(self) -> Option<&'static str> {
-        use domain::features as flags;
-        match self {
-            Self::Channels => Some(flags::CHANNELS),
-            Self::CodeMap => Some(flags::CODE_MAP),
-            Self::OutputSavings => Some(flags::OUTPUT_SAVINGS),
-            Self::Plugins => Some(flags::PLUGINS),
-            Self::Schedules => Some(flags::SCHEDULES),
-            Self::Trace => Some(flags::TRACE),
-            Self::Flags | Self::Memory | Self::Sessions | Self::Shell | Self::Workspace => None,
-        }
+    pub fn on(self) -> bool {
+        use brand::features as flags;
+        let flag = match self {
+            Self::Channels => flags::CHANNELS,
+            Self::CodeMap => flags::CODE_MAP,
+            Self::OutputSavings => flags::OUTPUT_SAVINGS,
+            Self::Plugins => flags::PLUGINS,
+            Self::Schedules => flags::SCHEDULES,
+            Self::Trace => flags::TRACE,
+            Self::Memory | Self::Sessions | Self::Shell | Self::Workspace => return true,
+        };
+        domain::features::on(flag)
     }
 }
 
@@ -96,7 +92,6 @@ impl std::fmt::Display for FeatureName {
 pub enum FeatureRequest {
     Channels(ChannelsRequest),
     CodeMap(CodeMapRequest),
-    Flags(FlagsRequest),
     Memory(MemoryRequest),
     OutputSavings,
     Plugins(PluginsRequest),
@@ -112,7 +107,6 @@ impl FeatureRequest {
         match self {
             Self::Channels(_) => FeatureName::Channels,
             Self::CodeMap(_) => FeatureName::CodeMap,
-            Self::Flags(_) => FeatureName::Flags,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings => FeatureName::OutputSavings,
             Self::Plugins(_) => FeatureName::Plugins,
@@ -130,7 +124,6 @@ impl FeatureRequest {
 pub enum FeatureReply {
     Channels(ChannelsReply),
     CodeMap(CodeMapReply),
-    Flags(FlagsReply),
     Memory(MemoryReply),
     OutputSavings(OutputSavingsReply),
     Plugins(PluginsReply),
@@ -146,7 +139,6 @@ impl FeatureReply {
         match self {
             Self::Channels(_) => FeatureName::Channels,
             Self::CodeMap(_) => FeatureName::CodeMap,
-            Self::Flags(_) => FeatureName::Flags,
             Self::Memory(_) => FeatureName::Memory,
             Self::OutputSavings(_) => FeatureName::OutputSavings,
             Self::Plugins(_) => FeatureName::Plugins,
@@ -162,14 +154,10 @@ impl FeatureReply {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, thiserror::Error)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum FeatureError {
-    #[error("{feature} is turned off{}", back_on(*.feature))]
+    #[error("{feature} is turned off")]
     FeatureOff { feature: FeatureName },
     #[error("{message}")]
     Failed { feature: FeatureName, message: String },
-}
-
-fn back_on(feature: FeatureName) -> String {
-    feature.switch().map(|flag| format!(" (/features {flag} on)")).unwrap_or_default()
 }
 
 impl FeatureError {

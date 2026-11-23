@@ -1,7 +1,6 @@
 use std::path::{Path, PathBuf};
 
 use crate::api::features::code_map::CodeMapRequest;
-use crate::api::features::flags::{FlagsRequest, ListedFlag};
 use crate::api::features::memory::{MemoryOp, MemoryReply, MemoryRequest};
 use crate::api::features::plugins::{PluginsReply, PluginsRequest};
 use crate::api::features::schedules::{SchedulesReply, SchedulesRequest};
@@ -46,15 +45,6 @@ impl Client {
 
     pub fn plugins(&self, request: PluginsRequest) -> Result<PluginsReply, Error> {
         self.ask_plugins(request)
-    }
-
-    pub fn flags(&self, cwd: &Path) -> Result<Vec<ListedFlag>, Error> {
-        self.ask_flags(FlagsRequest::List { cwd: cwd.to_path_buf() }).map(|reply| reply.flags)
-    }
-
-    pub fn set_flag(&self, cwd: &Path, name: &str, on: bool) -> Result<Vec<ListedFlag>, Error> {
-        let request = FlagsRequest::Set { cwd: cwd.to_path_buf(), name: name.to_owned(), on };
-        self.ask_flags(request).map(|reply| reply.flags)
     }
 
     pub fn scheduled(&self) -> Result<Vec<Scheduled>, Error> {

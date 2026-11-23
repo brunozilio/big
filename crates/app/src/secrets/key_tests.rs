@@ -137,7 +137,7 @@ fn a_keychain_that_goes_away_is_an_error_that_offers_the_file_and_makes_no_new_k
     let error = at(&path, Keeper::Keychain(&keychain)).expect_err("no new key orphans the vault");
 
     assert!(error.contains("cannot be reached") && error.contains("no keychain here"), "{error}");
-    assert!(error.contains(&format!("{CHOICE}=file")), "the fallback is offered: {error}");
+    assert!(error.contains(&format!("{CHOICE} to file")), "the fallback is offered: {error}");
     assert_eq!(on_disk(&path), IN_KEYCHAIN);
     assert_eq!(keychain.items.locked().values().cloned().collect::<Vec<_>>(), [hex(&key)]);
     assert_eq!(keychain.sets.load(Ordering::SeqCst), 1);
@@ -234,7 +234,8 @@ fn only_asking_for_the_keychain_uses_it_and_the_file_is_the_default() {
     for choice in [None, Some(""), Some("file"), Some("keychains")] {
         assert!(matches!(Keeper::chosen(choice, &keychain), Keeper::FileInsteadOf(_)), "{choice:?}");
     }
-    assert_eq!(CHOICE, format!("{}_SECRETS", brand::ENV));
+    let configured = matches!(Keeper::chosen(Some(brand::secrets::BACKEND), &keychain), Keeper::Keychain(_));
+    assert_eq!(configured, brand::secrets::BACKEND.trim().eq_ignore_ascii_case(IN_KEYCHAIN));
 }
 
 #[test]

@@ -1,7 +1,6 @@
 mod channels;
 mod code_map;
 pub mod context;
-mod flags;
 pub(crate) mod memory;
 mod output_savings;
 mod plugins;
@@ -19,10 +18,9 @@ use crate::features::context::{Context, Finish};
 type Forget = fn(u64);
 type Prepare = fn(&Context<'_>, RunId, PromptRequest) -> (PromptRequest, Option<Finish>);
 
-const ALL: [(FeatureName, Forget); 11] = [
+const ALL: [(FeatureName, Forget); 10] = [
     (FeatureName::Channels, channels::forget),
     (FeatureName::CodeMap, code_map::forget),
-    (FeatureName::Flags, flags::forget),
     (FeatureName::Memory, memory::forget),
     (FeatureName::OutputSavings, output_savings::forget),
     (FeatureName::Plugins, plugins::forget),
@@ -39,13 +37,9 @@ const PREPARING: [(FeatureName, Prepare); 3] = [
     (FeatureName::Memory, memory::run::prepare),
 ];
 
-fn turned_off(context: &Context<'_>, feature: FeatureName) -> bool {
-    feature.switch().is_some_and(|flag| !context.on(flag))
-}
-
 pub fn handle(context: &Context<'_>, request: FeatureRequest) -> Result<FeatureReply, FeatureError> {
     let feature = request.feature();
-    if turned_off(context, feature) {
+    if !feature.on() {
         return Err(FeatureError::FeatureOff { feature });
     }
     answer(context, request).map_err(|message| FeatureError::Failed { feature, message })
@@ -55,7 +49,6 @@ fn answer(context: &Context<'_>, request: FeatureRequest) -> Result<FeatureReply
     match request {
         FeatureRequest::Channels(request) => channels::handle(context, request).map(FeatureReply::Channels),
         FeatureRequest::CodeMap(request) => code_map::handle(context, request).map(FeatureReply::CodeMap),
-        FeatureRequest::Flags(request) => flags::handle(context, request).map(FeatureReply::Flags),
         FeatureRequest::Memory(request) => memory::handle(context, request).map(FeatureReply::Memory),
         FeatureRequest::OutputSavings => output_savings::handle(context).map(FeatureReply::OutputSavings),
         FeatureRequest::Plugins(request) => plugins::handle(context, request).map(FeatureReply::Plugins),
@@ -77,7 +70,7 @@ pub fn prepare(context: &Context<'_>, run: RunId, request: PromptRequest) -> (Pr
     let mut request = request;
     let mut finishes = Vec::new();
     for (feature, prepare) in PREPARING {
-        if !turned_off(context, feature) {
+        if feature.on() {
             let (prepared, finish) = prepare(context, run, request);
             request = prepared;
             finishes.extend(finish);

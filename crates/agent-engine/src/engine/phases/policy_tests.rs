@@ -3,16 +3,11 @@ use std::path::{Path, PathBuf};
 use domain::code_mode::Mode;
 use domain::memory::{Author, Memory, MemoryBrief, MemoryId, MemoryKind};
 use domain::{Criteria, ModelOption, PermissionMode};
-use serde_json::json;
 
 use super::*;
 
-fn settings(flags: serde_json::Value) -> Settings {
-    Settings { features: Features::default().layered(&flags, true).expect("flags"), ..Settings::default() }
-}
-
-fn policy(flags: serde_json::Value) -> Policy {
-    flagged(&settings(flags), Path::new("/nowhere"))
+fn policy() -> Policy {
+    flagged(&Settings::default(), Path::new("/nowhere"))
 }
 
 fn request() -> PromptRequest {
@@ -22,71 +17,53 @@ fn request() -> PromptRequest {
 type Reads = fn(&Policy) -> bool;
 
 const SWITCHES: [(&str, Reads); 17] = [
-    (features::WEB_LINKS, |policy| policy.web.links),
-    (features::WEB_SMALL_PAGES_DIRECT, |policy| policy.web.small_pages_direct),
-    (features::WEB_FORMATS, |policy| policy.web.formats),
-    (features::WEB_EMPTY_PAGE_ERROR, |policy| policy.web.empty_page_error),
-    (features::REDACT_SECRETS, |policy| policy.redact.is_some()),
-    (features::ESCALATION, |policy| policy.escalation),
-    (features::AUTO_REVIEW, |policy| policy.auto_review),
-    (features::FOLLOW_THROUGH, |policy| policy.follow_through),
-    (features::AFFECTED_TESTS, |policy| policy.affected_tests),
-    (features::SESSION_CLAIMS, |policy| policy.session_claims),
-    (features::LOAD_ON_CALL, |policy| policy.load_on_call),
-    (features::CODE_MODE, |policy| policy.code_mode != Mode::Off),
-    (features::WEB_MAIN_CONTENT, |policy| policy.web.main_content),
-    (features::WEB_CLEANUP, |policy| policy.web.cleanup),
-    (features::OUTPUT_CLEANUP, |policy| policy.output.cleanup),
-    (features::OUTPUT_FILTERS, |policy| policy.output.filters),
-    (features::OUTPUT_SAVINGS, |policy| policy.output.savings),
+    (flags::WEB_LINKS, |policy| policy.web.links),
+    (flags::WEB_SMALL_PAGES_DIRECT, |policy| policy.web.small_pages_direct),
+    (flags::WEB_FORMATS, |policy| policy.web.formats),
+    (flags::WEB_EMPTY_PAGE_ERROR, |policy| policy.web.empty_page_error),
+    (flags::REDACT_SECRETS, |policy| policy.redact.is_some()),
+    (flags::ESCALATION, |policy| policy.escalation),
+    (flags::AUTO_REVIEW, |policy| policy.auto_review),
+    (flags::FOLLOW_THROUGH, |policy| policy.follow_through),
+    (flags::AFFECTED_TESTS, |policy| policy.affected_tests),
+    (flags::SESSION_CLAIMS, |policy| policy.session_claims),
+    (flags::LOAD_ON_CALL, |policy| policy.load_on_call),
+    (flags::CODE_MODE, |policy| policy.code_mode != Mode::Off),
+    (flags::WEB_MAIN_CONTENT, |policy| policy.web.main_content),
+    (flags::WEB_CLEANUP, |policy| policy.web.cleanup),
+    (flags::OUTPUT_CLEANUP, |policy| policy.output.cleanup),
+    (flags::OUTPUT_FILTERS, |policy| policy.output.filters),
+    (flags::OUTPUT_SAVINGS, |policy| policy.output.savings),
 ];
 
 #[test]
-fn with_no_flag_set_every_switch_is_on_and_the_repl_is_the_only_tool() {
-    let policy = policy(json!({}));
+fn every_switch_follows_its_flag_in_the_config() {
+    let policy = policy();
     for (flag, reads) in SWITCHES {
-        assert!(reads(&policy), "{flag} is on until it is turned off");
+        assert_eq!(reads(&policy), on(flag));
     }
-    assert_eq!(policy.code_mode, Mode::Only);
-    assert_eq!(policy.web, domain::web_reading::WebReading::from(&Features::default()));
-}
-
-#[test]
-fn turning_one_flag_off_turns_off_its_own_switch_and_no_other() {
-    for (flag, _) in SWITCHES {
-        let policy = policy(json!({ flag: false }));
-        for (other, reads) in SWITCHES {
-            assert_eq!(reads(&policy), other != flag, "{other} with {flag} off");
-        }
-    }
+    assert_eq!(policy.web, domain::web_reading::WebReading::configured());
 }
 
 #[test]
 fn the_scripts_are_the_ones_the_settings_describe() {
-    let settings = settings(json!({}));
+    let settings = Settings::default();
     let policy = flagged(&settings, Path::new("/nowhere"));
     assert_eq!(policy.scripts, settings.scripts);
 }
 
 #[test]
-fn turning_code_mode_off_gives_the_agent_its_tools_back() {
-    assert_eq!(policy(json!({ features::CODE_MODE: false })).code_mode, Mode::Off);
-}
-
-#[test]
-fn secrets_are_read_from_the_folder_s_env_files_only_when_redaction_is_on() {
+fn secrets_are_read_from_the_folder_s_env_files_while_redaction_is_on() {
     let dir = tempfile::tempdir().expect("dir");
     std::fs::write(dir.path().join(".env"), "TOKEN=s3cr3t-value-123456\n").expect("env");
     let said = "the token is s3cr3t-value-123456";
-    let redacting = flagged(&settings(json!({})), dir.path());
-    assert!(!redacting.redacted(said).contains("s3cr3t-value-123456"));
-    let plain = flagged(&settings(json!({ features::REDACT_SECRETS: false })), dir.path());
-    assert_eq!(plain.redacted(said), said);
+    let redacting = flagged(&Settings::default(), dir.path());
+    assert_eq!(redacting.redacted(said).contains("s3cr3t-value-123456"), !on(flags::REDACT_SECRETS));
 }
 
 #[test]
 fn flags_grant_no_pre_approval() {
-    let policy = policy(json!({}));
+    let policy = policy();
     assert!(policy.pre_approved.is_empty());
     assert_eq!(policy.code_mode_detach, None);
 }
@@ -95,8 +72,8 @@ fn flags_grant_no_pre_approval() {
 fn a_budget_is_kept_only_while_its_flag_is_on() {
     let mut request = request();
     request.policy.budget = Some(domain::budget::Budget { limit_usd: 2.0, spent_usd: 0.5 });
-    assert_eq!(budget(&request, &Features::default()), request.policy.budget);
-    assert_eq!(budget(&request, &settings(json!({ features::BUDGET: false })).features), None);
+    let kept = budget(&request);
+    assert_eq!(kept, request.policy.budget.filter(|_| on(flags::BUDGET)));
 }
 
 #[test]
@@ -109,15 +86,14 @@ fn nothing_is_verified_in_plan_mode() {
 
 #[test]
 fn the_project_s_criteria_apply_only_with_their_flag_and_yield_to_the_request_s() {
-    let project = |flags| Settings { project_criteria: Some("lint is clean".into()), ..settings(flags) };
+    let project = Settings { project_criteria: Some("lint is clean".into()), ..Settings::default() };
     let request = request();
-    let judged = verification(&request, &project(json!({})), &ModelRoles::default()).expect("verification");
-    assert_eq!(judged.map(|found| found.criteria), Some(Criteria::project("lint is clean")));
-    let off = project(json!({ features::PROJECT_CRITERIA: false }));
-    assert_eq!(verification(&request, &off, &ModelRoles::default()), Ok(None));
+    let judged = verification(&request, &project, &ModelRoles::default()).expect("verification");
+    let expected = on(flags::PROJECT_CRITERIA).then(|| Criteria::project("lint is clean"));
+    assert_eq!(judged.map(|found| found.criteria), expected);
     let mut asking = request.clone();
     asking.policy.verification = Some(Criteria::project("tests pass"));
-    let judged = verification(&asking, &project(json!({})), &ModelRoles::default()).expect("verification");
+    let judged = verification(&asking, &project, &ModelRoles::default()).expect("verification");
     assert_eq!(judged.map(|found| found.criteria.text), Some("tests pass".to_owned()));
 }
 
@@ -155,9 +131,8 @@ fn anchored_memories_need_the_brief_to_ask_and_the_flag_to_be_on() {
     let mut request = request();
     let brief = |anchors| MemoryBrief { anchors, anchored: vec![anchor()], ..MemoryBrief::default() };
     request.host.memory = Some(brief(true));
-    assert_eq!(anchored(&request, &Features::default()), [anchor()]);
-    let off = settings(json!({ features::MEMORY_ANCHORS: false })).features;
-    assert_eq!(anchored(&request, &off), []);
+    let expected = if on(flags::MEMORY_ANCHORS) { vec![anchor()] } else { Vec::new() };
+    assert_eq!(anchored(&request), expected);
     request.host.memory = Some(brief(false));
-    assert_eq!(anchored(&request, &Features::default()), []);
+    assert_eq!(anchored(&request), []);
 }

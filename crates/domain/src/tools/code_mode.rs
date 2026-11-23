@@ -2,8 +2,6 @@ use std::time::Duration;
 
 use serde_json::Value;
 
-use crate::features::{CODE_MODE, Features};
-
 pub const TOOL: &str = crate::tool_name::ToolName::Repl.as_str();
 pub const SEARCH: &str = "searchTools";
 pub const DESCRIBE: &str = "describeTool";
@@ -83,8 +81,8 @@ pub enum Mode {
 }
 
 impl Mode {
-    pub fn of(features: &Features) -> Self {
-        if features.on(CODE_MODE) { Self::Only } else { Self::Off }
+    pub fn configured() -> Self {
+        if crate::features::on(brand::features::CODE_MODE) { Self::Only } else { Self::Off }
     }
 }
 
@@ -445,11 +443,9 @@ mod tests {
     }
 
     #[test]
-    fn code_mode_is_on_until_turned_off_and_on_the_repl_is_the_only_tool() {
-        let flags = |value: serde_json::Value| Features::default().layered(&value, true).expect("flags");
-
-        assert_eq!(Mode::of(&Features::default()), Mode::Only);
-        assert_eq!(Mode::of(&flags(serde_json::json!({ CODE_MODE: false }))), Mode::Off);
+    fn code_mode_follows_the_config() {
+        let on = crate::features::on(brand::features::CODE_MODE);
+        assert_eq!(Mode::configured(), if on { Mode::Only } else { Mode::Off });
     }
 
     #[test]

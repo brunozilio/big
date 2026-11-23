@@ -1,6 +1,5 @@
 use crate::api::features::channels::{ChannelsReply, ChannelsRequest};
 use crate::api::features::code_map::{CodeMapReply, CodeMapRequest};
-use crate::api::features::flags::{FlagsReply, FlagsRequest};
 use crate::api::features::memory::{MemoryReply, MemoryRequest};
 use crate::api::features::output_savings::OutputSavingsReply;
 use crate::api::features::plugins::{PluginsReply, PluginsRequest};
@@ -51,7 +50,6 @@ macro_rules! asks {
 asks! {
     ask_channels: Channels(ChannelsRequest) -> ChannelsReply;
     ask_code_map: CodeMap(CodeMapRequest) -> CodeMapReply;
-    ask_flags: Flags(FlagsRequest) -> FlagsReply;
     ask_memory: Memory(MemoryRequest) -> MemoryReply;
     ask_plugins: Plugins(PluginsRequest) -> PluginsReply;
     ask_schedules: Schedules(SchedulesRequest) -> SchedulesReply;

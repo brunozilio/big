@@ -43,8 +43,6 @@ pub struct Settings {
     pub added_dirs: Vec<String>,
     pub scripts: crate::tools::script_tool::ScriptGrants,
     #[serde(default)]
-    pub features: domain::features::Features,
-    #[serde(default)]
     pub notices: Vec<String>,
     #[serde(default)]
     pub skipped_files: Vec<PathBuf>,
@@ -187,10 +185,6 @@ impl Layer<'_> {
         super::permissions::read(settings, self.owners, &mut merged.added_dirs).map_err(|e| self.located(e))?;
         if let Some(value) = settings.get("scripts") {
             merged.scripts = merged.scripts.layered(value, self.owners)?;
-        }
-        if let Some(value) = settings.get("features") {
-            let features = std::mem::take(&mut merged.features);
-            merged.features = features.layered(value, self.owners).map_err(|e| self.located(e))?;
         }
         Ok(())
     }

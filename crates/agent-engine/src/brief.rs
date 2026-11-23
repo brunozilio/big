@@ -43,7 +43,7 @@ impl Brief {
         let plugins = crate::plugins::found(folder, home);
         let settings = prompt::settings::load(&gate, &plugins).map_err(BriefError::Settings)?;
         let mut skills = tools::skill::discover(folder, home);
-        skills.retain(|skill| domain::features::skill_flag(&skill.name).is_none_or(|flag| settings.features.on(flag)));
+        skills.retain(|skill| domain::features::skill_on(&skill.name));
         let found = crate::hooks::Briefed {
             skills,
             agents: tools::subagent::discover(folder, home),
@@ -177,7 +177,7 @@ mod tests {
     }
 
     #[test]
-    fn a_skill_behind_a_flag_is_offered_until_the_owner_turns_the_flag_off() {
+    fn a_skill_behind_a_flag_is_offered_as_the_config_says_and_the_settings_cannot_change_it() {
         let home = tempfile::tempdir().expect("home");
         let repo = tempfile::tempdir().expect("repo");
         let mut request = PromptRequest::plain(repo.path().into(), "", ModelOption::new("m", "M"));
@@ -185,12 +185,13 @@ mod tests {
         let offered = |request: &PromptRequest| {
             super::Brief::load(request.folder()).expect("brief").skills.iter().any(|skill| skill.name == "follow-pr")
         };
-        assert!(offered(&request));
+        let configured = domain::features::on(brand::features::PR_FOLLOW);
+        assert_eq!(offered(&request), configured);
 
         std::fs::create_dir_all(home.path().join(brand::DIR)).expect("dir");
-        let off = serde_json::json!({ "features": { domain::features::PR_FOLLOW: false } });
+        let off = serde_json::json!({ "features": { "pr-follow": false } });
         std::fs::write(home.path().join(brand::DIR).join("settings.json"), off.to_string()).expect("settings");
-        assert!(!offered(&request));
+        assert_eq!(offered(&request), configured);
     }
 
     #[test]
