@@ -118,11 +118,18 @@ Sinais (sem resposta):
   - `etapa(opts)` devolve um `StepCall` (`{ type: "step-call", step, id, options }`) para a lista `steps` do workflow;
   - `etapa(ctx, opts)` roda a etapa na hora e devolve o `Outcome`; `failed` vira `StepFailed` e `cancelled` vira `Cancelled`.
 - O id da etapa é `options.id` ou o nome do tipo. Cada nova execução do mesmo id no mesmo ramo aumenta `attempt`.
-- `options.status`, quando presente, vira `ctx.status(status)` antes do `run`.
+- `options.status`, quando presente, vira `ctx.status(status)` antes do `run`; `options.doneStatus` vira `ctx.status(doneStatus)` quando a etapa passa.
+- Dentro da etapa, `ctx.item` é o item da ativação (somente leitura), `ctx.output(id)` devolve os dados do último `pass`/`fail` da etapa `id` nesta execução (ou `null`) e `ctx.from` diz por que o executor entrou nela: `{ step, outcome: "failed" | "goto", data }` quando veio de um `onFail` ou de um `goto`, `null` no caminho normal. Tudo sai do replay, sem comando novo.
 - Executor de `steps: [...]`: `passed` segue para a próxima; `goto(id)` pula para a etapa; `failed` volta para `options.onFail` até `options.retries` vezes; esgotado, liga o impedimento e pede ao humano `retry`, `skip` ou `cancel`.
 - O `state` passado a `view(state)` é montado pelo host: os dados do último `pass`/`fail` espalhados no objeto, mais `id`, `state` (`pending`, `running`, `waiting_human`, `passed`, `failed`, `skipped`), `attempt`, `passed` e `failed`.
 
-## 7. Regras para quem escreve workflows
+## 7. Biblioteca padrão
+
+- `sdk/steps` resolve para `sdk/steps/index.js`, que reexporta `plan`, `ticket`, `develop`, `checks`, `pr`, `ci`, `review`, `merge` e `release`; os imports relativos (`./context.js`) são resolvidos a partir do arquivo que importa. Os tipos ficam nos `.d.ts` ao lado.
+- As etapas usam só a API pública: o cliente troca qualquer uma criando `<DIR>/sdk/steps/<nome>.js` ou escreve as suas.
+- Argumentos que a biblioteca passa ao host além da tabela da seção 4: `agent` recebe `askTimeout` (ms até uma pergunta sem resposta virar impedimento; sem ele, vale o `config.toml`) e `worktree` (a branch do item; o host cria ou reaproveita o worktree dela).
+
+## 8. Regras para quem escreve workflows
 
 - I/O só pelo `ctx`. Relógio e aleatoriedade só por `ctx.now()` e `ctx.random()`.
 - Concorrência com novos comandos depois de um `await` vai por `ctx.all/race/any` com ramos-função. `Promise.all` direto sobre comandos do `ctx` é seguro só quando as continuações não pedem novos comandos.

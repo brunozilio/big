@@ -104,6 +104,8 @@ class Runtime {
     this.cancelled = new Set();
     this.dropped = new Set();
     this.attempts = new Map();
+    this.outputs = new Map();
+    this.item = Object.freeze({ ...(activation.item || {}) });
     this.clock = Number(activation.start || 0);
     this.random = generator(String(activation.seed === undefined ? "" : activation.seed));
     this.finished = null;
@@ -198,15 +200,31 @@ class Runtime {
 const isCtx = (value) => value instanceof Ctx;
 
 class Ctx {
-  constructor(runtime, branch, step, attempt) {
+  constructor(runtime, branch, step, attempt, from) {
     Object.defineProperty(this, "runtime", { value: runtime, enumerable: false });
     this.branch = branch;
     this.step = step === undefined ? null : step;
     this.attempt = attempt === undefined ? 0 : attempt;
+    this.from = from === undefined ? null : from;
   }
 
-  scoped(branch, step, attempt) {
-    return new Ctx(this.runtime, branch, step === undefined ? this.step : step, attempt === undefined ? this.attempt : attempt);
+  scoped(branch, step, attempt, from) {
+    return new Ctx(
+      this.runtime,
+      branch,
+      step === undefined ? this.step : step,
+      attempt === undefined ? this.attempt : attempt,
+      from === undefined ? this.from : from,
+    );
+  }
+
+  get item() {
+    return this.runtime.item;
+  }
+
+  output(step) {
+    const found = this.runtime.outputs.get(step);
+    return found === undefined ? null : found;
   }
 
   agent(name, input, options) {
@@ -355,10 +373,10 @@ function normalized(value) {
   return outcome("passed", { data: value === undefined ? null : value });
 }
 
-async function runStep(ctx, type, call) {
+async function runStep(ctx, type, call, from) {
   const id = call.id || type.name;
   const attempt = ctx.runtime.attempt(ctx.branch, id);
-  const scope = ctx.scoped(ctx.branch, id, attempt);
+  const scope = ctx.scoped(ctx.branch, id, attempt, from || null);
   ctx.runtime.signal(scope, "step.started", { type: type.name, options: call.options });
   if (call.options && typeof call.options.status === "string") await scope.status(call.options.status);
   let result;
@@ -368,6 +386,10 @@ async function runStep(ctx, type, call) {
     if (error instanceof Cancelled || error instanceof Nondeterminism) throw error;
     const data = error instanceof EffectError ? { error: error.message, kind: error.kind } : { error: String(error && error.message ? error.message : error) };
     result = outcome("failed", { data });
+  }
+  if (result.outcome !== "cancelled") ctx.runtime.outputs.set(id, result.data === undefined ? null : result.data);
+  if (result.outcome === "passed" && call.options && typeof call.options.doneStatus === "string") {
+    await scope.status(call.options.doneStatus);
   }
   ctx.runtime.signal(scope, "step.finished", { outcome: result.outcome, data: result.data === undefined ? null : result.data, to: result.to || null });
   return result;
@@ -417,12 +439,14 @@ async function sequence(ctx, steps) {
   const retries = new Map();
   let at = 0;
   let last = null;
+  let from = null;
   while (at < steps.length) {
     const call = steps[at];
     const type = registry.steps.get(call.step);
     if (!type) throw new TypeError(`etapa desconhecida: ${call.step}`);
-    const result = await runStep(ctx, type, call);
+    const result = await runStep(ctx, type, call, from);
     last = result;
+    from = result.outcome === "passed" ? null : { step: call.id, outcome: result.outcome, data: result.data === undefined ? null : result.data };
     if (result.outcome === "cancelled") return result;
     if (result.outcome === "passed") at += 1;
     else if (result.outcome === "goto") at = indexOf(steps, result.to);
@@ -437,7 +461,10 @@ async function sequence(ctx, steps) {
       const decision = await exhausted(ctx, call, result);
       if (decision.cancel) return decision.cancel;
       retries.set(call.id, 0);
-      if (decision.skip) at += 1;
+      if (decision.skip) {
+        at += 1;
+        from = null;
+      }
     }
   }
   return last;
