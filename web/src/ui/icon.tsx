@@ -34,14 +34,22 @@ const customLogos: Record<string, IconDefLike> = {
   kiro: { w: 24, h: 24, body: '<rect width="24" height="24" rx="6" fill="#7c4dff"/><path d="M7 17.5V10a5 5 0 0 1 10 0v7.5l-1.7-1.3-1.6 1.3-1.7-1.3-1.7 1.3-1.6-1.3z" fill="#fff"/><circle cx="10.3" cy="10.4" r="1.1" fill="#7c4dff"/><circle cx="13.7" cy="10.4" r="1.1" fill="#7c4dff"/>' },
 }
 
-interface IconDefLike {
+export interface IconDefLike {
   body: string
   w: number
   h: number
 }
 
-export function Logo({ name, size = 20, className, tile }: { name: string; size?: number; className?: string; tile?: boolean }) {
-  const def = logoData[name] ?? customLogos[name]
+export function svgDef(markup: string): IconDefLike | null {
+  const open = markup.match(/^\s*<svg\b([^>]*)>/i)
+  const box = open?.[1].match(/viewBox="\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)\s*"/i)
+  const end = markup.lastIndexOf('</svg>')
+  if (!open || !box || end < 0) return null
+  return { w: Number(box[1]), h: Number(box[2]), body: markup.slice(open[0].length + markup.indexOf(open[0]), end) }
+}
+
+export function Logo({ name, size = 20, className, tile, def: given }: { name: string; size?: number; className?: string; tile?: boolean; def?: IconDefLike | null }) {
+  const def = given ?? logoData[name] ?? customLogos[name]
   const svg = def ? (
     <svg aria-label={name} fill="currentColor" className="text-fg" width={tile ? size * 0.62 : size} height={tile ? size * 0.62 : size} viewBox={`0 0 ${def.w} ${def.h}`} preserveAspectRatio="xMidYMid meet" dangerouslySetInnerHTML={{ __html: def.body }} />
   ) : (

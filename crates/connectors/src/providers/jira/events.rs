@@ -3,14 +3,15 @@ use domain::connection::Capability;
 use jiff::{SignedDuration, Timestamp};
 use serde_json::{Value, json};
 
-use super::adf::adf_to_markdown;
-use super::{Api, jql_key};
+use super::tracker::markdown;
+use super::{Api, jql_key, listed};
 use crate::contracts;
 use crate::error::ActionError;
-use crate::http::{Http, Method};
+use crate::http::Http;
 use crate::provider::{Credentials, EventBatch, EventSource, ExternalEvent, text_of, timestamp};
 
 const PAGES: usize = 10;
+const DETAIL: [&str; 5] = ["summary", "status", "created", "updated", "comment"];
 const MARGIN: SignedDuration = SignedDuration::from_hours(15);
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -54,7 +55,7 @@ impl Collector<'_> {
             let data = json!({
                 "id": text_of(comment, "/id"),
                 "author": text_of(comment, "/author/displayName"),
-                "body": adf_to_markdown(&comment["body"]),
+                "body": markdown(&comment["body"]),
             });
             let id = format!("jira:{key}:comment:{}", text_of(comment, "/id"));
             self.push(id, "tracker.comment.added", &key, data, &text_of(comment, "/created"));
@@ -99,22 +100,21 @@ impl EventSource for JiraEvents {
         };
         let project =
             creds.setting("project").ok_or_else(|| ActionError::permanent("the connection has no project to watch"))?;
-        let api = Api::new(http, creds)?;
+        let api = Api::new(http, creds).await?;
         let jql = events_jql(project, since)?;
         let mut collector = Collector { creds, since, events: Vec::new() };
         let mut newest = since;
         let mut token: Option<String> = None;
         for _ in 0..PAGES {
-            let body = json!({
-                "jql": jql,
-                "fields": ["summary", "status", "created", "updated", "comment"],
-                "expand": "changelog",
-                "maxResults": 100,
-                "nextPageToken": token,
-            });
-            let page = api.send(Method::Post, "/search/jql", &body).await?;
-            let issues = page["issues"].as_array().map(Vec::as_slice).unwrap_or_default();
-            issues.iter().for_each(|issue| collector.issue(issue));
+            let page = api.search(&jql, &["updated"], token.as_deref()).await?;
+            let issues = listed(&page, "issues");
+            for found in issues {
+                let arguments = json!({
+                    "issueIdOrKey": text_of(found, "/key"), "fields": DETAIL, "expand": "changelog",
+                    "responseContentFormat": "markdown",
+                });
+                collector.issue(&api.tool("getJiraIssue", arguments).await?);
+            }
             newest = latest(issues, newest);
             token = page["nextPageToken"].as_str().map(str::to_owned).filter(|_| page["isLast"] != json!(true));
             if token.is_none() {

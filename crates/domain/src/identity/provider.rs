@@ -28,6 +28,10 @@ pub fn app_name(executable: &str) -> String {
 pub struct ProviderSummary {
     pub provider: ModelProvider,
     pub name: String,
+    #[serde(default)]
+    pub label: String,
+    #[serde(default)]
+    pub logo: String,
     pub access: Access,
     pub account: Option<ProviderAccount>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -40,6 +44,8 @@ pub struct ProviderSummary {
 pub struct ProviderInfo {
     pub provider: ModelProvider,
     pub name: String,
+    pub label: String,
+    pub logo: String,
     pub access: Access,
 }
 

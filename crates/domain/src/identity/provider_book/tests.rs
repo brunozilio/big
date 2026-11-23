@@ -84,7 +84,13 @@ fn summaries_list_every_provider_with_its_active_account_and_all_of_them() {
     let (one, two) = (ModelProvider::new("one"), ModelProvider::new("two"));
     book.connect(two, account("…ff00", ""));
     book.connect(two, account("…ee11", "e"));
-    let info = |provider, name: &str| ProviderInfo { provider, name: name.into(), access: Access::Key };
+    let info = |provider, name: &str| ProviderInfo {
+        provider,
+        name: name.into(),
+        label: name.into(),
+        logo: String::new(),
+        access: Access::Key,
+    };
     let summaries = book.summaries([info(one, "One"), info(two, "Two")]);
     assert_eq!(summaries.iter().map(|s| s.provider).collect::<Vec<_>>(), [one, two]);
     assert_eq!((summaries[0].account.as_ref(), summaries[0].accounts.len()), (None, 0));
@@ -103,6 +109,12 @@ fn each_provider_keeps_its_own_balance_and_where_the_account_in_use_sits() {
     let back: ProviderBook = serde_json::from_str(&serde_json::to_string(&book).expect("json")).expect("parse");
     assert_eq!(back.balance(ACME), Balance::RoundRobin);
     assert_eq!(back.balance(ModelProvider::new("other")), Balance::Off);
-    let info = ProviderInfo { provider: ACME, name: "Acme".into(), access: Access::Key };
+    let info = ProviderInfo {
+        provider: ACME,
+        name: "Acme".into(),
+        label: "Acme".into(),
+        logo: String::new(),
+        access: Access::Key,
+    };
     assert_eq!(book.summaries([info])[0].balance, Balance::RoundRobin);
 }

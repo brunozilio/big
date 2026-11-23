@@ -54,27 +54,50 @@ async fn a_refused_sso_token_is_an_auth_error() {
 }
 
 #[test]
-fn the_sso_flow_registers_against_the_regional_oidc() {
-    let AuthSpec::Sso(spec) = Aws.descriptor().auth else { panic!("not sso") };
-    assert_eq!(
-        spec.registration_endpoint,
-        format!("https://oidc.{}.amazonaws.com/client/register", brand::connectors::AWS_SSO_REGION)
-    );
+fn the_console_sign_in_is_the_default_and_the_company_sso_the_alternative() {
+    let AuthSpec::Loopback(_) = Aws.descriptor().auth else { panic!("not loopback") };
+    let Some(alternative) = Aws.alternative() else { panic!("no alternative") };
+    let AuthSpec::Sso(spec) = alternative.auth else { panic!("not sso") };
+    assert_eq!(alternative.label, "Usar SSO da empresa");
+    let spec = spec.in_region("eu-west-1");
+    assert_eq!(spec.registration_endpoint, "https://oidc.eu-west-1.amazonaws.com/client/register");
+    assert_eq!(spec.device.token_endpoint, "https://oidc.eu-west-1.amazonaws.com/token");
+    assert_eq!(sso_spec().region, brand::connectors::AWS_REGION);
     assert_eq!(spec.client_name, brand::NAME);
     assert_eq!(spec.scopes, vec![SCOPE.to_owned()]);
 }
 
+fn console() -> Credentials {
+    let keys = r#"{"accessKeyId":"ASIA1","secretAccessKey":"sk","sessionToken":"st","accountId":"123456789012","expiresAt":"2100-01-01T00:00:00Z"}"#;
+    Credentials::new(&ConnectionId::from("aws2"), keys, json!({ "region": "us-east-1" }))
+}
+
+const CALLER: &str = "<GetCallerIdentityResponse><GetCallerIdentityResult><Arn>arn:aws:iam::123456789012:user/ana</Arn><UserId>AIDA</UserId><Account>123456789012</Account></GetCallerIdentityResult></GetCallerIdentityResponse>";
+
+#[tokio::test]
+async fn console_credentials_report_their_identity_through_sts() {
+    let http = FakeHttp::new().always(Method::Post, "sts.us-east-1.amazonaws.com", 200, CALLER);
+    let answer = Aws.call(&http, &console(), cloud::IDENTITY, &json!({}), "").await;
+    let Ok(answer) = answer else { panic!("{answer:?}") };
+    assert_eq!(answer["account"], "123456789012");
+    assert_eq!(answer["arn"], "arn:aws:iam::123456789012:user/ana");
+    assert_eq!(answer["access_key_id"], "ASIA1");
+    assert_eq!(answer["expires_at"], "2100-01-01T00:00:00Z");
+    assert!(http.sent()[0].header_value("authorization").is_some_and(|a| a.contains("Credential=ASIA1/")));
+    let roles = Aws.call(&http, &console(), cloud::ACCOUNTS_AND_ROLES, &json!({}), "").await;
+    assert_eq!(roles.map(|r| r["accounts"][0]["roles"].clone()), Ok(json!([])));
+    let options = Aws.accounts(&http, &console()).await;
+    assert_eq!(options.map(|o| o[0].label.clone()), Ok("ana · 1234-5678-9012".to_owned()));
+}
+
 #[tokio::test]
 async fn the_accounts_to_choose_are_the_portal_accounts() {
-    let http = FakeHttp::new().once(
-        Method::Get,
-        "/assignment/accounts",
-        200,
-        r#"{"accountList":[{"accountId":"9","accountName":"lab"}]}"#,
-    );
+    let http = FakeHttp::new()
+        .once(Method::Get, "/assignment/accounts", 200, r#"{"accountList":[{"accountId":"9","accountName":"lab"}]}"#)
+        .once(Method::Get, "/assignment/roles", 200, r#"{"roleList":[{"roleName":"Admin"}]}"#);
     let options = Aws.accounts(&http, &creds()).await;
     assert_eq!(
-        options.map(|o| (o[0].label.clone(), o[0].settings["account"].clone())),
-        Ok(("lab (9)".to_owned(), json!("9")))
+        options.map(|o| (o[0].label.clone(), o[0].settings["role"].clone())),
+        Ok(("lab · 9".to_owned(), json!("Admin")))
     );
 }

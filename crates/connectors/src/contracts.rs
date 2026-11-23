@@ -196,11 +196,17 @@ pub fn pipelines() -> Vec<ActionSpec> {
 
 pub fn cloud() -> Vec<ActionSpec> {
     let credentials = object(
-        &[("account", "string"), ("role", "string"), ("access_key_id", "string"), ("secret_access_key", "string")],
-        &[("session_token", "string"), ("expires_at", "string"), ("region", "string")],
+        &[("account", "string"), ("access_key_id", "string"), ("secret_access_key", "string")],
+        &[
+            ("role", "string"),
+            ("arn", "string"),
+            ("session_token", "string"),
+            ("expires_at", "string"),
+            ("region", "string"),
+        ],
     );
     vec![
-        ActionSpec::read(cloud::IDENTITY, object(&[("account", "string"), ("role", "string")], &[]), credentials),
+        ActionSpec::read(cloud::IDENTITY, object(&[], &[("account", "string"), ("role", "string")]), credentials),
         ActionSpec::read(cloud::ACCOUNTS_AND_ROLES, json!({ "type": "object", "properties": {} }), object(&[("accounts", "array")], &[])),
     ]
 }

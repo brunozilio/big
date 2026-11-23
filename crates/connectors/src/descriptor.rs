@@ -2,7 +2,7 @@ use domain::connection::{Capability, ProviderKey};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
 
-use crate::oauth::{DeviceApp, OAuthApp, SsoSpec};
+use crate::oauth::{DeviceApp, Loopback, OAuthApp, SsoSpec};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -54,6 +54,7 @@ pub enum AuthSpec {
     Redirect(OAuthApp),
     Device(DeviceApp),
     Sso(SsoSpec),
+    Loopback(Loopback),
 }
 
 impl AuthSpec {
@@ -62,8 +63,27 @@ impl AuthSpec {
             AuthSpec::Redirect(_) => "redirect",
             AuthSpec::Device(_) => "device",
             AuthSpec::Sso(_) => "sso",
+            AuthSpec::Loopback(_) => "loopback",
         }
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+pub struct Presentation {
+    pub description: String,
+    pub group: String,
+    pub button: String,
+    pub site: String,
+    pub choose_title: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AlternateAuth {
+    pub key: String,
+    pub label: String,
+    pub button: String,
+    pub site: String,
+    pub auth: AuthSpec,
 }
 
 #[derive(Debug, Clone, PartialEq)]

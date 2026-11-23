@@ -1,5 +1,8 @@
-pub fn property_key() -> String {
-    format!("{}.idempotency", brand::COMMAND)
+pub fn label(key: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(key.as_bytes());
+    let hex: String = digest.iter().take(6).map(|byte| format!("{byte:02x}")).collect();
+    format!("{}-{hex}", brand::COMMAND)
 }
 
 pub fn marker(key: &str) -> String {
@@ -36,7 +39,9 @@ mod tests {
 
     #[test]
     fn keys_and_branches_carry_the_product_prefix() {
-        assert!(property_key().starts_with(brand::COMMAND));
+        assert_eq!(label("k1"), label("k1"));
+        assert_ne!(label("k1"), label("k2"));
+        assert!(label("k1").starts_with(&format!("{}-", brand::COMMAND)) && !label("k1").contains(' '));
         assert_eq!(branch("x"), format!("{}/x", brand::COMMAND));
         assert_eq!(branch(&branch("x")), branch("x"));
     }

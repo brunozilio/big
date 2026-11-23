@@ -6,9 +6,11 @@ use domain::connection::ConnectionId;
 
 use super::Grant;
 use crate::clock::Clock;
+use crate::descriptor::AlternateAuth;
 use crate::descriptor::AuthSpec;
 use crate::error::{ActionError, ErrorClass, RECONNECT};
 use crate::http::Http;
+use crate::provider::auth_for;
 
 pub const REFRESH_WINDOW_SECONDS: i64 = 300;
 
@@ -77,17 +79,36 @@ impl TokenKeeper {
     }
 
     pub async fn access_token(&self, connection: &ConnectionId, auth: &AuthSpec) -> Result<String, ActionError> {
+        self.access_token_of(connection, auth, None).await
+    }
+
+    pub async fn access_token_of(
+        &self,
+        connection: &ConnectionId,
+        auth: &AuthSpec,
+        alternative: Option<&AlternateAuth>,
+    ) -> Result<String, ActionError> {
         let grant = self.store.load(connection).await?.ok_or_else(|| reconnect("the connection has no token"))?;
         if !grant.stale(self.clock.now()) {
             return Ok(grant.access_token);
         }
-        self.refreshed(connection, auth, &grant.access_token).await
+        self.refreshed_of(connection, auth, alternative, &grant.access_token).await
     }
 
     pub async fn refreshed(
         &self,
         connection: &ConnectionId,
         auth: &AuthSpec,
+        stale: &str,
+    ) -> Result<String, ActionError> {
+        self.refreshed_of(connection, auth, None, stale).await
+    }
+
+    pub async fn refreshed_of(
+        &self,
+        connection: &ConnectionId,
+        primary: &AuthSpec,
+        alternative: Option<&AlternateAuth>,
         stale: &str,
     ) -> Result<String, ActionError> {
         let lock = {
@@ -102,7 +123,8 @@ impl TokenKeeper {
         }
         let refresh_token =
             grant.refresh_token.clone().ok_or_else(|| reconnect("the token expired and cannot be renewed"))?;
-        let mut fresh = match self.exchange(auth, &grant, &refresh_token, now).await {
+        let auth = auth_for(primary, alternative, grant.method.as_deref());
+        let mut fresh = match self.exchange(&auth, &grant, &refresh_token, now).await {
             Ok(fresh) => fresh,
             Err(error) if matches!(error.class, ErrorClass::Auth | ErrorClass::Permanent) => {
                 return Err(reconnect(&error.message));
@@ -110,6 +132,10 @@ impl TokenKeeper {
             Err(error) => return Err(error),
         };
         fresh.client = fresh.client.or(grant.client);
+        fresh.method = fresh.method.or(grant.method);
+        if fresh.extra.is_null() {
+            fresh.extra = grant.extra;
+        }
         self.store.save(connection, &fresh).await?;
         Ok(fresh.access_token)
     }
@@ -127,8 +153,10 @@ impl TokenKeeper {
             AuthSpec::Device(app) => app.refresh(http, refresh_token, now).await,
             AuthSpec::Sso(spec) => {
                 let client = grant.client.as_ref().ok_or_else(|| reconnect("the registered client is missing"))?;
-                spec.device_for(client, "").refresh(http, refresh_token, now).await
+                let region = grant.extra["region"].as_str().unwrap_or_default();
+                spec.in_region(region).device_for(client, "").refresh(http, refresh_token, now).await
             }
+            AuthSpec::Loopback(sign_in) => sign_in.0.refresh(http, grant, now).await,
         }
     }
 }

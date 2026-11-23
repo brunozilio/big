@@ -77,6 +77,8 @@ pub fn infos() -> Vec<ProviderInfo> {
         .map(|provider| ProviderInfo {
             provider: id(provider),
             name: provider.name().to_owned(),
+            label: provider.label().to_owned(),
+            logo: provider.logo().to_owned(),
             access: provider.access(),
         })
         .collect()

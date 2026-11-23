@@ -2,14 +2,17 @@ import type { Agent, Model, Person, Provider } from '../contract'
 import type { ConnectionState, Need } from './sim'
 
 export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]; choose?: { title: string; options: { id: string; label: string; detail: string }[] } })[] = [
-  { key: 'github', name: 'GitHub', group: 'Código', description: 'Sua conta GitHub', logo: 'github', signIn: 'device', fields: [], multiple: true, capabilities: ['code'], accounts: ['acme · 1 repositório'], choose: { title: 'Organização', options: [{ id: 'acme', label: 'acme', detail: 'acme/checkout, acme/web, acme/infra' }] } },
-  { key: 'jira', name: 'Jira', group: 'Tarefas', description: 'Sua conta Atlassian', logo: 'jira', signIn: 'oauth', fields: [], multiple: true, capabilities: ['tracker'], accounts: ['acme.atlassian.net'], choose: { title: 'Site do Jira', options: [{ id: 'acme', label: 'acme.atlassian.net', detail: 'Projetos APP, OPS' }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: 'Projeto LAB' }] } },
+  { key: 'github', name: 'GitHub', group: 'Código', description: 'Sua conta GitHub', logo: 'github', button: 'Entrar com GitHub', site: 'do GitHub', signIn: 'device', fields: [], multiple: true, capabilities: ['code'], accounts: ['acme · 1 repositório'], choose: { title: 'Organização', options: [{ id: 'acme', label: 'acme', detail: 'acme/checkout, acme/web, acme/infra' }] } },
+  { key: 'jira', name: 'Jira', group: 'Tarefas', description: 'Sua conta Atlassian', logo: 'jira', button: 'Continuar na Atlassian', site: 'da Atlassian', signIn: 'oauth', fields: [], multiple: true, capabilities: ['tracker'], accounts: ['acme.atlassian.net'], choose: { title: 'Site do Jira', options: [{ id: 'acme', label: 'acme.atlassian.net', detail: 'Projetos APP, OPS' }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: 'Projeto LAB' }] } },
   {
-    key: 'aws', name: 'AWS', group: 'Nuvem', description: 'Sua conta AWS', logo: 'aws', signIn: 'sso', multiple: true, capabilities: ['cloud'], accounts: ['papel deploy · us-east-1'],
-    fields: [
-      { name: 'startUrl', label: 'Start URL do IAM Identity Center', kind: 'text', value: 'https://acme.awsapps.com/start', mono: true },
-      { name: 'region', label: 'Região', kind: 'text', value: 'us-east-1', mono: true },
-    ],
+    key: 'aws', name: 'AWS', group: 'Nuvem', description: 'Sua conta AWS', logo: 'aws', button: 'Entrar com AWS', site: 'da AWS', signIn: 'oauth', fields: [], multiple: true, capabilities: ['cloud'], accounts: ['papel deploy · us-east-1'],
+    alternative: {
+      key: 'sso', label: 'Usar SSO da empresa', button: 'Continuar', site: 'do AWS IAM Identity Center', signIn: 'sso',
+      fields: [
+        { name: 'start_url', label: 'Start URL do IAM Identity Center', kind: 'text', value: 'https://acme.awsapps.com/start', mono: true },
+        { name: 'region', label: 'Região', kind: 'text', value: 'us-east-1', mono: true },
+      ],
+    },
     choose: { title: 'Conta e papel', options: [{ id: 'prod', label: 'acme-prod · 1234-5678-9012', detail: 'DeployRole' }, { id: 'stg', label: 'acme-staging · 2109-8765-4321', detail: 'DeployRole' }] },
   },
   { key: 'claude', name: 'Claude', group: 'Provedores de IA', description: 'Sua conta Claude', logo: 'claude', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Claude Team · ti@acme.com.br'] },

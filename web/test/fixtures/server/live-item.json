@@ -26,7 +26,7 @@
         "icon": "check",
         "id": "approve",
         "label": "Aprovação",
-        "logo": "data:image/svg+xml;base64,PHN2Zy8+",
+        "logo": "<svg/>",
         "seconds": 0,
         "state": "pending"
       }

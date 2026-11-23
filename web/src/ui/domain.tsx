@@ -4,7 +4,7 @@ import type { Person } from '@/api/contract'
 import { AgentAvatar } from './agentAvatar'
 import { cn } from './cn'
 import { Avatar } from './display'
-import { Logo } from './icon'
+import { Logo, svgDef } from './icon'
 
 export function ProductMark({ size = 22, className }: { size?: number; className?: string }) {
   const branding = useStore((s) => s.branding)
@@ -70,6 +70,7 @@ export function ProviderLogo({ logo, name, size = 20, className, tile }: { logo:
   if (isImageSource(logo)) {
     return <img src={logo} alt={name ?? ''} className={cn('shrink-0 object-contain', tile && 'rounded-[28%] bg-surface p-[18%] shadow-card', className)} style={{ width: size, height: size }} />
   }
+  if (logo.trimStart().startsWith('<svg')) return <Logo name={name ?? ''} def={svgDef(logo)} size={size} className={className} tile={tile} />
   return <Logo name={logo} size={size} className={className} tile={tile} />
 }
 

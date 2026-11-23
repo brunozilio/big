@@ -29,6 +29,7 @@ pub struct Authorization {
     pub state: String,
     pub verifier: String,
     pub redirect_uri: String,
+    pub carried: Value,
 }
 
 impl OAuthApp {
@@ -61,7 +62,7 @@ impl OAuthApp {
                 .append_pair("code_challenge", &challenge(&verifier))
                 .append_pair("code_challenge_method", "S256");
         }
-        Ok(Authorization { url: url.into(), state, verifier, redirect_uri })
+        Ok(Authorization { url: url.into(), state, verifier, redirect_uri, carried: Value::Null })
     }
 
     pub async fn exchange(

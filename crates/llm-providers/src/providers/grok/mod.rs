@@ -22,6 +22,12 @@ impl Shape for Provider {
     fn name(&self) -> &'static str {
         "Grok Subscription"
     }
+    fn label(&self) -> &'static str {
+        "Grok"
+    }
+    fn logo(&self) -> &'static str {
+        include_str!("logo.svg")
+    }
     fn vendor(&self) -> &'static str {
         "xai"
     }
@@ -29,7 +35,7 @@ impl Shape for Provider {
         Access::Code
     }
     fn rank(&self) -> u8 {
-        70
+        60
     }
     fn slot(&self) -> u128 {
         0x7072_6f76_6964_6572_0000_0000_0000_0008

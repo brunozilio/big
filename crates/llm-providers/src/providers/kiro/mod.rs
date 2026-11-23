@@ -26,6 +26,12 @@ impl Shape for Provider {
     fn name(&self) -> &'static str {
         "Kiro Subscription"
     }
+    fn label(&self) -> &'static str {
+        "Kiro"
+    }
+    fn logo(&self) -> &'static str {
+        include_str!("logo.svg")
+    }
     fn vendor(&self) -> &'static str {
         "kiro"
     }
@@ -36,7 +42,7 @@ impl Shape for Provider {
         Access::Browser
     }
     fn rank(&self) -> u8 {
-        60
+        70
     }
     fn slot(&self) -> u128 {
         0x7072_6f76_6964_6572_0000_0000_0000_0007

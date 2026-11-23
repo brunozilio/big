@@ -115,6 +115,8 @@ impl ProviderBook {
                 balance: self.balance(info.provider),
                 provider: info.provider,
                 name: info.name,
+                label: info.label,
+                logo: info.logo,
                 access: info.access,
             })
             .collect()

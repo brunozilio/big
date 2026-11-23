@@ -63,7 +63,7 @@ async fn an_item_runs_waits_for_the_human_and_is_delivered() {
     let waiting = world.until("waiting", |item| item["group"] == "you").await;
     assert_eq!(waiting["attention"]["action"]["step"], "approve");
     assert_eq!(waiting["steps"][1]["state"], "waiting_human");
-    assert_eq!(waiting["steps"][1]["logo"], "data:image/svg+xml;base64,PHN2Zy8+");
+    assert_eq!(waiting["steps"][1]["logo"], "<svg/>");
     assert_ne!(waiting["updatedAt"], item["updatedAt"]);
     fixture("item", &waiting);
     fixture("items", &world.get("/api/items").await);
