@@ -133,6 +133,17 @@ async fn without_a_project_a_case_is_blocked_before_any_write() {
 }
 
 #[tokio::test]
+async fn without_a_chosen_project_the_case_goes_to_the_project_of_its_issue() {
+    let http = ZephyrMcp::new()
+        .answer("zephyr_get_issue_link_test_cases", json!({ "result": [] }))
+        .answer("zephyr_create_test_case", json!({ "key": "DEMO-T1" }));
+    let args = json!({ "title": "T", "issue": "DEMO-17" });
+    let made = Zephyr.call(&http, &creds(json!({})), actions::CREATE_CASE, &args, "k").await.expect("made");
+    assert_eq!(made["ref"], "DEMO-T1");
+    assert_eq!(http.calls()[1].1["projectKey"], "DEMO");
+}
+
+#[tokio::test]
 async fn projects_are_paged_filtered_and_the_only_one_becomes_the_account_project() {
     let first: Vec<Value> = (0..50).map(|n| json!({ "id": n, "key": format!("P{n}") })).collect();
     let http = ZephyrMcp::new()

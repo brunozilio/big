@@ -38,6 +38,8 @@ pub struct Application {
     #[serde(default)]
     pub tracker: Option<TrackerChoice>,
     #[serde(default)]
+    pub tests: Option<TrackerChoice>,
+    #[serde(default)]
     pub repositories: Vec<Repository>,
     #[serde(rename = "skipDependabot", default = "on")]
     pub skip_dependabot: bool,

@@ -39,7 +39,7 @@ export interface Tests {
   };
   cases: { args: { issue: IssueRef }; result: TestCase[] };
   create_cycle: {
-    args: { title: string; project?: string; description?: string; issue_id?: string | number };
+    args: { title: string; project?: string; description?: string; issue?: string; issue_id?: string | number };
     result: { ref: TestCycleRef; url: string };
   };
   record: {

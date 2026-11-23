@@ -121,6 +121,7 @@ export function mockApi(options: MockOptions = {}): Api {
         case 'tracker.search':
           return searchIssues(a.query ?? '', a.project) as CallResult<A>
         case 'tracker.projects':
+        case 'tests.projects':
           return trackerProjects(a.query ?? '') as CallResult<A>
         case 'code.repos':
           return CODE_REPOS.filter((r) => r.ref.includes((a.query ?? '').toLowerCase())) as CallResult<A>

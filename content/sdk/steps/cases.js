@@ -114,17 +114,27 @@ async function judged(ctx, opts, draft) {
   }
 }
 
+function chosen(ctx, field) {
+  return object(object(ctx.item.application)[field]);
+}
+
+function testsOptions(ctx, opts) {
+  const tests = chosen(ctx, "tests");
+  return { ...opts, project: opts.project ?? tests.project, connection: opts.connection ?? tests.connection };
+}
+
 async function trackerId(ctx, opts, issue) {
   if (!issue || opts.link === false) return undefined;
   try {
-    const found = await ctx.call("tracker", "issue", { issue }, effects({ ...opts, connection: opts.tracker }));
+    const found = await ctx.call("tracker", "issue", { issue }, effects({ ...opts, connection: opts.tracker ?? chosen(ctx, "tracker").connection }));
     return object(found).id ?? undefined;
   } catch {
     return undefined;
   }
 }
 
-async function created(ctx, opts, cases, issue) {
+async function created(ctx, given, cases, issue) {
+  const opts = testsOptions(ctx, given);
   const issueId = await trackerId(ctx, opts, issue);
   const labels = Array.isArray(opts.labels) ? opts.labels : ["e2e"];
   const made = [];
@@ -144,7 +154,7 @@ async function created(ctx, opts, cases, issue) {
     made.push({ ...entry, ref: found.ref, url: found.url ?? null });
   }
   const title = issue ? `${issue} · ${planOf(ctx, opts).title}` : planOf(ctx, opts).title;
-  const cycle = await ctx.call("tests", "create_cycle", defined({ project: opts.project, title, issue_id: issueId }), effects(opts));
+  const cycle = await ctx.call("tests", "create_cycle", defined({ project: opts.project, title, issue: issue ?? undefined, issue_id: issueId }), effects(opts));
   return { cases: made, cycle: cycle.ref, cycleUrl: cycle.url ?? null };
 }
 

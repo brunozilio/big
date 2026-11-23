@@ -320,6 +320,7 @@ export interface PipelineRun {
 export type ConnectionCall =
   | { action: 'tracker.search'; args: { query: string; project?: string }; result: IssueSummary[] }
   | { action: 'tracker.projects'; args: { query?: string }; result: TrackerProject[] }
+  | { action: 'tests.projects'; args: { query?: string }; result: TrackerProject[] }
   | { action: 'code.repos'; args: { query?: string }; result: CodeRepo[] }
   | { action: 'tracker.issue'; args: { key: string }; result: IssueData }
   | { action: 'tracker.comment'; args: { key: string; body: string }; result: Comment }
@@ -603,6 +604,7 @@ export interface Application {
   id: string
   name: string
   tracker: TrackerChoice | null
+  tests?: TrackerChoice | null
   repositories: ApplicationRepository[]
   skipDependabot?: boolean
 }

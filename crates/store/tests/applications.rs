@@ -6,6 +6,7 @@ fn application(id: &str, name: &str) -> Application {
         id: id.into(),
         name: name.into(),
         tracker: Some(TrackerChoice { connection: "c-tracker".into(), project: "APP".into() }),
+        tests: Some(TrackerChoice { connection: "c-tests".into(), project: "APP".into() }),
         repositories: vec![
             Repository {
                 id: "r1".into(),

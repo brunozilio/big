@@ -1192,3 +1192,17 @@ export default workflow({
     assert_eq!(result["result"]["outcome"], "skipped", "{result}");
     assert_eq!(step_view("develop", result["result"]["data"].clone())[0]["type"], "markdown");
 }
+
+#[test]
+fn cases_go_to_the_test_project_chosen_in_the_application() {
+    let mut fake = Fake::default();
+    let mut chosen = item(json!("T-1"));
+    chosen["application"] = json!({ "tests": { "connection": "z1", "project": "QA" }, "repositories": [] });
+    let (_, asked) = drive(&source("workflows/casos.ts", CASES_THEN_CHECKS), &chosen, |command| fake.reply(command));
+    let created = &calls(&asked, "create_case")[0];
+    assert_eq!(created["args"]["args"]["project"], "QA");
+    assert_eq!(created["connection"], "z1");
+    let cycle = &calls(&asked, "create_cycle")[0];
+    assert_eq!(cycle["args"]["args"]["project"], "QA");
+    assert_eq!(cycle["args"]["args"]["issue"], "T-1");
+}

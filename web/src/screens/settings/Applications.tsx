@@ -50,6 +50,7 @@ export function useListed<T>(sources: Source[], load: (connection: string) => Pr
 }
 
 export const loadProjects = (connection: string) => api().call(connection, 'tracker.projects', {})
+export const loadTestProjects = (connection: string) => api().call(connection, 'tests.projects', {})
 export const loadRepos = (connection: string) => api().call(connection, 'code.repos', {})
 
 export function folderName(directory: string): string {
@@ -132,6 +133,8 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
   const trackers = useSources('tracker')
   const coders = useSources('code')
   const projects = useListed<TrackerProject>(trackers, loadProjects, open)
+  const testers = useSources('tests')
+  const testProjects = useListed<TrackerProject>(testers, loadTestProjects, open)
   const repos = useListed<CodeRepo>(coders, loadRepos, open)
   useEffect(() => {
     if (open) {
@@ -145,6 +148,12 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
   ]
   const space = draft.tracker ? choiceKey(draft.tracker.connection, draft.tracker.project) : NONE
   if (draft.tracker && !spaces.some((o) => o.value === space)) spaces.push({ value: space, label: draft.tracker.project })
+  const suites = [
+    { value: NONE, label: 'Nenhum' },
+    ...testers.flatMap((s) => (testProjects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: `${p.name} · ${p.key}`, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
+  ]
+  const suite = draft.tests ? choiceKey(draft.tests.connection, draft.tests.project) : NONE
+  if (draft.tests && !suites.some((o) => o.value === suite)) suites.push({ value: suite, label: draft.tests.project })
   const change = (index: number, next: ApplicationRepository) => setDraft((d) => ({ ...d, repositories: d.repositories.map((r, i) => (i === index ? next : r)) }))
   const chosen = (listing: DirListing) => {
     if (folderFor === null) return
@@ -192,6 +201,14 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
                 setDraft((d) => ({ ...d, tracker: picked ? { connection: picked.connection, project: picked.key } : null }))
               }} />
             </Field>
+            {testers.length > 0 && (
+              <Field label="Casos de teste">
+                <Select label="Casos de teste" className="w-full" value={suite} options={suites} onValueChange={(v) => {
+                  const picked = fromKey(v)
+                  setDraft((d) => ({ ...d, tests: picked ? { connection: picked.connection, project: picked.key } : null }))
+                }} />
+              </Field>
+            )}
           </div>
           <div className="flex items-start gap-2.5">
             <span className="mt-0.5 flex"><Checkbox label="Ignorar pipelines do dependabot[bot]" checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} /></span>

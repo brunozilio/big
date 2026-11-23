@@ -268,7 +268,7 @@ pub fn tests() -> Vec<ActionSpec> {
     ));
     let new_cycle = with_issue_id(object(
         &[("title", "string")],
-        &[("project", "string"), ("description", "string"), ("issue_id", "string")],
+        &[("project", "string"), ("description", "string"), ("issue", "string"), ("issue_id", "string")],
     ));
     let record = object(
         &[("case", "string"), ("cycle", "string"), ("status", "string")],

@@ -1,4 +1,4 @@
-use connectors::contracts::{code, pipelines, tracker};
+use connectors::contracts::{code, pipelines, tests as suite, tracker};
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use serde_json::{Value, json};
 use store::ConnectionRecord;
@@ -76,7 +76,8 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
     let caller = Caller { shared, record };
     match action {
         "tracker.search" => search(&caller, args).await,
-        "tracker.projects" => projects(&caller, args).await,
+        "tracker.projects" => projects(&caller, tracker::PROJECTS, args).await,
+        "tests.projects" => projects(&caller, suite::PROJECTS, args).await,
         "tracker.issue" => Ok(issue(&caller.call(tracker::ISSUE, json!({ "issue": arg(args, "key")? })).await?)),
         "tracker.comment" => {
             let body = arg(args, "body")?;
@@ -105,12 +106,12 @@ async fn search(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
     Ok(json!(listed))
 }
 
-async fn projects(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
+async fn projects(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<Value> {
     let mut wanted = json!({});
     if let Some(query) = args["query"].as_str().filter(|query| !query.is_empty()) {
         wanted["query"] = json!(query);
     }
-    let found = caller.call(tracker::PROJECTS, wanted).await?;
+    let found = caller.call(action, wanted).await?;
     let listed: Vec<Value> = items(&found)
         .iter()
         .map(|project| {

@@ -52,7 +52,10 @@ impl<'a> Api<'a> {
     }
 
     fn project<'p>(&'p self, args: Args<'p>) -> Result<&'p str, ActionError> {
-        let project = args.optional_text("project").or(self.project.as_deref());
+        let from_issue =
+            args.optional_text("issue").and_then(|issue| issue.rsplit_once('-')).map(|(project, _)| project);
+        let project =
+            args.optional_text("project").or(self.project.as_deref()).or(from_issue.filter(|key| !key.is_empty()));
         valid_key(project.ok_or_else(|| ActionError::blocked(NO_PROJECT))?)
     }
 }
