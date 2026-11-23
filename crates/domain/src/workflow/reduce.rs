@@ -3,7 +3,9 @@ use std::collections::BTreeSet;
 use serde_json::Value;
 
 use super::event::WorkflowEvent;
-use super::item::{ChildLink, EffectEntry, Ending, HumanAnswer, Impediment, StepRun, StepState, WorkItem};
+use super::item::{
+    ChildLink, EffectEntry, Ending, HumanAnswer, Impediment, Observed, StepRun, StepState, WorkItem,
+};
 use crate::effect::{Effect, EffectOutcome, EffectRequest, IdempotencyKey};
 
 pub fn replay<'a>(events: impl IntoIterator<Item = &'a WorkflowEvent>) -> WorkItem {
@@ -63,6 +65,8 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
         WorkflowEvent::Rewound { to } => rewind(&mut item, to),
         WorkflowEvent::Cancelled { reason } => item.ending = Some(Ending::Cancelled { reason: reason.clone() }),
         WorkflowEvent::Finished { output } => item.ending = Some(Ending::Finished { output: output.clone() }),
+        WorkflowEvent::ExternalObserved(seen) => observe(&mut item, seen),
+        WorkflowEvent::Reconciled { .. } => {}
     }
     item
 }
@@ -116,6 +120,13 @@ fn resume(item: &mut WorkItem, id: &str, branch: Option<&str>) {
         && run.state == StepState::WaitingHuman
     {
         run.state = StepState::Running;
+    }
+}
+
+fn observe(item: &mut WorkItem, seen: &Observed) {
+    let slot = seen.slot();
+    if item.observed.get(&slot).is_none_or(|known| known.at <= seen.at) {
+        item.observed.insert(slot, seen.clone());
     }
 }
 

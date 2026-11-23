@@ -244,3 +244,52 @@ fn replay_is_the_fold_of_reduce() {
     assert_eq!(replay(&events), folded);
     assert_eq!(folded.version, 4);
 }
+
+fn observed(id: &str, subject: &str, to: &str, at: i64) -> WorkflowEvent {
+    WorkflowEvent::ExternalObserved(Observed {
+        id: id.into(),
+        connection: "c1".into(),
+        kind: "tracker.status.changed".into(),
+        subject: subject.into(),
+        data: json!({"to": to}),
+        at,
+    })
+}
+
+#[test]
+fn an_observed_external_event_keeps_the_newest_per_kind_and_subject_even_out_of_order() {
+    let item = replay(&[created(), observed("b", "K-1", "Done", 20), observed("a", "K-1", "Doing", 10)]);
+    assert_eq!(item.observed.len(), 1);
+    assert_eq!(item.latest_observed("K-1").map(|seen| seen.id.as_str()), Some("b"));
+    let item = reduce(item, &observed("c", "K-2", "Todo", 5));
+    assert_eq!(item.observed.len(), 2);
+    assert_eq!(item.latest_observed("K-2").map(|seen| seen.data["to"].clone()), Some(json!("Todo")));
+    assert_eq!(item.version, 4);
+}
+
+#[test]
+fn a_reconciliation_is_logged_without_touching_the_projection() {
+    let before = replay(&[created(), WorkflowEvent::StatusSet("Doing".into())]);
+    let reconciled = WorkflowEvent::Reconciled {
+        field: "status".into(),
+        local: json!("Doing"),
+        remote: json!("Done"),
+        action: "reapplied".into(),
+    };
+    let after = reduce(before.clone(), &reconciled);
+    assert_eq!(after.version, before.version + 1);
+    assert_eq!(WorkItem { version: before.version, ..after }, before);
+    let back: Option<WorkflowEvent> =
+        serde_json::to_value(&reconciled).ok().and_then(|value| serde_json::from_value(value).ok());
+    assert_eq!(back, Some(reconciled));
+}
+
+#[test]
+fn items_saved_before_observations_existed_still_load() {
+    let mut value = serde_json::to_value(replay(&[created()])).unwrap_or_default();
+    if let Some(fields) = value.as_object_mut() {
+        fields.remove("observed");
+    }
+    let item: Option<WorkItem> = serde_json::from_value(value).ok();
+    assert!(item.is_some_and(|item| item.observed.is_empty()));
+}
