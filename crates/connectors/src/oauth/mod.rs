@@ -1,4 +1,6 @@
 mod device;
+mod loopback;
+pub mod mcp;
 mod redirect;
 mod tokens;
 
@@ -14,6 +16,7 @@ use crate::error::ActionError;
 use crate::http::HttpResponse;
 
 pub use device::{DeviceApp, DeviceCode, Dialect, Polled, RegisteredClient, SsoSpec, register_client};
+pub use loopback::{Loopback, LoopbackSignIn};
 pub use redirect::{Authorization, OAuthApp, TokenBody};
 pub use tokens::{MemoryTokenStore, REFRESH_WINDOW_SECONDS, TokenKeeper, TokenStore};
 
@@ -24,6 +27,10 @@ pub struct Grant {
     pub expires_at: Option<Timestamp>,
     pub scope: Option<String>,
     pub client: Option<RegisteredClient>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method: Option<String>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub extra: Value,
 }
 
 impl Grant {
@@ -34,6 +41,8 @@ impl Grant {
             expires_at: None,
             scope: None,
             client: None,
+            method: None,
+            extra: Value::Null,
         }
     }
 
@@ -52,11 +61,11 @@ pub fn challenge(verifier: &str) -> String {
     URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
 }
 
-fn text(answer: &Value, names: &[&str]) -> Option<String> {
+pub(crate) fn text(answer: &Value, names: &[&str]) -> Option<String> {
     names.iter().find_map(|name| answer.get(*name).and_then(Value::as_str)).map(str::to_owned)
 }
 
-fn number(answer: &Value, names: &[&str]) -> Option<i64> {
+pub(crate) fn number(answer: &Value, names: &[&str]) -> Option<i64> {
     names.iter().find_map(|name| answer.get(*name).and_then(Value::as_i64))
 }
 
@@ -70,7 +79,7 @@ fn refused(code: &str, answer: &Value) -> ActionError {
     ActionError::auth(description.map_or_else(|| code.to_owned(), |text| format!("{code}: {text}")))
 }
 
-fn token_error(response: &HttpResponse) -> Option<ActionError> {
+pub(crate) fn token_error(response: &HttpResponse) -> Option<ActionError> {
     let answer = response.value();
     if let Some(code) = error_code(&answer) {
         return Some(refused(&code, &answer));
@@ -78,7 +87,7 @@ fn token_error(response: &HttpResponse) -> Option<ActionError> {
     response.clone().checked().err()
 }
 
-fn granted(answer: &Value, now: Timestamp) -> Result<Grant, ActionError> {
+pub(crate) fn granted(answer: &Value, now: Timestamp) -> Result<Grant, ActionError> {
     let access_token = text(answer, &["access_token", "accessToken"])
         .ok_or_else(|| ActionError::auth("the answer has no access token"))?;
     Ok(Grant {
@@ -87,6 +96,8 @@ fn granted(answer: &Value, now: Timestamp) -> Result<Grant, ActionError> {
         expires_at: number(answer, &["expires_in", "expiresIn"]).map(|seconds| after_seconds(now, seconds)),
         scope: text(answer, &["scope"]),
         client: None,
+        method: None,
+        extra: Value::Null,
     })
 }
 

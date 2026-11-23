@@ -1,14 +1,9 @@
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD;
 use connectors::ProviderDescriptor;
 use serde_json::{Value, json};
 use store::ConnectionRecord;
 
 pub fn logo(svg: &str) -> String {
-    if svg.trim_start().starts_with('<') {
-        return format!("data:image/svg+xml;base64,{}", STANDARD.encode(svg.as_bytes()));
-    }
-    svg.to_owned()
+    svg.trim().to_owned()
 }
 
 pub fn mark(descriptor: &ProviderDescriptor) -> Value {
@@ -51,8 +46,8 @@ mod tests {
     use super::*;
 
     #[test]
-    fn an_svg_becomes_a_data_url_and_a_name_stays_a_name() {
-        assert!(logo("<svg/>").starts_with("data:image/svg+xml;base64,"));
+    fn an_svg_is_sent_as_markup_for_the_page_to_draw_and_a_name_stays_a_name() {
+        assert_eq!(logo(" <svg/>\n"), "<svg/>");
         assert_eq!(logo("claude"), "claude");
         assert_eq!(iso(0), "1970-01-01T00:00:00Z");
     }

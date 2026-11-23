@@ -33,10 +33,12 @@ pub fn provider_json(summary: &ProviderSummary) -> Value {
         domain::provider::Access::Code => "device",
         _ => "browser",
     };
+    let name = if summary.label.is_empty() { summary.name.as_str() } else { summary.label.as_str() };
+    let logo = if summary.logo.is_empty() { summary.provider.id() } else { summary.logo.trim() };
     json!({
-        "key": summary.provider.id(), "name": summary.name, "group": GROUP,
-        "description": format!("Sua conta {}", summary.name), "logo": summary.provider.id(),
-        "signIn": sign_in, "fields": [], "multiple": true,
+        "key": summary.provider.id(), "name": name, "group": GROUP,
+        "description": format!("Sua conta {name}"), "logo": logo, "button": format!("Entrar com {name}"),
+        "site": format!("do {name}"), "signIn": sign_in, "fields": [], "multiple": true, "alternative": null, "ai": true,
     })
 }
 
@@ -51,7 +53,8 @@ pub fn connections_of(summary: &ProviderSummary) -> Vec<Value> {
         .map(|account| {
             let key = if account.id.is_empty() { &account.label } else { &account.id };
             json!({
-                "id": format!("{PREFIX}{provider}:{key}"), "provider": provider, "label": summary.name,
+                "id": format!("{PREFIX}{provider}:{key}"), "provider": provider,
+                "label": if summary.label.is_empty() { &summary.name } else { &summary.label },
                 "account": account.label, "capabilities": ["ai"], "status": "ok",
             })
         })

@@ -23,19 +23,45 @@ fn group(descriptor: &ProviderDescriptor) -> &'static str {
     }
 }
 
-fn provider_json(descriptor: &ProviderDescriptor) -> Value {
-    let (sign_in, fields) = match &descriptor.auth {
-        AuthSpec::Redirect(_) => ("oauth", json!([])),
+fn sign_in_of(auth: &AuthSpec) -> (&'static str, Value) {
+    match auth {
+        AuthSpec::Redirect(_) | AuthSpec::Loopback(_) => ("oauth", json!([])),
         AuthSpec::Device(_) => ("device", json!([])),
         AuthSpec::Sso(spec) => {
-            let field = json!({ "name": spec.start_field, "label": "Start URL", "kind": "text", "mono": true });
-            ("sso", json!([field]))
+            let start = json!({
+                "name": spec.start_field, "label": "Start URL do IAM Identity Center", "kind": "text", "mono": true,
+                "placeholder": "https://empresa.awsapps.com/start",
+            });
+            let region =
+                json!({ "name": "region", "label": "Região", "kind": "text", "mono": true, "value": spec.region });
+            ("sso", json!([start, region]))
         }
-    };
+    }
+}
+
+fn or(text: &str, fallback: String) -> String {
+    if text.is_empty() { fallback } else { text.to_owned() }
+}
+
+fn provider_json(shared: &Shared, descriptor: &ProviderDescriptor) -> Value {
+    let connectors = &shared.backend.connectors;
+    let look = connectors.presentation(&descriptor.key).cloned().unwrap_or_default();
+    let (sign_in, fields) = sign_in_of(&descriptor.auth);
+    let alternative = connectors.alternative(&descriptor.key).ok().flatten().map(|alternative| {
+        let (sign_in, fields) = sign_in_of(&alternative.auth);
+        json!({
+            "key": alternative.key, "label": alternative.label, "button": alternative.button, "site": alternative.site,
+            "signIn": sign_in, "fields": fields,
+        })
+    });
     json!({
-        "key": descriptor.key.as_str(), "name": descriptor.name, "group": group(descriptor),
-        "description": format!("Sua conta {}", descriptor.name), "logo": logo(&descriptor.logo),
-        "signIn": sign_in, "fields": fields, "multiple": true,
+        "key": descriptor.key.as_str(), "name": descriptor.name,
+        "group": or(&look.group, group(descriptor).to_owned()),
+        "description": or(&look.description, format!("Sua conta {}", descriptor.name)),
+        "button": or(&look.button, format!("Entrar com {}", descriptor.name)),
+        "site": or(&look.site, format!("do {}", descriptor.name)),
+        "logo": logo(&descriptor.logo), "signIn": sign_in, "fields": fields, "multiple": true,
+        "alternative": alternative,
     })
 }
 
@@ -58,7 +84,7 @@ fn status(shared: &Shared, record: &ConnectionRecord) -> &'static str {
 pub fn listing(shared: &Shared) -> ApiResult<Value> {
     let descriptors: Vec<ProviderDescriptor> = shared.backend.connectors.descriptors().into_iter().cloned().collect();
     let ai = crate::ai::subscriptions(shared);
-    let mut providers: Vec<Value> = descriptors.iter().map(provider_json).collect();
+    let mut providers: Vec<Value> = descriptors.iter().map(|descriptor| provider_json(shared, descriptor)).collect();
     providers.extend(ai.iter().map(crate::ai::provider_json));
     let records = shared.backend.store.connections()?;
     let mut connections: Vec<Value> =
@@ -91,9 +117,10 @@ pub async fn start(
     Path(provider): Path<String>,
     body: Option<Json<Value>>,
 ) -> ApiResult<Response> {
-    let fields = body.map(|Json(body)| body["fields"].clone()).unwrap_or(Value::Null);
+    let body = body.map(|Json(body)| body).unwrap_or(Value::Null);
+    let fields = body["fields"].clone();
     if is_connector(&ctx, &provider) {
-        return Ok(reply(crate::sign_in::start(&ctx, &provider, &fields).await?));
+        return Ok(reply(crate::sign_in::start(&ctx, &provider, &fields, body["method"].as_str()).await?));
     }
     let shared = Arc::clone(&ctx);
     Ok(reply(blocking(move || crate::ai::start(&shared, &provider)).await?))

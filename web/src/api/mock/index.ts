@@ -15,7 +15,7 @@ export interface MockOptions {
 }
 
 function wireConnections(): Connections {
-  const providers = PROVIDERS.map(({ capabilities: _c, accounts: _a, choose: _h, ...p }) => p)
+  const providers = PROVIDERS.map(({ capabilities, accounts: _a, choose: _h, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
   return { providers, connections: store.connections.map((c) => ({ ...c, status: 'ok' })) }
 }
 
@@ -123,13 +123,13 @@ export function mockApi(options: MockOptions = {}): Api {
       throw new Error(`ação ${action} desconhecida`)
     }, 120)
 
-  const startSignIn = (provider: string): Promise<SignInStart> =>
+  const startSignIn = (provider: string, method?: string): Promise<SignInStart> =>
     wait(() => {
       const p = PROVIDERS.find((x) => x.key === provider)
       if (!p) throw new Error(`provedor ${provider} desconhecido`)
       const flow = `f-${provider}-${Date.now()}`
       flows.set(flow, { provider, polls: 0, chosen: null, started: Date.now() })
-      if (p.signIn === 'device' || p.signIn === 'sso') {
+      if (p.signIn === 'device' || p.signIn === 'sso' || method === 'sso') {
         const url = provider === 'aws' ? 'https://device.sso.us-east-1.amazonaws.com/' : provider === 'grok' ? 'https://accounts.x.ai/device' : 'https://github.com/login/device'
         return { flow, kind: 'device', url, code: provider === 'aws' ? 'KQTX-WMPB' : 'WDJB-MJHT', expiresIn: 900, interval: 1 }
       }
@@ -211,7 +211,7 @@ export function mockApi(options: MockOptions = {}): Api {
     }, 120).then(() => undefined),
     stop: () => wait(() => undefined),
     connections: () => wait(wireConnections),
-    startSignIn: (provider) => startSignIn(provider),
+    startSignIn: (provider, _fields, method) => startSignIn(provider, method),
     pollSignIn,
     disconnect: (id) => wait(() => {
       disconnect(id)

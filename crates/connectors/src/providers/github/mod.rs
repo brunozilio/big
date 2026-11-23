@@ -8,7 +8,7 @@ use domain::connection::{Capability, ProviderKey};
 use serde_json::{Value, json};
 
 use crate::contracts::{self, code as code_actions, pipelines as pipeline_actions};
-use crate::descriptor::{AuthSpec, ProviderDescriptor};
+use crate::descriptor::{AuthSpec, Presentation, ProviderDescriptor};
 use crate::error::ActionError;
 use crate::http::{Http, HttpRequest, HttpResponse, Method, fetch};
 use crate::oauth::{DeviceApp, Dialect};
@@ -18,7 +18,7 @@ pub const KEY: &str = "github";
 pub const API: &str = "https://api.github.com";
 pub const SCOPES: [&str; 3] = ["repo", "read:org", "workflow"];
 const API_VERSION: &str = "2022-11-28";
-const LOGO: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><circle cx="32" cy="32" r="30" fill="#181717"/><path d="M22 47c0-5 1-7 3-9-6-1-10-4-10-11 0-3 1-5 3-7-1-2-1-5 0-7 3 0 5 2 6 3a24 24 0 0 1 16 0c1-1 3-3 6-3 1 2 1 5 0 7 2 2 3 4 3 7 0 7-4 10-10 11 2 2 3 4 3 9z" fill="#fff"/></svg>"##;
+const LOGO: &str = include_str!("logo.svg");
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Github;
@@ -100,6 +100,16 @@ impl Provider for Github {
             capabilities: vec![Capability::from(contracts::CODE), Capability::from(contracts::PIPELINES)],
             auth: AuthSpec::Device(device_app()),
             actions: [contracts::code(), contracts::pipelines()].concat(),
+        }
+    }
+
+    fn presentation(&self) -> Presentation {
+        Presentation {
+            description: "Sua conta GitHub".to_owned(),
+            group: "Código".to_owned(),
+            button: "Entrar com GitHub".to_owned(),
+            site: "do GitHub".to_owned(),
+            choose_title: "Organização".to_owned(),
         }
     }
 

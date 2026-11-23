@@ -333,15 +333,28 @@ export type AskResponse =
 
 export type SignInKind = 'oauth' | 'device' | 'sso' | 'browser'
 
+export interface SignInAlternative {
+  key: string
+  label: string
+  button: string
+  site: string
+  signIn: SignInKind
+  fields: FormField[]
+}
+
 export interface Provider {
   key: string
   name: string
   group: string
   description: string
   logo: string
+  button?: string
+  site?: string
   signIn: SignInKind
   fields: FormField[]
   multiple: boolean
+  alternative?: SignInAlternative | null
+  ai?: boolean
 }
 
 export interface Connection {
@@ -424,7 +437,7 @@ export interface Api {
   respond(session: string, event: string, response: AskResponse): Promise<void>
   stop(session: string): Promise<void>
   connections(): Promise<Connections>
-  startSignIn(provider: string, fields: Record<string, string>): Promise<SignInStart>
+  startSignIn(provider: string, fields: Record<string, string>, method?: string): Promise<SignInStart>
   pollSignIn(request: SignInPollRequest): Promise<SignInPoll>
   disconnect(connection: string): Promise<void>
   models(): Promise<Models>

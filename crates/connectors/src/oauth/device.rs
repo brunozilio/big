@@ -58,10 +58,22 @@ pub struct SsoSpec {
     pub client_name: String,
     pub scopes: Vec<String>,
     pub start_field: String,
+    pub region: String,
     pub device: DeviceApp,
 }
 
 impl SsoSpec {
+    pub fn in_region(&self, region: &str) -> SsoSpec {
+        let region = if region.trim().is_empty() { self.region.as_str() } else { region.trim() };
+        let place = |url: &str| url.replace("{region}", region);
+        let mut spec = self.clone();
+        spec.registration_endpoint = place(&self.registration_endpoint);
+        spec.device.device_endpoint = place(&self.device.device_endpoint);
+        spec.device.token_endpoint = place(&self.device.token_endpoint);
+        spec.region = region.to_owned();
+        spec
+    }
+
     pub fn device_for(&self, client: &RegisteredClient, start_url: &str) -> DeviceApp {
         let mut device = self.device.clone();
         device.client_id.clone_from(&client.client_id);
@@ -215,6 +227,7 @@ mod tests {
             client_name: "app".into(),
             scopes: vec!["account:access".into()],
             start_field: "start_url".into(),
+            region: "r1".into(),
             device: DeviceApp {
                 client_id: String::new(),
                 client_secret: None,

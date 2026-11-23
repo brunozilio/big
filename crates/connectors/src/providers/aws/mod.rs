@@ -1,41 +1,45 @@
+mod login;
+mod sts;
+
 use async_trait::async_trait;
 use domain::connection::{Capability, ProviderKey};
 use serde_json::{Value, json};
 
 use crate::contracts::{self, cloud};
-use crate::descriptor::{AuthSpec, ProviderDescriptor};
+use crate::descriptor::{AlternateAuth, AuthSpec, Presentation, ProviderDescriptor};
 use crate::error::ActionError;
 use crate::http::{Http, HttpRequest, fetch_json};
-use crate::oauth::{DeviceApp, Dialect, SsoSpec};
+use crate::oauth::{DeviceApp, Dialect, Loopback, SsoSpec};
 use crate::provider::{AccountOption, Args, Credentials, Provider, text_of, unknown_action};
 
+pub use login::ConsoleLogin;
+pub use sts::{Keys, signature};
+
 pub const KEY: &str = "aws";
+pub const SSO: &str = "sso";
 const SCOPE: &str = "sso:account:access";
 const PAGES: usize = 20;
-const LOGO: &str = r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect width="64" height="64" rx="12" fill="#232F3E"/><path d="M14 40c10 7 26 7 36 0" stroke="#FF9900" stroke-width="4" fill="none" stroke-linecap="round"/><path d="M45 36l6 3-3 6" stroke="#FF9900" stroke-width="4" fill="none" stroke-linecap="round"/><text x="32" y="32" font-family="Arial" font-weight="700" font-size="17" fill="#fff" text-anchor="middle">aws</text></svg>"##;
+const LOGO: &str = include_str!("logo.svg");
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Aws;
 
 fn region(creds: Option<&Credentials>) -> String {
-    creds.and_then(|creds| creds.setting("region")).unwrap_or(brand::connectors::AWS_SSO_REGION).to_owned()
-}
-
-pub fn oidc(region: &str) -> String {
-    format!("https://oidc.{region}.amazonaws.com")
+    creds.and_then(|creds| creds.setting("region")).unwrap_or(brand::connectors::AWS_REGION).to_owned()
 }
 
 pub fn portal(region: &str) -> String {
     format!("https://portal.sso.{region}.amazonaws.com")
 }
 
-pub fn sso_spec(region: &str) -> SsoSpec {
-    let base = oidc(region);
+pub fn sso_spec() -> SsoSpec {
+    let base = "https://oidc.{region}.amazonaws.com";
     SsoSpec {
         registration_endpoint: format!("{base}/client/register"),
         client_name: brand::NAME.to_owned(),
         scopes: vec![SCOPE.to_owned()],
         start_field: "start_url".to_owned(),
+        region: brand::connectors::AWS_REGION.to_owned(),
         device: DeviceApp {
             client_id: String::new(),
             client_secret: None,
@@ -86,7 +90,7 @@ async fn paged(
     Ok(found)
 }
 
-async fn accounts_and_roles(http: &dyn Http, creds: &Credentials) -> Result<Value, ActionError> {
+async fn sso_accounts(http: &dyn Http, creds: &Credentials) -> Result<Vec<Value>, ActionError> {
     let accounts = paged(http, creds, "/assignment/accounts", &[], "accountList").await?;
     let mut listed = Vec::new();
     for account in accounts {
@@ -100,17 +104,47 @@ async fn accounts_and_roles(http: &dyn Http, creds: &Credentials) -> Result<Valu
             "roles": roles,
         }));
     }
-    Ok(json!({ "accounts": listed }))
+    Ok(listed)
+}
+
+async fn accounts_and_roles(http: &dyn Http, creds: &Credentials) -> Result<Value, ActionError> {
+    if let Some(keys) = Keys::read(&creds.access_token) {
+        let caller = sts::caller(http, &keys, &region(Some(creds))).await?;
+        let account = json!({ "id": caller.account, "name": caller.arn, "email": "", "roles": [] });
+        return Ok(json!({ "accounts": [account] }));
+    }
+    Ok(json!({ "accounts": sso_accounts(http, creds).await? }))
+}
+
+async fn console_identity(http: &dyn Http, creds: &Credentials, keys: &Keys) -> Result<Value, ActionError> {
+    let place = region(Some(creds));
+    let caller = sts::caller(http, keys, &place).await?;
+    Ok(json!({
+        "user": caller.arn,
+        "arn": caller.arn,
+        "account": caller.account,
+        "role": Value::Null,
+        "region": place,
+        "access_key_id": keys.access_key_id,
+        "secret_access_key": keys.secret_access_key,
+        "session_token": keys.session_token,
+        "expires_at": keys.expires_at,
+    }))
 }
 
 async fn identity(http: &dyn Http, creds: &Credentials, args: Args<'_>) -> Result<Value, ActionError> {
-    let account = args.text("account")?;
-    let role = args.text("role")?;
+    if let Some(keys) = Keys::read(&creds.access_token) {
+        return console_identity(http, creds, &keys).await;
+    }
+    let account =
+        args.optional_text("account").or(creds.setting("account")).ok_or_else(|| ActionError::missing("account"))?;
+    let role = args.optional_text("role").or(creds.setting("role")).ok_or_else(|| ActionError::missing("role"))?;
     let answer =
         portal_get(http, creds, "/federation/credentials", &[("account_id", account), ("role_name", role)]).await?;
     let held = answer.get("roleCredentials").ok_or_else(|| ActionError::decode("no roleCredentials"))?;
     let expires_at = held["expiration"].as_i64().and_then(|millis| jiff::Timestamp::from_millisecond(millis).ok());
     Ok(json!({
+        "user": role,
         "account": account,
         "role": role,
         "region": region(Some(creds)),
@@ -121,6 +155,30 @@ async fn identity(http: &dyn Http, creds: &Credentials, args: Args<'_>) -> Resul
     }))
 }
 
+pub fn spaced(account: &str) -> String {
+    if account.len() != 12 || !account.chars().all(|c| c.is_ascii_digit()) {
+        return account.to_owned();
+    }
+    format!("{}-{}-{}", &account[..4], &account[4..8], &account[8..])
+}
+
+fn sso_options(listed: &[Value], place: &str) -> Vec<AccountOption> {
+    let mut options = Vec::new();
+    for account in listed {
+        let id = text_of(account, "/id");
+        let label = format!("{} · {}", text_of(account, "/name"), spaced(&id));
+        for role in account["roles"].as_array().map(Vec::as_slice).unwrap_or_default() {
+            let role = role.as_str().unwrap_or_default();
+            options.push(AccountOption {
+                id: format!("{id}/{role}"),
+                label: label.clone(),
+                settings: json!({ "account": id, "role": role, "region": place, "detail": role }),
+            });
+        }
+    }
+    options
+}
+
 #[async_trait]
 impl Provider for Aws {
     fn descriptor(&self) -> ProviderDescriptor {
@@ -129,9 +187,29 @@ impl Provider for Aws {
             name: "AWS".to_owned(),
             logo: LOGO.to_owned(),
             capabilities: vec![Capability::from(contracts::CLOUD)],
-            auth: AuthSpec::Sso(sso_spec(&region(None))),
+            auth: AuthSpec::Loopback(Loopback::new(ConsoleLogin { region: brand::connectors::AWS_REGION.to_owned() })),
             actions: contracts::cloud(),
         }
+    }
+
+    fn presentation(&self) -> Presentation {
+        Presentation {
+            description: "Sua conta AWS".to_owned(),
+            group: "Nuvem".to_owned(),
+            button: "Entrar com AWS".to_owned(),
+            site: "da AWS".to_owned(),
+            choose_title: "Conta e papel".to_owned(),
+        }
+    }
+
+    fn alternative(&self) -> Option<AlternateAuth> {
+        Some(AlternateAuth {
+            key: SSO.to_owned(),
+            label: "Usar SSO da empresa".to_owned(),
+            button: "Continuar".to_owned(),
+            site: "do AWS IAM Identity Center".to_owned(),
+            auth: AuthSpec::Sso(sso_spec()),
+        })
     }
 
     async fn call(
@@ -150,18 +228,17 @@ impl Provider for Aws {
     }
 
     async fn accounts(&self, http: &dyn Http, creds: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
-        let accounts = paged(http, creds, "/assignment/accounts", &[], "accountList").await?;
-        Ok(accounts
-            .iter()
-            .map(|account| {
-                let id = text_of(account, "/accountId");
-                AccountOption {
-                    label: format!("{} ({id})", text_of(account, "/accountName")),
-                    settings: json!({ "account": id, "region": region(Some(creds)) }),
-                    id,
-                }
-            })
-            .collect())
+        let place = region(Some(creds));
+        if let Some(keys) = Keys::read(&creds.access_token) {
+            let caller = sts::caller(http, &keys, &place).await?;
+            let name = caller.arn.rsplit([':', '/']).next().unwrap_or_default().to_owned();
+            return Ok(vec![AccountOption {
+                id: caller.account.clone(),
+                label: format!("{name} · {}", spaced(&caller.account)),
+                settings: json!({ "account": caller.account, "arn": caller.arn, "region": place, "detail": caller.arn }),
+            }]);
+        }
+        Ok(sso_options(&sso_accounts(http, creds).await?, &place))
     }
 }
 

@@ -38,6 +38,12 @@ pub enum ProviderError {
 pub trait Provider: Sync {
     fn id(&self) -> &'static str;
     fn name(&self) -> &'static str;
+    fn label(&self) -> &'static str {
+        self.name()
+    }
+    fn logo(&self) -> &'static str {
+        ""
+    }
     fn vendor(&self) -> &'static str;
     fn access(&self) -> Access;
     fn rank(&self) -> u8;

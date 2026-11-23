@@ -26,6 +26,12 @@ impl Shape for Provider {
     fn name(&self) -> &'static str {
         "GitHub Copilot Subscription"
     }
+    fn label(&self) -> &'static str {
+        "GitHub Copilot"
+    }
+    fn logo(&self) -> &'static str {
+        include_str!("logo.svg")
+    }
     fn vendor(&self) -> &'static str {
         "github"
     }

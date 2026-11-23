@@ -3,7 +3,7 @@ use std::sync::Arc;
 use domain::connection::{Capability, Connection, ProviderKey};
 use serde_json::Value;
 
-use crate::descriptor::ProviderDescriptor;
+use crate::descriptor::{AlternateAuth, Presentation, ProviderDescriptor};
 use crate::error::{ActionError, ErrorClass, RECONNECT};
 use crate::http::Http;
 use crate::limiter::{Metered, RateLimiter};
@@ -15,6 +15,8 @@ use crate::providers;
 struct Entry {
     provider: &'static dyn Provider,
     descriptor: ProviderDescriptor,
+    presentation: Presentation,
+    alternative: Option<AlternateAuth>,
 }
 
 #[derive(Debug)]
@@ -31,8 +33,15 @@ impl Connectors {
     }
 
     pub fn with_providers(providers: &[&'static dyn Provider], http: Arc<dyn Http>, keeper: TokenKeeper) -> Connectors {
-        let entries =
-            providers.iter().map(|provider| Entry { provider: *provider, descriptor: provider.descriptor() }).collect();
+        let entries = providers
+            .iter()
+            .map(|provider| Entry {
+                provider: *provider,
+                descriptor: provider.descriptor(),
+                presentation: provider.presentation(),
+                alternative: provider.alternative(),
+            })
+            .collect();
         Connectors { entries, http, keeper, limiter: RateLimiter::new() }
     }
 
@@ -42,6 +51,14 @@ impl Connectors {
 
     pub fn descriptor(&self, key: &ProviderKey) -> Result<&ProviderDescriptor, ActionError> {
         self.entry(key).map(|entry| &entry.descriptor)
+    }
+
+    pub fn presentation(&self, key: &ProviderKey) -> Result<&Presentation, ActionError> {
+        self.entry(key).map(|entry| &entry.presentation)
+    }
+
+    pub fn alternative(&self, key: &ProviderKey) -> Result<Option<&AlternateAuth>, ActionError> {
+        self.entry(key).map(|entry| entry.alternative.as_ref())
     }
 
     pub fn http(&self) -> &dyn Http {
@@ -69,7 +86,8 @@ impl Connectors {
         connection: &Connection,
         settings: &Value,
     ) -> Result<Credentials, ActionError> {
-        let token = self.keeper.access_token(&connection.id, &entry.descriptor.auth).await?;
+        let token =
+            self.keeper.access_token_of(&connection.id, &entry.descriptor.auth, entry.alternative.as_ref()).await?;
         Ok(Credentials::new(&connection.id, &token, settings.clone()))
     }
 
@@ -98,8 +116,11 @@ impl Connectors {
         let first = entry.provider.call(&metered, &creds, action, args, idempotency_key).await;
         let result = match first {
             Err(error) if error.class == ErrorClass::Auth && !error.message.starts_with(RECONNECT) => {
-                creds.access_token =
-                    self.keeper.refreshed(&connection.id, &entry.descriptor.auth, &creds.access_token).await?;
+                let alternative = entry.alternative.as_ref();
+                creds.access_token = self
+                    .keeper
+                    .refreshed_of(&connection.id, &entry.descriptor.auth, alternative, &creds.access_token)
+                    .await?;
                 entry.provider.call(&metered, &creds, action, args, idempotency_key).await
             }
             other => other,

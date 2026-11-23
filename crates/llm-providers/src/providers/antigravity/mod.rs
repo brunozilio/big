@@ -22,6 +22,12 @@ impl Shape for Provider {
     fn name(&self) -> &'static str {
         "Antigravity Subscription"
     }
+    fn label(&self) -> &'static str {
+        "Antigravity"
+    }
+    fn logo(&self) -> &'static str {
+        include_str!("logo.svg")
+    }
     fn vendor(&self) -> &'static str {
         "antigravity"
     }

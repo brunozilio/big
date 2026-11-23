@@ -4,7 +4,7 @@ use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::descriptor::ProviderDescriptor;
+use crate::descriptor::{AlternateAuth, AuthSpec, Presentation, ProviderDescriptor};
 use crate::error::ActionError;
 use crate::http::Http;
 
@@ -80,6 +80,21 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
 
     fn events(&self) -> Option<&dyn EventSource> {
         None
+    }
+
+    fn presentation(&self) -> Presentation {
+        Presentation::default()
+    }
+
+    fn alternative(&self) -> Option<AlternateAuth> {
+        None
+    }
+}
+
+pub fn auth_for(primary: &AuthSpec, alternative: Option<&AlternateAuth>, method: Option<&str>) -> AuthSpec {
+    match (method, alternative) {
+        (Some(method), Some(alternate)) if alternate.key == method => alternate.auth.clone(),
+        _ => primary.clone(),
     }
 }
 
