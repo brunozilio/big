@@ -84,7 +84,11 @@ fn drive(source: &str, item: &Value, mut reply: impl FnMut(&Value) -> Option<Val
             }
             let Some(value) = reply(command) else { continue };
             answered = true;
-            journal.push(json!({ "seq": command["seq"], "kind": command["kind"], "ok": value, "at": 2000 + round }));
+            let entry = match value.get("failed") {
+                Some(error) => json!({ "seq": command["seq"], "kind": command["kind"], "error": error, "at": 2000 + round }),
+                None => json!({ "seq": command["seq"], "kind": command["kind"], "ok": value, "at": 2000 + round }),
+            };
+            journal.push(entry);
         }
         assert!(answered, "the fake host answers something each round: {result}");
     }
@@ -375,6 +379,30 @@ export default workflow({
     });
     assert_eq!(calls(&asked, "runs").len(), 5, "four for the branch and one look at the repository");
     assert_eq!(result["result"]["state"], "none", "{result}");
+}
+
+#[test]
+fn a_failed_look_at_the_repository_keeps_the_ci_waiting_instead_of_failing() {
+    let text = r#"
+import { workflow } from "sdk";
+import { ci } from "sdk/steps";
+export default workflow({
+  name: "so-ci",
+  async run(ctx) {
+    const done = await ci(ctx, { ref: "big/x", patience: 3 });
+    return { outcome: done.outcome, state: done.data.state };
+  },
+});
+"#;
+    let (result, asked) = drive(&source("workflows/so-ci.ts", text), &item(json!("T-1")), |command| match command["kind"].as_str() {
+        Some("call") if command["args"]["args"].get("ref").is_none() => {
+            Some(json!({ "failed": { "kind": "permanent", "message": "ref is missing" } }))
+        }
+        Some("call") => Some(json!([])),
+        _ => Some(Value::Null),
+    });
+    assert_eq!(calls(&asked, "runs").len(), 4, "three for the branch and the failed look");
+    assert_eq!(result["result"], json!({ "outcome": "skipped", "state": "none" }), "{result}");
 }
 
 #[test]

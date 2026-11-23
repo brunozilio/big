@@ -49,7 +49,7 @@ export interface PendingDeployment {
 }
 
 export interface Pipelines {
-  runs: { args: { ref: string; repo?: string; pipeline?: string; limit?: number }; result: RunSummary[] };
+  runs: { args: { ref?: string; repo?: string; pipeline?: string; limit?: number }; result: RunSummary[] };
   run: { args: { run: RunRef }; result: Run };
   job_log: { args: { run: RunRef; job: string; tail?: number }; result: { text: string; truncated: boolean } };
   pending_deployments: { args: { run: RunRef }; result: PendingDeployment[] };

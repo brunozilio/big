@@ -243,13 +243,16 @@ async fn runs_filter_by_branch_or_sha() {
             200,
             r#"{"workflow_runs":[{"id":1,"status":"completed"}]}"#,
         )
-        .once(Method::Get, "/actions/workflows/ci.yml/runs?per_page=20&head_sha=", 200, r#"{"workflow_runs":[]}"#);
+        .once(Method::Get, "/actions/workflows/ci.yml/runs?per_page=20&head_sha=", 200, r#"{"workflow_runs":[]}"#)
+        .once(Method::Get, "/actions/runs?per_page=1", 200, r#"{"workflow_runs":[]}"#);
     let answer = call(&http, pipeline_actions::RUNS, json!({"ref": "big/x", "limit": 5}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!((answer[0]["ref"].as_str(), answer[0]["state"].as_str()), (Some("acme/app/runs/1"), Some("failed")));
     let sha = "a".repeat(40);
     let answer = call(&http, pipeline_actions::RUNS, json!({"ref": sha, "pipeline": "ci.yml"}), "").await;
     assert_eq!(answer, Ok(json!([])));
+    let whole = call(&http, pipeline_actions::RUNS, json!({"limit": 1}), "").await;
+    assert_eq!(whole, Ok(json!([])), "without a ref it lists the repository's runs");
 }
 
 #[tokio::test]

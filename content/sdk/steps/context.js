@@ -196,6 +196,15 @@ export function feedbackText(from) {
   return parts.join("\n\n");
 }
 
+async function neverRan(ctx, opts, wanted) {
+  try {
+    const ever = await ctx.call("pipelines", "runs", defined({ repo: wanted.repo, pipeline: opts.pipeline, limit: 1 }), effects(opts));
+    return Array.isArray(ever) && ever.length === 0;
+  } catch {
+    return false;
+  }
+}
+
 export async function findRun(ctx, opts, wanted) {
   const args = defined({ ref: wanted.ref, repo: wanted.repo, pipeline: opts.pipeline, limit: 10 });
   const patience = opts.patience ?? 10;
@@ -204,10 +213,7 @@ export async function findRun(ctx, opts, wanted) {
     const fresh = (Array.isArray(runs) ? runs : []).find((run) => !wanted.seen.includes(run.ref));
     if (fresh) return fresh;
     if (wanted.optional && tries >= patience) return null;
-    if (wanted.optional && tries === 2) {
-      const ever = await ctx.call("pipelines", "runs", defined({ repo: wanted.repo, pipeline: opts.pipeline, limit: 1 }), effects(opts));
-      if (!Array.isArray(ever) || ever.length === 0) return null;
-    }
+    if (wanted.optional && tries === 2 && (await neverRan(ctx, opts, wanted))) return null;
     await ctx.sleep(opts.every ?? 30000);
   }
 }

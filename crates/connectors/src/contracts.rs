@@ -192,7 +192,7 @@ pub fn pipelines() -> Vec<ActionSpec> {
     vec![
         ActionSpec::read(
             pipelines::RUNS,
-            object(&[("ref", "string")], &[("repo", "string"), ("pipeline", "string"), ("limit", "integer")]),
+            object(&[], &[("ref", "string"), ("repo", "string"), ("pipeline", "string"), ("limit", "integer")]),
             list(),
         ),
         ActionSpec::read(pipelines::RUN, run_ref.clone(), run_output()),
