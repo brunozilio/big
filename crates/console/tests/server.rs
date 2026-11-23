@@ -1,7 +1,7 @@
 use console::{Assets, Options};
 
 fn started() -> console::Running {
-    let options = Options { assets: Assets::Missing, port: 0, folder: std::env::temp_dir() };
+    let options = Options { assets: Assets::Missing, port: 0 };
     let Ok(running) = console::start(options) else {
         panic!("the console did not start");
     };

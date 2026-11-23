@@ -1,4 +1,3 @@
-use crate::api::features::channels::{ChannelsReply, ChannelsRequest};
 use crate::api::features::code_map::{CodeMapReply, CodeMapRequest};
 use crate::api::features::declared_providers::{DeclaredProvidersReply, DeclaredProvidersRequest};
 use crate::api::features::flags::{FlagsReply, FlagsRequest};
@@ -51,7 +50,6 @@ macro_rules! asks {
 }
 
 asks! {
-    ask_channels: Channels(ChannelsRequest) -> ChannelsReply;
     ask_code_map: CodeMap(CodeMapRequest) -> CodeMapReply;
     ask_declared_providers: DeclaredProviders(DeclaredProvidersRequest) -> DeclaredProvidersReply;
     ask_flags: Flags(FlagsRequest) -> FlagsReply;

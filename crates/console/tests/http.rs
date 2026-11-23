@@ -27,7 +27,6 @@ fn serving(token: &str, port: u16, assets: Assets, entries: Arc<Entries>) -> axu
             token: token.into(),
             port,
             assets,
-            terminal: console::Launch::this_program(std::env::temp_dir()),
             entries,
         },
         console::Live::default(),
@@ -233,13 +232,10 @@ async fn every_api_route_needs_the_token() {
     let routes = [
         ("GET", "/api/health"),
         ("GET", "/api/instance"),
-        ("GET", "/api/report"),
-        ("GET", "/api/docs"),
         ("GET", "/api/sessions"),
         ("GET", "/api/latest"),
         ("GET", "/api/events"),
         ("POST", "/api/watch"),
-        ("GET", "/api/terminal"),
         ("GET", "/api/no/such/route"),
     ];
     for (method, path) in routes {

@@ -1,4 +1,3 @@
-mod channels;
 mod code_map;
 pub mod context;
 mod declared_providers;
@@ -21,8 +20,7 @@ use crate::features::context::{Context, Finish};
 type Forget = fn(u64);
 type Prepare = fn(&Context<'_>, RunId, PromptRequest) -> (PromptRequest, Option<Finish>);
 
-const ALL: [(FeatureName, Forget); 13] = [
-    (FeatureName::Channels, channels::forget),
+const ALL: [(FeatureName, Forget); 12] = [
     (FeatureName::CodeMap, code_map::forget),
     (FeatureName::DeclaredProviders, declared_providers::forget),
     (FeatureName::Flags, flags::forget),
@@ -37,8 +35,7 @@ const ALL: [(FeatureName, Forget); 13] = [
     (FeatureName::Workspace, workspace::forget),
 ];
 
-const PREPARING: [(FeatureName, Prepare); 3] = [
-    (FeatureName::Channels, channels::run::prepare),
+const PREPARING: [(FeatureName, Prepare); 2] = [
     (FeatureName::CodeMap, code_map::run::prepare),
     (FeatureName::Memory, memory::run::prepare),
 ];
@@ -57,7 +54,6 @@ pub fn handle(context: &Context<'_>, request: FeatureRequest) -> Result<FeatureR
 
 fn answer(context: &Context<'_>, request: FeatureRequest) -> Result<FeatureReply, String> {
     match request {
-        FeatureRequest::Channels(request) => channels::handle(context, request).map(FeatureReply::Channels),
         FeatureRequest::CodeMap(request) => code_map::handle(context, request).map(FeatureReply::CodeMap),
         FeatureRequest::DeclaredProviders(request) => {
             declared_providers::handle(context, request).map(FeatureReply::DeclaredProviders)
@@ -113,7 +109,6 @@ mod tests {
         assert_eq!(
             names,
             [
-                "channels",
                 "code_map",
                 "declared_providers",
                 "flags",
@@ -133,6 +128,6 @@ mod tests {
     #[test]
     fn these_features_prepare_a_run_in_this_order() {
         let names: Vec<&str> = PREPARING.iter().map(|(feature, _)| feature.name()).collect();
-        assert_eq!(names, ["channels", "code_map", "memory"]);
+        assert_eq!(names, ["code_map", "memory"]);
     }
 }

@@ -16,7 +16,6 @@ use serde_json::Value;
 use tokio::sync::{OwnedSemaphorePermit, broadcast};
 
 use crate::chats::Desk;
-use crate::mirror::Mirror;
 use crate::routes::{Shared, failure};
 
 const KEPT_UPDATES: usize = 256;
@@ -25,8 +24,6 @@ pub const MOST_BODY_BYTES: usize = 64 * 1024;
 
 #[derive(Debug, Default)]
 struct Board {
-    report: Option<String>,
-    docs: Option<String>,
     sessions: Option<String>,
     latest: BTreeMap<String, String>,
     watched: Option<String>,
@@ -35,7 +32,6 @@ struct Board {
 #[derive(Debug, Clone)]
 enum Update {
     Session(String),
-    Report,
     Chat(String),
     Resync,
 }
@@ -44,7 +40,6 @@ impl Update {
     fn event(self) -> Event {
         match self {
             Self::Session(line) => Event::default().data(line),
-            Self::Report => Event::default().event("report").data("changed"),
             Self::Chat(session) => Event::default().event("chat").data(session),
             Self::Resync => Event::default().event("resync").data("missed"),
         }
@@ -55,7 +50,6 @@ impl Update {
 pub struct Live {
     board: Arc<Mutex<Board>>,
     updates: broadcast::Sender<Update>,
-    mirror: Mirror,
     desk: Desk,
 }
 
@@ -64,24 +58,14 @@ impl Default for Live {
         Self {
             board: Arc::default(),
             updates: broadcast::channel(KEPT_UPDATES).0,
-            mirror: Mirror::default(),
             desk: Desk::default(),
         }
     }
 }
 
 impl Live {
-    pub fn mirror(&self) -> &Mirror {
-        &self.mirror
-    }
-
     fn board(&self) -> MutexGuard<'_, Board> {
         self.board.lock().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    pub fn show(&self, report: String) {
-        self.board().report = Some(report);
-        let _ = self.updates.send(Update::Report);
     }
 
     pub fn desk(&self) -> &Desk {
@@ -90,14 +74,6 @@ impl Live {
 
     pub fn chat_changed(&self, session: &str) {
         let _ = self.updates.send(Update::Chat(session.to_owned()));
-    }
-
-    pub fn report(&self) -> Option<String> {
-        self.board().report.clone()
-    }
-
-    pub fn document(&self, docs: String) {
-        self.board().docs = Some(docs);
     }
 
     pub fn list(&self, sessions: String) {
@@ -123,8 +99,6 @@ impl Live {
 
 pub fn routes() -> Router<Shared> {
     Router::new()
-        .route("/api/report", get(report))
-        .route("/api/docs", get(docs))
         .route("/api/sessions", get(sessions))
         .route("/api/latest", get(latest))
         .route("/api/events", get(events))
@@ -133,20 +107,6 @@ pub fn routes() -> Router<Shared> {
 
 fn json(body: String) -> Response {
     ([(header::CONTENT_TYPE, "application/json")], body).into_response()
-}
-
-async fn report(State(shared): State<Shared>) -> Response {
-    match shared.live.board().report.clone() {
-        Some(report) => json(report),
-        None => failure(StatusCode::SERVICE_UNAVAILABLE, "not_ready", "The terminal has not sent its report yet."),
-    }
-}
-
-async fn docs(State(shared): State<Shared>) -> Response {
-    match shared.live.board().docs.clone() {
-        Some(docs) => json(docs),
-        None => failure(StatusCode::SERVICE_UNAVAILABLE, "not_ready", "The terminal has not sent the docs yet."),
-    }
 }
 
 async fn sessions(State(shared): State<Shared>) -> Response {
@@ -208,7 +168,7 @@ async fn watch(State(shared): State<Shared>, body: Result<axum::Json<Value>, Jso
     let Some(session) = named(&body, "session") else {
         return failure(StatusCode::BAD_REQUEST, "validation", "Say which session to watch.");
     };
-    let Some(session) = crate::pty::session_id(&session) else {
+    let Some(session) = crate::chats::session_id(&session) else {
         return failure(StatusCode::BAD_REQUEST, "validation", "That is not a session id.");
     };
     shared.live.board().watched = Some(session.to_owned());
