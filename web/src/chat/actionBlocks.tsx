@@ -6,7 +6,6 @@ import { Kbd } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { AnimatePresence, motion, springPop, springSnap, tween, tweenClose } from '@/ui/motion'
-import { RiskPill } from '@/ui/pill'
 import type { Ev } from './events'
 
 export type Respond = (event: string, response: AskResponse) => Promise<void>
@@ -262,7 +261,7 @@ export function AskBlock({ event, readOnly, respond }: { event: Ev<'ask'>; readO
 
 const permissionLabel = { allowed: 'Permitido uma vez', always: 'Sempre permitido nesta sessão', denied: 'Negado' } as const
 
-export function PermissionBlock({ event, readOnly, bypass, respond }: { event: Ev<'permission'>; readOnly?: boolean; bypass?: boolean; respond: Respond }) {
+export function PermissionBlock({ event, readOnly, respond }: { event: Ev<'permission'>; readOnly?: boolean; respond: Respond }) {
   const { busy, error, send } = useSend(respond)
   if (event.resolution !== 'pending') {
     return (
@@ -291,7 +290,6 @@ export function PermissionBlock({ event, readOnly, bypass, respond }: { event: E
             O agente quer usar <code className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-xs text-fg shadow-card">{event.tool}</code>
           </p>
           <p className="mt-1.5 text-md text-fg">{event.detail}</p>
-          <RiskPill level={event.risk} tag={bypass ? 'bypass' : undefined} className="mt-3" />
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">

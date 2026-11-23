@@ -139,7 +139,7 @@ export function EventView({ session, event, respond }: { session: Session; event
     case 'ask':
       return <AskBlock event={event} respond={respond} />
     case 'permission':
-      return <PermissionBlock event={event} bypass={session.mode === 'bypass'} respond={respond} />
+      return <PermissionBlock event={event} respond={respond} />
     case 'plan':
       return <PlanBlock event={event} respond={respond} />
   }
