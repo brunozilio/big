@@ -99,7 +99,7 @@ async fn a_pull_request_closed_outside_reaches_the_item_by_event_and_the_merge_s
     server.input(&id, "merge", "merge", json!({ "method": "squash" })).await;
     let stuck = server.until(&id, "the merge stops", |item| item["impediment"].is_object()).await;
     assert_eq!(stuck["group"], "you");
-    assert!(stuck["impediment"]["reason"].as_str().is_some_and(|reason| reason.contains("merge")), "{stuck}");
+    assert!(stuck["impediment"]["reason"].as_str().is_some_and(|reason| reason.starts_with("Merge falhou")), "{stuck}");
     assert!(["failed", "waiting_human"].contains(&step(&stuck, "merge")["state"].as_str().unwrap_or_default()), "{stuck}");
     assert_eq!(hub.github.state().merges, 0);
     assert_eq!(hub.github.pulls_created(), 1);

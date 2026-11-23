@@ -38,7 +38,7 @@ function useHistoricalIds(sessionId: string, events: SessionEvent[] | undefined)
   return (id: string | undefined) => (id && ids?.has(id) ? settled : enter)
 }
 
-export function ChatView({ sessionId, composer }: { sessionId: string; composer: boolean }) {
+export function ChatView({ sessionId, composer, dock }: { sessionId: string; composer: boolean; dock?: ReactNode }) {
   const { session, error } = useSession(sessionId)
   const enterFor = useHistoricalIds(sessionId, session?.events)
   const scroller = useRef<HTMLDivElement>(null)
@@ -97,11 +97,12 @@ export function ChatView({ sessionId, composer }: { sessionId: string; composer:
             )}
           </AnimatePresence>
         </div>
-        {composer && (
+        {(composer || dock) && (
           <div className="relative px-4 pb-4 sm:px-8">
             <div className="pointer-events-none absolute inset-x-0 -top-8 h-8 bg-gradient-to-t from-bg to-transparent" />
             <div className="mx-auto max-w-[760px]">
-              <Composer
+              {dock && <div data-testid="chat-dock" className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 rounded-card bg-surface px-4 py-3 shadow-card [&>*:first-child]:min-w-0 [&>*:first-child]:flex-1', composer && 'mb-2')}>{dock}</div>}
+              {composer && <Composer
                 running={running}
                 onStop={() => void api().stop(session.id)}
                 placeholder="Responder ou pedir o próximo passo…"
@@ -112,7 +113,7 @@ export function ChatView({ sessionId, composer }: { sessionId: string; composer:
                   setSendError(null)
                   api().send(session.id, { text: input.text, model: input.model, effort: input.effort, fast: input.fast, attachments: input.attachments }).catch((e: unknown) => setSendError(e instanceof Error ? e.message : 'Não foi possível enviar'))
                 }}
-              />
+              />}
               {sendError && <p role="alert" className="mt-2 px-2 text-sm text-danger-fg">{sendError}</p>}
             </div>
           </div>

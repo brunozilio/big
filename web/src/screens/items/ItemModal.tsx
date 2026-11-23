@@ -2,10 +2,11 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { api } from '@/api'
 import { mins } from '@/api/clock'
-import type { Item, StepState, StepView } from '@/api/contract'
+import type { Block, Item, StepState, StepView } from '@/api/contract'
 import { errorText, useStepView } from '@/api/store'
 import { BlockContext } from '@/blocks/context'
 import { BlockView, fillsPanel } from '@/blocks/registry'
+import { ChatView } from '@/chat/ChatView'
 import { IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Card, Spinner } from '@/ui/display'
@@ -87,6 +88,13 @@ function ItemDetail({ it, step, onStep }: { it: Item; step: string; onStep: (s: 
   )
 }
 
+export function dockedChat(blocks: Block[]) {
+  const [first, ...rest] = blocks
+  if (!first || first.type !== 'chat' || first.title || rest.length === 0) return null
+  if (!rest.every((b) => b.type === 'markdown' || b.type === 'actions')) return null
+  return { chat: first, rest }
+}
+
 const attemptTone = (st: StepState) => (st === 'failed' ? 'text-danger' : st === 'passed' ? 'text-success' : 'text-info')
 
 function RunPicker({ view, onPick }: { view: StepView; onPick: (n: number | null) => void }) {
@@ -116,6 +124,18 @@ export function StepPanel({ it, step }: { it: Item; step: string }) {
       <Card className="flex h-full items-center justify-center p-4">
         {error ? <p role="alert" className="text-base text-danger-fg">{error}</p> : <Spinner />}
       </Card>
+    )
+  }
+  const docked = dockedChat(current.blocks)
+  if (docked) {
+    return (
+      <BlockContext.Provider value={host}>
+        <div className="flex h-full flex-col overflow-hidden rounded-card bg-bg shadow-card">
+          <div className="min-h-0 flex-1">
+            <ChatView sessionId={docked.chat.session} composer={docked.chat.composer} dock={docked.rest.map((b, i) => <BlockView key={`${current.attempt}-${i}-${b.type}`} block={b} />)} />
+          </div>
+        </div>
+      </BlockContext.Provider>
     )
   }
   if (fillsPanel(current.blocks)) {

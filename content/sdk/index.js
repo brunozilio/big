@@ -439,10 +439,24 @@ function indexOf(steps, id) {
   return index;
 }
 
+const decisions = [
+  { id: "retry", label: "Tentar de novo", icon: "refresh", variant: "primary" },
+  { id: "skip", label: "Pular etapa", icon: "right" },
+  { id: "cancel", label: "Cancelar item", icon: "stop", variant: "danger" },
+];
+
+function failure(type, call, result) {
+  const label = type && type.label ? type.label : call.id;
+  const data = result && result.data && typeof result.data === "object" ? result.data : {};
+  const cause = typeof data.error === "string" && data.error.trim() ? data.error.trim() : null;
+  return { reason: cause ? `${label} falhou: ${cause}` : `${label} falhou`, label, cause };
+}
+
 async function exhausted(ctx, call, result) {
-  const reason = `a etapa ${call.id} falhou e as tentativas acabaram`;
+  const { reason, label, cause } = failure(registry.steps.get(call.step), call, result);
   await ctx.impediment(true, reason);
-  const answer = await ctx.waitHuman([markdown(reason), actions(["retry", "skip", "cancel"])]);
+  const text = cause ? `**${label} falhou.** ${cause}` : `**${label} falhou.**`;
+  const answer = await ctx.waitHuman([markdown(text), actions(decisions)]);
   await ctx.impediment(false);
   const chosen = answer && typeof answer === "object" ? answer.action : answer;
   if (chosen === "cancel") return { cancel: ctx.cancel(reason) };

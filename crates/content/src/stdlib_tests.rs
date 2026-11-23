@@ -348,7 +348,7 @@ fn a_known_issue_is_reused_and_a_rejected_deploy_raises_an_impediment() {
     assert!(
         impediments
             .iter()
-            .any(|args| args["on"] == true && args["reason"].as_str().is_some_and(|reason| reason.contains("release")))
+            .any(|args| args["on"] == true && args["reason"].as_str().is_some_and(|reason| reason.starts_with("Release falhou")))
     );
     assert!(!of_kind(&asked, "status.set").iter().any(|command| command["args"]["name"] == "Feito"));
     assert!(
