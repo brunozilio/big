@@ -6,7 +6,7 @@ const STARTS_GIT: [&str; 3] = ["Command::new(\"git\")", "command(\"git\")", "OsS
 
 pub fn findings(root: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut files = Vec::new();
-    crate::env_vars::rust_files(&root.join("crates"), &mut files);
+    rust_files(&root.join("crates"), &mut files);
     let mut found = Vec::new();
     for file in files {
         let shown = shown(root, &file);
@@ -46,5 +46,20 @@ mod tests {
     fn the_workspace_starts_git_only_through_the_helper() {
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).parent().expect("workspace root");
         assert_eq!(findings(root).expect("scanned"), Vec::<String>::new());
+    }
+}
+
+fn rust_files(dir: &Path, files: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if path.is_dir() {
+            if !["tests", "target", "node_modules"].contains(&name.as_str()) {
+                rust_files(&path, files);
+            }
+        } else if name.ends_with(".rs") && name != "tests.rs" && !name.ends_with("_tests.rs") {
+            files.push(path);
+        }
     }
 }

@@ -7,7 +7,7 @@ publish.workspace = true
 license.workspace = true
 
 [[bin]]
-name = "cortex"
+name = "big"
 path = "src/main.rs"
 
 [features]

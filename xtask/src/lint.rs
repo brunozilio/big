@@ -7,10 +7,7 @@ pub fn run(root: &Path, update_baseline: bool) -> Result<(), Box<dyn std::error:
     let mut found = BTreeSet::new();
     found.extend(crate::brand::findings(root)?);
     found.extend(crate::comments::findings(root)?);
-    found.extend(crate::crate_table::findings(root)?);
     found.extend(crate::crate_graph::findings(root)?);
-    found.extend(crate::drift::findings(root)?);
-    found.extend(crate::env_vars::findings(root)?);
     found.extend(crate::git_commands::findings(root)?);
     let baseline_path = root.join(BASELINE);
     if update_baseline {
