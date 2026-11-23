@@ -75,6 +75,7 @@ impl Orchestrator {
             start_sync(&shared);
         }
         crate::asks::restore(&shared)?;
+        crate::factory::watch(&shared);
         for item in shared.store.items()?.into_iter().filter(|item| !item.is_ended()) {
             ensure(&shared, &item.id);
         }
@@ -113,12 +114,16 @@ impl Orchestrator {
     }
 
     pub fn create_item(&self, workflow: &str, input: Value) -> Result<ItemId> {
-        self.create(workflow, input, None)
+        self.create_with(workflow, input, None)
     }
 
-    fn create(&self, workflow: &str, input: Value, parent: Option<ItemId>) -> Result<ItemId> {
-        if self.shared.resources_in(self.shared.home(&input).as_deref()).workflow(workflow).is_none() {
+    pub(crate) fn create_with(&self, workflow: &str, mut input: Value, parent: Option<ItemId>) -> Result<ItemId> {
+        let resources = self.shared.resources_in(self.shared.home(&input).as_deref());
+        if resources.workflow(workflow).is_none() {
             return Err(Error::Script(format!("there is no workflow named {workflow}")));
+        }
+        if parent.is_none() {
+            crate::factory::stamp(&self.shared, &resources, &mut input)?;
         }
         let id = ItemId::new();
         let named = parent.is_none() && input["issue"].as_str().is_none_or(str::is_empty);
@@ -348,24 +353,32 @@ impl Orchestrator {
         let value = serde_json::to_value(event).unwrap_or(Value::Null);
         let existing = self.shared.store.items()?;
         let mut created = 0;
+        for workflow in self.triggered(&event.kind, &value) {
+            let known =
+                existing.iter().any(|item| item.workflow == workflow && item.input["issue"] == event.subject.as_str());
+            if !known {
+                let title = value["data"]["title"].as_str().unwrap_or(&event.subject).to_owned();
+                let input =
+                    json!({ "title": title, "issue": event.subject, "connection": event.connection, "event": value });
+                self.create_with(&workflow, input, None)?;
+                created += 1;
+            }
+        }
+        Ok(created)
+    }
+
+    pub(crate) fn triggered(&self, kind: &str, event: &Value) -> Vec<String> {
+        let mut fired = Vec::new();
         for workflow in self.workflows() {
             let Ok(script) = self.shared.script(&workflow) else { continue };
             let shapes = script.described["workflows"].as_array().cloned().unwrap_or_default();
             let Some(shape) = shapes.iter().find(|shape| shape["name"] == script.target["workflow"]) else { continue };
             let triggers = shape["triggers"].as_array().cloned().unwrap_or_default();
-            let fires =
-                triggers.iter().any(|on| on["kind"] == event.kind.as_str() && event_matches(&on["filter"], &value));
-            let known =
-                existing.iter().any(|item| item.workflow == workflow && item.input["issue"] == event.subject.as_str());
-            if fires && !known {
-                let title = value["data"]["title"].as_str().unwrap_or(&event.subject).to_owned();
-                let input =
-                    json!({ "title": title, "issue": event.subject, "connection": event.connection, "event": value });
-                self.create(&workflow, input, None)?;
-                created += 1;
+            if triggers.iter().any(|on| on["kind"] == kind && event_matches(&on["filter"], event)) {
+                fired.push(workflow);
             }
         }
-        Ok(created)
+        fired
     }
 
     pub fn record(&self, id: &ItemId, events: &[WorkflowEvent]) -> Result<()> {

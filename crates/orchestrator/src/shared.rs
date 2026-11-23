@@ -48,6 +48,8 @@ pub struct Shared {
     scripts: Mutex<HashMap<ScriptKey, Arc<Script>>>,
     pins: Mutex<HashMap<(String, String), Arc<Script>>>,
     appending: Mutex<()>,
+    pub observed: Mutex<Vec<ItemId>>,
+    pub observing: tokio::sync::Notify,
 }
 
 pub fn now_ms() -> i64 {
@@ -78,6 +80,8 @@ impl Shared {
             scripts: Mutex::default(),
             pins: Mutex::default(),
             appending: Mutex::default(),
+            observed: Mutex::default(),
+            observing: tokio::sync::Notify::new(),
         }
     }
 
@@ -94,6 +98,13 @@ impl Shared {
         let state = self.store.append(item, events)?;
         if !events.is_empty() {
             self.emit(OrchestratorEvent::ItemChanged { item: item.clone(), version: state.version });
+        }
+        if self.config.factory.enabled && crate::factory::relevant(events) {
+            let mut observed = self.observed.lock().unwrap_or_else(PoisonError::into_inner);
+            if !observed.contains(item) {
+                observed.push(item.clone());
+            }
+            self.observing.notify_one();
         }
         Ok(state)
     }

@@ -54,6 +54,24 @@ const MIGRATIONS: &[&str] = &["
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
     );
+", "
+    CREATE TABLE factory_findings (
+        id TEXT PRIMARY KEY,
+        item TEXT NOT NULL,
+        workflow TEXT NOT NULL,
+        generation TEXT,
+        kind TEXT NOT NULL,
+        step TEXT NOT NULL,
+        data TEXT NOT NULL,
+        at INTEGER NOT NULL
+    );
+    CREATE INDEX factory_findings_by_step ON factory_findings (workflow, step, kind);
+    CREATE TABLE factory_generations (
+        version TEXT PRIMARY KEY,
+        chain TEXT NOT NULL,
+        files TEXT NOT NULL,
+        first_seen INTEGER NOT NULL
+    );
 "];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

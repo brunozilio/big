@@ -1,6 +1,7 @@
 mod application;
 mod cloud;
 mod control;
+mod factory;
 mod flow;
 mod repos;
 mod restart;

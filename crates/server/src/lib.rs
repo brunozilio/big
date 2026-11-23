@@ -10,6 +10,7 @@ mod chats;
 mod cloud;
 mod connections;
 mod error;
+mod factory;
 mod folders;
 mod item_view;
 mod items;

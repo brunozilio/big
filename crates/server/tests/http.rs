@@ -403,3 +403,13 @@ async fn a_connection_saved_without_its_choice_learns_the_only_one_and_a_sign_in
     assert!(last["message"].as_str().is_some_and(|text| text.contains("Picky")), "{last}");
     assert_eq!(world.store.connections().expect("store").len(), 2, "nothing was saved without a choice");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_factory_reports_its_generations_and_findings() {
+    let world = World::new().await;
+    let report = world.get("/api/factory").await;
+    assert_eq!(report["autonomy"], "near");
+    assert!(report["current"].as_str().is_some_and(|version| version.len() == 16));
+    assert!(report["generations"].is_array());
+    assert!(report["findings"].is_array());
+}

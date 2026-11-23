@@ -2,6 +2,7 @@ mod applications;
 mod branding;
 mod connections;
 mod error;
+mod factory;
 mod log;
 mod pins;
 mod schema;
@@ -16,6 +17,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 pub use applications::{Application, CodeChoice, Repository, TrackerChoice};
 pub use connections::ConnectionRecord;
 pub use error::Error;
+pub use factory::{Generation, GenerationReport};
 
 pub type Result<T> = std::result::Result<T, Error>;
 

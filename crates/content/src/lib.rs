@@ -12,6 +12,8 @@ mod render;
 mod sdk_tests;
 #[cfg(test)]
 mod stdlib_tests;
+#[cfg(test)]
+mod factory_tests;
 
 pub use install::{Installed, MANIFEST, install_files, install_once};
 

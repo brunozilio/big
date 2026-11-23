@@ -10,6 +10,7 @@ pub type Builtin = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
 #[serde(rename_all = "snake_case")]
 pub enum Origin {
     Repo,
+    Factory,
     User,
     Builtin,
 }
@@ -24,9 +25,17 @@ pub struct Resource {
 #[derive(Clone)]
 pub struct Resources {
     layers: Vec<(Origin, PathBuf)>,
+    chain: Vec<String>,
+    user: Option<PathBuf>,
     builtin: Builtin,
     listed: Vec<String>,
 }
+
+pub const FACTORIES: &str = "factories";
+
+pub const FACTORY_FILE: &str = "factory";
+
+const MOST_ANCESTORS: usize = 16;
 
 impl fmt::Debug for Resources {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -47,19 +56,30 @@ impl Resources {
     }
 
     pub fn new(repo_dir: Option<PathBuf>, user_dir: Option<PathBuf>, builtin: Builtin) -> Resources {
-        let layers = [(Origin::Repo, repo_dir), (Origin::User, user_dir)]
-            .into_iter()
-            .filter_map(|(origin, dir)| dir.map(|dir| (origin, dir)))
-            .collect();
-        Resources { layers, builtin, listed: Vec::new() }
+        let (layers, chain) = layered(repo_dir.as_deref(), user_dir.as_deref());
+        Resources { layers, chain, user: user_dir, builtin, listed: Vec::new() }
     }
 
     #[must_use]
     pub fn in_repo(&self, repo: &Path) -> Resources {
-        let mut layers: Vec<(Origin, PathBuf)> =
-            self.layers.iter().filter(|(origin, _)| *origin != Origin::Repo).cloned().collect();
-        layers.insert(0, (Origin::Repo, repo.join(brand::DIR)));
-        Resources { layers, builtin: Arc::clone(&self.builtin), listed: self.listed.clone() }
+        let (layers, chain) = layered(Some(&repo.join(brand::DIR)), self.user.as_deref());
+        Resources { layers, chain, user: self.user.clone(), builtin: Arc::clone(&self.builtin), listed: self.listed.clone() }
+    }
+
+    pub fn chain(&self) -> &[String] {
+        &self.chain
+    }
+
+    pub fn factory_dir(&self, name: &str) -> Option<PathBuf> {
+        self.user.as_ref().map(|user| user.join(FACTORIES).join(name))
+    }
+
+    pub fn repo_dir(&self) -> Option<&Path> {
+        self.layers.iter().find(|(origin, _)| *origin == Origin::Repo).map(|(_, dir)| dir.as_path())
+    }
+
+    pub fn layer_dirs(&self) -> impl Iterator<Item = (Origin, &Path)> {
+        self.layers.iter().map(|(origin, dir)| (*origin, dir.as_path()))
     }
 
     #[must_use]
@@ -111,6 +131,32 @@ impl Resources {
     pub fn workflow(&self, name: &str) -> Option<Resource> {
         self.script(&format!("workflows/{name}"))
     }
+}
+
+fn layered(repo: Option<&Path>, user: Option<&Path>) -> (Vec<(Origin, PathBuf)>, Vec<String>) {
+    let mut layers: Vec<(Origin, PathBuf)> = repo.map(|dir| (Origin::Repo, dir.to_path_buf())).into_iter().collect();
+    let mut chain: Vec<String> = Vec::new();
+    if let Some(user) = user {
+        let mut next = repo.and_then(named).or_else(|| named(user));
+        while let Some(name) = next.take() {
+            if chain.contains(&name) || chain.len() >= MOST_ANCESTORS {
+                break;
+            }
+            let place = user.join(FACTORIES).join(&name);
+            next = named(&place);
+            layers.push((Origin::Factory, place));
+            chain.push(name);
+        }
+        layers.push((Origin::User, user.to_path_buf()));
+    }
+    (layers, chain)
+}
+
+fn named(dir: &Path) -> Option<String> {
+    let text = std::fs::read_to_string(dir.join(FACTORY_FILE)).ok()?;
+    let name = text.trim();
+    let plain = !name.is_empty() && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.');
+    (plain && !name.starts_with('.')).then(|| name.to_owned())
 }
 
 pub fn script_candidates(base: &str) -> Vec<String> {

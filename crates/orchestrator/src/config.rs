@@ -9,6 +9,7 @@ use connectors::Connectors;
 use domain::effect::RetryPolicy;
 use store::Store;
 
+use crate::factory::Factory;
 use crate::protocol::{AGENT, CALL, EXEC};
 use crate::resources::Resources;
 
@@ -80,6 +81,7 @@ pub struct Config {
     pub data: PathBuf,
     pub server: Option<String>,
     pub limits: Limits,
+    pub factory: Factory,
     pub sync: bool,
     pub sync_config: sync::SyncConfig,
     pub watch: Arc<std::sync::OnceLock<Watch>>,
@@ -109,6 +111,7 @@ impl Config {
             data,
             server: None,
             limits: Limits::from_config(),
+            factory: Factory::from_config(),
             sync: true,
             sync_config: sync::SyncConfig::from_brand(),
             watch: Arc::default(),
@@ -143,6 +146,12 @@ impl Config {
     #[must_use]
     pub fn with_server(mut self, url: impl Into<String>) -> Config {
         self.server = Some(url.into());
+        self
+    }
+
+    #[must_use]
+    pub fn with_factory(mut self, factory: Factory) -> Config {
+        self.factory = factory;
         self
     }
 

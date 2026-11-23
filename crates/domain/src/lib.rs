@@ -1,6 +1,7 @@
 pub mod board;
 pub mod command;
 pub mod effect;
+pub mod factory;
 pub mod connection;
 pub mod features;
 pub mod identity;
