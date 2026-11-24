@@ -139,7 +139,7 @@ fn the_ceiling_caps_the_mode() {
 fn with_the_list_every_mode_asks_for_what_is_not_on_it_and_lets_through_what_is() {
     let bounds = bounds();
     let none = Remembered::default();
-    let list = Allowed::of([Grant::Command("cargo test".into()), Grant::Site("gov.br".into()), Grant::Tool("mcp__jira__*".into())]);
+    let list = Allowed::of([Grant::Command("cargo test".into()), Grant::Site("*.gov.br".into()), Grant::Tool("mcp__jira__*".into())]);
     let browser = crate::mcp::browser_server();
     let judged = |tool: &str, effects: Vec<Effect>, mode| {
         let call = Call { tool, subject: "", effects: &effects };
@@ -180,6 +180,10 @@ fn always_allowing_learns_the_command_prefix_the_site_or_the_tool() {
     let mut list = Allowed::default();
     assert!(list.add(Grant::Site("https://Docs.rs/serde".into())));
     assert!(!list.add(Grant::Site("docs.rs".into())));
-    assert!(list.site_allowed("api.docs.rs") && !list.site_allowed("notdocs.rs"));
+    assert!(list.site_allowed("docs.rs") && !list.site_allowed("api.docs.rs") && !list.site_allowed("notdocs.rs"));
     assert!(list.remove(&Grant::Site("docs.rs".into())));
+    assert!(list.add(Grant::Site("*.Gov.br".into())));
+    assert_eq!(list.grants(), [Grant::Site("*.gov.br".into())]);
+    assert!(list.site_allowed("www.gov.br") && list.site_allowed("sso.acesso.gov.br"));
+    assert!(!list.site_allowed("gov.br") && !list.site_allowed("evilgov.br"));
 }

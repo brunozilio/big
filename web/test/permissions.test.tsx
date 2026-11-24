@@ -30,6 +30,7 @@ describe('aba de permissões', () => {
     expect(grantOf('Bash')).toEqual({ kind: 'command', value: '*' })
     expect(grantOf('WebFetch(domain:gov.br)')).toEqual({ kind: 'site', value: 'gov.br' })
     expect(grantOf('Site(docs.rs)')).toEqual({ kind: 'site', value: 'docs.rs' })
+    expect(grantOf('Site(*.gov.br)')).toEqual({ kind: 'site', value: '*.gov.br' })
     expect(grantOf('mcp__atlassian__*')).toEqual({ kind: 'tool', value: 'mcp__atlassian__*' })
     expect(grantOf('   ')).toBeNull()
     for (const grant of [{ kind: 'command', value: 'cargo test' }, { kind: 'site', value: 'gov.br' }, { kind: 'tool', value: 'WebSearch' }] as Grant[]) {

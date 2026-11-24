@@ -27,11 +27,20 @@ impl Grant {
 
 fn site_of(text: &str) -> String {
     let text = text.trim();
-    let wild = text.strip_prefix("*.").unwrap_or(text);
-    if wild == "*" {
-        return wild.to_owned();
+    if text == "*" {
+        return text.to_owned();
     }
-    crate::site::site(wild).unwrap_or_default()
+    match text.strip_prefix("*.") {
+        Some(rest) => crate::site::site(rest).map(|site| format!("*.{site}")).unwrap_or_default(),
+        None => crate::site::site(text).unwrap_or_default(),
+    }
+}
+
+fn site_matches(rule: &str, host: &str) -> bool {
+    match rule.strip_prefix("*.") {
+        Some(parent) => host.ends_with(&format!(".{parent}")),
+        None => rule == "*" || rule == host,
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,9 +80,9 @@ impl Allowed {
     }
 
     pub fn site_allowed(&self, host: &str) -> bool {
-        let host = site_of(host);
+        let host = crate::site::site(host.trim()).unwrap_or_default();
         self.grants.iter().any(|grant| match grant {
-            Grant::Site(site) => site == "*" || host == *site || host.ends_with(&format!(".{site}")),
+            Grant::Site(site) => site_matches(site, &host),
             _ => false,
         })
     }

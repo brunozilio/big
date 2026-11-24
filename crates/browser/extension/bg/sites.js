@@ -10,7 +10,7 @@ export function hostOf(url) {
 }
 
 function covered(sites, host) {
-  return (sites || []).some((site) => site === "*" || host === site || host.endsWith(`.${site}`));
+  return (sites || []).some((site) => (site.startsWith("*.") ? host.endsWith(site.slice(1)) : site === "*" || site === host));
 }
 
 export function ensure(url, sites) {
