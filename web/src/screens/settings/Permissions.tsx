@@ -2,7 +2,7 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { request } from '@/api/http'
 import { IconButton } from '@/ui/button'
 import { Card } from '@/ui/display'
-import { Select } from '@/ui/form'
+import { ChipPicker } from '@/ui/chipPicker'
 import { Icon } from '@/ui/icon'
 import { useT } from '@/i18n'
 import { PermissionsDiscovery } from './PermissionsDiscovery'
@@ -25,10 +25,17 @@ export function withBehavior(grants: Grant[], grant: Grant, behavior: Behavior):
   return grants.map((known) => (same(known, grant) ? { ...known, behavior } : known))
 }
 
+const LOOK: Record<Behavior, { icon: 'checkCircle' | 'help' | 'stop'; tone: string }> = {
+  allow: { icon: 'checkCircle', tone: 'text-success-fg' },
+  ask: { icon: 'help', tone: 'text-warning-fg' },
+  deny: { icon: 'stop', tone: 'text-danger-fg' },
+}
+
 function BehaviorPicker({ value, onChange, name }: { value: Behavior; onChange: (behavior: Behavior) => void; name: string }) {
   const t = useT()
   const label = { allow: t('settings.perm_allow'), ask: t('settings.perm_ask'), deny: t('settings.perm_deny') }
-  return <Select size="sm" className="w-32 shrink-0" label={t('settings.perm_behaviorOf', { name })} value={value} onValueChange={(v) => onChange(v as Behavior)} options={BEHAVIORS.map((b) => ({ value: b, label: label[b] }))} />
+  const options = BEHAVIORS.map((behavior) => ({ value: behavior, label: label[behavior], icon: <Icon name={LOOK[behavior].icon} size={14} className={LOOK[behavior].tone} /> }))
+  return <ChipPicker label={t('settings.perm_behaviorOf', { name })} placeholder={t('settings.perm_changeTo')} value={value} options={options} onChange={onChange} />
 }
 
 type Loaded = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; grants: Grant[] }
@@ -150,7 +157,6 @@ function Adder({ grants, onAdd }: { grants: Grant[]; onAdd: (grant: Grant) => vo
             className="min-w-0 flex-1 bg-transparent font-mono text-sm text-fg outline-none placeholder:font-sans placeholder:text-muted"
           />
           <BehaviorPicker name={t('settings.perm_new')} value={behavior} onChange={setBehavior} />
-          <span className="w-8 shrink-0" />
         </div>
         {problem && <p role="alert" className="mt-1 pl-[26px] text-xs text-danger-fg">{problem}</p>}
       </form>

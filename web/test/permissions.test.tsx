@@ -14,8 +14,12 @@ afterEach(() => {
 function serve(start: Grant[], suggestions: unknown[] = []) {
   let grants = start
   const puts: Grant[][] = []
+  let discovery: unknown = { state: 'idle' }
   globalThis.fetch = (async (path: string, init?: RequestInit) => {
-    if (String(path).endsWith('/discover')) return new Response(JSON.stringify({ suggestions }), { status: 200 })
+    if (String(path).endsWith('/discover')) {
+      discovery = init?.method === 'POST' ? { state: 'ready', suggestions } : init?.method === 'DELETE' ? { state: 'idle' } : discovery
+      return new Response(JSON.stringify(discovery), { status: 200 })
+    }
     if (init?.method === 'PUT') {
       grants = (JSON.parse(String(init.body)) as { grants: Grant[] }).grants
       puts.push(grants)
@@ -81,6 +85,17 @@ describe('aba de permissões', () => {
     expect(view.queryByRole('checkbox')).toBeNull()
   })
 
+  test('ao voltar à tela, a descoberta que rodou em segundo plano aparece', async () => {
+    const suggestions = [{ grant: { kind: 'command', value: 'bun test' }, why: '' }]
+    serve([], suggestions)
+    const first = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    fireEvent.click(await first.findByRole('button', { name: /Descobrir permissões/ }))
+    await first.findByRole('checkbox', { name: 'Bash(bun test:*)' })
+    first.unmount()
+    const again = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    expect(await again.findByRole('checkbox', { name: 'Bash(bun test:*)' })).toBeTruthy()
+  })
+
   test('regra inválida ou repetida não entra e diz o porquê', async () => {
     const puts = serve([{ kind: 'command', value: 'cargo test' }])
     const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
@@ -96,12 +111,23 @@ describe('aba de permissões', () => {
   })
 
   test('cada regra diz se permite, sempre pergunta ou nega', async () => {
-    serve([{ kind: 'command', value: 'cargo test' }, { kind: 'command', value: 'git push', behavior: 'ask' }, { kind: 'site', value: 'evil.dev', behavior: 'deny' }])
+    const puts = serve([{ kind: 'command', value: 'cargo test' }, { kind: 'command', value: 'git push', behavior: 'ask' }, { kind: 'site', value: 'evil.dev', behavior: 'deny' }])
     const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
-    const push = await view.findByRole('combobox', { name: 'O que fazer com Bash(git push:*)' })
+    const push = await view.findByRole('button', { name: 'O que fazer com Bash(git push:*)' })
     expect(push.textContent).toContain('Sempre perguntar')
-    expect(view.getByRole('combobox', { name: 'O que fazer com Bash(cargo test:*)' }).textContent).toContain('Permitir')
-    expect(view.getByRole('combobox', { name: 'O que fazer com Site(evil.dev)' }).textContent).toContain('Negar')
+    expect(view.getByRole('button', { name: 'O que fazer com Bash(cargo test:*)' }).textContent).toContain('Permitir')
+    expect(view.getByRole('button', { name: 'O que fazer com Site(evil.dev)' }).textContent).toContain('Negar')
+    fireEvent.click(push)
+    const choices = await view.findAllByRole('menuitemradio')
+    expect(choices.map((c) => c.textContent)).toEqual(['Permitir1', 'Sempre perguntar2', 'Negar3'])
+    expect(choices[1].getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(choices[2])
+    await waitFor(() => expect(puts.length).toBe(1))
+    expect(puts[0][1]).toEqual({ kind: 'command', value: 'git push', behavior: 'deny' })
+    fireEvent.click(view.getByRole('button', { name: 'O que fazer com Site(evil.dev)' }))
+    fireEvent.keyDown(await view.findByLabelText('Mudar para…'), { key: '1' })
+    await waitFor(() => expect(puts.length).toBe(2))
+    expect(puts[1][2]).toEqual({ kind: 'site', value: 'evil.dev', behavior: 'allow' })
     const grants: Grant[] = [{ kind: 'command', value: 'ls' }, { kind: 'site', value: 'gov.br' }]
     expect(withBehavior(grants, { kind: 'site', value: 'gov.br' }, 'deny')).toEqual([{ kind: 'command', value: 'ls' }, { kind: 'site', value: 'gov.br', behavior: 'deny' }])
   })
