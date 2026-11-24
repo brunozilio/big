@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::Json;
 use axum::extract::State;
 use axum::response::Response;
-use domain::permission::{Allowed, Grant, allowed};
+use domain::permission::{Allowed, Rule, allowed};
 use serde_json::{Value, json};
 use store::Store;
 
@@ -15,7 +15,7 @@ const SEEDED: &str = "permissions.defaults";
 
 pub fn kept(store: &Store) -> Allowed {
     let saved = store.preference(KEY).ok().flatten().unwrap_or(Value::Null);
-    serde_json::from_value::<Vec<Grant>>(saved).map(Allowed::of).unwrap_or_default()
+    serde_json::from_value::<Allowed>(saved).map(|saved| Allowed::of(saved.rules().to_vec())).unwrap_or_default()
 }
 
 fn seeded(store: &Store) -> Allowed {
@@ -54,11 +54,11 @@ fn current(store: &Store) -> Allowed {
 }
 
 pub fn replaced(store: &Store, body: &Value) -> ApiResult<Allowed> {
-    let grants = serde_json::from_value::<Vec<Grant>>(body["grants"].clone()).map_err(|_| {
+    let grants = serde_json::from_value::<Vec<Rule>>(body["grants"].clone()).map_err(|_| {
         ApiError::bad(said(
-            "Send grants as a list of { kind: command | site | tool, value }.",
-            "Envía grants como una lista de { kind: command | site | tool, value }.",
-            "Envie grants como uma lista de { kind: command | site | tool, value }.",
+            "Send grants as a list of { kind: command | site | tool, value, behavior: allow | ask | deny }.",
+            "Envía grants como una lista de { kind: command | site | tool, value, behavior: allow | ask | deny }.",
+            "Envie grants como uma lista de { kind: command | site | tool, value, behavior: allow | ask | deny }.",
         ))
     })?;
     let wanted = Allowed::of(grants);
@@ -83,6 +83,8 @@ pub async fn put(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<R
 
 #[cfg(test)]
 mod tests {
+    use domain::permission::{Behavior, Grant};
+
     use super::*;
 
     #[test]
@@ -93,9 +95,17 @@ mod tests {
             { "kind": "site", "value": "https://www.gov.br/pt-br" },
             { "kind": "site", "value": "www.gov.br" },
             { "kind": "tool", "value": "" },
+            { "kind": "command", "value": "git push", "behavior": "deny" },
         ] });
         let saved = replaced(&store, &body).expect("saved");
-        assert_eq!(saved.grants(), [Grant::Command("cargo test".into()), Grant::Site("www.gov.br".into())]);
+        assert_eq!(
+            saved.rules(),
+            [
+                Rule::from(Grant::Command("cargo test".into())),
+                Rule::from(Grant::Site("www.gov.br".into())),
+                Rule::new(Grant::Command("git push".into()), Behavior::Deny),
+            ]
+        );
         assert_eq!(kept(&store), saved);
         assert!(replaced(&store, &json!({ "grants": [{ "kind": "nope", "value": "x" }] })).is_err());
     }
@@ -105,9 +115,9 @@ mod tests {
         let store = Store::in_memory(0).expect("store");
         replaced(&store, &json!({ "grants": [{ "kind": "site", "value": "gov.br" }] })).expect("saved");
         let first = seeded(&store);
-        assert!(first.grants().contains(&Grant::Site("gov.br".into())));
-        assert!(first.grants().contains(&Grant::Command("git status".into())));
+        assert!(first.has(&Grant::Site("gov.br".into())));
+        assert!(first.has(&Grant::Command("git status".into())));
         replaced(&store, &json!({ "grants": [] })).expect("emptied");
-        assert!(seeded(&store).grants().is_empty());
+        assert!(seeded(&store).rules().is_empty());
     }
 }

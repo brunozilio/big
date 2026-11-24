@@ -226,8 +226,9 @@ fn stamped(mut event: Value, id: String, at: i64) -> Value {
 
 pub fn ask_event(ask: &AgentAsk, at: i64) -> Value {
     let event = match &ask.kind {
-        AskKind::Permission { tool, subject, .. } => json!({
+        AskKind::Permission { tool, subject, rememberable } => json!({
             "type": "permission", "tool": tool, "detail": subject, "risk": "medium", "resolution": "pending",
+            "rememberable": rememberable,
         }),
         AskKind::Questions(questions) => {
             let asked: Vec<Value> = questions
@@ -380,6 +381,11 @@ fn answers(questions: &[domain::Question], given: &Value) -> Vec<Vec<usize>> {
 pub fn decision(kind: &AskKind, response: &Value) -> Option<Decision> {
     match (response["kind"].as_str()?, kind) {
         ("ask", AskKind::Questions(questions)) => Some(Decision::Answer(answers(questions, &response["answers"]))),
+        ("permission", AskKind::Permission { rememberable: false, .. }) => match response["decision"].as_str()? {
+            "allowed" | "always" => Some(Decision::Allow),
+            "denied" => Some(Decision::Deny),
+            _ => None,
+        },
         ("permission", _) => match response["decision"].as_str()? {
             "allowed" => Some(Decision::Allow),
             "always" => Some(Decision::AllowAlways),

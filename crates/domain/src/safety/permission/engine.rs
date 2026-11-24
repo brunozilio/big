@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use super::allowed::Behavior;
 use super::{Call, Effect, Guard, Judgement, PolicyContext, Reason, Remembered, Standing, Verdict};
 use crate::PermissionMode;
 
@@ -43,6 +44,12 @@ impl PolicyEngine {
 
 fn by_the_list(call: &Call<'_>, cx: &PolicyContext<'_>, standing: Standing) -> Option<Verdict> {
     let allowed = cx.allowed?;
+    let listed = allowed.verdict(call);
+    match listed {
+        Some(Behavior::Deny) => return Some(Verdict::Deny(format!("{} is denied by the permission list.", call.tool))),
+        Some(Behavior::Ask) => return Some(Verdict::Ask { reason: Reason::Mode, rememberable: false }),
+        _ => {}
+    }
     if standing != Standing::Acts {
         return None;
     }
@@ -50,7 +57,7 @@ fn by_the_list(call: &Call<'_>, cx: &PolicyContext<'_>, standing: Standing) -> O
     if cx.mode() == PermissionMode::Plan && !plannable {
         return None;
     }
-    Some(if allowed.covers(call) { Verdict::Allow } else { Verdict::Ask { reason: Reason::Mode, rememberable: true } })
+    Some(if listed == Some(Behavior::Allow) { Verdict::Allow } else { Verdict::Ask { reason: Reason::Mode, rememberable: true } })
 }
 
 fn only_commands(call: &Call<'_>) -> bool {

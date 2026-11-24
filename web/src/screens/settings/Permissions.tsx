@@ -2,15 +2,33 @@ import { type FormEvent, useEffect, useState } from 'react'
 import { request } from '@/api/http'
 import { IconButton } from '@/ui/button'
 import { Card } from '@/ui/display'
+import { Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { useT } from '@/i18n'
 import { PermissionsDiscovery } from './PermissionsDiscovery'
 
 export type GrantKind = 'command' | 'site' | 'tool'
 
+const same = (a: { kind: GrantKind; value: string }, b: { kind: GrantKind; value: string }) => a.kind === b.kind && a.value === b.value
+
+export type Behavior = 'allow' | 'ask' | 'deny'
+
 export interface Grant {
   kind: GrantKind
   value: string
+  behavior?: Behavior
+}
+
+const BEHAVIORS: Behavior[] = ['allow', 'ask', 'deny']
+
+export function withBehavior(grants: Grant[], grant: Grant, behavior: Behavior): Grant[] {
+  return grants.map((known) => (same(known, grant) ? { ...known, behavior } : known))
+}
+
+function BehaviorPicker({ value, onChange, name }: { value: Behavior; onChange: (behavior: Behavior) => void; name: string }) {
+  const t = useT()
+  const label = { allow: t('settings.perm_allow'), ask: t('settings.perm_ask'), deny: t('settings.perm_deny') }
+  return <Select size="sm" className="w-32 shrink-0" label={t('settings.perm_behaviorOf', { name })} value={value} onValueChange={(v) => onChange(v as Behavior)} options={BEHAVIORS.map((b) => ({ value: b, label: label[b] }))} />
 }
 
 type Loaded = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; grants: Grant[] }
@@ -86,11 +104,13 @@ function usePermissions() {
   return { loaded, error, save }
 }
 
-function Row({ rule, onRemove }: { rule: string; onRemove: () => void }) {
+function Row({ grant, onBehavior, onRemove }: { grant: Grant; onBehavior: (behavior: Behavior) => void; onRemove: () => void }) {
   const t = useT()
+  const rule = ruleOf(grant)
   return (
     <li className="group flex items-center gap-3 px-4 py-2">
       <code className="min-w-0 flex-1 truncate font-mono text-sm text-fg" title={rule}>{rule}</code>
+      <BehaviorPicker name={rule} value={grant.behavior ?? 'allow'} onChange={onBehavior} />
       <IconButton size="sm" tooltip={t('settings.remove')} aria-label={t('settings.removeNamed', { name: rule })} onClick={onRemove} className="opacity-60 group-hover:opacity-100">
         <Icon name="close" size={14} />
       </IconButton>
@@ -98,19 +118,19 @@ function Row({ rule, onRemove }: { rule: string; onRemove: () => void }) {
   )
 }
 
-const same = (a: Grant, b: Grant) => a.kind === b.kind && a.value === b.value
 
 function Adder({ grants, onAdd }: { grants: Grant[]; onAdd: (grant: Grant) => void }) {
   const t = useT()
   const [value, setValue] = useState('')
   const [problem, setProblem] = useState<string | null>(null)
+  const [behavior, setBehavior] = useState<Behavior>('allow')
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (!value.trim()) return
     const grant = grantOf(value)
     if (!grant) return setProblem(t('settings.perm_invalid'))
     if (grants.some((known) => same(known, grant))) return setProblem(t('settings.perm_duplicate'))
-    onAdd(grant)
+    onAdd({ ...grant, behavior })
     setValue('')
   }
   return (
@@ -129,6 +149,8 @@ function Adder({ grants, onAdd }: { grants: Grant[]; onAdd: (grant: Grant) => vo
             }}
             className="min-w-0 flex-1 bg-transparent font-mono text-sm text-fg outline-none placeholder:font-sans placeholder:text-muted"
           />
+          <BehaviorPicker name={t('settings.perm_new')} value={behavior} onChange={setBehavior} />
+          <span className="w-8 shrink-0" />
         </div>
         {problem && <p role="alert" className="mt-1 pl-[26px] text-xs text-danger-fg">{problem}</p>}
       </form>
@@ -148,7 +170,7 @@ export function PermissionsView() {
       <Card>
         <ul aria-label={t('settings.tab_permissions')} className="divide-y">
           <Adder grants={grants} onAdd={(grant) => save([grant, ...grants])} />
-          {grants.length === 0 ? <li className="px-4 py-3 text-sm text-muted">{t('settings.perm_empty')}</li> : grants.map((grant) => <Row key={`${grant.kind}:${grant.value}`} rule={ruleOf(grant)} onRemove={() => save(grants.filter((g) => !same(g, grant)))} />)}
+          {grants.length === 0 ? <li className="px-4 py-3 text-sm text-muted">{t('settings.perm_empty')}</li> : grants.map((grant) => <Row key={`${grant.kind}:${grant.value}`} grant={grant} onBehavior={(behavior) => save(withBehavior(grants, grant, behavior))} onRemove={() => save(grants.filter((g) => !same(g, grant)))} />)}
         </ul>
       </Card>
       {error && <p role="alert" className="text-sm text-danger-fg">{error}</p>}

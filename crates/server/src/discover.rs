@@ -107,9 +107,10 @@ fn evidence(seen: &[(Grant, Seen)], folders: &[PathBuf], current: &Allowed) -> S
         .map(|(grant, count)| format!("- {} ({}× in {} sessions)", grant.rule(), count.times, count.sessions.len()))
         .collect();
     let projects: Vec<String> = folders.iter().map(|folder| project(folder)).filter(|text| !text.is_empty()).collect();
-    let listed: Vec<String> = current.grants().iter().map(Grant::rule).collect();
+    let listed: Vec<String> =
+        current.rules().iter().map(|rule| format!("{} ({:?})", rule.grant.rule(), rule.behavior)).collect();
     format!(
-        "# Used in recent sessions\n{}\n\n# Projects\n{}\n\n# Already on the allow list\n{}",
+        "# Used in recent sessions\n{}\n\n# Projects\n{}\n\n# Already on the list (Allow, Ask or Deny: never propose these again)\n{}",
         ran.join("\n"),
         projects.join("\n\n"),
         listed.join("\n"),
@@ -119,7 +120,7 @@ fn evidence(seen: &[(Grant, Seen)], folders: &[PathBuf], current: &Allowed) -> S
 fn fresh(found: Vec<Suggested>, current: &Allowed) -> Vec<Suggested> {
     found
         .into_iter()
-        .filter(|suggested| !current.grants().contains(&suggested.grant))
+        .filter(|suggested| !current.has(&suggested.grant))
         .filter(|suggested| match &suggested.grant {
             Grant::Command(command) => {
                 let effects = [Effect::exec(command)];

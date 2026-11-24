@@ -183,7 +183,7 @@ fn always_allowing_learns_the_command_prefix_the_site_or_the_tool() {
     assert!(list.site_allowed("docs.rs") && !list.site_allowed("api.docs.rs") && !list.site_allowed("notdocs.rs"));
     assert!(list.remove(&Grant::Site("docs.rs".into())));
     assert!(list.add(Grant::Site("*.Gov.br".into())));
-    assert_eq!(list.grants(), [Grant::Site("*.gov.br".into())]);
+    assert_eq!(list.rules(), [Rule::from(Grant::Site("*.gov.br".into()))]);
     assert!(list.site_allowed("www.gov.br") && list.site_allowed("sso.acesso.gov.br"));
     assert!(!list.site_allowed("gov.br") && !list.site_allowed("evilgov.br"));
 }
@@ -241,5 +241,40 @@ fn a_tool_rule_must_name_a_tool_and_a_new_rule_can_go_first() {
     }
     assert!(list.add_first(Grant::Site("docs.rs".into())));
     assert!(!list.add_first(Grant::Site("docs.rs".into())));
-    assert_eq!(list.grants()[0], Grant::Site("docs.rs".into()));
+    assert_eq!(list.rules()[0].grant, Grant::Site("docs.rs".into()));
+}
+
+#[test]
+fn deny_beats_ask_beats_allow_and_an_ask_rule_cannot_be_remembered() {
+    let bounds = bounds();
+    let none = Remembered::default();
+    let list = Allowed::of([
+        Rule::from(Grant::Command("git".into())),
+        Rule::new(Grant::Command("git push".into()), Behavior::Ask),
+        Rule::new(Grant::Command("git push --force".into()), Behavior::Deny),
+        Rule::new(Grant::Site("evil.dev".into()), Behavior::Deny),
+        Rule::new(Grant::Tool("Write".into()), Behavior::Ask),
+    ]);
+    let judged = |tool: &str, effects: Vec<Effect>| {
+        let call = Call { tool, subject: "", effects: &effects };
+        let cx = PolicyContext { allowed: Some(&list), ..context(PermissionMode::Bypass, &none, &bounds) };
+        PolicyEngine::decide(&call, &cx)
+    };
+    assert_eq!(judged("Bash", vec![Effect::exec("git status")]), Verdict::Allow);
+    assert_eq!(
+        judged("Bash", vec![Effect::exec("git status && git push origin main")]),
+        Verdict::Ask { reason: Reason::Mode, rememberable: false }
+    );
+    assert!(matches!(judged("Bash", vec![Effect::exec("git push --force")]), Verdict::Deny(_)));
+    assert!(matches!(judged("WebFetch", vec![Effect::Fetch { host: Some("evil.dev".into()) }]), Verdict::Deny(_)));
+    let edit = vec![Effect::WritePath(place("/work/rocket/src/a.rs"))];
+    assert_eq!(judged("Write", edit), Verdict::Ask { reason: Reason::Mode, rememberable: false });
+    assert_eq!(judged("Bash", vec![Effect::exec("ls")]), Verdict::Ask { reason: Reason::Mode, rememberable: true });
+    let mut changed = list.clone();
+    assert!(changed.add(Rule::new(Grant::Command("git push".into()), Behavior::Allow)));
+    assert_eq!(changed.rules().len(), list.rules().len());
+    let saved = serde_json::to_value(&list).expect("json");
+    assert_eq!(saved[1], serde_json::json!({ "kind": "command", "value": "git push", "behavior": "ask" }));
+    let old: Allowed = serde_json::from_value(serde_json::json!([{ "kind": "site", "value": "gov.br" }])).expect("old");
+    assert_eq!(old.rules(), [Rule::from(Grant::Site("gov.br".into()))]);
 }

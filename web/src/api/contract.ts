@@ -420,7 +420,7 @@ export type SessionEvent =
   | { id: string; at: Iso; type: 'assistant'; text: string; agent?: string }
   | { id: string; at: Iso; type: 'status'; status: 'info' | 'error'; text: string }
   | { id: string; at: Iso; type: 'ask'; questions: AskQuestion[]; answers: string[] | null; agent?: string }
-  | { id: string; at: Iso; type: 'permission'; tool: string; detail: string; risk: 'low' | 'medium' | 'high'; logo?: string; resolution: 'pending' | PermissionDecision }
+  | { id: string; at: Iso; type: 'permission'; tool: string; detail: string; risk: 'low' | 'medium' | 'high'; logo?: string; rememberable?: boolean; resolution: 'pending' | PermissionDecision }
   | { id: string; at: Iso; type: 'plan'; text: string; resolution: 'pending' | 'approved' | 'revised'; feedback?: string; agent?: string }
 
 export interface Session {

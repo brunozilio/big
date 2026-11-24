@@ -82,9 +82,8 @@ impl Job {
         let ledger = Arc::new(Ledger::default());
         let api =
             Metered { calls: None, budget: None, ..self.metered(api, &ledger, self.request.session.model.clone()) };
-        let small = (command == SessionCommand::Permissions)
-            .then(|| self.small_model(&self.request.session.roles))
-            .flatten();
+        let small =
+            (command == SessionCommand::Permissions).then(|| self.small_model(&self.request.session.roles)).flatten();
         let template = TurnRequest {
             model: small.unwrap_or_else(|| self.request.session.model.id.clone()),
             system: crate::prompt::text("chores"),

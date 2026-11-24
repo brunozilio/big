@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
-import { type Grant, PermissionsView, grantOf, ruleOf } from '../src/screens/settings/Permissions'
+import { type Grant, PermissionsView, grantOf, ruleOf, withBehavior } from '../src/screens/settings/Permissions'
+import { PermissionBlock } from '../src/chat/actionBlocks'
 import { TooltipProvider } from '../src/ui/overlay'
 
 const realFetch = globalThis.fetch
@@ -54,10 +55,10 @@ describe('aba de permissões', () => {
     fireEvent.change(box, { target: { value: 'Bash(git status)' } })
     fireEvent.submit(box)
     await waitFor(() => expect(list.textContent).toContain('Bash(git status:*)'))
-    fireEvent.click(view.getByLabelText(/Bash\(cargo test:\*\)/))
+    fireEvent.click(view.getByLabelText("Remover Bash(cargo test:*)"))
     await waitFor(() => expect(list.textContent).not.toContain('cargo test'))
-    expect(puts[0]).toEqual([{ kind: 'command', value: 'git status' }, { kind: 'command', value: 'cargo test' }, { kind: 'site', value: 'gov.br' }])
-    expect(puts[puts.length - 1]).toEqual([{ kind: 'command', value: 'git status' }, { kind: 'site', value: 'gov.br' }])
+    expect(puts[0]).toEqual([{ kind: 'command', value: 'git status', behavior: 'allow' }, { kind: 'command', value: 'cargo test' }, { kind: 'site', value: 'gov.br' }])
+    expect(puts[puts.length - 1]).toEqual([{ kind: 'command', value: 'git status', behavior: 'allow' }, { kind: 'site', value: 'gov.br' }])
   })
 
   test('descobrir traz tudo marcado e só entra o que ficou marcado', async () => {
@@ -92,5 +93,27 @@ describe('aba de permissões', () => {
     fireEvent.submit(box)
     expect((await view.findByRole('alert')).textContent).toContain('já está na lista')
     expect(puts).toEqual([])
+  })
+
+  test('cada regra diz se permite, sempre pergunta ou nega', async () => {
+    serve([{ kind: 'command', value: 'cargo test' }, { kind: 'command', value: 'git push', behavior: 'ask' }, { kind: 'site', value: 'evil.dev', behavior: 'deny' }])
+    const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    const push = await view.findByRole('combobox', { name: 'O que fazer com Bash(git push:*)' })
+    expect(push.textContent).toContain('Sempre perguntar')
+    expect(view.getByRole('combobox', { name: 'O que fazer com Bash(cargo test:*)' }).textContent).toContain('Permitir')
+    expect(view.getByRole('combobox', { name: 'O que fazer com Site(evil.dev)' }).textContent).toContain('Negar')
+    const grants: Grant[] = [{ kind: 'command', value: 'ls' }, { kind: 'site', value: 'gov.br' }]
+    expect(withBehavior(grants, { kind: 'site', value: 'gov.br' }, 'deny')).toEqual([{ kind: 'command', value: 'ls' }, { kind: 'site', value: 'gov.br', behavior: 'deny' }])
+  })
+
+  test('pedido de uma regra "sempre perguntar" não oferece "Sempre permitir"', () => {
+    const event = (rememberable?: boolean) => ({ id: 'p', at: '', type: 'permission', tool: 'Bash', detail: 'git push', risk: 'medium', resolution: 'pending', rememberable }) as never
+    const respond = async () => {}
+    const asked = render(<TooltipProvider><PermissionBlock event={event(false)} respond={respond} /></TooltipProvider>)
+    expect(asked.queryByRole('button', { name: /Sempre permitir/ })).toBeNull()
+    expect(asked.getByRole('button', { name: /Negar/ })).toBeTruthy()
+    cleanup()
+    const plain = render(<TooltipProvider><PermissionBlock event={event(undefined)} respond={respond} /></TooltipProvider>)
+    expect(plain.getByRole('button', { name: /Sempre permitir/ })).toBeTruthy()
   })
 })

@@ -66,6 +66,11 @@ fn plans_and_permissions_take_the_page_s_decisions() {
         Some(Decision::AllowAlways)
     );
     assert_eq!(decision(&permission, &json!({ "kind": "nope" })), None);
+    let listed = AskKind::Permission { tool: "Bash".into(), subject: "git push".into(), rememberable: false };
+    assert_eq!(decision(&listed, &json!({ "kind": "permission", "decision": "always" })), Some(Decision::Allow));
+    assert_eq!(decision(&listed, &json!({ "kind": "permission", "decision": "denied" })), Some(Decision::Deny));
+    let asked = ask_event(&AgentAsk { id: domain::AskId("a".into()), kind: listed }, 0);
+    assert_eq!(asked["rememberable"], false);
     assert_eq!(mode_named("Plan"), "plan");
 }
 

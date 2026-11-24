@@ -11,7 +11,7 @@ mod verdict;
 #[cfg(test)]
 mod tests;
 
-pub use allowed::{Allowed, Grant};
+pub use allowed::{Allowed, Behavior, Grant, Rule};
 pub use suggested::{Suggested, parse_suggestions};
 pub use context::{Bounds, Call, PolicyContext, Protected};
 pub use effect::{Declared, Effect, Exec, Place, SpawnKind, change_nothing, only_browser, only_fetch};

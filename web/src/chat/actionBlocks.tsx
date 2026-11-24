@@ -275,9 +275,11 @@ export function PermissionBlock({ event, readOnly, respond }: { event: Ev<'permi
         <Button size="sm" variant="primary" disabled={readOnly || busy} onClick={() => decide('allowed')} kbd="↵">
           Permitir uma vez
         </Button>
-        <Button size="sm" disabled={readOnly || busy} onClick={() => decide('always')}>
-          Sempre permitir
-        </Button>
+        {event.rememberable !== false && (
+          <Button size="sm" disabled={readOnly || busy} onClick={() => decide('always')}>
+            Sempre permitir
+          </Button>
+        )}
         <Button size="sm" variant="ghost" className="text-danger-fg hover:text-danger-fg" disabled={readOnly || busy} onClick={() => decide('denied')}>
           Negar
         </Button>

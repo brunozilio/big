@@ -19,7 +19,9 @@ impl Agent<'_> {
         match self.asked_relaying(id, kind, Some(input)) {
             Ok(Decision::Allow | Decision::Answer(_) | Decision::Approve(_)) => self.went_ahead(id, tool, input),
             Ok(Decision::AllowAlways) => {
-                self.remember_allowed(asking);
+                if rememberable {
+                    self.remember_allowed(asking);
+                }
                 self.went_ahead(id, tool, input)
             }
             Ok(Decision::Deny) => self.refused(
@@ -38,7 +40,13 @@ impl Agent<'_> {
         if *standing == Standing::Acts && domain::permission::allowed::global().is_some() {
             let learned = Allowed::learned(&asking.called.call());
             if !learned.is_empty() {
-                domain::permission::allowed::change(|allowed| learned.into_iter().rev().for_each(|grant| _ = allowed.add_first(grant)));
+                domain::permission::allowed::change(|allowed| {
+                    for grant in learned.into_iter().rev() {
+                        if !allowed.has(&grant) {
+                            allowed.add_first(grant);
+                        }
+                    }
+                });
                 return;
             }
         }
