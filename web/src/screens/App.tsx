@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams, useSearchParams } from 'react-rout
 import { retry, useStore } from '@/api/store'
 import { useBrandTitle, useThemeSync } from '@/app/theme'
 import { useLanguageSync } from '@/i18n/sync'
+import { useT } from '@/i18n'
 import { Button, IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { ProductMark } from '@/ui/domain'
@@ -51,13 +52,14 @@ export function App() {
 function LoadState() {
   const ready = useStore((s) => s.ready)
   const error = useStore((s) => s.error)
+  const t = useT()
   if (!ready) return null
   if (!error) return null
   return (
     <div className="mb-8 flex items-center gap-3 rounded-card bg-danger-soft px-4 py-3 text-base text-danger-fg">
       <Icon name="alert" size={16} />
       <span className="min-w-0 flex-1">{error}</span>
-      <Button size="sm" variant="secondary" onClick={() => void retry()}>Tentar de novo</Button>
+      <Button size="sm" variant="secondary" onClick={() => void retry()}>{t('app.retry')}</Button>
     </div>
   )
 }
@@ -68,8 +70,9 @@ function DeliveryPage() {
   const params = useParams()
   const [search, setSearch] = useSearchParams()
   const [fresh, setFresh] = useState<string | null>(null)
+  const t = useT()
   const settings = location.pathname.startsWith('/settings')
-  const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'browser' || params.tab === 'applications' || params.tab === 'usage' ? params.tab : 'connections'
+  const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'browser' || params.tab === 'permissions' || params.tab === 'applications' || params.tab === 'usage' ? params.tab : 'connections'
   const connecting = search.get('connect')
   const items = useStore((s) => s.items)
   const openId = params.id ?? null
@@ -82,8 +85,8 @@ function DeliveryPage() {
         <AnimatePresence mode="wait" initial={false}>
           {settings ? (
             <motion.div key="back" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={tweenClose} className="flex items-center gap-2">
-              <IconButton tooltip="Voltar" onClick={() => navigate('/')}><Icon name="left" size={18} /></IconButton>
-              <span className="text-lg font-medium text-fg">Configurações</span>
+              <IconButton tooltip={t('app.back')} onClick={() => navigate('/')}><Icon name="left" size={18} /></IconButton>
+              <span className="text-lg font-medium text-fg">{t('app.settings')}</span>
             </motion.div>
           ) : (
             <motion.span key="mark" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tweenClose} className="flex">
@@ -92,8 +95,8 @@ function DeliveryPage() {
           )}
         </AnimatePresence>
         <div className="ml-auto flex items-center gap-2">
-          <Tooltip content="Configurações">
-            <button aria-label="Configurações" onClick={() => navigate(settings ? '/' : '/settings/connections')} className={cn('relative flex size-9 items-center justify-center rounded-control text-fg2 transition-colors hover:bg-hover hover:text-fg', settings && 'bg-active text-fg')}>
+          <Tooltip content={t('app.settings')}>
+            <button aria-label={t('app.settings')} onClick={() => navigate(settings ? '/' : '/settings/connections')} className={cn('relative flex size-9 items-center justify-center rounded-control text-fg2 transition-colors hover:bg-hover hover:text-fg', settings && 'bg-active text-fg')}>
               <motion.span animate={{ rotate: settings ? 90 : 0 }} transition={tween} className="flex"><Icon name="settings" size={19} /></motion.span>
             </button>
           </Tooltip>
@@ -103,7 +106,7 @@ function DeliveryPage() {
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={settings ? 'settings' : 'items'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tweenClose}>
           {settings ? (
-            <SettingsView tab={tab} onTab={(t) => navigate(`/settings/${t}`)} onConnect={(p) => setSearch({ connect: p })} />
+            <SettingsView tab={tab} onTab={(next) => navigate(`/settings/${next}`)} onConnect={(p) => setSearch({ connect: p })} />
           ) : (
             <>
               <NewItem onCreated={(it) => {

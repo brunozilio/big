@@ -18,6 +18,17 @@ describe('ordem do chat', () => {
     expect(order).toEqual(['t1', 'a1', 'k1+k2', 'a2'])
   })
 
+  test('permissão já respondida não deixa linha no chat; a pendente fica', () => {
+    const events = [
+      ev('k1', 'tools', { calls: [], seconds: 0, live: false }),
+      ev('p1', 'permission', { tool: 'navigate', detail: 'gov.br', risk: 'low', resolution: 'allowed' }),
+      ev('k2', 'tools', { calls: [], seconds: 0, live: false }),
+      ev('p2', 'permission', { tool: 'navigate', detail: 'x.dev', risk: 'low', resolution: 'pending' }),
+    ]
+    const order = segmentsOf(events, false).map((s) => (s.kind === 'human' ? s.event.id : s.events.map((e) => e.id).join('+')))
+    expect(order).toEqual(['k1+k2', 'p2'])
+  })
+
   test('o mesmo plano não aparece duas vezes', () => {
     const plan = (id: string, resolution: string) => ev(id, 'plan', { text: '# P', resolution })
     expect(withoutRepeatedPlans([plan('e14', 'approved'), plan('ask', 'approved')]).map((e) => e.id)).toEqual(['ask'])
