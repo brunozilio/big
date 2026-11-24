@@ -24,7 +24,7 @@ fn conversations() -> MutexGuard<'static, HashMap<String, Vec<Message>>> {
 fn ended(outcome: &Result<crate::transcript::Usage, Ending>) -> Option<&'static str> {
     match outcome {
         Ok(_) => Some("done"),
-        Err(Ending::Cancelled | Ending::Moved) => None,
+        Err(Ending::Cancelled) => None,
         Err(Ending::Failed(_)) => Some("failed"),
         Err(Ending::Refused) => Some("refused"),
         Err(Ending::TooManyTurns) => Some("too many turns"),

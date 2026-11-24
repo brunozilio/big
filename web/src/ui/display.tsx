@@ -13,16 +13,6 @@ export function Spinner({ className, size = 16 }: { className?: string; size?: n
   )
 }
 
-export function DotsSpinner({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 16 16" width={16} height={16} className={cn('shrink-0 animate-spin text-muted [animation-duration:1.4s]', className)}>
-      {Array.from({ length: 8 }, (_, i) => (
-        <circle key={i} cx={8 + 5.5 * Math.cos((i * Math.PI) / 4)} cy={8 + 5.5 * Math.sin((i * Math.PI) / 4)} r="1.1" fill="currentColor" opacity={0.25 + i * 0.1} />
-      ))}
-    </svg>
-  )
-}
-
 export function Kbd({ children, className }: { children: ReactNode; className?: string }) {
   return <kbd className={cn('inline-flex h-[20px] min-w-[20px] items-center justify-center rounded-[5px] bg-inset px-1 font-sans text-2xs font-medium tabular-nums text-muted shadow-[inset_0_-1px_0_rgb(0_0_0/0.06)]', className)}>{children}</kbd>
 }
@@ -50,23 +40,6 @@ export function Badge({ tone = 'neutral', children, className, icon }: { tone?: 
   )
 }
 
-export function Chip({ children, className, onRemove }: { children: ReactNode; className?: string; onRemove?: () => void }) {
-  return (
-    <span className={cn('inline-flex h-[24px] items-center gap-1 whitespace-nowrap rounded-control-sm bg-inset px-2 text-sm text-fg2', className)}>
-      {children}
-      {onRemove && (
-        <button aria-label="remover" className="-mr-1 rounded p-0.5 text-faint hover:text-fg" onClick={onRemove}>
-          <Icon name="close" size={12} />
-        </button>
-      )}
-    </span>
-  )
-}
-
-export function Dot({ className }: { className?: string }) {
-  return <span className={cn('inline-block size-[7px] shrink-0 rounded-full', className)} />
-}
-
 export function Avatar({ name, photo, size = 24, agent, className }: { name: string; photo?: string | null; size?: number; agent?: boolean; className?: string }) {
   return (
     <span title={name} className={cn('relative inline-flex shrink-0', className)} style={{ width: size, height: size }}>
@@ -74,25 +47,6 @@ export function Avatar({ name, photo, size = 24, agent, className }: { name: str
       {agent && (
         <span className="absolute -bottom-0.5 -right-0.5 flex items-center justify-center rounded-full bg-primary text-primary-fg ring-2 ring-bg" style={{ width: Math.max(12, size * 0.5), height: Math.max(12, size * 0.5) }}>
           <Icon name="asterisk" size={Math.max(9, Math.round(size * 0.36))} strokeWidth={2.4} />
-        </span>
-      )}
-    </span>
-  )
-}
-
-export function AvatarStack({ people, max = 4, size = 22 }: { people: { name: string; id?: string; photo?: string | null }[]; max?: number; size?: number }) {
-  const shown = people.slice(0, max)
-  const rest = people.length - shown.length
-  return (
-    <span className="flex items-center -space-x-1.5">
-      {shown.map((p) => (
-        <span key={p.id ?? p.name}>
-          <Avatar name={p.name} photo={p.photo} size={size} />
-        </span>
-      ))}
-      {rest > 0 && (
-        <span className="inline-flex items-center justify-center rounded-full bg-inset text-2xs font-medium tabular-nums text-muted ring-2 ring-bg" style={{ width: size, height: size }}>
-          +{rest}
         </span>
       )}
     </span>
@@ -119,36 +73,12 @@ export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('skeleton h-3', className)} />
 }
 
-export function SkeletonList({ rows = 4 }: { rows?: number }) {
-  return (
-    <div className="space-y-3.5">
-      {Array.from({ length: rows }, (_, i) => (
-        <div key={i} className="flex items-center gap-3">
-          <Skeleton className="size-6" />
-          <Skeleton className="h-2.5 flex-1" />
-          <Skeleton className="h-2.5 w-12" />
-        </div>
-      ))}
-    </div>
-  )
-}
-
 export function ProgressBar({ value, tone }: { value: number; tone?: 'auto' | 'info' }) {
   const pct = Math.min(100, Math.max(0, value))
   const color = tone === 'info' ? 'bg-info' : pct >= 100 ? 'bg-danger' : pct >= 80 ? 'bg-warning' : 'bg-fg'
   return (
     <div className="h-[5px] w-full overflow-hidden rounded-full bg-inset">
       <motion.div className={cn('h-full w-full origin-left rounded-full', color)} initial={false} animate={{ scaleX: pct / 100 }} transition={tween} />
-    </div>
-  )
-}
-
-export function SegmentBar({ total, filled }: { total: number; filled: number }) {
-  return (
-    <div className="flex gap-[3px]">
-      {Array.from({ length: total }, (_, i) => (
-        <span key={i} className={cn('h-[14px] w-[7px] rounded-[2px] transition-colors duration-[250ms]', i < filled ? 'bg-info' : 'bg-inset')} />
-      ))}
     </div>
   )
 }
@@ -269,18 +199,5 @@ export function DiffView({ diff }: { diff: string }) {
         </motion.div>
       ))}
     </pre>
-  )
-}
-
-export function Stat({ label, value, hint, icon }: { label: string; value: ReactNode; hint?: ReactNode; icon?: ReactNode }) {
-  return (
-    <div>
-      <p className="flex items-center gap-1.5 text-base text-muted">
-        {icon}
-        {label}
-      </p>
-      <p className="mt-2 text-xl font-medium tabular-nums tracking-tightish text-fg">{value}</p>
-      {hint && <p className="mt-0.5 text-xs tabular-nums text-muted">{hint}</p>}
-    </div>
   )
 }

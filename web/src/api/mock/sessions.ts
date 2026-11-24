@@ -80,7 +80,7 @@ function workSession(it: SimItem): Session {
   developEvents(it, ev, iso)
   const running = !it.done && !it.bounce && (it.states.plan === 'running' || it.states.develop === 'running')
   const waiting = it.states.plan === 'waiting' || isPaused(it)
-  return { id: `s-${it.id}`, title: `${it.key} · ${it.title}`, status: running ? 'running' : waiting ? 'waiting' : 'idle', mode: it.pause?.kind === 'permission' ? 'bypass' : it.states.plan === 'running' || it.states.plan === 'waiting' ? 'plan' : 'accept_edits', model: it.model, agents: AGENTS, events: ev }
+  return { id: `s-${it.id}`, title: `${it.key} · ${it.title}`, status: running ? 'running' : waiting ? 'waiting' : 'idle', mode: it.pause?.kind === 'permission' ? 'bypass' : it.states.plan === 'running' || it.states.plan === 'waiting' ? 'plan' : 'accept_edits', model: it.model, agents: AGENTS, events: ev, suggestion: !running && !waiting && it.states.develop === 'passed' ? `Explique o que mudou em ${fileOf(it)}` : null }
 }
 
 function reviewSession(it: SimItem): Session {
@@ -88,7 +88,7 @@ function reviewSession(it: SimItem): Session {
   const ev: SessionEvent[] = [{ id: 'r-a', at: iso(store.clock - 20), type: 'assistant', agent: 'reviewer', text: `Resumo do **PR #${it.pr}** (${d.files} arquivos, +${d.additions} −${d.deletions}):\n\n- \`${fileOf(it)}\`: renova a sessão expirada em vez de devolvê-la\n- Teste novo cobre o caso que falhava\n- \`src/lib/retry.ts\`: usa o backoff existente\n\nPergunte o que quiser sobre as mudanças.` }]
   it.reviewChat.forEach((c) => ev.push(c.role === 'user' ? { id: c.id, at: iso(c.tick), type: 'user', author: you, text: c.text, attachments: 0 } : { id: c.id, at: iso(c.tick), type: 'assistant', text: c.text, agent: c.agent }))
   const replying = it.reviewChat.length > 0 && it.reviewChat[it.reviewChat.length - 1].role === 'user'
-  return { id: `r-${it.id}`, title: `Review · ${it.key}`, status: replying ? 'running' : isReviewWaiting(it) ? 'idle' : 'idle', mode: 'ask', model: it.model, agents: AGENTS, events: ev }
+  return { id: `r-${it.id}`, title: `Review · ${it.key}`, status: replying ? 'running' : isReviewWaiting(it) ? 'idle' : 'idle', mode: 'ask', model: it.model, agents: AGENTS, events: ev, suggestion: replying ? null : 'Quais testes cobrem essa mudança?' }
 }
 
 export function sessionById(id: string): Session | null {

@@ -2,9 +2,9 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
 import { mins, minutesSince } from '@/api/clock'
-import type { Block, Item, StepState, StepView } from '@/api/contract'
+import type { Block, HeadsUp, Item, StepState, StepView } from '@/api/contract'
 import { errorText, useStepView } from '@/api/store'
-import { BlockContext } from '@/blocks/context'
+import { BlockContext, type BlockHost } from '@/blocks/context'
 import { BlockView, fillsPanel } from '@/blocks/registry'
 import { ChatView } from '@/chat/ChatView'
 import { PlanTarget, type PlanDestination } from '@/chat/PlanCard'
@@ -179,6 +179,29 @@ function StepContent({ it, step }: { it: Item; step: string }) {
       </Card>
     )
   }
+  return (
+    <div className="flex h-full flex-col gap-3">
+      {current.headsUp && <HeadsUpNote headsUp={current.headsUp} />}
+      <div className="min-h-0 flex-1">
+        <StepBody it={it} step={step} view={current} host={host} onPick={setAttempt} />
+      </div>
+    </div>
+  )
+}
+
+export function HeadsUpNote({ headsUp }: { headsUp: HeadsUp }) {
+  return (
+    <div role="note" data-urgent={headsUp.urgent} className={cn('flex shrink-0 gap-2.5 rounded-card px-4 py-3 text-base', headsUp.urgent ? 'bg-danger-soft text-danger-fg shadow-[0_0_0_1px_rgb(var(--danger)/0.35)]' : 'bg-warning-soft text-warning-fg')}>
+      <Icon name={headsUp.urgent ? 'alert' : 'info'} size={17} className="mt-px shrink-0" />
+      <div className="min-w-0">
+        <p className="text-sm opacity-80">Você deveria saber</p>
+        <p className="mt-0.5 break-words"><span className="font-medium">{headsUp.title}</span> <span>{headsUp.explain}</span></p>
+      </div>
+    </div>
+  )
+}
+
+function StepBody({ it, step, view: current, host, onPick: setAttempt }: { it: Item; step: string; view: StepView; host: BlockHost; onPick: (n: number | null) => void }) {
   const docked = dockedChat(current.blocks)
   if (docked) {
     return (

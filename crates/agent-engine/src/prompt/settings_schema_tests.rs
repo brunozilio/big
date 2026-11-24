@@ -22,7 +22,7 @@ fn a_key_of_the_wrong_type_is_reported_and_the_rest_of_the_file_still_applies() 
         "settings.json",
         &json!({
             "disabledMcpServers": "no",
-            "outputStyle": "Concise",
+            "smallModel": "small",
             "permissions": { "additionalDirectories": ["../lib", 5] }
         }),
     );
@@ -39,7 +39,7 @@ fn a_key_of_the_wrong_type_is_reported_and_the_rest_of_the_file_still_applies() 
         settings.notices.contains(&format!("{shown}: permissions.additionalDirectories[1]: expected string, found 5"))
     );
     assert!(settings.mcp_approval.disabled.is_empty(), "the wrong value is left out");
-    assert_eq!(settings.style.map(|style| style.name), Some("Concise".into()));
+    assert_eq!(settings.small_model.as_deref(), Some("small"));
 }
 
 #[test]
@@ -69,7 +69,7 @@ fn an_unknown_key_is_named_once_and_ignored() {
     let path = write(
         home.path(),
         "settings.json",
-        &json!({ "outputStyle": "Concise", "theme": "dark", "permissions": { "defaultMode": "plan" } }),
+        &json!({ "smallModel": "small", "theme": "dark", "permissions": { "defaultMode": "plan" } }),
     );
 
     let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
@@ -79,13 +79,13 @@ fn an_unknown_key_is_named_once_and_ignored() {
     assert_eq!(about("theme"), 1, "{:?}", settings.notices);
     assert!(settings.notices.contains(&format!("{shown}: theme: unknown key, ignored")));
     assert!(settings.notices.contains(&format!("{shown}: permissions.defaultMode: unknown key, ignored")));
-    assert_eq!(settings.style.map(|style| style.name), Some("Concise".into()));
+    assert_eq!(settings.small_model.as_deref(), Some("small"));
 }
 
 #[test]
 fn a_leftover_auto_memory_switch_is_named_once_and_ignored() {
     let (home, repo) = folders();
-    let path = write(repo.path(), "settings.json", &json!({ "autoMemoryEnabled": false, "outputStyle": "Concise" }));
+    let path = write(repo.path(), "settings.json", &json!({ "autoMemoryEnabled": false, "smallModel": "small" }));
 
     let settings = load(repo.path(), Some(home.path())).expect("the file still loads");
 
@@ -93,7 +93,7 @@ fn a_leftover_auto_memory_switch_is_named_once_and_ignored() {
     assert_eq!(about, 1, "{:?}", settings.notices);
     assert!(settings.notices.contains(&format!("{}: autoMemoryEnabled: unknown key, ignored", path.display())));
     assert!(settings.skipped_files.is_empty(), "{:?}", settings.skipped_files);
-    assert_eq!(settings.style.map(|style| style.name), Some("Concise".into()));
+    assert_eq!(settings.small_model.as_deref(), Some("small"));
 }
 
 #[test]
@@ -114,19 +114,19 @@ fn an_unknown_hook_event_is_named_and_the_other_hooks_still_run() {
 #[test]
 fn a_file_that_is_not_an_object_is_reported_and_skipped() {
     let (home, repo) = folders();
-    let path = write(repo.path(), "settings.json", &json!(["outputStyle", "Concise"]));
-    write(home.path(), "settings.json", &json!({ "outputStyle": "Concise" }));
+    let path = write(repo.path(), "settings.json", &json!(["smallModel", "small"]));
+    write(home.path(), "settings.json", &json!({ "smallModel": "small" }));
 
     let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
 
     assert!(settings.notices.iter().any(|notice| notice.starts_with(&format!("{}: expected object", path.display()))));
-    assert_eq!(settings.style.map(|style| style.name), Some("Concise".into()));
+    assert_eq!(settings.small_model.as_deref(), Some("small"));
 }
 
 #[test]
 fn a_schema_reference_is_not_an_unknown_key() {
     let (home, repo) = folders();
-    let schema = json!({ "$schema": "./schemas/settings.schema.json", "outputStyle": "Concise" });
+    let schema = json!({ "$schema": "./schemas/settings.schema.json", "smallModel": "small" });
     write(home.path(), "settings.json", &schema);
     write(repo.path(), "settings.local.json", &schema);
 
@@ -139,9 +139,6 @@ fn a_schema_reference_is_not_an_unknown_key() {
 fn the_documented_full_example_reads_without_a_notice() {
     let (home, repo) = folders();
     let example = json!({
-        "outputStyle": "explanatory",
-        "advisorModel": "opus",
-        "judgeModel": "sonnet",
         "smallModel": "haiku",
         "escalationModel": "opus",
         "fallbackModel": ["sonnet", "gpt-5"],
@@ -176,11 +173,8 @@ fn the_documented_full_example_reads_without_a_notice() {
 
 fn one_value_per_published_key() -> Vec<(&'static str, Value)> {
     vec![
-        ("outputStyle", json!("concise")),
         ("agent", json!("reviewer")),
         ("bashOutputLimit", json!(4_000)),
-        ("advisorModel", json!("a")),
-        ("judgeModel", json!("j")),
         ("smallModel", json!("s")),
         ("teammateMode", json!("tmux")),
         ("escalationModel", json!("e")),

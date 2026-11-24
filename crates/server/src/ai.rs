@@ -38,7 +38,7 @@ pub fn provider_json(summary: &ProviderSummary) -> Value {
     json!({
         "key": summary.provider.id(), "name": name, "group": GROUP,
         "description": format!("Sua conta {name}"), "logo": logo, "button": format!("Entrar com {name}"),
-        "site": format!("do {name}"), "signIn": sign_in, "fields": [], "multiple": true, "alternative": null, "ai": true,
+        "site": format!("do {name}"), "signIn": sign_in, "fields": [], "multiple": true, "alternatives": [], "ai": true,
     })
 }
 

@@ -12,13 +12,16 @@ pub mod provider;
 pub mod providers;
 
 pub use clock::{Clock, FixedClock, SystemClock};
-pub use descriptor::{ActionSpec, AlternateAuth, AuthSpec, Idempotency, Presentation, ProviderDescriptor};
+pub use descriptor::{
+    ActionSpec, AlternateAuth, AuthSpec, Idempotency, Presentation, ProviderDescriptor, TokenField, TokenForm,
+    TokenSpec,
+};
 pub use error::{ActionError, ErrorClass};
 pub use http::{FakeHttp, Http, HttpRequest, HttpResponse, Method, ReqwestHttp};
 pub use hub::Connectors;
 pub use limiter::RateLimiter;
 pub use oauth::{
-    Authorization, DeviceApp, DeviceCode, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, OAuthApp, Polled,
-    RegisteredClient, SsoSpec, TokenKeeper, TokenStore,
+    Authorization, DeviceApp, DeviceCode, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, Polled, RegisteredClient,
+    SsoSpec, TokenKeeper, TokenStore,
 };
 pub use provider::{AccountOption, Args, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SettingsSink};

@@ -7,7 +7,7 @@ import { Origins } from '@/screens/items/parts'
 
 const app: Application = {
   id: 'a1', name: 'Loja', tracker: null,
-  repositories: [{ id: 'r1', code: { connection: 'c-code', repo: 'acme/web' }, directory: '/p/web', run: '', verify: [], e2e: [] }],
+  repositories: [{ id: 'r1', code: { connection: 'c-code', repo: 'acme/web' }, directory: '/p/web', run: [], verify: [] }],
 }
 
 describe('origens do item', () => {

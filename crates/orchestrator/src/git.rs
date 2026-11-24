@@ -48,7 +48,7 @@ fn started(repo: &Path) -> std::io::Result<()> {
 }
 
 pub fn head_of(item: &WorkItem, repo: &str) -> String {
-    wanted(item, repo, "head").unwrap_or_else(|| branch_name(item.id.as_str()))
+    wanted(item, repo, "head").or_else(|| item.branch.clone()).unwrap_or_else(|| branch_name(item.id.as_str()))
 }
 
 pub fn base_of(item: &WorkItem, repo: &str) -> Option<String> {

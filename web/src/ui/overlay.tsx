@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import { cn } from './cn'
 import { Icon } from './icon'
-import { dur, easeOut, springSheet, tween, tweenClose } from './motion'
+import { dur, easeOut, tween, tweenClose } from './motion'
 
 export function TooltipProvider({ children }: { children: ReactNode }) {
   return <RTooltip.Provider delayDuration={300} skipDelayDuration={500}>{children}</RTooltip.Provider>
@@ -135,37 +135,4 @@ export function Dialog({ open, onOpenChange, title, description, children, size 
       </AnimatePresence>
     </RDialog.Root>
   )
-}
-
-export function Sheet({ open, onOpenChange, children, title, width = 'max-w-[720px]', side = 'right', className }: { open: boolean; onOpenChange: (o: boolean) => void; children: ReactNode; title?: string; width?: string; side?: 'left' | 'right'; className?: string }) {
-  const offscreen = side === 'left' ? '-100%' : '100%'
-  return (
-    <RDialog.Root open={open} onOpenChange={onOpenChange}>
-      <AnimatePresence>
-        {open && (
-          <RDialog.Portal forceMount>
-            <RDialog.Overlay asChild forceMount>
-              <motion.div className="fixed inset-0 z-40 bg-[rgb(20_20_20/0.18)]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={overlayFade} />
-            </RDialog.Overlay>
-            <RDialog.Content asChild forceMount aria-describedby={undefined}>
-              <motion.div
-                initial={{ x: offscreen }}
-                animate={{ x: 0 }}
-                exit={{ x: offscreen }}
-                transition={springSheet}
-                className={cn('fixed inset-y-2 z-50 flex w-[calc(100%-16px)] flex-col overflow-hidden rounded-overlay bg-bg shadow-float outline-none', side === 'left' ? 'left-2' : 'right-2', width, className)}
-              >
-                <RDialog.Title className="sr-only">{title ?? 'Painel'}</RDialog.Title>
-                {children}
-              </motion.div>
-            </RDialog.Content>
-          </RDialog.Portal>
-        )}
-      </AnimatePresence>
-    </RDialog.Root>
-  )
-}
-
-export function SheetClose({ children }: { children: ReactNode }) {
-  return <RDialog.Close asChild>{children}</RDialog.Close>
 }

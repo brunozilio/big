@@ -15,12 +15,13 @@ use crate::stamps::Stamps;
 pub struct Followed {
     pub seen: HashMap<String, String>,
     pub status: String,
+    pub suggestion: Option<String>,
     pub wanted: Instant,
 }
 
 impl Default for Followed {
     fn default() -> Self {
-        Followed { seen: HashMap::new(), status: String::new(), wanted: Instant::now() }
+        Followed { seen: HashMap::new(), status: String::new(), suggestion: None, wanted: Instant::now() }
     }
 }
 

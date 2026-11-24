@@ -57,6 +57,8 @@ pub struct AgentConfig {
     pub label: Option<String>,
     #[serde(default)]
     pub avatar: Option<Avatar>,
+    #[serde(default)]
+    pub output_schema: Option<String>,
     pub error: Option<String>,
 }
 impl AgentConfig {
@@ -91,6 +93,10 @@ impl AgentConfig {
                     .ok_or("memory must be user, project or local")?
                     .into(),
             );
+        }
+        if let Some(schema) = value.get("outputSchema") {
+            jsonschema::validator_for(schema).map_err(|error| format!("outputSchema: {error}"))?;
+            config.output_schema = Some(schema.to_string());
         }
         if let Some(isolation) = value.get("isolation") {
             if isolation.as_str() != Some("worktree") {
@@ -141,7 +147,7 @@ impl AgentConfig {
                 .as_str()
                 .filter(|s| !s.is_empty() && !s.contains(char::is_whitespace))
                 .ok_or("invalid custom-agent model")?;
-            if model != "inherit" && model != "auto" {
+            if model != "inherit" {
                 config.model = Some(model.into());
             }
         }
@@ -178,6 +184,10 @@ impl AgentConfig {
             self.unobserved_subagents = !subagents.as_bool().ok_or("observeSubagents must be boolean")?;
         }
         Ok(())
+    }
+
+    pub fn output_schema(&self) -> Option<Value> {
+        self.output_schema.as_deref().and_then(|text| serde_json::from_str(text).ok())
     }
 
     pub fn observing(&self) -> Option<domain::observer::Observing> {
@@ -244,15 +254,15 @@ mod tests {
     }
 
     #[test]
-    fn a_label_an_avatar_and_the_auto_model_are_read_and_bad_ones_refused() {
+    fn a_label_an_avatar_and_the_inherited_model_are_read_and_bad_ones_refused() {
         let config = AgentConfig::parse(&json!({
             "label": "Planejador",
-            "model": "auto",
+            "model": "inherit",
             "avatar": {"shape": "triangle", "color": "#E94B9B"}
         }))
         .expect("config");
         assert_eq!(config.label.as_deref(), Some("Planejador"));
-        assert_eq!(config.model, None, "auto leaves the choice to whoever runs the agent");
+        assert_eq!(config.model, None, "inherit leaves the choice to whoever runs the agent");
         assert_eq!(config.avatar, Some(Avatar { shape: "triangle".into(), color: "#e94b9b".into() }));
         for value in [
             json!({"avatar": {"shape": "triangle"}}),

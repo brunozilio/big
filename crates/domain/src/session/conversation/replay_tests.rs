@@ -77,6 +77,7 @@ fn a_kept_history_is_shown_again_as_the_conversation_it_was() {
                 summary: "notes.txt".into(),
                 state: ToolState::Done,
                 output: Some("alpha".into()),
+                input: None,
             },
             Entry::Assistant("It says alpha.".into()),
             Entry::Finished { duration_ms: 4_000, cost_usd: None },

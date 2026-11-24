@@ -5,7 +5,6 @@ use domain::factory::{Finding, FindingKind, Origin as Source, crossed, findings,
 use domain::workflow::{ItemId, WorkItem, WorkflowEvent};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
-use store::GenerationReport;
 
 use crate::api::Orchestrator;
 use crate::error::Result;
@@ -63,16 +62,6 @@ impl Factory {
     pub fn off() -> Factory {
         Factory { enabled: false, ..Factory::from_config() }
     }
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-pub struct FactoryReport {
-    pub enabled: bool,
-    pub autonomy: Autonomy,
-    pub chain: Vec<String>,
-    pub current: String,
-    pub generations: Vec<GenerationReport>,
-    pub findings: Vec<Finding>,
 }
 
 pub fn relevant(events: &[WorkflowEvent]) -> bool {
@@ -260,22 +249,6 @@ impl Orchestrator {
             created += 1;
         }
         Ok(created)
-    }
-
-    pub fn factory(&self) -> Result<FactoryReport> {
-        let resources = &self.shared.config.resources;
-        let (current, _) = fingerprint(resources);
-        let mut found = self.shared.store.findings(None)?;
-        found.reverse();
-        found.truncate(50);
-        Ok(FactoryReport {
-            enabled: self.shared.config.factory.enabled,
-            autonomy: self.shared.config.factory.autonomy,
-            chain: resources.chain().to_vec(),
-            current,
-            generations: self.shared.store.generations()?,
-            findings: found,
-        })
     }
 }
 

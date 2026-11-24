@@ -7,7 +7,7 @@ use crate::api::ClientCommand;
 use domain::budget::Spending;
 use domain::memory::MemoryBrief;
 use domain::session_run::{Carried, RunWatch};
-use domain::{Criteria, Effort, ModelOption, PermissionMode, PromptRequest, SessionId};
+use domain::{Effort, ModelOption, PermissionMode, PromptRequest, SessionId};
 
 use crate::Error;
 use crate::client::dispatch::Dispatcher;
@@ -19,14 +19,13 @@ pub struct Session {
     cwd: PathBuf,
     model: ModelOption,
     effort: Effort,
-    auto_pick: bool,
     memory: bool,
     carried: Arc<Mutex<Carried>>,
     added_dirs: Vec<PathBuf>,
-    output_style: Option<String>,
     roles: domain::model_roles::ModelRoles,
     fallbacks: Vec<String>,
     headless: Headless,
+    agent: Option<domain::MainAgentSpec>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -44,26 +43,14 @@ impl Session {
             cwd,
             model,
             effort: Effort::Medium,
-            auto_pick: false,
             memory: true,
             carried: Arc::default(),
             added_dirs: Vec::new(),
-            output_style: None,
             roles: Default::default(),
             fallbacks: Vec::new(),
             headless: Headless::default(),
+            agent: None,
         }
-    }
-
-    pub fn learn(&self) -> Option<Result<Run, Error>> {
-        let brief = self.carried.locked().lesson_due()?;
-        let mut request = PromptRequest::plain(self.cwd.clone(), brief, self.model.clone());
-        request.session.resume = Some(match self.id() {
-            Some(id) => id,
-            None => return Some(Err(Error::NothingToAsk)),
-        });
-        request.session.command = Some(domain::SessionCommand::Learn);
-        Some(self.start(request))
     }
 
     pub fn set_budget(&self, limit_usd: Option<f64>) {
@@ -80,10 +67,6 @@ impl Session {
 
     pub fn set_headless(&mut self, headless: Headless) {
         self.headless = headless;
-    }
-
-    pub fn set_output_style(&mut self, style: Option<String>) {
-        self.output_style = style;
     }
 
     pub fn add_dir(&mut self, dir: PathBuf) {
@@ -116,6 +99,11 @@ impl Session {
         self
     }
 
+    pub fn agent(mut self, agent: Option<domain::MainAgentSpec>) -> Self {
+        self.agent = agent;
+        self
+    }
+
     pub fn set_model(&mut self, model: ModelOption) {
         self.model = model;
     }
@@ -134,11 +122,6 @@ impl Session {
 
     pub fn set_effort(&mut self, effort: Effort) {
         self.effort = effort;
-        self.auto_pick = false;
-    }
-
-    pub fn set_auto_pick(&mut self) {
-        self.auto_pick = true;
     }
 
     pub fn effort_level(&self) -> Effort {
@@ -151,14 +134,6 @@ impl Session {
 
     pub fn permission_mode(&self) -> PermissionMode {
         self.carried.locked().mode
-    }
-
-    pub fn set_verification(&mut self, criteria: Option<String>) {
-        self.carried.locked().verifications.set_user(criteria);
-    }
-
-    pub fn verification(&self) -> Option<Criteria> {
-        self.carried.locked().verifications.current()
     }
 
     pub fn id(&self) -> Option<SessionId> {
@@ -183,14 +158,13 @@ impl Session {
         request.prompt.images = images;
         request.prompt.shown = shown;
         request.session.effort = self.effort;
-        request.session.auto_pick = self.auto_pick;
         request.host.memory = self.memory.then(|| MemoryBrief::new(None));
+        request.session.agent.clone_from(&self.agent);
         {
             let mut carried = self.carried.locked();
             request.policy.permission = carried.mode;
             request.session.resume = carried.id.clone();
             request.session.fork = carried.forks();
-            request.policy.verification = carried.criteria_for_run();
         }
         self.start(request)
     }
@@ -240,11 +214,8 @@ impl Session {
         request.session.teammate.clone_from(&self.headless.teammate);
         request.session.roles.clone_from(&self.roles);
         request.session.fallbacks.clone_from(&self.fallbacks);
-        if request.session.output_style.is_none() {
-            request.session.output_style.clone_from(&self.output_style);
-        }
         request.policy.budget = self.spending().budget();
-        let watch = RunWatch::of(request.session.command, request.policy.permission);
+        let watch = RunWatch::of(request.session.command);
         let run = Run::start(&self.dispatcher, |run| ClientCommand::SubmitPrompt { run, request })?;
         Ok(run.of_session(Arc::clone(&self.carried), watch))
     }

@@ -1,8 +1,6 @@
-mod auto_pick;
 pub(crate) mod date;
 mod job;
 mod live;
-mod moved;
 mod phases;
 mod record;
 mod rewind;

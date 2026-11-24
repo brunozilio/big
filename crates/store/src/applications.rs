@@ -22,12 +22,24 @@ pub struct Repository {
     #[serde(default)]
     pub code: Option<CodeChoice>,
     pub directory: String,
-    #[serde(default)]
-    pub run: String,
+    #[serde(default, deserialize_with = "one_or_many")]
+    pub run: Vec<String>,
     #[serde(default)]
     pub verify: Vec<String>,
-    #[serde(default)]
-    pub e2e: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Commands {
+    One(String),
+    Many(Vec<String>),
+}
+
+fn one_or_many<'de, D: serde::Deserializer<'de>>(deserializer: D) -> std::result::Result<Vec<String>, D::Error> {
+    Ok(match Commands::deserialize(deserializer)? {
+        Commands::One(line) => Some(line).filter(|line| !line.trim().is_empty()).into_iter().collect(),
+        Commands::Many(lines) => lines,
+    })
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]

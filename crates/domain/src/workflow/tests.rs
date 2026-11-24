@@ -57,6 +57,21 @@ fn starting_a_step_runs_it_and_starting_again_counts_an_attempt() {
 }
 
 #[test]
+fn going_back_to_a_step_makes_the_steps_after_it_pending_again() {
+    let item = replay(&[
+        created(),
+        started("develop"),
+        finished("develop", StepState::Passed),
+        started("checks"),
+        finished("checks", StepState::Failed),
+        started("develop"),
+    ]);
+    let states: Vec<(&str, StepState, u32)> =
+        item.steps.iter().map(|run| (run.id.as_str(), run.state, run.attempt)).collect();
+    assert_eq!(states, [("develop", StepState::Running, 2), ("checks", StepState::Pending, 1)]);
+}
+
+#[test]
 fn branches_of_one_step_are_separate_runs() {
     let item = replay(&[
         created(),
@@ -237,7 +252,6 @@ fn events_and_items_round_trip_through_json() {
         requested("s", 1, exec()),
         resolved("s", 1, json!(0)),
         WorkflowEvent::StatusSet("Doing".into()),
-        WorkflowEvent::StepViewSet { step: "s".into(), branch: None, view: json!(["v"]) },
         finished("s", StepState::Skipped),
     ];
     for event in &events {
@@ -336,4 +350,23 @@ fn items_saved_before_observations_existed_still_load() {
     }
     let item: Option<WorkItem> = serde_json::from_value(value).ok();
     assert!(item.is_some_and(|item| item.observed.is_empty()));
+}
+
+#[test]
+fn the_first_branch_sticks_and_the_latest_recap_and_heads_up_per_step_win() {
+    let note = |title: &str| HeadsUpNote { title: title.into(), explain: "porque".into(), urgent: false };
+    let item = replay(&[
+        created(),
+        WorkflowEvent::Branched { name: "big/primeira".into() },
+        WorkflowEvent::Branched { name: "big/segunda".into() },
+        WorkflowEvent::Recapped { recap: ItemRecap { text: "antes".into(), after: "k1".into() } },
+        WorkflowEvent::Recapped { recap: ItemRecap { text: "agora".into(), after: "k2".into() } },
+        WorkflowEvent::HeadsUp { step: "develop".into(), note: note("velho") },
+        WorkflowEvent::HeadsUp { step: "develop".into(), note: note("novo") },
+        WorkflowEvent::HeadsUp { step: "review".into(), note: note("outro") },
+    ]);
+    assert_eq!(item.branch.as_deref(), Some("big/primeira"));
+    assert_eq!(item.recap.as_ref().map(|recap| recap.text.as_str()), Some("agora"));
+    assert_eq!(item.heads_up.get("develop").map(|note| note.title.as_str()), Some("novo"));
+    assert_eq!(item.heads_up.len(), 2);
 }

@@ -26,7 +26,7 @@ impl Job {
         }
         self.keep_checkpoint(&session, checkpoint, &workspace);
         match outcome {
-            Ok(_) | Err(Ending::Moved) => Stop::completed(api.ledger.cost()),
+            Ok(_) => Stop::completed(api.ledger.cost()),
             Err(Ending::Cancelled) => Stop::Cancelled,
             Err(Ending::Failed(error)) => Stop::Model(error),
             Err(Ending::Refused) => Stop::failed("The model declined to continue with this request."),

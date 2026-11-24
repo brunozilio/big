@@ -14,15 +14,6 @@ pub struct Generation {
     pub first_seen: i64,
 }
 
-#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct GenerationReport {
-    pub version: Option<String>,
-    pub items: u64,
-    pub finished: u64,
-    pub failures: u64,
-    pub escapes: u64,
-}
-
 impl Store {
     pub fn record_findings(&self, findings: &[Finding]) -> Result<Vec<Finding>> {
         self.write(|transaction| {
@@ -98,47 +89,12 @@ impl Store {
         })
         .transpose()
     }
-
-    pub fn generations(&self) -> Result<Vec<GenerationReport>> {
-        let connection = self.locked();
-        let mut statement = connection.prepare(
-            "SELECT g.version,
-                (SELECT COUNT(*) FROM items i WHERE json_extract(i.state, '$.input.generation.version') = g.version),
-                (SELECT COUNT(*) FROM items i WHERE json_extract(i.state, '$.input.generation.version') = g.version
-                    AND json_extract(i.state, '$.ending.type') = 'finished'),
-                (SELECT COUNT(*) FROM factory_findings f WHERE f.generation = g.version AND f.kind = 'failure'),
-                (SELECT COUNT(*) FROM factory_findings f WHERE f.generation = g.version AND f.kind = 'escape')
-             FROM factory_generations g ORDER BY g.first_seen, g.rowid",
-        )?;
-        let rows = statement
-            .query_map([], |row| {
-                Ok((
-                    row.get::<_, String>(0)?,
-                    row.get::<_, i64>(1)?,
-                    row.get::<_, i64>(2)?,
-                    row.get::<_, i64>(3)?,
-                    row.get::<_, i64>(4)?,
-                ))
-            })?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
-        rows.into_iter()
-            .map(|(version, items, finished, failures, escapes)| {
-                Ok(GenerationReport {
-                    version: Some(version),
-                    items: unsigned(items)?,
-                    finished: unsigned(finished)?,
-                    failures: unsigned(failures)?,
-                    escapes: unsigned(escapes)?,
-                })
-            })
-            .collect()
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use domain::factory::{Finding, FindingKind};
-    use domain::workflow::{ItemId, WorkflowEvent};
+    use domain::workflow::ItemId;
     use serde_json::json;
 
     use crate::Store;
@@ -173,25 +129,10 @@ mod tests {
     }
 
     #[test]
-    fn each_generation_reports_its_items_and_findings() {
+    fn a_generation_is_recorded_once_and_loads_back() {
         let store = Store::in_memory(0).expect("store");
         assert!(store.record_generation("g1", &["base".into()], &json!({"agents/a.md": "h"})).expect("record"));
         assert!(!store.record_generation("g1", &[], &json!({})).expect("record"), "a version is immutable");
-        store.record_generation("g2", &[], &json!({})).expect("record");
-        let created = WorkflowEvent::ItemCreated {
-            id: ItemId::from("i1"),
-            workflow: "entrega".into(),
-            parent: None,
-            input: json!({ "generation": { "version": "g1" } }),
-        };
-        store.append(&ItemId::from("i1"), &[created, WorkflowEvent::Finished { output: json!(null) }]).expect("append");
-        store
-            .record_findings(&[finding("a", FindingKind::Failure, "g1"), finding("b", FindingKind::Escape, "g2")])
-            .expect("record");
-        let reports = store.generations().expect("reports");
-        assert_eq!(reports.len(), 2);
-        assert_eq!((reports[0].items, reports[0].finished, reports[0].failures, reports[0].escapes), (1, 1, 1, 0));
-        assert_eq!((reports[1].items, reports[1].escapes), (0, 1));
         assert_eq!(store.generation("g1").expect("load").expect("found").chain, vec!["base".to_owned()]);
     }
 }

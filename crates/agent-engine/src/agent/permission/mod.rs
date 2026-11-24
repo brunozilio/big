@@ -59,9 +59,6 @@ impl Agent<'_> {
 
     fn decided(&self, asking: &Asking<'_>, hook_permission: Option<RuleKind>) -> Outcome {
         let verdict = after_the_tool_hook(asking.judgement.verdict.clone(), hook_permission, asking.judgement);
-        if self.pre_approved(asking) && !verdict.denies() && hook_permission != Some(RuleKind::Ask) {
-            return self.went_ahead(asking.id, asking.tool, asking.called.input);
-        }
         match self.after_the_permission_hook(asking, verdict) {
             Ok(verdict) => self.carried_out(asking, verdict),
             Err(settled) => settled,
@@ -109,16 +106,6 @@ impl Agent<'_> {
             Verdict::Deny(reason) => self.refused(name, reason),
             Verdict::Ask { rememberable, .. } => self.ask_permission(asking, &asking.shown(), rememberable),
         }
-    }
-
-    fn pre_approved(&self, asking: &Asking<'_>) -> bool {
-        let commands = &self.workspace.policy.pre_approved;
-        let ran = asking.called.effects.iter().filter_map(|effect| match effect {
-            Effect::Exec(exec) => Some(exec.command.text().trim()),
-            _ => None,
-        });
-        let mut ran = ran.peekable();
-        ran.peek().is_some() && ran.all(|command| commands.iter().any(|approved| approved.trim() == command))
     }
 
     pub(in crate::agent) fn went_ahead(&self, id: &str, tool: &dyn Tool, input: &Value) -> Outcome {

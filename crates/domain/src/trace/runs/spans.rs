@@ -5,7 +5,6 @@ use super::{ContextSplit, Span, SpanKind, Usage};
 use crate::billing::ModelUsage;
 use crate::trace::{Agent, Kind, Lane, ModelCall, Node, RunInfo, Title, Wait};
 
-pub const JUDGE: &str = "verification judge";
 pub const REVIEW: &str = "auto-review";
 const CHARS_PER_TOKEN: u64 = 4;
 const SUMMARY: usize = 60;
@@ -175,7 +174,6 @@ impl Spans {
             Kind::Failed { error } => marker(self, SpanKind::Event, "failed".into(), error.clone()),
             Kind::Cancelled => marker(self, SpanKind::Event, "cancelled".into(), String::new()),
             Kind::Note { title, text } => match title {
-                Title::Verified => marker(self, SpanKind::Eval, JUDGE.into(), text.clone()),
                 Title::Reviewed => marker(self, SpanKind::Eval, REVIEW.into(), text.clone()),
                 _ => marker(self, SpanKind::Event, title.as_str().into(), text.clone()),
             },

@@ -100,9 +100,8 @@ fn listed_sources(item: Option<&WorkItem>) -> Vec<Value> {
     if let Some(found) = item.input["sources"].as_array() {
         return found.clone();
     }
-    let legacy = text(&item.input["issue"]).map(|issue| {
-        json!({ "kind": "issue", "connection": item.input["connection"].clone(), "subject": issue })
-    });
+    let legacy = text(&item.input["issue"])
+        .map(|issue| json!({ "kind": "issue", "connection": item.input["connection"].clone(), "subject": issue }));
     legacy.into_iter().collect()
 }
 
@@ -112,7 +111,9 @@ fn source_json(known: &Known<'_>, source: &Value) -> Value {
     let record = connection.and_then(|id| known.connections.iter().find(|record| record.id == id));
     let mut value = match record {
         Some(record) => reference(known.descriptors, record, &subject, None),
-        None => json!({ "provider": null, "name": null, "logo": null, "connection": connection, "key": subject, "url": null }),
+        None => {
+            json!({ "provider": null, "name": null, "logo": null, "connection": connection, "key": subject, "url": null })
+        }
     };
     value["kind"] = source["kind"].clone();
     value["repository"] = json!(source["repository"].as_str());
@@ -126,7 +127,8 @@ fn sources(known: &Known<'_>, item: Option<&WorkItem>) -> Vec<Value> {
 fn repository_name(item: &WorkItem, id: &str) -> String {
     let repositories = item.input["application"]["repositories"].as_array().map(Vec::as_slice).unwrap_or_default();
     let found = repositories.iter().find(|repository| repository["id"] == id);
-    let named = found.and_then(|repository| text(&repository["code"]["repo"]).or_else(|| text(&repository["directory"])));
+    let named =
+        found.and_then(|repository| text(&repository["code"]["repo"]).or_else(|| text(&repository["directory"])));
     named.unwrap_or_else(|| id.to_owned())
 }
 
@@ -309,6 +311,7 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "activity": activity(known, summary),
         "impediment": impediment(known, summary),
         "attention": attention(summary),
+        "recap": item.and_then(|item| item.recap.as_ref()).map(|recap| recap.text.clone()),
         "createdAt": iso(summary.created_at),
         "updatedAt": iso(summary.updated_at),
         "doneAt": summary.ended_at.map(iso),

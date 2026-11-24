@@ -6,7 +6,7 @@ import { errorText, setApplications, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card, EmptyState } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
-import { Checkbox, Field, Input, Select, Textarea } from '@/ui/form'
+import { Checkbox, Field, Input, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { stagger, tween } from '@/ui/motion'
 import { Dialog } from '@/ui/overlay'
@@ -67,7 +67,7 @@ export function suggestedCode(ref: string | null, repos: Record<string, CodeRepo
 }
 
 function blankRepository(): ApplicationRepository {
-  return { id: '', code: null, directory: '', run: '', verify: [], e2e: [] }
+  return { id: '', code: null, directory: '', run: [], verify: [] }
 }
 
 function draftOf(application: Application | null): ApplicationDraft {
@@ -86,6 +86,25 @@ export function fromKey(value: string): { connection: string; key: string } | nu
   if (value === NONE) return null
   const at = value.indexOf('::')
   return at < 0 ? null : { connection: value.slice(0, at), key: value.slice(at + 2) }
+}
+
+function CommandList({ label, value, placeholder, onChange }: { label: string; value: string[]; placeholder: string; onChange: (next: string[]) => void }) {
+  const lines = value.length > 0 ? value : ['']
+  const set = (at: number, line: string) => onChange(lines.map((l, i) => (i === at ? line : l)))
+  return (
+    <div className="space-y-2">
+      <span className="text-base font-medium text-fg">{label}</span>
+      <div className="space-y-2">
+        {lines.map((line, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <Input aria-label={`${label} ${i + 1}`} className="font-mono text-sm" value={line} placeholder={i === 0 ? placeholder : undefined} onChange={(e) => set(i, e.target.value)} />
+            {lines.length > 1 && <IconButton tooltip="Remover comando" size="sm" onClick={() => onChange(lines.filter((_, at) => at !== i))}><Icon name="trash" size={15} /></IconButton>}
+          </div>
+        ))}
+      </div>
+      <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => onChange([...lines, ''])}>Adicionar comando</Button>
+    </div>
+  )
 }
 
 function RepositoryCard({ value, index, removable, repos, sources, onChange, onRemove, onFolder }: { value: ApplicationRepository; index: number; removable: boolean; repos: Record<string, CodeRepo[]>; sources: Source[]; onChange: (next: ApplicationRepository) => void; onRemove: () => void; onFolder: () => void }) {
@@ -110,20 +129,13 @@ function RepositoryCard({ value, index, removable, repos, sources, onChange, onR
           </button>
         </div>
         <Field label="Repositório">
-          <Select label="Repositório" className="w-full" value={current} options={options} onValueChange={(v) => {
+          <Select label="Repositório" className="w-full" leading={<Icon name="branch" size={16} className="shrink-0 text-faint" />} value={current} options={options} onValueChange={(v) => {
             const chosen = fromKey(v)
             onChange({ ...value, code: chosen ? { connection: chosen.connection, repo: chosen.key } : null })
           }} />
         </Field>
-        <Field label="Rodar">
-          <Input aria-label="Rodar" className="font-mono" value={value.run} placeholder="bun dev" onChange={(e) => onChange({ ...value, run: e.target.value })} />
-        </Field>
-        <Field label="Verificação">
-          <Textarea aria-label="Verificação" rows={2} className="font-mono text-sm" value={value.verify.join('\n')} placeholder="bun test" onChange={(e) => onChange({ ...value, verify: e.target.value.split('\n') })} />
-        </Field>
-        <Field label="Testes E2E">
-          <Textarea aria-label="Testes E2E" rows={2} className="font-mono text-sm" value={value.e2e.join('\n')} placeholder="npx playwright test" onChange={(e) => onChange({ ...value, e2e: e.target.value.split('\n') })} />
-        </Field>
+        <CommandList label="Rodar" value={value.run} placeholder="bun dev" onChange={(run) => onChange({ ...value, run })} />
+        <CommandList label="Verificação" value={value.verify} placeholder="bun test" onChange={(verify) => onChange({ ...value, verify })} />
       </div>
     </Card>
   )
@@ -170,7 +182,7 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
   const save = () => {
     setBusy(true)
     setError(null)
-    const clean = { ...draft, repositories: draft.repositories.map((r) => ({ ...r, verify: r.verify.map((v) => v.trim()).filter(Boolean), e2e: r.e2e.map((v) => v.trim()).filter(Boolean) })) }
+    const clean = { ...draft, repositories: draft.repositories.map((r) => ({ ...r, run: r.run.map((v) => v.trim()).filter(Boolean), verify: r.verify.map((v) => v.trim()).filter(Boolean) })) }
     const sent = application ? api().saveApplication({ ...clean, id: application.id }) : api().createApplication(clean)
     sent
       .then((saved) => {
@@ -214,12 +226,9 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
               </Field>
             )}
           </div>
-          <div className="flex items-start gap-2.5">
-            <span className="mt-0.5 flex"><Checkbox label="Ignorar pipelines do dependabot[bot]" checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} /></span>
-            <span className="flex cursor-pointer select-none flex-col gap-0.5" onClick={() => setDraft((d) => ({ ...d, skipDependabot: d.skipDependabot === false }))}>
-              <span className="text-base text-fg">Ignorar pipelines do dependabot[bot]</span>
-              <span className="text-sm text-muted">O CI e a release não esperam nem contam pipelines disparados pelo Dependabot.</span>
-            </span>
+          <div className="flex items-center gap-2.5">
+            <span className="flex"><Checkbox label="Ignorar dependabot" checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} /></span>
+            <span className="cursor-pointer select-none text-base text-fg" onClick={() => setDraft((d) => ({ ...d, skipDependabot: d.skipDependabot === false }))}>Ignorar dependabot</span>
           </div>
           <div className="space-y-3">
             {draft.repositories.map((r, i) => (

@@ -2,7 +2,7 @@ use crate::RunGate;
 use crate::model::{BoxFuture, CancellationToken, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
 use domain::billing::{ModelUsage, PRICE_DATE};
 use domain::{EngineEvent, ModelProvider};
-use llm_providers::rates;
+use llm_providers::priced;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug, Default)]
@@ -58,11 +58,18 @@ impl Metered {
         }
         let u = reply.usage;
         let provider = crate::providers::find(self.provider);
-        let vendor = provider.map_or("", |provider| provider.vendor());
-        let searched =
-            llm_providers::search_price(vendor).map_or(0.0, |price| domain::billing::searches_cost(price, u.searches));
-        let cost = rates(vendor, &request.model, u.prompt())
-            .map(|rate| rate.estimate(u.input, u.output, u.cache_read, u.cache_write) + searched);
+        let cost = estimate(
+            self.provider.id(),
+            &ModelUsage {
+                model: request.model.clone(),
+                input: u.input,
+                output: u.output,
+                cache_read: u.cache_read,
+                cache_write: u.cache_write,
+                searches: u.searches,
+                ..ModelUsage::default()
+            },
+        );
         self.ledger.costs.lock().map_err(|_| ModelError::Provider("usage ledger unavailable".into()))?.push(cost);
         let served = self.served_by(request, reply);
         self.gate.emit(spent_by(
@@ -98,6 +105,16 @@ impl Metered {
         }
     }
 }
+pub fn estimate(provider: &str, usage: &ModelUsage) -> Option<f64> {
+    let vendor =
+        crate::providers::all().into_iter().find(|known| known.id() == provider).map_or("", |known| known.vendor());
+    let searched =
+        llm_providers::search_price(vendor).map_or(0.0, |price| domain::billing::searches_cost(price, usage.searches));
+    let prompt = usage.input + usage.cache_read + usage.cache_write;
+    priced(provider, vendor, &usage.model, prompt)
+        .map(|rate| rate.estimate(usage.input, usage.output, usage.cache_read, usage.cache_write) + searched)
+}
+
 fn spent_by(agent: Option<usize>, usage: ModelUsage) -> EngineEvent {
     let spent = EngineEvent::Usage(usage);
     match agent {

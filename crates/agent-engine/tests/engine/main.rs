@@ -3,7 +3,6 @@
 mod accounts;
 mod agents;
 mod anchors;
-mod auto_pick;
 mod brand_only;
 mod checkpoints;
 mod crash;
@@ -22,9 +21,7 @@ mod sessions;
 mod stable_prompt;
 mod steering;
 mod trace;
-mod verification;
 mod web_search;
-mod worktrees;
 
 use std::sync::{Arc, Mutex};
 

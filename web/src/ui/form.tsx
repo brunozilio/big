@@ -1,6 +1,5 @@
 import * as RCheckbox from '@radix-ui/react-checkbox'
 import * as RSelect from '@radix-ui/react-select'
-import * as RSwitch from '@radix-ui/react-switch'
 import { motion } from 'framer-motion'
 import { cloneElement, forwardRef, isValidElement, useId, type InputHTMLAttributes, type MouseEvent, type ReactNode, type TextareaHTMLAttributes } from 'react'
 import { cn } from './cn'
@@ -47,22 +46,6 @@ export function Field({ label, help, error, children }: { label: string; help?: 
   )
 }
 
-export function Switch({ checked, onCheckedChange, label, disabled, tone = 'dark' }: { checked: boolean; onCheckedChange: (v: boolean) => void; label?: string; disabled?: boolean; tone?: 'dark' | 'blue' }) {
-  return (
-    <RSwitch.Root
-      aria-label={label}
-      checked={checked}
-      disabled={disabled}
-      onCheckedChange={onCheckedChange}
-      className={cn('relative h-[22px] w-[38px] shrink-0 rounded-full bg-active p-[3px] transition-colors duration-200 disabled:opacity-45', tone === 'dark' ? 'data-[state=checked]:bg-primary' : 'data-[state=checked]:bg-info')}
-    >
-      <RSwitch.Thumb asChild>
-        <motion.span initial={false} animate={{ x: checked ? 16 : 0 }} transition={springSnap} className="block size-4 rounded-full bg-white shadow-[0_1px_3px_rgb(0_0_0/0.25)]" />
-      </RSwitch.Thumb>
-    </RSwitch.Root>
-  )
-}
-
 export function Checkbox({ checked, onCheckedChange, label, disabled }: { checked: boolean; onCheckedChange: (v: boolean) => void; label?: string; disabled?: boolean }) {
   return (
     <RCheckbox.Root
@@ -81,29 +64,18 @@ export function Checkbox({ checked, onCheckedChange, label, disabled }: { checke
   )
 }
 
-export function SettingRow({ title, description, children }: { title: ReactNode; description?: ReactNode; children: ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-6 px-6 py-5 [&+&]:border-t">
-      <div className="min-w-0">
-        <p className="text-md font-medium text-fg">{title}</p>
-        {description && <p className="mt-1 text-base text-muted">{description}</p>}
-      </div>
-      <div className="shrink-0">{children}</div>
-    </div>
-  )
-}
-
 export interface SelectOption {
   value: string
   label: ReactNode
   icon?: ReactNode
 }
 
-export function Select({ value, onValueChange, options, placeholder, className, size = 'md', label }: { value: string; onValueChange: (v: string) => void; options: SelectOption[]; placeholder?: string; className?: string; size?: 'sm' | 'md'; label?: string }) {
+export function Select({ value, onValueChange, options, placeholder, className, size = 'md', label, leading }: { value: string; onValueChange: (v: string) => void; options: SelectOption[]; placeholder?: string; className?: string; size?: 'sm' | 'md'; label?: string; leading?: ReactNode }) {
   return (
     <RSelect.Root value={value} onValueChange={onValueChange}>
       <RSelect.Trigger aria-label={label} className={cn('inline-flex items-center justify-between gap-2 rounded-control bg-surface px-3 text-fg shadow-card transition-colors hover:bg-hover', size === 'sm' ? 'h-8 text-sm' : 'h-10 text-base', className)}>
         <span className="flex min-w-0 items-center gap-2 truncate">
+          {leading}
           <RSelect.Value placeholder={placeholder} />
         </span>
         <Icon name="down" size={15} className="text-muted" />

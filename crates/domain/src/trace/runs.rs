@@ -6,8 +6,8 @@ use std::collections::BTreeMap;
 use serde::Serialize;
 use serde_json::Value;
 
+pub use self::spans::REVIEW;
 use self::spans::Spans;
-pub use self::spans::{JUDGE, REVIEW};
 use super::{Kind, Mark, Node, RunInfo, Title, Trace};
 
 pub fn marked(flag: &str, title: Title) -> bool {
@@ -93,7 +93,6 @@ impl Span {
 #[serde(rename_all = "snake_case")]
 pub enum Signal {
     ToolError,
-    EvalFailed,
     Review,
     Subagent,
     Waste,
@@ -256,7 +255,6 @@ fn signals(run: &Run) -> Vec<Signal> {
     let event = |name: &str| any(&|span| span.kind == SpanKind::Event && span.name.starts_with(name));
     [
         (Signal::ToolError, any(&|span| span.kind == SpanKind::Tool && span.failed)),
-        (Signal::EvalFailed, any(&|span| span.kind == SpanKind::Eval && span.failed && span.name == spans::JUDGE)),
         (Signal::Review, any(&|span| span.name == spans::REVIEW && !span.output.is_empty())),
         (Signal::Subagent, any(&|span| span.kind == SpanKind::Agent)),
         (Signal::Waste, run.waste > WASTEFUL),

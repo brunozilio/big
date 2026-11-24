@@ -10,9 +10,8 @@ pub struct Checkout {
     pub id: String,
     pub name: String,
     pub directory: Option<PathBuf>,
-    pub run: String,
+    pub run: Vec<String>,
     pub verify: Vec<String>,
-    pub e2e: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -27,6 +26,9 @@ fn text(value: &Value, name: &str) -> String {
 }
 
 fn commands(value: &Value, name: &str) -> Vec<String> {
+    if let Some(line) = value[name].as_str() {
+        return Some(line.trim()).filter(|line| !line.is_empty()).map(str::to_owned).into_iter().collect();
+    }
     let listed = value[name].as_array().map(Vec::as_slice).unwrap_or_default();
     listed.iter().filter_map(Value::as_str).map(str::trim).filter(|line| !line.is_empty()).map(str::to_owned).collect()
 }
@@ -44,9 +46,8 @@ fn checkout(repository: &Value) -> Checkout {
         id: text(repository, "id"),
         name,
         directory,
-        run: text(repository, "run"),
+        run: commands(repository, "run"),
         verify: commands(repository, "verify"),
-        e2e: commands(repository, "e2e"),
     }
 }
 
@@ -60,9 +61,8 @@ pub fn of_input(input: &Value, fallback: Option<&Path>) -> Vec<Checkout> {
         id: String::new(),
         name: String::new(),
         directory: fallback.map(Path::to_path_buf),
-        run: String::new(),
+        run: Vec::new(),
         verify: Vec::new(),
-        e2e: Vec::new(),
     }]
 }
 
@@ -87,13 +87,10 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
         let checkout = &worktree.checkout;
         let _ = write!(text, "\n- {}: {}", checkout.name, worktree.path.display());
         if !checkout.run.is_empty() {
-            let _ = write!(text, "\n  - Para rodar: `{}`", checkout.run);
+            let _ = write!(text, "\n  - Para rodar: {}", quoted(&checkout.run));
         }
         if !checkout.verify.is_empty() {
             let _ = write!(text, "\n  - Para verificar: {}", quoted(&checkout.verify));
-        }
-        if !checkout.e2e.is_empty() {
-            let _ = write!(text, "\n  - Testes E2E: {}", quoted(&checkout.e2e));
         }
     }
     let _ = write!(
@@ -128,14 +125,16 @@ mod tests {
     fn the_application_s_repositories_come_in_order_with_their_commands() {
         let input = json!({ "application": { "repositories": [
             { "id": "web", "directory": "/src/web", "code": { "connection": "c", "repo": "acme/web" },
-              "run": "bun dev", "verify": ["bun test", " "], "e2e": [" npx playwright test", ""] },
+              "run": "bun dev", "verify": ["bun test", " "] },
+            { "id": "app", "directory": "/src/app", "run": ["bun api", " bun web ", ""] },
             { "id": "api", "directory": "/src/api" },
         ] } });
         let found = of_input(&input, Some(Path::new("/padrao")));
-        assert_eq!(found.iter().map(|found| found.name.as_str()).collect::<Vec<_>>(), ["acme/web", "api"]);
+        assert_eq!(found.iter().map(|found| found.name.as_str()).collect::<Vec<_>>(), ["acme/web", "app", "api"]);
         assert_eq!(found[0].verify, ["bun test"]);
-        assert_eq!(found[0].e2e, ["npx playwright test"]);
-        assert!(found[1].e2e.is_empty());
+        assert_eq!(found[0].run, ["bun dev"]);
+        assert_eq!(found[1].run, ["bun api", "bun web"]);
+        assert!(found[2].run.is_empty());
         assert_eq!(home(&input, None), Some(PathBuf::from("/src/web")));
         assert_eq!(folder("cmd/i1", "web"), "cmd_i1--web");
         assert_eq!(folder("cmd/i1", ""), "cmd_i1");
@@ -145,7 +144,7 @@ mod tests {
             .collect();
         let text = described(&worktrees).expect("described");
         assert!(text.contains("acme/web: /w/web") && text.contains("`bun dev`") && text.contains("`bun test`"));
-        assert!(text.contains("  - Testes E2E: `npx playwright test`"));
+        assert!(text.contains("  - Para rodar: `bun api`, `bun web`"));
         assert!(text.contains("`AddRepository`"));
     }
 }

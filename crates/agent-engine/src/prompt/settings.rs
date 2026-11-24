@@ -1,34 +1,18 @@
-use crate::frontmatter::parse as parse_frontmatter;
 use crate::scope::Scope;
 use serde_json::Value;
 use std::path::{Path, PathBuf};
 pub const MANAGED: &str = "managed-settings.json";
 const LOCAL: &str = "settings.local.json";
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub struct Style {
-    pub name: String,
-    pub instructions: String,
-    pub keep_coding: bool,
-    #[serde(default)]
-    pub reminder: Option<String>,
-}
 #[derive(Debug, Clone, Default, serde::Serialize, serde::Deserialize)]
 pub struct Settings {
-    pub style: Option<Style>,
     pub schema: Option<Value>,
     #[serde(default)]
     pub agent: Option<String>,
     #[serde(default)]
     pub hooks: crate::hooks::Hooks,
     #[serde(default)]
-    pub advisor: Option<String>,
-    #[serde(default)]
-    pub judge: Option<String>,
-    #[serde(default)]
     pub escalation: Option<String>,
-    #[serde(default)]
-    pub project_criteria: Option<String>,
     #[serde(default)]
     pub fallbacks: Vec<String>,
     #[serde(default)]
@@ -68,11 +52,8 @@ fn model_names(value: &Value, key: &str) -> Result<Vec<String>, String> {
 pub fn load(scope: &Scope) -> Result<Settings, String> {
     let home = scope.home();
     let roots = roots(scope.cwd(), home);
-    let is_user_root = |root: &Path| home.is_some_and(|home| root == home.join(brand::DIR));
     let mut merged = Settings::default();
     merged.hooks.extend(&crate::hooks::Hooks::gathered(home, &roots, &|file| scope.honours(file)));
-    merged.project_criteria = super::criteria_file::nearest(roots.iter().filter(|root| !is_user_root(root)));
-    let mut style = String::from("Default");
     let mut problems = Vec::new();
     let mut skipped = Vec::new();
     for (path, users) in files(&roots, home) {
@@ -92,12 +73,12 @@ pub fn load(scope: &Scope) -> Result<Settings, String> {
         let value = checked.value;
         let layer = Layer { path: &path, value: &value, owners, runs_hooks: honoured };
         if owners {
-            layer.merge_into(&mut merged, &mut style)?;
+            layer.merge_into(&mut merged)?;
             continue;
         }
-        let (mut tried, mut tried_style) = (merged.clone(), style.clone());
-        match layer.merge_into(&mut tried, &mut tried_style) {
-            Ok(()) => (merged, style) = (tried, tried_style),
+        let mut tried = merged.clone();
+        match layer.merge_into(&mut tried) {
+            Ok(()) => merged = tried,
             Err(error) => skipped.push((path, error)),
         }
     }
@@ -106,7 +87,6 @@ pub fn load(scope: &Scope) -> Result<Settings, String> {
     merged.notices = Vec::new();
     crate::config_schema::logged_once(&problems);
     merged.notices.extend(problems);
-    merged.style = style_named(style, &roots)?;
     Ok(merged)
 }
 
@@ -158,14 +138,11 @@ struct Layer<'a> {
 }
 
 impl Layer<'_> {
-    fn merge_into(&self, merged: &mut Settings, style: &mut String) -> Result<(), String> {
+    fn merge_into(&self, merged: &mut Settings) -> Result<(), String> {
         self.merge_access(merged)?;
         self.merge_agent(merged)?;
         self.merge_models(merged)?;
         self.merge_extensions(merged)?;
-        if let Some(name) = self.value["outputStyle"].as_str() {
-            name.clone_into(style);
-        }
         if let Some(value) = self.value.get("jsonSchema") {
             merged.schema = (!value.is_null()).then(|| value.clone());
         }
@@ -203,12 +180,6 @@ impl Layer<'_> {
 
     fn merge_models(&self, merged: &mut Settings) -> Result<(), String> {
         let settings = self.value;
-        if let Some(value) = settings.get("advisorModel") {
-            merged.advisor = model_name(value, "advisorModel")?;
-        }
-        if let Some(value) = settings.get("judgeModel") {
-            merged.judge = model_name(value, "judgeModel")?;
-        }
         if self.owners
             && let Some(value) = settings.get("escalationModel")
         {
@@ -247,32 +218,6 @@ impl Layer<'_> {
     }
 }
 
-fn style_named(selected: String, roots: &[PathBuf]) -> Result<Option<Style>, String> {
-    match selected.to_ascii_lowercase().as_str() {
-        "default" => return Ok(None),
-        name if super::styles::builtin(name).is_some() => {
-            return Ok(super::styles::builtin(name).map(|style| style.style()));
-        }
-        _ => {}
-    }
-    if selected.is_empty() || !selected.chars().all(|c| c.is_ascii_alphanumeric() || "-_".contains(c)) {
-        return Err("invalid outputStyle name".into());
-    }
-    let path = roots
-        .iter()
-        .rev()
-        .map(|r| r.join("output-styles").join(format!("{selected}.md")))
-        .find(|p| p.is_file())
-        .ok_or_else(|| format!("output style {selected} was not found"))?;
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let (front, body) = parse_frontmatter(&text);
-    Ok(Some(Style {
-        name: selected,
-        instructions: body.trim().into(),
-        keep_coding: front.get("keep-coding-instructions").is_some_and(|v| v == "true"),
-        reminder: front.get("turn-reminder").map(|text| text.trim().to_owned()).filter(|t| !t.is_empty()),
-    }))
-}
 #[cfg(test)]
 pub(crate) fn load_trusted(cwd: &Path, home: Option<&Path>) -> Result<Settings, String> {
     load(&Scope::at(cwd, home))

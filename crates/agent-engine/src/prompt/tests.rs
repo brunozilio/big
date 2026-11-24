@@ -217,16 +217,15 @@ fn project_import_cannot_read_a_sibling_private_file() {
 }
 
 #[test]
-fn the_turn_reminder_guides_planning_and_repeats_the_style() {
+fn the_turn_reminder_guides_planning() {
     use domain::PermissionMode;
-    let planning = reminder(PermissionMode::Plan, 0, Some("Be concise."));
+    let planning = reminder(PermissionMode::Plan, 0);
     assert!(planning.contains("Planning mode is on.") && planning.contains("**Verification**"));
-    assert!(planning.ends_with("\nBe concise."), "the style's reminder comes last");
     assert!(planning.contains("started empty") && planning.contains("write the plan yourself"), "{planning}");
-    assert!(reminder(PermissionMode::Plan, 1, None).contains("Bash is not offered"));
-    let sub_agent = reminder(PermissionMode::Plan, 1, Some("Be concise."));
-    assert!(!sub_agent.contains("Planning mode is on.") && !sub_agent.contains("Be concise."));
-    assert!(!reminder(PermissionMode::Ask, 0, None).contains("Planning"));
+    let sub_agent = reminder(PermissionMode::Plan, 1);
+    assert!(sub_agent.contains("Bash is not offered") && !sub_agent.contains("Planning mode is on."));
+    let asking = reminder(PermissionMode::Ask, 0);
+    assert!(!asking.contains("Planning") && !asking.contains("undefined"), "{asking}");
 }
 
 #[test]

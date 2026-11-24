@@ -2,10 +2,20 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use jiff::Timestamp;
+use serde_json::Value;
 
-use super::{Authorization, Grant};
+use super::Grant;
 use crate::error::ActionError;
 use crate::http::Http;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Authorization {
+    pub url: String,
+    pub state: String,
+    pub verifier: String,
+    pub redirect_uri: String,
+    pub carried: Value,
+}
 
 #[async_trait]
 pub trait LoopbackSignIn: Send + Sync + std::fmt::Debug {

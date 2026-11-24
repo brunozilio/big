@@ -8,6 +8,7 @@ import { PersonAvatar, personName } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { MarkdownPreview } from '@/ui/markdownProse'
 import { Collapse, motion, tween } from '@/ui/motion'
+import { ChatView } from '@/chat/ChatView'
 import { useBlockHost } from './context'
 
 export function RichText({ text }: { text: string }) {
@@ -59,22 +60,49 @@ export function Loading({ error }: { error?: string | null }) {
 
 const commandTone = (st: Command['state']) => cn('flex size-[18px] shrink-0 items-center justify-center rounded-full', st === 'done' && 'bg-success text-white', st === 'failed' && 'bg-danger text-white', st === 'running' && 'bg-info-soft text-info', st === 'todo' && 'bg-inset text-faint')
 
+function CommandLog({ log }: { log: string }) {
+  return (
+    <pre className="mx-1.5 mb-2 mt-1 overflow-x-auto rounded-control bg-code p-3 font-mono text-xs leading-5 text-code-fg">
+      {log.split('\n').map((l, k) => (
+        <span key={k} className={cn('block', /✗|error|fail$|Received/.test(l) && !/0 fail/.test(l) && 'text-code-err', /✓|pass$|No issues|0 errors|successfully/.test(l) && 'text-code-ok', l.startsWith('$') && 'text-white')}>{l || ' '}</span>
+      ))}
+    </pre>
+  )
+}
+
+function CommandBody({ command }: { command: Command }) {
+  if (!command.session) return <CommandLog log={command.log} />
+  return (
+    <div className="mx-1.5 mb-2 mt-1 h-[440px] overflow-hidden rounded-control border bg-bg">
+      <ChatView sessionId={command.session} composer={false} />
+    </div>
+  )
+}
+
+const opened = (commands: Command[]) => new Set(commands.filter((c) => c.state === 'failed' || (c.state === 'running' && c.session)).map((c) => c.name))
+
 export function Commands({ commands }: { commands: Command[] }) {
-  const failed = commands.find((c) => c.state === 'failed')
-  const [open, setOpen] = useState<string | null>(failed?.name ?? null)
+  const [open, setOpen] = useState<Set<string>>(() => opened(commands))
+  const toggle = (name: string) =>
+    setOpen((now) => {
+      const next = new Set(now)
+      if (!next.delete(name)) next.add(name)
+      return next
+    })
   return (
     <ul className="space-y-0.5">
       {commands.map((c) => {
         const can = c.state !== 'todo'
-        const isOpen = open === c.name && can
+        const isOpen = open.has(c.name) && can
         return (
           <li key={c.name}>
-            <button disabled={!can} onClick={() => setOpen(isOpen ? null : c.name)} className={cn('flex w-full items-center gap-3 rounded-control-sm px-1.5 py-1.5 text-left transition-colors', can && 'hover:bg-hover')}>
+            <button disabled={!can} aria-expanded={isOpen} onClick={() => toggle(c.name)} className={cn('flex w-full items-center gap-3 rounded-control-sm px-1.5 py-1.5 text-left transition-colors', can && 'hover:bg-hover')}>
               <span className={commandTone(c.state)}>
                 {c.state === 'done' && <Icon name="check" size={11} strokeWidth={2.4} />}
                 {c.state === 'failed' && <Icon name="close" size={11} strokeWidth={2.4} />}
                 {c.state === 'running' && <Spinner size={11} className="text-info" />}
               </span>
+              {c.session && <Icon name="chat" size={14} className="shrink-0 text-muted" />}
               <span className={cn('min-w-0 flex-1 font-mono text-sm', c.state === 'todo' ? 'text-muted' : 'text-fg2')}>{c.name}</span>
               {c.seconds !== null && <span className="text-xs tabular-nums text-faint">{c.seconds}s</span>}
               {can && (
@@ -84,11 +112,7 @@ export function Commands({ commands }: { commands: Command[] }) {
               )}
             </button>
             <Collapse open={isOpen}>
-              <pre className="mx-1.5 mb-2 mt-1 overflow-x-auto rounded-control bg-code p-3 font-mono text-xs leading-5 text-code-fg">
-                {c.log.split('\n').map((l, k) => (
-                  <span key={k} className={cn('block', /✗|error|fail$|Received/.test(l) && !/0 fail/.test(l) && 'text-code-err', /✓|pass$|No issues|0 errors|successfully/.test(l) && 'text-code-ok', l.startsWith('$') && 'text-white')}>{l || ' '}</span>
-                ))}
-              </pre>
+              <CommandBody command={c} />
             </Collapse>
           </li>
         )

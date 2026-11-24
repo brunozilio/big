@@ -1,6 +1,6 @@
 #[test]
-fn the_chat_s_review_and_init_commands_ship_as_skills() {
-    for name in ["init", "review", "code-review"] {
+fn the_chat_s_review_commands_ship_as_skills() {
+    for name in ["review", "code-review"] {
         let path = format!("{name}/SKILL.md");
         let skill = content::builtin(&format!("skills/{path}"));
         let text = String::from_utf8_lossy(skill.unwrap_or_default());

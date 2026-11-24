@@ -36,7 +36,7 @@ pub fn launch(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> crate::err
         tasks.push(fire_at(shared, item, &launch.key, at, EffectOutcome::TimedOut));
     }
     match launch.command.kind.as_str() {
-        WAIT_HUMAN => {}
+        WAIT_HUMAN => crate::chores::recap(shared, item, &launch.key.to_string()),
         CHILD => crate::children::start(shared, item, &launch.command, &launch.key)?,
         EVENT => {
             let wait = EventWait {

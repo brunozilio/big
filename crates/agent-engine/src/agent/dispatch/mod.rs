@@ -3,7 +3,6 @@ mod batches;
 mod in_loop;
 mod task_list;
 mod watch;
-mod worktree;
 
 use domain::{EngineEvent, ToolCall};
 use platform::sync::Locked;

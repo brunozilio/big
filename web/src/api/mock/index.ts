@@ -143,6 +143,7 @@ export function mockApi(options: MockOptions = {}): Api {
       if (!p) throw new Error(`provedor ${provider} desconhecido`)
       const flow = `f-${provider}-${Date.now()}`
       flows.set(flow, { provider, polls: 0, chosen: null, started: Date.now() })
+      if (method === 'api_token' || method === 'access_keys') return { flow, kind: 'token' }
       if (p.signIn === 'device' || p.signIn === 'sso' || method === 'sso') {
         const url = provider === 'aws' ? 'https://device.sso.us-east-1.amazonaws.com/' : provider === 'grok' ? 'https://accounts.x.ai/device' : 'https://github.com/login/device'
         return { flow, kind: 'device', url, code: provider === 'aws' ? 'KQTX-WMPB' : 'WDJB-MJHT', expiresIn: 900, interval: 1 }
@@ -235,6 +236,12 @@ export function mockApi(options: MockOptions = {}): Api {
       const found = itemOfSession(id)
       if (found) chat(found.it.id, found.kind, message.text)
     }, 80),
+    side: (id, question) => wait(() => {
+      const found = itemOfSession(id)
+      if (!found) throw new Error(`sessão ${id} não encontrada`)
+      if (!question.text.trim()) throw new Error('Escreva a pergunta.')
+      return { answer: `Sobre ${found.it.key}: o agente segue no passo atual e nada muda no trabalho dele. Sua pergunta foi “${question.text.trim()}”.` }
+    }, 600),
     respond: (id, event, response) => wait(() => {
       const found = itemOfSession(id)
       if (!found) throw new Error(`sessão ${id} não encontrada`)

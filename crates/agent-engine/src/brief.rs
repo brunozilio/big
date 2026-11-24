@@ -39,8 +39,7 @@ impl Brief {
         let gate = Scope::of(folder);
         let home = gate.home();
         let settings = prompt::settings::load(&gate).map_err(BriefError::Settings)?;
-        let mut skills = tools::skill::discover(folder, home);
-        skills.retain(|skill| domain::features::skill_on(&skill.name));
+        let skills = tools::skill::discover(folder, home);
         let found = crate::hooks::Briefed {
             skills,
             agents: tools::subagent::discover(folder, home),
@@ -169,24 +168,6 @@ mod tests {
     }
 
     #[test]
-    fn a_skill_behind_a_flag_is_offered_as_the_config_says_and_the_settings_cannot_change_it() {
-        let home = tempfile::tempdir().expect("home");
-        let repo = tempfile::tempdir().expect("repo");
-        let mut request = PromptRequest::plain(repo.path().into(), "", ModelOption::new("m", "M"));
-        request.host.extensions = Some(domain::Extensions { home: Some(home.path().into()), ..Default::default() });
-        let offered = |request: &PromptRequest| {
-            super::Brief::load(request.folder()).expect("brief").skills.iter().any(|skill| skill.name == "follow-pr")
-        };
-        let configured = domain::features::on(brand::features::PR_FOLLOW);
-        assert_eq!(offered(&request), configured);
-
-        std::fs::create_dir_all(home.path().join(brand::DIR)).expect("dir");
-        let off = serde_json::json!({ "features": { "pr-follow": false } });
-        std::fs::write(home.path().join(brand::DIR).join("settings.json"), off.to_string()).expect("settings");
-        assert_eq!(offered(&request), configured);
-    }
-
-    #[test]
     fn a_brief_hook_adds_changes_and_removes_the_session_s_skills() {
         let home = tempfile::tempdir().expect("home");
         let repo = tempfile::tempdir().expect("repo");
@@ -200,7 +181,7 @@ export default (input) => {
   return {
     skills: [
       ...input.skills
-        .filter((skill) => skill.name !== "follow-pr" && skill.name !== "review")
+        .filter((skill) => skill.name !== "simplify" && skill.name !== "review")
         .map((skill) => ({ name: skill.name })),
       { name: "review", description: `ACME: ${review.description}`, body: review.path.length > 0 ? "Use the ACME checklist." : "" },
       { name: "deploy", description: "Ship it", body: "Run make deploy." },
@@ -215,7 +196,7 @@ export default (input) => {
         let skills = super::Brief::load(request.folder()).expect("brief").skills;
 
         let named = |name: &str| skills.iter().find(|skill| skill.name == name);
-        assert!(named("follow-pr").is_none(), "removed");
+        assert!(named("simplify").is_none(), "removed");
         assert!(named("verify").is_some(), "kept");
         let review = named("review").expect("review");
         assert!(review.description.starts_with("ACME: "), "{}", review.description);

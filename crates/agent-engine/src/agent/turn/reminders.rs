@@ -41,9 +41,7 @@ impl Reminders {
 impl crate::agent::Agent<'_> {
     pub(super) fn runtime_reminder(&self, budget: &Budget, quiet_tasks: usize, run: &ThisRun) -> String {
         let context = self.workspace.prompt_context.as_ref();
-        let style = context.and_then(|context| context.output_style.as_ref());
-        let reminder =
-            crate::prompt::reminder(self.control.mode(), self.depth, style.and_then(|s| s.reminder.as_deref()));
+        let reminder = crate::prompt::reminder(self.control.mode(), self.depth);
         let today = crate::engine::date::today();
         let offers_search = self.request.tools.iter().any(|spec| spec.name == crate::tools::tool_search::TOOL_SEARCH);
         let deferred =

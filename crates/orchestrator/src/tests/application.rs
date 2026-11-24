@@ -18,9 +18,8 @@ fn stored(web: &str) -> Arc<Store> {
             id: "r1".into(),
             code: Some(CodeChoice { connection: "c-code".into(), repo: "acme/web".into() }),
             directory: web.into(),
-            run: "bun dev".into(),
+            run: vec!["bun dev".into()],
             verify: vec!["bun test".into()],
-            e2e: vec!["npx playwright test".into()],
         }],
     };
     store.save_application(&application).expect("saved");
@@ -54,7 +53,10 @@ fn an_agent_adds_a_new_repository_to_its_application_with_the_application_s_code
     assert_eq!(application.repositories.len(), 2);
     assert_eq!(added.directory, api.to_string_lossy());
     assert_eq!(added.code, Some(CodeChoice { connection: "c-code".into(), repo: "acme/api".into() }));
-    assert_eq!((added.run.as_str(), added.verify.as_slice()), ("cargo run", ["cargo test".to_owned()].as_slice()));
+    assert_eq!(
+        (added.run.as_slice(), added.verify.as_slice()),
+        (["cargo run".to_owned()].as_slice(), ["cargo test".to_owned()].as_slice())
+    );
     assert!(!added.id.is_empty() && added.id != "r1");
 }
 
@@ -67,7 +69,7 @@ fn a_known_directory_is_updated_in_place_and_keeps_what_was_left_out() {
     assert!(outcome.content.contains("Atualizei"), "{}", outcome.content);
     let application = store.application("app").expect("read").expect("there");
     let [only] = application.repositories.as_slice() else { panic!("one repository") };
-    assert_eq!((only.id.as_str(), only.run.as_str()), ("r1", "bun dev"));
+    assert_eq!((only.id.as_str(), only.run.as_slice()), ("r1", ["bun dev".to_owned()].as_slice()));
     assert_eq!(only.verify, ["bun test", "bun run lint"]);
 }
 

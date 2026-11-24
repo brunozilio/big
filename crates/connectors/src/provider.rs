@@ -86,8 +86,8 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
         Presentation::default()
     }
 
-    fn alternative(&self) -> Option<AlternateAuth> {
-        None
+    fn alternatives(&self) -> Vec<AlternateAuth> {
+        Vec::new()
     }
 
     fn chooses(&self) -> &'static [&'static str] {
@@ -99,11 +99,9 @@ pub trait SettingsSink: Send + Sync + std::fmt::Debug {
     fn learned(&self, connection: &ConnectionId, settings: &Value);
 }
 
-pub fn auth_for(primary: &AuthSpec, alternative: Option<&AlternateAuth>, method: Option<&str>) -> AuthSpec {
-    match (method, alternative) {
-        (Some(method), Some(alternate)) if alternate.key == method => alternate.auth.clone(),
-        _ => primary.clone(),
-    }
+pub fn auth_for(primary: &AuthSpec, alternatives: &[AlternateAuth], method: Option<&str>) -> AuthSpec {
+    let chosen = method.and_then(|method| alternatives.iter().find(|alternate| alternate.key == method));
+    chosen.map_or_else(|| primary.clone(), |alternate| alternate.auth.clone())
 }
 
 pub fn unknown_action(action: &str) -> ActionError {

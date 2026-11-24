@@ -189,4 +189,5 @@ pub fn forget_client(client: u64) {
 }
 
 #[cfg(test)]
+#[path = "watch_tests.rs"]
 mod tests;

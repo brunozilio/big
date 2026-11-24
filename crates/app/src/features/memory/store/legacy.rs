@@ -47,7 +47,7 @@ impl LegacyMemoryStore {
 
     #[cfg(test)]
     pub(crate) fn save(&self, project: &Path, book: &MemoryBook) {
-        let file = self.folder().join(format!("{}.{EXTENSION}", crate::dirs::project_key(project)));
+        let file = self.folder().join(format!("{}.{EXTENSION}", crate::dirs::memory_key(project)));
         Document::at(file).write(book).expect("legacy memory");
     }
 }

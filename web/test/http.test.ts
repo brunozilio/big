@@ -39,6 +39,14 @@ describe('cliente HTTP', () => {
     expect(calls[5].body).toEqual({ event: 'e1', response: { kind: 'plan', decision: 'approve' } })
   })
 
+  test('pergunta à parte vai para a rota side com texto e modelo', async () => {
+    const { calls, fetcher } = recorder({ answer: 'Está rodando os testes.' })
+    const answer = await httpApi(fetcher).side('s 1', { text: 'O que falta?', model: null })
+    expect(answer).toEqual({ answer: 'Está rodando os testes.' })
+    expect(calls).toEqual([{ url: '/api/sessions/s%201/side', method: 'POST', body: { text: 'O que falta?', model: null } }])
+    expect(ROUTES.side('s1')).toBe('/api/sessions/s1/side')
+  })
+
   test('erro do servidor vira ApiError com a mensagem dele', async () => {
     const { fetcher } = recorder({ error: { code: 'missing', message: 'Item não existe' } }, 404)
     await expect(httpApi(fetcher).items()).rejects.toMatchObject({ status: 404, code: 'missing', message: 'Item não existe' })

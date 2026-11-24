@@ -7,16 +7,12 @@ pub const MCP_PREFIX: &str = "mcp__";
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ToolName {
     AddRepository,
-    Advisor,
     Agent,
     AskUserQuestion,
     Bash,
     BashOutput,
     Edit,
-    EnterPlanMode,
-    EnterWorktree,
     ExitPlanMode,
-    ExitWorktree,
     Glob,
     Grep,
     KillShell,
@@ -48,18 +44,14 @@ pub enum ToolName {
 }
 
 impl ToolName {
-    pub const BUILTIN: [Self; 37] = [
+    pub const BUILTIN: [Self; 33] = [
         Self::AddRepository,
-        Self::Advisor,
         Self::Agent,
         Self::AskUserQuestion,
         Self::Bash,
         Self::BashOutput,
         Self::Edit,
-        Self::EnterPlanMode,
-        Self::EnterWorktree,
         Self::ExitPlanMode,
-        Self::ExitWorktree,
         Self::Glob,
         Self::Grep,
         Self::KillShell,
@@ -98,16 +90,12 @@ impl ToolName {
     pub const fn as_str(&self) -> &str {
         match self {
             Self::AddRepository => "AddRepository",
-            Self::Advisor => "Advisor",
             Self::Agent => "Agent",
             Self::AskUserQuestion => "AskUserQuestion",
             Self::Bash => "Bash",
             Self::BashOutput => "BashOutput",
             Self::Edit => "Edit",
-            Self::EnterPlanMode => "EnterPlanMode",
-            Self::EnterWorktree => "EnterWorktree",
             Self::ExitPlanMode => "ExitPlanMode",
-            Self::ExitWorktree => "ExitWorktree",
             Self::Glob => "Glob",
             Self::Grep => "Grep",
             Self::KillShell => "KillShell",

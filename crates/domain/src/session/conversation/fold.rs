@@ -70,10 +70,6 @@ impl Transcript {
             EngineEvent::Reviewed(findings) => self.notice(crate::review::summary(findings)),
             EngineEvent::Compacted(compaction) => self.push(Entry::Compacted { freed: compaction.freed() }),
             EngineEvent::Diagnosed(problem) => self.error(problem.message()),
-            EngineEvent::Verified(verdict) => {
-                let line = super::verdict::line(verdict);
-                if verdict.passed { self.notice(line) } else { self.error(line) }
-            }
             EngineEvent::ToolInputDelta { name, piece } => {
                 self.close_thinking();
                 let drafting = self.drafting.get_or_insert_with(String::new);
@@ -85,13 +81,6 @@ impl Transcript {
             EngineEvent::FellBack(model) => self.notice(format!("The model call failed; going on with {model}.")),
             EngineEvent::AccountSwitched { from, to } => {
                 self.notice(format!("Account {from} is busy or signed out; going on with {to}."))
-            }
-            EngineEvent::Picked { model, effort } => {
-                self.notice(format!("Auto: {model}, {} effort", effort.cli_value()))
-            }
-            EngineEvent::Moved(path) => {
-                self.moved = Some(path.clone());
-                self.notice(format!("Now working in {}", path.display()));
             }
             EngineEvent::Refused { tool, reason } => {
                 self.push(Entry::Refused { tool: tool.clone(), reason: reason.clone() });
@@ -133,6 +122,7 @@ impl Transcript {
             summary: started.summary.clone(),
             state: ToolState::Running,
             output: None,
+            input: started.input.clone(),
         });
     }
 

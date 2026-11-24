@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "ReadMcpResource",
   input: {
@@ -10,10 +9,6 @@ export const spec = {
   description: `Read a resource of an MCP server by its URI (ListMcpResources lists them).`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

@@ -23,6 +23,22 @@ struct Going {
 #[derive(Clone, Default)]
 pub struct Chats {
     runs: Arc<Mutex<HashMap<String, Going>>>,
+    suggestions: Arc<Mutex<HashMap<String, String>>>,
+}
+
+struct Resumed {
+    client: Client,
+    folder: PathBuf,
+    model: app::Model,
+    agent: Option<domain::MainAgentSpec>,
+    session: String,
+}
+
+impl Resumed {
+    fn session(&self) -> app::Session {
+        let id = SessionId(self.session.clone());
+        self.client.session(self.folder.clone(), self.model.clone()).resume(id).agent(self.agent.clone())
+    }
 }
 
 impl std::fmt::Debug for Chats {
@@ -38,6 +54,7 @@ pub struct Message<'a> {
     pub text: &'a str,
     pub model: app::Model,
     pub effort: Option<app::Effort>,
+    pub agent: Option<domain::MainAgentSpec>,
     pub shown: Shown,
 }
 
@@ -59,6 +76,21 @@ impl Chats {
         Some((events, status, going.shown.mode.clone(), going.shown.model.clone()))
     }
 
+    pub fn suggestion(&self, session: &str) -> Option<String> {
+        self.suggestions.lock().unwrap_or_else(PoisonError::into_inner).get(session).cloned()
+    }
+
+    pub fn side(client: &Client, message: &Message<'_>) -> ApiResult<String> {
+        let resumed = Resumed {
+            client: client.clone(),
+            folder: message.folder.clone(),
+            model: message.model.clone(),
+            agent: message.agent.clone(),
+            session: message.session.to_owned(),
+        };
+        resumed.session().side(message.text).and_then(app::Run::side_answer).map_err(ApiError::failed)
+    }
+
     pub fn pending(&self, session: &str) -> Option<domain::AgentAsk> {
         self.locked().get(session).and_then(|going| going.shown.transcript.ask().map(|pending| pending.ask.clone()))
     }
@@ -67,9 +99,15 @@ impl Chats {
         if self.running(message.session) {
             return Err(ApiError::busy("Esta conversa ainda está respondendo."));
         }
-        let id = SessionId(message.session.to_owned());
-        let model = message.model.clone();
-        let mut session = client.session(message.folder.clone(), model).resume(id);
+        self.suggestions.lock().unwrap_or_else(PoisonError::into_inner).remove(message.session);
+        let resumed = Resumed {
+            client: client.clone(),
+            folder: message.folder.clone(),
+            model: message.model.clone(),
+            agent: message.agent.clone(),
+            session: message.session.to_owned(),
+        };
+        let mut session = resumed.session();
         if let Some(effort) = message.effort {
             session = session.effort(effort);
         }
@@ -81,9 +119,9 @@ impl Chats {
         shown.stamp(now_ms());
         self.locked().insert(message.session.to_owned(), Going { control: run.control(), shown });
         notify(message.session);
-        let (chats, session) = (self.clone(), message.session.to_owned());
+        let chats = self.clone();
         let pumped =
-            std::thread::Builder::new().name("web-chat".into()).spawn(move || chats.pump(run, &session, &notify));
+            std::thread::Builder::new().name("web-chat".into()).spawn(move || chats.pump(run, &resumed, &notify));
         if let Err(error) = pumped {
             self.locked().remove(message.session);
             return Err(ApiError::failed(error));
@@ -91,9 +129,12 @@ impl Chats {
         Ok(())
     }
 
-    fn pump(&self, run: app::Run, session: &str, notify: &Notify) {
+    fn pump(&self, run: app::Run, resumed: &Resumed, notify: &Notify) {
+        let session = resumed.session.as_str();
         let mut told = Instant::now();
+        let mut completed = false;
         for event in run {
+            completed |= matches!(event, EngineEvent::Completed { .. });
             let streaming = matches!(event, EngineEvent::TextDelta(_) | EngineEvent::ThinkingDelta(_));
             if let Some(going) = self.locked().get_mut(session) {
                 going.shown.transcript.apply(&event);
@@ -106,6 +147,19 @@ impl Chats {
         }
         self.locked().remove(session);
         notify(session);
+        if completed {
+            self.suggest(resumed, notify);
+        }
+    }
+
+    fn suggest(&self, resumed: &Resumed, notify: &Notify) {
+        let answer = resumed.session().suggest().and_then(app::Run::chore_answer);
+        let Ok(Some(domain::ChoreAnswer::Suggestion(text))) = answer else { return };
+        if self.running(&resumed.session) {
+            return;
+        }
+        self.suggestions.lock().unwrap_or_else(PoisonError::into_inner).insert(resumed.session.clone(), text);
+        notify(&resumed.session);
     }
 
     pub fn answer(&self, session: &str, ask: &str, decision: domain::Decision) -> ApiResult<()> {

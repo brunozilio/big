@@ -8,9 +8,8 @@ use crate::tools::read_files::Freshness;
 use crate::tools::script_tool::ScriptGrants;
 
 #[test]
-fn a_forked_policy_keeps_its_settings_and_scripts_but_clears_pre_approved() {
+fn a_forked_policy_keeps_its_settings_and_scripts() {
     let policy = Policy {
-        pre_approved: vec!["cargo test".into()],
         scripts: ScriptGrants::none(),
         redact: Some(Arc::new(domain::redact::Known::default())),
         escalation: true,
@@ -36,7 +35,6 @@ fn a_forked_policy_keeps_its_settings_and_scripts_but_clears_pre_approved() {
     assert!(fork.load_on_call, "a sub-agent loads a waiting tool on call as its parent does");
     assert_eq!(fork.code_mode, policy.code_mode, "a sub-agent scripts its tools as its parent does");
     assert_eq!(fork.scripts, ScriptGrants::none());
-    assert!(fork.pre_approved.is_empty());
 }
 
 #[test]
@@ -69,19 +67,13 @@ fn a_forked_tracking_starts_with_no_refusals_seen_files_or_seen_rules() {
 }
 
 #[test]
-fn a_forked_workspace_keeps_models_and_drops_verification_and_worktree() {
+fn a_forked_workspace_keeps_models_and_drops_the_worktree() {
     let mut workspace = Workspace::new("/repo");
     workspace.models = Models { small_model: Some("small".into()), ..Models::default() };
-    workspace.verification = Some(super::Verification {
-        criteria: domain::Criteria::user("tests pass"),
-        model: "judge".into(),
-        allow: Vec::new(),
-    });
 
     let fork = workspace.fork(Arc::default());
 
     assert_eq!(fork.models.small_model.as_deref(), Some("small"));
     assert_eq!(fork.cwd, Path::new("/repo"));
-    assert!(fork.verification.is_none());
     assert!(fork.worktree.is_none());
 }

@@ -52,7 +52,7 @@ interface Draft {
   repository: ApplicationRepository
 }
 
-const blank: Draft = { name: '', tracker: null, repository: { id: '', code: null, directory: '', run: '', verify: [], e2e: [] } }
+const blank: Draft = { name: '', tracker: null, repository: { id: '', code: null, directory: '', run: [], verify: [] } }
 
 function Steps({ stage }: { stage: Stage }) {
   const at = STAGES.findIndex((s) => s.stage === stage)

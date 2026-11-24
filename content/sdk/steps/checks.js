@@ -1,4 +1,4 @@
-import { step, logs, chat } from "sdk";
+import { step, logs } from "sdk";
 import { agentOptions, branchOf, defined, eachOf, inLanguage, planOf, repositoriesOf, tail } from "./context.js";
 import { endToEnd, e2eLines } from "./e2e.js";
 
@@ -34,9 +34,10 @@ function checked(s) {
   const many = results.length > 1;
   const commands = results.flatMap((result) => (Array.isArray(result.ran) ? result.ran : []).map((entry) => (many && result.name ? { ...entry, name: `${result.name}: ${entry.name}` } : entry)));
   commands.push(...e2eLines(s.e2e));
-  if (s.session) {
+  const verifying = s.state === undefined || s.state === "running";
+  if (s.session && (s.verdict !== undefined || verifying)) {
     const state = s.verdict === undefined ? "running" : s.approved === false ? "failed" : "done";
-    commands.push({ name: "Verificador: critérios de aceite", state, seconds: null, log: s.verdict ?? "" });
+    commands.push({ name: "Verificador: critérios de aceite", state, seconds: null, log: s.verdict ?? "", session: s.session });
   }
   return commands;
 }
@@ -68,9 +69,7 @@ export default step({
   doing: "Rodando checks",
   view: (s) => {
     const commands = checked(s);
-    if (commands.length === 0) return [logs(s.output ?? NOTHING)];
-    const sessions = [s.e2e && s.e2e.session, s.session].filter(Boolean);
-    return [logs(commands), ...sessions.map((session) => chat(session))];
+    return commands.length === 0 ? [logs(s.output ?? NOTHING)] : [logs(commands)];
   },
   async run(ctx, opts) {
     const groups = groupsOf(ctx, opts);

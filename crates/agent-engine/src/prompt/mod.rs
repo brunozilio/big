@@ -1,11 +1,9 @@
-mod criteria_file;
 mod git;
 mod instruction_files;
 pub(crate) mod markdown;
 pub mod permissions;
 pub mod rules;
 pub mod settings;
-pub mod styles;
 mod top_level;
 pub const CONTRACT_VERSION: &str = "agent-engine/1";
 
@@ -65,7 +63,6 @@ pub struct Environment {
     pub instructions: Vec<Instructions>,
     pub tools: Vec<String>,
     pub skills: String,
-    pub output_style: Option<settings::Style>,
     pub mcp_instructions: Vec<McpInstructions>,
 }
 
@@ -110,9 +107,6 @@ impl Environment {
             })).collect::<Vec<_>>(),
             "tools": self.tools,
             "skills": self.skills,
-            "output_style": self.output_style.as_ref().map(|style| serde_json::json!({
-                "name": style.name, "instructions": style.instructions, "keep_coding": style.keep_coding,
-            })),
             "mcp_instructions": self.mcp_instructions.iter().map(|served| {
                 serde_json::json!({ "server": served.server, "text": McpInstructions::of(&served.server, &served.text).text })
             }).collect::<Vec<_>>(),
@@ -149,8 +143,8 @@ pub const fn platform() -> &'static str {
 #[cfg(test)]
 mod tests;
 
-pub fn reminder(mode: domain::PermissionMode, depth: usize, style: Option<&str>) -> String {
+pub fn reminder(mode: domain::PermissionMode, depth: usize) -> String {
     let mode = domain::command::mode_label(mode);
-    let data = serde_json::json!({ "mode": mode, "depth": depth, "style": style });
+    let data = serde_json::json!({ "mode": mode, "depth": depth });
     render("prompts/reminder.js", &data)
 }

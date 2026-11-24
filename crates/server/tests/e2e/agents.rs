@@ -144,12 +144,13 @@ impl AgentEngine for Agents {
         sink: Arc<dyn EventSink>,
     ) -> Result<Box<dyn RunHandle>, EngineError> {
         let titling = request.session.command == Some(domain::SessionCommand::Title);
-        let number = if titling { 0 } else { self.script.started.fetch_add(1, Ordering::SeqCst) + 1 };
+        let chore = request.session.command.is_some_and(domain::SessionCommand::is_chore);
+        let number = if chore { 0 } else { self.script.started.fetch_add(1, Ordering::SeqCst) + 1 };
         let named = request.session.agent.as_ref().map(|agent| agent.name.clone());
         let fallback = if request.policy.permission == PermissionMode::Plan { "planner" } else { "developer" };
         let role = named.unwrap_or_else(|| fallback.to_owned());
         let session = request.session.resume.clone().unwrap_or_else(|| SessionId(format!("{role}-{number}")));
-        if !titling {
+        if !chore {
             self.script.runs.lock().unwrap_or_else(PoisonError::into_inner).push((
                 role.clone(),
                 session.0.clone(),

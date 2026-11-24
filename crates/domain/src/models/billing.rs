@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-pub const PRICE_DATE: &str = "2026-11-07";
+pub const PRICE_DATE: &str = "2026-11-23";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenRates {

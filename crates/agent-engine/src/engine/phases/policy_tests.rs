@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
+use domain::ModelOption;
 use domain::code_mode::Mode;
 use domain::memory::{Author, Memory, MemoryBrief, MemoryId, MemoryKind};
-use domain::{Criteria, ModelOption, PermissionMode};
 
 use super::*;
 
@@ -62,9 +62,8 @@ fn secrets_are_read_from_the_folder_s_env_files_while_redaction_is_on() {
 }
 
 #[test]
-fn flags_grant_no_pre_approval() {
+fn flags_set_no_code_mode_detach() {
     let policy = policy();
-    assert!(policy.pre_approved.is_empty());
     assert_eq!(policy.code_mode_detach, None);
 }
 
@@ -74,39 +73,6 @@ fn a_budget_is_kept_only_while_its_flag_is_on() {
     request.policy.budget = Some(domain::budget::Budget { limit_usd: 2.0, spent_usd: 0.5 });
     let kept = budget(&request);
     assert_eq!(kept, request.policy.budget.filter(|_| on(flags::BUDGET)));
-}
-
-#[test]
-fn nothing_is_verified_in_plan_mode() {
-    let mut request = request();
-    request.policy.verification = Some(Criteria::project("tests pass"));
-    request.policy.permission = PermissionMode::Plan;
-    assert_eq!(verification(&request, &Settings::default(), &ModelRoles::default()), Ok(None));
-}
-
-#[test]
-fn the_project_s_criteria_apply_only_with_their_flag_and_yield_to_the_request_s() {
-    let project = Settings { project_criteria: Some("lint is clean".into()), ..Settings::default() };
-    let request = request();
-    let judged = verification(&request, &project, &ModelRoles::default()).expect("verification");
-    let expected = on(flags::PROJECT_CRITERIA).then(|| Criteria::project("lint is clean"));
-    assert_eq!(judged.map(|found| found.criteria), expected);
-    let mut asking = request.clone();
-    asking.policy.verification = Some(Criteria::project("tests pass"));
-    let judged = verification(&asking, &project, &ModelRoles::default()).expect("verification");
-    assert_eq!(judged.map(|found| found.criteria.text), Some("tests pass".to_owned()));
-}
-
-#[test]
-fn the_judge_is_the_review_role_s_model_or_the_run_s_own() {
-    let mut request = request();
-    request.policy.verification = Some(Criteria::project("tests pass"));
-    let own = verification(&request, &Settings::default(), &ModelRoles::default()).expect("verification");
-    assert_eq!(own.map(|found| found.model), Some("m".to_owned()));
-    let mut roles = ModelRoles::default();
-    roles.set(ModelRole::Review, Some("no such model anywhere".into()));
-    let error = verification(&request, &Settings::default(), &roles).expect_err("unknown judge");
-    assert!(error.starts_with("judgeModel: "), "{error}");
 }
 
 fn anchor() -> Memory {

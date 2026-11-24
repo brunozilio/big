@@ -79,20 +79,20 @@ impl TokenKeeper {
     }
 
     pub async fn access_token(&self, connection: &ConnectionId, auth: &AuthSpec) -> Result<String, ActionError> {
-        self.access_token_of(connection, auth, None).await
+        self.access_token_of(connection, auth, &[]).await
     }
 
     pub async fn access_token_of(
         &self,
         connection: &ConnectionId,
         auth: &AuthSpec,
-        alternative: Option<&AlternateAuth>,
+        alternatives: &[AlternateAuth],
     ) -> Result<String, ActionError> {
         let grant = self.store.load(connection).await?.ok_or_else(|| reconnect("the connection has no token"))?;
         if !grant.stale(self.clock.now()) {
             return Ok(grant.access_token);
         }
-        self.refreshed_of(connection, auth, alternative, &grant.access_token).await
+        self.refreshed_of(connection, auth, alternatives, &grant.access_token).await
     }
 
     pub async fn refreshed(
@@ -101,14 +101,14 @@ impl TokenKeeper {
         auth: &AuthSpec,
         stale: &str,
     ) -> Result<String, ActionError> {
-        self.refreshed_of(connection, auth, None, stale).await
+        self.refreshed_of(connection, auth, &[], stale).await
     }
 
     pub async fn refreshed_of(
         &self,
         connection: &ConnectionId,
         primary: &AuthSpec,
-        alternative: Option<&AlternateAuth>,
+        alternatives: &[AlternateAuth],
         stale: &str,
     ) -> Result<String, ActionError> {
         let lock = {
@@ -123,7 +123,7 @@ impl TokenKeeper {
         }
         let refresh_token =
             grant.refresh_token.clone().ok_or_else(|| reconnect("the token expired and cannot be renewed"))?;
-        let auth = auth_for(primary, alternative, grant.method.as_deref());
+        let auth = auth_for(primary, alternatives, grant.method.as_deref());
         let mut fresh = match self.exchange(&auth, &grant, &refresh_token, now).await {
             Ok(fresh) => fresh,
             Err(error) if matches!(error.class, ErrorClass::Auth | ErrorClass::Permanent) => {
@@ -149,7 +149,6 @@ impl TokenKeeper {
     ) -> Result<Grant, ActionError> {
         let http = self.http.as_ref();
         match auth {
-            AuthSpec::Redirect(app) => app.refresh(http, refresh_token, now).await,
             AuthSpec::Device(app) => app.refresh(http, refresh_token, now).await,
             AuthSpec::Sso(spec) => {
                 let client = grant.client.as_ref().ok_or_else(|| reconnect("the registered client is missing"))?;
@@ -157,6 +156,7 @@ impl TokenKeeper {
                 spec.in_region(region).device_for(client, "").refresh(http, refresh_token, now).await
             }
             AuthSpec::Loopback(sign_in) => sign_in.0.refresh(http, grant, now).await,
+            AuthSpec::Token(_) => Err(reconnect("the API token was refused")),
         }
     }
 }
@@ -166,18 +166,17 @@ mod tests {
     use super::*;
     use crate::clock::{FixedClock, after_seconds};
     use crate::http::{FakeHttp, Method};
-    use crate::oauth::{DeviceApp, Dialect, OAuthApp, TokenBody};
+    use crate::oauth::{DeviceApp, Dialect};
 
-    fn redirect() -> AuthSpec {
-        AuthSpec::Redirect(OAuthApp {
+    fn device() -> AuthSpec {
+        AuthSpec::Device(DeviceApp {
             client_id: "c".into(),
             client_secret: Some("s".into()),
-            redirect: "http://127.0.0.1:{port}/cb".into(),
-            authorize_endpoint: "https://a/authorize".into(),
+            device_endpoint: "https://a/code".into(),
             token_endpoint: "https://a/token".into(),
             scopes: Vec::new(),
-            extra_authorize: Vec::new(),
-            token_body: TokenBody::Form,
+            start_fields: Vec::new(),
+            dialect: Dialect::Form,
         })
     }
 
@@ -201,7 +200,7 @@ mod tests {
         let (keeper, store, http) = keeper(FakeHttp::new(), clock.clone());
         let id = ConnectionId::from("c1");
         let _ = store.save(&id, &expiring("old", &clock, 3600)).await;
-        assert_eq!(keeper.access_token(&id, &redirect()).await, Ok("old".to_owned()));
+        assert_eq!(keeper.access_token(&id, &device()).await, Ok("old".to_owned()));
         assert!(http.sent().is_empty());
     }
 
@@ -212,10 +211,10 @@ mod tests {
         let (keeper, store, http) = keeper(FakeHttp::new().once(Method::Post, "/token", 200, answer), clock.clone());
         let id = ConnectionId::from("c1");
         let _ = store.save(&id, &expiring("old", &clock, 299)).await;
-        assert_eq!(keeper.access_token(&id, &redirect()).await, Ok("new".to_owned()));
+        assert_eq!(keeper.access_token(&id, &device()).await, Ok("new".to_owned()));
         let kept = store.load(&id).await.ok().flatten();
         assert_eq!(kept.and_then(|g| g.refresh_token), Some("rt2".to_owned()));
-        assert_eq!(keeper.access_token(&id, &redirect()).await, Ok("new".to_owned()));
+        assert_eq!(keeper.access_token(&id, &device()).await, Ok("new".to_owned()));
         assert_eq!(http.sent().len(), 1);
     }
 
@@ -226,7 +225,7 @@ mod tests {
         let (keeper, store, _) = keeper(http, clock.clone());
         let id = ConnectionId::from("c1");
         let _ = store.save(&id, &expiring("old", &clock, 10)).await;
-        let refused = keeper.access_token(&id, &redirect()).await;
+        let refused = keeper.access_token(&id, &device()).await;
         assert!(matches!(&refused, Err(e) if e.class == ErrorClass::Auth && e.message.starts_with(RECONNECT)));
     }
 
@@ -237,7 +236,7 @@ mod tests {
         let (keeper, store, _) = keeper(http, clock.clone());
         let id = ConnectionId::from("c1");
         let _ = store.save(&id, &expiring("old", &clock, 10)).await;
-        assert_eq!(keeper.access_token(&id, &redirect()).await.map_err(|e| e.class), Err(ErrorClass::Transient));
+        assert_eq!(keeper.access_token(&id, &device()).await.map_err(|e| e.class), Err(ErrorClass::Transient));
     }
 
     #[tokio::test]
@@ -245,9 +244,9 @@ mod tests {
         let clock = Arc::new(FixedClock::at_second(1_000));
         let (keeper, store, _) = keeper(FakeHttp::new(), clock.clone());
         let id = ConnectionId::from("c1");
-        assert_eq!(keeper.access_token(&id, &redirect()).await.map_err(|e| e.class), Err(ErrorClass::Auth));
+        assert_eq!(keeper.access_token(&id, &device()).await.map_err(|e| e.class), Err(ErrorClass::Auth));
         let _ = store.save(&id, &Grant { expires_at: Some(clock.now()), ..Grant::bearer("t") }).await;
-        assert_eq!(keeper.access_token(&id, &redirect()).await.map_err(|e| e.class), Err(ErrorClass::Auth));
+        assert_eq!(keeper.access_token(&id, &device()).await.map_err(|e| e.class), Err(ErrorClass::Auth));
     }
 
     #[tokio::test]

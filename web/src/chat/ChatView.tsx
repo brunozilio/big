@@ -10,6 +10,7 @@ import { AskBlock, PermissionBlock, type Respond } from './actionBlocks'
 import { BackgroundWork, hasWork } from './BackgroundWork'
 import { Composer } from './Composer'
 import { PlanBlock } from './PlanCard'
+import { SideAnswers, useSideQuestions } from './SideQuestions'
 import { AgentMark, AgentsContext, emptyThinking, AssistantMessage, StatusLine, ThinkingSteps, ToolRunSummary, TurnHeader, UserMessage } from './events'
 
 interface Turn {
@@ -46,6 +47,7 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
   const [atBottom, setAtBottom] = useState(true)
   const [sendError, setSendError] = useState<string | null>(null)
   const [model, setModel] = useState<string | null>(null)
+  const side = useSideQuestions(sessionId, model ?? session?.model ?? null)
   const eventCount = session?.events.length ?? 0
   const lastSignature = session ? JSON.stringify(session.events[session.events.length - 1] ?? null).length : 0
 
@@ -65,7 +67,7 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
   useEffect(() => {
     const el = scroller.current
     if (el && atBottom && placed.current === sessionId) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
-  }, [eventCount, lastSignature, atBottom, sessionId])
+  }, [eventCount, lastSignature, atBottom, sessionId, side.asked])
 
   if (error && !session) return <EmptyState title="Sessão não encontrada" text={error} />
   if (!session) return <div className="flex h-full items-center justify-center"><Spinner /></div>
@@ -102,6 +104,7 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
               )
             })}
             {hasWork(session.work) && <BackgroundWork work={session.work} />}
+            <SideAnswers asked={side.asked} onDismiss={side.dismiss} />
           </div>
           <AnimatePresence>
             {!atBottom && (
@@ -119,7 +122,12 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
               {composer && <Composer
                 running={running}
                 onStop={() => void api().stop(session.id)}
-                placeholder="Responder ou pedir o próximo passo…"
+                placeholder={running ? 'Perguntar à parte, sem interromper o agente…' : 'Responder ou pedir o próximo passo…'}
+                suggestion={session.suggestion}
+                onAside={(text) => {
+                  setAtBottom(true)
+                  side.ask(text)
+                }}
                 model={model ?? session.model}
                 onModel={setModel}
                 onSubmit={(input) => {
@@ -182,7 +190,8 @@ export function withoutRepeatedPlans(events: SessionEvent[]): SessionEvent[] {
 function workLabel(events: SessionEvent[]): string {
   const tools = events.reduce((n, e) => n + (e.type === 'tools' ? e.calls.length : 0), 0)
   const thought = events.some((e) => e.type === 'thinking')
-  const parts = [thought ? 'Pensou' : '', tools ? `${tools} ${plural(tools, 'ferramenta', 'ferramentas')}` : ''].filter(Boolean)
+  const only = tools === 1 ? events.flatMap((e) => (e.type === 'tools' ? e.calls : []))[0]?.title : undefined
+  const parts = [thought ? 'Pensou' : '', only ?? (tools ? `${tools} ${plural(tools, 'ferramenta', 'ferramentas')}` : '')].filter(Boolean)
   return parts.length > 0 ? parts.join(' · ') : `${events.length} ${plural(events.length, 'passo', 'passos')}`
 }
 
@@ -191,8 +200,8 @@ function WorkGroup({ events, live, render }: { events: SessionEvent[]; live: boo
   useEffect(() => setOpen(live), [live])
   return (
     <div>
-      <button onClick={() => setOpen(!open)} className="group flex items-center gap-1.5 text-md text-muted transition-colors hover:text-fg">
-        <span>{workLabel(events)}</span>
+      <button onClick={() => setOpen(!open)} className="group flex max-w-full items-center gap-1.5 text-md text-muted transition-colors hover:text-fg">
+        <span className="min-w-0 truncate">{workLabel(events)}</span>
         <motion.span initial={false} animate={{ rotate: open ? 90 : 0 }} transition={tween} className="flex text-faint group-hover:text-fg"><Icon name="right" size={14} /></motion.span>
       </button>
       <Collapse open={open}>

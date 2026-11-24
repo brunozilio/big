@@ -16,11 +16,10 @@ pub mod workflow;
 
 pub use identity::{account_pool, credentials, ids, legacy, provider, provider_book};
 pub use knowledge::{learning, memory};
-pub use models::{auto_pick, billing, cache_window, fallback, model, model_roles, routing, small_model};
+pub use models::{billing, cache_window, fallback, model, model_roles, routing, small_model};
 pub use run::{
     affected, approval, budget, changes, claims, engines, evals, events, factory_reset, failure, follow_through,
-    git_offer, image, interception, observer, request, review, session_run, stuck, task_board, team, verification,
-    watchdog,
+    git_offer, image, interception, observer, request, review, session_run, stuck, task_board, team,
 };
 pub use safety::{permission, redact, shell};
 pub use session::{catalog, chat, conversation, repeats, usage};
@@ -42,7 +41,6 @@ pub use run::events::{EngineEvent, LeftAlone, Rewound, RunId, Skipped, ToolCall}
 pub use run::failure::FailureKind;
 pub use run::image::{Image, MAX_IMAGE_BYTES};
 pub use run::request::{Folder, HostContext, MainAgentSpec, Policy, Prompt, PromptRequest, SessionConfig};
-pub use run::verification::{Criteria, CriteriaSource, Verdict, Verifications};
 pub use session::usage::{
     ChoreAnswer, Compaction, ContextShare, ContextSlice, ContextUsage, HeadsUp, SessionCommand, compact_tokens,
 };

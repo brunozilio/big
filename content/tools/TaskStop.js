@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "TaskStop",
   input: {
@@ -16,10 +15,6 @@ export const spec = {
   description: `Cancel a background agent and wait for its tools to stop.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

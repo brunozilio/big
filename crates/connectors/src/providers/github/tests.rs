@@ -34,6 +34,14 @@ fn the_device_flow_uses_the_configured_client_and_workflow_scope() {
     assert!(app.scopes.contains(&"workflow".to_owned()));
 }
 
+#[test]
+fn a_personal_access_token_is_the_alternative_to_the_device_sign_in() {
+    let [alternative] = Github.alternatives().try_into().unwrap_or_else(|_| panic!("not one alternative"));
+    let AuthSpec::Token(spec) = alternative.auth else { panic!("not a token") };
+    assert_eq!(alternative.key, API_TOKEN);
+    assert_eq!(spec.access_token(&json!({ "token": "ghp_1" })), Ok("ghp_1".to_owned()));
+}
+
 #[tokio::test]
 async fn an_open_pull_request_of_the_branch_is_reused() {
     let http = FakeHttp::new().once(

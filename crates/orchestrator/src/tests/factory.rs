@@ -62,11 +62,10 @@ async fn a_gate_that_lets_a_defect_through_opens_the_meta_loop_once() {
     assert_eq!(factory["data"]["caught_by"], "review");
     assert_eq!(factory["autonomy"], "near");
     assert_eq!(factory["dir"], brand::DIR);
-    let report = kernel.factory().expect("report");
-    let escapes: Vec<_> = report.findings.iter().filter(|found| found.kind == FindingKind::Escape).collect();
-    assert_eq!(escapes.len(), 1);
-    assert_eq!(report.generations.len(), 1);
-    assert_eq!(report.generations[0].escapes, 1);
+    let store = world.store();
+    assert_eq!(store.findings(Some(FindingKind::Escape)).expect("findings").len(), 1);
+    let version = item.input["generation"]["version"].as_str().expect("version");
+    assert!(store.generation(version).expect("generation").is_some());
     assert!(opened[0].input["generation"].is_object(), "the factory's own items are stamped too");
 }
 

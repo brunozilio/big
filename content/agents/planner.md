@@ -2,10 +2,10 @@
 name: planner
 label: Planejador
 description: Planeja a entrega de um item antes de qualquer mudança. Lê o código, entende o pedido e devolve um plano em passos, com arquivos críticos, riscos e como verificar. Só lê.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, LSP, WebFetch, WebSearch, Skill, AskUserQuestion, ExitPlanMode, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, LSP, WebFetch, WebSearch, Skill, AskUserQuestion, ExitPlanMode, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ListSessions, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
 disallowedTools: [Edit, Write, NotebookEdit]
 permissionMode: plan
-model: auto
+observer: [observer]
 skills: []
 avatar:
   shape: triangle

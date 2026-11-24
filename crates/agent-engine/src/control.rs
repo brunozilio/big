@@ -38,7 +38,6 @@ pub struct Control {
     remembered: Mutex<Remembered>,
     asks: Asks,
     steered: Arc<Mutex<Vec<String>>>,
-    moving: Mutex<Option<crate::agent_runtime::Relocation>>,
     spawned: AtomicUsize,
     children: Mutex<Vec<Weak<Control>>>,
 }
@@ -53,7 +52,6 @@ impl Control {
             remembered: Mutex::default(),
             asks: Arc::default(),
             steered: Arc::default(),
-            moving: Mutex::default(),
             spawned: AtomicUsize::new(0),
             children: Mutex::default(),
         }
@@ -150,18 +148,6 @@ impl Control {
 
     pub fn steer(&self, text: String) {
         self.steered.locked().push(text);
-    }
-
-    pub fn move_to(&self, setup: crate::agent_runtime::Relocation) {
-        *self.moving.locked() = Some(setup);
-    }
-
-    pub fn is_moving(&self) -> bool {
-        self.moving.locked().is_some()
-    }
-
-    pub fn take_move(&self) -> Option<crate::agent_runtime::Relocation> {
-        self.moving.locked().take()
     }
 
     pub fn take_steered(&self) -> Vec<String> {

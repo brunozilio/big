@@ -100,7 +100,7 @@ fn a_call_run_side_by_side_that_would_start_background_work_is_refused_instead_o
     let answered = agent.call_from("a1", names::AGENT, &input, &run, &[], None);
     let (content, failed) = result(&answered);
     assert!(failed && content.contains("cannot start background work"), "{content}");
-    assert!(!run.background.busy(), "nothing was started");
+    assert!(run.background.started().is_empty(), "nothing was started");
     assert!(model.asked().is_empty(), "no sub-agent ran");
 }
 

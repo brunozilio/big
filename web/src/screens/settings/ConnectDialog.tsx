@@ -39,8 +39,8 @@ interface Way {
 }
 
 function wayOf(provider: Provider, method: string | null): Way {
-  const alternative = provider.alternative
-  if (method && alternative?.key === method) return { method, fields: alternative.fields, button: alternative.button, site: alternative.site }
+  const alternative = provider.alternatives?.find((a) => a.key === method)
+  if (method && alternative) return { method, fields: alternative.fields, button: alternative.button, site: alternative.site }
   return { fields: provider.fields, button: provider.button ?? `Entrar com ${provider.name}`, site: provider.site ?? `do ${provider.name}` }
 }
 
@@ -99,6 +99,7 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
     setPasted('')
     setChoice(null)
     run(api().startSignIn(provider.key, fields, way.method).then((start) => {
+      if (start.kind === 'token') return setStep({ kind: 'resume', flow: start.flow })
       if (start.kind === 'redirect' && !start.paste && !isMock()) leave(start)
       setStep(start.kind === 'device' ? { kind: 'device', start } : { kind: 'browser', start })
     }))
@@ -167,11 +168,18 @@ export function ConnectDialog({ provider: key, resume, onClose }: { provider: st
       </Button>
     </>
   )
-  const alternative = provider?.alternative
-  const toggle = alternative && (
-    <button type="button" onClick={() => setMethod(method ? null : alternative.key)} className="text-sm text-muted underline decoration-line-strong underline-offset-4 transition-colors hover:text-fg">
-      {method ? `Entrar com a conta ${provider.name}` : alternative.label}
-    </button>
+  const ways = [
+    ...(method && provider ? [{ key: null, label: `Entrar com a conta ${provider.name}` }] : []),
+    ...(provider?.alternatives ?? []).filter((a) => a.key !== method).map((a) => ({ key: a.key, label: a.label })),
+  ]
+  const toggle = ways.length > 0 && (
+    <div className="flex flex-wrap gap-x-4 gap-y-1">
+      {ways.map((w) => (
+        <button key={w.key ?? ''} type="button" onClick={() => setMethod(w.key)} className="text-sm text-muted underline decoration-line-strong underline-offset-4 transition-colors hover:text-fg">
+          {w.label}
+        </button>
+      ))}
+    </div>
   )
   return (
     <Dialog open={!!provider} onOpenChange={(o) => !o && !signIn.busy && onClose()} title={provider ? `Conectar ${provider.name}` : ''} footer={footer}>

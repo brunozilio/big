@@ -111,21 +111,15 @@ fn tools_count_failures_and_the_permission_waits_under_them() {
 }
 
 #[test]
-fn failed_judgements_and_review_lines_become_findings_newest_first() {
-    let mut judge = span(2, 1, SpanKind::Eval, JUDGE, 500, 500);
-    (judge.failed, judge.output) = (true, "pass builds\nfail tests pass: 1 failed".into());
+fn review_lines_become_findings() {
     let mut review = span(3, 1, SpanKind::Eval, REVIEW, 900, 900);
     review.output = "high src/a.rs:4 divides by zero\nlow docs/x.md stale".into();
-    let ran = run(100, 3, vec![judge, review]);
+    let ran = run(100, 3, vec![review]);
     let found = insights(&[&ran], NOW);
     let findings: Vec<_> = found.findings.iter().map(|f| (f.check, f.text.as_str(), f.severe, f.span)).collect();
     assert_eq!(
         findings,
-        [
-            (CheckKind::Review, "src/a.rs:4 divides by zero", true, 3),
-            (CheckKind::Review, "docs/x.md stale", false, 3),
-            (CheckKind::Judge, "tests pass: 1 failed", true, 2),
-        ]
+        [(CheckKind::Review, "src/a.rs:4 divides by zero", true, 3), (CheckKind::Review, "docs/x.md stale", false, 3),]
     );
-    assert_eq!((found.checks.verified_failed, found.checks.review_findings), (1, 2));
+    assert_eq!(found.checks.review_findings, 2);
 }

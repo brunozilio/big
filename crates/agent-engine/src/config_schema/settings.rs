@@ -29,11 +29,6 @@ fn switch(about: &str) -> Value {
 fn properties() -> Value {
     json!({
         "$schema": reference(),
-        "outputStyle": {
-            "type": "string",
-            "description": "How the agent talks: a built-in style (default, concise, proactive, explanatory, learning) \
-                            or the name of a custom style in output-styles/<name>.md."
-        },
         "agent": { "type": ["string", "null"], "description": "Runs the main conversation as this agent." },
         "bashOutputLimit": {
             "type": "integer",
@@ -43,8 +38,6 @@ fn properties() -> Value {
             "description": "Characters of a command's output the agent sees; past it, the start and the end are kept \
                             and the whole output is saved to a file the agent is pointed to."
         },
-        "advisorModel": model("Model for the advisor the agent consults."),
-        "judgeModel": model("Model for the judge that checks finished work."),
         "smallModel": model("Model for background chores: titles, effort picks, web reading."),
         "teammateMode": {
             "enum": ["process", "tmux", "iterm2", "auto"],

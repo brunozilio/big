@@ -3,7 +3,6 @@ use domain::billing::TokenRates;
 use serde_json::{Value, json};
 
 use crate::request::{capabilities, unsupported};
-use crate::vendor::{Price, per, rated};
 use crate::{ProviderError, Vendor as Family};
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -12,14 +11,6 @@ pub struct Vendor;
 const REASONING: [&str; 5] = ["o1", "o3", "o4", "gpt-5", "gpt-6"];
 
 const SEARCH: u64 = 10_000;
-
-const PRICES: &[Price] = &[
-    (&["gpt-6-astra"], per(10_000_000, 50_000_000, 1_000_000, 12_500_000)),
-    (&["gpt-6.1-sol"], per(2_000_000, 10_000_000, 100_000, 2_500_000)),
-    (&["gpt-6.1-terra"], per(1_000_000, 5_000_000, 50_000, 1_250_000)),
-    (&["gpt-6-luna"], per(100_000, 500_000, 10_000, 125_000)),
-    (&["gpt-5.3-codex"], per(1_750_000, 14_000_000, 175_000, 0)),
-];
 
 impl Family for Vendor {
     fn id(&self) -> &'static str {
@@ -47,8 +38,8 @@ impl Family for Vendor {
         Some(SEARCH)
     }
 
-    fn rates(&self, model: &str, _prompt_tokens: u64) -> Option<TokenRates> {
-        rated(PRICES, model)
+    fn rates(&self, model: &str, prompt_tokens: u64) -> Option<TokenRates> {
+        crate::prices::listed(self.id(), model, prompt_tokens)
     }
 
     fn effort(

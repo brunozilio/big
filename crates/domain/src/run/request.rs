@@ -39,15 +39,11 @@ pub struct SessionConfig {
     pub add_dirs: Vec<PathBuf>,
     pub model: ModelOption,
     pub effort: Effort,
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub auto_pick: bool,
     pub resume: Option<SessionId>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub fork: bool,
     #[serde(default)]
     pub command: Option<SessionCommand>,
-    #[serde(default)]
-    pub output_style: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fallback_model: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -75,8 +71,6 @@ pub struct Policy {
     pub permission: PermissionMode,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_turns: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub verification: Option<crate::verification::Criteria>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub budget: Option<crate::budget::Budget>,
 }
@@ -131,11 +125,9 @@ impl SessionConfig {
             add_dirs: Vec::new(),
             model,
             effort: Effort::Medium,
-            auto_pick: false,
             resume: None,
             fork: false,
             command: None,
-            output_style: None,
             fallback_model: None,
             fallbacks: Vec::new(),
             roles: Default::default(),
@@ -238,7 +230,6 @@ mod tests {
                 "max_turns",
                 "memory",
                 "model",
-                "output_style",
                 "permission",
                 "prompt",
                 "resume"

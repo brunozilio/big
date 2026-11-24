@@ -10,7 +10,7 @@ use domain::connection::{Capability, ProviderKey};
 use serde_json::{Map, Value, json};
 
 use crate::contracts::{self, tracker as actions};
-use crate::descriptor::{AuthSpec, Presentation, ProviderDescriptor};
+use crate::descriptor::{AlternateAuth, AuthSpec, Presentation, ProviderDescriptor, TokenField, TokenForm};
 use crate::error::ActionError;
 use crate::http::Http;
 use crate::mcp::{self, McpClient};
@@ -19,6 +19,7 @@ use crate::provider::{AccountOption, Args, Credentials, EventSource, Provider, t
 use operations::{found_list, last_page};
 
 pub const KEY: &str = "jira";
+pub const API_TOKEN: &str = "api_token";
 pub const DEFAULT_FLAG_FIELD: &str = "customfield_10021";
 pub const SCOPES: [&str; 6] = [
     "read:jira:agent-interface",
@@ -37,6 +38,13 @@ pub const NO_SITES: &str = "Nenhum site do Jira foi encontrado nesta conta Atlas
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Jira;
+
+pub fn api_token() -> AlternateAuth {
+    let email = TokenField::new("email", "E-mail da conta Atlassian", "", false);
+    let help = "Em id.atlassian.com, abra Segurança e crie um API token. O admin da organização precisa permitir API token no Rovo MCP server.";
+    let token = TokenField::new("token", "API token da Atlassian", help, true);
+    AlternateAuth::token(API_TOKEN, "Usar API token", "da Atlassian", vec![email, token], TokenForm::Basic)
+}
 
 pub fn sign_in() -> McpSignIn {
     McpSignIn {
@@ -202,6 +210,10 @@ impl Provider for Jira {
             site: "da Atlassian".to_owned(),
             choose_title: "Site do Jira".to_owned(),
         }
+    }
+
+    fn alternatives(&self) -> Vec<AlternateAuth> {
+        vec![api_token()]
     }
 
     async fn call(

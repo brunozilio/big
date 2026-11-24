@@ -130,8 +130,10 @@ pub fn process_credentials(identity: &Value) -> Value {
         "Version": 1,
         "AccessKeyId": identity["access_key_id"],
         "SecretAccessKey": identity["secret_access_key"],
-        "SessionToken": identity["session_token"],
     });
+    if identity["session_token"].as_str().is_some_and(|token| !token.is_empty()) {
+        answer["SessionToken"] = identity["session_token"].clone();
+    }
     let expiration = identity["expires_at"].as_str().and_then(|at| at.parse::<jiff::Timestamp>().ok());
     if let Some(at) = expiration {
         answer["Expiration"] = json!(at.to_string());
@@ -163,8 +165,9 @@ mod tests {
             json!({ "Version": 1, "AccessKeyId": "AK", "SecretAccessKey": "SK", "SessionToken": "ST",
                     "Expiration": "2100-01-01T00:00:00Z" })
         );
-        let unknown = process_credentials(&json!({ "access_key_id": "AK", "expires_at": "" }));
+        let unknown = process_credentials(&json!({ "access_key_id": "AK", "session_token": "", "expires_at": "" }));
         assert!(unknown.get("Expiration").is_none());
+        assert!(unknown.get("SessionToken").is_none());
     }
 
     #[test]

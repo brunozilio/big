@@ -73,7 +73,7 @@ fn a_prompt_is_a_function_of_its_context() {
     let source = r##"
       export default function (ctx) {
         const lines = [ctx.text("prompts/role.md"), "# Environment", `- Working directory: ${ctx.cwd}`];
-        if (ctx.tools.includes("Advisor")) lines.push("advisor on");
+        if (ctx.tools.includes("Bash")) lines.push("bash on");
         return lines.join("\n");
       }"##;
     let (result, host) = go(source, "default", &[], json!({ "cwd": "/repo", "tools": ["Read"] }));

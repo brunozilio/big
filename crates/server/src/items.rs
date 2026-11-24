@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
+use crate::calls::connection;
 use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
 use connectors::ProviderDescriptor;
 use connectors::contracts::{self, code};
-use crate::calls::connection;
 use domain::workflow::{ItemId, StepState};
 use orchestrator::ItemSummary;
 use serde_json::{Map, Value, json};
@@ -142,7 +142,9 @@ fn pull_repo(found: &Value) -> Option<String> {
 
 fn matching<'a>(applications: &'a [Application], repo: &str) -> Option<(&'a Application, &'a Repository)> {
     applications.iter().find_map(|application| {
-        let same = |repository: &&Repository| repository.code.as_ref().is_some_and(|code| code.repo.eq_ignore_ascii_case(repo));
+        let same = |repository: &&Repository| {
+            repository.code.as_ref().is_some_and(|code| code.repo.eq_ignore_ascii_case(repo))
+        };
         application.repositories.iter().find(same).map(|repository| (application, repository))
     })
 }
@@ -301,7 +303,8 @@ fn input(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<Value>
     }
     let files = crate::attachments::paths(&shared.backend.attachments(), &body["attachments"]);
     let files: Vec<String> = files.iter().map(|file| file.display().to_string()).collect();
-    let mut input = json!({ "title": title(text, origin), "text": text, "attachments": files, "sources": origin.sources });
+    let mut input =
+        json!({ "title": title(text, origin), "text": text, "attachments": files, "sources": origin.sources });
     if !text.is_empty() {
         input["description"] = json!(text);
     }
@@ -413,9 +416,10 @@ pub async fn step(
         let place = Place { connections: &connections, waiting: true };
         blocks.extend(blocks::normalized(&place, &decided.blocks));
     }
-    Ok(reply(
-        json!({ "item": id.as_str(), "step": step, "attempt": view.attempt, "attempts": attempts, "blocks": blocks }),
-    ))
+    Ok(reply(json!({
+        "item": id.as_str(), "step": step, "attempt": view.attempt, "attempts": attempts, "blocks": blocks,
+        "headsUp": view.heads_up.map(|note| json!({ "title": note.title, "explain": note.explain, "urgent": note.urgent })),
+    })))
 }
 
 pub async fn human(

@@ -3,7 +3,6 @@ use serde_json::json;
 use super::*;
 use crate::billing::ModelUsage;
 use crate::trace::{ModelCall, Record, build};
-use crate::verification::{Check, Verdict};
 use crate::{AgentAsk, AskId, AskKind, Decision, EngineEvent, ToolCall};
 
 fn at(at_ms: u64, event: EngineEvent) -> Record {
@@ -43,12 +42,6 @@ fn session() -> Vec<Record> {
         tools: Some(json!(["y".repeat(196)])),
         ..ModelCall::default()
     };
-    let failed = Verdict {
-        passed: false,
-        score: 0.2,
-        checks: vec![Check { criterion: "tests pass".into(), passed: false, evidence: "1 failed".into() }],
-        attempt: 1,
-    };
     vec![
         Record::Prompted { at_ms: 1_000, prompt: "fix the rounding".into() },
         Record::Opened { at_ms: 1_000, run: crate::trace::RunInfo { model: "sonnet".into(), ..Default::default() } },
@@ -65,7 +58,6 @@ fn session() -> Vec<Record> {
         at(2_700, EngineEvent::Answered { ask: AskId("a1".into()), decision: Decision::Allow }),
         at(2_800, EngineEvent::Repeated { tool: "Bash".into() }),
         at(4_000, EngineEvent::ToolResult { id: "b".into(), output: "boom".into(), failed: true }),
-        at(4_500, EngineEvent::Verified(failed)),
         at(5_000, EngineEvent::Completed { duration_ms: 4_000, cost_usd: Some(0.02) }),
         Record::Prompted { at_ms: 10_000, prompt: "again".into() },
         at(11_000, EngineEvent::Completed { duration_ms: 1_000, cost_usd: None }),
@@ -109,12 +101,7 @@ fn a_permission_wait_sits_under_its_tool_and_the_failed_tool_is_waste() {
     );
     assert_eq!(run.waiting_ms, 500);
     assert!((run.waste - 0.475).abs() < 1e-9, "{}", run.waste);
-    assert_eq!(run.signals, [Signal::ToolError, Signal::EvalFailed, Signal::Waste, Signal::Repeated]);
-    let [judge] = named(run, SpanKind::Eval)[..] else { panic!("one evaluation") };
-    assert_eq!(
-        (judge.name.as_str(), judge.failed, judge.output.as_str()),
-        ("verification judge", true, "fail tests pass: 1 failed")
-    );
+    assert_eq!(run.signals, [Signal::ToolError, Signal::Waste, Signal::Repeated]);
 }
 
 #[test]

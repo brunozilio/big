@@ -150,19 +150,6 @@ export default () => ({ decision: "block", reason: "built in" });"#;
         std::fs::write(user.path().join("guard.js"), "export const event = \"Stop\";").expect("mine");
         assert!(Hooks::from_builtin(&files, Some(user.path())).0.is_empty(), "the user's copy replaces it");
 
-        let shipped = content::builtin_files("hooks/");
-        let events: Vec<String> = shipped
-            .iter()
-            .filter_map(|(path, source)| script::exported(path, &String::from_utf8_lossy(source), "event").ok())
-            .filter_map(|event| event.as_str().map(str::to_owned))
-            .collect();
-        assert_eq!(events.len(), 19, "one file per event: {events:?}");
-        for event in &events {
-            assert!(HookEvent::named(event).is_some(), "{event}");
-        }
-        assert!(Hooks::from_builtin(&shipped, None).0.is_empty(), "an empty default registers nothing");
-
         assert_eq!(source("builtin:hooks/missing.js"), Err("hooks/missing.js: no such built-in hook".to_owned()));
-        assert!(content::builtin_files("hooks/").iter().all(|(path, _)| path.ends_with(".js")));
     }
 }

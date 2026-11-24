@@ -211,6 +211,7 @@ impl Orchestrator {
             attempt: chosen.map_or(latest, |chosen| chosen.n),
             attempts: tried.clone(),
             session: crate::views::session_of(&ledger, step),
+            heads_up: item.heads_up.get(step).cloned(),
             blocks,
         })
     }
@@ -297,6 +298,16 @@ impl Orchestrator {
         let items = self.shared.store.items()?;
         let names = crate::cards::agents_of(&items, session);
         Ok(names.iter().map(|name| crate::cards::card(&self.shared.config.resources, name)).collect())
+    }
+
+    pub fn session_agent(&self, session: &str) -> Result<Option<domain::MainAgentSpec>> {
+        let items = self.shared.store.items()?;
+        let owner = items.iter().find_map(|item| {
+            crate::cards::agents_of(std::slice::from_ref(item), session).into_iter().next().map(|name| (item, name))
+        });
+        let Some((item, name)) = owner else { return Ok(None) };
+        let resources = self.shared.resources_in(self.shared.home(&item.input).as_deref());
+        Ok(resources.agent(&name).map(|definition| domain::MainAgentSpec { name, definition: Some(definition.text) }))
     }
 
     pub fn asks(&self) -> Vec<PendingAsk> {

@@ -38,9 +38,6 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
             item.input = input.clone();
         }
         WorkflowEvent::StepStarted { step, branch } => start(&mut item, step, branch.as_deref()),
-        WorkflowEvent::StepViewSet { step, branch, view } => {
-            run_mut(&mut item, step, branch.as_deref()).view = view.clone();
-        }
         WorkflowEvent::EffectRequested(request) => request_effect(&mut item, request),
         WorkflowEvent::EffectResolved { key, outcome } => resolve(&mut item, key, outcome),
         WorkflowEvent::EffectProgress { key, data } => {
@@ -90,6 +87,13 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
         WorkflowEvent::ExternalObserved(seen) => observe(&mut item, seen),
         WorkflowEvent::Reconciled { .. } => {}
         WorkflowEvent::Named { title } => item.name = Some(title.clone()),
+        WorkflowEvent::Branched { name } => {
+            item.branch.get_or_insert_with(|| name.clone());
+        }
+        WorkflowEvent::Recapped { recap } => item.recap = Some(recap.clone()),
+        WorkflowEvent::HeadsUp { step, note } => {
+            item.heads_up.insert(step.clone(), note.clone());
+        }
     }
     item
 }
@@ -111,6 +115,11 @@ fn run_mut<'a>(item: &'a mut WorkItem, id: &str, branch: Option<&str>) -> &'a mu
 }
 
 fn start(item: &mut WorkItem, id: &str, branch: Option<&str>) {
+    if let Some(at) = item.steps.iter().position(|run| run.is(id, branch)) {
+        for later in item.steps[at + 1..].iter_mut().filter(|run| run.branch.as_deref() == branch) {
+            later.state = StepState::Pending;
+        }
+    }
     let run = run_mut(item, id, branch);
     run.state = StepState::Running;
     run.attempt += 1;

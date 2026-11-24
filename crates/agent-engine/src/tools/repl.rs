@@ -14,9 +14,9 @@ const KEPT: usize = 8;
 const IDLE: Duration = Duration::from_secs(600);
 const HELPERS: &str = "repl/helpers.js";
 
-pub const OUT_OF_REACH: [&str; 5] = [REPL_TOOL, "EnterPlanMode", "ExitPlanMode", "EnterWorktree", "ExitWorktree"];
+pub const OUT_OF_REACH: [&str; 2] = [REPL_TOOL, "ExitPlanMode"];
 
-pub const TOP_LEVEL: [&str; 5] = [REPL_TOOL, "EnterPlanMode", "ExitPlanMode", "EnterWorktree", "ExitWorktree"];
+pub const TOP_LEVEL: [&str; 2] = [REPL_TOOL, "ExitPlanMode"];
 
 #[derive(Debug)]
 pub struct Repl;

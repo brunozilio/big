@@ -119,7 +119,6 @@ pub(crate) fn start(
         readers,
     };
     lock().insert(id.clone(), shell);
-    workspace.tracking.started_shell(&id);
     Ok(id)
 }
 

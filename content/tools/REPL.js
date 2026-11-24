@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "REPL",
   input: {

@@ -26,9 +26,6 @@ impl Signals {
             }
             EngineEvent::Steered(text) => Some(format!("The user redirected the agent mid-task: {text}")),
             EngineEvent::Repeated { tool } => Some(format!("The agent kept repeating the same {tool} call")),
-            EngineEvent::Verified(verdict) if !verdict.passed => {
-                Some("The verification judge found the work did not meet the criteria".into())
-            }
             _ => None,
         };
         self.0.extend(noted);

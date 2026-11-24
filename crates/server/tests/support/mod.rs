@@ -10,10 +10,11 @@ use axum::Router;
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use connectors::descriptor::object;
-use connectors::oauth::{Dialect, TokenBody};
+use connectors::oauth::Dialect;
 use connectors::{
-    AccountOption, ActionError, ActionSpec, AuthSpec, Connectors, Credentials, DeviceApp, FakeHttp, FixedClock, Grant,
-    Http, OAuthApp, Provider, ProviderDescriptor, TokenKeeper, TokenStore,
+    AccountOption, ActionError, ActionSpec, AlternateAuth, AuthSpec, Authorization, Connectors, Credentials, DeviceApp,
+    FakeHttp, FixedClock, Grant, Http, Loopback, LoopbackSignIn, Provider, ProviderDescriptor, TokenField, TokenForm,
+    TokenKeeper, TokenStore,
 };
 use domain::connection::{Capability, ConnectionId, ProviderKey};
 use domain::{EngineEvent, ModelOption, SessionId};
@@ -175,6 +176,41 @@ impl Provider for Picky {
 }
 
 #[derive(Debug, Default)]
+pub struct WebSignIn;
+
+#[async_trait]
+impl LoopbackSignIn for WebSignIn {
+    fn name(&self) -> &str {
+        "web"
+    }
+
+    async fn begin(&self, _: &dyn Http, port: u16) -> Result<Authorization, ActionError> {
+        let state = format!("st-{port}");
+        Ok(Authorization {
+            url: format!("https://login.test/authorize?client_id=c&state={state}"),
+            state,
+            verifier: "v".into(),
+            redirect_uri: format!("http://127.0.0.1:{port}/oauth/callback"),
+            carried: Value::Null,
+        })
+    }
+
+    async fn exchange(
+        &self,
+        _: &dyn Http,
+        _: &Authorization,
+        _: &str,
+        _: jiff::Timestamp,
+    ) -> Result<Grant, ActionError> {
+        Ok(Grant::bearer("web-token"))
+    }
+
+    async fn refresh(&self, _: &dyn Http, grant: &Grant, _: jiff::Timestamp) -> Result<Grant, ActionError> {
+        Ok(grant.clone())
+    }
+}
+
+#[derive(Debug, Default)]
 pub struct Web;
 
 #[async_trait]
@@ -183,24 +219,23 @@ impl Provider for Web {
         let mut descriptor = Picky.descriptor();
         descriptor.key = ProviderKey::from("web");
         descriptor.name = "Web".into();
-        descriptor.auth = AuthSpec::Redirect(OAuthApp {
-            client_id: "c".into(),
-            client_secret: None,
-            redirect: "http://127.0.0.1:{port}/oauth/callback".into(),
-            authorize_endpoint: "https://login.test/authorize".into(),
-            token_endpoint: "https://login.test/token".into(),
-            scopes: Vec::new(),
-            extra_authorize: Vec::new(),
-            token_body: TokenBody::Form,
-        });
+        descriptor.auth = AuthSpec::Loopback(Loopback::new(WebSignIn));
         descriptor
+    }
+
+    fn alternatives(&self) -> Vec<AlternateAuth> {
+        let token = TokenField::new("token", "API token", "Gere o token.", true);
+        vec![AlternateAuth::token("api_token", "Usar API token", "da Web", vec![token], TokenForm::Bearer)]
     }
 
     async fn call(&self, _: &dyn Http, _: &Credentials, _: &str, _: &Value, _: &str) -> Result<Value, ActionError> {
         Ok(json!({}))
     }
 
-    async fn accounts(&self, _: &dyn Http, _: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
+    async fn accounts(&self, _: &dyn Http, creds: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
+        if creds.access_token == "recusado" {
+            return Err(ActionError::auth("the token was refused"));
+        }
         Ok(Vec::new())
     }
 }
@@ -248,7 +283,10 @@ impl World {
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).expect("data");
         let model = ModelOption::new("m1", "Modelo Um");
-        let engine = FakeEngine::new(vec![model], script());
+        let engine = FakeEngine::new(vec![model], script()).answering_chores(vec![
+            domain::ChoreAnswer::Suggestion("rode os testes".into()),
+            domain::ChoreAnswer::Side("está no passo dois".into()),
+        ]);
         let services = app::LocalServices::with_engine(Arc::new(engine.clone())).kept_in(&data);
         let client = app::Client::builder().services(services.clone()).build().expect("client");
         let keyed = Arc::new(app::KeyedEngine::new(services.clone()));

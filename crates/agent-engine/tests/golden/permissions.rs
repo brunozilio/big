@@ -50,7 +50,7 @@ fn an_edit_in_ask_mode_waits_for_the_user_and_runs_once_allowed() {
         == prompt: conversation ==
         user:
           text "Write the file"
-          reminder "# Runtime reminder\nAsk mode: tool actions require the permissions enforced by the runtime. Respect denials and do not bypass them.\nCollect background agent reports be…
+          reminder "# Runtime reminder\nCollect background agent reports before completing. Use TaskStop to cancel an unnecessary task."
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
         user:
@@ -121,7 +121,7 @@ fn an_edit_the_user_denies_never_runs_and_the_model_reads_the_refusal() {
         == prompt: conversation ==
         user:
           text "Write the file"
-          reminder "# Runtime reminder\nAsk mode: tool actions require the permissions enforced by the runtime. Respect denials and do not bypass them.\nCollect background agent reports be…
+          reminder "# Runtime reminder\nCollect background agent reports before completing. Use TaskStop to cancel an unnecessary task."
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
         user:
@@ -183,7 +183,7 @@ fn an_edit_denied_with_a_note_carries_the_note_to_the_model() {
         == prompt: conversation ==
         user:
           text "Write the file"
-          reminder "# Runtime reminder\nAsk mode: tool actions require the permissions enforced by the runtime. Respect denials and do not bypass them.\nCollect background agent reports be…
+          reminder "# Runtime reminder\nCollect background agent reports before completing. Use TaskStop to cancel an unnecessary task."
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
         user:

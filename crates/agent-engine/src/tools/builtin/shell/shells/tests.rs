@@ -17,15 +17,6 @@ fn workspace(client: u64) -> Workspace {
 }
 
 #[test]
-fn a_started_command_is_remembered_by_the_agent_that_started_it() {
-    let starter = of_client(906);
-    let id = start(&starter, "quick", &mut sh("true")).expect("start");
-    assert_eq!(starter.tracking.started_shells(), std::slice::from_ref(&id));
-    assert!(starter.fork(Arc::default()).tracking.started_shells().is_empty());
-    assert!(kill(906, &id));
-}
-
-#[test]
 fn stopping_a_command_this_agent_started_needs_no_permission_and_any_other_asks() {
     use crate::tools::Effect;
     let id = start(&of_client(908), "server", &mut sh("sleep 30")).expect("start");

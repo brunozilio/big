@@ -1,8 +1,6 @@
 use crate::budget::Spending;
-use crate::learning::Signals;
 use crate::usage::SessionCommand;
-use crate::verification::{PlanWatch, Verifications};
-use crate::{Criteria, EngineEvent, PermissionMode, SessionId};
+use crate::{EngineEvent, PermissionMode, SessionId};
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Touches {
@@ -19,13 +17,11 @@ impl Touches {
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct RunWatch {
     touches: Touches,
-    plan: Option<PlanWatch>,
 }
 
 impl RunWatch {
-    pub fn of(command: Option<SessionCommand>, mode: PermissionMode) -> Self {
-        let touches = Touches::of(command);
-        Self { touches, plan: touches.conversation.then(|| PlanWatch::starting_in(mode)) }
+    pub fn of(command: Option<SessionCommand>) -> Self {
+        Self { touches: Touches::of(command) }
     }
 
     pub fn touches(&self) -> Touches {
@@ -38,8 +34,6 @@ pub struct Carried {
     pub id: Option<SessionId>,
     pub mode: PermissionMode,
     pub spending: Spending,
-    pub verifications: Verifications,
-    signals: Signals,
     fork_asked: bool,
 }
 
@@ -52,15 +46,7 @@ impl Carried {
         self.id.is_some() && std::mem::take(&mut self.fork_asked)
     }
 
-    pub fn criteria_for_run(&self) -> Option<Criteria> {
-        self.verifications.for_run(self.mode)
-    }
-
-    pub fn lesson_due(&mut self) -> Option<String> {
-        self.signals.lesson_due()
-    }
-
-    pub fn observe(&mut self, watch: &mut RunWatch, event: &EngineEvent) {
+    pub fn observe(&mut self, watch: &RunWatch, event: &EngineEvent) {
         self.spending.observe(event);
         if watch.touches.session
             && let EngineEvent::SessionStarted(id) = event
@@ -72,10 +58,6 @@ impl Carried {
         }
         if let EngineEvent::ModeChanged(mode) = event {
             self.mode = *mode;
-        }
-        self.signals.observe(event);
-        if let Some(plan) = watch.plan.as_mut().and_then(|plan| plan.observe(event)) {
-            self.verifications.plan_finished(plan);
         }
     }
 }
@@ -96,9 +78,9 @@ mod tests {
 
     fn after(carried: &Carried, command: Option<SessionCommand>, events: &[EngineEvent]) -> Carried {
         let mut carried = carried.clone();
-        let mut watch = RunWatch::of(command, carried.mode);
+        let watch = RunWatch::of(command);
         for event in events {
-            carried.observe(&mut watch, event);
+            carried.observe(&watch, event);
         }
         carried
     }
@@ -125,21 +107,13 @@ mod tests {
     }
 
     #[test]
-    fn a_prompt_s_run_moves_the_session_its_mode_its_spending_and_its_plan_s_criteria() {
-        let events = [
-            started("s"),
-            EngineEvent::ModeChanged(PermissionMode::Plan),
-            EngineEvent::TextDelta("## Verification\ncargo test\n".into()),
-            cost(0.5),
-            DONE,
-        ];
+    fn a_prompt_s_run_moves_the_session_its_mode_and_its_spending() {
+        let events = [started("s"), EngineEvent::ModeChanged(PermissionMode::Plan), cost(0.5), DONE];
         let carried = after(&Carried::default(), None, &events);
 
         assert_eq!(carried.id, Some(SessionId("s".into())));
         assert_eq!(carried.mode, PermissionMode::Plan);
         assert!((carried.spending.spent_usd - 0.5).abs() < f64::EPSILON);
-        assert_eq!(carried.verifications.current().map(|criteria| criteria.text).as_deref(), Some("cargo test"));
-        assert_eq!(carried.criteria_for_run(), None, "nothing is verified while planning");
     }
 
     #[test]
@@ -153,11 +127,10 @@ mod tests {
             cost(0.25),
             DONE,
         ];
-        let mut carried = after(&resumed, Some(SessionCommand::Side), &events);
+        let carried = after(&resumed, Some(SessionCommand::Side), &events);
 
         assert_eq!(carried.id, resumed.id, "the session it was asked about stays the session");
         assert_eq!(carried.mode, resumed.mode);
-        assert_eq!(carried.lesson_due(), None, "only the conversation teaches");
         assert!((carried.spending.spent_usd - 0.25).abs() < f64::EPSILON, "but its model calls cost");
     }
 
@@ -168,15 +141,6 @@ mod tests {
         let carried = after(&resumed, Some(SessionCommand::Branch(2)), &events);
         assert_eq!(carried.id, Some(SessionId("branch".into())));
         assert_eq!(carried.mode, resumed.mode);
-    }
-
-    #[test]
-    fn corrections_in_the_conversation_make_a_lesson_due_once() {
-        let events = [EngineEvent::Steered("no".into()), EngineEvent::Repeated { tool: "Bash".into() }, DONE];
-        let mut carried = after(&Carried::default(), None, &events);
-        let brief = carried.lesson_due().expect("due");
-        assert!(brief.contains("- The user redirected the agent mid-task: no"), "{brief}");
-        assert_eq!(carried.lesson_due(), None);
     }
 
     #[test]

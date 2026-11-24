@@ -26,6 +26,7 @@ export function isItem(v: unknown): v is Item {
     (v.change === null || (isRef(v.change) && bool((v.change as Shape).merged))) &&
     (v.impediment === null || (obj(v.impediment) && str(v.impediment.reason))) &&
     (v.attention === null || obj(v.attention)) &&
+    strOrNull(v.recap) &&
     (v.activity === null || (obj(v.activity) && str(v.activity.text) && str(v.activity.since))) &&
     arr(v.sources, isSource) &&
     arr(v.git, isGit) &&
@@ -74,7 +75,11 @@ export function isBlock(v: unknown): v is Block {
 }
 
 export function isStepView(v: unknown): v is StepView {
-  return obj(v) && str(v.item) && str(v.step) && num(v.attempt) && Array.isArray(v.attempts) && arr(v.blocks, isBlock)
+  return obj(v) && str(v.item) && str(v.step) && num(v.attempt) && Array.isArray(v.attempts) && arr(v.blocks, isBlock) && (v.headsUp === null || isHeadsUp(v.headsUp))
+}
+
+function isHeadsUp(v: unknown): boolean {
+  return obj(v) && str(v.title) && str(v.explain) && bool(v.urgent)
 }
 
 const eventTypes: SessionEvent['type'][] = ['user', 'thinking', 'tools', 'assistant', 'status', 'ask', 'permission', 'plan']
@@ -84,7 +89,7 @@ export function isSessionEvent(v: unknown): v is SessionEvent {
 }
 
 export function isSession(v: unknown): v is Session {
-  return obj(v) && str(v.id) && str(v.title) && str(v.status) && str(v.mode) && str(v.model) && Array.isArray(v.agents) && arr(v.events, isSessionEvent)
+  return obj(v) && str(v.id) && str(v.title) && str(v.status) && str(v.mode) && str(v.model) && Array.isArray(v.agents) && arr(v.events, isSessionEvent) && strOrNull(v.suggestion)
 }
 
 export function isLiveEvent(v: unknown): v is LiveEvent {
@@ -98,6 +103,8 @@ export function isLiveEvent(v: unknown): v is LiveEvent {
       return str(v.session) && isSessionEvent(v.event)
     case 'session.status':
       return str(v.session) && str(v.status)
+    case 'session.suggestion':
+      return str(v.session) && (v.suggestion === null || str(v.suggestion))
     case 'connections':
       return obj(v.connections) && Array.isArray(v.connections.providers) && Array.isArray(v.connections.connections)
     case 'branding':

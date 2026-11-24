@@ -11,38 +11,9 @@ impl script::Host for NoHost {
     }
 }
 
-const FILES: [&str; 9] = [
-    "sdk/index.js",
-    "sdk/index.d.ts",
-    "sdk/PROTOCOL.md",
-    "sdk/capabilities/index.d.ts",
-    "sdk/capabilities/tracker.d.ts",
-    "sdk/capabilities/code.d.ts",
-    "sdk/capabilities/pipelines.d.ts",
-    "sdk/capabilities/cloud.d.ts",
-    "sdk/capabilities/tests.d.ts",
-];
+const FILES: [&str; 1] = ["sdk/index.js"];
 
 const PROVIDERS: [&str; 8] = ["jira", "github", "aws", "atlassian", "gitlab", "bitbucket", "zephyr", "smartbear"];
-
-const ACTIONS: [(&str, &[&str]); 5] = [
-    ("tracker", &["create_issue", "issue", "comment", "statuses", "transition", "set_impediment", "search"]),
-    (
-        "code",
-        &[
-            "open_pull_request",
-            "pull_request",
-            "files_diff",
-            "review_comments",
-            "submit_review",
-            "resolve_thread",
-            "merge",
-        ],
-    ),
-    ("pipelines", &["runs", "run", "job_log", "pending_deployments", "review_deployment"]),
-    ("cloud", &["identity", "accounts_and_roles"]),
-    ("tests", &["create_case", "cases", "create_cycle", "record", "projects"]),
-];
 
 const DELIVERY: &str = r#"
 const checks = step({
@@ -139,12 +110,6 @@ fn every_sdk_file_is_built_in_and_names_no_provider() {
             assert!(!lower.contains(provider), "{path} names {provider}");
         }
     }
-    for (capability, actions) in ACTIONS {
-        let contract = super::builtin_text(&format!("sdk/capabilities/{capability}.d.ts")).expect("contract");
-        for action in actions {
-            assert!(contract.contains(&format!("  {action}: {{")), "{capability}.{action}");
-        }
-    }
 }
 
 #[test]
@@ -155,8 +120,7 @@ fn the_delivery_agents_are_built_in_with_a_header() {
         let text = super::builtin_text(&format!("agents/{name}.md")).expect("built in");
         let header = text.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n")).map(|(head, _)| head);
         let header = header.unwrap_or_else(|| panic!("{name} has a header"));
-        for key in ["name:", "label:", "description:", "tools:", "permissionMode:", "model: auto", "skills:", "avatar:"]
-        {
+        for key in ["name:", "label:", "description:", "tools:", "permissionMode:", "skills:", "avatar:"] {
             assert!(header.contains(key), "{name} lacks {key}");
         }
         assert!(header.contains(color), "{name} keeps its color");

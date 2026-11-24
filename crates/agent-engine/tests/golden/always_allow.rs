@@ -51,7 +51,7 @@ fn an_edit_always_allowed_is_remembered_for_the_run_only_and_writes_no_rule() {
         == prompt: conversation ==
         user:
           text "Write the file twice"
-          reminder "# Runtime reminder\nAsk mode: tool actions require the permissions enforced by the runtime. Respect denials and do not bypass them.\nCollect background agent reports be…
+          reminder "# Runtime reminder\nCollect background agent reports before completing. Use TaskStop to cancel an unnecessary task."
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
         user:

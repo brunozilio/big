@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "ObserverReport",
   input: {

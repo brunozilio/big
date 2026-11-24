@@ -3,7 +3,7 @@ use crate::{Effort, PermissionMode};
 mod slash;
 mod sub;
 pub use slash::{closest, mistyped_slash, slash_name};
-pub use sub::{McpCommand, MemoryCommand, RoleChange, VerificationCommand};
+pub use sub::{McpCommand, MemoryCommand, RoleChange};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Command {
@@ -15,7 +15,6 @@ pub enum Command {
     ModelFallbacks(RoleChange),
     Mode(Option<PermissionMode>),
     Effort(Option<Effort>),
-    EffortAuto,
     Compact(Option<String>),
     Rewind,
     Retry,
@@ -37,7 +36,6 @@ pub enum Command {
     Accounts { removing: bool },
     AccountsBalance(Option<crate::account_pool::Balance>),
     TerminalSetup,
-    OutputStyle(Option<String>),
     Hooks,
     StatusLine(Option<String>),
     Doctor,
@@ -54,7 +52,7 @@ pub enum Command {
 }
 
 impl Command {
-    pub const HELP: [(&'static str, &'static str); 37] = [
+    pub const HELP: [(&'static str, &'static str); 36] = [
         ("help", "Show the commands and keys"),
         ("clear", "Clear the conversation and start fresh (also /new, /reset)"),
         ("resume", "Go back to an earlier conversation of this folder, /resume <words> searches the titles"),
@@ -65,8 +63,7 @@ impl Command {
             "Pick the model, or /model <id>; /model <role> [model] per role, /model roles lists them, /model fallbacks <model…>",
         ),
         ("mode", "Pick ask, edits, plan or bypass"),
-        ("effort", "Set low, medium, high, xhigh or max, or auto to pick the model and effort per request"),
-        ("output-style", "How the agent talks: default, concise, proactive, explanatory, learning"),
+        ("effort", "Set low, medium, high, xhigh or max"),
         ("compact", "Summarize the conversation to free context, /compact <what to keep>"),
         ("rewind", "Go back to an earlier prompt: its files and the conversation"),
         ("retry", "Send the last prompt again, from where it started"),
@@ -119,7 +116,7 @@ impl Command {
 
     pub const GROUPS: [(&'static str, &'static [&'static str]); 4] = [
         ("Conversation", &["clear", "resume", "fleet", "fork", "compact", "rewind", "retry", "btw", "export", "copy"]),
-        ("Model and mode", &["model", "mode", "effort", "output-style"]),
+        ("Model and mode", &["model", "mode", "effort"]),
         (
             "Project",
             &[
@@ -172,7 +169,6 @@ impl Command {
             },
             "effort" => match &argument {
                 None => Some(Self::Effort(None)),
-                Some(level) if level.eq_ignore_ascii_case("auto") => Some(Self::EffortAuto),
                 Some(level) => level_named(level).map(|level| Self::Effort(Some(level))),
             },
             "compact" => Some(Self::Compact(argument)),
@@ -209,7 +205,6 @@ impl Command {
             "logout" => bare(Self::Logout),
             "accounts" => sub::accounts_command(argument.as_deref()),
             "terminal-setup" => bare(Self::TerminalSetup),
-            "output-style" => Some(Self::OutputStyle(argument)),
             "hooks" => bare(Self::Hooks),
             "statusline" => Some(Self::StatusLine(argument)),
             "doctor" => bare(Self::Doctor),

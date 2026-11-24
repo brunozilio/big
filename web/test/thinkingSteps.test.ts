@@ -27,7 +27,7 @@ test('sessão parada não deixa pensamento vazio girando', () => {
 test('o pensamento vira texto: inteiro depois, só o fim enquanto pensa', async () => {
   const { thoughtText } = await import('../src/chat/events')
   const steps = [{ text: 'Primeiro', done: true }, { text: '', done: true }, { text: 'Segundo', done: false }]
-  expect(thoughtText(steps, false)).toBe('Primeiro\nSegundo')
+  expect(thoughtText(steps, false)).toBe('Primeiro\n\nSegundo')
   expect(thoughtText(steps, true)).toBe('Segundo')
   expect(thoughtText([{ text: 'x'.repeat(400), done: false }], true)).toBe(`…${'x'.repeat(280)}`)
 })

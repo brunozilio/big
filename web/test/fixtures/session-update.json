@@ -5,9 +5,7 @@
       "asked": 1,
       "refused": 1,
       "repeated": 1,
-      "review_findings": 2,
-      "verified_failed": 1,
-      "verified_passed": 0
+      "review_findings": 2
     },
     "days": [
       {
@@ -348,7 +346,7 @@
         "run": 0,
         "session": "session-current",
         "severe": true,
-        "span": 17,
+        "span": 16,
         "text": "src/invoice.rs:42 rounds twice"
       },
       {
@@ -357,17 +355,8 @@
         "run": 0,
         "session": "session-current",
         "severe": false,
-        "span": 17,
-        "text": "src/invoice.rs unused import"
-      },
-      {
-        "at_ms": 1799996408600,
-        "check": "judge",
-        "run": 0,
-        "session": "session-current",
-        "severe": true,
         "span": 16,
-        "text": "tests pass: 1 failed"
+        "text": "src/invoice.rs unused import"
       },
       {
         "at_ms": 1799996406100,
@@ -505,7 +494,6 @@
       "session": "session-current",
       "signals": [
         "tool_error",
-        "eval_failed",
         "review",
         "subagent",
         "waste",
@@ -933,27 +921,10 @@
         {
           "attrs": [],
           "context": null,
-          "end_ms": 8600,
-          "failed": true,
-          "flags": [],
-          "id": 16,
-          "input": "",
-          "kind": "eval",
-          "name": "verification judge",
-          "output": "fail tests pass: 1 failed",
-          "parent": 1,
-          "start_ms": 8600,
-          "stop": null,
-          "thinking": "",
-          "usage": null
-        },
-        {
-          "attrs": [],
-          "context": null,
           "end_ms": 8700,
           "failed": true,
           "flags": [],
-          "id": 17,
+          "id": 16,
           "input": "",
           "kind": "eval",
           "name": "auto-review",
@@ -975,7 +946,7 @@
           "end_ms": 6290,
           "failed": false,
           "flags": [],
-          "id": 18,
+          "id": 17,
           "input": "cargo fmt",
           "kind": "task",
           "name": "hook PostToolUse",

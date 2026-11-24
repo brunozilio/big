@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "Watch",
   input: {
@@ -62,10 +61,6 @@ The first check runs now, as an ordinary call of that tool, so it follows the pe
 Once a watch is started, end your turn: its event arrives as a new message even while the chat is idle. Do not add ScheduleWakeup or a second watch for the same thing, and leave whatever the user asked to happen afterwards ("then commit", "then deploy") until the event says the condition was met.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

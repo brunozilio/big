@@ -6,7 +6,7 @@ use domain::connection::{Capability, ProviderKey};
 use serde_json::{Value, json};
 
 use crate::contracts::{self, cloud};
-use crate::descriptor::{AlternateAuth, AuthSpec, Presentation, ProviderDescriptor};
+use crate::descriptor::{AlternateAuth, AuthSpec, Presentation, ProviderDescriptor, TokenField, TokenForm};
 use crate::error::ActionError;
 use crate::http::{Http, HttpRequest, fetch_json};
 use crate::oauth::{DeviceApp, Dialect, Loopback, SsoSpec};
@@ -17,6 +17,7 @@ pub use sts::{Keys, signature};
 
 pub const KEY: &str = "aws";
 pub const SSO: &str = "sso";
+pub const ACCESS_KEYS: &str = "access_keys";
 const SCOPE: &str = "sso:account:access";
 const PAGES: usize = 20;
 const LOGO: &str = include_str!("logo.svg");
@@ -30,6 +31,13 @@ fn region(creds: Option<&Credentials>) -> String {
 
 pub fn portal(region: &str) -> String {
     format!("https://portal.sso.{region}.amazonaws.com")
+}
+
+pub fn access_keys() -> AlternateAuth {
+    let id = TokenField::new("accessKeyId", "Access key ID", "", false);
+    let help = "No IAM, abra o usuário, Security credentials, e crie uma access key.";
+    let secret = TokenField::new("secretAccessKey", "Secret access key", help, true);
+    AlternateAuth::token(ACCESS_KEYS, "Usar access key", "da AWS", vec![id, secret], TokenForm::Json)
 }
 
 pub fn sso_spec() -> SsoSpec {
@@ -202,14 +210,15 @@ impl Provider for Aws {
         }
     }
 
-    fn alternative(&self) -> Option<AlternateAuth> {
-        Some(AlternateAuth {
+    fn alternatives(&self) -> Vec<AlternateAuth> {
+        let sso = AlternateAuth {
             key: SSO.to_owned(),
             label: "Usar SSO da empresa".to_owned(),
             button: "Continuar".to_owned(),
             site: "do AWS IAM Identity Center".to_owned(),
             auth: AuthSpec::Sso(sso_spec()),
-        })
+        };
+        vec![sso, access_keys()]
     }
 
     async fn call(

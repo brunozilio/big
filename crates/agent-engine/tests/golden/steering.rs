@@ -49,7 +49,7 @@ fn a_message_steered_during_a_tool_call_is_delivered_with_its_results_and_cannot
         == prompt: conversation ==
         user:
           text "Write the file"
-          reminder "# Runtime reminder\nAsk mode: tool actions require the permissions enforced by the runtime. Respect denials and do not bypass them.\nCollect background agent reports be…
+          reminder "# Runtime reminder\nCollect background agent reports before completing. Use TaskStop to cancel an unnecessary task."
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
         user:

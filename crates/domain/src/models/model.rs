@@ -53,6 +53,12 @@ impl ModelOption {
         }
     }
 
+    pub fn unlisted(wanted: &str) -> Self {
+        let wanted = wanted.trim();
+        let provider = wanted.split_once(':').map_or("", |(provider, _)| provider);
+        Self::new(wanted, wanted).served_by(ModelProvider::named(provider))
+    }
+
     pub fn served_by(self, provider: ModelProvider) -> Self {
         Self { provider, ..self }
     }
@@ -166,6 +172,13 @@ mod tests {
         assert_eq!(choose_model(&models, Some("ANTHROPIC:claude-opus-5-5")).map(|m| m.id), Some(models[0].id.clone()));
         assert_eq!(choose_model(&models, Some("gone")).map(|m| m.id), Some(models[0].id.clone()), "the first");
         assert_eq!(choose_model(&[], Some("x")), None);
+    }
+
+    #[test]
+    fn an_unlisted_model_keeps_the_provider_its_id_names() {
+        let unlisted = ModelOption::unlisted(" acme:gpt-6 ");
+        assert_eq!((unlisted.id.as_str(), unlisted.provider.id()), ("acme:gpt-6", "acme"));
+        assert_eq!(ModelOption::unlisted("gpt-6").provider.id(), "");
     }
 
     #[test]

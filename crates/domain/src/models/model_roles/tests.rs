@@ -12,7 +12,7 @@ fn roles(pairs: &[(ModelRole, &str)]) -> ModelRoles {
 #[test]
 fn each_role_has_a_name_it_is_typed_and_saved_under() {
     let names: Vec<_> = ModelRole::ALL.iter().map(|role| role.name()).collect();
-    assert_eq!(names, ["plan", "explore", "small", "review", "advisor"]);
+    assert_eq!(names, ["plan", "explore", "small"]);
     assert_eq!(ModelRole::parse(" Explore "), Some(ModelRole::Explore));
     assert_eq!(ModelRole::parse("implement"), None);
 }
@@ -36,16 +36,16 @@ fn the_plan_and_explore_agents_take_their_role_and_explore_falls_back_to_the_sma
 
 #[test]
 fn clearing_a_role_forgets_it_and_blank_names_are_never_kept() {
-    let mut set = roles(&[(ModelRole::Review, "r")]);
-    set.set(ModelRole::Review, None);
-    set.set(ModelRole::Advisor, Some("  ".into()));
+    let mut set = roles(&[(ModelRole::Plan, "p")]);
+    set.set(ModelRole::Plan, None);
+    set.set(ModelRole::Small, Some("  ".into()));
     assert_eq!(set, ModelRoles::default());
 }
 
 #[test]
 fn roles_round_trip_as_an_object_keyed_by_role_name() {
-    let set = roles(&[(ModelRole::Explore, "e"), (ModelRole::Advisor, "a")]);
+    let set = roles(&[(ModelRole::Explore, "e"), (ModelRole::Small, "s")]);
     let json = serde_json::to_value(&set).expect("serialize");
-    assert_eq!(json, serde_json::json!({"explore": "e", "advisor": "a"}));
+    assert_eq!(json, serde_json::json!({"explore": "e", "small": "s"}));
     assert_eq!(serde_json::from_value::<ModelRoles>(json).expect("deserialize"), set);
 }

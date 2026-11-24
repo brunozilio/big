@@ -2,7 +2,6 @@ use super::{Entry, Transcript};
 use crate::{AskKind, EngineEvent, PermissionMode};
 
 const EXIT_PLAN: &str = "ExitPlanMode";
-const ENTER_PLAN: &str = "EnterPlanMode";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(tag = "kind", content = "mode", rename_all = "snake_case")]
@@ -19,7 +18,6 @@ impl Transcript {
                 self.plan_call = Some(call.id.clone());
                 self.activity = Some("Waiting for the plan's approval".into());
             }
-            EngineEvent::ToolStarted(call) if call.name == ENTER_PLAN => {}
             EngineEvent::Asked(ask) => match &ask.kind {
                 AskKind::Plan { plan } => {
                     self.push(Entry::Plan { plan: plan.clone(), outcome: Outcome::Waiting });

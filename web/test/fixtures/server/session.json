@@ -18,6 +18,7 @@
   "mode": "accept_edits",
   "model": "",
   "status": "idle",
+  "suggestion": null,
   "title": "Conversa",
   "work": {
     "background": [],

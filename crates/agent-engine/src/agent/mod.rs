@@ -30,7 +30,6 @@ pub enum Ending {
     Failed(ModelError),
     Refused,
     TooManyTurns,
-    Moved,
 }
 
 pub trait Review: Sync {

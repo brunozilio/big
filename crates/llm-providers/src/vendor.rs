@@ -54,6 +54,15 @@ pub fn rates(vendor_id: &str, model: &str, prompt_tokens: u64) -> Option<TokenRa
     vendor(vendor_id).filter(|vendor| vendor.owns(model)).and_then(|vendor| vendor.rates(model, prompt_tokens))
 }
 
+pub fn priced(provider: &str, vendor_id: &str, model: &str, prompt_tokens: u64) -> Option<TokenRates> {
+    match crate::prices::source(provider) {
+        Some(sources) => {
+            sources.split_whitespace().find_map(|source| crate::prices::listed(source, model, prompt_tokens))
+        }
+        None => rates(vendor_id, model, prompt_tokens),
+    }
+}
+
 pub fn search_price(vendor_id: &str) -> Option<u64> {
     vendor(vendor_id).and_then(Vendor::search_price)
 }
@@ -82,16 +91,6 @@ pub fn efforts(model: &ModelOption) -> Vec<&'static str> {
         return EFFORTS.to_vec();
     }
     known
-}
-
-pub type Price = (&'static [&'static str], TokenRates);
-
-pub const fn per(input: u64, output: u64, cache_read: u64, cache_write: u64) -> TokenRates {
-    TokenRates { input, output, cache_read, cache_write }
-}
-
-pub fn rated(prices: &[Price], model: &str) -> Option<TokenRates> {
-    prices.iter().find(|(names, _)| names.contains(&model)).map(|(_, rates)| *rates)
 }
 
 fn bare(model: &str) -> &str {

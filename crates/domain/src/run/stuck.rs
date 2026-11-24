@@ -11,12 +11,6 @@ pub struct Stuck {
     escalations: u32,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Help {
-    Advisor,
-    Model(String),
-}
-
 impl Stuck {
     pub fn failed(&mut self, tool: &str, summary: &str) -> bool {
         let count = self.failures.entry(format!("{tool}\u{0}{summary}")).or_default();
@@ -44,24 +38,11 @@ impl Stuck {
     }
 }
 
-pub fn help(advisor: bool, escalation_model: Option<&str>) -> Option<Help> {
-    match (advisor, escalation_model) {
-        (true, _) => Some(Help::Advisor),
-        (false, Some(model)) => Some(Help::Model(model.to_owned())),
-        (false, None) => None,
-    }
-}
-
-pub fn nudge(help: &Help) -> String {
-    match help {
-        Help::Advisor => "\n\nYou have tried this several times without success. Before another attempt, call the \
-                          Advisor tool with what you tried and what failed, then follow its advice."
-            .into(),
-        Help::Model(model) => format!(
-            "\n\nYou have tried this several times without success. The next turns run on {model}: step back, \
-             read the failure again and change the approach instead of repeating it."
-        ),
-    }
+pub fn nudge(model: &str) -> String {
+    format!(
+        "\n\nYou have tried this several times without success. The next turns run on {model}: step back, read the \
+         failure again and change the approach instead of repeating it."
+    )
 }
 
 #[cfg(test)]
@@ -98,11 +79,7 @@ mod tests {
     }
 
     #[test]
-    fn the_advisor_comes_first_then_a_stronger_model() {
-        assert_eq!(help(true, Some("big")), Some(Help::Advisor));
-        assert_eq!(help(false, Some("big")), Some(Help::Model("big".into())));
-        assert_eq!(help(false, None), None);
-        assert!(nudge(&Help::Advisor).contains("Advisor tool"));
-        assert!(nudge(&Help::Model("big".into())).contains("run on big"));
+    fn the_nudge_names_the_stronger_model() {
+        assert!(nudge("big").contains("run on big"));
     }
 }

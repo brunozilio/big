@@ -1,5 +1,6 @@
 mod check;
 mod command;
+pub(crate) mod lesson;
 pub mod mcp;
 mod optimize;
 pub mod run;

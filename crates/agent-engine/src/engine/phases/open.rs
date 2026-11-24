@@ -12,7 +12,7 @@ use crate::checkpoints::Checkpoint;
 use crate::engine::job::Job;
 use crate::engine::stop::Stop;
 use crate::meter::{Ledger, Metered};
-use crate::model::{ModelApi, TurnRequest};
+use crate::model::TurnRequest;
 use crate::tools::Workspace;
 use crate::tools::subagent_config::AgentConfig;
 use crate::transcript::Message;
@@ -24,7 +24,6 @@ pub(in crate::engine) struct Opened {
     pub(in crate::engine) worktree: SessionWorktree,
     pub(in crate::engine) api: Metered,
     pub(in crate::engine) template: TurnRequest,
-    pub(in crate::engine) extra: String,
     pub(in crate::engine) session: SessionId,
     pub(in crate::engine) history: Vec<Message>,
     pub(in crate::engine) checkpoint: Checkpoint,
@@ -45,8 +44,8 @@ impl Job {
         }
         let api = self.signed_in()?;
         let framed = self.frame(runtime, brief, &session)?;
-        let Framed { mut workspace, toolbox, main, worktree, mut template, extra } = framed;
-        let api = self.metered_for_the_run(api, &mut template, &mut workspace);
+        let Framed { workspace, toolbox, main, worktree, template } = framed;
+        let api = self.metered(api, &Arc::new(Ledger::default()), self.request.session.model.clone());
         if self.request.session.command == Some(SessionCommand::Compact) {
             return Err(self.compacted(&api, &template, &workspace, &session, &mut history));
         }
@@ -56,26 +55,13 @@ impl Job {
         let user = self.submitted(user, &opening)?;
         let checkpoint = self.open_checkpoint(&session, &history, &workspace);
         crate::transcript::prompted(&mut history, user);
-        Ok(Opened { workspace, toolbox, worktree, api, template, extra, session, history, checkpoint, turn_limit })
+        Ok(Opened { workspace, toolbox, worktree, api, template, session, history, checkpoint, turn_limit })
     }
 
     fn measured(&self, template: &TurnRequest, history: &[Message]) -> Stop {
         let usage = upkeep::measure(&self.request.session.model, &template.system, &template.tools, history);
         self.gate.emit(EngineEvent::ContextMeasured(usage));
         Stop::completed(Some(0.0))
-    }
-
-    fn metered_for_the_run(
-        &mut self,
-        api: Arc<dyn ModelApi>,
-        template: &mut TurnRequest,
-        workspace: &mut Workspace,
-    ) -> Metered {
-        let ledger = Arc::new(Ledger::default());
-        if self.request.session.auto_pick && self.request.session.command.is_none() {
-            self.auto_pick(&api, &ledger, template, &mut workspace.models);
-        }
-        self.metered(api, &ledger, self.request.session.model.clone())
     }
 
     fn compacted(

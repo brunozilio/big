@@ -142,13 +142,6 @@
       "description": "The JSON Schema this file follows, for editors; the app ignores it.",
       "type": "string"
     },
-    "advisorModel": {
-      "description": "Model for the advisor the agent consults.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
     "agent": {
       "description": "Runs the main conversation as this agent.",
       "type": [
@@ -338,23 +331,12 @@
         "null"
       ]
     },
-    "judgeModel": {
-      "description": "Model for the judge that checks finished work.",
-      "type": [
-        "string",
-        "null"
-      ]
-    },
     "lspServers": {
       "additionalProperties": {
         "$ref": "#/$defs/languageServer"
       },
       "description": "Adds, changes or disables language servers, by name.",
       "type": "object"
-    },
-    "outputStyle": {
-      "description": "How the agent talks: a built-in style (default, concise, proactive, explanatory, learning) or the name of a custom style in output-styles/<name>.md.",
-      "type": "string"
     },
     "permissions": {
       "additionalProperties": false,

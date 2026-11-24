@@ -42,8 +42,11 @@ fn section_code(file: &std::path::Path, sections: &[(String, Pairs)]) -> String 
             );
             code.push_str(&format!("    pub const {}: &str = {value:?};\n", key.to_ascii_uppercase()));
         }
-        code.push_str("}\n");
+        let listed: String = pairs.iter().map(|(key, value)| format!("({key:?}, {value:?}), ")).collect();
+        code.push_str(&format!("    pub const PAIRS: &[(&str, &str)] = &[{listed}];\n}}\n"));
     }
+    let listed: String = sections.iter().map(|(section, _)| format!("({section:?}, {section}::PAIRS), ")).collect();
+    code.push_str(&format!("pub const SECTIONS: &[(&str, &[(&str, &str)])] = &[{listed}];\n"));
     code
 }
 

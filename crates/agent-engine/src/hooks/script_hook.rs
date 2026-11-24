@@ -163,22 +163,6 @@ export default function (input, ctx) {
     }
 
     #[test]
-    fn every_built_in_hook_declares_the_host_functions_it_uses() {
-        for (path, source) in content::builtin_files("hooks/") {
-            let source = String::from_utf8_lossy(source);
-            let declared = declared(path, &source).expect("a valid capabilities list");
-            assert!(
-                script::exported(path, &source, "capabilities").is_ok_and(|listed| listed.is_array()),
-                "{path} says what it uses, even when it is nothing"
-            );
-            for capability in crate::tools::script_tool::Capability::ALL {
-                let named = format!("ctx.{}(", capability.name());
-                assert!(!source.contains(&named) || declared.declares(capability), "{path} uses {named}");
-            }
-        }
-    }
-
-    #[test]
     fn a_script_hook_that_runs_out_of_time_fails_alone_and_the_run_goes_on() {
         let dir = tempfile::tempdir().expect("dir");
         std::fs::write(dir.path().join("slow.js"), "export default function () { for (;;) {} }").expect("hook");

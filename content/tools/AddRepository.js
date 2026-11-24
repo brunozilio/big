@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "AddRepository",
   input: {
@@ -13,18 +12,14 @@ export const spec = {
         "type": "string"
       },
       "run": {
-        "description": "The command that runs the application in this repository.",
-        "type": "string"
-      },
-      "verify": {
-        "description": "The commands that check a change in this repository (tests, lint).",
+        "description": "The commands that run the application in this repository, one per process.",
         "items": {
           "type": "string"
         },
         "type": "array"
       },
-      "e2e": {
-        "description": "The commands that run this repository's end-to-end tests, for the API and for the screens.",
+      "verify": {
+        "description": "The commands that check a change in this repository (tests, lint, end-to-end tests).",
         "items": {
           "type": "string"
         },
@@ -36,13 +31,9 @@ export const spec = {
     ],
     "type": "object"
   },
-  description: `Add a repository to the application this task belongs to, or update the one already registered at that directory. Call it whenever you create a new repository or service for the application, or learn how one is run, verified or tested end to end, so the next steps of this task and later tasks in {{NAME}} work in it too. Fields you leave out keep their current value.`,
+  description: `Add a repository to the application this task belongs to, or update the one already registered at that directory. Call it whenever you create a new repository or service for the application, or learn how one is run or verified, so the next steps of this task and later tasks in {{NAME}} work in it too. Fields you leave out keep their current value.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

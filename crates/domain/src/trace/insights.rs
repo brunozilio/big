@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 pub use self::report::{
     CheckKind, Checks, Day, DayModel, Finding, Insights, ModelStat, Report, SessionRuns, TimeShare, ToolStat, Totals,
 };
-use super::runs::{JUDGE, REVIEW, Run, Span, SpanKind, dollars, marked};
+use super::runs::{REVIEW, Run, Span, SpanKind, dollars, marked};
 use super::{Mark, Title};
 
 pub const DAY_MS: u64 = 86_400_000;
@@ -148,10 +148,7 @@ fn time(runs: &[&Run]) -> Vec<TimeShare> {
 fn checks(runs: &[&Run]) -> Checks {
     let spans = || runs.iter().flat_map(|run| &run.spans);
     let flagged = |title: Title| spans().flat_map(|span| &span.flags).filter(|flag| marked(flag, title)).count();
-    let judged = |failed: bool| spans().filter(|span| span.name == JUDGE && span.failed == failed).count();
     Checks {
-        verified_passed: judged(false) as u64,
-        verified_failed: judged(true) as u64,
         review_findings: spans()
             .filter(|span| span.name == REVIEW)
             .map(|span| span.output.lines().count())
@@ -175,10 +172,6 @@ fn findings(runs: &[&Run]) -> Vec<Finding> {
                 at_ms: run.started_at_ms + span.start_ms,
                 severe,
             };
-            if span.name == JUDGE && span.failed {
-                let failing = span.output.lines().find(|line| line.starts_with("fail")).unwrap_or(&span.output);
-                found.push(finding(CheckKind::Judge, failing.trim_start_matches("fail ").trim(), true));
-            }
             if span.name == REVIEW {
                 for line in span.output.lines() {
                     let (severity, issue) = line.split_once(' ').unwrap_or(("low", line));

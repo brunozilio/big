@@ -132,7 +132,7 @@ impl<'a> McpClient<'a> {
 
     fn request(&self, body: &Value) -> Result<HttpRequest, ActionError> {
         let mut request = HttpRequest::post(&self.url)
-            .bearer(&self.token)
+            .authorized(&self.token)
             .header("accept", "application/json, text/event-stream")
             .header("mcp-protocol-version", PROTOCOL);
         if let Some(session) = &self.session {

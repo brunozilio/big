@@ -51,20 +51,4 @@ impl Agent<'_> {
             Err(_) => Outcome::error(crate::tools::stopped::while_asking("the plan")),
         }
     }
-
-    pub(in crate::agent) fn enter_plan_mode(&self) -> Outcome {
-        if self.depth > 0 {
-            return Outcome::error("Only the main agent enters plan mode.");
-        }
-        if self.control.mode() == PermissionMode::Plan {
-            return Outcome::error("You are already in plan mode.");
-        }
-        self.control.set_mode(PermissionMode::Plan);
-        (self.emit)(EngineEvent::ModeChanged(PermissionMode::Plan));
-        Outcome::ok(
-            "Plan mode is on. Do not edit files or run commands that change anything: read and search to understand \
-             the task, ask the user with AskUserQuestion when a choice is theirs, then present the plan with \
-             ExitPlanMode for approval.",
-        )
-    }
 }

@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "Skill",
   input: {
@@ -20,10 +19,6 @@ export const spec = {
   description: `Loads a skill's instructions by its exact name from the list of available skills. When a skill covers the task, call this first and follow what it returns.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

@@ -50,6 +50,18 @@ describe('diálogo de conexão', () => {
     expect(await dialog.findByText('Conectado', {}, wait)).toBeTruthy()
   }, 10000)
 
+  test('o API token conecta sem navegador e o campo esconde o token', async () => {
+    const dialog = await opened('zephyr')
+    fireEvent.click(dialog.getByRole('button', { name: 'Usar API token' }))
+    const token = (await dialog.findByLabelText(/^API token do Zephyr/, {}, wait)) as HTMLInputElement
+    expect(token.type).toBe('password')
+    expect(dialog.getByText(/Zephyr API Access Tokens/)).toBeTruthy()
+    expect((dialog.getByRole('button', { name: /Conectar/ }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(token, { target: { value: 'zt-123' } })
+    fireEvent.click(dialog.getByRole('button', { name: /Conectar/ }))
+    expect(await dialog.findByText('Conectado', {}, wait)).toBeTruthy()
+  }, 10000)
+
   test('a recusa volta ao início com o erro no mesmo lugar', async () => {
     localStorage.setItem('mock:signIn', 'failed')
     const dialog = await opened('jira')

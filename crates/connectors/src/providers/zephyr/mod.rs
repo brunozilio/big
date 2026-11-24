@@ -7,7 +7,7 @@ use domain::connection::{Capability, ProviderKey};
 use serde_json::{Value, json};
 
 use crate::contracts::{self, tests as actions};
-use crate::descriptor::{AuthSpec, Presentation, ProviderDescriptor};
+use crate::descriptor::{AlternateAuth, AuthSpec, Presentation, ProviderDescriptor, TokenField, TokenForm};
 use crate::error::ActionError;
 use crate::http::Http;
 use crate::mcp::{self, McpClient};
@@ -20,9 +20,17 @@ const LOGO: &str = include_str!("logo.svg");
 const PAGE: u64 = 50;
 const MOST_PAGES: u64 = 10;
 pub const NO_PROJECT: &str = "Escolha o projeto.";
+pub const API_TOKEN: &str = "api_token";
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Zephyr;
+
+pub fn api_token() -> AlternateAuth {
+    let help =
+        "No Jira, abra ⚙ → Configurações gerais → Apps → Zephyr API Access Tokens e clique em Gerar token de acesso.";
+    let token = TokenField::new("token", "API token do Zephyr", help, true);
+    AlternateAuth::token(API_TOKEN, "Usar API token", "do Zephyr", vec![token], TokenForm::Bearer)
+}
 
 pub fn sign_in() -> McpSignIn {
     McpSignIn {
@@ -139,21 +147,25 @@ impl Provider for Zephyr {
         }
     }
 
+    fn alternatives(&self) -> Vec<AlternateAuth> {
+        vec![api_token()]
+    }
+
     async fn call(
         &self,
         http: &dyn Http,
         creds: &Credentials,
         action: &str,
         args: &Value,
-        _idempotency_key: &str,
+        idempotency_key: &str,
     ) -> Result<Value, ActionError> {
         let args = Args(args);
         let api = Api::new(http, creds).await?;
         match action {
-            actions::CREATE_CASE => cases::create_case(&api, args).await,
+            actions::CREATE_CASE => cases::create_case(&api, args, idempotency_key).await,
             actions::CASES => cases::cases(&api, args.text("issue")?).await,
-            actions::CREATE_CYCLE => cases::create_cycle(&api, args).await,
-            actions::RECORD => cases::record(&api, args).await,
+            actions::CREATE_CYCLE => cases::create_cycle(&api, args, idempotency_key).await,
+            actions::RECORD => cases::record(&api, args, idempotency_key).await,
             actions::PROJECTS => projects(&api, args).await,
             _ => Err(unknown_action(action)),
         }

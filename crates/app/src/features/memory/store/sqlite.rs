@@ -8,7 +8,6 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 use super::{MemoryStore, Revised};
 use crate::db::Db;
 use crate::db::codec::{from_json, json, name, named, small, stored};
-use crate::dirs::project_key;
 
 const BOOK: &str = "SELECT next, revision, with_runs, with_corrections, with_cost_usd, without_runs, \
      without_corrections, without_cost_usd, briefed FROM memory_books WHERE project = ?1";
@@ -43,7 +42,7 @@ impl SqliteMemoryStore {
 
 impl MemoryStore for SqliteMemoryStore {
     fn revision(&self, project: &Path) -> u64 {
-        let key = project_key(project);
+        let key = crate::dirs::memory_key(project);
         self.db.read(|connection| revision(connection, &key)).unwrap_or_else(|error| {
             tracing::warn!(%error, "the memory's revision could not be read");
             0
@@ -51,7 +50,7 @@ impl MemoryStore for SqliteMemoryStore {
     }
 
     fn read(&self, project: &Path) -> Revised {
-        let key = project_key(project);
+        let key = crate::dirs::memory_key(project);
         self.db.read(|connection| book(connection, &key)).unwrap_or_else(|error| {
             tracing::warn!(%error, "the memory could not be read; going on from nothing");
             Revised::default()
@@ -59,7 +58,7 @@ impl MemoryStore for SqliteMemoryStore {
     }
 
     fn update(&self, project: &Path, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised> {
-        let key = project_key(project);
+        let key = crate::dirs::memory_key(project);
         let changed = self.db.write(|transaction| {
             let before = stored_book(transaction, &key)?;
             let mut after = before.kept.book.clone();
@@ -71,7 +70,7 @@ impl MemoryStore for SqliteMemoryStore {
     }
 
     fn undo_point(&self, project: &Path) -> Option<MemoryBook> {
-        let key = project_key(project);
+        let key = crate::dirs::memory_key(project);
         let point = self.db.read(|connection| {
             let kept = connection.query_row("SELECT book FROM memory_undo_points WHERE project = ?1", [&key], |row| {
                 from_json(0, &row.get::<_, String>(0)?)
@@ -88,7 +87,7 @@ impl MemoryStore for SqliteMemoryStore {
         if book.is_none() && self.undo_point(project).is_none() {
             return Ok(());
         }
-        let key = project_key(project);
+        let key = crate::dirs::memory_key(project);
         let set = self.db.write(|transaction| match book {
             Some(book) => transaction.execute(
                 "INSERT INTO memory_undo_points (project, book) VALUES (?1, ?2) \

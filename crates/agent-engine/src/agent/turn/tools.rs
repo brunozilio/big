@@ -1,5 +1,5 @@
 use domain::EngineEvent;
-use domain::stuck::{Help, help, nudge};
+use domain::stuck::nudge;
 
 use super::{Call, Next, TurnState};
 use crate::agent::run::ThisRun;
@@ -31,9 +31,6 @@ impl Agent<'_> {
         if let Some(why) = self.workspace.tracking.refusals_stop() {
             return Err(Ending::Failed(ModelError::Provider(why)));
         }
-        if self.control.is_moving() {
-            return Err(Ending::Moved);
-        }
         Ok(Next::AskModel)
     }
 
@@ -63,21 +60,14 @@ impl Agent<'_> {
         if !due {
             return None;
         }
-        let advisor =
-            self.workspace.models.advisor.is_some() && self.offered().iter().any(|tool| tool.name == names::ADVISOR);
-        let help = help(advisor, self.workspace.models.escalation.as_deref())?;
+        let model = self.workspace.models.escalation.clone()?;
         if let Some(Block::ToolResult { content, .. }) =
             results.iter_mut().rev().find(|block| matches!(block, Block::ToolResult { .. }))
         {
-            content.push_str(&nudge(&help));
+            content.push_str(&nudge(&model));
         }
-        match help {
-            Help::Advisor => None,
-            Help::Model(model) => {
-                (self.emit)(EngineEvent::FellBack(model.clone()));
-                Some(model)
-            }
-        }
+        (self.emit)(EngineEvent::FellBack(model.clone()));
+        Some(model)
     }
 
     pub(super) fn steered(&self) -> Vec<Block> {

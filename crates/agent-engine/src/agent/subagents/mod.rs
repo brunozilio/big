@@ -23,15 +23,7 @@ use crate::tools::{Outcome, Workspace, builtin_agents};
 use crate::transcript::{Message, Usage};
 
 fn top_level_only(name: &str) -> bool {
-    matches!(
-        ToolName::of(name),
-        ToolName::Agent
-            | ToolName::SendMessage
-            | ToolName::ExitPlanMode
-            | ToolName::EnterPlanMode
-            | ToolName::EnterWorktree
-            | ToolName::ExitWorktree
-    )
+    matches!(ToolName::of(name), ToolName::Agent | ToolName::SendMessage | ToolName::ExitPlanMode)
 }
 
 struct Spawning<'s> {
@@ -241,7 +233,6 @@ impl Agent<'_> {
 
     fn child_system(&self, chosen: &Chosen, config: &AgentConfig, child_workspace: &Workspace) -> String {
         let base = if let Some(mut context) = child_workspace.prompt_context.clone() {
-            context.output_style = None;
             if config.omit_instructions {
                 context.instructions.clear();
             }

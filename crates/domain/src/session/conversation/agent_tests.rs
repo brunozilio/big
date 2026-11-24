@@ -47,6 +47,7 @@ fn a_sub_agent_keeps_its_own_conversation() {
                 summary: "timeout".into(),
                 state: ToolState::Done,
                 output: Some("7 matches".into()),
+                input: None,
             },
             Entry::Assistant("Seven fixed waits.".into()),
         ]

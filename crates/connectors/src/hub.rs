@@ -17,7 +17,7 @@ struct Entry {
     provider: &'static dyn Provider,
     descriptor: ProviderDescriptor,
     presentation: Presentation,
-    alternative: Option<AlternateAuth>,
+    alternatives: Vec<AlternateAuth>,
 }
 
 #[derive(Debug)]
@@ -64,7 +64,7 @@ impl Connectors {
                 provider: *provider,
                 descriptor: provider.descriptor(),
                 presentation: provider.presentation(),
-                alternative: provider.alternative(),
+                alternatives: provider.alternatives(),
             })
             .collect();
         Connectors { entries, http, keeper, limiter: RateLimiter::new(), learned: Mutex::default(), sink: None }
@@ -91,8 +91,8 @@ impl Connectors {
         self.entry(key).map(|entry| &entry.presentation)
     }
 
-    pub fn alternative(&self, key: &ProviderKey) -> Result<Option<&AlternateAuth>, ActionError> {
-        self.entry(key).map(|entry| entry.alternative.as_ref())
+    pub fn alternatives(&self, key: &ProviderKey) -> Result<&[AlternateAuth], ActionError> {
+        self.entry(key).map(|entry| entry.alternatives.as_slice())
     }
 
     pub fn http(&self) -> &dyn Http {
@@ -142,8 +142,7 @@ impl Connectors {
         connection: &Connection,
         settings: &Value,
     ) -> Result<Credentials, ActionError> {
-        let token =
-            self.keeper.access_token_of(&connection.id, &entry.descriptor.auth, entry.alternative.as_ref()).await?;
+        let token = self.keeper.access_token_of(&connection.id, &entry.descriptor.auth, &entry.alternatives).await?;
         Ok(Credentials::new(&connection.id, &token, settings.clone()))
     }
 
@@ -173,10 +172,9 @@ impl Connectors {
         let first = entry.provider.call(&metered, &creds, action, args, idempotency_key).await;
         let result = match first {
             Err(error) if error.class == ErrorClass::Auth && !error.message.starts_with(RECONNECT) => {
-                let alternative = entry.alternative.as_ref();
                 creds.access_token = self
                     .keeper
-                    .refreshed_of(&connection.id, &entry.descriptor.auth, alternative, &creds.access_token)
+                    .refreshed_of(&connection.id, &entry.descriptor.auth, &entry.alternatives, &creds.access_token)
                     .await?;
                 entry.provider.call(&metered, &creds, action, args, idempotency_key).await
             }

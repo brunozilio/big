@@ -6,7 +6,6 @@ mod own_shell;
 mod plan;
 mod replay;
 mod status;
-pub mod verdict;
 
 pub use agent::AgentRun;
 pub use drafted::drafted;
@@ -29,7 +28,15 @@ pub enum Entry {
     Attached { names: Vec<String> },
     Thinking { text: String, done: bool },
     Assistant(String),
-    Tool { id: String, name: String, summary: String, state: ToolState, output: Option<String> },
+    Tool {
+        id: String,
+        name: String,
+        summary: String,
+        state: ToolState,
+        output: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<serde_json::Value>,
+    },
     Agent { index: usize, kind: String, summary: String, done: Option<bool>, steps: Vec<String> },
     Diff { diff: String, untracked: Vec<String> },
     Plan { plan: String, outcome: Outcome },
@@ -68,7 +75,6 @@ pub struct Transcript {
     asking: std::collections::HashMap<crate::AskId, usize>,
     failure: Option<crate::FailureKind>,
     agents: std::collections::BTreeMap<usize, AgentRun>,
-    moved: Option<std::path::PathBuf>,
 }
 
 fn user_text(entry: &Entry) -> Option<String> {
@@ -134,10 +140,6 @@ impl Transcript {
 
     pub fn error(&mut self, text: impl Into<String>) {
         self.push(Entry::Error(text.into()));
-    }
-
-    pub fn moved_to(&self) -> Option<&std::path::Path> {
-        self.moved.as_deref()
     }
 
     pub fn begin(&mut self) {

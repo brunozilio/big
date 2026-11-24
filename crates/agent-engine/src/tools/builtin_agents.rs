@@ -116,6 +116,22 @@ mod tests {
     }
 
     #[test]
+    fn the_agents_a_step_reads_a_result_from_declare_its_shape_and_every_one_is_observed() {
+        let named = |name: &str| shipped().into_iter().find(|agent| agent.name == name).expect(name);
+        for name in ["tester", "reviewer", "release"] {
+            let agent = named(name);
+            assert_eq!(agent.config.error, None, "{name}");
+            assert!(agent.config.output_schema().is_some_and(|schema| schema.is_object()), "{name}");
+        }
+        for name in ["planner", "developer", "tester", "verifier", "reviewer", "release"] {
+            let agent = named(name);
+            assert_eq!(agent.config.observers, vec!["observer".to_owned()], "{name}");
+            assert!(agent.config.allows("SendMessage") && agent.config.allows("ListSessions"), "{name}");
+        }
+        assert_eq!(named("observer").config.error, None);
+    }
+
+    #[test]
     fn the_delivery_agents_are_built_in_with_their_mode_skills_and_avatar() {
         let named = |name: &str| shipped().into_iter().find(|agent| agent.name == name).expect(name);
         for (name, label, shape, color, mode) in [
@@ -166,7 +182,8 @@ mod tests {
 
     #[test]
     fn every_built_in_agent_names_only_real_tools_and_can_delegate_and_reach_mcp() {
-        let written: Vec<FoundAgent> = shipped().into_iter().filter(|agent| agent.config.tools.is_some()).collect();
+        let written: Vec<FoundAgent> =
+            shipped().into_iter().filter(|agent| agent.config.tools.as_ref().is_some_and(|tools| !tools.is_empty())).collect();
         assert!(written.len() >= 4, "the workflow's agents declare their tools");
         for agent in &written {
             assert_eq!(agent.config.error, None, "{}", agent.name);

@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn the_user_s_file_replaces_the_built_in_one_and_a_broken_one_falls_back() {
         let folder = tempfile::tempdir().expect("folder");
-        let data = serde_json::json!({ "mode": "ask", "depth": 0, "style": null });
+        let data = serde_json::json!({ "mode": "ask", "depth": 0 });
         let built_in = render_in(None, "prompts/reminder.js", &data);
         assert!(built_in.contains("# Runtime reminder"), "{built_in}");
         write(folder.path(), "prompts/reminder.js", "export default (ctx) => `mode is ${ctx.mode}`;");
@@ -160,7 +160,7 @@ mod tests {
         let folder = tempfile::tempdir().expect("folder");
         write(folder.path(), "prompts/reminder.js", "export default () => { for (;;) {} };");
         let started = std::time::Instant::now();
-        let data = serde_json::json!({ "mode": "ask", "depth": 0, "style": null });
+        let data = serde_json::json!({ "mode": "ask", "depth": 0 });
         assert!(render_in(Some(folder.path()), "prompts/reminder.js", &data).contains("# Runtime reminder"));
         assert!(started.elapsed() < LIMIT + Duration::from_secs(3));
     }

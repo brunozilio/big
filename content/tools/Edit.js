@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "Edit",
   input: {
@@ -32,10 +31,6 @@ export const spec = {
   description: `Replace \`old_string\` with \`new_string\` in a file read earlier with Read. \`old_string\` must match the file exactly, indentation included (without Read's line-number prefix), and appear only once unless \`replace_all\` is true; include surrounding lines to make it unique. To create a file, use Write.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

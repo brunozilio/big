@@ -4,8 +4,7 @@ use super::Calling;
 use crate::agent::Agent;
 use crate::tools::names::ToolName;
 use crate::tools::subagent::AgentTool;
-use crate::tools::{Consult, Outcome, Tool};
-use crate::transcript::Message;
+use crate::tools::{Outcome, Tool};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Handler {
@@ -14,9 +13,6 @@ pub(super) enum Handler {
     TaskList,
     Ask,
     ExitPlan,
-    EnterPlan,
-    EnterWorktree,
-    ExitWorktree,
     Agent,
     SendMessage,
     Watch,
@@ -32,9 +28,6 @@ impl Handler {
             ToolName::TaskList => Self::TaskList,
             ToolName::AskUserQuestion => Self::Ask,
             ToolName::ExitPlanMode => Self::ExitPlan,
-            ToolName::EnterPlanMode => Self::EnterPlan,
-            ToolName::EnterWorktree => Self::EnterWorktree,
-            ToolName::ExitWorktree => Self::ExitWorktree,
             ToolName::Agent => Self::Agent,
             ToolName::SendMessage => Self::SendMessage,
             ToolName::Watch => Self::Watch,
@@ -68,16 +61,10 @@ impl Agent<'_> {
             Handler::TaskList => return run.background.list(|| self.planned_tasks(tool, input)),
             _ => {}
         }
-        if let Some(outcome) = tool.and_then(|tool| self.consulted(tool, input, parent)) {
-            return outcome;
-        }
         let Some(tool) = tool else { return Outcome::error(format!("There is no tool named {name}.")) };
         match handler {
             Handler::Ask => self.ask_user(id, input),
             Handler::ExitPlan => self.exit_plan_mode(id, input),
-            Handler::EnterPlan => self.enter_plan_mode(),
-            Handler::EnterWorktree => self.enter_worktree(run),
-            Handler::ExitWorktree => self.exit_worktree(input, run),
             Handler::Agent => self.agent_tool(calling, input),
             Handler::SendMessage => self.message(calling, tool, input),
             Handler::Watch => self.watch(id, input, run),
@@ -95,12 +82,6 @@ impl Agent<'_> {
         tool.map(|tool| tool.run(input, self.workspace))
             .and_then(|out| serde_json::from_str::<Value>(&out.content).ok())
             .unwrap_or_else(|| json!([]))
-    }
-
-    fn consulted(&self, tool: &dyn Tool, input: &Value, parent: &[Message]) -> Option<Outcome> {
-        let agent =
-            Consult { api: self.api, request: &self.request, conversation: parent, stop: self.control.stop_flag() };
-        tool.consult(input, self.workspace, &agent)
     }
 
     fn agent_tool<'env>(&'env self, calling: &Calling<'_, 'env>, input: &Value) -> Outcome {
@@ -166,9 +147,6 @@ mod tests {
             Handler::TaskList,
             Handler::Ask,
             Handler::ExitPlan,
-            Handler::EnterPlan,
-            Handler::EnterWorktree,
-            Handler::ExitWorktree,
             Handler::Agent,
             Handler::SendMessage,
             Handler::Watch,

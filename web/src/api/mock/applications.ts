@@ -70,8 +70,8 @@ export function initialApplications(): Application[] {
       name: 'Checkout',
       tracker: { connection: 'c-jira', project: 'APP' },
       repositories: [
-        { id: 'r-checkout', code: { connection: 'c-github', repo: 'acme/checkout' }, directory: `${MOCK_HOME}/projetos/checkout`, run: 'bun dev', verify: ['bun test', 'bun run lint'], e2e: ['npx playwright test'] },
-        { id: 'r-infra', code: { connection: 'c-github', repo: 'acme/infra' }, directory: `${MOCK_HOME}/projetos/infra`, run: '', verify: ['terraform validate'], e2e: [] },
+        { id: 'r-checkout', code: { connection: 'c-github', repo: 'acme/checkout' }, directory: `${MOCK_HOME}/projetos/checkout`, run: ['bun dev'], verify: ['bun test', 'bun run lint', 'npx playwright test'] },
+        { id: 'r-infra', code: { connection: 'c-github', repo: 'acme/infra' }, directory: `${MOCK_HOME}/projetos/infra`, run: [], verify: ['terraform validate'] },
       ],
     },
   ]
@@ -90,9 +90,8 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
       id: r.id || `r-${Date.now()}-${counter}`,
       code: r.code && r.code.repo && r.code.connection ? r.code : null,
       directory: r.directory.trim(),
-      run: r.run.trim(),
+      run: r.run.map((v) => v.trim()).filter(Boolean),
       verify: r.verify.map((v) => v.trim()).filter(Boolean),
-      e2e: r.e2e.map((v) => v.trim()).filter(Boolean),
     }
   })
   const tracker = draft.tracker && draft.tracker.project && draft.tracker.connection ? draft.tracker : null

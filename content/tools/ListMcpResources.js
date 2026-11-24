@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec<{ servers: string[] }>} */
 export const spec = {
   name: "ListMcpResources",
   input: {
@@ -11,10 +10,6 @@ export const spec = {
     `List the resources (files, records, documents) MCP servers offer: ${ctx.servers.join(", ")}. Read one with ReadMcpResource.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

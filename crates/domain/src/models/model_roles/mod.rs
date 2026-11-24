@@ -10,20 +10,16 @@ pub enum ModelRole {
     Plan,
     Explore,
     Small,
-    Review,
-    Advisor,
 }
 
 impl ModelRole {
-    pub const ALL: [Self; 5] = [Self::Plan, Self::Explore, Self::Small, Self::Review, Self::Advisor];
+    pub const ALL: [Self; 3] = [Self::Plan, Self::Explore, Self::Small];
 
     pub fn name(self) -> &'static str {
         match self {
             Self::Plan => "plan",
             Self::Explore => "explore",
             Self::Small => "small",
-            Self::Review => "review",
-            Self::Advisor => "advisor",
         }
     }
 
@@ -32,8 +28,6 @@ impl ModelRole {
             Self::Plan => "plan mode and the Plan agent",
             Self::Explore => "the Explore agent that searches the code",
             Self::Small => "background chores: titles, effort picks, web reading",
-            Self::Review => "the judge that checks finished work",
-            Self::Advisor => "the advisor the agent consults",
         }
     }
 

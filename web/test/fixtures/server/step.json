@@ -15,6 +15,7 @@
       "type": "chat"
     }
   ],
+  "headsUp": null,
   "item": "item-1",
   "step": "work"
 }

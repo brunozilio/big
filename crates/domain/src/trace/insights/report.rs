@@ -52,8 +52,6 @@ pub struct ToolStat {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct Checks {
-    pub verified_passed: u64,
-    pub verified_failed: u64,
     pub review_findings: u64,
     pub repeated: u64,
     pub refused: u64,
@@ -74,7 +72,6 @@ pub struct Totals {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CheckKind {
-    Judge,
     Review,
     Repeated,
     Refused,

@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec<{ agents: { name: string, description: string }[] }>} */
 export const spec = {
   name: "Agent",
   input: {
@@ -69,10 +68,6 @@ Brief it like the peer it is: state the goal and what you already ruled out, poi
   },
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

@@ -448,3 +448,16 @@ fn an_operation_is_picked_from_what_discover_lists() {
     assert_eq!(operations::found_list(&nested, &["values", "projects"]), vec![json!({"key": "A"})]);
     assert!(operations::last_page(&nested));
 }
+
+#[tokio::test]
+async fn an_api_token_reaches_the_mcp_server_as_basic_auth() {
+    let [alternative] = Jira.alternatives().try_into().unwrap_or_else(|_| panic!("not one alternative"));
+    let AuthSpec::Token(spec) = alternative.auth else { panic!("not a token") };
+    let token = spec.access_token(&json!({ "email": "ana@acme.com", "token": "t1" })).unwrap_or_default();
+    let http =
+        session(&[json!([{"id": "c1", "url": "https://acme.atlassian.net", "name": "acme"}]), json!({"values": []})]);
+    let creds = Credentials::new(&ConnectionId::from("jira2"), &token, json!({}));
+    let options = Jira.accounts(&http, &creds).await;
+    assert!(options.is_ok(), "{options:?}");
+    assert_eq!(http.sent()[0].header_value("authorization"), Some("Basic YW5hQGFjbWUuY29tOnQx"));
+}

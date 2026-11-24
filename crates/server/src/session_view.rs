@@ -1,6 +1,6 @@
 use domain::conversation::{Entry, Outcome, SessionStatus, ToolState, Transcript};
 use domain::trace::Record;
-use domain::{AgentAsk, AskKind, Decision, PermissionMode};
+use domain::{AgentAsk, AskKind, Decision, PermissionMode, ToolName};
 use serde_json::{Value, json};
 
 use crate::marks::iso;
@@ -81,9 +81,9 @@ fn tool_state(state: &ToolState) -> &'static str {
 
 fn call(entry: &Entry) -> Option<Value> {
     match entry {
-        Entry::Tool { id, name, summary, state, output } => Some(json!({
+        Entry::Tool { id, name, summary, state, output, input } => Some(json!({
             "id": id, "kind": tool_kind(name), "title": if summary.is_empty() { name } else { summary },
-            "tag": name, "state": tool_state(state), "output": output, "durationMs": 0,
+            "tag": name, "state": tool_state(state), "output": output, "input": input, "durationMs": 0,
         })),
         Entry::Agent { index, kind, summary, done, steps } => Some(json!({
             "id": format!("agent-{index}"), "kind": "subagent", "title": summary, "tag": kind,
@@ -92,6 +92,19 @@ fn call(entry: &Entry) -> Option<Value> {
         })),
         _ => None,
     }
+}
+
+fn into_script(calls: &mut [Value], entry: &Entry) -> bool {
+    let Entry::Agent { kind, summary, steps, .. } = entry else { return false };
+    if kind != ToolName::Repl.as_str() {
+        return false;
+    }
+    let script = calls.iter_mut().rev().find(|call| {
+        call["tag"] == kind.as_str() && call["title"] == summary.as_str() && call.get("steps").is_none()
+    });
+    let Some(script) = script else { return false };
+    script["steps"] = json!(steps);
+    true
 }
 
 fn plan(text: &str, resolution: &str) -> Value {
@@ -172,7 +185,10 @@ pub fn events(shown: &Shown, pending: Option<&AgentAsk>) -> Vec<Value> {
     };
     for (at, entry) in entries.iter().enumerate() {
         if let Some(found) = call(entry) {
-            tools.get_or_insert_with(|| (at, Vec::new())).1.push(found);
+            let (_, calls) = tools.get_or_insert_with(|| (at, Vec::new()));
+            if !into_script(calls, entry) {
+                calls.push(found);
+            }
             continue;
         }
         close(&mut tools, &mut listed);

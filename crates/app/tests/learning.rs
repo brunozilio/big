@@ -1,18 +1,23 @@
 #![allow(clippy::expect_used, reason = "a failed setup step stops the test")]
 
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use agent_engine::fake::FakeEngine;
 use app::{Client, EngineEvent, Model};
 use app::{InMemorySecretStore, LocalServices};
-use domain::{SessionCommand, SessionId};
+use domain::{PromptRequest, SessionCommand, SessionId};
 
 fn model() -> Model {
     Model::new("scripted", "Scripted")
 }
 
+fn learned(engine: &FakeEngine) -> Option<PromptRequest> {
+    engine.requests().into_iter().find(|request| request.session.command == Some(SessionCommand::Learn))
+}
+
 #[test]
-fn a_lesson_is_asked_for_only_after_the_user_corrected_the_agent_enough() {
+fn a_run_the_user_corrected_enough_proposes_a_lesson_on_its_own_session() {
     let data = tempfile::tempdir().expect("data");
     let engine = FakeEngine::new(
         vec![model()],
@@ -27,13 +32,16 @@ fn a_lesson_is_asked_for_only_after_the_user_corrected_the_agent_enough() {
     services.providers = services.providers.with_secrets(Arc::new(InMemorySecretStore::default()));
     let client = Client::builder().data_dir(data.path()).services(services).build().expect(brand::COMMAND);
     let session = client.session(data.path(), model());
-    assert!(session.learn().is_none(), "nothing happened yet");
 
     session.send("install it").expect("run").text().expect("text");
-    session.learn().expect("worth a lesson").expect("started").text().expect("text");
 
-    let learned = engine.requests().into_iter().find(|request| request.session.command == Some(SessionCommand::Learn));
-    let prompt = learned.map(|request| request.prompt.text).unwrap_or_default();
-    assert!(prompt.contains("no, use pnpm") && prompt.contains("again: pnpm, not npm"), "{prompt}");
-    assert!(session.learn().is_none(), "the signals were used up");
+    let until = Instant::now() + Duration::from_secs(5);
+    while learned(&engine).is_none() && Instant::now() < until {
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let lesson = learned(&engine).expect("a lesson was asked for");
+    assert!(lesson.prompt.text.contains("no, use pnpm") && lesson.prompt.text.contains("again: pnpm, not npm"));
+    assert_eq!(lesson.session.resume, Some(SessionId("s-1".into())), "on the corrected session");
+    let lessons = engine.requests().iter().filter(|r| r.session.command == Some(SessionCommand::Learn)).count();
+    assert_eq!(lessons, 1, "a lesson run does not ask for another lesson");
 }

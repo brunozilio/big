@@ -14,7 +14,7 @@ fn keys(value: &Value) -> Vec<String> {
     keys
 }
 
-const ITEM_KEYS: [&str; 19] = [
+const ITEM_KEYS: [&str; 20] = [
     "activity",
     "attention",
     "change",
@@ -27,6 +27,7 @@ const ITEM_KEYS: [&str; 19] = [
     "impediment",
     "issue",
     "live",
+    "recap",
     "sources",
     "status",
     "steps",
@@ -160,7 +161,7 @@ async fn a_session_shows_its_events_and_refuses_unknown_answers() {
         .await;
     world.until("the agent ran", |item| item["group"] == "you").await;
     let session = world.get(&format!("/api/sessions/{SESSION}")).await;
-    assert_eq!(keys(&session), ["agents", "events", "id", "mode", "model", "status", "title", "work"]);
+    assert_eq!(keys(&session), ["agents", "events", "id", "mode", "model", "status", "suggestion", "title", "work"]);
     assert_eq!(session["status"], "idle");
     fixture("session", &session);
     let bad = world.send(Method::GET, "/api/sessions/..", None).await;
@@ -177,6 +178,7 @@ async fn a_session_shows_its_events_and_refuses_unknown_answers() {
     assert_eq!(unknown.0, StatusCode::NOT_FOUND);
     let stop = world.send(Method::POST, &format!("/api/sessions/{SESSION}/stop"), Some(json!({}))).await;
     assert_eq!(stop.0, StatusCode::CONFLICT);
+    let mut feed = world.ctx_live.subscribe();
     let sent = world
         .send(
             Method::POST,
@@ -185,6 +187,55 @@ async fn a_session_shows_its_events_and_refuses_unknown_answers() {
         )
         .await;
     assert_eq!(sent.0, StatusCode::NO_CONTENT, "{}", sent.1);
+    let resumed = |request: &domain::PromptRequest| request.prompt.text == "continue";
+    for _ in 0..200 {
+        if world.engine.requests().iter().any(resumed) {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let requests = world.engine.requests();
+    let continued = requests.iter().find(|request| resumed(request)).expect("the message reached the agent");
+    let first = requests.iter().find_map(|request| request.session.agent.as_ref()).map(|agent| agent.name.clone());
+    assert!(first.is_some(), "the step ran a named agent");
+    assert_eq!(
+        continued.session.agent.as_ref().map(|agent| agent.name.clone()),
+        first,
+        "the chat goes on as the agent that ran the step, with its tools and mode"
+    );
+    let mut suggested = Value::Null;
+    for _ in 0..200 {
+        suggested = world.get(&format!("/api/sessions/{SESSION}")).await["suggestion"].clone();
+        if !suggested.is_null() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    assert_eq!(suggested, "rode os testes", "a finished reply leaves a suggestion for what to say next");
+    let mut announced = None;
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
+    while announced.is_none() && tokio::time::Instant::now() < deadline {
+        if let Ok(Ok(text)) = tokio::time::timeout(Duration::from_millis(200), feed.recv()).await {
+            let event: Value = serde_json::from_str(&text).expect("json");
+            if event["type"] == "session.suggestion" && !event["suggestion"].is_null() {
+                announced = Some(event);
+            }
+        }
+    }
+    let announced = announced.expect("the suggestion is announced on the live feed");
+    assert_eq!(announced["suggestion"], "rode os testes");
+    fixture("live-session-suggestion", &announced);
+    let side = world
+        .send(Method::POST, &format!("/api/sessions/{SESSION}/side"), Some(json!({ "text": "em que passo está?" })))
+        .await;
+    assert_eq!(side.0, StatusCode::OK, "{}", side.1);
+    assert_eq!(side.1["answer"], "está no passo dois");
+    let asked_aside =
+        world.engine.requests().into_iter().rfind(|r| r.session.command == Some(domain::SessionCommand::Side));
+    let asked_aside = asked_aside.expect("the side question went to the agent's session");
+    assert_eq!(asked_aside.session.resume.as_ref().map(|s| s.0.as_str()), Some(SESSION));
+    let empty = world.send(Method::POST, &format!("/api/sessions/{SESSION}/side"), Some(json!({ "text": " " }))).await;
+    assert_eq!(empty.0, StatusCode::BAD_REQUEST);
     let missing = world.send(Method::GET, "/api/sessions/nao-existe", None).await;
     assert_eq!(missing.0, StatusCode::NOT_FOUND);
 }
@@ -434,13 +485,34 @@ async fn the_browser_comes_back_to_the_connections_screen_after_signing_in() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn the_factory_reports_its_generations_and_findings() {
+async fn an_api_token_connects_without_a_browser_and_is_kept_without_expiry() {
     let world = World::new().await;
-    let report = world.get("/api/factory").await;
-    assert_eq!(report["autonomy"], "near");
-    assert!(report["current"].as_str().is_some_and(|version| version.len() == 16));
-    assert!(report["generations"].is_array());
-    assert!(report["findings"].is_array());
+    let listed = world.get("/api/connections").await;
+    let web = listed["providers"].as_array().and_then(|all| all.iter().find(|p| p["key"] == "web")).cloned();
+    let alternative = web.map(|web| web["alternatives"][0].clone()).unwrap_or_default();
+    assert_eq!(alternative["signIn"], "token", "{alternative}");
+    assert_eq!(alternative["fields"][0]["secret"], true);
+    assert_eq!(alternative["fields"][0]["help"], "Gere o token.");
+    let start = |token: &str| json!({ "fields": { "token": token }, "method": "api_token" });
+    let empty = world.send(Method::POST, "/api/connections/web/start", Some(start("  "))).await;
+    assert_eq!(empty.0, StatusCode::BAD_REQUEST, "{}", empty.1);
+    let refused = world.send(Method::POST, "/api/connections/web/start", Some(start("recusado"))).await.1;
+    let polled =
+        world.send(Method::POST, "/api/connections/device/poll", Some(json!({ "flow": refused["flow"] }))).await.1;
+    assert_eq!(polled["state"], "failed", "{polled}");
+    let (status, started) = world.send(Method::POST, "/api/connections/web/start", Some(start(" zt-123 "))).await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!(started["kind"], "token");
+    let done =
+        world.send(Method::POST, "/api/connections/device/poll", Some(json!({ "flow": started["flow"] }))).await.1;
+    assert_eq!(done["state"], "done", "{done}");
+    let id = done["connection"]["id"].as_str().expect("id").to_owned();
+    let kept = world.connectors.keeper().store().load(&domain::connection::ConnectionId::from(id.as_str())).await;
+    let kept = kept.expect("store").expect("grant");
+    assert_eq!(
+        (kept.access_token.as_str(), kept.expires_at, kept.method.as_deref()),
+        ("zt-123", None, Some("api_token"))
+    );
 }
 
 fn folder(world: &World, name: &str) -> String {
@@ -478,7 +550,10 @@ async fn a_new_item_needs_no_issue_and_keeps_the_base_branch_chosen_per_reposito
     assert_eq!(item["sources"], json!([]));
     assert_eq!(item["issue"], Value::Null);
     assert_eq!(item["workflow"], "default");
-    assert_eq!(item["git"], json!([{ "repository": repository, "name": "acme/web", "base": "release/2", "head": null }]));
+    assert_eq!(
+        item["git"],
+        json!([{ "repository": repository, "name": "acme/web", "base": "release/2", "head": null }])
+    );
     let input = kept(&world, &item);
     assert_eq!(input["git"], json!({ repository.clone(): { "base": "release/2" } }));
     assert!(input["issue"].is_null());

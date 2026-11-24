@@ -3,7 +3,6 @@ use domain::inbox::Notice;
 use domain::review::{Finding, Severity};
 use domain::trace::{ModelCall, Record, RunInfo};
 use domain::usage::Compaction;
-use domain::verification::{Check, Verdict};
 use domain::{AgentAsk, AgentStatus, AskId, AskKind, Decision, EngineEvent, ToolCall};
 use serde_json::json;
 
@@ -139,12 +138,6 @@ fn delegating(start: u64) -> Vec<Record> {
 
 fn closing(start: u64) -> Vec<Record> {
     let compaction = Compaction { before: 9_000, after: 400, summary: "They fixed a rounding bug.".into() };
-    let verdict = Verdict {
-        passed: false,
-        score: 0.2,
-        checks: vec![Check { criterion: "tests pass".into(), passed: false, evidence: "1 failed".into() }],
-        attempt: 1,
-    };
     let findings = vec![
         Finding {
             severity: Severity::High,
@@ -163,7 +156,6 @@ fn closing(start: u64) -> Vec<Record> {
         Record::Called { at_ms: start + 7_800, agent: None, call: second_call() },
         at(start + 7_900, EngineEvent::TextDelta("The totals now round half up.".into())),
         at(start + 8_500, spent("sonnet", 200, 600, 40, 0.02)),
-        at(start + 8_600, EngineEvent::Verified(verdict)),
         at(start + 8_700, EngineEvent::Reviewed(findings)),
         at(start + 9_000, EngineEvent::Completed { duration_ms: 9_000, cost_usd: Some(0.04) }),
     ]

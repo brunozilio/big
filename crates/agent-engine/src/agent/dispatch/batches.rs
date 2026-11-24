@@ -95,12 +95,9 @@ impl Agent<'_> {
                 named,
                 ToolName::AskUserQuestion
                     | ToolName::ExitPlanMode
-                    | ToolName::EnterPlanMode
                     | ToolName::Agent
                     | ToolName::SendMessage
                     | ToolName::Skill
-                    | ToolName::EnterWorktree
-                    | ToolName::ExitWorktree
             );
         let Some(tool) = self.tool(run, name) else { return false };
         if self.invalid_input(name, tool, input).is_some() {

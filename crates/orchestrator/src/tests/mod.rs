@@ -162,7 +162,14 @@ pub struct FakeEngine {
 impl FakeEngine {
     pub fn requests(&self) -> Vec<PromptRequest> {
         let all = self.state.requests.lock().expect("lock").clone();
-        all.into_iter().filter(|request| request.session.command != Some(domain::SessionCommand::Title)).collect()
+        all.into_iter()
+            .filter(|request| !request.session.command.is_some_and(domain::SessionCommand::is_chore))
+            .collect()
+    }
+
+    pub fn chores(&self, command: domain::SessionCommand) -> Vec<PromptRequest> {
+        let all = self.state.requests.lock().expect("lock").clone();
+        all.into_iter().filter(|request| request.session.command == Some(command)).collect()
     }
 
     pub fn titled(&self) -> Vec<PromptRequest> {
@@ -213,8 +220,8 @@ impl AgentEngine for FakeEngine {
         let number = {
             let mut requests = self.state.requests.lock().expect("lock");
             requests.push(request.clone());
-            let titling = |request: &PromptRequest| request.session.command == Some(domain::SessionCommand::Title);
-            requests.iter().filter(|request| !titling(request)).count()
+            let chore = |request: &PromptRequest| request.session.command.is_some_and(domain::SessionCommand::is_chore);
+            requests.iter().filter(|request| !chore(request)).count()
         };
         let cancelled = Arc::new(AtomicBool::new(false));
         let (answer, answers) = std::sync::mpsc::channel();
@@ -225,8 +232,21 @@ impl AgentEngine for FakeEngine {
             sink.emit(run, EngineEvent::SessionStarted(session));
             sink.emit(run, EngineEvent::Checkpoint(u32::try_from(number).unwrap_or(0)));
             if request.session.command.is_some() {
-                if request.session.command == Some(domain::SessionCommand::Title) {
-                    sink.emit(run, EngineEvent::Chore(domain::ChoreAnswer::Title("Loja virtual".into())));
+                let answer = match request.session.command {
+                    Some(domain::SessionCommand::Title) => Some(domain::ChoreAnswer::Title("Loja virtual".into())),
+                    Some(domain::SessionCommand::Recap) => {
+                        Some(domain::ChoreAnswer::Recap("Plano pronto; falta aprovar.".into()))
+                    }
+                    Some(domain::SessionCommand::HeadsUp) => Some(domain::ChoreAnswer::HeadsUp(domain::HeadsUp {
+                        urgent: false,
+                        learn: "migração".into(),
+                        title: "A migração apaga a coluna antiga".into(),
+                        explain: "Rode o backup antes do deploy.".into(),
+                    })),
+                    _ => None,
+                };
+                if let Some(answer) = answer {
+                    sink.emit(run, EngineEvent::Chore(answer));
                 }
                 sink.emit(run, EngineEvent::Completed { duration_ms: 0, cost_usd: None });
                 return;

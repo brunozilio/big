@@ -4,6 +4,10 @@ pub fn env(key: &str) -> String {
     format!("{ENV}_{key}")
 }
 
+pub fn section(name: &str) -> &'static [(&'static str, &'static str)] {
+    SECTIONS.iter().find(|(section, _)| *section == name).map_or(&[], |(_, pairs)| pairs)
+}
+
 pub fn text(template: &str) -> String {
     if !template.contains("{{") {
         return template.to_owned();
@@ -31,6 +35,12 @@ mod tests {
         assert_eq!(ENV, COMMAND.to_ascii_uppercase().replace('-', "_"));
         assert_eq!(INSTRUCTIONS, format!("{ENV}.md"));
         assert_eq!(env("PROJECT_DIR"), format!("{ENV}_PROJECT_DIR"));
+    }
+
+    #[test]
+    fn a_section_lists_its_pairs_and_an_unknown_one_is_empty() {
+        assert!(section("server").iter().any(|(key, _)| *key == "port"));
+        assert!(section("nope").is_empty());
     }
 
     #[test]

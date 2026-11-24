@@ -1,7 +1,6 @@
 mod device;
 mod loopback;
 pub mod mcp;
-mod redirect;
 mod tokens;
 
 use base64::Engine;
@@ -16,8 +15,7 @@ use crate::error::ActionError;
 use crate::http::HttpResponse;
 
 pub use device::{DeviceApp, DeviceCode, Dialect, Polled, RegisteredClient, SsoSpec, register_client};
-pub use loopback::{Loopback, LoopbackSignIn};
-pub use redirect::{Authorization, OAuthApp, TokenBody};
+pub use loopback::{Authorization, Loopback, LoopbackSignIn};
 pub use tokens::{MemoryTokenStore, REFRESH_WINDOW_SECONDS, TokenKeeper, TokenStore};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec<{ default_timeout: number, max_timeout: number, OUTPUT: number, shell: string }>} */
 export const spec = {
   name: "Bash",
   input: {
@@ -38,10 +37,6 @@ Git:
 - Never force-push, rewrite published history or skip hooks unless the user asks for that.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

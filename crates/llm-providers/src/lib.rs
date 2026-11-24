@@ -6,6 +6,7 @@ mod config;
 pub mod limits;
 pub mod model;
 pub mod oauth;
+pub mod prices;
 pub mod providers;
 pub mod request;
 pub mod sign_in;
@@ -16,7 +17,7 @@ mod vendor;
 pub mod vendors;
 pub mod web_search;
 
-pub use vendor::{EFFORTS, Vendor, effort, efforts, owner, rated, rates, search_price, vendor};
+pub use vendor::{EFFORTS, Vendor, effort, efforts, owner, priced, rates, search_price, vendor};
 
 use domain::{Access, ModelOption};
 use serde_json::Value;

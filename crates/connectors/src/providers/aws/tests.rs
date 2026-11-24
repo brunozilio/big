@@ -71,9 +71,11 @@ async fn a_refused_sso_token_is_an_auth_error() {
 #[test]
 fn the_console_sign_in_is_the_default_and_the_company_sso_the_alternative() {
     let AuthSpec::Loopback(_) = Aws.descriptor().auth else { panic!("not loopback") };
-    let Some(alternative) = Aws.alternative() else { panic!("no alternative") };
+    let alternatives = Aws.alternatives();
+    let Some(alternative) = alternatives.first().cloned() else { panic!("no alternative") };
     let AuthSpec::Sso(spec) = alternative.auth else { panic!("not sso") };
     assert_eq!(alternative.label, "Usar SSO da empresa");
+    assert_eq!(alternatives.get(1).map(|keys| keys.key.as_str()), Some(ACCESS_KEYS));
     let spec = spec.in_region("eu-west-1");
     assert_eq!(spec.registration_endpoint, "https://oidc.eu-west-1.amazonaws.com/client/register");
     assert_eq!(spec.device.token_endpoint, "https://oidc.eu-west-1.amazonaws.com/token");

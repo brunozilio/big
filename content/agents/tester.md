@@ -2,10 +2,20 @@
 name: tester
 label: Testador
 description: Escreve casos de teste E2E, de API e de tela, a partir dos critérios de aceite. Depois automatiza esses casos no repositório, roda os testes e devolve o resultado de cada caso com a evidência. Não muda o código do produto.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, Edit, Write, LSP, WebFetch, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, Edit, Write, LSP, WebFetch, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ListSessions, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
 disallowedTools: [NotebookEdit]
 permissionMode: bypass
-model: auto
+observer: [observer]
+outputSchema:
+  type: object
+  properties:
+    cases:
+      type: array
+      items: { type: object, required: [title, kind, given, when, then] }
+    results:
+      type: array
+      items: { type: object, required: [case, status] }
+  minProperties: 1
 skills: [run, verify]
 avatar:
   shape: drop

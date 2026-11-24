@@ -1,16 +1,12 @@
 pub use domain::ToolName;
 
 pub const ASK: &str = ToolName::AskUserQuestion.as_str();
-pub const ADVISOR: &str = ToolName::Advisor.as_str();
-pub const ENTER_PLAN: &str = ToolName::EnterPlanMode.as_str();
 pub const EXIT_PLAN: &str = ToolName::ExitPlanMode.as_str();
 pub const REPL: &str = ToolName::Repl.as_str();
 pub const SEND_MESSAGE: &str = ToolName::SendMessage.as_str();
 pub const SKILL: &str = ToolName::Skill.as_str();
 pub const AGENT: &str = ToolName::Agent.as_str();
 pub const WATCH: &str = ToolName::Watch.as_str();
-pub const ENTER_WORKTREE: &str = ToolName::EnterWorktree.as_str();
-pub const EXIT_WORKTREE: &str = ToolName::ExitWorktree.as_str();
 pub const BASH: &str = ToolName::Bash.as_str();
 pub const READ: &str = ToolName::Read.as_str();
 pub const WRITE: &str = ToolName::Write.as_str();
@@ -31,9 +27,7 @@ mod tests {
     fn every_builtin_name_the_loop_dispatches_on_belongs_to_a_standard_tool_or_one_the_run_adds() {
         let mut offered: Vec<String> = crate::tools::standard().iter().map(|tool| tool.spec().name).collect();
         offered.extend(crate::tools::task::tools().iter().map(|tool| tool.spec().name));
-        for name in
-            [ASK, ENTER_PLAN, EXIT_PLAN, ENTER_WORKTREE, EXIT_WORKTREE, WATCH, BASH, READ, WRITE, WEB_FETCH, ADVISOR]
-        {
+        for name in [ASK, EXIT_PLAN, WATCH, BASH, READ, WRITE, WEB_FETCH] {
             assert!(offered.iter().any(|known| known == name), "{name} is not a standard tool");
         }
         for name in [TASK_OUTPUT, TASK_STOP, TASK_LIST, TASK_GET, TASK_CREATE, TASK_UPDATE] {

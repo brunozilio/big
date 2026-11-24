@@ -249,15 +249,11 @@ fn of_kind<'a>(asked: &'a [Value], kind: &str) -> Vec<&'a Value> {
 
 #[test]
 fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider() {
-    let mut paths: Vec<String> =
-        STEPS.iter().flat_map(|step| [format!("sdk/steps/{step}.js"), format!("sdk/steps/{step}.d.ts")]).collect();
+    let mut paths: Vec<String> = STEPS.iter().map(|step| format!("sdk/steps/{step}.js")).collect();
     paths.extend(
         [
             "sdk/steps/index.js",
-            "sdk/steps/index.d.ts",
-            "sdk/steps/types.d.ts",
             "sdk/steps/context.js",
-            "sdk/steps/context.d.ts",
             "sdk/steps/e2e.js",
             "workflows/default.ts",
             "workflows/pull-request.ts",
@@ -762,9 +758,18 @@ fn each_step_view_is_made_of_blocks() {
         shown[0]["commands"].as_array().expect("commands").iter().map(|command| &command["name"]).collect();
     assert_eq!(names, [&json!("bun run lint"), &json!("bun test"), &json!("Verificador: critérios de aceite")]);
     assert_eq!(shown[0]["commands"][2]["state"], "done");
-    assert_eq!(shown[1], json!({ "type": "chat", "session": "v1", "composer": false }));
+    assert_eq!(shown[0]["commands"][2]["session"], "v1", "the verifier chat lives inside its own check");
+    assert_eq!(shown.as_array().map(Vec::len), Some(1));
+    let tested =
+        json!({ "e2e": { "session": "t1", "cases": [{ "case": "C-1", "title": "Login", "status": "failed" }] } });
+    let shown = view("checks", tested);
+    assert_eq!(shown[0]["commands"][0]["session"], "t1", "the E2E agent chat lives inside its own check");
+    assert_eq!(shown[0]["commands"][0]["state"], "failed");
+    assert_eq!(shown.as_array().map(Vec::len), Some(1));
     let running = view("checks", json!({ "session": "v1" }));
     assert_eq!(running[0]["commands"][0]["state"], "running", "the verifier is still at it");
+    let stopped = view("checks", json!({ "session": "t1", "state": "failed", "output": "erro" }));
+    assert_eq!(stopped, json!([{ "type": "logs", "text": "erro" }]), "a stopped step has no verifier still at it");
     assert_eq!(view("pr", json!({ "title": "T", "body": "B" })), json!([{ "type": "markdown", "text": "# T\n\nB" }]));
     assert_eq!(view("ci", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));
     assert_eq!(view("review", json!({ "pr": "P" })), json!([{ "type": "review", "pr": "P" }]));
@@ -953,39 +958,6 @@ fn test_cases_are_written_reviewed_by_a_person_and_created_linked_to_the_issue()
         *recorded,
         json!({ "case": "Z-T1", "cycle": "Z-R1", "status": "passed", "comment": "api.spec.ts passou" })
     );
-}
-
-const E2E_ONLY: &str = r#"
-import { workflow } from "sdk";
-import { checks } from "sdk/steps";
-export default workflow({
-  name: "so-e2e",
-  async run(ctx) {
-    try {
-      const checked = await checks(ctx, { commands: [] });
-      return { outcome: checked.outcome, data: checked.data };
-    } catch (error) {
-      return { outcome: "failed", data: error.outcome.data };
-    }
-  },
-});
-"#;
-
-#[test]
-fn checks_run_the_e2e_commands_and_a_failing_one_fails_with_the_command() {
-    let mut chosen = item(json!("T-1"));
-    chosen["e2e"] = json!(["npx playwright test"]);
-    let (result, asked) = drive(&source("workflows/so-e2e.ts", E2E_ONLY), &chosen, |command| {
-        Some(match command["kind"].as_str() {
-            Some("exec") => json!({ "code": 1, "output": "1 failed", "stdout": "", "stderr": "" }),
-            _ => Value::Null,
-        })
-    });
-    assert_eq!(of_kind(&asked, "exec")[0]["args"]["command"], "npx playwright test");
-    assert!(of_kind(&asked, "agent").is_empty(), "without created cases only the commands run");
-    assert_eq!(result["result"]["outcome"], "failed", "{result}");
-    let error = result["result"]["data"]["error"].as_str().expect("error");
-    assert!(error.contains("npx playwright test"), "{error}");
 }
 
 const CASES_THEN_CHECKS: &str = r#"

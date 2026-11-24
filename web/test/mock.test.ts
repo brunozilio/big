@@ -120,7 +120,6 @@ describe('adaptador mock', () => {
     const api = fresh()
     const it = await api.createItem({ text: '', issue: { connection: 'c-jira', key: 'APP-251' }, model: 'claude-opus', effort: 'medium', fast: false, attachments: [] })
     expect(it.steps.find((s) => s.id === 'ticket')?.state).toBe('skipped')
-    expect((await api.models()).models.some((m) => m.id === 'auto')).toBe(false)
   })
 
   test('modelos trazem esforços e somem sem provedor de IA', async () => {

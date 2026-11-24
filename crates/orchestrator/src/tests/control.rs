@@ -126,7 +126,8 @@ async fn rewinding_a_step_restores_the_worktree_and_the_session_and_runs_it_agai
     let id = kernel.create_item("steps", json!({})).expect("item");
     let first = ended(&kernel, &id).await;
     assert_eq!(first.status.as_deref(), Some("Fazendo"));
-    let worktree = world.dir.path().join("data/worktrees").join(git::folder_for(&git::branch_name(id.as_str())));
+    let branch = git::head_of(&first, "");
+    let worktree = world.dir.path().join("data/worktrees").join(git::folder_for(&branch));
     assert!(worktree.join("feito.txt").exists());
     *world.engine.state.write.lock().expect("lock") = None;
     kernel.rewind(&id, "build").await.expect("rewind");
@@ -376,7 +377,7 @@ async fn a_step_that_sends_the_item_back_reads_as_not_approved() {
     let kernel = world.start().await;
     let id = kernel.create_item("back", json!({})).expect("item");
     let item = until(&kernel, &id, |item| item.step("make", Some("main")).is_some_and(|run| run.attempt == 2)).await;
-    assert_eq!(item.step("look", Some("main")).map(|run| run.state), Some(StepState::Failed));
+    assert_eq!(item.step("look", Some("main")).map(|run| run.state), Some(StepState::Pending), "it runs again later");
     let view = kernel.step_view(&id, "look", None).await.expect("view");
     assert_eq!(view.attempts.last().map(|attempt| attempt.state), Some(StepState::Failed));
 }

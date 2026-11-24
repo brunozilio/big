@@ -8,7 +8,6 @@ use crate::tools::script_tool::ScriptGrants;
 
 #[derive(Debug, Default)]
 pub struct Policy {
-    pub pre_approved: Vec<String>,
     pub scripts: ScriptGrants,
     pub redact: Option<Arc<Known>>,
     pub escalation: bool,
@@ -28,7 +27,6 @@ pub struct Policy {
 impl Policy {
     pub fn fork(&self) -> Self {
         Self {
-            pre_approved: Vec::new(),
             scripts: self.scripts,
             redact: self.redact.clone(),
             escalation: self.escalation,

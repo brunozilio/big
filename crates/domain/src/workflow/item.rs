@@ -68,6 +68,19 @@ impl StepRun {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ItemRecap {
+    pub text: String,
+    pub after: String,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HeadsUpNote {
+    pub title: String,
+    pub explain: String,
+    pub urgent: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Impediment {
     pub reason: Option<String>,
 }
@@ -138,6 +151,12 @@ pub struct WorkItem {
     pub version: u64,
     #[serde(default)]
     pub name: Option<String>,
+    #[serde(default)]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub recap: Option<ItemRecap>,
+    #[serde(default)]
+    pub heads_up: BTreeMap<String, HeadsUpNote>,
 }
 
 impl WorkItem {

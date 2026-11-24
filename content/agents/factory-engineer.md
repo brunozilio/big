@@ -2,10 +2,10 @@
 name: factory-engineer
 label: Engenheiro da fábrica
 description: Ajusta a própria fábrica (agentes, skills, prompts, etapas e workflows em {{DIR}}/) quando uma etapa falha de forma recorrente, sem afrouxar nenhum portão. Valida com as avaliações da fábrica.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Edit, Write, LSP, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Edit, Write, LSP, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ListSessions, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
 permissionMode: bypass
-model: auto
-skills: [verify]
+observer: [observer]
+skills: [verify, skill-creator]
 avatar:
   shape: hexagon
   color: "#a855f7"

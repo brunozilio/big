@@ -1,14 +1,13 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import { now } from '@/api/clock'
 import type { Agent, SessionEvent, ThinkingStep, ToolCall } from '@/api/contract'
 import { AgentAvatar } from '@/ui/agentAvatar'
+import { ChatMarkdown } from '@/ui/chatMarkdown'
 import { cn, plural } from '@/ui/cn'
 import { CodeBlock, DiffView, Spinner } from '@/ui/display'
 import { PersonAvatar, personName, ProviderLogo } from '@/ui/domain'
 import { Icon, type IconName } from '@/ui/icon'
-import { AnimatePresence, Collapse, IconSwap, motion, stagger, tween } from '@/ui/motion'
+import { AnimatePresence, Collapse, IconSwap, motion, tween } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
 
 export type Ev<T extends SessionEvent['type']> = Extract<SessionEvent, { type: T }>
@@ -63,7 +62,7 @@ export function AssistantMessage({ event }: { event: Ev<'assistant'> }) {
       </span>
       <div className="min-w-0 flex-1">
         <div className="prose-chat">
-          <ReactMarkdown remarkPlugins={[remarkGfm]}>{event.text}</ReactMarkdown>
+          <ChatMarkdown text={event.text} />
         </div>
       </div>
     </div>
@@ -74,7 +73,7 @@ const TAIL = 280
 
 export function thoughtText(steps: ThinkingStep[], live: boolean): string {
   const written = visibleSteps(steps).map((s) => s.text.trim())
-  if (!live) return written.join('\n')
+  if (!live) return written.join('\n\n')
   const last = written[written.length - 1] ?? ''
   return last.length > TAIL ? `…${last.slice(-TAIL).trimStart()}` : last
 }
@@ -91,7 +90,9 @@ export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
       <div className="min-w-0 flex-1 text-md leading-6 text-muted">
         {text ? (
           <>
-            <p className={cn('whitespace-pre-wrap break-words', !open && 'line-clamp-3', event.live && 'text-shimmer')}>{text}</p>
+            <div className={cn('prose-chat prose-thought break-words', !open && 'line-clamp-3', event.live && 'text-shimmer')}>
+              <ChatMarkdown text={text} />
+            </div>
             {long && (
               <button onClick={() => setOpen(!open)} className="mt-1 text-sm text-faint transition-colors hover:text-fg">
                 {open ? 'Mostrar menos' : 'Mostrar tudo'}
@@ -112,70 +113,31 @@ export const emptyThinking = (e: SessionEvent, running = true) => e.type === 'th
 
 const toolIcons: Record<ToolCall['kind'], IconName> = { command: 'terminal', edit: 'edit', read: 'read', search: 'search', call: 'plug', subagent: 'users' }
 
-const toolVerb: Record<ToolCall['kind'], string> = { command: 'Rodando comando', edit: 'Editando arquivo', read: 'Lendo arquivo', search: 'Buscando', call: 'Chamando conexão', subagent: 'Delegando' }
-
-function summarize(calls: ToolCall[]): string {
-  const edits = calls.filter((c) => c.kind === 'edit').length
-  const commands = calls.filter((c) => c.kind === 'command').length
-  const parts = [`${calls.length} ${plural(calls.length, 'ferramenta', 'ferramentas')}`]
-  if (edits) parts.push(`editou ${edits} ${plural(edits, 'arquivo', 'arquivos')}`)
-  if (commands) parts.push(`rodou ${commands} ${plural(commands, 'comando', 'comandos')}`)
-  return parts.join(', ')
-}
-
 export function duration(seconds: number) {
   if (seconds < 60) return `${seconds}s`
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
 export function ToolRunSummary({ event }: { event: Ev<'tools'> }) {
-  const [open, setOpen] = useState(false)
-  const shown = open || event.live
-  const current = event.calls.find((c) => c.state === 'running')
+  const last = event.calls.length - 1
   return (
-    <div>
-      <button onClick={() => setOpen(!open)} className="group flex w-full items-center gap-3 text-left">
-        <AgentMark size={20} spinning={event.live} agent={event.agent} />
-        <span className="min-w-0 truncate text-body text-fg2">{event.live && current ? <span className="text-shimmer">{toolVerb[current.kind]}…</span> : summarize(event.calls)}</span>
-        <motion.span animate={{ rotate: shown ? 180 : 0 }} transition={tween} className="flex text-muted transition-colors group-hover:text-fg">
-          <Icon name="down" size={16} />
-        </motion.span>
-        <span className="ml-auto text-md tabular-nums text-muted">{duration(event.seconds)}</span>
-      </button>
-      <Collapse open={shown}>
-        <ToolTimeline calls={event.calls} done={!event.live} />
-      </Collapse>
-    </div>
-  )
-}
-
-export function ToolTimeline({ calls, done }: { calls: ToolCall[]; done?: boolean }) {
-  return (
-    <ol className="relative mt-4 pl-[2px]">
+    <ol className="relative">
       <AnimatePresence initial={false}>
-        {calls.map((c, i) => (
-          <motion.div key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...tween, delay: stagger(i) }}>
-            <ToolCallItem call={c} last={!done && i === calls.length - 1} />
+        {event.calls.map((c, i) => (
+          <motion.div key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={tween}>
+            <ToolCallItem call={c} last={i === last} single={i === last} />
           </motion.div>
         ))}
       </AnimatePresence>
-      {done && (
-        <motion.li initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={tween} className="flex items-center gap-3.5 pt-1 text-body text-fg2">
-          <span className="flex size-[22px] items-center justify-center text-muted">
-            <Icon name="checkCircle" size={22} />
-          </span>
-          Concluído
-        </motion.li>
-      )}
     </ol>
   )
 }
 
-export function ToolCallItem({ call, last }: { call: ToolCall; last?: boolean }) {
+export function ToolCallItem({ call, last, single }: { call: ToolCall; last?: boolean; single?: boolean }) {
   const [open, setOpen] = useState(call.state === 'error')
-  const hasDetail = call.input !== undefined || call.output !== undefined || call.diff !== undefined || (call.steps?.length ?? 0) > 0
+  const hasDetail = call.input != null || call.output !== undefined || call.diff !== undefined || (call.steps?.length ?? 0) > 0
   return (
-    <li className="relative list-none pb-5">
+    <li className={cn('relative list-none', !single && 'pb-5')}>
       {!last && <span className="absolute bottom-0 left-[11px] top-[28px] w-px bg-line-strong" />}
       <button disabled={!hasDetail} onClick={() => setOpen(!open)} className="group flex w-full items-center gap-3.5 text-left disabled:cursor-default">
         <span className={cn('relative flex size-[22px] shrink-0 items-center justify-center text-muted', call.state === 'error' && 'text-danger-fg')}>
@@ -206,15 +168,24 @@ function SubagentSteps({ steps }: { steps: string[] }) {
   )
 }
 
+function scriptOf(input: unknown) {
+  if (typeof input !== 'object' || input === null || !('code' in input)) return null
+  return typeof input.code === 'string' ? input.code : null
+}
+
+function ToolCallInput({ input }: { input: unknown }) {
+  const script = scriptOf(input)
+  if (script !== null) return <CodeBlock language="Script" code={script} />
+  return <CodeBlock language="json" code={JSON.stringify(input, null, 2)} />
+}
+
 function ToolCallDetail({ call }: { call: ToolCall }) {
-  if (call.steps && call.steps.length > 0 && call.output === undefined) {
-    return <div className="mt-3"><SubagentSteps steps={call.steps} /></div>
-  }
   const output = call.output ?? ''
   const isJson = output.trim().startsWith('{') || output.trim().startsWith('[')
   return (
     <div className="mt-3 space-y-2.5">
-      {call.input !== undefined && <CodeBlock language="json" code={JSON.stringify(call.input, null, 2)} />}
+      {call.input != null && <ToolCallInput input={call.input} />}
+      {call.steps && call.steps.length > 0 && <SubagentSteps steps={call.steps} />}
       {call.diff && <DiffView diff={call.diff} />}
       {output && <CodeBlock language={isJson ? 'json' : call.kind === 'command' ? 'Terminal' : 'Saída'} code={isJson ? prettyJson(output) : output} className={cn(call.state === 'error' && 'ring-1 ring-danger/30')} />}
     </div>
@@ -249,7 +220,39 @@ function BackgroundDone({ notice }: { notice: NonNullable<ReturnType<typeof back
   )
 }
 
+export function observerReport(text: string): { observer: string; message: string } | null {
+  const found = /^\[observer ([^\]]+)\] Your background observer \([^)]*\) sent a report:\n([\s\S]*?)(?:\n\nThis is one-way advice from an agent watching[\s\S]*)?$/.exec(text.trim())
+  if (!found) return null
+  return { observer: found[1], message: found[2].trim() }
+}
+
+function ObserverReport({ report }: { report: NonNullable<ReturnType<typeof observerReport>> }) {
+  const [open, setOpen] = useState(false)
+  const long = report.message.length > TAIL || report.message.split('\n').length > 3
+  return (
+    <div className="flex gap-2.5">
+      <Tooltip content={`Observer: ${report.observer}`}>
+        <span className="mt-[3px] flex shrink-0 text-muted">
+          <Icon name="eye" size={16} />
+        </span>
+      </Tooltip>
+      <div className="min-w-0 flex-1 text-md leading-6 text-muted">
+        <div className={cn('prose-chat prose-thought break-words', !open && 'line-clamp-3')}>
+          <ChatMarkdown text={report.message} />
+        </div>
+        {long && (
+          <button onClick={() => setOpen(!open)} className="mt-1 text-sm text-faint transition-colors hover:text-fg">
+            {open ? 'Mostrar menos' : 'Mostrar tudo'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function StatusLine({ event }: { event: Ev<'status'> }) {
+  const report = observerReport(event.text)
+  if (report) return <ObserverReport report={report} />
   const notice = backgroundNotice(event.text)
   if (notice) return <BackgroundDone notice={notice} />
   if (event.status !== 'error') return <p className="text-sm text-muted">{event.text}</p>

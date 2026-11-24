@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "TaskOutput",
   input: {
@@ -19,10 +18,6 @@ export const spec = {
   description: `Collect a background agent's report. block defaults to true; false polls without waiting.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

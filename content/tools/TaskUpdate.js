@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "TaskUpdate",
   input: {
@@ -36,10 +35,6 @@ export const spec = {
   description: `Update a task. Status is pending, in_progress or completed; a task cannot start or end while a task in its blocked_by is open. blocked_by lists the task_ids that must be completed first (each task shows the ones it blocks). owner claims a task: a task someone else holds cannot be claimed, except by the lead, and a teammate that stops hands its open tasks back.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

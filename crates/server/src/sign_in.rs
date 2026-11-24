@@ -3,8 +3,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use connectors::{
-    AccountOption, AuthSpec, Authorization, DeviceApp, DeviceCode, Grant, Loopback, OAuthApp, Polled,
-    ProviderDescriptor,
+    AccountOption, AuthSpec, Authorization, DeviceApp, DeviceCode, Grant, Loopback, Polled, ProviderDescriptor,
 };
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use serde_json::{Value, json};
@@ -18,14 +17,8 @@ use crate::state::{Shared, held};
 const FLOW_LASTS: Duration = Duration::from_secs(1800);
 
 #[derive(Debug, Clone)]
-pub enum Exchanger {
-    App(OAuthApp),
-    Loopback(Loopback),
-}
-
-#[derive(Debug, Clone)]
 pub enum Waiting {
-    Redirect { exchanger: Exchanger, authorization: Authorization },
+    Redirect { sign_in: Loopback, authorization: Authorization },
     Device { app: DeviceApp, code: DeviceCode, client: Option<connectors::RegisteredClient> },
     Ai(AiFlow),
 }
@@ -63,12 +56,20 @@ impl Flows {
         method: Option<&str>,
         fields: Value,
     ) -> ApiResult<String> {
+        self.opened(provider, Stage::Waiting(waiting), method, fields)
+    }
+
+    pub fn granted(&self, provider: &str, grant: Grant, method: Option<&str>, fields: Value) -> ApiResult<String> {
+        self.opened(provider, Stage::Granted(grant), method, fields)
+    }
+
+    fn opened(&self, provider: &str, stage: Stage, method: Option<&str>, fields: Value) -> ApiResult<String> {
         let id = random_id()?;
         let mut flows = held(&self.0);
         flows.retain(|_, flow| flow.started.elapsed() < FLOW_LASTS);
         let flow = Flow {
             provider: provider.to_owned(),
-            stage: Stage::Waiting(waiting),
+            stage,
             started: Instant::now(),
             method: method.map(str::to_owned),
             fields,
@@ -105,16 +106,15 @@ fn descriptor(shared: &Shared, provider: &str) -> ApiResult<ProviderDescriptor> 
 
 fn chosen_auth(shared: &Shared, found: &ProviderDescriptor, method: Option<&str>) -> ApiResult<AuthSpec> {
     let Some(method) = method.filter(|method| !method.is_empty()) else { return Ok(found.auth.clone()) };
-    let alternative = shared.backend.connectors.alternative(&found.key).ok().flatten();
-    let alternative = alternative.filter(|alternative| alternative.key == method);
+    let alternatives = shared.backend.connectors.alternatives(&found.key).unwrap_or_default();
+    let alternative = alternatives.iter().find(|alternative| alternative.key == method);
     alternative.map(|alternative| alternative.auth.clone()).ok_or_else(|| ApiError::bad("Não há essa forma de entrar."))
 }
 
 fn missing_client(found: &ProviderDescriptor, auth: &AuthSpec) -> Option<String> {
     let client_id = match auth {
-        AuthSpec::Redirect(app) => app.client_id.as_str(),
         AuthSpec::Device(app) => app.client_id.as_str(),
-        AuthSpec::Sso(_) | AuthSpec::Loopback(_) => return None,
+        AuthSpec::Sso(_) | AuthSpec::Loopback(_) | AuthSpec::Token(_) => return None,
     };
     client_id
         .trim()
@@ -122,7 +122,12 @@ fn missing_client(found: &ProviderDescriptor, auth: &AuthSpec) -> Option<String>
         .then(|| format!("Falta o client id do {}: preencha a seção [connectors] do config.toml.", found.name))
 }
 
-pub async fn start(shared: &crate::state::Ctx, provider: &str, fields: &Value, method: Option<&str>) -> ApiResult<Value> {
+pub async fn start(
+    shared: &crate::state::Ctx,
+    provider: &str,
+    fields: &Value,
+    method: Option<&str>,
+) -> ApiResult<Value> {
     let found = descriptor(shared, provider)?;
     let auth = chosen_auth(shared, &found, method)?;
     if let Some(told) = missing_client(&found, &auth) {
@@ -130,19 +135,15 @@ pub async fn start(shared: &crate::state::Ctx, provider: &str, fields: &Value, m
     }
     let http = shared.backend.connectors.http();
     let opened = |waiting: Waiting| shared.flows.open_with(provider, waiting, method, fields.clone());
-    let redirect = |exchanger: Exchanger, authorization: Authorization| -> ApiResult<Value> {
-        let url = authorization.url.clone();
-        let flow = opened(Waiting::Redirect { exchanger, authorization })?;
-        Ok(json!({ "flow": flow, "kind": "redirect", "url": url, "paste": false, "returns": true }))
-    };
     match &auth {
-        AuthSpec::Redirect(app) => redirect(Exchanger::App(app.clone()), app.begin(shared.port)?),
         AuthSpec::Loopback(sign_in) => {
             if let Some(port) = sign_in.0.callback_port().filter(|port| *port != shared.port) {
                 crate::callback_port::open(shared, port).await?;
             }
             let authorization = sign_in.0.begin(http, shared.port).await?;
-            redirect(Exchanger::Loopback(sign_in.clone()), authorization)
+            let url = authorization.url.clone();
+            let flow = opened(Waiting::Redirect { sign_in: sign_in.clone(), authorization })?;
+            Ok(json!({ "flow": flow, "kind": "redirect", "url": url, "paste": false, "returns": true }))
         }
         AuthSpec::Device(app) => device(shared, app.clone(), None, &opened).await,
         AuthSpec::Sso(spec) => {
@@ -154,6 +155,11 @@ pub async fn start(shared: &crate::state::Ctx, provider: &str, fields: &Value, m
             let client = connectors::oauth::register_client(http, &spec).await?;
             let app = spec.device_for(&client, start_url);
             device(shared, app, Some(client), &opened).await
+        }
+        AuthSpec::Token(spec) => {
+            let token = spec.access_token(fields).map_err(ApiError::bad)?;
+            let flow = shared.flows.granted(provider, Grant::bearer(&token), method, Value::Null)?;
+            Ok(json!({ "flow": flow, "kind": "token" }))
         }
     }
 }
@@ -189,18 +195,14 @@ pub fn refused(shared: &Shared, state: &str, told: &str) -> ApiResult<String> {
 
 pub async fn callback(shared: &Shared, state: &str, code: &str) -> ApiResult<String> {
     let id = shared.flows.by_state(state).ok_or_else(|| ApiError::missing("Essa entrada expirou."))?;
-    let Some(Flow { provider, stage: Stage::Waiting(Waiting::Redirect { exchanger, authorization }), .. }) =
+    let Some(Flow { provider, stage: Stage::Waiting(Waiting::Redirect { sign_in, authorization }), .. }) =
         shared.flows.get(&id)
     else {
         return Err(ApiError::missing("Essa entrada expirou."));
     };
     let http = shared.backend.connectors.http();
     let now = jiff::Timestamp::now();
-    let exchanged = match exchanger {
-        Exchanger::App(app) => app.exchange(http, &authorization, state, code, now).await,
-        Exchanger::Loopback(sign_in) => sign_in.finish(http, &authorization, state, code, now).await,
-    };
-    match exchanged {
+    match sign_in.finish(http, &authorization, state, code, now).await {
         Ok(grant) => shared.flows.set(&id, Stage::Granted(grant)),
         Err(error) => shared.flows.set(&id, Stage::Failed(error.message)),
     }

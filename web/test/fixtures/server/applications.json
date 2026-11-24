@@ -9,11 +9,11 @@
           "repo": "acme/web"
         },
         "directory": "/projetos/web",
-        "e2e": [
-          "npx playwright test"
-        ],
         "id": "repo-0-0",
-        "run": "bun dev",
+        "run": [
+          "bun api",
+          "bun web"
+        ],
         "verify": [
           "bun test"
         ]
@@ -21,13 +21,13 @@
       {
         "code": null,
         "directory": "/projetos/api",
-        "e2e": [],
         "id": "repo-0-1",
-        "run": "",
+        "run": [],
         "verify": []
       }
     ],
     "skipDependabot": true,
+    "tests": null,
     "tracker": {
       "connection": "c1",
       "project": "APP"

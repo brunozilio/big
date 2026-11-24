@@ -61,6 +61,10 @@ impl HttpRequest {
         self.header("authorization", format!("Bearer {token}"))
     }
 
+    pub fn authorized(self, token: &str) -> HttpRequest {
+        if token.starts_with("Basic ") { self.header("authorization", token.to_owned()) } else { self.bearer(token) }
+    }
+
     pub fn body(mut self, content_type: &str, body: Vec<u8>) -> HttpRequest {
         self.body = body;
         self.header("content-type", content_type)

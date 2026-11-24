@@ -26,9 +26,23 @@ describe('respostas reais do servidor', () => {
     expect(isSession(load('session'))).toBe(true)
   })
 
+  test('resumo, aviso e sugestão seguem o contrato', () => {
+    const item = load('item') as Record<string, unknown>
+    expect(item.recap === null || typeof item.recap === 'string').toBe(true)
+    expect(isItem({ ...item, recap: 'Espera sua revisão do PR.' })).toBe(true)
+    expect(isItem({ ...item, recap: 3 })).toBe(false)
+    const step = load('step') as Record<string, unknown>
+    expect(isStepView({ ...step, headsUp: { title: 'Migração', explain: 'Altera tabelas.', urgent: true } })).toBe(true)
+    expect(isStepView({ ...step, headsUp: { title: 'Migração' } })).toBe(false)
+    const session = load('session') as Record<string, unknown>
+    expect(isSession({ ...session, suggestion: 'Rode os testes de novo' })).toBe(true)
+    expect(isSession({ ...session, suggestion: false })).toBe(false)
+  })
+
   test('feed ao vivo', () => {
     expect(isLiveEvent(load('live-item'))).toBe(true)
     expect(isLiveEvent(load('live-session-status'))).toBe(true)
+    expect(isLiveEvent(load('live-session-suggestion'))).toBe(true)
   })
 
   test('conexões, modelos e marca', () => {
@@ -58,7 +72,7 @@ describe('respostas reais do servidor', () => {
       expect(typeof a.id === 'string' && typeof a.name === 'string' && Array.isArray(a.repositories)).toBe(true)
       expect(a.tracker === null || (typeof a.tracker.connection === 'string' && typeof a.tracker.project === 'string')).toBe(true)
       for (const r of a.repositories) {
-        expect(typeof r.id === 'string' && typeof r.directory === 'string' && typeof r.run === 'string' && Array.isArray(r.verify) && Array.isArray(r.e2e)).toBe(true)
+        expect(typeof r.id === 'string' && typeof r.directory === 'string' && Array.isArray(r.run) && Array.isArray(r.verify)).toBe(true)
         expect(r.code === null || (typeof r.code.connection === 'string' && typeof r.code.repo === 'string')).toBe(true)
       }
     }

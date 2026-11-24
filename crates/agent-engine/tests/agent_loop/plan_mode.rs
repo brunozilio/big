@@ -114,25 +114,6 @@ fn exit_plan_mode_outside_planning_asks_nothing() {
 }
 
 #[test]
-fn entering_plan_mode_makes_the_agent_read_only() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
-    let model = ScriptedModel::new([
-        ScriptedModel::reply(vec![tool_use("e", "EnterPlanMode", json!({}))]),
-        ScriptedModel::reply(vec![tool_use("w", "Write", json!({"file_path": "out.txt", "content": "x"}))]),
-        ScriptedModel::reply(vec![Block::Text("Planning.".into())]),
-    ]);
-    let mut history = vec![Message::user("this is big")];
-    rig.run(&model, &mut history).expect("run");
-
-    assert_eq!(rig.control.mode(), PermissionMode::Plan);
-    assert!(rig.events().contains(&EngineEvent::ModeChanged(PermissionMode::Plan)));
-    assert!(!rig.dir.path().join("out.txt").exists());
-    let results = results(&history);
-    assert!(!results[0].1, "{results:?}");
-    assert!(results[1].1, "Write is refused once planning: {results:?}");
-}
-
-#[test]
 fn planning_runs_commands_without_asking_but_still_refuses_writes() {
     let rig = Rig::new(PermissionMode::Plan);
     let model = ScriptedModel::new([

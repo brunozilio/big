@@ -70,7 +70,7 @@ fn cancelling_while_an_edit_waits_for_permission_ends_in_cancelled_and_saves_the
         == prompt: conversation ==
         user:
           text "Write the file"
-          reminder "# Runtime reminder\nAsk mode: tool actions require the permissions enforced by the runtime. Respect denials and do not bypass them.\nCollect background agent reports be…
+          reminder "# Runtime reminder\nCollect background agent reports before completing. Use TaskStop to cancel an unnecessary task."
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
         user:

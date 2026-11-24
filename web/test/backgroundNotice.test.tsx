@@ -17,6 +17,6 @@ describe('aviso de tarefa em segundo plano', () => {
   })
 
   test('outro aviso continua como texto', () => {
-    expect(backgroundNotice('Auto: claude, medium effort')).toBeNull()
+    expect(backgroundNotice('Contexto resumido para continuar')).toBeNull()
   })
 })

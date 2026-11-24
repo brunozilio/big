@@ -15,7 +15,7 @@
   ],
   "providers": [
     {
-      "alternative": null,
+      "alternatives": [],
       "button": "Entrar com Fake",
       "description": "Sua conta Fake",
       "fields": [],
@@ -28,7 +28,7 @@
       "site": "do Fake"
     },
     {
-      "alternative": null,
+      "alternatives": [],
       "button": "Entrar com Picky",
       "description": "Sua conta Picky",
       "fields": [],
@@ -41,7 +41,25 @@
       "site": "do Picky"
     },
     {
-      "alternative": null,
+      "alternatives": [
+        {
+          "button": "Conectar",
+          "fields": [
+            {
+              "help": "Gere o token.",
+              "kind": "text",
+              "label": "API token",
+              "mono": true,
+              "name": "token",
+              "secret": true
+            }
+          ],
+          "key": "api_token",
+          "label": "Usar API token",
+          "signIn": "token",
+          "site": "da Web"
+        }
+      ],
       "button": "Entrar com Web",
       "description": "Sua conta Web",
       "fields": [],
@@ -55,7 +73,7 @@
     },
     {
       "ai": true,
-      "alternative": null,
+      "alternatives": [],
       "button": "Entrar com Claude",
       "description": "Sua conta Claude",
       "fields": [],
@@ -69,7 +87,7 @@
     },
     {
       "ai": true,
-      "alternative": null,
+      "alternatives": [],
       "button": "Entrar com ChatGPT",
       "description": "Sua conta ChatGPT",
       "fields": [],
@@ -83,7 +101,7 @@
     },
     {
       "ai": true,
-      "alternative": null,
+      "alternatives": [],
       "button": "Entrar com GitHub Copilot",
       "description": "Sua conta GitHub Copilot",
       "fields": [],
@@ -97,7 +115,7 @@
     },
     {
       "ai": true,
-      "alternative": null,
+      "alternatives": [],
       "button": "Entrar com Grok",
       "description": "Sua conta Grok",
       "fields": [],
@@ -111,7 +129,7 @@
     },
     {
       "ai": true,
-      "alternative": null,
+      "alternatives": [],
       "button": "Entrar com Kiro",
       "description": "Sua conta Kiro",
       "fields": [],
@@ -125,7 +143,7 @@
     },
     {
       "ai": true,
-      "alternative": null,
+      "alternatives": [],
       "button": "Entrar com Antigravity",
       "description": "Sua conta Antigravity",
       "fields": [],

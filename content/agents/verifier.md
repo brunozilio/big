@@ -2,10 +2,10 @@
 name: verifier
 label: Verificador
 description: Verifica a branch de um item contra os critérios de aceite. Roda o que precisar para provar cada um e devolve aprovado ou reprovado, com o motivo. Não muda código.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, LSP, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, LSP, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ListSessions, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
 disallowedTools: [Edit, Write, NotebookEdit]
 permissionMode: bypass
-model: auto
+observer: [observer]
 skills: [verify, run]
 avatar:
   shape: pill

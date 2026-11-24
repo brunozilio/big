@@ -17,7 +17,7 @@ use rusqlite::{Connection, Transaction, TransactionBehavior};
 pub use applications::{Application, CodeChoice, Repository, TrackerChoice};
 pub use connections::ConnectionRecord;
 pub use error::Error;
-pub use factory::{Generation, GenerationReport};
+pub use factory::Generation;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

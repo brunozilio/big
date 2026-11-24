@@ -55,8 +55,6 @@ pub enum Title {
     Partial,
     Diagnosed,
     Mode,
-    Moved,
-    Verified,
     Reviewed,
     Notified,
     Notice,
@@ -72,8 +70,6 @@ impl Title {
             Self::Partial => "partial",
             Self::Diagnosed => "diagnosed",
             Self::Mode => "mode",
-            Self::Moved => "moved",
-            Self::Verified => "verified",
             Self::Reviewed => "reviewed",
             Self::Notified => "notified",
             Self::Notice => "notice",
@@ -105,6 +101,6 @@ mod tests {
         }
         assert_eq!(Mark::of("something else"), None);
         assert_eq!(Mark::Refused("x".into()).title(), Title::Refused);
-        assert_eq!(serde_json::to_value(Title::Verified).expect("written"), serde_json::json!("verified"));
+        assert_eq!(serde_json::to_value(Title::Reviewed).expect("written"), serde_json::json!("reviewed"));
     }
 }

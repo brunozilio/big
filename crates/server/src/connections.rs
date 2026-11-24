@@ -27,7 +27,7 @@ fn group(descriptor: &ProviderDescriptor) -> &'static str {
 
 fn sign_in_of(auth: &AuthSpec) -> (&'static str, Value) {
     match auth {
-        AuthSpec::Redirect(_) | AuthSpec::Loopback(_) => ("oauth", json!([])),
+        AuthSpec::Loopback(_) => ("oauth", json!([])),
         AuthSpec::Device(_) => ("device", json!([])),
         AuthSpec::Sso(spec) => {
             let start = json!({
@@ -37,6 +37,20 @@ fn sign_in_of(auth: &AuthSpec) -> (&'static str, Value) {
             let region =
                 json!({ "name": "region", "label": "Região", "kind": "text", "mono": true, "value": spec.region });
             ("sso", json!([start, region]))
+        }
+        AuthSpec::Token(spec) => {
+            let fields: Vec<Value> = spec
+                .fields
+                .iter()
+                .map(|field| {
+                    let help = (!field.help.is_empty()).then_some(&field.help);
+                    json!({
+                        "name": field.name, "label": field.label, "kind": "text", "mono": true,
+                        "secret": field.secret, "help": help,
+                    })
+                })
+                .collect();
+            ("token", Value::Array(fields))
         }
     }
 }
@@ -49,13 +63,18 @@ fn provider_json(shared: &Shared, descriptor: &ProviderDescriptor) -> Value {
     let connectors = &shared.backend.connectors;
     let look = connectors.presentation(&descriptor.key).cloned().unwrap_or_default();
     let (sign_in, fields) = sign_in_of(&descriptor.auth);
-    let alternative = connectors.alternative(&descriptor.key).ok().flatten().map(|alternative| {
-        let (sign_in, fields) = sign_in_of(&alternative.auth);
-        json!({
-            "key": alternative.key, "label": alternative.label, "button": alternative.button, "site": alternative.site,
-            "signIn": sign_in, "fields": fields,
+    let alternatives: Vec<Value> = connectors
+        .alternatives(&descriptor.key)
+        .unwrap_or_default()
+        .iter()
+        .map(|alternative| {
+            let (sign_in, fields) = sign_in_of(&alternative.auth);
+            json!({
+                "key": alternative.key, "label": alternative.label, "button": alternative.button,
+                "site": alternative.site, "signIn": sign_in, "fields": fields,
+            })
         })
-    });
+        .collect();
     json!({
         "key": descriptor.key.as_str(), "name": descriptor.name,
         "group": or(&look.group, group(descriptor).to_owned()),
@@ -63,7 +82,7 @@ fn provider_json(shared: &Shared, descriptor: &ProviderDescriptor) -> Value {
         "button": or(&look.button, format!("Entrar com {}", descriptor.name)),
         "site": or(&look.site, format!("do {}", descriptor.name)),
         "logo": logo(&descriptor.logo), "signIn": sign_in, "fields": fields, "multiple": true,
-        "alternative": alternative,
+        "alternatives": alternatives,
     })
 }
 

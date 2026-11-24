@@ -50,23 +50,6 @@ impl MemoryCommand {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum VerificationCommand {
-    Show,
-    Clear,
-    Set(String),
-}
-
-impl VerificationCommand {
-    pub fn parse(argument: Option<String>) -> Self {
-        match argument {
-            None => Self::Show,
-            Some(text) if text.eq_ignore_ascii_case("off") => Self::Clear,
-            Some(text) => Self::Set(text),
-        }
-    }
-}
-
 impl McpCommand {
     pub(super) fn parse(argument: Option<&str>) -> Option<Self> {
         let Some(argument) = argument else { return Some(Self::List) };

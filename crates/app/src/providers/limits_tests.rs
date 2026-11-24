@@ -32,7 +32,13 @@ fn every_account_is_listed_without_turning_the_rotation() {
 fn each_account_answers_on_its_own_and_one_failing_spoils_none_of_the_others() {
     let usage = PlanUsage {
         plan: Some("Max".into()),
-        windows: vec![PlanWindow { id: "w".into(), label: "W".into(), used_percent: 5.0, resets_at: None, starts_at: None }],
+        windows: vec![PlanWindow {
+            id: "w".into(),
+            label: "W".into(),
+            used_percent: 5.0,
+            resets_at: None,
+            starts_at: None,
+        }],
     };
     let accounts = ["ok", "none", "bad"].map(|label| (KEYED, label.to_owned(), ProviderKey::new(label)));
     let answer = usage.clone();

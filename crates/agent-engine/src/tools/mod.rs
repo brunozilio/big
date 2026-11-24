@@ -35,7 +35,6 @@ pub mod task;
 pub mod tool_search;
 pub mod watch;
 mod workspace;
-pub mod worktree;
 
 use std::path::Path;
 
@@ -46,8 +45,7 @@ pub use llm_providers::web_search::WEB_SEARCH;
 pub use lsp::Lsp;
 pub(crate) use outside::settled;
 pub use workspace::{
-    Launch, Launcher, Models, Network, OnThisMachine, Policy, Starter, Verification, WebSearcher, Workspace,
-    env_secrets,
+    Launch, Launcher, Models, Network, OnThisMachine, Policy, Starter, WebSearcher, Workspace, env_secrets,
 };
 
 use crate::model::ToolSpec;
@@ -132,10 +130,6 @@ pub trait Tool: Send + Sync {
         false
     }
 
-    fn consult(&self, _input: &Value, _workspace: &Workspace, _agent: &Consult<'_>) -> Option<Outcome> {
-        None
-    }
-
     fn script(&self) -> Option<&script_tool::ScriptTool> {
         None
     }
@@ -152,10 +146,7 @@ pub trait Tool: Send + Sync {
 pub fn standard() -> Vec<Box<dyn Tool>> {
     let features: Vec<Box<dyn Tool>> = vec![
         Box::new(ask::AskUserQuestion),
-        Box::new(plan_mode::EnterPlanMode),
         Box::new(plan_mode::ExitPlanMode),
-        Box::new(worktree::EnterWorktree),
-        Box::new(worktree::ExitWorktree),
         Box::new(peers::ListSessions),
         Box::new(watch::Watch),
     ];

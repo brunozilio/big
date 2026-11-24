@@ -11,8 +11,7 @@ when_to_use: |-
 - **Level.** The first argument, if it is `low`, `medium`, `xhigh` or `max`,
   picks the recipe: Read that level's file (`low.md`, `medium.md`,
   `xhigh.md`, `max.md`) in this skill's base directory and follow it instead
-  of the recipe below. `high`, or no level, runs the recipe below (the same
-  as `high.md`).
+  of the recipe below. `high`, or no level, runs the recipe below.
 - **Target.** What follows the level (a PR number, branch name or path) is
   the review target.
 - **`--max-findings <n>`** replaces the level's cap on reported findings for

@@ -2,10 +2,15 @@
 name: release
 label: Release
 description: Roda depois do deploy de uma mudança mergeada. Escreve as notas da release, confere o que foi para produção e, quando a release falha, diagnostica a causa pelo log do pipeline e pela conta de nuvem. Só lê.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, WebFetch, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ScheduleWakeup, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, WebFetch, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ListSessions, ScheduleWakeup, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
 disallowedTools: [Edit, Write, NotebookEdit]
 permissionMode: plan
-model: auto
+observer: [observer]
+outputSchema:
+  type: object
+  properties:
+    notes: { type: string }
+  required: [notes]
 skills: []
 avatar:
   shape: cloud

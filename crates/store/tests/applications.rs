@@ -12,18 +12,10 @@ fn application(id: &str, name: &str) -> Application {
                 id: "r1".into(),
                 code: Some(CodeChoice { connection: "c-code".into(), repo: "acme/web".into() }),
                 directory: "/src/web".into(),
-                run: "bun dev".into(),
+                run: vec!["bun dev".into()],
                 verify: vec!["bun test".into(), "bun run lint".into()],
-                e2e: vec!["npx playwright test".into()],
             },
-            Repository {
-                id: "r2".into(),
-                code: None,
-                directory: "/src/api".into(),
-                run: String::new(),
-                verify: vec![],
-                e2e: vec![],
-            },
+            Repository { id: "r2".into(), code: None, directory: "/src/api".into(), run: vec![], verify: vec![] },
         ],
     }
 }
@@ -60,11 +52,14 @@ fn an_item_keeps_the_workflow_code_it_was_pinned_to() {
 }
 
 #[test]
-fn a_repository_saved_before_e2e_existed_reads_with_no_e2e_commands() {
-    let old = r#"{ "directory": "/src/web", "verify": ["bun test"] }"#;
+fn a_repository_saved_with_a_single_run_command_reads_it_as_a_list() {
+    let old =
+        r#"{ "directory": "/src/web", "run": "bun dev", "verify": ["bun test"], "e2e": ["npx playwright test"] }"#;
     let found: Repository = serde_json::from_str(old).expect("parsed");
-    assert!(found.e2e.is_empty());
+    assert_eq!(found.run, ["bun dev"]);
     assert_eq!(found.verify, ["bun test"]);
+    let blank: Repository = serde_json::from_str(r#"{ "directory": "/src/web", "run": "" }"#).expect("blank");
+    assert!(blank.run.is_empty());
 }
 
 #[test]

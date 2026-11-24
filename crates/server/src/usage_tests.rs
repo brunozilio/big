@@ -76,3 +76,42 @@ fn the_report_names_providers_and_counts_every_day() {
     assert_eq!(listed["byAccount"][0]["id"], "claude-subscription:fulano@x.com");
     assert_eq!(listed["byModel"][0]["name"], "claude-opus-4-5");
 }
+
+fn unpriced(model: &str, provider: &str) -> EngineEvent {
+    EngineEvent::Usage(ModelUsage {
+        model: model.into(),
+        input: 1_000_000,
+        output: 1_000_000,
+        provider: provider.into(),
+        ..ModelUsage::default()
+    })
+}
+
+fn cost_of(event: &EngineEvent) -> Option<f64> {
+    match event {
+        EngineEvent::Usage(usage) => usage.estimated_cost_usd,
+        EngineEvent::AgentEvent { event, .. } => cost_of(event),
+        _ => None,
+    }
+}
+
+#[test]
+fn a_call_recorded_without_a_price_is_priced_from_its_tokens() {
+    let mut served = unpriced("openai-subscription:gpt-5.6-terra", "openai-subscription");
+    priced(&mut served);
+    assert!(cost_of(&served).is_some_and(|cost| cost > 0.0));
+    let mut inferred =
+        EngineEvent::AgentEvent { index: 1, event: Box::new(unpriced("openai-subscription:gpt-5.6-terra", "")) };
+    priced(&mut inferred);
+    assert_eq!(cost_of(&inferred), cost_of(&served));
+}
+
+#[test]
+fn a_recorded_price_is_kept_and_an_unknown_model_stays_unpriced() {
+    let mut kept = EngineEvent::Usage(ModelUsage { estimated_cost_usd: Some(0.5), ..ModelUsage::default() });
+    priced(&mut kept);
+    assert_eq!(cost_of(&kept), Some(0.5));
+    let mut unknown = unpriced("modelo-sem-preco", "nenhum");
+    priced(&mut unknown);
+    assert_eq!(cost_of(&unknown), None);
+}

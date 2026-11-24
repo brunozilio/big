@@ -5,17 +5,17 @@ use super::*;
 fn project_overrides_user_and_claude_settings_are_not_read() {
     let home = tempfile::tempdir().expect("valid test fixture");
     let repo = tempfile::tempdir().expect("valid test fixture");
-    for (root, style) in [
-        (home.path().join(brand::DIR), "Explanatory"),
-        (repo.path().join(brand::DIR), "Concise"),
-        (repo.path().join(".claude"), "Learning"),
+    for (root, model) in [
+        (home.path().join(brand::DIR), "user-small"),
+        (repo.path().join(brand::DIR), "project-small"),
+        (repo.path().join(".claude"), "claude-small"),
     ] {
         std::fs::create_dir_all(&root).expect("valid test fixture");
-        std::fs::write(root.join("settings.json"), serde_json::json!({"outputStyle":style}).to_string())
+        std::fs::write(root.join("settings.json"), serde_json::json!({"smallModel":model}).to_string())
             .expect("valid test fixture");
     }
     let config = load(repo.path(), Some(home.path())).expect("valid test fixture");
-    assert_eq!(config.style.expect("valid test fixture").name, "Concise");
+    assert_eq!(config.small_model.as_deref(), Some("project-small"));
 }
 
 #[test]
@@ -32,48 +32,30 @@ fn managed_settings_in_the_home_have_the_last_word_over_the_project() {
 }
 
 #[test]
-fn custom_style_controls_coding_instructions_and_rejects_paths() {
-    let repo = tempfile::tempdir().expect("valid test fixture");
-    let root = repo.path().join(brand::DIR);
-    std::fs::create_dir_all(root.join("output-styles")).expect("valid test fixture");
-    std::fs::write(root.join("settings.json"), r#"{"outputStyle":"review"}"#).expect("valid test fixture");
-    std::fs::write(
-        root.join("output-styles/review.md"),
-        "---\nkeep-coding-instructions: false\n---\nReturn review findings.",
-    )
-    .expect("valid test fixture");
-    let style = load(repo.path(), None).expect("valid test fixture").style.expect("valid test fixture");
-    assert!(!style.keep_coding);
-    assert_eq!(style.instructions, "Return review findings.");
-    std::fs::write(root.join("settings.json"), r#"{"outputStyle":"../private"}"#).expect("valid test fixture");
-    assert!(load(repo.path(), None).is_err());
-}
-
-#[test]
-fn judge_and_fallback_models_are_model_names() {
+fn small_and_fallback_models_are_model_names() {
     let repo = tempfile::tempdir().expect("repo");
     let root = repo.path().join(brand::DIR);
     std::fs::create_dir_all(&root).expect("dir");
     std::fs::write(
         root.join("settings.json"),
-        r#"{"judgeModel":"claude-haiku-5-5","fallbackModel":"claude-sonnet-5-5"}"#,
+        r#"{"smallModel":"claude-haiku-5-5","fallbackModel":"claude-sonnet-5-5"}"#,
     )
     .expect("write");
     let settings = load(repo.path(), None).expect("settings");
-    assert_eq!(settings.judge.as_deref(), Some("claude-haiku-5-5"));
+    assert_eq!(settings.small_model.as_deref(), Some("claude-haiku-5-5"));
     assert_eq!(settings.fallbacks, ["claude-sonnet-5-5"]);
     std::fs::write(root.join("settings.json"), r#"{"fallbackModel":["chatgpt:a","kiro:b"]}"#).expect("write");
     assert_eq!(load(repo.path(), None).expect("settings").fallbacks, ["chatgpt:a", "kiro:b"]);
-    std::fs::write(root.join("settings.json"), r#"{"judgeModel":"two words"}"#).expect("write");
+    std::fs::write(root.join("settings.json"), r#"{"smallModel":"two words"}"#).expect("write");
     let skipped = load(repo.path(), None).expect("a project's file that does not read is skipped");
-    assert_eq!(skipped.judge, None);
+    assert_eq!(skipped.small_model, None);
     assert!(skipped.notices.iter().any(|notice| notice.contains("must be a model name")), "{:?}", skipped.notices);
     std::fs::write(root.join("settings.json"), r#"{"fallbackModel":["ok","two words"]}"#).expect("write");
     assert!(load(repo.path(), None).expect("skipped").fallbacks.is_empty());
 
     let home = tempfile::tempdir().expect("home");
     std::fs::create_dir_all(home.path().join(brand::DIR)).expect("dir");
-    std::fs::write(home.path().join(brand::DIR).join("settings.json"), r#"{"judgeModel":"two words"}"#).expect("write");
+    std::fs::write(home.path().join(brand::DIR).join("settings.json"), r#"{"smallModel":"two words"}"#).expect("write");
     assert!(load(repo.path(), Some(home.path())).is_err(), "the owner's own file still stops the run");
 }
 

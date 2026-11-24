@@ -15,7 +15,6 @@ pub(crate) struct Tracking {
     pub(crate) seen_files: Arc<SeenFiles>,
     pub(crate) seen_rules: Arc<Mutex<HashSet<PathBuf>>>,
     pub(crate) seen_memories: Arc<Mutex<HashSet<domain::MemoryId>>>,
-    pub(crate) shells: Mutex<Vec<String>>,
 }
 
 impl Tracking {
@@ -50,14 +49,6 @@ impl Tracking {
 
     pub(crate) fn refusals_stop(&self) -> Option<String> {
         self.refusals.locked().stop()
-    }
-
-    pub(crate) fn started_shell(&self, id: &str) {
-        self.shells.locked().push(id.to_owned());
-    }
-
-    pub(crate) fn started_shells(&self) -> Vec<String> {
-        self.shells.locked().clone()
     }
 
     pub(crate) fn rule_instructions(&self, rules: &[Rule]) -> String {

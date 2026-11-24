@@ -112,8 +112,6 @@ impl Builder<'_> {
             }
             EngineEvent::Diagnosed(problem) => self.note(at, Title::Diagnosed, format!("{problem:?}")),
             EngineEvent::ModeChanged(mode) => self.note(at, Title::Mode, format!("{mode:?}")),
-            EngineEvent::Moved(path) => self.note(at, Title::Moved, path.display().to_string()),
-            EngineEvent::Verified(verdict) => self.verified(at, &verdict),
             EngineEvent::Reviewed(findings) => self.reviewed(at, &findings),
             EngineEvent::Answered { ask, decision } => self.answered(at, &ask, &decision),
             EngineEvent::Repeated { tool } => self.mark(at, &tool, Mark::Repeated),

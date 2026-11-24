@@ -116,7 +116,7 @@ impl Run {
     }
 
     fn observe(&mut self, event: &EngineEvent) {
-        self.carried.locked().observe(&mut self.watch, event);
+        self.carried.locked().observe(&self.watch, event);
         self.done = event.is_terminal();
     }
 

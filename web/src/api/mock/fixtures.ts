@@ -2,18 +2,42 @@ import type { Agent, Model, Person, Provider, Usage, UsageDays, UsageLimits } fr
 import type { ConnectionState, Need } from './sim'
 
 export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]; paste?: boolean; choose?: { title: string; options: { id: string; label: string; detail: string }[] } })[] = [
-  { key: 'github', name: 'GitHub', group: 'Código', description: 'Sua conta GitHub', logo: 'github', button: 'Entrar com GitHub', site: 'do GitHub', signIn: 'device', fields: [], multiple: true, capabilities: ['code'], accounts: ['acme · 1 repositório'], choose: { title: 'Organização', options: [{ id: 'acme', label: 'acme', detail: 'acme/checkout, acme/web, acme/infra' }] } },
-  { key: 'jira', name: 'Jira', group: 'Tarefas', description: 'Sua conta Atlassian', logo: 'jira', button: 'Continuar na Atlassian', site: 'da Atlassian', signIn: 'oauth', fields: [], multiple: true, capabilities: ['tracker'], accounts: ['acme.atlassian.net'], choose: { title: 'Site do Jira', options: [{ id: 'acme', label: 'acme.atlassian.net', detail: 'Projetos APP, OPS' }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: 'Projeto LAB' }] } },
+  { key: 'github', name: 'GitHub', group: 'Código', description: 'Sua conta GitHub', logo: 'github', button: 'Entrar com GitHub', site: 'do GitHub', signIn: 'device', fields: [], multiple: true, capabilities: ['code'],
+    alternatives: [{
+      key: 'api_token', label: 'Usar personal access token', button: 'Conectar', site: 'do GitHub', signIn: 'token',
+      fields: [{ name: 'token', label: 'Personal access token do GitHub', kind: 'text', mono: true, secret: true, help: 'No GitHub, abra Settings, Developer settings, Personal access tokens e gere um token com acesso aos repositórios, à organização e aos workflows.' }],
+    }], accounts: ['acme · 1 repositório'], choose: { title: 'Organização', options: [{ id: 'acme', label: 'acme', detail: 'acme/checkout, acme/web, acme/infra' }] } },
+  { key: 'jira', name: 'Jira', group: 'Tarefas', description: 'Sua conta Atlassian', logo: 'jira', button: 'Continuar na Atlassian', site: 'da Atlassian', signIn: 'oauth', fields: [], multiple: true, capabilities: ['tracker'],
+    alternatives: [{
+      key: 'api_token', label: 'Usar API token', button: 'Conectar', site: 'da Atlassian', signIn: 'token',
+      fields: [
+        { name: 'email', label: 'E-mail da conta Atlassian', kind: 'text', mono: true },
+        { name: 'token', label: 'API token da Atlassian', kind: 'text', mono: true, secret: true, help: 'Em id.atlassian.com, abra Segurança e crie um API token. O admin da organização precisa permitir API token no Rovo MCP server.' },
+      ],
+    }], accounts: ['acme.atlassian.net'], choose: { title: 'Site do Jira', options: [{ id: 'acme', label: 'acme.atlassian.net', detail: 'Projetos APP, OPS' }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: 'Projeto LAB' }] } },
   {
     key: 'aws', name: 'AWS', group: 'Nuvem', description: 'Sua conta AWS', logo: 'aws', button: 'Entrar com AWS', site: 'da AWS', signIn: 'oauth', fields: [], multiple: true, capabilities: ['cloud'], accounts: ['papel deploy · us-east-1'],
-    alternative: {
+    alternatives: [{
       key: 'sso', label: 'Usar SSO da empresa', button: 'Continuar', site: 'do AWS IAM Identity Center', signIn: 'sso',
       fields: [
         { name: 'start_url', label: 'Start URL do IAM Identity Center', kind: 'text', value: 'https://acme.awsapps.com/start', mono: true },
         { name: 'region', label: 'Região', kind: 'text', value: 'us-east-1', mono: true },
       ],
-    },
+    }, {
+      key: 'access_keys', label: 'Usar access key', button: 'Conectar', site: 'da AWS', signIn: 'token',
+      fields: [
+        { name: 'accessKeyId', label: 'Access key ID', kind: 'text', mono: true },
+        { name: 'secretAccessKey', label: 'Secret access key', kind: 'text', mono: true, secret: true, help: 'No IAM, abra o usuário, Security credentials, e crie uma access key.' },
+      ],
+    }],
     choose: { title: 'Conta e papel', options: [{ id: 'prod', label: 'acme-prod · 1234-5678-9012', detail: 'DeployRole' }, { id: 'stg', label: 'acme-staging · 2109-8765-4321', detail: 'DeployRole' }] },
+  },
+  {
+    key: 'zephyr', name: 'Zephyr', group: 'Testes', description: 'Sua conta Zephyr Scale', logo: 'jira', button: 'Continuar na SmartBear', site: 'da SmartBear', signIn: 'oauth', fields: [], multiple: true, capabilities: ['tests'], accounts: ['Zephyr Scale'],
+    alternatives: [{
+      key: 'api_token', label: 'Usar API token', button: 'Conectar', site: 'do Zephyr', signIn: 'token',
+      fields: [{ name: 'token', label: 'API token do Zephyr', kind: 'text', mono: true, secret: true, help: 'No Jira, abra ⚙ → Configurações gerais → Apps → Zephyr API Access Tokens e clique em Gerar token de acesso.' }],
+    }],
   },
   { key: 'claude', name: 'Claude', group: 'Provedores de IA', description: 'Sua conta Claude', logo: 'claude', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Claude Team · ti@acme.com.br'] },
   { key: 'chatgpt', name: 'ChatGPT', group: 'Provedores de IA', description: 'Sua conta ChatGPT', logo: 'chatgpt', signIn: 'browser', paste: true, fields: [], multiple: false, capabilities: ['ai'], accounts: ['ChatGPT Business · ti@acme.com.br'] },

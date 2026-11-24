@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "SendMessage",
   input: {
@@ -45,10 +44,6 @@ export const spec = {
 - \`to\` can also name another of the user's open sessions (ListSessions lists them): the message waits in its inbox and reaches its agent; any answer comes back to you as an event.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

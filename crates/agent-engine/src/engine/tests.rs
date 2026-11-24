@@ -8,7 +8,6 @@ use super::stop::Stop;
 use super::*;
 use crate::boundary::EventSink;
 use crate::checkpoints::Checkpoint;
-use crate::model::TurnRequest;
 use crate::model::scripted::ScriptedModel;
 use crate::sessions::{Entry, InMemorySessions};
 use crate::transcript::{Block, Message};
@@ -284,32 +283,4 @@ fn a_cancelled_run_ends_as_cancelled_however_it_stopped() {
     for stop in [Stop::failed("no"), Stop::completed(None), signed_out()] {
         assert_eq!(ended(stop, true), [EngineEvent::Cancelled]);
     }
-}
-
-#[test]
-fn a_pick_of_the_small_model_switches_the_run_to_it_and_forgets_the_old_model_s_limits() {
-    let judge = said(r#"{"tier":"small","effort":"low"}"#);
-    let mut staged = staged(None, |request| request.prompt.text = "rename x to y".into());
-    let mut models = crate::tools::Models::new(staged.job.request.session.model.clone());
-    models.small_model = Some("m".into());
-    models.model.id = "large".into();
-    models.model.window = Some(200_000);
-    staged.job.request.session.model.id = "large".into();
-    let mut template = TurnRequest {
-        model: "large".into(),
-        system: String::new(),
-        messages: Vec::new(),
-        tools: Vec::new(),
-        effort: domain::Effort::High,
-        max_tokens: 100,
-    };
-    let api = judge as Arc<dyn ModelApi>;
-    staged.job.auto_pick(&api, &Arc::default(), &mut template, &mut models);
-    assert_eq!((models.model.id.as_str(), models.model.window), ("m", None));
-    assert_eq!((template.model.as_str(), template.effort), ("m", domain::Effort::Low));
-    assert_eq!(staged.job.request.session.model.id, "m");
-    assert_eq!(
-        staged.heard.events().last(),
-        Some(&EngineEvent::Picked { model: "m".into(), effort: domain::Effort::Low })
-    );
 }

@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "KillShell",
   input: {
@@ -17,10 +16,6 @@ export const spec = {
   description: `Stop a background command (and everything it started), a monitor, or a watch.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

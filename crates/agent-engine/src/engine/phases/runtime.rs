@@ -44,7 +44,7 @@ impl Job {
         workspace.hooks.extend(&main.config.hooks);
         let worktree = self.session_worktree(&main, &mut workspace, session)?;
         self.settle_model(&main, &mut workspace)?;
-        if let Some(schema) = settings.schema.clone() {
+        if let Some(schema) = settings.schema.clone().or_else(|| main.config.output_schema()) {
             let structured = tools::structured::Structured::new(schema).map_err(Stop::failed)?;
             toolbox.tools.push(Box::new(structured));
         }

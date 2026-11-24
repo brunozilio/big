@@ -16,6 +16,7 @@ pub struct FakeEngine {
     requests: Arc<Mutex<Vec<PromptRequest>>>,
     steers: Arc<Mutex<Vec<String>>>,
     steering: Steering,
+    chores: Vec<domain::ChoreAnswer>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,7 +36,24 @@ impl FakeEngine {
             requests: Arc::default(),
             steers: Arc::default(),
             steering: Steering::HandOver,
+            chores: Vec::new(),
         }
+    }
+
+    pub fn answering_chores(mut self, answers: Vec<domain::ChoreAnswer>) -> Self {
+        self.chores = answers;
+        self
+    }
+
+    fn chore_script(&self, request: &PromptRequest) -> Option<Vec<EngineEvent>> {
+        let command = request.session.command.filter(|command| command.is_chore())?;
+        let answer = self.chores.iter().find(|answer| answers(answer, command))?;
+        let session = request.session.resume.clone().unwrap_or_else(|| domain::SessionId("chore".into()));
+        Some(vec![
+            EngineEvent::SessionStarted(session),
+            EngineEvent::Chore(answer.clone()),
+            EngineEvent::Completed { duration_ms: 0, cost_usd: None },
+        ])
     }
 
     pub fn steers(&self) -> Vec<String> {
@@ -95,7 +113,7 @@ impl AgentEngine for FakeEngine {
         }
         let gate = RunGate::new(run, sink);
         let cancelled = Arc::new(AtomicBool::new(false));
-        let script = self.script.clone();
+        let script = self.chore_script(request).unwrap_or_else(|| self.script.clone());
         let delay = self.delay;
         let replay_gate = gate.clone();
         let replay_cancelled = Arc::clone(&cancelled);
@@ -112,6 +130,19 @@ impl AgentEngine for FakeEngine {
             held: Vec::new(),
         }))
     }
+}
+
+fn answers(answer: &domain::ChoreAnswer, command: domain::SessionCommand) -> bool {
+    use domain::{ChoreAnswer, SessionCommand};
+    matches!(
+        (answer, command),
+        (ChoreAnswer::Title(_), SessionCommand::Title)
+            | (ChoreAnswer::Suggestion(_), SessionCommand::Suggest)
+            | (ChoreAnswer::Recap(_), SessionCommand::Recap)
+            | (ChoreAnswer::Side(_), SessionCommand::Side)
+            | (ChoreAnswer::HeadsUp(_), SessionCommand::HeadsUp)
+            | (ChoreAnswer::Learned(_), SessionCommand::Learn)
+    )
 }
 
 fn replay(script: Vec<EngineEvent>, delay: Duration, gate: &RunGate, cancelled: &AtomicBool) {

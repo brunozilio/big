@@ -183,10 +183,9 @@ fn every_span_kind() -> [SpanKind; 8] {
     all
 }
 
-fn every_signal() -> [Signal; 9] {
+fn every_signal() -> [Signal; 8] {
     let all = [
         Signal::ToolError,
-        Signal::EvalFailed,
         Signal::Review,
         Signal::Subagent,
         Signal::Waste,
@@ -198,7 +197,6 @@ fn every_signal() -> [Signal; 9] {
     for signal in all {
         match signal {
             Signal::ToolError
-            | Signal::EvalFailed
             | Signal::Review
             | Signal::Subagent
             | Signal::Waste
@@ -226,7 +224,7 @@ fn the_fixtures_show_every_kind_of_span_signal_status_and_finding() {
     }
     let all: Vec<&Run> = traced.iter().collect();
     let found = insights(&all, NOW_MS).findings;
-    for check in [CheckKind::Judge, CheckKind::Review, CheckKind::Repeated, CheckKind::Refused] {
+    for check in [CheckKind::Review, CheckKind::Repeated, CheckKind::Refused] {
         assert!(found.iter().any(|finding| finding.check == check), "no {check:?} finding");
     }
     let notice = spans.iter().find(|span| span.kind == SpanKind::Event && span.name == "notice").expect("a notice");

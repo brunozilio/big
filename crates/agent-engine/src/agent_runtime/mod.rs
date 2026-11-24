@@ -182,9 +182,7 @@ fn managed(root: &std::path::Path, path: &std::path::Path) -> bool {
         && path.file_name().and_then(|s| s.to_str()).and_then(|s| uuid::Uuid::parse_str(s).ok()).is_some()
 }
 
-mod session_worktree;
 mod worktree_lease;
-pub use session_worktree::{Entered, Relocation, enter, removable, remove};
 pub use worktree_lease::WorktreeLease;
 
 #[cfg(test)]

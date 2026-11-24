@@ -1,4 +1,4 @@
-import type { Application, Attempt as WireAttempt, Attention, Block, ChangeRef, Command, ExternalRef, Item, ItemGit, ItemSource, ItemStep, NewItem, ProviderMark, StepState, StepView } from '../contract'
+import type { Application, Attempt as WireAttempt, Attention, Block, ChangeRef, Command, ExternalRef, HeadsUp, Item, ItemGit, ItemSource, ItemStep, NewItem, ProviderMark, StepState, StepView } from '../contract'
 import { NEED_PROVIDER, PEOPLE, PROVIDERS } from './fixtures'
 import {
   IDX, REPO, STEPS, diffOf, fileOf, isBlocked, isGate, isMergeReady, isPaused, isPlanWaiting, isReviewWaiting, store, testName, withYou,
@@ -80,6 +80,17 @@ function attention(it: SimItem): Attention | null {
   return null
 }
 
+function recap(it: SimItem): string | null {
+  if (isPlanWaiting(it)) return `O plano de ${it.key} está pronto e espera sua aprovação para o agente começar a implementar.`
+  if (isPaused(it)) return it.pause?.kind === 'ask'
+    ? 'O agente parou no meio da implementação e quer saber quantas tentativas o retry da cobrança deve usar.'
+    : 'O agente quer rodar a migração no banco de staging e precisa da sua permissão para seguir.'
+  if (isReviewWaiting(it)) return `O PR #${it.pr} passou nos checks e no CI; falta a sua revisão.`
+  if (isMergeReady(it)) return `O PR #${it.pr} foi aprovado e está pronto para o merge.`
+  if (isGate(it)) return it.rejected ? 'O deploy em production foi rejeitado; o item espera uma decisão.' : 'O canary está saudável e o deploy em production espera sua aprovação.'
+  return null
+}
+
 export function toItem(it: SimItem): Omit<Item, 'updatedAt'> {
   const cur = STEPS[it.cur]
   const blocked = isBlocked(it)
@@ -100,6 +111,7 @@ export function toItem(it: SimItem): Omit<Item, 'updatedAt'> {
     activity: it.done ? null : it.bounce ? { text: 'Voltando ao develop', since: iso(store.clock), tone: 'danger' } : { text: cur.doing, since: iso(store.clock - it.elapsed) },
     impediment: blocked ? { reason: `Falta conectar ${need?.name ?? 'um provedor'}`, connect: need } : null,
     attention: attention(it),
+    recap: withYou(it) ? recap(it) : null,
     createdAt: iso(it.createdAt),
     doneAt: it.done ? iso(it.doneAt) : null,
   }
@@ -172,6 +184,12 @@ function blocksFor(it: SimItem, s: Step, attempt: number): Block[] {
 export function stepView(it: SimItem, step: StepId, attempt: number | null): StepView {
   const s = STEPS[IDX[step]]
   const n = pickAttempt(it, step, attempt)
-  return { item: String(it.id), step, attempt: n, attempts: attemptsOf(it, step), blocks: blocksFor(it, s, n) }
+  return { item: String(it.id), step, attempt: n, attempts: attemptsOf(it, step), blocks: blocksFor(it, s, n), headsUp: headsUpFor(it, step) }
+}
+
+function headsUpFor(it: SimItem, step: StepId): HeadsUp | null {
+  if (step === 'develop' && it.pause?.kind === 'permission' && isPaused(it)) return { title: 'Migração em staging', explain: 'O agente quer rodar bun run db:migrate --env staging. A migração altera tabelas compartilhadas com outros times.', urgent: true }
+  if (step === 'develop' && it.attempts.develop.length > 1) return { title: 'O teste falhou antes', explain: `Na primeira execução, ${testName(it)} falhou e o agente mudou a lógica de renovação de sessão para corrigir.`, urgent: false }
+  return null
 }
 

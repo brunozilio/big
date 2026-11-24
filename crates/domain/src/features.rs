@@ -2,25 +2,19 @@ pub fn on(value: &str) -> bool {
     value.trim().eq_ignore_ascii_case("true")
 }
 
-pub fn skill_on(skill: &str) -> bool {
-    skill != "follow-pr" || on(brand::features::PR_FOLLOW)
-}
-
 #[cfg(test)]
 mod tests {
     use brand::features as flags;
 
     use super::*;
 
-    const ALL: [&str; 31] = [
+    const ALL: [&str; 29] = [
         flags::REDACT_SECRETS,
         flags::BUDGET,
         flags::ESCALATION,
-        flags::PROJECT_CRITERIA,
         flags::AUTO_REVIEW,
         flags::FOLLOW_THROUGH,
         flags::AFFECTED_TESTS,
-        flags::PR_FOLLOW,
         flags::SESSION_CLAIMS,
         flags::LOAD_ON_CALL,
         flags::OUTPUT_CLEANUP,
@@ -57,11 +51,5 @@ mod tests {
         for value in ALL {
             assert!(["true", "false"].contains(&value.trim()), "{value}");
         }
-    }
-
-    #[test]
-    fn only_the_follow_pr_skill_has_a_flag() {
-        assert!(skill_on("review"));
-        assert_eq!(skill_on("follow-pr"), on(flags::PR_FOLLOW));
     }
 }

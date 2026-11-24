@@ -1,4 +1,3 @@
-/** @type {import("../types").ToolSpec} */
 export const spec = {
   name: "NotebookEdit",
   input: {
@@ -36,10 +35,6 @@ export const spec = {
   description: `Change one cell of a Jupyter notebook (.ipynb): \`replace\` its source (the default), \`insert\` a new cell after it (or first, without \`cell_number\`), or \`delete\` it. Cells are numbered from 0 as Read shows them. Read the notebook first.`,
 };
 
-/**
- * @param {import("../types").ToolInput} input
- * @param {import("../types").ToolContext} ctx
- */
 export function execute(input, ctx) {
   return ctx.builtin(input);
 }

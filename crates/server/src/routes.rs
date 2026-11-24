@@ -9,9 +9,7 @@ use tower_http::services::{ServeDir, ServeFile};
 
 use crate::error::ApiError;
 use crate::state::Ctx;
-use crate::{
-    applications, attachments, branding, cloud, connections, factory, folders, items, models, sessions, usage,
-};
+use crate::{applications, attachments, branding, cloud, connections, folders, items, models, sessions, usage};
 
 const MOST_BODY_BYTES: usize = 32 * 1024 * 1024;
 
@@ -26,6 +24,7 @@ fn api() -> Router<Ctx> {
         .route("/api/sessions/{id}/messages", post(sessions::send))
         .route("/api/sessions/{id}/respond", post(sessions::respond))
         .route("/api/sessions/{id}/stop", post(sessions::stop))
+        .route("/api/sessions/{id}/side", post(sessions::side))
         .route("/api/connections", get(connections::list))
         .route("/api/connections/oauth/callback", get(connections::callback))
         .route("/oauth/callback", get(connections::callback))
@@ -36,7 +35,6 @@ fn api() -> Router<Ctx> {
         .route("/api/models", get(models::list))
         .route("/api/usage/limits", get(crate::limits::list))
         .route("/api/usage", get(usage::report))
-        .route("/api/factory", get(factory::report))
         .route("/api/branding", get(branding::get).put(branding::put))
         .route("/api/applications", get(applications::list).post(applications::create))
         .route("/api/applications/{id}", put(applications::update).delete(applications::remove))
@@ -44,7 +42,6 @@ fn api() -> Router<Ctx> {
         .route("/api/fs/dirs", get(folders::dirs))
         .route("/api/attachments", post(attachments::upload))
         .route("/api/live", get(live))
-        .route("/api/health", get(|| async { axum::Json(serde_json::json!({ "status": "ok" })) }))
         .route("/api/{*rest}", any(|| async { ApiError::missing("Não há esse endereço.") }))
 }
 

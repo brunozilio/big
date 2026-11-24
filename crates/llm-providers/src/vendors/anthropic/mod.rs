@@ -3,26 +3,12 @@ use domain::billing::TokenRates;
 use serde_json::{Value, json};
 
 use crate::request::{capabilities, remove, unsupported};
-use crate::vendor::{Price, per, rated};
 use crate::{ProviderError, Vendor as Family};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Vendor;
 
 const SEARCH: u64 = 10_000;
-
-const PRICES: &[Price] = &[
-    (&["claude-opus-5-5"], per(4_000_000, 20_000_000, 200_000, 5_000_000)),
-    (&["claude-sonnet-5-5"], per(2_000_000, 10_000_000, 100_000, 2_500_000)),
-    (&["claude-fable-5-1", "claude-mythos-5-1"], per(10_000_000, 50_000_000, 250_000, 12_500_000)),
-    (&["claude-sonnet-4-5", "claude-sonnet-4-6"], per(3_000_000, 15_000_000, 300_000, 3_750_000)),
-    (
-        &["claude-opus-4-5", "claude-opus-4-6", "claude-opus-4-7", "claude-opus-4-8", "claude-opus-5"],
-        per(5_000_000, 25_000_000, 500_000, 6_250_000),
-    ),
-    (&["claude-haiku-4-5"], per(1_000_000, 5_000_000, 100_000, 1_250_000)),
-    (&["claude-opus-4-1"], per(15_000_000, 75_000_000, 1_500_000, 18_750_000)),
-];
 
 impl Family for Vendor {
     fn id(&self) -> &'static str {
@@ -38,11 +24,7 @@ impl Family for Vendor {
     }
 
     fn rates(&self, model: &str, prompt_tokens: u64) -> Option<TokenRates> {
-        match model {
-            "claude-haiku-5-5" if prompt_tokens <= 100_000 => Some(per(100_000, 500_000, 10_000, 125_000)),
-            "claude-haiku-5-5" => Some(per(500_000, 2_500_000, 50_000, 625_000)),
-            _ => rated(PRICES, model),
-        }
+        crate::prices::listed(self.id(), model, prompt_tokens)
     }
 
     fn alias(&self, name: &str) -> Option<&'static str> {

@@ -2,10 +2,19 @@
 name: reviewer
 label: Revisor
 description: Revisa a mudança de um item (o diff da branch ou do pull request) procurando bugs, riscos de segurança e quebras das regras do repositório. Só lê e devolve um veredito com comentários por linha.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, LSP, WebFetch, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Watch, LSP, WebFetch, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ListSessions, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
 disallowedTools: [Edit, Write, NotebookEdit]
 permissionMode: plan
-model: auto
+observer: [observer]
+outputSchema:
+  type: object
+  properties:
+    verdict: { enum: [approve, request_changes, comment] }
+    summary: { type: string }
+    lines:
+      type: array
+      items: { type: object, required: [path, line, body] }
+  required: [verdict, summary]
 skills: [code-review, review]
 avatar:
   shape: circle
@@ -29,7 +38,7 @@ Você é o Revisor do {{NAME}}. Uma etapa de workflow te pediu para revisar a mu
 - Cada comentário aponta arquivo e linha, diz o problema, por que importa e uma sugestão concreta.
 
 ## Formato da resposta
-Devolva (com StructuredOutput, se a etapa pedir):
+Termine com StructuredOutput contendo:
 - **verdict**: `approve` quando não há nada que impeça o merge, `request_changes` quando há, ou `comment` para observações que não bloqueiam;
 - **summary**: duas ou três frases;
 - **lines**: a lista de comentários, cada um com `path`, `line` e `body`.

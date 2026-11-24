@@ -13,7 +13,7 @@ fn commands_parse_with_their_arguments() {
     assert_eq!(Command::parse("/model claude-opus-5-5"), Some(Command::Model(Some("claude-opus-5-5".into()))));
     assert_eq!(Command::parse("/mode plan"), Some(Command::Mode(Some(PermissionMode::Plan))));
     assert_eq!(Command::parse("/effort max"), Some(Command::Effort(Some(Effort::Max))));
-    assert_eq!(Command::parse("/effort auto"), Some(Command::EffortAuto));
+    assert_eq!(Command::parse("/effort auto"), None);
     assert_eq!(Command::parse("/mcp"), Some(Command::Mcp(McpCommand::List)));
     assert_eq!(Command::parse("/reload"), Some(Command::Reload));
     assert_eq!(Command::parse("/rewind"), Some(Command::Rewind));
@@ -41,13 +41,7 @@ fn commands_parse_with_their_arguments() {
 }
 
 #[test]
-fn verification_shows_sets_or_clears_the_criteria() {
-    assert_eq!(VerificationCommand::parse(None), VerificationCommand::Show);
-    assert_eq!(VerificationCommand::parse(Some("OFF".into())), VerificationCommand::Clear);
-    assert_eq!(
-        VerificationCommand::parse(Some("cargo test passes".into())),
-        VerificationCommand::Set("cargo test passes".into())
-    );
+fn the_verify_skill_keeps_its_name() {
     assert_eq!(Command::parse("/verify"), None, "the verify skill keeps its name");
 }
 
@@ -175,7 +169,10 @@ fn model_takes_a_role_before_the_model_name() {
         Command::parse("/model Explore grok-subscription:grok-4.6-fast"),
         Some(Command::ModelRole(ModelRole::Explore, RoleChange::Set("grok-subscription:grok-4.6-fast".into())))
     );
-    assert_eq!(Command::parse("/model review default"), Some(Command::ModelRole(ModelRole::Review, RoleChange::Clear)));
+    assert_eq!(
+        Command::parse("/model explore default"),
+        Some(Command::ModelRole(ModelRole::Explore, RoleChange::Clear))
+    );
     assert_eq!(Command::parse("/model gpt-6.1-sol"), Some(Command::Model(Some("gpt-6.1-sol".into()))));
 }
 

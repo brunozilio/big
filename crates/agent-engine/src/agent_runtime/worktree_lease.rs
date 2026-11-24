@@ -16,11 +16,6 @@ impl WorktreeLease {
         self.retained = true;
     }
 
-    pub fn moved(&mut self, setup: Setup) {
-        self.retained = setup.worktree_root.is_some();
-        self.setup = setup;
-    }
-
     pub fn finish(&mut self) -> Result<Option<PathBuf>, String> {
         self.finished = true;
         if self.retained {

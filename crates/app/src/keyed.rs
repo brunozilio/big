@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use agent_engine::{AgentEngine, EngineError, EventSink, RunHandle};
+use domain::memory::MemoryBrief;
 use domain::{EngineEvent, ModelOption, PromptRequest, RunId};
 use platform::sync::Locked;
 
@@ -26,23 +27,11 @@ impl KeyedEngine {
     pub fn remember(&self, models: Vec<ModelOption>) {
         *self.known.locked() = models;
     }
-
-    fn keyed(&self, request: &PromptRequest) -> PromptRequest {
-        let providers = &self.services.providers;
-        let (model_accounts, mut keys): (Vec<String>, Vec<_>) =
-            crate::engine::keys_for(providers, &request.session.model).into_iter().unzip();
-        let mut request = request.clone();
-        request.host.credentials.model = (!keys.is_empty()).then(|| keys.remove(0));
-        request.host.credentials.model_pool = keys;
-        request.host.credentials.model_accounts = model_accounts;
-        request.host.credentials.other_models = crate::engine::other_keys(providers, &request.session.model);
-        request.host.credentials.mcp_tokens = Some(self.services.mcp_auth.for_run());
-        request
-    }
 }
 
 struct Listed {
     listing: Option<Listing>,
+    ending: crate::prepare::Ending,
     inner: Arc<dyn EventSink>,
 }
 
@@ -50,6 +39,12 @@ impl EventSink for Listed {
     fn emit(&self, run: RunId, event: EngineEvent) {
         if let Some(listing) = &self.listing {
             listing.observe(&event);
+        }
+        for finished in self.ending.observe(&event) {
+            tracing::debug!(%run, ?finished, "an agent run finished its features");
+        }
+        if event.is_terminal() {
+            agent_engine::tools::peers::forget(self.ending.client());
         }
         self.inner.emit(run, event);
     }
@@ -67,9 +62,16 @@ impl AgentEngine for KeyedEngine {
         request: &PromptRequest,
         sink: Arc<dyn EventSink>,
     ) -> Result<Box<dyn RunHandle>, EngineError> {
-        let request = self.keyed(request);
-        let listing = Listing::of(&self.services, &request);
-        self.services.engine.start(run, &request, Arc::new(Listed { listing, inner: sink }))
+        let mut request = request.clone();
+        if request.host.memory.is_none() {
+            request.host.memory = Some(MemoryBrief::new(None));
+        }
+        let refuse = |_: RunId, _: PromptRequest| Err::<(), String>("an agent run starts no other run here".into());
+        let client = request.host.credentials.client;
+        let prepared = crate::prepare::prepare(&self.services, client, run, &request, &refuse);
+        let listing = Listing::of(&self.services, &prepared.request);
+        let sink = Arc::new(Listed { listing, ending: prepared.ending, inner: sink });
+        self.services.engine.start(run, &prepared.request, sink)
     }
 }
 
@@ -91,11 +93,14 @@ mod tests {
         let keyed = KeyedEngine::new(services.clone());
         keyed.remember(vec![model.clone()]);
         assert_eq!(keyed.models(), vec![model.clone()]);
-        let request = PromptRequest::plain(Path::new("/work").to_path_buf(), "oi", model);
+        let mut request = PromptRequest::plain(Path::new("/work").to_path_buf(), "oi", model);
+        request.host.credentials.client = 7;
         let sink: Arc<dyn EventSink> = Arc::new(|_: RunId, _: EngineEvent| {});
         let started = keyed.start(RunId::new(), &request, sink);
         assert!(started.is_ok());
         let sent = engine.requests();
         assert!(sent.iter().any(|sent| sent.host.credentials.model.is_some()), "the key went with the run");
+        assert!(sent.iter().all(|sent| sent.host.credentials.client == 7), "the run keeps the client it was given");
+        assert!(sent.iter().all(|sent| sent.host.credentials.mcp_tokens.is_some()), "the run carries its MCP tokens");
     }
 }

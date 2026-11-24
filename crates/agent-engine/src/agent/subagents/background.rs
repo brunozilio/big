@@ -70,10 +70,6 @@ impl Background {
         }
     }
 
-    pub(in crate::agent) fn busy(&self) -> bool {
-        self.0.locked().values().any(|task| !task.is_collected())
-    }
-
     pub(in crate::agent) fn started(&self) -> Vec<(String, Arc<BackgroundAgent>)> {
         self.0.locked().iter().map(|(id, task)| (id.clone(), task.clone())).collect()
     }
@@ -193,13 +189,10 @@ mod tests {
         let background = Background::default();
         let (id, task) = background.start(control()).expect("room");
         assert_eq!(id, "task-1");
-        assert!(background.busy());
         assert_eq!(background.output(&json!({"task_id": id, "block": false})).content, "Task is still running.");
-        assert!(background.busy(), "asking early collects nothing");
         task.finished(Outcome::ok("report"));
-        assert!(background.started().iter().all(|(_, task)| !task.is_collected()));
+        assert!(background.started().iter().all(|(_, task)| !task.is_collected()), "asking early collects nothing");
         assert_eq!(background.output(&json!({"task_id": id})).content, "report");
-        assert!(!background.busy());
         assert!(background.started().iter().all(|(_, task)| task.is_collected()));
         assert!(background.output(&json!({"task_id": "task-9"})).is_error);
     }

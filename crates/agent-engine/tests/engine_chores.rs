@@ -84,21 +84,6 @@ fn a_suggestion_reads_the_kept_session() {
 }
 
 #[test]
-fn the_style_picked_in_settings_reaches_the_prompt() {
-    let dir = tempfile::tempdir().expect("dir");
-    let model_api = says("Done.");
-    let engine =
-        Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&model_api)]))), Arc::new(InMemorySessions::default()));
-    let mut request = PromptRequest::plain(dir.path().into(), "hi", model());
-    request.session.output_style = Some("concise".into());
-    finish(&engine, &request);
-    let asked = &model_api.asked()[0];
-    assert!(asked.system.contains("# Concise style"), "the style's text");
-    let reminded = format!("{:?}", asked.messages.last().map(|m| &m.blocks));
-    assert!(reminded.contains("Be concise: lead with the result"), "and its turn reminder: {reminded}");
-}
-
-#[test]
 fn a_side_question_on_a_session_not_kept_yet_is_answered_not_reported_lost() {
     let dir = tempfile::tempdir().expect("dir");
     let answerer = says("Nothing has been said yet.");

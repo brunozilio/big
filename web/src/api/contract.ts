@@ -120,6 +120,7 @@ export interface Item {
   activity: Activity | null
   impediment: Impediment | null
   attention: Attention | null
+  recap: string | null
   createdAt: Iso
   updatedAt: Iso
   doneAt: Iso | null
@@ -151,6 +152,13 @@ export interface StepView {
   attempt: number
   attempts: Attempt[]
   blocks: Block[]
+  headsUp: HeadsUp | null
+}
+
+export interface HeadsUp {
+  title: string
+  explain: string
+  urgent: boolean
 }
 
 export type CommandState = 'todo' | 'running' | 'done' | 'failed'
@@ -160,6 +168,7 @@ export interface Command {
   state: CommandState
   seconds: number | null
   log: string
+  session?: string | null
 }
 
 export interface FormField {
@@ -170,6 +179,8 @@ export interface FormField {
   placeholder?: string
   options?: { value: string; label: string }[]
   mono?: boolean
+  secret?: boolean
+  help?: string
 }
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
@@ -380,8 +391,6 @@ export type SessionEvent =
   | { id: string; at: Iso; type: 'permission'; tool: string; detail: string; risk: 'low' | 'medium' | 'high'; logo?: string; resolution: 'pending' | PermissionDecision }
   | { id: string; at: Iso; type: 'plan'; text: string; resolution: 'pending' | 'approved' | 'revised'; feedback?: string; agent?: string }
 
-export type SessionEventType = SessionEvent['type']
-
 export interface Session {
   id: string
   title: string
@@ -391,6 +400,7 @@ export interface Session {
   agents: Agent[]
   events: SessionEvent[]
   work?: SessionWork
+  suggestion: string | null
 }
 
 export interface SessionTask {
@@ -412,12 +422,21 @@ export interface NewMessage {
   attachments: string[]
 }
 
+export interface SideQuestion {
+  text: string
+  model?: string | null
+}
+
+export interface SideAnswer {
+  answer: string
+}
+
 export type AskResponse =
   | { kind: 'ask'; answers: string[] }
   | { kind: 'permission'; decision: PermissionDecision }
   | { kind: 'plan'; decision: 'approve' | 'revise'; feedback?: string }
 
-export type SignInKind = 'oauth' | 'device' | 'sso' | 'browser'
+export type SignInKind = 'oauth' | 'device' | 'sso' | 'browser' | 'token'
 
 export interface SignInAlternative {
   key: string
@@ -439,7 +458,7 @@ export interface Provider {
   signIn: SignInKind
   fields: FormField[]
   multiple: boolean
-  alternative?: SignInAlternative | null
+  alternatives?: SignInAlternative[]
   ai?: boolean
 }
 
@@ -536,6 +555,7 @@ export interface UsageLimits {
 export type SignInStart =
   | { flow: string; kind: 'redirect'; url: string; paste: boolean; returns?: boolean }
   | { flow: string; kind: 'device'; url: string; code: string; expiresIn: number; interval: number }
+  | { flow: string; kind: 'token' }
 
 export interface SignInPollRequest {
   flow: string
@@ -595,9 +615,8 @@ export interface ApplicationRepository {
   id: string
   code: CodeChoice | null
   directory: string
-  run: string
+  run: string[]
   verify: string[]
-  e2e: string[]
 }
 
 export interface Application {
@@ -631,6 +650,7 @@ export type LiveEvent =
   | { type: 'item.removed'; id: string }
   | { type: 'session'; session: string; event: SessionEvent }
   | { type: 'session.status'; session: string; status: SessionStatus }
+  | { type: 'session.suggestion'; session: string; suggestion: string | null }
   | { type: 'connections'; connections: Connections }
   | { type: 'branding'; branding: Branding }
   | { type: 'resync' }
@@ -645,6 +665,7 @@ export interface Api {
   call<A extends CallAction>(connection: string, action: A, args: CallArgs<A>): Promise<CallResult<A>>
   session(id: string): Promise<Session>
   send(session: string, message: NewMessage): Promise<void>
+  side(session: string, question: SideQuestion): Promise<SideAnswer>
   respond(session: string, event: string, response: AskResponse): Promise<void>
   stop(session: string): Promise<void>
   connections(): Promise<Connections>
@@ -667,7 +688,6 @@ export interface Api {
 
 export const ROUTES = {
   items: '/api/items',
-  item: (id: string) => `/api/items/${encodeURIComponent(id)}`,
   rerun: (id: string) => `/api/items/${encodeURIComponent(id)}/rerun`,
   cancel: (id: string) => `/api/items/${encodeURIComponent(id)}/cancel`,
   step: (id: string, step: string) => `/api/items/${encodeURIComponent(id)}/steps/${encodeURIComponent(step)}`,
@@ -675,6 +695,7 @@ export const ROUTES = {
   call: (connection: string) => `/api/connections/${encodeURIComponent(connection)}/call`,
   session: (id: string) => `/api/sessions/${encodeURIComponent(id)}`,
   messages: (id: string) => `/api/sessions/${encodeURIComponent(id)}/messages`,
+  side: (id: string) => `/api/sessions/${encodeURIComponent(id)}/side`,
   respond: (id: string) => `/api/sessions/${encodeURIComponent(id)}/respond`,
   stop: (id: string) => `/api/sessions/${encodeURIComponent(id)}/stop`,
   connections: '/api/connections',

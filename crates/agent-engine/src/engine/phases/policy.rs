@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use brand::features as flags;
 use domain::features::on;
-use domain::model_roles::{ModelRole, ModelRoles};
+use domain::model_roles::ModelRoles;
 use domain::{PromptRequest, SessionId};
 
 use super::equip::{Equipped, MainAgent, Toolbox};
@@ -12,8 +12,7 @@ use crate::engine::job::Job;
 use crate::engine::roles;
 use crate::engine::stop::Stop;
 use crate::prompt::settings::Settings;
-use crate::tools::subagent_config::AgentConfig;
-use crate::tools::{self, Policy, Verification, Workspace};
+use crate::tools::{self, Policy, Workspace};
 
 pub(in crate::engine) struct Governed {
     pub(in crate::engine) workspace: Workspace,
@@ -36,12 +35,7 @@ impl Job {
         self.request.policy.budget = budget(&self.request);
         workspace.services.files = Some(Arc::default());
         let roles = roles::merged(&self.request.session.roles, settings);
-        if let Some(advisor) = roles.get(ModelRole::Advisor) {
-            let model = role_model(&self.request, advisor).map_err(|error| format!("advisorModel: {error}"));
-            workspace.models.advisor = Some(model.map_err(Stop::failed)?);
-        }
         toolbox.tools.retain(|tool| tool.offered(&workspace));
-        workspace.verification = verification(&self.request, settings, &roles).map_err(Stop::failed)?;
         workspace.agent_name = main.name().into();
         workspace.session_id.clone_from(&session.0);
         workspace.anchored_memories = anchored(&self.request);
@@ -72,30 +66,6 @@ pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path) -> Policy {
 
 pub(in crate::engine) fn budget(request: &PromptRequest) -> Option<domain::budget::Budget> {
     request.policy.budget.filter(|_| on(flags::BUDGET))
-}
-
-fn role_model(request: &PromptRequest, name: &str) -> Result<String, String> {
-    let config = AgentConfig { model: Some(name.to_owned()), ..Default::default() };
-    config.model(&request.session.model.id, request.session.model.provider)
-}
-
-pub(in crate::engine) fn verification(
-    request: &PromptRequest,
-    settings: &Settings,
-    roles: &ModelRoles,
-) -> Result<Option<Verification>, String> {
-    let project =
-        settings.project_criteria.clone().filter(|_| on(flags::PROJECT_CRITERIA)).map(domain::Criteria::project);
-    let asked = request.policy.verification.clone().or(project);
-    let Some(criteria) = asked.filter(|_| request.policy.permission != domain::PermissionMode::Plan) else {
-        return Ok(None);
-    };
-    let config = AgentConfig { model: roles.get(ModelRole::Review).map(str::to_owned), ..Default::default() };
-    let model = config
-        .model(&request.session.model.id, request.session.model.provider)
-        .map_err(|error| format!("judgeModel: {error}"))?;
-    let allow = criteria.judge_commands();
-    Ok(Some(Verification { criteria, model, allow }))
 }
 
 pub(in crate::engine) fn anchored(request: &PromptRequest) -> Vec<domain::Memory> {

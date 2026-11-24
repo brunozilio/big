@@ -1,7 +1,6 @@
 use super::{Builder, node};
 use crate::review::{Finding, Severity};
 use crate::trace::{Kind, Mark, Node, Title};
-use crate::verification::Verdict;
 use crate::{AskId, Decision};
 
 pub fn decided(decision: &Decision) -> String {
@@ -37,23 +36,6 @@ impl Builder<'_> {
             wait.answered_ms = Some(at);
             wait.decision = Some(decided(decision));
         }
-    }
-
-    pub(super) fn verified(&mut self, at: u64, verdict: &Verdict) {
-        let lines: Vec<String> = verdict
-            .checks
-            .iter()
-            .map(|check| {
-                let result = if check.passed { "pass" } else { "fail" };
-                if check.evidence.is_empty() {
-                    format!("{result} {}", check.criterion)
-                } else {
-                    format!("{result} {}: {}", check.criterion, check.evidence)
-                }
-            })
-            .collect();
-        let kind = Kind::Note { title: Title::Verified, text: lines.join("\n") };
-        self.single(node(at, !verdict.passed, kind));
     }
 
     pub(super) fn reviewed(&mut self, at: u64, findings: &[Finding]) {

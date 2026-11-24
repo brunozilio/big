@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { cn } from '@/ui/cn'
 import { Icon } from '@/ui/icon'
+import { Button } from '@/ui/button'
 import { AnimatePresence, dur, easeOut, IconSwap, motion, tween } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
 import { AttachmentStrip, useAttachments } from './Attachments'
@@ -33,6 +34,8 @@ export function Composer({
   onModel,
   tuning,
   onTuning,
+  suggestion,
+  onAside,
 }: {
   onSubmit: (input: ComposerSubmit) => void
   running?: boolean
@@ -46,6 +49,8 @@ export function Composer({
   onModel?: (id: string | null) => void
   tuning?: Tuning
   onTuning?: (tuning: Tuning) => void
+  suggestion?: string | null
+  onAside?: (text: string) => void
 }) {
   const [text, setText] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
@@ -72,8 +77,16 @@ export function Composer({
 
   const hasText = text.trim().length > 0
   const ready = (hasText || !!allowEmpty) && !disabled && !attachments.uploading && !noModel
+  const aside = !!running && !!onAside
+  const suggested = !running && !hasText && !disabled && suggestion ? suggestion : null
 
   const submit = () => {
+    if (aside) {
+      if (!hasText || disabled) return
+      onAside(text.trim())
+      setText('')
+      return
+    }
     if (!ready) return
     onSubmit({ text: text.trim(), attachments: attachments.serverIds, model: chosen, effort, fast })
     setText('')
@@ -83,6 +96,12 @@ export function Composer({
 
   return (
     <div className="relative">
+      {suggested && (
+        <SuggestionChip text={suggested} onPick={() => {
+          setText(suggested)
+          ref.current?.focus()
+        }} />
+      )}
       <motion.div
         className={cn('relative z-10 rounded-overlay border border-line bg-surface transition-colors', focused && 'border-line-strong', dragging && 'border-info shadow-[0_0_0_4px_rgb(var(--info)/0.12)]')}
         onDragOver={(e) => {
@@ -145,6 +164,7 @@ export function Composer({
           </Tooltip>
           {leading}
           <span className="ml-auto flex items-center">
+            {aside && hasText && <AsideButton onAsk={submit} disabled={!!disabled} />}
             <ModelPicker value={chosen} onChange={chooseModel} effort={effort} onEffort={(next) => tune({ effort: next })} fast={fast} onFast={(next) => tune({ fast: next })} />
             <SendButton running={!!running} ready={ready} onSend={submit} onStop={onStop} />
           </span>
@@ -158,6 +178,27 @@ export function Composer({
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+function SuggestionChip({ text, onPick }: { text: string; onPick: () => void }) {
+  return (
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={tween} className="mb-2 flex">
+      <button onClick={onPick} aria-label={`Usar sugestão: ${text}`} className="inline-flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full bg-surface px-3 text-sm text-fg2 shadow-card transition-colors hover:bg-hover hover:text-fg">
+        <Icon name="sparkles" size={14} className="shrink-0 text-muted" />
+        <span className="truncate">{text}</span>
+      </button>
+    </motion.div>
+  )
+}
+
+function AsideButton({ onAsk, disabled }: { onAsk: () => void; disabled: boolean }) {
+  return (
+    <Tooltip content="Pergunta sem interromper o agente  ↵">
+      <Button size="sm" variant="soft" disabled={disabled} onClick={onAsk} icon={<Icon name="help" size={15} />} className="mr-1">
+        Perguntar à parte
+      </Button>
+    </Tooltip>
   )
 }
 

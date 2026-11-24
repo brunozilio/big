@@ -14,6 +14,7 @@ const FORM: &str = "application/x-www-form-urlencoded; charset=utf-8";
 pub struct Keys {
     pub access_key_id: String,
     pub secret_access_key: String,
+    #[serde(default)]
     pub session_token: String,
     #[serde(default)]
     pub account_id: String,
@@ -59,23 +60,22 @@ pub fn signature(secret: &str, stamp: &str, region: &str, service: &str, canonic
 pub fn signed_identity_request(keys: &Keys, region: &str, now: Timestamp) -> HttpRequest {
     let host = format!("sts.{region}.amazonaws.com");
     let stamp = now.strftime("%Y%m%dT%H%M%SZ").to_string();
-    let names = "content-type;host;x-amz-date;x-amz-security-token";
-    let canonical = format!(
-        "POST\n/\n\ncontent-type:{FORM}\nhost:{host}\nx-amz-date:{stamp}\nx-amz-security-token:{}\n\n{names}\n{}",
-        keys.session_token,
-        digest(BODY)
-    );
+    let session = !keys.session_token.is_empty();
+    let names =
+        if session { "content-type;host;x-amz-date;x-amz-security-token" } else { "content-type;host;x-amz-date" };
+    let token = if session { format!("x-amz-security-token:{}\n", keys.session_token) } else { String::new() };
+    let canonical =
+        format!("POST\n/\n\ncontent-type:{FORM}\nhost:{host}\nx-amz-date:{stamp}\n{token}\n{names}\n{}", digest(BODY));
     let signed = signature(&keys.secret_access_key, &stamp, region, "sts", &canonical);
     let day = &stamp[..8];
     let authorization = format!(
         "AWS4-HMAC-SHA256 Credential={}/{day}/{region}/sts/aws4_request, SignedHeaders={names}, Signature={signed}",
         keys.access_key_id
     );
-    HttpRequest::post(format!("https://{host}/"))
-        .body(FORM, BODY.as_bytes().to_vec())
-        .header("x-amz-date", stamp)
-        .header("x-amz-security-token", keys.session_token.clone())
-        .header("authorization", authorization)
+    let request =
+        HttpRequest::post(format!("https://{host}/")).body(FORM, BODY.as_bytes().to_vec()).header("x-amz-date", stamp);
+    let request = if session { request.header("x-amz-security-token", keys.session_token.clone()) } else { request };
+    request.header("authorization", authorization)
 }
 
 fn element(xml: &str, name: &str) -> String {
@@ -128,5 +128,15 @@ mod tests {
         assert!(authorization.starts_with("AWS4-HMAC-SHA256 Credential=ASIA1/20231114/sa-east-1/sts/aws4_request"));
         assert_eq!(request.header_value("x-amz-security-token"), Some("t"));
         assert_eq!(element("<a><Arn> arn:x </Arn></a>", "Arn"), "arn:x");
+    }
+
+    #[test]
+    fn a_permanent_access_key_is_signed_without_a_session_token() {
+        let Some(keys) = Keys::read(r#"{"accessKeyId":"AKIA1","secretAccessKey":"s"}"#) else { panic!("unread") };
+        let now = Timestamp::from_second(1_700_000_000).unwrap_or(Timestamp::UNIX_EPOCH);
+        let request = signed_identity_request(&keys, "us-east-1", now);
+        assert_eq!(request.header_value("x-amz-security-token"), None);
+        let authorization = request.header_value("authorization").unwrap_or_default();
+        assert!(authorization.contains("SignedHeaders=content-type;host;x-amz-date,"), "{authorization}");
     }
 }

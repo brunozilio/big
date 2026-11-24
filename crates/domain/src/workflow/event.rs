@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::item::{ItemId, Observed, StepState};
+use super::item::{HeadsUpNote, ItemId, ItemRecap, Observed, StepState};
 use crate::effect::{EffectOutcome, EffectRequest, IdempotencyKey};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -9,7 +9,6 @@ use crate::effect::{EffectOutcome, EffectRequest, IdempotencyKey};
 pub enum WorkflowEvent {
     ItemCreated { id: ItemId, workflow: String, parent: Option<ItemId>, input: Value },
     StepStarted { step: String, branch: Option<String> },
-    StepViewSet { step: String, branch: Option<String>, view: Value },
     EffectRequested(EffectRequest),
     EffectResolved { key: IdempotencyKey, outcome: EffectOutcome },
     EffectProgress { key: IdempotencyKey, data: Value },
@@ -28,4 +27,7 @@ pub enum WorkflowEvent {
     ExternalObserved(Observed),
     Reconciled { field: String, local: Value, remote: Value, action: String },
     Named { title: String },
+    Branched { name: String },
+    Recapped { recap: ItemRecap },
+    HeadsUp { step: String, note: HeadsUpNote },
 }

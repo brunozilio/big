@@ -6,14 +6,11 @@ const STATES = ["passed", "failed", "blocked", "not_run"];
 const BROKEN = ["failed", "blocked", "not_run"];
 
 export function e2eGroups(ctx, opts) {
+  const commands = opts.e2e ?? [];
+  if (!Array.isArray(commands) || commands.length === 0) return [];
   const repositories = repositoriesOf(ctx);
-  if (repositories.length === 0) {
-    const commands = opts.e2e ?? ctx.item.e2e ?? [];
-    return Array.isArray(commands) && commands.length > 0 ? [{ commands }] : [];
-  }
-  return repositories
-    .map((repository) => ({ repository: repository.id, name: repository.name, commands: opts.e2e ?? (Array.isArray(repository.e2e) ? repository.e2e : []) }))
-    .filter((group) => group.commands.length > 0);
+  if (repositories.length === 0) return [{ commands }];
+  return repositories.map((repository) => ({ repository: repository.id, name: repository.name, commands }));
 }
 
 function commandLines(groups) {
@@ -96,5 +93,6 @@ export function e2eLines(e2e) {
     seconds: null,
     log: verdict.evidence ?? "",
   }));
-  return [...ran, ...cases];
+  const tester = found.session ? [{ name: "Agente de E2E", state: cases.some((entry) => entry.state === "failed") ? "failed" : "done", seconds: null, log: "", session: found.session }] : [];
+  return [...tester, ...ran, ...cases];
 }

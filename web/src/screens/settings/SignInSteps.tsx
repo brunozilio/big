@@ -100,8 +100,8 @@ export function SignInFields({ fields, values, onChange }: { fields: FormField[]
   return (
     <div className="space-y-3">
       {fields.map((f) => (
-        <Field key={f.name} label={f.label}>
-          <Input value={values[f.name] ?? ''} placeholder={f.placeholder} onChange={(e) => onChange(f.name, e.target.value)} className={f.mono ? 'font-mono' : undefined} />
+        <Field key={f.name} label={f.label} help={f.help}>
+          <Input type={f.secret ? 'password' : 'text'} autoComplete={f.secret ? 'off' : undefined} value={values[f.name] ?? ''} placeholder={f.placeholder} onChange={(e) => onChange(f.name, e.target.value)} className={f.mono ? 'font-mono' : undefined} />
         </Field>
       ))}
     </div>

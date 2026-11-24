@@ -119,19 +119,11 @@ pub fn branch_of(command: &Command) -> Option<&str> {
 
 fn model(shared: &Shared, wanted: Option<&str>) -> ModelOption {
     let models = shared.config.engine.models();
-    let named = |id: &str| ModelOption {
-        id: id.to_owned(),
-        label: id.to_owned(),
-        provider: Default::default(),
-        window: None,
-        capabilities: None,
-    };
     wanted
-        .filter(|wanted| *wanted != "auto")
         .and_then(|wanted| models.iter().find(|option| option.id == wanted))
         .cloned()
         .or_else(|| models.first().cloned())
-        .unwrap_or_else(|| named(wanted.unwrap_or("unknown")))
+        .unwrap_or_else(|| ModelOption::unlisted(wanted.unwrap_or("unknown")))
 }
 
 fn prompt_of(input: &Value) -> String {
@@ -225,6 +217,7 @@ impl AgentEffect<'_> {
     pub async fn run(self) -> Result<Value, Failure> {
         let name = self.command.text("name");
         let state = self.shared.item(self.item).map_err(|error| Failure::permanent(error.to_string()))?;
+        let state = crate::chores::ensure_branch(self.shared, &state, &self.key.to_string());
         let resources = self.shared.resources_in(self.shared.home(&state.input).as_deref());
         let definition =
             resources.agent(&name).ok_or_else(|| Failure::permanent(format!("there is no agent named {name}")))?;
@@ -247,7 +240,11 @@ impl AgentEffect<'_> {
             let system = request.session.append_system.take().unwrap_or_default();
             request.session.append_system = Some(if system.is_empty() { text } else { format!("{system}\n\n{text}") });
         }
+        self.note(json!({ "worktree": cwd.to_string_lossy() }));
         let collected = self.drive(&request).await?;
+        if let Some(session) = collected.session.clone() {
+            crate::chores::heads_up(self.shared, self.item, &self.key.step, session, cwd.clone());
+        }
         let pushed: Vec<(PathBuf, String)> =
             trees.iter().map(|tree| (tree.path.clone(), tree.branch.clone())).collect();
         blocking(move || {
@@ -459,6 +456,7 @@ impl AgentEffect<'_> {
         asks.insert(ask.id.0.clone(), serde_json::to_value(&pending).unwrap_or(Value::Null));
         self.note(json!({ "asks": asks }));
         self.announce(pending);
+        crate::chores::recap(self.shared, self.item, &ask.id.0);
     }
 }
 

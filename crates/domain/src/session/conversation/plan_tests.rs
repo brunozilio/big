@@ -58,10 +58,9 @@ fn a_plan_that_was_refused_or_left_open_kept_planning() {
 }
 
 #[test]
-fn entering_plan_mode_is_said_once_without_a_tool_line() {
+fn entering_plan_mode_is_said_once() {
     let mut transcript = Transcript::default();
     transcript.begin();
-    transcript.apply(&EngineEvent::ToolStarted(ToolCall::new("e1", "EnterPlanMode", "")));
     transcript.apply(&EngineEvent::ModeChanged(PermissionMode::Plan));
     assert_eq!(transcript.entries, [Entry::Notice("Entered plan mode".into())]);
 }

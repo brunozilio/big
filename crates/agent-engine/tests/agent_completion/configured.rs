@@ -1,6 +1,6 @@
 use agent_engine::{
     model::{ModelError, Reply, scripted::ScriptedModel},
-    prompt::{self, Environment, Instructions, Scope},
+    prompt::{Environment, Instructions, Scope},
     tools::Workspace,
     transcript::Usage,
 };
@@ -47,7 +47,7 @@ fn explore_runs_on_the_small_model_unless_it_names_its_own() {
 }
 
 #[test]
-fn child_omits_initial_instruction_files_and_parent_output_style() {
+fn child_omits_initial_instruction_files() {
     let dir = tempfile::tempdir().expect("dir");
     let mut workspace = Workspace::new(dir.path());
     workspace.prompt_context = Some(Environment {
@@ -57,19 +57,13 @@ fn child_omits_initial_instruction_files_and_parent_output_style() {
             scope: Scope::Project,
             text: "PARENT_FILE_SENTINEL".into(),
         }],
-        output_style: Some(prompt::settings::Style {
-            name: "parent-style".into(),
-            instructions: "PARENT_STYLE_SENTINEL".into(),
-            keep_coding: true,
-            reminder: None,
-        }),
         ..Default::default()
     });
     let model = ScriptedModel::new([delegated(), done("Reviewed"), done("Done")]);
     run(json!({"omitClaudeMd":true}), &model, &workspace, PermissionMode::Bypass);
     assert!(model.asked()[0].system.contains("PARENT_FILE_SENTINEL"));
     let child = &model.asked()[1].system;
-    assert!(!child.contains("PARENT_FILE_SENTINEL") && !child.contains("PARENT_STYLE_SENTINEL"));
+    assert!(!child.contains("PARENT_FILE_SENTINEL"));
     assert!(child.contains("Do the review."));
 }
 

@@ -72,7 +72,10 @@ export function applyLive(e: LiveEvent) {
       set((s) => (s.sessions[e.session] ? { sessions: { ...s.sessions, [e.session]: upsertEvent(s.sessions[e.session], e.event) } } : {}))
       return
     case 'session.status':
-      set((s) => (s.sessions[e.session] ? { sessions: { ...s.sessions, [e.session]: { ...s.sessions[e.session], status: e.status } } } : {}))
+      applyStatus(e.session, e.status)
+      return
+    case 'session.suggestion':
+      set((s) => (s.sessions[e.session] ? { sessions: { ...s.sessions, [e.session]: { ...s.sessions[e.session], suggestion: e.suggestion } } } : {}))
       return
     case 'connections':
       set({ connections: e.connections })
@@ -84,6 +87,13 @@ export function applyLive(e: LiveEvent) {
     case 'resync':
       void reload(api())
   }
+}
+
+function applyStatus(id: string, status: Session['status']) {
+  const before = state.sessions[id]
+  if (!before) return
+  const suggestion = status === 'idle' ? before.suggestion : null
+  set((s) => ({ sessions: { ...s.sessions, [id]: { ...before, status, suggestion } } }))
 }
 
 async function reload(a: Api) {
@@ -124,11 +134,6 @@ export function setBranding(branding: Branding) {
 
 export function setApplications(update: (applications: Application[]) => Application[]) {
   set((s) => ({ applications: update(s.applications ?? []) }))
-}
-
-export function setConnections(connections: Connections) {
-  set({ connections })
-  refreshModels()
 }
 
 function refreshModels() {

@@ -21,13 +21,6 @@ pub use services::{Network, Services, WebSearcher};
 pub use starter::Starter;
 pub(crate) use tracking::Tracking;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Verification {
-    pub criteria: domain::Criteria,
-    pub model: String,
-    pub allow: Vec<String>,
-}
-
 #[derive(Debug)]
 pub struct Workspace {
     pub cwd: PathBuf,
@@ -46,7 +39,6 @@ pub struct Workspace {
     pub rules: Vec<crate::prompt::rules::Rule>,
     pub anchored_memories: Vec<domain::Memory>,
     pub blast_radius: bool,
-    pub verification: Option<Verification>,
     pub worktree: Option<crate::agent_runtime::WorktreeState>,
     pub policy: Policy,
     pub models: Models,
@@ -73,7 +65,6 @@ impl Workspace {
             rules: Vec::new(),
             anchored_memories: Vec::new(),
             blast_radius: false,
-            verification: None,
             worktree: None,
             policy: Policy::default(),
             models: Models::default(),
@@ -118,7 +109,6 @@ impl Workspace {
             rules: self.rules.clone(),
             anchored_memories: self.anchored_memories.clone(),
             blast_radius: self.blast_radius,
-            verification: None,
             worktree: None,
             policy: self.policy.fork(),
             models: self.models.clone(),

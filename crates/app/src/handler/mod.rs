@@ -9,9 +9,8 @@ use std::sync::Arc;
 use crate::api::{ClientCommand, Envelope, Notices, Reply, ServerEvent};
 use agent_engine::EventSink;
 use domain::{EngineEvent, PromptRequest, RunId};
-use platform::sync::Locked;
 
-use crate::features::context::{Context, Finish};
+use crate::features::context::Context;
 use crate::handler::flows::Flows;
 use crate::handler::outbox::{Outbox, Replies};
 use crate::handler::runs::{Reach, RunTable};
@@ -187,36 +186,17 @@ impl CommandHandler {
     }
 
     fn start(&self, run: RunId, request: &PromptRequest) -> Result<(), String> {
-        agent_engine::tools::peers::register(self.client, &request.session.cwd);
-        let outbox = self.outbox.clone();
-        let (model_accounts, mut keys): (Vec<String>, Vec<_>) =
-            crate::engine::keys_for(&self.services.providers, &request.session.model).into_iter().unzip();
-        let model = (!keys.is_empty()).then(|| keys.remove(0));
         let mut request = request.clone();
-        request.host.credentials = domain::credentials::RunCredentials {
-            model,
-            model_pool: keys,
-            model_accounts,
-            other_models: crate::engine::other_keys(&self.services.providers, &request.session.model),
-            mcp: Vec::new(),
-            client: self.client,
-            mcp_tokens: Some(self.services.mcp_auth.for_run()),
-        };
-        let request = self.services.extensions.brief(request, self.services.home());
-        let (request, finishes) = self.with_context(|context| crate::features::prepare(context, run, request));
+        request.host.credentials.mcp = Vec::new();
+        let submit = |run: RunId, request: PromptRequest| self.submit(run, &request);
+        let prepared = crate::prepare::prepare(&self.services, self.client, run, &request, &submit);
         let sink = Arc::new(RunSink {
             runs: Arc::clone(&self.runs),
-            listing: crate::catalog::Listing::of(&self.services, &request),
-            outbox,
-            finishes: std::sync::Mutex::new(finishes),
-            outcome: std::sync::Mutex::default(),
-            exported: self
-                .services
-                .exporter
-                .as_ref()
-                .map(|exporter| exporter.watch(&request.session.cwd, request.session.resume.as_ref())),
+            listing: crate::catalog::Listing::of(&self.services, &prepared.request),
+            outbox: self.outbox.clone(),
+            ending: prepared.ending,
         });
-        match self.services.engine.start(run, &request, sink) {
+        match self.services.engine.start(run, &prepared.request, sink) {
             Ok(handle) => {
                 self.runs.insert(run, handle);
                 Ok(())
@@ -244,9 +224,7 @@ struct RunSink {
     runs: Arc<RunTable>,
     listing: Option<crate::catalog::Listing>,
     outbox: Outbox,
-    finishes: std::sync::Mutex<Vec<Finish>>,
-    outcome: std::sync::Mutex<domain::memory::scorecard::RunOutcome>,
-    exported: Option<crate::features::trace::export::Watch>,
+    ending: crate::prepare::Ending,
 }
 
 impl EventSink for RunSink {
@@ -254,17 +232,12 @@ impl EventSink for RunSink {
         if let Some(listing) = &self.listing {
             listing.observe(&event);
         }
-        if let Some(exported) = &self.exported {
-            exported.observe(&event);
-        }
-        self.outcome.locked().observe(&event);
+        let finished = self.ending.observe(&event);
         if event.is_terminal() {
             self.runs.finish(run);
-            let outcome = *self.outcome.locked();
-            let finishes = std::mem::take(&mut *self.finishes.locked());
-            for finished in finishes.into_iter().filter_map(|finish| finish(&outcome)) {
-                self.outbox.send(ServerEvent::Unsolicited(finished));
-            }
+        }
+        for finished in finished {
+            self.outbox.send(ServerEvent::Unsolicited(finished));
         }
         self.outbox.send(ServerEvent::Run { run, event });
     }

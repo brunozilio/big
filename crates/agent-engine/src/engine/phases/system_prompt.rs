@@ -21,7 +21,6 @@ pub(super) struct Framed {
     pub(super) main: MainAgent,
     pub(super) worktree: SessionWorktree,
     pub(super) template: TurnRequest,
-    pub(super) extra: String,
 }
 
 impl Job {
@@ -47,7 +46,7 @@ impl Job {
             effort: self.request.session.effort,
             max_tokens: MAX_OUTPUT,
         };
-        Ok(Framed { workspace, toolbox, main, worktree, template, extra })
+        Ok(Framed { workspace, toolbox, main, worktree, template })
     }
 
     fn environment(
@@ -85,10 +84,6 @@ impl Job {
             instructions: moved_to.map_or_else(|| brief.instructions.clone(), |context| context.instructions.clone()),
             tools: toolbox.tools.iter().map(|tool| tool.spec().name).collect(),
             skills: tools::skill::listing(&brief.skills),
-            output_style: prompt::styles::picked(
-                self.request.session.output_style.as_deref(),
-                brief.settings.style.clone(),
-            ),
             mcp_instructions: toolbox
                 .servers
                 .iter()

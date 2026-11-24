@@ -10,7 +10,7 @@ use domain::connection::{Capability, ProviderKey};
 use serde_json::{Value, json};
 
 use crate::contracts::{self, code as code_actions, pipelines as pipeline_actions};
-use crate::descriptor::{AuthSpec, Presentation, ProviderDescriptor};
+use crate::descriptor::{AlternateAuth, AuthSpec, Presentation, ProviderDescriptor, TokenField, TokenForm};
 use crate::error::ActionError;
 use crate::http::{Http, HttpRequest, HttpResponse, Method, fetch};
 use crate::oauth::{DeviceApp, Dialect};
@@ -18,12 +18,19 @@ use crate::provider::{AccountOption, Args, Credentials, EventSource, Provider, t
 
 pub const KEY: &str = "github";
 pub const API: &str = "https://api.github.com";
+pub const API_TOKEN: &str = "api_token";
 pub const SCOPES: [&str; 3] = ["repo", "read:org", "workflow"];
 const API_VERSION: &str = "2022-11-28";
 const LOGO: &str = include_str!("logo.svg");
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Github;
+
+pub fn personal_token() -> AlternateAuth {
+    let help = "No GitHub, abra Settings, Developer settings, Personal access tokens e gere um token com acesso aos repositórios, à organização e aos workflows.";
+    let token = TokenField::new("token", "Personal access token do GitHub", help, true);
+    AlternateAuth::token(API_TOKEN, "Usar personal access token", "do GitHub", vec![token], TokenForm::Bearer)
+}
 
 pub fn device_app() -> DeviceApp {
     DeviceApp {
@@ -117,6 +124,10 @@ impl Provider for Github {
             site: "do GitHub".to_owned(),
             choose_title: "Organização".to_owned(),
         }
+    }
+
+    fn alternatives(&self) -> Vec<AlternateAuth> {
+        vec![personal_token()]
     }
 
     async fn call(

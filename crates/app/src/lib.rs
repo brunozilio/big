@@ -14,11 +14,13 @@ mod homes;
 mod keyed;
 mod mcp_auth;
 mod permissions;
+mod prepare;
 mod providers;
 mod secrets;
 mod services;
 mod settings;
 
+pub use agent_engine::meter::estimate as estimated_cost;
 pub use api::features::shell::BackgroundCommand;
 pub use api::{Backend, BackendError, Wake};
 pub use catalog::{InMemorySessionCatalog, SessionCatalog, SqliteSessionCatalog};
@@ -31,9 +33,8 @@ pub use domain::memory::seed::Candidate as SeedCandidate;
 pub use domain::memory::{Forgotten, Memory, MemoryEdit, MemoryId, MemoryKind, Revision};
 pub use domain::provider::{ModelProvider, PortHolder, ProviderSummary};
 pub use domain::{
-    AgentAsk, AskId, AskKind, Choice, ChoreAnswer, Criteria, CriteriaSource, CustomAgent, Decision, Effort,
-    EngineEvent, HeadsUp, Image, MAX_IMAGE_BYTES, ModelOption as Model, PermissionMode, Question, Rewound, SessionId,
-    ToolCall, Verdict,
+    AgentAsk, AskId, AskKind, Choice, ChoreAnswer, CustomAgent, Decision, Effort, EngineEvent, HeadsUp, Image,
+    MAX_IMAGE_BYTES, ModelOption as Model, PermissionMode, Question, Rewound, SessionId, ToolCall,
 };
 pub use extensions::Extensions;
 pub use handler::CommandHandler;

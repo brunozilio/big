@@ -42,8 +42,8 @@ async fn applications_are_created_changed_checked_and_removed() {
     let body = json!({
         "name": " Loja ", "tracker": { "connection": "c1", "project": "APP" },
         "repositories": [
-            { "code": { "connection": "c1", "repo": "acme/web" }, "directory": web, "run": "bun dev",
-              "verify": ["bun test", " "], "e2e": [" npx playwright test ", ""] },
+            { "code": { "connection": "c1", "repo": "acme/web" }, "directory": web, "run": [" bun api ", "bun web", ""],
+              "verify": ["bun test", " "] },
             { "code": null, "directory": api, "run": "", "verify": [] },
         ],
     });
@@ -51,8 +51,8 @@ async fn applications_are_created_changed_checked_and_removed() {
     assert_eq!(status, StatusCode::OK, "{made}");
     assert_eq!(made["name"], "Loja");
     assert_eq!(made["repositories"][0]["verify"], json!(["bun test"]));
-    assert_eq!(made["repositories"][0]["e2e"], json!(["npx playwright test"]));
-    assert_eq!(made["repositories"][1]["e2e"], json!([]));
+    assert_eq!(made["repositories"][0]["run"], json!(["bun api", "bun web"]));
+    assert_eq!(made["repositories"][1]["run"], json!([]));
     let ids: Vec<&str> =
         made["repositories"].as_array().expect("repos").iter().filter_map(|repo| repo["id"].as_str()).collect();
     assert!(ids.len() == 2 && ids[0] != ids[1] && !ids[0].is_empty());

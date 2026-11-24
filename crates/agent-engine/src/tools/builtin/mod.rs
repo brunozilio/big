@@ -1,24 +1,19 @@
-pub mod advisor;
 pub mod code_review;
 pub mod files;
 pub mod follow_through;
 pub mod schedules;
 pub mod shell;
-pub mod verification;
 pub mod web;
 
 use crate::agent::Review;
 use crate::tools::Tool;
 
 pub fn tools() -> Vec<Box<dyn Tool>> {
-    [advisor::tools(), files::tools(), schedules::tools(), shell::tools(), web::tools()].into_iter().flatten().collect()
+    [files::tools(), schedules::tools(), shell::tools(), web::tools()].into_iter().flatten().collect()
 }
 
 pub fn reviewers() -> Vec<Box<dyn Review>> {
-    [code_review::review::reviewers(), follow_through::review::reviewers(), verification::review::reviewers()]
-        .into_iter()
-        .flatten()
-        .collect()
+    [code_review::review::reviewers(), follow_through::review::reviewers()].into_iter().flatten().collect()
 }
 
 #[cfg(test)]
@@ -32,7 +27,6 @@ mod tests {
     #[test]
     fn each_tool_folder_registers_these_tools_in_this_order() {
         let folders = [
-            ("advisor", names(advisor::tools())),
             ("files", names(files::tools())),
             ("schedules", names(schedules::tools())),
             ("shell", names(shell::tools())),
@@ -43,7 +37,6 @@ mod tests {
         assert_eq!(
             listed,
             [
-                "advisor: Advisor",
                 "files: Read Write Edit Glob Grep NotebookEdit",
                 "schedules: ScheduleWakeup",
                 "shell: Bash BashOutput KillShell Monitor",
@@ -58,9 +51,8 @@ mod tests {
         let folders = [
             ("code_review", code_review::review::reviewers().len()),
             ("follow_through", follow_through::review::reviewers().len()),
-            ("verification", verification::review::reviewers().len()),
         ];
-        assert_eq!(folders, [("code_review", 1), ("follow_through", 1), ("verification", 1)]);
-        assert_eq!(reviewers().len(), 3);
+        assert_eq!(folders, [("code_review", 1), ("follow_through", 1)]);
+        assert_eq!(reviewers().len(), 2);
     }
 }

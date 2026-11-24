@@ -1,4 +1,3 @@
-pub mod auto_pick;
 pub mod billing;
 pub mod cache_window;
 pub mod fallback;

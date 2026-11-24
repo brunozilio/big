@@ -2,9 +2,9 @@
 name: eval-engineer
 label: Engenheiro de avaliações
 description: Escreve casos de avaliação em {{DIR}}/evals/ que reproduzem um defeito que passou por um portão, para que a fábrica aprenda a pegá-lo.
-tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Edit, Write, LSP, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
+tools: [Read, Grep, Glob, Bash, BashOutput, KillShell, Monitor, Edit, Write, LSP, Skill, TaskCreate, TaskUpdate, TaskList, TaskGet, TaskOutput, TaskStop, Agent, SendMessage, ListSessions, ToolSearch, ListMcpResources, ReadMcpResource, "mcp__*", StructuredOutput]
 permissionMode: bypass
-model: auto
+observer: [observer]
 skills: [verify]
 avatar:
   shape: hexagon

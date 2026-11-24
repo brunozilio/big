@@ -288,3 +288,26 @@ async fn an_item_takes_new_workflow_code_that_still_replays_its_history_and_show
     let item = ended(&kernel, &id).await;
     assert_eq!(output(&item)["data"]["by"], "novo");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_item_waiting_on_a_person_gets_a_recap_and_a_finished_agent_leaves_its_heads_up() {
+    let world = World::new();
+    world.engine.state.ask.store(true, std::sync::atomic::Ordering::SeqCst);
+    world.workflow("plan", &single("plan", "return ctx.pass((await ctx.agent(\"worker\", \"planeje\")).plan);"));
+    let kernel = world.start().await;
+    let id = kernel.create_item("plan", json!({ "title": "t" })).expect("item");
+    let recapped = until(&kernel, &id, |item| item.recap.is_some()).await;
+    let recap = recapped.recap.expect("recap");
+    assert_eq!(recap.text, "Plano pronto; falta aprovar.");
+    assert_eq!(
+        world.engine.chores(domain::SessionCommand::Recap)[0].session.resume.as_ref().map(|s| s.0.as_str()),
+        Some("s1")
+    );
+    let ask = kernel.asks()[0].ask.id.clone();
+    let decision = domain::Decision::Approve(domain::PermissionMode::Plan);
+    kernel.answer_ask_with(&ask, &decision, json!({ "resolution": "approved" })).expect("answer");
+    let noted = until(&kernel, &id, |item| !item.heads_up.is_empty()).await;
+    let note = noted.heads_up.values().next().expect("note");
+    assert_eq!(note.title, "A migração apaga a coluna antiga");
+    assert_eq!(world.engine.runs(), 1, "the chores run beside the agent, never as another step run");
+}

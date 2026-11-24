@@ -4,6 +4,7 @@ use std::sync::Arc;
 use app::ProviderSummary;
 use axum::extract::{Query, State};
 use axum::response::Response;
+use domain::EngineEvent;
 use domain::models::usage_report::{Tally, UNKNOWN, UsageReport, UsageTally};
 use domain::trace::Record;
 use jiff::civil::Date;
@@ -52,22 +53,37 @@ fn gather(shared: &Shared, days: i64) -> ApiResult<Value> {
     let mut tally = UsageTally::new(&window, &known);
     let sessions = client.sessions().map_err(ApiError::failed)?;
     for listed in sessions.iter().filter(|listed| listed.updated == 0 || listed.updated >= start) {
-        let records = match client.history(&listed.session, &listed.cwd) {
+        let mut records = match client.history(&listed.session, &listed.cwd) {
             Ok(records) => records,
             Err(error) => {
                 tracing::warn!(%error, session = %listed.session.0, "the session's history could not be read for usage");
                 continue;
             }
         };
-        for record in &records {
+        for record in &mut records {
             if let Record::Event { at_ms, event } = record
                 && let Some(day) = day_of(*at_ms, &zone)
             {
+                priced(event);
                 tally.add(&listed.session.0, &day, event);
             }
         }
     }
     Ok(listing(days, &window, &tally.report(), &providers))
+}
+
+pub fn priced(event: &mut EngineEvent) {
+    match event {
+        EngineEvent::Usage(usage) if usage.estimated_cost_usd.is_none() => {
+            let provider = match usage.provider.trim() {
+                "" => usage.model.split_once(':').map_or("", |(provider, _)| provider).to_owned(),
+                served => served.to_owned(),
+            };
+            usage.estimated_cost_usd = app::estimated_cost(&provider, usage);
+        }
+        EngineEvent::AgentEvent { event, .. } => priced(event),
+        _ => {}
+    }
 }
 
 fn named(id: &str, providers: &[ProviderSummary]) -> (Value, Value) {

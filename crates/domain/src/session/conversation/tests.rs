@@ -156,13 +156,6 @@ fn an_account_switch_names_both_accounts() {
 }
 
 #[test]
-fn an_automatic_pick_names_the_model_and_effort_it_chose() {
-    let mut transcript = Transcript::default();
-    transcript.apply(&EngineEvent::Picked { model: "claude-haiku-5-5".into(), effort: crate::Effort::Low });
-    assert_eq!(transcript.entries, [Entry::Notice("Auto: claude-haiku-5-5, low effort".into())]);
-}
-
-#[test]
 fn a_running_tool_shows_its_latest_line_until_its_result_comes() {
     let mut transcript = Transcript::default();
     transcript.apply(&EngineEvent::ToolStarted(ToolCall::new("t", "Bash", "cargo build")));
@@ -227,7 +220,7 @@ fn a_thinking_followed_by_anything_else_stops_thinking_even_if_more_thinking_com
         EngineEvent::ThinkingDelta("first".into()),
         EngineEvent::Refused { tool: "Write".into(), reason: "planning".into() },
         EngineEvent::ThinkingDelta("second".into()),
-        EngineEvent::Picked { model: "m".into(), effort: crate::Effort::Medium },
+        EngineEvent::Notice("noted".into()),
     ] {
         transcript.apply(&event);
     }

@@ -36,13 +36,16 @@ pub fn offer(client: u64, store: &Arc<Store>, application: String) {
 struct Wanted {
     directory: String,
     repo: Option<String>,
-    run: Option<String>,
+    run: Option<Vec<String>>,
     verify: Option<Vec<String>>,
-    e2e: Option<Vec<String>>,
 }
 
 fn text(input: &Value, name: &str) -> Option<String> {
     input[name].as_str().map(str::trim).map(str::to_owned)
+}
+
+fn lines_of(found: &[String]) -> Vec<String> {
+    found.iter().map(|line| line.trim()).filter(|line| !line.is_empty()).map(str::to_owned).collect()
 }
 
 fn lines(input: &Value, name: &str) -> Option<Vec<String>> {
@@ -67,9 +70,8 @@ fn wanted(input: &Value, workspace: &Workspace) -> Result<Wanted, String> {
     Ok(Wanted {
         directory: directory.to_string_lossy().into_owned(),
         repo: text(input, "repo").filter(|repo| !repo.is_empty()),
-        run: text(input, "run"),
+        run: text(input, "run").map(|line| lines_of(&[line])).or_else(|| lines(input, "run")),
         verify: lines(input, "verify"),
-        e2e: lines(input, "e2e"),
     })
 }
 
@@ -110,9 +112,6 @@ fn apply(application: &mut Application, mut wanted: Wanted) -> bool {
     if let Some(verify) = wanted.verify {
         repository.verify = verify;
     }
-    if let Some(e2e) = wanted.e2e {
-        repository.e2e = e2e;
-    }
     added
 }
 
@@ -122,13 +121,10 @@ fn described(application: &Application, directory: &str, added: bool) -> String 
     let found = application.repositories.iter().find(|repository| repository.directory == directory);
     if let Some(repository) = found {
         if !repository.run.is_empty() {
-            let _ = write!(text, "\nPara rodar: `{}`", repository.run);
+            let _ = write!(text, "\nPara rodar: {}", repository.run.join(", "));
         }
         if !repository.verify.is_empty() {
             let _ = write!(text, "\nPara verificar: {}", repository.verify.join(", "));
-        }
-        if !repository.e2e.is_empty() {
-            let _ = write!(text, "\nTestes E2E: {}", repository.e2e.join(", "));
         }
     }
     text.push_str(
@@ -191,13 +187,13 @@ mod tests {
             ..Application::default()
         };
         let worktree = "/data/worktrees/big_92ec--565e";
-        let wanted = Wanted { directory: worktree.into(), run: Some("npm start".into()), ..Wanted::default() };
+        let wanted = Wanted { directory: worktree.into(), run: Some(vec!["npm start".into()]), ..Wanted::default() };
 
         let added = apply(&mut application, wanted);
 
         assert!(!added);
         assert_eq!(application.repositories.len(), 1);
         assert_eq!(application.repositories[0].directory, "/code/demo");
-        assert_eq!(application.repositories[0].run, "npm start");
+        assert_eq!(application.repositories[0].run, ["npm start"]);
     }
 }

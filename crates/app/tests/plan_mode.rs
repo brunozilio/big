@@ -5,7 +5,7 @@ use std::sync::Arc;
 use agent_engine::fake::FakeEngine;
 use app::{Client, EngineEvent, Model};
 use app::{InMemorySecretStore, LocalServices};
-use domain::{AgentAsk, AskId, AskKind, Criteria, PermissionMode, SessionId};
+use domain::{AgentAsk, AskId, AskKind, PermissionMode, SessionId};
 
 fn model() -> Model {
     Model::new("scripted", "Scripted")
@@ -32,7 +32,7 @@ fn presented() -> EngineEvent {
 }
 
 #[test]
-fn an_approved_plan_leaves_the_session_in_the_mode_chosen_with_the_plans_criteria() {
+fn an_approved_plan_leaves_the_session_in_the_mode_chosen() {
     let data = tempfile::tempdir().expect("data");
     let engine =
         FakeEngine::new(vec![model()], run(vec![presented(), EngineEvent::ModeChanged(PermissionMode::AcceptEdits)]));
@@ -42,11 +42,9 @@ fn an_approved_plan_leaves_the_session_in_the_mode_chosen_with_the_plans_criteri
     assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })));
 
     assert_eq!(session.permission_mode(), PermissionMode::AcceptEdits);
-    assert_eq!(session.verification(), Some(Criteria::plan("cargo test passes")));
     session.send("more").expect("run").text().expect("text");
     let requests = engine.requests();
     assert_eq!(requests[1].policy.permission, PermissionMode::AcceptEdits);
-    assert_eq!(requests[1].policy.verification, Some(Criteria::plan("cargo test passes")));
 }
 
 #[test]

@@ -96,7 +96,7 @@ fn rendered(shared: &Shared, session: &str, row: &Row, shown: &Shown) -> ApiResu
     let work = session_view::work(&shown.transcript);
     Ok(json!({
         "id": session, "title": title, "status": status, "mode": mode, "model": model, "agents": agents,
-        "events": events, "work": work,
+        "events": events, "work": work, "suggestion": shared.chats.suggestion(session),
     }))
 }
 
@@ -160,8 +160,29 @@ fn send_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<()> {
     let effort = crate::models::tuning(body)?;
     let nudged = Arc::clone(ctx);
     let notify: Notify = Arc::new(move |session: &str| nudged.follow(session));
-    let message = Message { session, folder: row.folder, text: &text, model, effort, shown };
+    let agent = shared.backend.orchestrator.session_agent(session)?;
+    let message = Message { session, folder: row.folder, text: &text, model, effort, agent, shown };
     shared.chats.send(&shared.backend.client, message, notify)
+}
+
+fn side_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<Value> {
+    let shared = ctx.as_ref();
+    let text = body["text"].as_str().map(str::trim).filter(|text| !text.is_empty());
+    let text = text.ok_or_else(|| ApiError::bad("Escreva a pergunta."))?.to_owned();
+    let row = row(shared, session)?;
+    let model = chosen_model(shared, body["model"].as_str())?;
+    let agent = shared.backend.orchestrator.session_agent(session)?;
+    let message =
+        Message { session, folder: row.folder, text: &text, model, effort: None, agent, shown: Shown::default() };
+    let answer = crate::chats::Chats::side(&shared.backend.client, &message)?;
+    Ok(json!({ "answer": answer }))
+}
+
+pub async fn side(State(ctx): State<Ctx>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
+    let id = valid(&id)?.to_owned();
+    let shared = Arc::clone(&ctx);
+    let answered = blocking(move || side_now(&shared, &id, &body)).await?;
+    Ok(reply(answered))
 }
 
 pub async fn send(State(ctx): State<Ctx>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
@@ -230,6 +251,7 @@ fn refresh(shared: &Shared, sessions: &[String]) {
         let Ok(value) = view(shared, session) else { continue };
         let events = value["events"].as_array().cloned().unwrap_or_default();
         let status = value["status"].as_str().unwrap_or("idle").to_owned();
+        let suggestion = value["suggestion"].as_str().map(str::to_owned);
         let mut followed = held(&shared.followed);
         let entry = followed.entry(session.clone()).or_default();
         for event in events {
@@ -243,6 +265,10 @@ fn refresh(shared: &Shared, sessions: &[String]) {
         if entry.status != status {
             shared.live.session_status(session, &status);
             entry.status = status;
+        }
+        if entry.suggestion != suggestion {
+            shared.live.session_suggestion(session, suggestion.as_deref());
+            entry.suggestion = suggestion;
         }
         if entry.status == "idle" && entry.wanted.elapsed() > FORGET_AFTER {
             followed.remove(session);

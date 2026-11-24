@@ -225,19 +225,6 @@ export function highlightMarkdown(text: string): Token[][] {
   })
 }
 
-export function markdownToPlain(text: string): string {
-  return text
-    .split('\n')
-    .filter((l) => !/^\s*(```|~~~|\|?\s*:?-{3,})/.test(l))
-    .map((l) => l.replace(linePrefixPattern, '$1').trim())
-    .join(' ')
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
-    .replace(/(\*\*|__|~~|`)(.+?)\1/g, '$2')
-    .replace(/(^|\W)[*_]([^*_]+)[*_](?=\W|$)/g, '$1$2')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
-
 function sentences(paragraph: string) {
   return paragraph.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
 }

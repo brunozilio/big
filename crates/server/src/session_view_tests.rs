@@ -117,3 +117,27 @@ fn a_subagent_shows_its_steps_and_the_session_lists_its_tasks_and_background_wor
     assert_eq!(work["background"], serde_json::json!(["bash_1"]));
     assert_eq!(work["tasks"][0]["subject"], "rodar os testes");
 }
+
+#[test]
+fn a_script_shows_its_code_its_steps_and_its_answer_in_one_row() {
+    let code = serde_json::json!({ "code": "return 1" });
+    let script = ToolCall::new("r1", "REPL", "Ler testes").with_input(code.clone());
+    let inner = EngineEvent::ToolStarted(ToolCall::new("repl-2", "Read", "a.rs"));
+    let records: Vec<Record> = [
+        EngineEvent::ToolStarted(script),
+        EngineEvent::AgentSpawned { index: 1, kind: "REPL".into(), summary: "Ler testes".into(), prompt: "return 1".into() },
+        EngineEvent::AgentEvent { index: 1, event: Box::new(inner) },
+        EngineEvent::ToolResult { id: "r1".into(), output: "1".into(), failed: false },
+    ]
+    .into_iter()
+    .map(|event| Record::Event { at_ms: 1_000, event })
+    .collect();
+
+    let events = events(&Shown::of(&records), None);
+    let calls = events[0]["calls"].as_array().expect("the calls");
+
+    assert_eq!(calls.len(), 1);
+    assert_eq!(calls[0]["input"], code);
+    assert_eq!(calls[0]["output"], "1");
+    assert_eq!(calls[0]["steps"], serde_json::json!(["Read(a.rs)"]));
+}

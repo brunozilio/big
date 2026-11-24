@@ -1,7 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import { Button } from '@/ui/button'
+import { ChatMarkdown } from '@/ui/chatMarkdown'
 import { cn } from '@/ui/cn'
 import { ProviderLogo } from '@/ui/domain'
 import { Textarea } from '@/ui/form'
@@ -21,7 +20,7 @@ export const PlanTarget = createContext<PlanDestination | null>(null)
 function Md({ text, className }: { text: string; className?: string }) {
   return (
     <div className={cn('prose-chat min-w-0 [&>*:last-child]:mb-0', className)}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+      <ChatMarkdown text={text} />
     </div>
   )
 }

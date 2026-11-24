@@ -42,12 +42,3 @@ export function money(usd: number, currency: 'BRL' | 'USD' = 'BRL', usdToBrl = 5
   const value = currency === 'BRL' ? usd * usdToBrl : usd
   return new Intl.NumberFormat('pt-BR', { style: 'currency', currency, maximumFractionDigits: value < 10 ? 2 : 0 }).format(value)
 }
-
-export function initials(name: string): string {
-  return name
-    .split(' ')
-    .map((p) => p[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
-}

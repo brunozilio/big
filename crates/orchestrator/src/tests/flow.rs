@@ -34,7 +34,11 @@ async fn a_typescript_workflow_runs_each_effect_once_and_replays_without_repeati
     assert_eq!(agent.name, "worker");
     assert_eq!(agent.definition.as_deref(), Some(WORKER), "its tools, skills and hooks travel with it");
     assert_ne!(request.host.credentials.client, 0, "each agent run has a client of its own");
-    assert!(request.session.cwd.ends_with(git::folder_for(&git::branch_name(id.as_str()))));
+    let branch = item.branch.clone().expect("the item names its branch before the first agent runs");
+    let id_tail: String = id.as_str().chars().filter(char::is_ascii_alphanumeric).collect();
+    assert!(branch.starts_with(&format!("{}/", brand::COMMAND)), "{branch}");
+    assert!(branch.ends_with(&id_tail[id_tail.len() - 6..]), "{branch}");
+    assert!(request.session.cwd.ends_with(git::folder_for(&branch)));
     let keys = world.provider.keys("tracker.issue");
     assert_eq!(keys.len(), 1);
     assert!(keys[0].starts_with(&format!("{}:{id}/", brand::COMMAND)));

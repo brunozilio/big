@@ -75,23 +75,6 @@ fn the_plan_agent_runs_on_the_plan_model() {
 }
 
 #[test]
-fn the_small_role_wins_over_the_small_model_setting() {
-    let dir = tempfile::tempdir().expect("dir");
-    let root = dir.path().join(brand::DIR);
-    std::fs::create_dir_all(&root).expect("settings dir");
-    std::fs::write(root.join("settings.json"), r#"{"smallModel":"claude-haiku-5-5"}"#).expect("settings");
-    let scripted = Arc::new(ScriptedModel::new([
-        ScriptedModel::reply(vec![Block::Text(r#"{"tier":"small","effort":"low"}"#.into())]),
-        ScriptedModel::reply(vec![Block::Text("Renamed.".into())]),
-    ]));
-    let mut request = request(&dir, ModelRole::Small, GROK);
-    request.prompt.text = "rename the variable x to y".into();
-    request.session.auto_pick = true;
-    finish(&start(&engine(&scripted), &request));
-    assert_eq!(scripted.asked()[1].model, GROK);
-}
-
-#[test]
 fn the_session_s_fallbacks_take_over_when_the_model_is_busy() {
     let dir = tempfile::tempdir().expect("dir");
     let root = dir.path().join(brand::DIR);
