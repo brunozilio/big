@@ -13,7 +13,25 @@ export interface ChipOption<T extends string = string> {
 
 export type PickerLook = 'chip' | 'field'
 
+export interface PickerAction {
+  key: string
+  label: ReactNode
+  icon?: ReactNode
+  onSelect: () => void
+}
+
+function ActionRow({ action, lit, onPick, onHover }: { action: PickerAction; lit: boolean; onPick: () => void; onHover: () => void }) {
+  return (
+    <div role="option" tabIndex={-1} aria-selected={false} onClick={onPick} onKeyDown={(e) => e.key === 'Enter' && onPick()} onMouseMove={onHover} className={cn('flex h-9 w-full shrink-0 cursor-pointer items-center gap-2.5 rounded-control-sm px-2.5 text-left text-base text-fg2 outline-none transition-colors', lit && 'bg-hover text-fg')}>
+      {action.icon && <span aria-hidden className="flex w-4 shrink-0 justify-center text-muted">{action.icon}</span>}
+      <span className="flex-1 truncate">{action.label}</span>
+    </div>
+  )
+}
+
 const SHORTCUTS = 9
+
+export const CHIP = 'inline-flex h-7 max-w-full shrink-0 items-center gap-1.5 rounded-full bg-inset px-2.5 text-sm font-medium text-fg2 shadow-[inset_0_0_0_1px_rgb(var(--border))] outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg focus-visible:outline-none data-[state=open]:bg-hover data-[state=open]:text-fg'
 
 function textOf(option: ChipOption<string>): string {
   if (option.text) return option.text
@@ -63,7 +81,7 @@ const Trigger = forwardRef<HTMLButtonElement, TriggerProps>(function Trigger({ l
   const shared = { ...props, ref, type: 'button' as const, role: 'combobox', 'aria-label': label, onKeyDown: keyed }
   if (look === 'chip') {
     return (
-      <button {...shared} className={cn('inline-flex h-7 max-w-full shrink-0 items-center gap-1.5 rounded-full bg-inset px-2.5 text-sm font-medium text-fg2 shadow-[inset_0_0_0_1px_rgb(var(--border))] outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg focus-visible:outline-none data-[state=open]:bg-hover data-[state=open]:text-fg', className)}>
+      <button {...shared} className={cn(CHIP, className)}>
         {current?.icon ?? leading}
         <span className="truncate">{shown}</span>
       </button>
@@ -91,15 +109,18 @@ export interface PickerProps<T extends string> {
   size?: 'sm' | 'md'
   leading?: ReactNode
   className?: string
+  actions?: PickerAction[]
+  side?: 'top' | 'bottom'
 }
 
-export function ChipPicker<T extends string>({ value, options, onChange, label, placeholder, empty, look = 'chip', size = 'sm', leading, className }: PickerProps<T>) {
+export function ChipPicker<T extends string>({ value, options, onChange, label, placeholder, empty, look = 'chip', size = 'sm', leading, className, actions = [], side }: PickerProps<T>) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [lit, setLit] = useState(0)
   const current = options.find((option) => option.value === value)
   const shown = matching(options, query)
   const numbered = options.length <= SHORTCUTS
+  const rows = shown.length + actions.length
   const toggle = (next: boolean) => {
     setOpen(next)
     setQuery('')
@@ -110,6 +131,11 @@ export function ChipPicker<T extends string>({ value, options, onChange, label, 
     toggle(false)
     if (option.value !== value) onChange(option.value)
   }
+  const act = (action: PickerAction | undefined) => {
+    if (!action) return
+    toggle(false)
+    action.onSelect()
+  }
   const keyed = (e: KeyboardEvent<HTMLInputElement>) => {
     const digit = Number(e.key)
     if (numbered && !query && Number.isInteger(digit) && digit >= 1 && digit <= options.length) {
@@ -119,16 +145,17 @@ export function ChipPicker<T extends string>({ value, options, onChange, label, 
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
       const step = e.key === 'ArrowDown' ? 1 : -1
-      return setLit((at) => (at + step + shown.length) % Math.max(shown.length, 1))
+      return setLit((at) => (at + step + rows) % Math.max(rows, 1))
     }
     if (e.key === 'Enter') {
       e.preventDefault()
-      pick(shown[lit])
+      if (lit < shown.length) return pick(shown[lit])
+      act(actions[lit - shown.length])
     }
   }
   const searchLabel = placeholder ?? `${label}…`
   return (
-    <Popover trigger={<Trigger look={look} current={current} label={label} leading={leading} empty={empty} className={className} size={size} onOpen={() => toggle(true)} />} open={open} onOpenChange={toggle} align="start" className="w-[max(16rem,var(--radix-popover-trigger-width))] p-0">
+    <Popover trigger={<Trigger look={look} current={current} label={label} leading={leading} empty={empty} className={className} size={size} onOpen={() => toggle(true)} />} open={open} onOpenChange={toggle} align="start" side={side} className="w-[max(16rem,var(--radix-popover-trigger-width))] p-0">
       <div className="flex items-center gap-2 border-b px-3 py-2.5">
         <input autoFocus aria-label={searchLabel} placeholder={searchLabel} value={query} onChange={(e) => { setQuery(e.target.value); setLit(0) }} onKeyDown={keyed} className="min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-muted" />
         {numbered && <Kbd>1–{options.length}</Kbd>}
@@ -136,6 +163,10 @@ export function ChipPicker<T extends string>({ value, options, onChange, label, 
       <div role="listbox" aria-label={label} className="flex max-h-80 flex-col overflow-y-auto p-1.5">
         {shown.map((option) => (
           <Choice key={option.value} option={option} at={options.indexOf(option)} numbered={numbered} chosen={option.value === value} lit={shown[lit] === option} onPick={() => pick(option)} onHover={() => setLit(shown.indexOf(option))} />
+        ))}
+        {actions.length > 0 && shown.length > 0 && <div role="separator" className="-mx-1.5 my-1.5 h-px shrink-0 bg-line" />}
+        {actions.map((action, at) => (
+          <ActionRow key={action.key} action={action} lit={lit === shown.length + at} onPick={() => act(action)} onHover={() => setLit(shown.length + at)} />
         ))}
       </div>
     </Popover>
