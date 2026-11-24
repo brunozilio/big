@@ -160,7 +160,12 @@ impl Session {
 
 impl McpEndpoint for Session {
     fn handle(&self, message: &Value) -> Option<Value> {
-        domain::mcp::respond(message, &spec::server_name(), || spec::tools().to_vec(), |name, input| self.call(name, input))
+        let mut reply =
+            domain::mcp::respond(message, &spec::server_name(), || spec::tools().to_vec(), |name, input| self.call(name, input))?;
+        if message["method"] == "initialize" {
+            reply["result"]["instructions"] = json!(spec::instructions());
+        }
+        Some(reply)
     }
 }
 

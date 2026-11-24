@@ -13,6 +13,11 @@ pub fn tools() -> &'static [Value] {
     TOOLS.get_or_init(|| serde_json::from_str(&brand::text(DECLARED)).unwrap_or_default())
 }
 
+pub fn instructions() -> String {
+    let prefix = format!("mcp__{}__", server_name());
+    brand::text(include_str!("instructions.md")).replace("{{SERVER}}", &prefix)
+}
+
 pub fn known(name: &str) -> bool {
     tools().iter().any(|tool| tool["name"] == name)
 }
@@ -56,5 +61,8 @@ mod tests {
             assert!(!tool["description"].as_str().unwrap_or_default().contains("{{"), "{}", tool["name"]);
         }
         assert!(server_name().ends_with("_browser"));
+        let instructions = instructions();
+        assert!(instructions.contains(&format!("mcp__{}__tabs_context_mcp", server_name())));
+        assert!(!instructions.contains("{{"));
     }
 }

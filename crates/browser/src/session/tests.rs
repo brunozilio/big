@@ -65,6 +65,8 @@ fn the_server_lists_the_browser_tools_under_its_own_name() {
     let initialized =
         session.handle(&json!({ "jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {} })).unwrap_or_default();
     assert_eq!(initialized["result"]["serverInfo"]["name"], spec::server_name());
+    let instructions = initialized["result"]["instructions"].as_str().unwrap_or_default();
+    assert!(instructions.contains("tabs_context_mcp first"), "{instructions}");
     assert_eq!(session.local().name, spec::server_name());
 }
 
