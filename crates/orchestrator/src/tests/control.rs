@@ -265,8 +265,10 @@ async fn a_trigger_creates_one_item_per_subject_and_the_sync_reports_health() {
     let mut other = created.clone();
     other.data = json!({ "status": "Feito" });
     other.subject = "K-10".into();
-    assert_eq!(kernel.trigger(&other).expect("trigger"), 0);
-    let items = kernel.items().expect("items");
+    assert_eq!(kernel.trigger(&other).expect("trigger"), 1, "the built-in delivery takes what the filter left out");
+    let all = kernel.items().expect("items");
+    assert!(all.iter().any(|item| item.workflow == "default" && item.issue.as_deref() == Some("K-10")));
+    let items: Vec<_> = all.into_iter().filter(|item| item.workflow == "intake").collect();
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].title, "Nova");
     assert_eq!(items[0].issue.as_deref(), Some("K-9"));

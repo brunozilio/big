@@ -20,6 +20,8 @@ use crate::git;
 use crate::ledger::Ledger;
 use crate::matching::event_matches;
 use crate::protocol::{AGENT, WAIT_HUMAN, kind_of};
+use crate::provenance;
+use crate::resources::Origin;
 use crate::runner::ensure;
 use crate::shared::Shared;
 use crate::sink::KernelSink;
@@ -356,23 +358,31 @@ impl Orchestrator {
     pub fn trigger(&self, event: &ExternalEvent) -> Result<usize> {
         let value = serde_json::to_value(event).unwrap_or(Value::Null);
         let existing = self.shared.store.items()?;
-        let kind = source_kind(event.kind.split('.').next().unwrap_or(event.capability.as_str()));
-        let mut created = 0;
-        for workflow in self.triggered(&event.kind, &value) {
-            let known = existing.iter().any(|item| item.workflow == workflow && mentions(&item.input, &event.subject));
-            if !known {
-                let title = value["data"]["title"].as_str().unwrap_or(&event.subject).to_owned();
-                let source = json!({ "kind": kind, "connection": event.connection, "subject": event.subject });
-                let mut input = json!({ "title": title, "sources": [source], "event": value });
-                if kind == ISSUE {
-                    input["issue"] = json!(event.subject);
-                    input["connection"] = json!(event.connection);
-                }
-                self.create_with(&workflow, input, None)?;
-                created += 1;
-            }
+        if provenance::owned(&existing, &event.subject) {
+            return Ok(0);
         }
-        Ok(created)
+        let fresh: Vec<String> = self
+            .triggered(&event.kind, &value)
+            .into_iter()
+            .filter(|workflow| {
+                !existing.iter().any(|item| &item.workflow == workflow && mentions(&item.input, &event.subject))
+            })
+            .collect();
+        let resources = &self.shared.config.resources;
+        let custom =
+            |workflow: &&String| resources.workflow(workflow).is_some_and(|found| found.origin != Origin::Builtin);
+        let Some(workflow) = fresh.iter().find(custom).or(fresh.first()) else { return Ok(0) };
+        let kind = source_kind(event.kind.split('.').next().unwrap_or(event.capability.as_str()));
+        let title = value["data"]["title"].as_str().unwrap_or(&event.subject).to_owned();
+        let source = json!({ "kind": kind, "connection": event.connection, "subject": event.subject });
+        let mut input = json!({ "title": title, "sources": [source], "event": value });
+        if kind == ISSUE {
+            input["issue"] = json!(event.subject);
+            input["connection"] = json!(event.connection);
+        }
+        provenance::attach(&self.shared.store, &mut input, &value);
+        self.create_with(workflow, input, None)?;
+        Ok(1)
     }
 
     fn shape(&self, workflow: &str) -> Option<Value> {

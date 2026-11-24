@@ -79,21 +79,27 @@ impl Poll<'_> {
                 (None, Some("closed")) => ("code.pr.closed", text_of(pull, "/closed_at"), "closed"),
                 _ => ("code.pr.updated", updated.clone(), "open"),
             };
-            let data = json!({ "pr": subject, "repo": repo, "number": number, "head": text_of(pull, "/head/ref"), "state": state });
+            let head = text_of(pull, "/head/ref");
+            let base = text_of(pull, "/base/ref");
+            let data = json!({ "pr": subject, "repo": repo, "number": number, "head": head, "base": base, "state": state, "title": pull["title"] });
             let id = format!("github:{repo}:pr:{number}:{kind}:{at}");
             self.push(contracts::CODE, kind, id, subject.clone(), data, &at);
-            self.reviews(repo, number, &subject).await?;
+            self.reviews(repo, pull, &subject).await?;
         }
         Ok(())
     }
 
-    async fn reviews(&mut self, repo: &str, number: u64, subject: &str) -> Result<(), ActionError> {
+    async fn reviews(&mut self, repo: &str, pull: &Value, subject: &str) -> Result<(), ActionError> {
+        let number = pull["number"].as_u64().unwrap_or_default();
         let reviews = self.api.get(&format!("/repos/{repo}/pulls/{number}/reviews?per_page=100")).await?;
         for review in reviews.as_array().map(Vec::as_slice).unwrap_or_default() {
             let data = json!({
                 "pr": subject,
                 "repo": repo,
                 "number": number,
+                "head": text_of(pull, "/head/ref"),
+                "base": text_of(pull, "/base/ref"),
+                "title": pull["title"],
                 "verdict": verdict(&review["state"]),
                 "author": text_of(review, "/user/login"),
                 "body": review["body"],

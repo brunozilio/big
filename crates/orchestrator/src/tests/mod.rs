@@ -5,6 +5,7 @@ mod factory;
 mod flow;
 mod repos;
 mod restart;
+mod triggers;
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};

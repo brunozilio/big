@@ -17,6 +17,7 @@ mod ledger;
 mod matching;
 mod naming;
 mod protocol;
+mod provenance;
 mod repos;
 mod resources;
 mod runner;
@@ -35,6 +36,7 @@ pub use error::{Error, Result};
 pub use events::OrchestratorEvent;
 pub use factory::{Autonomy, ESCAPED as FACTORY_ESCAPED, Factory, FactoryReport, RECURRING as FACTORY_RECURRING};
 pub use git::{is_repo, origin};
+pub use provenance::snapshot as application_snapshot;
 pub use resources::{Builtin, Origin, Resource, Resources};
 pub use views::{Attempt, ItemSummary, StepSummary, StepView};
 

@@ -3,8 +3,7 @@ use std::path::Path;
 use axum::Json;
 use axum::extract::{Path as UrlPath, State};
 use axum::response::Response;
-use connectors::contracts;
-use serde_json::{Value, json};
+use serde_json::Value;
 use store::{Application, CodeChoice, Repository, TrackerChoice};
 
 use crate::attachments::random_id;
@@ -32,14 +31,7 @@ fn repository(found: Repository) -> ApiResult<Repository> {
         .code
         .map(|code| CodeChoice { connection: trimmed(&code.connection), repo: trimmed(&code.repo) })
         .filter(|code| !code.connection.is_empty() && !code.repo.is_empty());
-    Ok(Repository {
-        id,
-        code,
-        directory,
-        run: trimmed(&found.run),
-        verify: lines(&found.verify),
-        e2e: lines(&found.e2e),
-    })
+    Ok(Repository { id, code, directory, run: lines(&found.run), verify: lines(&found.verify) })
 }
 
 pub fn checked(mut application: Application) -> ApiResult<Application> {
@@ -75,16 +67,7 @@ pub async fn all(shared: &Shared) -> ApiResult<Vec<Application>> {
 }
 
 pub fn snapshot(shared: &Shared, application: &Application) -> ApiResult<Value> {
-    let records = shared.backend.store.connections()?;
-    let mut value = serde_json::to_value(application).map_err(ApiError::failed)?;
-    for repository in value["repositories"].as_array_mut().into_iter().flatten() {
-        let Some(connection) = repository["code"]["connection"].as_str().map(str::to_owned) else { continue };
-        let record = records.iter().find(|record| record.id == connection);
-        let pipelines =
-            record.is_some_and(|record| record.capabilities.iter().any(|name| name == contracts::PIPELINES));
-        repository["code"]["pipelines"] = json!(pipelines);
-    }
-    Ok(value)
+    Ok(orchestrator::application_snapshot(&shared.backend.store, application))
 }
 
 pub async fn list(State(ctx): State<Ctx>) -> ApiResult<Response> {

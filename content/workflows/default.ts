@@ -1,9 +1,10 @@
-import { workflow } from "sdk";
+import { workflow, on } from "sdk";
 import { plan, ticket, cases, develop, checks, pr, ci, review, merge, release } from "sdk/steps";
 
 export default workflow({
   name: "entrega",
   accepts: ["issue", "text"],
+  triggers: [on("tracker.issue.created")],
   statuses: ["A fazer", "Fazendo", "Revisando", "Feito"],
   steps: [
     plan({ agent: "planner", status: "A fazer" }),

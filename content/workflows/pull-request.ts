@@ -1,9 +1,10 @@
-import { workflow } from "sdk";
+import { workflow, on } from "sdk";
 import { develop, checks, ci, review, merge, release } from "sdk/steps";
 
 export default workflow({
   name: "pull-request",
   accepts: ["pull_request"],
+  triggers: [on("code.review.submitted", { verdict: "request_changes" })],
   statuses: ["A fazer", "Fazendo", "Revisando", "Feito"],
   steps: [
     develop({ agent: "developer", status: "Fazendo", feedbackOnly: true }),
