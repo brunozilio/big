@@ -1,12 +1,11 @@
 import * as RCheckbox from '@radix-ui/react-checkbox'
-import * as RSelect from '@radix-ui/react-select'
 import { motion } from 'framer-motion'
 import { cloneElement, forwardRef, isValidElement, useId, type InputHTMLAttributes, type MouseEvent, type ReactNode, type TextareaHTMLAttributes } from 'react'
+import { ChipPicker, type PickerLook } from './chipPicker'
 import { cn } from './cn'
 import { Kbd } from './display'
 import { Icon } from './icon'
 import { springSnap, tween } from './motion'
-import { popIn } from './overlay'
 
 export const Input = forwardRef<HTMLInputElement, InputHTMLAttributes<HTMLInputElement> & { leading?: ReactNode; trailing?: ReactNode }>(function Input({ className, leading, trailing, ...props }, ref) {
   return (
@@ -84,35 +83,11 @@ export interface SelectOption {
   value: string
   label: ReactNode
   icon?: ReactNode
+  text?: string
 }
 
-export function Select({ value, onValueChange, options, placeholder, className, size = 'md', label, leading }: { value: string; onValueChange: (v: string) => void; options: SelectOption[]; placeholder?: string; className?: string; size?: 'sm' | 'md'; label?: string; leading?: ReactNode }) {
-  return (
-    <RSelect.Root value={value} onValueChange={onValueChange}>
-      <RSelect.Trigger aria-label={label} className={cn('inline-flex items-center justify-between gap-2 rounded-control bg-surface px-3 text-fg shadow-card transition-colors hover:bg-hover', size === 'sm' ? 'h-8 text-sm' : 'h-10 text-base', className)}>
-        <span className="flex min-w-0 items-center gap-2 truncate">
-          {leading}
-          <RSelect.Value placeholder={placeholder} />
-        </span>
-        <Icon name="down" size={15} className="text-muted" />
-      </RSelect.Trigger>
-      <RSelect.Portal>
-        <RSelect.Content position="popper" sideOffset={6} className={`z-50 max-h-80 min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-card bg-surface p-1.5 shadow-pop origin-[var(--radix-select-content-transform-origin)] ${popIn}`}>
-          <RSelect.Viewport>
-            {options.map((o) => (
-              <RSelect.Item key={o.value} value={o.value} className="flex h-9 cursor-pointer items-center gap-2.5 rounded-control-sm px-2.5 text-base text-fg2 outline-none data-[highlighted]:bg-hover data-[highlighted]:text-fg">
-                {o.icon}
-                <RSelect.ItemText>{o.label}</RSelect.ItemText>
-                <RSelect.ItemIndicator className="ml-auto pl-3">
-                  <Icon name="check" size={15} />
-                </RSelect.ItemIndicator>
-              </RSelect.Item>
-            ))}
-          </RSelect.Viewport>
-        </RSelect.Content>
-      </RSelect.Portal>
-    </RSelect.Root>
-  )
+export function Select({ value, onValueChange, options, placeholder, className, size = 'md', label, leading, look }: { value: string; onValueChange: (v: string) => void; options: SelectOption[]; placeholder?: string; className?: string; size?: 'sm' | 'md'; label?: string; leading?: ReactNode; look?: PickerLook }) {
+  return <ChipPicker value={value} onChange={onValueChange} options={options} label={label ?? placeholder ?? ''} empty={placeholder} size={size} look={look ?? (size === 'sm' ? 'chip' : 'field')} leading={leading} className={className} />
 }
 
 export function SegmentedControl<T extends string>({ value, onChange, options, className, size = 'md' }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode; icon?: ReactNode; badge?: ReactNode }[]; className?: string; size?: 'sm' | 'md' }) {
