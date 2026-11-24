@@ -105,11 +105,19 @@ impl Tool for McpTool {
         self.spec.clone()
     }
 
-    fn effects(&self, _input: &Value, _workspace: &Workspace) -> Vec<Effect> {
+    fn effects(&self, input: &Value, _workspace: &Workspace) -> Vec<Effect> {
+        if self.server.name == domain::mcp::browser_server() {
+            return domain::browser_sites::effects(&self.server.name, &self.name, input);
+        }
         if self.marked_read_only { Vec::new() } else { remote_effects(&self.server.name, &self.name) }
     }
 
     fn summary(&self, input: &Value) -> String {
+        if self.server.name == domain::mcp::browser_server()
+            && let Some(sites) = domain::browser_sites::subject(&self.name, input)
+        {
+            return sites;
+        }
         ["query", "url", "command", "item", "id", "text", "title"]
             .into_iter()
             .find_map(|key| field(input, key))

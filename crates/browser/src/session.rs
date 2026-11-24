@@ -95,8 +95,13 @@ impl Session {
     }
 
     pub(crate) fn ask(&self, device: &str, tool: &str, input: &Value, standalone: bool) -> Result<Value, String> {
-        let message = json!({ "type": "call", "session": self.key, "tool": tool, "input": input, "standalone": standalone });
-        self.hub.call(device, message, self.settings.call)
+        let sites = approved_sites(tool, input);
+        let message = json!({ "type": "call", "session": self.key, "tool": tool, "input": input, "standalone": standalone, "sites": sites });
+        let mut answer = self.hub.call(device, message, self.settings.call)?;
+        if let Some(tabs) = answer.as_object_mut().and_then(|fields| fields.remove("tabs")) {
+            remember_tabs(&tabs);
+        }
+        Ok(answer)
     }
 
     fn listed(&self) -> Value {
@@ -166,6 +171,20 @@ impl McpEndpoint for Session {
             reply["result"]["instructions"] = json!(spec::instructions());
         }
         Some(reply)
+    }
+}
+
+fn approved_sites(tool: &str, input: &Value) -> Vec<String> {
+    let mut sites = domain::permission::allowed::global().map(|allowed| allowed.sites()).unwrap_or_else(|| vec!["*".to_owned()]);
+    sites.extend(domain::browser_sites::sites(tool, input).into_iter().flatten());
+    sites
+}
+
+fn remember_tabs(tabs: &Value) {
+    for tab in tabs.as_array().map(Vec::as_slice).unwrap_or_default() {
+        if let Some(id) = tab["id"].as_i64() {
+            domain::browser_sites::record(id, tab["url"].as_str().unwrap_or_default());
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
-use super::git::Git;
+use super::command::Git;
 use crate::tools::Workspace;
 
 const FILE_AT_MOST: u64 = 10 * 1024 * 1024;
@@ -54,19 +54,6 @@ fn held(path: &Path, room: &mut u64) -> Held {
         }
         Err(_) => Held::NotKept,
     }
-}
-
-pub fn not_kept(skipped: &[PathBuf]) -> Option<String> {
-    let named: Vec<String> = skipped.iter().take(5).map(|path| path.display().to_string()).collect();
-    let more = skipped.len().saturating_sub(named.len());
-    let more = if more > 0 { format!(" and {more} more") } else { String::new() };
-    (!skipped.is_empty()).then(|| {
-        format!(
-            "(/rewind cannot restore {}{more}: the repository runs a filter on them that was not run here, so what \
-             git stores is not what was checked out)",
-            named.join(", ")
-        )
-    })
 }
 
 impl Watched {

@@ -133,6 +133,16 @@ fn an_exported_value_is_read_without_running_anything_else() {
 }
 
 #[test]
+fn an_outline_marks_the_functions_an_export_holds() {
+    let source =
+        r#"export const hooks = { Stop: () => 1, PreToolUse: [{ matcher: "Bash", run(input) { return input; } }] };"#;
+    let shape = outline("agent.ts", source, "hooks").expect("outline");
+    let function = json!({ "$function": true });
+    assert_eq!(shape, json!({ "Stop": function, "PreToolUse": [{ "matcher": "Bash", "run": function }] }));
+    assert_eq!(outline("agent.ts", "export const spec = {};", "hooks"), Ok(serde_json::Value::Null));
+}
+
+#[test]
 fn an_export_that_is_not_a_function_is_its_own_value() {
     let source = r#"export const spec = { name: "Echo", description: "Says it back." };"#;
     assert_eq!(go(source, "spec.description", &[], json!({})).0, Ok(json!("Says it back.")));

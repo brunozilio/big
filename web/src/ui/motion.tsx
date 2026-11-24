@@ -1,5 +1,6 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'framer-motion'
 import { useEffect, useRef, type ReactNode } from 'react'
+import { currentLocale } from '@/i18n'
 import { cn } from './cn'
 
 export { AnimatePresence, motion }
@@ -24,7 +25,7 @@ export function Collapse({ open, children, className }: { open: boolean; childre
   )
 }
 
-export function Counter({ value, format = (v: number) => Math.round(v).toLocaleString('pt-BR'), className }: { value: number; format?: (v: number) => string; className?: string }) {
+export function Counter({ value, format = (v: number) => Math.round(v).toLocaleString(currentLocale()), className }: { value: number; format?: (v: number) => string; className?: string }) {
   const mv = useMotionValue(value)
   const text = useTransform(mv, (v) => format(v))
   const shown = useRef(value)

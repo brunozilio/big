@@ -53,10 +53,7 @@ impl Db {
         let place = path.display().to_string();
         made_private(path).map_err(|source| Error::Io { place: place.clone(), source })?;
         let connection = Connection::open(path).map_err(|source| Error::Sqlite { place: place.clone(), source })?;
-        Self::ready(
-            Kept { connection: Mutex::new(connection), place, wait },
-            migrations,
-        )
+        Self::ready(Kept { connection: Mutex::new(connection), place, wait }, migrations)
     }
 
     fn ready(kept: Kept, migrations: &[&str]) -> Result<Self, Error> {

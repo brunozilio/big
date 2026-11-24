@@ -19,6 +19,7 @@ pub struct Script {
     pub ask_develop: AtomicBool,
     pub started: AtomicUsize,
     pub answers: Mutex<Vec<(String, Decision)>>,
+    pub steered: Mutex<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -50,6 +51,10 @@ impl RunHandle for Handle {
     fn answer(&mut self, ask: &AskId, decision: &Decision) {
         self.script.answers.lock().unwrap_or_else(PoisonError::into_inner).push((ask.0.clone(), decision.clone()));
         let _ = self.answer.send(decision.clone());
+    }
+
+    fn steer(&mut self, text: String) {
+        self.script.steered.lock().unwrap_or_else(PoisonError::into_inner).push(text);
     }
 }
 
@@ -164,7 +169,7 @@ impl AgentEngine for Agents {
         let places: Vec<PathBuf> =
             std::iter::once(request.session.cwd.clone()).chain(request.session.add_dirs.iter().cloned()).collect();
         let command = request.session.command.is_some();
-        let running = request.prompt.text.starts_with("Automatize");
+        let running = request.prompt.text.starts_with("Automate");
         std::thread::spawn(move || {
             turn.emit(EngineEvent::SessionStarted(session));
             if command {

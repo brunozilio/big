@@ -1,9 +1,9 @@
 import { setClock } from '../clock'
 import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
-import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, initialApplications, listDirs } from './applications'
+import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, codeBranches, openPulls, initialApplications, listDirs } from './applications'
 import { INITIAL_CONNECTIONS, MCP_TOOLS, MODELS, PROVIDERS, usageFixture, usageLimitsFixture } from './fixtures'
-import { itemOfSession, sessionById } from './sessions'
+import { chatFree, itemOfSession, openFree, sessionById } from './sessions'
 import {
   approveDeploy, approvePlan, cancelItem, chat, connect, createItem, disconnect, isStepId, mergePr, onChange, rejectDeploy, rerunFrom, reset, resolvePause, revisePlan, store, submitReview, tick,
   type Note, type SimItem,
@@ -16,7 +16,7 @@ export interface MockOptions {
 }
 
 function wireConnections(): Connections {
-  const providers = PROVIDERS.map(({ capabilities, accounts: _a, choose: _h, paste: _p, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
+  const providers = PROVIDERS.filter((p) => !p.hidden).map(({ capabilities, accounts: _a, choose: _h, paste: _p, hidden: _x, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
   return { providers, connections: store.connections.map((c) => ({ ...c, status: c.status ?? 'ok' })) }
 }
 
@@ -43,7 +43,7 @@ export function mockApi(options: MockOptions = {}): Api {
   reset(INITIAL_CONNECTIONS)
   let lastTick = Date.now()
   setClock(() => EPOCH + store.clock * TICK_MS + Math.min(TICK_MS, ((Date.now() - lastTick) / tickMs) * TICK_MS))
-  let branding: Branding = { name: 'Entregas', logo: null, theme: 'system' }
+  let branding: Branding = { name: 'Entregas', logo: '/api/branding/logo', theme: 'system', language: 'pt-BR', output_style: null, output_styles: [{ key: 'concise', name: 'Concise', description: 'Respostas curtas' }] }
   let applications: Application[] = initialApplications()
   const flows = new Map<string, Flow>()
   const listeners = new Set<(e: LiveEvent) => void>()
@@ -133,6 +133,10 @@ export function mockApi(options: MockOptions = {}): Api {
           return trackerProjects(a.query ?? '') as CallResult<A>
         case 'code.repos':
           return CODE_REPOS.filter((r) => r.ref.includes((a.query ?? '').toLowerCase())) as CallResult<A>
+        case 'code.pulls':
+          return openPulls(a.repo) as CallResult<A>
+        case 'code.branches':
+          return codeBranches() as CallResult<A>
         case 'tracker.issue':
           return issueData(a.key) as CallResult<A>
         case 'tracker.comment':
@@ -248,6 +252,7 @@ export function mockApi(options: MockOptions = {}): Api {
       return s
     }, 80),
     send: (id, message) => wait(() => {
+      if (chatFree(id, message.text)) return
       const found = itemOfSession(id)
       if (found) chat(found.it.id, found.kind, message.text)
     }, 80),
@@ -257,6 +262,11 @@ export function mockApi(options: MockOptions = {}): Api {
       if (!question.text.trim()) throw new Error('Escreva a pergunta.')
       return { answer: `Sobre ${found.it.key}: o agente segue no passo atual e nada muda no trabalho dele. Sua pergunta foi “${question.text.trim()}”.` }
     }, 600),
+    btw: (question) => wait(() => {
+      if (!question.text.trim()) throw new Error('Escreva a pergunta.')
+      if (!question.application) throw new Error('Escolha uma aplicação para perguntar.')
+      return { session: openFree(question.text.trim()) }
+    }, 200),
     respond: (id, event, response) => wait(() => {
       const found = itemOfSession(id)
       if (!found) throw new Error(`sessão ${id} não encontrada`)

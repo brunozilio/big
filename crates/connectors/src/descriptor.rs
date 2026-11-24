@@ -126,6 +126,7 @@ pub struct Presentation {
     pub button: String,
     pub site: String,
     pub choose_title: String,
+    pub hidden: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

@@ -38,6 +38,7 @@ pub struct Shared {
     pub store: Arc<Store>,
     pub events: broadcast::Sender<OrchestratorEvent>,
     pub asks: Asks,
+    pub steering: crate::steering::Steering,
     pub waits: Mutex<Vec<EventWait>>,
     pub permits: Arc<Semaphore>,
     pub token: CancellationToken,
@@ -46,7 +47,6 @@ pub struct Shared {
     runners: Mutex<HashMap<ItemId, (u64, mpsc::UnboundedSender<Wake>)>>,
     generation: AtomicU64,
     scripts: Mutex<HashMap<ScriptKey, Arc<Script>>>,
-    pins: Mutex<HashMap<(String, String), Arc<Script>>>,
     appending: Mutex<()>,
     pub observed: Mutex<Vec<ItemId>>,
     pub observing: tokio::sync::Notify,
@@ -71,6 +71,7 @@ impl Shared {
             config,
             events,
             asks: Asks::default(),
+            steering: crate::steering::Steering::default(),
             waits: Mutex::default(),
             token: CancellationToken::new(),
             sync: OnceLock::new(),
@@ -78,7 +79,6 @@ impl Shared {
             runners: Mutex::default(),
             generation: AtomicU64::new(0),
             scripts: Mutex::default(),
-            pins: Mutex::default(),
             appending: Mutex::default(),
             observed: Mutex::default(),
             observing: tokio::sync::Notify::new(),
@@ -189,31 +189,7 @@ impl Shared {
     }
 
     pub fn script_for(&self, item: &WorkItem) -> Result<Arc<Script>> {
-        if let Some((version, code)) = self.store.pinned_workflow(item.id.as_str())? {
-            return self.pinned(&version, &code, &item.workflow);
-        }
-        let script = self.script_in(self.home(&item.input).as_deref(), &item.workflow)?;
-        self.store.pin_workflow(item.id.as_str(), &script.version(), &script.code())?;
-        Ok(script)
-    }
-
-    pub fn latest_for(&self, item: &WorkItem) -> Result<Arc<Script>> {
         self.script_in(self.home(&item.input).as_deref(), &item.workflow)
-    }
-
-    pub fn adopt(&self, item: &WorkItem, script: &Script) -> Result<()> {
-        self.store.pin_workflow(item.id.as_str(), &script.version(), &script.code())?;
-        Ok(())
-    }
-
-    fn pinned(&self, version: &str, code: &str, workflow: &str) -> Result<Arc<Script>> {
-        let key = (version.to_owned(), workflow.to_owned());
-        if let Some(found) = self.pins.lock().unwrap_or_else(PoisonError::into_inner).get(&key) {
-            return Ok(Arc::clone(found));
-        }
-        let loaded = Arc::new(Script::from_code(code, workflow).map_err(Error::Script)?);
-        let mut pins = self.pins.lock().unwrap_or_else(PoisonError::into_inner);
-        Ok(Arc::clone(pins.entry(key).or_insert(loaded)))
     }
 
     pub fn script_in(&self, home: Option<&Path>, workflow: &str) -> Result<Arc<Script>> {

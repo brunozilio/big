@@ -107,7 +107,12 @@ fn status(shared: &Shared, record: &ConnectionRecord) -> &'static str {
 pub fn listing(shared: &Shared) -> ApiResult<Value> {
     let descriptors: Vec<ProviderDescriptor> = shared.backend.connectors.descriptors().into_iter().cloned().collect();
     let ai = crate::ai::subscriptions(shared);
-    let mut providers: Vec<Value> = descriptors.iter().map(|descriptor| provider_json(shared, descriptor)).collect();
+    let connectors = &shared.backend.connectors;
+    let mut providers: Vec<Value> = descriptors
+        .iter()
+        .filter(|descriptor| !connectors.presentation(&descriptor.key).is_ok_and(|look| look.hidden))
+        .map(|descriptor| provider_json(shared, descriptor))
+        .collect();
     providers.extend(ai.iter().map(crate::ai::provider_json));
     let records = shared.backend.store.connections()?;
     let mut connections: Vec<Value> =

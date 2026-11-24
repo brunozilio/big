@@ -21,13 +21,17 @@ Do not ask in text whether the plan is fine nor offer to start: ExitPlanMode ask
 };
 
 const planSubAgent = `Planning mode: only read/search tools are available. Bash is not offered, whatever your instructions say about it: use Glob, Grep and Read. Report what you found; do not edit files, run commands or change external state.`;
+const planTeammate = `Planning mode: you are a teammate, not the lead, so the lead writes and presents the plan. Do not start Plan agents and do not call ExitPlanMode. Read and search for your part yourself, then report what you found; do not edit files, run commands that change anything or change external state.`;
 const reminderMain = `Collect background agent reports before completing. Use TaskStop to cancel an unnecessary task.`;
 const reminderSubAgent = `You are a sub-agent; return your report and do not create other agents.`;
+const reminderTeammate = `You are a teammate, not the lead; do your part yourself, return your report to the lead and do not create other agents.`;
 
 export default function reminder(ctx) {
   const sub = ctx.depth > 0;
-  const mode = ctx.mode === "plan" && sub ? planSubAgent : modes[ctx.mode];
-  const role = sub ? reminderSubAgent : reminderMain;
+  const teammate = !sub && ctx.teammate === true;
+  const planning = ctx.mode === "plan";
+  const mode = planning && sub ? planSubAgent : planning && teammate ? planTeammate : modes[ctx.mode];
+  const role = sub ? reminderSubAgent : teammate ? reminderTeammate : reminderMain;
   const lines = mode ? [mode, role] : [role];
   return `\n\n# Runtime reminder\n${lines.join("\n")}`;
 }

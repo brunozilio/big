@@ -12,6 +12,10 @@ pub trait McpEndpoint: std::any::Any + Send + Sync {
 
 pub const PROTOCOL_VERSION: &str = "2025-06-18";
 
+pub fn browser_server() -> String {
+    format!("{}_browser", brand::COMMAND.replace('-', "_"))
+}
+
 pub type RpcError = (i64, String);
 
 pub fn respond(

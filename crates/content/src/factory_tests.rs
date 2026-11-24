@@ -136,6 +136,25 @@ fn the_meta_loop_writes_a_case_checks_it_promotes_it_into_the_base_factory_and_h
 }
 
 #[test]
+fn rejecting_the_promotion_cancels_the_item_without_merging() {
+    let source = source("workflows/factory-evals.ts");
+    let host = Host { detector_catches: true, listed: format!(".big/evals/login.json\t{CASE}\n") };
+    let (result, asked) =
+        drive(&source, &json!({ "workflow": "factory-evals" }), &item("near", json!([finding()])), |command| {
+            if command["kind"] == "wait.human" {
+                return json!({ "action": "reject", "values": {}, "by": "ana" });
+            }
+            host.reply(command)
+        });
+    assert_eq!(result["state"], "cancelled", "{result}");
+    let execs = of_kind(&asked, "exec");
+    assert!(
+        !execs.iter().any(|command| command["args"]["command"].as_str().unwrap_or_default().contains("merge --no-ff"))
+    );
+    assert!(of_kind(&asked, "child").is_empty());
+}
+
+#[test]
 fn an_eval_fails_when_the_detector_misses_the_defect_or_the_case_for_the_finding_is_missing() {
     let source = source("sdk/factory/index.js");
     let target = json!({ "step": "evals", "options": { "requireOrigin": true } });
@@ -174,6 +193,6 @@ fn the_factory_library_names_no_provider_and_has_no_comments() {
         }
         assert!(!text.contains("//") || text.contains("://"), "{path} has no comments");
     }
-    assert!(super::builtin_text("agents/factory-engineer.md").is_some());
-    assert!(super::builtin_text("agents/eval-engineer.md").is_some());
+    assert!(super::builtin_text("agents/factory-engineer.ts").is_some());
+    assert!(super::builtin_text("agents/eval-engineer.ts").is_some());
 }

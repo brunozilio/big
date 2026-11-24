@@ -44,12 +44,7 @@ impl Ending {
     }
 }
 
-pub(crate) fn prepare(
-    services: &LocalServices,
-    client: u64,
-    run: RunId,
-    request: &PromptRequest,
-) -> Prepared {
+pub(crate) fn prepare(services: &LocalServices, client: u64, run: RunId, request: &PromptRequest) -> Prepared {
     agent_engine::tools::peers::register(client, &request.session.cwd);
     let providers = &services.providers;
     let (model_accounts, mut keys): (Vec<String>, Vec<_>) =

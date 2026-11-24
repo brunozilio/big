@@ -14,6 +14,7 @@ use crate::error::{Error, Result};
 use crate::events::{OrchestratorEvent, Wake};
 use crate::ledger::Ledger;
 use crate::protocol::{AGENT, Activated, CHILD, Command, Signal, WAIT_HUMAN, kind_of};
+use crate::rewind;
 use crate::shared::Shared;
 use crate::views::item_json;
 
@@ -31,6 +32,7 @@ pub struct Runner {
     inflight: HashMap<u64, Inflight>,
     blocked: BTreeSet<u64>,
     permit: Option<OwnedSemaphorePermit>,
+    realigned: BTreeSet<String>,
 }
 
 pub fn ensure(shared: &Arc<Shared>, item: &ItemId) {
@@ -43,6 +45,7 @@ pub fn ensure(shared: &Arc<Shared>, item: &ItemId) {
             inflight: HashMap::new(),
             blocked: BTreeSet::new(),
             permit: None,
+            realigned: BTreeSet::new(),
         };
         shared.spawn(runner.run());
     } else {
@@ -74,6 +77,10 @@ fn impede(shared: &Shared, item: &WorkItem, reason: &str) -> Result<()> {
 
 pub fn block(shared: &Shared, item: &ItemId, key: &IdempotencyKey, reason: &str) -> Result<()> {
     let state = shared.item(item)?;
+    let timeout = crate::shared::timeout_timer(key);
+    if state.timers.contains_key(&timeout) {
+        shared.append(item, &[WorkflowEvent::TimerFired { id: timeout }])?;
+    }
     impede(shared, &state, reason)?;
     let branch = key.branch.clone().unwrap_or_default();
     mark_waiting(shared, &shared.item(item)?, Some((&key.step, &branch)))
@@ -140,6 +147,9 @@ impl Runner {
         match wake {
             Wake::Poke => {}
             Wake::Blocked(seq) => {
+                if let Some(known) = self.inflight.get(&seq) {
+                    known.tasks.iter().for_each(AbortHandle::abort);
+                }
                 self.blocked.insert(seq);
             }
             Wake::Rerun => {
@@ -201,16 +211,7 @@ impl Runner {
                 self.close(&ended)?;
                 Ok(false)
             }
-            "nondeterministic" => {
-                let message = activated.error["message"].as_str().unwrap_or_default();
-                park(
-                    &self.shared,
-                    &self.id,
-                    &ledger,
-                    &format!("o código do workflow mudou e não reproduz o histórico: {message}"),
-                )?;
-                Ok(true)
-            }
+            "nondeterministic" => self.realign(&ledger, &activated.error).await,
             _ => {
                 let message = activated.error["message"].as_str().unwrap_or_default();
                 park(&self.shared, &self.id, &ledger, &format!("o workflow falhou: {message}"))?;
@@ -229,19 +230,25 @@ impl Runner {
             "seed": item.id.as_str(),
         });
         tokio::task::spawn_blocking(move || {
-            let pinned = shared.script_for(&owner)?;
-            let latest = shared.latest_for(&owner)?;
-            if latest.version() != pinned.version() {
-                let tried = run_script(&latest, &mut activation)?;
-                if tried.state != "nondeterministic" {
-                    shared.adopt(&owner, &latest)?;
-                    return Ok(tried);
-                }
-            }
-            run_script(&pinned, &mut activation)
+            let script = shared.script_for(&owner)?;
+            run_script(&script, &mut activation)
         })
         .await
         .map_err(|error| Error::Script(error.to_string()))?
+    }
+
+    async fn realign(&mut self, ledger: &Ledger, error: &Value) -> Result<bool> {
+        let diverged = error["seq"].as_u64().and_then(|seq| ledger.requested.get(&seq));
+        let step = diverged.map(|request| request.key.step.clone()).filter(|step| ledger.cut(step).is_some());
+        if let Some(step) = step.filter(|step| self.realigned.insert(step.clone())) {
+            tracing::info!(item = %self.id, %step, "the workflow code changed; the step runs again with it");
+            rewind::rewind(&self.shared, &self.id, &step).await?;
+            return Ok(true);
+        }
+        let message = error["message"].as_str().unwrap_or_default();
+        let reason = format!("o código do workflow mudou e não reproduz o histórico: {message}");
+        park(&self.shared, &self.id, ledger, &reason)?;
+        Ok(true)
     }
 
     fn settle(&mut self, ledger: &Ledger) {
@@ -345,6 +352,7 @@ impl Runner {
         for child in item.children.iter().filter(|child| !child.finished) {
             crate::api::cancel_item(&self.shared, &child.id, "o pai terminou")?;
         }
+        crate::release::release(&self.shared, item);
         self.shared.emit(OrchestratorEvent::ItemEnded { item: item.id.clone() });
         if let Some(parent) = &item.parent {
             self.shared.wake(parent, Wake::Poke);

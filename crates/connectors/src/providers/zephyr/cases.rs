@@ -162,7 +162,8 @@ async fn keyed_cycle(api: &Api<'_>, project: &str, key: &str) -> Result<Option<V
         let wanted = json!({ "projectKey": project, "maxResults": LOOKUP_PAGE, "startAt": start });
         let answer = api.tool("zephyr_get_test_cycles", wanted).await?;
         let cycles = mcp::items(&answer, "values");
-        if let Some(found) = cycles.iter().find(|cycle| idempotency::carries_tag(&text_of(cycle, "/description"), key)) {
+        if let Some(found) = cycles.iter().find(|cycle| idempotency::carries_tag(&text_of(cycle, "/description"), key))
+        {
             return Ok(Some(found.clone()));
         }
         let fetched = u64::try_from(cycles.len()).unwrap_or(0);

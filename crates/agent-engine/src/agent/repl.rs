@@ -10,9 +10,12 @@ use serde_json::{Value, json};
 
 use super::Agent;
 use super::run::ThisRun as Tasks;
+use super::subagents::background::Spawn;
 use crate::control::Control;
-use crate::tools::repl::{DESCRIBE_TOOL, READ_TEXT, REPL_TOOL, Repl, SEARCH_TOOLS, reachable, session};
-use crate::tools::{Outcome, Tool, Workspace, raw_text};
+use crate::model::ToolSpec;
+use crate::tools::repl::{DESCRIBE_TOOL, READ_TEXT, REPL_TOOL, SEARCH_TOOLS, reachable, session};
+use crate::tools::tool_search::TOOL_SEARCH;
+use crate::tools::{Outcome, Workspace, raw_text};
 use crate::transcript::{Block, Message};
 
 const POLL: Duration = Duration::from_millis(25);
@@ -37,7 +40,7 @@ impl Agent<'_> {
         input: &Value,
         tasks: &Tasks,
         parent: &[Message],
-        spawn: &dyn Fn(Box<dyn FnOnce() + Send + 'env>),
+        spawn: Spawn<'_, 'env>,
     ) -> Outcome {
         let Some(code) = input["code"].as_str().filter(|code| !code.trim().is_empty()) else {
             return Outcome::error("Missing required parameter `code`.");
@@ -61,7 +64,7 @@ impl Agent<'_> {
             refused: Mutex::default(),
             lane: OnceLock::new(),
             started: Instant::now(),
-            summary: Repl.summary(input),
+            summary: input["summary"].as_str().unwrap_or_default().to_owned(),
             code: code.to_owned(),
             fresh: domain::code_mode::fresh_context(context.started_now, earlier_scripts(parent, id)),
         };
@@ -77,13 +80,7 @@ impl Agent<'_> {
     }
 
     #[allow(clippy::needless_lifetimes)]
-    fn dispatch<'env>(
-        &'env self,
-        run: ScriptRun,
-        tasks: &Tasks,
-        detach: Duration,
-        spawn: &dyn Fn(Box<dyn FnOnce() + Send + 'env>),
-    ) -> Outcome {
+    fn dispatch<'env>(&'env self, run: ScriptRun, tasks: &Tasks, detach: Duration, spawn: Spawn<'_, 'env>) -> Outcome {
         let number = run.number;
         let job = move |control: &Arc<Control>, _forked: &Workspace| {
             let agent = Agent { control, request: self.request.clone(), ..*self };
@@ -158,16 +155,28 @@ impl Agent<'_> {
         answered(block, function, input)
     }
 
+    fn found(&self, query: &str) -> Result<Vec<ToolSpec>, String> {
+        let Some(deferred) = &self.workspace.services.deferred else { return Ok(Vec::new()) };
+        let listed: Vec<Value> =
+            deferred.specs().iter().map(|spec| json!({ "name": spec.name, "description": spec.description })).collect();
+        let path = crate::tools::script_tool::shipped(TOOL_SEARCH)
+            .map(|tool| tool.path.display().to_string())
+            .ok_or_else(|| format!("{TOOL_SEARCH} is not shipped"))?;
+        let source = content::source(&path).ok_or_else(|| format!("{TOOL_SEARCH} is not shipped"))?;
+        let arguments = [Value::Array(listed), json!(query)];
+        let found = crate::tools::contract::quick(&path, &source, "search", &arguments, &Value::Null)?;
+        let names = found.as_array().into_iter().flatten().filter_map(|tool| tool["name"].as_str());
+        Ok(names
+            .filter(|name| deferred.load(name))
+            .filter_map(|name| deferred.specs().iter().find(|spec| spec.name == name).cloned())
+            .collect())
+    }
+
     fn describe_tool(&self, input: &Value) -> Result<Value, String> {
         let name = input["name"].as_str().map(str::trim).unwrap_or_default();
-        let deferred =
-            self.workspace.services.deferred.as_ref().map(|deferred| deferred.search(&format!("select:{name}")));
-        let spec = self
-            .request
-            .tools
-            .iter()
-            .chain(deferred.iter().flatten())
-            .find(|spec| spec.name == name && reachable(&spec.name));
+        let deferred = self.found(&format!("select:{name}"))?;
+        let spec =
+            self.request.tools.iter().chain(deferred.iter()).find(|spec| spec.name == name && reachable(&spec.name));
         let Some(spec) = spec else {
             return Ok(Value::String(format!(
                 "No tool is named {name}; searchTools(words) finds tools by what they do."
@@ -180,11 +189,8 @@ impl Agent<'_> {
     fn search_tools(&self, input: &Value) -> Result<Value, String> {
         let query = input["query"].as_str().map(str::trim).filter(|query| !query.is_empty());
         let query = query.ok_or("searchTools needs the words to look for, e.g. searchTools('slack message')")?;
-        let Some(deferred) = &self.workspace.services.deferred else {
-            return Ok(json!([]));
-        };
-        let found: Vec<Value> = deferred
-            .search(query)
+        let found: Vec<Value> = self
+            .found(query)?
             .into_iter()
             .map(|spec| {
                 let declared = Declared { name: &spec.name, description: &spec.description, schema: &spec.schema };

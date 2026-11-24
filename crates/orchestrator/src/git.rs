@@ -119,6 +119,15 @@ pub fn worktree(
     Ok(path)
 }
 
+pub fn remove_worktree(repo: &Path, path: &Path) -> std::io::Result<()> {
+    let place = path.to_string_lossy().into_owned();
+    attempt(repo, &["worktree", "remove", &place]).map(|_| ())
+}
+
+pub fn prune_worktrees(repo: &Path) {
+    run(repo, &["worktree", "prune"]);
+}
+
 pub fn restore(dir: &Path, commit: &str) -> bool {
     is_repo(dir) && run(dir, &["reset", "--hard", commit]).is_some() && run(dir, &["clean", "-fd"]).is_some()
 }
@@ -152,6 +161,27 @@ mod tests {
         assert!(is_repo(&made), "the worktree is a git checkout");
         assert_eq!(git(&made, &["branch", "--show-current"]), "big/x");
         assert_eq!(git(repo.path(), &["log", "--format=%s", "main"]), "Initial commit");
+    }
+
+    #[test]
+    fn a_clean_worktree_is_removed_and_its_branch_kept_but_a_dirty_one_stays() {
+        let repo = tempfile::tempdir().expect("repo");
+        let data = tempfile::tempdir().expect("data");
+        git(repo.path(), &["init", "-q", "-b", "main"]);
+        git(repo.path(), &["config", "user.name", "T"]);
+        git(repo.path(), &["config", "user.email", "t@example.com"]);
+        let clean = worktree(Some(repo.path()), data.path(), "big/a", None, "big_a").expect("clean");
+        let dirty = worktree(Some(repo.path()), data.path(), "big/b", None, "big_b").expect("dirty");
+        std::fs::write(dirty.join("draft.txt"), "wip").expect("draft");
+
+        remove_worktree(repo.path(), &clean).expect("removed");
+        let kept = remove_worktree(repo.path(), &dirty);
+
+        assert!(!clean.exists());
+        assert!(exists(repo.path(), "refs/heads/big/a"), "the branch outlives its worktree");
+        assert!(kept.is_err() && dirty.join("draft.txt").exists(), "unsaved work is never thrown away");
+        let again = worktree(Some(repo.path()), data.path(), "big/a", None, "big_a").expect("again");
+        assert_eq!(git(&again, &["branch", "--show-current"]), "big/a");
     }
 
     #[test]

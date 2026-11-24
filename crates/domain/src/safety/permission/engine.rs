@@ -19,8 +19,13 @@ impl PolicyEngine {
 
     pub fn judge(call: &Call<'_>, cx: &PolicyContext<'_>) -> Judgement {
         let stood = standing(call, cx);
-        let planned = cx.mode() == PermissionMode::Plan && only_commands(call);
-        let decided = by_mode(cx.mode(), stood.standing, call.tool, &stood.subject, cx.remembered);
+        if let Some(verdict) = by_the_list(call, cx, stood.standing) {
+            return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
+        }
+        let planned = cx.mode() == PermissionMode::Plan && (only_commands(call) || super::only_fetch(call.effects));
+        let browses = cx.mode() == PermissionMode::Plan && super::only_browser(call.effects);
+        let mode = if browses { PermissionMode::Ask } else { cx.mode() };
+        let decided = by_mode(mode, stood.standing, call.tool, &stood.subject, cx.remembered);
         let verdict = match if planned { Verdict::Allow } else { decided } {
             Verdict::Ask { .. } => {
                 let reason = match (&stood.guarded, stood.standing) {
@@ -34,6 +39,18 @@ impl PolicyEngine {
         };
         Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded }
     }
+}
+
+fn by_the_list(call: &Call<'_>, cx: &PolicyContext<'_>, standing: Standing) -> Option<Verdict> {
+    let allowed = cx.allowed?;
+    if standing != Standing::Acts {
+        return None;
+    }
+    let plannable = only_commands(call) || super::only_fetch(call.effects) || super::only_browser(call.effects);
+    if cx.mode() == PermissionMode::Plan && !plannable {
+        return None;
+    }
+    Some(if allowed.covers(call) { Verdict::Allow } else { Verdict::Ask { reason: Reason::Mode, rememberable: true } })
 }
 
 fn only_commands(call: &Call<'_>) -> bool {

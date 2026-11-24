@@ -50,6 +50,13 @@ describe('cliente HTTP', () => {
     expect(ROUTES.side('s1')).toBe('/api/sessions/s1/side')
   })
 
+  test('/btw vai para a rota btw com a aplicação e o modelo', async () => {
+    const { calls, fetcher } = recorder({ session: 's9' })
+    const opened = await httpApi(fetcher).btw({ text: 'o swagger está atualizado?', application: 'a1', model: 'opus' })
+    expect(opened).toEqual({ session: 's9' })
+    expect(calls).toEqual([{ url: '/api/btw', method: 'POST', body: { text: 'o swagger está atualizado?', application: 'a1', model: 'opus' } }])
+  })
+
   test('erro do servidor vira ApiError com a mensagem dele', async () => {
     const { fetcher } = recorder({ error: { code: 'missing', message: 'Item não existe' } }, 404)
     await expect(httpApi(fetcher).items()).rejects.toMatchObject({ status: 404, code: 'missing', message: 'Item não existe' })

@@ -124,6 +124,9 @@ impl Team {
             summary: summary.map(str::to_owned),
             msg_id: uuid::Uuid::new_v4().to_string(),
         };
+        if from == domain::team::LEAD {
+            lead_inbox::woke(&self.name, to);
+        }
         self.mailbox(to)
             .update(|mails: &mut Vec<Mail>| mails.push(mail))
             .map_err(|error| TeamError::Unsaved(error.to_string()))
@@ -244,6 +247,28 @@ mod tests {
         team.left("tester");
         let config = team.read().expect("config");
         assert_eq!(config.members.iter().filter(|member| member.active).count(), 1);
+    }
+
+    #[test]
+    fn a_teammate_that_went_idle_no_longer_keeps_the_lead_waiting_until_the_lead_writes_to_it() {
+        let home = tempfile::tempdir().expect("home");
+        let team = Team::named(home.path(), "idle-team");
+        team.open("s").expect("open");
+        team.join("tester", member("general")).expect("join");
+        let client = 96_401;
+        lead_inbox::watch(&team, client);
+        assert!(lead_inbox::teammates_working(client));
+        let idle = domain::team::Protocol::IdleNotification {
+            from: "tester".into(),
+            idle_reason: "available".into(),
+            summary: None,
+        };
+        team.send(LEAD, "tester", &idle.text(), None).expect("idle");
+        lead_inbox::deliver(&team, LEAD, client);
+        assert!(!lead_inbox::teammates_working(client), "an idle teammate is not working");
+        team.send("tester", LEAD, "one more thing", None).expect("wake");
+        assert!(lead_inbox::teammates_working(client), "the lead's message wakes it");
+        lead_inbox::closing(client);
     }
 
     #[test]

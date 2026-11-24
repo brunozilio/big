@@ -16,9 +16,11 @@ pub fn script(
     workspace: &Workspace,
     model: Option<(&dyn ModelApi, &TurnRequest)>,
 ) -> Result<CommandOutput, String> {
-    let source = super::scripts::source(&handler.command)?;
+    let (file, export) = super::scripts::target(&handler.command);
+    let source = super::scripts::source(file)?;
     let hook = Hook {
-        shown: handler.command.clone(),
+        shown: file.to_owned(),
+        export: export.to_owned(),
         source,
         input: input.clone(),
         data: serde_json::json!({ "cwd": workspace.cwd, "session": workspace.session_id, "agent": workspace.agent_name }),
@@ -28,7 +30,7 @@ pub fn script(
         Ok(capabilities) => capabilities,
         Err(error) => return Ok(CommandOutput { code: Some(1), stdout: String::new(), stderr: error }),
     };
-    let origin = crate::tools::script_tool::Origin::of_script(&handler.command, workspace.home.as_deref());
+    let origin = crate::tools::script_tool::Origin::of_script(file, workspace.home.as_deref());
     let standalone = StandaloneHost {
         cwd: workspace.cwd.clone(),
         access: workspace.policy.scripts.of(origin),
@@ -51,13 +53,14 @@ pub fn script(
     })
 }
 
-fn declared(shown: &str, source: &str) -> Result<Capabilities, String> {
+pub(crate) fn declared(shown: &str, source: &str) -> Result<Capabilities, String> {
     let listed = script::exported(shown, source, "capabilities").ok();
     Capabilities::listed(listed.as_ref(), Declaration::Export).map_err(|error| format!("{shown}: {error}"))
 }
 
 struct Hook {
     shown: String,
+    export: String,
     source: String,
     input: Value,
     data: Value,
@@ -70,7 +73,7 @@ impl Hook {
         script::run_within(
             &self.shown,
             &self.source,
-            "default",
+            &self.export,
             &[self.input],
             &self.data,
             host,
@@ -92,7 +95,7 @@ fn bridged(
         script::run_within(
             &hook.shown,
             &hook.source,
-            "default",
+            &hook.export,
             &[hook.input],
             &hook.data,
             host,

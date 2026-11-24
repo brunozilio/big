@@ -43,10 +43,10 @@ export function Popover({ trigger, children, align = 'start', className, open, o
 export const Menu = RDropdown.Root
 export const MenuTrigger = RDropdown.Trigger
 
-export function MenuContent({ children, align = 'start', className, side }: { children: ReactNode; align?: 'start' | 'end'; className?: string; side?: 'top' | 'bottom' | 'right' }) {
+export function MenuContent({ children, align = 'start', className, side, onCloseAutoFocus }: { children: ReactNode; align?: 'start' | 'end'; className?: string; side?: 'top' | 'bottom' | 'right'; onCloseAutoFocus?: (e: Event) => void }) {
   return (
     <RDropdown.Portal>
-      <RDropdown.Content align={align} side={side} sideOffset={8} className={cn('z-50 min-w-56 rounded-card bg-surface p-1.5 shadow-pop outline-none origin-[var(--radix-dropdown-menu-content-transform-origin)]', popIn, className)}>
+      <RDropdown.Content align={align} side={side} onCloseAutoFocus={onCloseAutoFocus} sideOffset={8} className={cn('z-50 min-w-56 rounded-card bg-surface p-1.5 shadow-pop outline-none origin-[var(--radix-dropdown-menu-content-transform-origin)]', popIn, className)}>
         {children}
       </RDropdown.Content>
     </RDropdown.Portal>

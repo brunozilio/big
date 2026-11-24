@@ -45,14 +45,21 @@ fn servers() -> Vec<Arc<crate::mcp::McpServer>> {
 
 #[test]
 fn a_server_s_resources_are_listed_and_read() {
-    let tools = resource_tools(&servers());
+    let servers = servers();
+    let tools = resource_tools(&servers);
     let names: Vec<String> = tools.iter().map(|tool| tool.spec().name).collect();
     assert_eq!(names, ["ListMcpResources", "ReadMcpResource"]);
-    let workspace = Workspace::new("/repo");
+    let mut workspace = Workspace::new("/repo");
+    workspace.services.mcp = servers;
     let listed = tools[0].run(&json!({ "server": "docs" }), &workspace);
     assert_eq!(listed.content, "docs: Intro <docs://intro> Start here");
     let read = tools[1].run(&json!({ "server": "docs", "uri": "docs://intro" }), &workspace);
     assert_eq!(read.content, "Welcome to the docs.");
+    let missing = tools[0].run(&json!({ "server": "wiki" }), &workspace);
+    assert_eq!(
+        (missing.content.as_str(), missing.is_error),
+        ("No MCP server wiki with resources; these have some: docs", true)
+    );
 }
 
 #[test]

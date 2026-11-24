@@ -11,7 +11,7 @@ export function verdictOf(text) {
 
 async function automatic(ctx, opts, pr) {
   const plan = planOf(ctx, opts);
-  const prompt = inLanguage(`Revise o pull request ${pr}.\n\n## Plano\n\n${plan.text}`);
+  const prompt = inLanguage(`Review pull request ${pr}.\n\n## Plan\n\n${plan.text}`);
   const result = await ctx.agent(opts.agent, { prompt, pr }, agentOptions(opts, { mode: opts.mode ?? "plan" }));
   const output = object(result.output);
   const lines = Array.isArray(output.lines) ? output.lines : [];
@@ -73,11 +73,11 @@ export default step({
   label: "Review",
   icon: "sReview",
   needs: "code",
-  doing: "Esperando review",
+  doing: "Waiting for review",
   view: (s) => (Array.isArray(s.prs) ? s.prs : s.pr ? [s.pr] : []).map((pr) => changes(pr, { session: s.session })),
   async run(ctx, opts) {
     const prs = pullRequestsOf(ctx, opts);
-    if (prs.length === 0) return ctx.fail({ error: "não há pull request para revisar" });
+    if (prs.length === 0) return ctx.fail({ error: "there is no pull request to review" });
     let session;
     let by;
     const resolved = [];

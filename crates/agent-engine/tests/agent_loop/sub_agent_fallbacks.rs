@@ -12,8 +12,7 @@ fn delegate(rig: &Rig, input: Value, replies: usize) -> (ScriptedModel, Vec<Mess
     let mut script = vec![ScriptedModel::reply(vec![tool_use("a1", "Agent", input)])];
     script.extend((0..replies).map(|_| ScriptedModel::reply(vec![Block::Text("ok".into())])));
     let model = ScriptedModel::new(script);
-    let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool::default()));
+    let tools = tools::standard();
     let emit = |_: EngineEvent| {};
     let agent = Agent {
         api: &model,
@@ -62,4 +61,15 @@ fn a_worktree_outside_a_repository_with_a_commit_runs_the_agent_without_isolatio
     let (failed, content) = agent_result(&history);
     assert!(!failed && content.starts_with("ok"), "{content}");
     assert!(content.contains("Ran without isolation"), "{content}");
+}
+
+#[test]
+fn a_planning_caller_s_worktree_request_is_ignored_since_the_agent_only_reads() {
+    let rig = Rig::new(PermissionMode::Plan);
+    let input = json!({"description": "Look", "prompt": "Say hi", "isolation": "worktree"});
+    let (model, history) = delegate(&rig, input, 2);
+    assert_eq!(model.asked().len(), 3, "the sub-agent ran");
+    let (failed, content) = agent_result(&history);
+    assert!(!failed && content.starts_with("ok"), "{content}");
+    assert!(!content.contains("isolation"), "{content}");
 }

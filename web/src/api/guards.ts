@@ -54,6 +54,10 @@ function isCase(v: unknown): v is Shape {
   return obj(v) && str(v.title) && (v.kind === 'api' || v.kind === 'ui') && strOrNull(v.objective) && strOrNull(v.ref) && strOrNull(v.url) && arr(v.given, str) && arr(v.when, str) && arr(v.then, str)
 }
 
+function isCall(v: unknown): v is Shape {
+  return obj(v) && str(v.id) && str(v.title) && str(v.tag) && (v.state === 'running' || v.state === 'ok' || v.state === 'error') && num(v.durationMs)
+}
+
 const blockChecks: Record<BlockType, (b: Shape) => boolean> = {
   chat: (b) => str(b.session) && bool(b.composer),
   issue: (b) => str(b.connection) && str(b.key) && bool(b.comment),
@@ -64,6 +68,7 @@ const blockChecks: Record<BlockType, (b: Shape) => boolean> = {
   markdown: (b) => str(b.text),
   cases: (b) => arr(b.cases, isCase) && strOrNull(b.session) && bool(b.editable) && strOrNull(b.approve) && strOrNull(b.changes),
   logs: (b) => Array.isArray(b.commands),
+  calls: (b) => arr(b.calls, isCall),
   form: (b) => Array.isArray(b.fields) && obj(b.submit) && str(b.submit.action),
   actions: (b) => arr(b.buttons, (x): x is Shape => obj(x) && str(x.action) && str(x.label)),
 }

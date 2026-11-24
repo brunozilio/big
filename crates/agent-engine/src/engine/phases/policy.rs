@@ -41,6 +41,7 @@ impl Job {
         workspace.anchored_memories = anchored(&self.request);
         workspace.blast_radius = on(flags::BLAST_RADIUS);
         workspace.hooks = settings.hooks.clone();
+        workspace.interceptors = settings.interceptors.clone();
         Ok(Governed { workspace, toolbox, main, roles })
     }
 }

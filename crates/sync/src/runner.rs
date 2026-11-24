@@ -47,6 +47,7 @@ pub struct TickReport {
 struct Schedule {
     due: HashMap<ConnectionId, Instant>,
     reconcile_at: Option<Instant>,
+    parked: HashMap<ConnectionId, Entry>,
 }
 
 #[derive(Debug)]
@@ -162,7 +163,7 @@ impl Synchronizer {
         let mut report = TickReport::default();
         for entry in &book.entries {
             let id = &entry.connection.id;
-            if self.due(id).is_some_and(|due| due > Instant::now()) {
+            if self.parked(entry) || self.due(id).is_some_and(|due| due > Instant::now()) {
                 continue;
             }
             let (outcome, delay) = self.poll_entry(entry, &book, &desired).await;
@@ -178,10 +179,27 @@ impl Synchronizer {
         Ok((report, self.next_wake(&book)))
     }
 
+    fn parked(&self, entry: &Entry) -> bool {
+        let mut schedule = self.schedule();
+        match schedule.parked.get(&entry.connection.id) {
+            Some(parked) if parked == entry => true,
+            Some(_) => {
+                schedule.parked.remove(&entry.connection.id);
+                false
+            }
+            None => false,
+        }
+    }
+
+    pub fn is_parked(&self, connection: &ConnectionId) -> bool {
+        self.schedule().parked.contains_key(connection)
+    }
+
     fn next_wake(&self, book: &Book) -> Instant {
         let now = Instant::now();
         let schedule = self.schedule();
-        let polls = book.entries.iter().map(|entry| schedule.due.get(&entry.connection.id).copied().unwrap_or(now));
+        let polling = book.entries.iter().filter(|entry| schedule.parked.get(&entry.connection.id) != Some(*entry));
+        let polls = polling.map(|entry| schedule.due.get(&entry.connection.id).copied().unwrap_or(now));
         polls.chain(schedule.reconcile_at).min().unwrap_or(now + self.config.slow_poll)
     }
 
@@ -220,6 +238,16 @@ impl Synchronizer {
     async fn after_failure(&self, entry: &Entry, book: &Book, desired: &[Desired], error: &Error) -> Duration {
         let id = &entry.connection.id;
         let class = error.class();
+        if class == ErrorClass::Permanent {
+            tracing::warn!(
+                connection = %id.as_str(),
+                %error,
+                "the sync of a connection failed for good; it waits until the connection or its settings change"
+            );
+            self.health.failing(id, &error.to_string());
+            self.schedule().parked.insert(id.clone(), entry.clone());
+            return self.config.slow_poll;
+        }
         tracing::warn!(connection = %id.as_str(), ?class, %error, "the sync of a connection failed");
         if class == ErrorClass::Auth {
             let _ = self.revoke(id, &error.to_string(), book, desired).await;

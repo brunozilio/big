@@ -207,6 +207,7 @@ impl Provider for Aws {
             button: "Entrar com AWS".to_owned(),
             site: "da AWS".to_owned(),
             choose_title: "Conta e papel".to_owned(),
+            hidden: false,
         }
     }
 

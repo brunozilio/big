@@ -1,13 +1,11 @@
+use super::agent_file;
 use super::subagent::FoundAgent;
-use super::subagent_config::AgentConfig;
 use crate::transcript::{Block, Message, Role};
 
 pub const FORK: &str = "fork";
 
-const WRITERS: [&str; 4] = ["Agent", "Edit", "Write", "StructuredOutput"];
-
 pub fn fork_preamble() -> String {
-    content::text("agents/fork.js").trim().to_owned()
+    content::render("agents/fork.ts", &content::with_brand(&serde_json::Value::Null)).trim().to_owned()
 }
 
 pub fn general() -> String {
@@ -39,49 +37,19 @@ pub fn fork_history(parent: &[Message], directive: &str) -> Vec<Message> {
     history
 }
 
-fn read_only() -> AgentConfig {
-    AgentConfig { disallowed_tools: WRITERS.map(str::to_owned).to_vec(), omit_instructions: true, ..Default::default() }
-}
-
-fn scripted(path: &str) -> Option<FoundAgent> {
-    let spec = content::value(path, "spec")?;
-    let read_only = spec["readOnly"].as_bool() == Some(true);
-    Some(FoundAgent {
-        name: spec["name"].as_str().filter(|name| !name.is_empty())?.to_owned(),
-        description: spec["description"].as_str().unwrap_or_default().to_owned(),
-        instructions: content::text(path).trim().to_owned(),
-        config: if read_only { self::read_only() } else { AgentConfig::default() },
-    })
-}
-
-fn written(path: &str) -> Option<FoundAgent> {
-    let text = content::text(path);
-    let (front, body) = crate::prompt::markdown::frontmatter(&text)
-        .inspect_err(|error| tracing::error!(%error, path, "a built-in agent has a broken header"))
+fn loaded(path: &str) -> Option<FoundAgent> {
+    let source = content::source(path)?;
+    let text = agent_file::markdown(path, &source, &crate::hooks::runs_from(path))
+        .inspect_err(|error| tracing::error!(%error, path, "a built-in agent does not load"))
         .ok()?;
-    let config =
-        AgentConfig::parse(&front).unwrap_or_else(|error| AgentConfig { error: Some(error), ..Default::default() });
-    let stem = path.rsplit('/').next().unwrap_or(path).trim_end_matches(".md");
-    Some(FoundAgent {
-        name: front["name"].as_str().unwrap_or(stem).trim().to_owned(),
-        description: front["description"].as_str().unwrap_or_default().trim().to_owned(),
-        instructions: body.trim().to_owned(),
-        config,
-    })
+    Some(super::subagent::parsed(agent_file::stem(path), &text, None, true))
 }
 
 pub fn all() -> Vec<FoundAgent> {
     content::builtin_files("agents/")
         .into_iter()
-        .filter_map(|(path, _)| {
-            if path.ends_with(".js") {
-                scripted(path)
-            } else if path.ends_with(".md") {
-                written(path)
-            } else {
-                None
-            }
-        })
+        .filter(|(path, _)| agent_file::EXTENSIONS.iter().any(|ext| path.ends_with(&format!(".{ext}"))))
+        .filter_map(|(path, _)| loaded(path))
         .collect()
 }
 
@@ -90,14 +58,7 @@ mod tests {
     use super::*;
 
     fn shipped() -> Vec<FoundAgent> {
-        content::builtin_files("agents/")
-            .into_iter()
-            .filter(|(path, _)| path.ends_with(".md"))
-            .filter_map(|(path, _)| {
-                let stem = path.trim_start_matches("agents/").trim_end_matches(".md");
-                content::builtin_text(path).map(|text| crate::tools::subagent::parsed(stem, &text, None, true))
-            })
-            .collect()
+        all()
     }
     use domain::PermissionMode;
 
@@ -135,9 +96,9 @@ mod tests {
     fn the_delivery_agents_are_built_in_with_their_mode_skills_and_avatar() {
         let named = |name: &str| shipped().into_iter().find(|agent| agent.name == name).expect(name);
         for (name, label, shape, color, mode) in [
-            ("planner", "Planejador", "triangle", "#e94b9b", PermissionMode::Plan),
-            ("developer", "Desenvolvedor", "squircle", "#3b82f6", PermissionMode::Bypass),
-            ("reviewer", "Revisor", "circle", "#4fb39c", PermissionMode::Plan),
+            ("planner", "Planner", "triangle", "#e94b9b", PermissionMode::Plan),
+            ("developer", "Developer", "squircle", "#3b82f6", PermissionMode::Bypass),
+            ("reviewer", "Reviewer", "circle", "#4fb39c", PermissionMode::Plan),
             ("release", "Release", "cloud", "#f0a235", PermissionMode::Plan),
         ] {
             let agent = named(name);
@@ -147,7 +108,7 @@ mod tests {
             assert_eq!((avatar.shape.as_str(), avatar.color.as_str()), (shape, color));
             assert_eq!(agent.config.permission, Some(mode), "{name}");
             assert_eq!(agent.config.model, None, "{name} leaves the model on auto");
-            assert!(!agent.description.is_empty() && agent.instructions.starts_with("Você é"), "{name}");
+            assert!(!agent.description.is_empty() && agent.instructions.starts_with("You are"), "{name}");
             assert!(agent.instructions.contains(brand::NAME) && !agent.instructions.contains("{{"), "{name}");
         }
         assert!(!named("planner").config.allows("Edit") && !named("reviewer").config.allows("Write"));
@@ -182,8 +143,10 @@ mod tests {
 
     #[test]
     fn every_built_in_agent_names_only_real_tools_and_can_delegate_and_reach_mcp() {
-        let written: Vec<FoundAgent> =
-            shipped().into_iter().filter(|agent| agent.config.tools.as_ref().is_some_and(|tools| !tools.is_empty())).collect();
+        let written: Vec<FoundAgent> = shipped()
+            .into_iter()
+            .filter(|agent| agent.config.tools.as_ref().is_some_and(|tools| !tools.is_empty()))
+            .collect();
         assert!(written.len() >= 4, "the workflow's agents declare their tools");
         for agent in &written {
             assert_eq!(agent.config.error, None, "{}", agent.name);

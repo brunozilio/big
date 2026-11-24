@@ -24,7 +24,10 @@ fn a_traced_session_keeps_every_text_whole() {
     for entry in [
         Entry::Prompted { at_ms: 1, prompt: long.clone() },
         Entry::Event { at_ms: 2, event: EngineEvent::ToolStarted(ToolCall::new("r", "Read", "a.txt")) },
-        Entry::Event { at_ms: 3, event: EngineEvent::ToolResult { id: "r".into(), output: long.clone(), failed: false } },
+        Entry::Event {
+            at_ms: 3,
+            event: EngineEvent::ToolResult { id: "r".into(), output: long.clone(), failed: false },
+        },
     ] {
         store.record(&request, &id, &entry).expect("record");
     }

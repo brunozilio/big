@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-const FILES: [(&str, &str); 20] = [
+const FILES: [(&str, &str); 19] = [
     ("manifest.json", include_str!("../extension/manifest.json")),
     ("config.js", include_str!("../extension/config.js")),
     ("bg/main.js", include_str!("../extension/bg/main.js")),
@@ -14,14 +14,16 @@ const FILES: [(&str, &str); 20] = [
     ("bg/logs.js", include_str!("../extension/bg/logs.js")),
     ("bg/frames.js", include_str!("../extension/bg/frames.js")),
     ("bg/sites.js", include_str!("../extension/bg/sites.js")),
+    ("bg/ask.js", include_str!("../extension/bg/ask.js")),
     ("bg/shortcuts.js", include_str!("../extension/bg/shortcuts.js")),
     ("page/agent.js", include_str!("../extension/page/agent.js")),
-    ("ui/popup.html", include_str!("../extension/ui/popup.html")),
-    ("ui/popup.js", include_str!("../extension/ui/popup.js")),
     ("ui/ask.html", include_str!("../extension/ui/ask.html")),
     ("ui/ask.js", include_str!("../extension/ui/ask.js")),
     ("ui/style.css", include_str!("../extension/ui/style.css")),
 ];
+
+const ICON: &str = "icon.png";
+const GONE: [&str; 2] = ["ui/popup.html", "ui/popup.js"];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Installed {
@@ -43,7 +45,19 @@ pub fn install(folder: &Path, port: u16) -> Result<Installed, String> {
         std::fs::write(&target, rendered).map_err(|error| format!("{}: {error}", target.display()))?;
         written += 1;
     }
+    written += usize::from(write_if_changed(&folder.join(ICON), brand::LOGO)?);
+    for gone in GONE {
+        let _ = std::fs::remove_file(folder.join(gone));
+    }
     Ok(Installed { folder: folder.to_path_buf(), written })
+}
+
+fn write_if_changed(target: &Path, bytes: &[u8]) -> Result<bool, String> {
+    if std::fs::read(target).is_ok_and(|current| current == bytes) {
+        return Ok(false);
+    }
+    std::fs::write(target, bytes).map_err(|error| format!("{}: {error}", target.display()))?;
+    Ok(true)
 }
 
 fn render(source: &str, port: u16) -> String {
@@ -58,11 +72,14 @@ mod tests {
     fn the_extension_is_written_with_the_brand_and_port_and_rewritten_only_when_it_changes() {
         let folder = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
         let first = install(folder.path(), 4321);
-        assert_eq!(first.map(|installed| installed.written), Ok(FILES.len()));
+        assert_eq!(first.map(|installed| installed.written), Ok(FILES.len() + 1));
+        assert_eq!(std::fs::read(folder.path().join(ICON)).ok().as_deref(), Some(brand::LOGO));
         let manifest = std::fs::read_to_string(folder.path().join("manifest.json")).unwrap_or_default();
         let parsed: serde_json::Value = serde_json::from_str(&manifest).unwrap_or_default();
         assert_eq!(parsed["manifest_version"], 3);
-        assert!(parsed["name"].as_str().unwrap_or_default().contains(brand::NAME));
+        assert_eq!(parsed["name"], brand::NAME);
+        assert_eq!(parsed["icons"]["128"], ICON);
+        assert!(parsed["action"].get("default_popup").is_none());
         let config = std::fs::read_to_string(folder.path().join("config.js")).unwrap_or_default();
         assert!(config.contains("4321"));
         for (path, _) in FILES {

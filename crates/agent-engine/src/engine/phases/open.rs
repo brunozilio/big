@@ -45,6 +45,7 @@ impl Job {
         let api = self.signed_in()?;
         let framed = self.frame(runtime, brief, &session)?;
         let Framed { workspace, toolbox, main, worktree, template } = framed;
+        workspace.recall_reads(&history);
         let api = self.metered(api, &Arc::new(Ledger::default()), self.request.session.model.clone());
         if self.request.session.command == Some(SessionCommand::Compact) {
             return Err(self.compacted(&api, &template, &workspace, &session, &mut history));

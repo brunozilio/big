@@ -17,6 +17,7 @@ pub(super) enum Intercepted {
 impl Agent<'_> {
     pub(super) fn holds_text(&self) -> bool {
         self.workspace.hooks.listens_to(RESPONSE)
+            || self.workspace.interceptors.listens_to(crate::intercept::Kind::Model)
     }
 
     pub(super) fn intercept_request(&self, request: &mut TurnRequest, rejections: &Rejections) -> Result<(), Ending> {
@@ -97,7 +98,7 @@ impl Agent<'_> {
     }
 }
 
-fn rewritten_history(history: Value) -> Result<Vec<crate::transcript::Message>, String> {
+pub(super) fn rewritten_history(history: Value) -> Result<Vec<crate::transcript::Message>, String> {
     let messages: Vec<crate::transcript::Message> = serde_json::from_value(history).map_err(|e| e.to_string())?;
     if messages.is_empty() {
         return Err("the history is empty".into());
@@ -105,13 +106,13 @@ fn rewritten_history(history: Value) -> Result<Vec<crate::transcript::Message>, 
     Ok(messages)
 }
 
-fn replace_text(blocks: &mut Vec<Block>, text: String) {
+pub(super) fn replace_text(blocks: &mut Vec<Block>, text: String) {
     let at = blocks.iter().position(|block| matches!(block, Block::Text(_))).unwrap_or(0);
     blocks.retain(|block| !matches!(block, Block::Text(_)));
     blocks.insert(at.min(blocks.len()), Block::Text(text));
 }
 
-fn stop_label(stop: StopReason) -> &'static str {
+pub(super) fn stop_label(stop: StopReason) -> &'static str {
     match stop {
         StopReason::EndTurn => "end_turn",
         StopReason::ToolUse => "tool_use",

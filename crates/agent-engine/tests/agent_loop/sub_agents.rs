@@ -24,8 +24,7 @@ fn a_sub_agent_works_in_its_own_conversation_and_reports_back() {
         ScriptedModel::reply(vec![Block::Text("It lists alpha and beta.".into())]),
         ScriptedModel::reply(vec![Block::Text("The notes list alpha and beta.".into())]),
     ]);
-    let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool::default()));
+    let tools = tools::standard();
     let events = Arc::clone(&rig.events);
     let emit = move |event: EngineEvent| events.lock().expect("events").push(event);
     let agent = Agent {
@@ -80,8 +79,7 @@ fn a_call_can_pick_the_sub_agent_s_model() {
         ScriptedModel::reply(vec![Block::Text("hi".into())]),
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
     ]);
-    let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool::default()));
+    let tools = tools::standard();
     let emit = |_: EngineEvent| {};
     let agent = Agent {
         api: &model,
@@ -162,9 +160,7 @@ fn background_agent_runs_concurrently_and_output_is_collected() {
         advanced: AtomicBool::new(false),
         done: AtomicBool::new(false),
     };
-    let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool::default()));
-    tools.extend(tools::task::tools());
+    let tools = tools::standard();
     let events = rig.events.clone();
     let emit = move |event| events.lock().expect("events").push(event);
     let agent = Agent {
@@ -233,9 +229,7 @@ fn stopping_background_task_joins_its_shell_without_stopping_parent() {
     }
     let rig = Rig::new(PermissionMode::Bypass);
     let model = StopModel { parent: AtomicUsize::new(0), child: AtomicUsize::new(0), dir: rig.dir.path().into() };
-    let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool::default()));
-    tools.extend(tools::task::tools());
+    let tools = tools::standard();
     let events = rig.events.clone();
     let emit = move |event| events.lock().expect("valid test fixture").push(event);
     let agent = Agent {

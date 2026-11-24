@@ -57,3 +57,14 @@ fn the_cloud_accounts_take_the_page_s_shape() {
     );
     assert_eq!(accounts(&json!({})), json!([]));
 }
+
+#[test]
+fn the_open_pulls_and_the_branches_take_the_page_s_shape() {
+    let raw = json!([{ "ref": "o/r#3", "number": 3, "title": "PR", "head": "h", "base": "main", "author": "bia", "url": "https://c/3", "draft": true }, { "ref": "" }]);
+    let shown = pulls(&raw);
+    assert_eq!(shown.as_array().map(Vec::len), Some(1));
+    assert_eq!(shown[0]["key"], "o/r#3");
+    assert_eq!(shown[0]["draft"], true);
+    let listed = branches(&json!([{ "name": "main", "default": true }, { "name": "" }]));
+    assert_eq!(listed, json!([{ "name": "main", "default": true }]));
+}

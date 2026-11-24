@@ -4,7 +4,7 @@ mod connections;
 mod error;
 mod factory;
 mod log;
-mod pins;
+mod preferences;
 mod schema;
 mod sync;
 

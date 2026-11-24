@@ -310,11 +310,12 @@ fn done_many(times: usize) -> ScriptedModel {
 
 #[test]
 fn a_model_that_never_gives_the_structured_result_is_asked_three_times_then_the_run_fails() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(PermissionMode::Bypass);
     let model = done_many(10);
-    let contract = agent_engine::tools::structured::Structured::new(json!({"type": "object"})).expect("schema");
+    let contract =
+        agent_engine::tools::structured::offer(json!({"type": "object"}), &mut rig.workspace).expect("schema");
     let mut history = vec![Message::user("answer in the contract")];
-    let ending = rig.run_with(&model, &mut history, vec![Box::new(contract)]).expect_err("the run fails");
+    let ending = rig.run_with(&model, &mut history, vec![contract]).expect_err("the run fails");
     assert_eq!(model.asked().len(), 4, "the answer and three reminders");
     let Ending::Failed(ModelError::Provider(why)) = ending else { panic!("{ending:?}") };
     assert!(why.contains("StructuredOutput") && why.contains("3 times"), "{why}");

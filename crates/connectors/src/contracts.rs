@@ -30,6 +30,8 @@ pub mod code {
     pub const RESOLVE_THREAD: &str = "code.resolve_thread";
     pub const MERGE: &str = "code.merge";
     pub const REPOS: &str = "code.repos";
+    pub const PULL_REQUESTS: &str = "code.pull_requests";
+    pub const BRANCHES: &str = "code.branches";
 }
 
 pub mod pipelines {
@@ -178,13 +180,18 @@ fn repo_list() -> Value {
     json!({ "type": "array", "items": repo })
 }
 
+fn branch_list() -> Value {
+    let branch = object(&[("name", "string")], &[("default", "boolean")]);
+    json!({ "type": "array", "items": branch })
+}
+
 pub fn code() -> Vec<ActionSpec> {
     let open = object(
         &[("head", "string"), ("title", "string")],
         &[("repo", "string"), ("base", "string"), ("body", "string"), ("draft", "boolean")],
     );
     let review = object(&[("pr", "string"), ("verdict", "string")], &[("body", "string"), ("lines", "array")]);
-    let merge = object(&[("pr", "string")], &[("method", "string")]);
+    let merge = object(&[("pr", "string")], &[("method", "string"), ("delete_branch", "boolean")]);
     vec![
         ActionSpec::write(code::OPEN_PULL_REQUEST, open, pull_output(), Idempotency::Lookup),
         ActionSpec::read(code::PULL_REQUEST, pull_ref(), pull_output()),
@@ -205,10 +212,12 @@ pub fn code() -> Vec<ActionSpec> {
         ActionSpec::write(
             code::MERGE,
             merge,
-            object(&[("merged", "boolean")], &[("sha", "string"), ("already", "boolean")]),
+            object(&[("merged", "boolean")], &[("sha", "string"), ("already", "boolean"), ("deleted", "boolean")]),
             Idempotency::Lookup,
         ),
         ActionSpec::read(code::REPOS, object(&[], &[("query", "string")]), repo_list()),
+        ActionSpec::read(code::PULL_REQUESTS, object(&[], &[("repo", "string")]), list()),
+        ActionSpec::read(code::BRANCHES, object(&[], &[("repo", "string")]), branch_list()),
     ]
 }
 
@@ -323,7 +332,14 @@ mod checks {
 
     #[test]
     fn every_standard_action_is_named_after_its_capability() {
-        let all = [(TRACKER, tracker()), (CODE, code()), (PIPELINES, pipelines()), (CLOUD, cloud()), (TESTS, tests()), (MCP, mcp())];
+        let all = [
+            (TRACKER, tracker()),
+            (CODE, code()),
+            (PIPELINES, pipelines()),
+            (CLOUD, cloud()),
+            (TESTS, tests()),
+            (MCP, mcp()),
+        ];
         for (capability, actions) in all {
             assert!(!actions.is_empty());
             for action in actions {

@@ -7,7 +7,7 @@ import { BlockView, registry } from '../src/blocks/registry'
 
 afterEach(cleanup)
 
-const TYPES: BlockType[] = ['chat', 'issue', 'change', 'review', 'pipeline', 'merge', 'markdown', 'cases', 'logs', 'form', 'actions']
+const TYPES: BlockType[] = ['chat', 'issue', 'change', 'review', 'pipeline', 'merge', 'markdown', 'cases', 'logs', 'calls', 'form', 'actions']
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {
@@ -32,6 +32,17 @@ describe('registro de blocos', () => {
     expect(view.getByText('Ainda não começou.')).toBeTruthy()
     expect(view.getByText('bun test')).toBeTruthy()
     expect(view.getByText('Aprovar')).toBeTruthy()
+  })
+
+  test('as chamadas a conectores da etapa aparecem como tool calls, as em andamento e as prontas', () => {
+    const calls = [
+      { id: '1', kind: 'call' as const, title: 'create_case · Lista vazia', tag: 'tests', state: 'ok' as const, input: { title: 'Lista vazia' }, output: '{"ref":"T-1"}', durationMs: 5200 },
+      { id: '2', kind: 'call' as const, title: 'create_case · Cria produto', tag: 'tests', state: 'running' as const, input: { title: 'Cria produto' }, durationMs: 800 },
+    ]
+    const view = render(<BlockView block={{ type: 'calls', calls }} />)
+    expect(view.getByText('create_case · Lista vazia')).toBeTruthy()
+    expect(view.getByText('create_case · Cria produto')).toBeTruthy()
+    expect(view.getAllByText('tests')).toHaveLength(2)
   })
 
   test('blocos não citam provedor pelo nome', () => {

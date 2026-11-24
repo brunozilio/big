@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
-  "name": "{{NAME}} Browser",
+  "name": "{{NAME}}",
   "description": "Lets {{NAME}} agents use this Chrome, in their own tab group, with your sign-ins.",
   "version": "{{VERSION}}",
   "minimum_chrome_version": "116",
   "permissions": ["debugger", "tabs", "tabGroups", "scripting", "storage", "downloads", "alarms"],
   "host_permissions": ["<all_urls>"],
   "background": { "service_worker": "bg/main.js", "type": "module" },
-  "action": { "default_popup": "ui/popup.html", "default_title": "{{NAME}} Browser" }
+  "icons": { "16": "icon.png", "32": "icon.png", "48": "icon.png", "128": "icon.png" },
+  "action": { "default_title": "{{NAME}}", "default_icon": { "16": "icon.png", "32": "icon.png" } }
 }

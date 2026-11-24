@@ -91,6 +91,24 @@ async fn a_step_that_keeps_failing_opens_the_outer_loop_at_the_threshold() {
     assert_eq!(factory["data"]["findings"].as_array().map(Vec::len), Some(3));
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn a_step_already_being_tuned_does_not_open_another_loop_at_the_next_multiple() {
+    let world = World::new();
+    world.workflow("failing", FAILING);
+    let kernel = world.start().await;
+    for round in 0..6 {
+        let id = kernel.create_item("failing", json!({ "title": format!("t{round}") })).expect("item");
+        until(&kernel, &id, |item| item.impediment.is_some()).await;
+        if round == 2 {
+            assert_eq!(factory_items(&kernel, "factory-tune").await.len(), 1);
+        }
+    }
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let opened = factory_items(&kernel, "factory-tune").await;
+    assert_eq!(opened.len(), 1, "the open loop absorbs the next crossing");
+    assert!(opened[0].ending.is_none());
+}
+
 fn factory_none(kernel: &Handle, workflow: &str) -> bool {
     kernel
         .items()

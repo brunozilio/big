@@ -56,6 +56,8 @@ pub struct SessionConfig {
     pub teammate: Option<crate::team::TeammateOf>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent: Option<MainAgentSpec>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output_style: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -134,6 +136,7 @@ impl SessionConfig {
             append_system: None,
             teammate: None,
             agent: None,
+            output_style: None,
         }
     }
 }

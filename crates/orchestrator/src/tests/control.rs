@@ -77,6 +77,25 @@ async fn a_call_the_connection_cannot_make_yet_becomes_an_impediment_with_its_re
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_blocked_call_does_not_time_out_while_it_waits_and_runs_again_with_a_fresh_timeout() {
+    let world = World::new();
+    let source = TRY.replace("{ issue: \"K\" })", "{ issue: \"K\" }, { timeout: 300 })");
+    world.workflow("try", &source);
+    world.provider.then("tracker.issue", Reply::Fail(ActionError::blocked("Escolha o projeto.")));
+    let kernel = world.start().await;
+    let id = kernel.create_item("try", json!({})).expect("item");
+    until(&kernel, &id, |item| item.impediment.is_some()).await;
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    let waiting = kernel.item(&id).expect("store").expect("item");
+    assert!(!waiting.is_ended(), "the blocked call timed out: {:?}", waiting.ending);
+    assert!(waiting.effects.values().all(|entry| entry.outcome.is_none()), "nothing resolved while blocked");
+    assert!(waiting.timers.is_empty(), "the timeout was cancelled: {:?}", waiting.timers);
+    kernel.rerun(&id).await.expect("rerun");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item), json!({ "ok": 2 }));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_call_without_a_connection_becomes_an_impediment() {
     let world = World::new();
     world.workflow(
@@ -86,7 +105,7 @@ async fn a_call_without_a_connection_becomes_an_impediment() {
     let kernel = world.start().await;
     let id = kernel.create_item("nothing", json!({})).expect("item");
     let item = until(&kernel, &id, |item| item.impediment.is_some()).await;
-    assert_eq!(item.impediment.and_then(|found| found.reason).as_deref(), Some("conecte uma conta para cloud"));
+    assert_eq!(item.impediment.and_then(|found| found.reason).as_deref(), Some("connect an account for cloud"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -128,7 +147,12 @@ async fn rewinding_a_step_restores_the_worktree_and_the_session_and_runs_it_agai
     assert_eq!(first.status.as_deref(), Some("Fazendo"));
     let branch = git::head_of(&first, "");
     let worktree = world.dir.path().join("data/worktrees").join(git::folder_for(&branch));
-    assert!(worktree.join("feito.txt").exists());
+    let mut waited = 0;
+    while worktree.exists() && waited < 100 {
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+        waited += 1;
+    }
+    assert!(!worktree.exists(), "an ended item gives its clean worktree back");
     *world.engine.state.write.lock().expect("lock") = None;
     kernel.rewind(&id, "build").await.expect("rewind");
     let again = until(&kernel, &id, |item| item.is_ended() && item.version > first.version).await;
@@ -187,6 +211,59 @@ async fn an_agent_question_reaches_the_human_and_the_answer_reaches_the_agent() 
         saw_session |= matches!(event, crate::OrchestratorEvent::Session { .. });
     }
     assert!(saw_session);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_step_whose_agent_waits_for_the_human_is_not_shown_as_running() {
+    use domain::workflow::StepState;
+    let world = World::new();
+    world.engine.state.ask.store(true, Ordering::SeqCst);
+    let body = "return ctx.pass((await ctx.agent(\"worker\", \"faça\")).text);";
+    let source = format!(
+        "import {{ workflow, step }} from \"sdk\";\nconst only = step({{ name: \"only\", async run(ctx) {{ {body} }} }});\nexport default workflow({{ name: \"waits\", steps: [only()] }});\n"
+    );
+    world.workflow("waits", &source);
+    let kernel = world.start().await;
+    let id = kernel.create_item("waits", json!({})).expect("item");
+    let mut asked = None;
+    for _ in 0..200 {
+        if let Some(found) = kernel.asks().first() {
+            asked = Some(found.clone());
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let asked = asked.expect("the question reached the human");
+    let summary = kernel.summary(&id).expect("summary").expect("item");
+    let shown = summary.steps.iter().filter(|step| step.id == "only").map(|step| step.state).collect::<Vec<_>>();
+    assert_eq!(shown, vec![StepState::WaitingHuman]);
+    let view = kernel.step_view(&id, "only", None).await.expect("view");
+    assert_eq!(view.attempts.last().map(|attempt| attempt.state), Some(StepState::WaitingHuman));
+    kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::Bypass)).expect("answer");
+    ended(&kernel, &id).await;
+    let after = kernel.summary(&id).expect("summary").expect("item");
+    assert!(after.steps.iter().all(|step| step.state != StepState::WaitingHuman));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_approved_plan_ends_a_planning_agent_even_if_it_would_keep_going() {
+    let world = World::new();
+    world.engine.state.ask.store(true, Ordering::SeqCst);
+    world.engine.state.keeps_going.store(true, Ordering::SeqCst);
+    world.workflow("plano", "import { workflow } from \"sdk\";\nexport default workflow({ name: \"plano\", async run(ctx) { return (await ctx.agent(\"worker\", \"planeje\", { mode: \"plan\" })).plan; } });");
+    let kernel = world.start().await;
+    let id = kernel.create_item("plano", json!({})).expect("item");
+    let mut asked = None;
+    for _ in 0..200 {
+        if let Some(found) = kernel.asks().first() {
+            asked = Some(found.clone());
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    let asked = asked.expect("the plan reached the human");
+    kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::AcceptEdits)).expect("answer");
+    assert_eq!(output(&ended(&kernel, &id).await), json!("o plano"));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -351,6 +428,12 @@ async fn a_step_tried_again_after_a_failure_is_the_current_one() {
     .await;
     let summary = kernel.summary(&id).expect("summary").expect("item");
     assert_eq!(summary.current.as_deref(), Some("only"));
+    let view = kernel.step_view(&id, "only", None).await.expect("view");
+    assert_eq!(
+        view.attempts.last().map(|attempt| attempt.state),
+        Some(StepState::WaitingHuman),
+        "not shown as running"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -395,4 +478,26 @@ async fn a_session_counts_as_running_only_while_its_item_s_agent_works() {
     world.engine.state.hold.store(false, Ordering::SeqCst);
     ended(&kernel, &id).await;
     assert!(!kernel.runs_session("s1").expect("asked"), "the run is over");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_earlier_attempt_shows_its_own_conversation() {
+    let world = World::new();
+    world.provider.then("tracker.issue", Reply::Fail(ActionError::permanent("404")));
+    let body = "await ctx.agent(\"worker\", \"faça\"); return ctx.pass(await ctx.call(\"tracker\", \"issue\", { issue: \"K\" }));";
+    let source = format!(
+        "import {{ workflow, step }} from \"sdk\";\nconst only = step({{ name: \"only\", async run(ctx) {{ {body} }} }});\nexport default workflow({{ name: \"talks\", steps: [only()] }});\n"
+    );
+    world.workflow("talks", &source);
+    let kernel = world.start().await;
+    let id = kernel.create_item("talks", json!({})).expect("item");
+    until(&kernel, &id, |item| item.step("", Some("main")).is_some_and(|run| run.state == StepState::WaitingHuman))
+        .await;
+    kernel.human_input(&id, "", "retry", json!({})).expect("retry");
+    ended(&kernel, &id).await;
+    let latest = kernel.step_view(&id, "only", None).await.expect("latest");
+    let first = kernel.step_view(&id, "only", Some(1)).await.expect("first");
+    assert_eq!((latest.attempt, first.attempt), (2, 1));
+    assert_ne!(latest.session, first.session);
+    assert!(first.session.is_some());
 }

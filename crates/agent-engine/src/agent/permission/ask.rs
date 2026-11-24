@@ -1,37 +1,13 @@
 use crossbeam_channel::RecvError;
-use domain::permission::Judgement;
+use domain::permission::{Allowed, Judgement, Standing};
 use domain::{AgentAsk, AskId, AskKind, Decision, EngineEvent};
 use serde_json::Value;
 
 use super::{Asking, Called};
 use crate::agent::Agent;
-use crate::tools::{Outcome, ask};
+use crate::tools::Outcome;
 
 impl Agent<'_> {
-    pub(in crate::agent) fn ask_user(&self, id: &str, input: &Value) -> Outcome {
-        if self.control.no_prompts() {
-            return Outcome::error("Interactive questions are disabled for this agent.");
-        }
-        let asked = match ask::questions(input) {
-            Ok(asked) => asked,
-            Err(problem) => return Outcome::error(format!("The questions could not be asked: {problem}.")),
-        };
-        self.notify("elicitation_dialog", concat!(brand::name!(), " has questions for you"));
-        match self.asked(id, AskKind::Questions(asked.clone())) {
-            Ok(Decision::Answer(picks)) => Outcome::ok(ask::answers(&asked, &picks)),
-            Ok(Decision::Allow | Decision::AllowAlways | Decision::Approve(_)) => {
-                Outcome::ok(ask::answers(&asked, &[]))
-            }
-            Ok(Decision::Deny) => Outcome::error(
-                "The user declined to answer. Do not ask again; go on with your best judgement and say what you assumed.",
-            ),
-            Ok(Decision::DenyWith(note)) => {
-                Outcome::error(format!("The user declined to answer the questions and said instead: {note}"))
-            }
-            Err(_) => Outcome::error(crate::tools::stopped::while_asking("the question")),
-        }
-    }
-
     pub(super) fn ask_permission(&self, asking: &Asking<'_>, shown: &str, rememberable: bool) -> Outcome {
         let Asking { id, tool, called, .. } = *asking;
         let Called { name, input, .. } = *called;
@@ -59,6 +35,13 @@ impl Agent<'_> {
 
     fn remember_allowed(&self, asking: &Asking<'_>) {
         let Judgement { standing, subject, .. } = asking.judgement;
+        if *standing == Standing::Acts && domain::permission::allowed::global().is_some() {
+            let learned = Allowed::learned(&asking.called.call());
+            if !learned.is_empty() {
+                domain::permission::allowed::change(|allowed| learned.into_iter().for_each(|grant| _ = allowed.add(grant)));
+                return;
+            }
+        }
         self.control.remember(|remembered| remembered.remember(asking.called.name, *standing, subject));
     }
 

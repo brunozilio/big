@@ -37,10 +37,7 @@ impl StoreView {
 impl ItemView for StoreView {
     async fn active(&self) -> Result<Vec<Desired>, Error> {
         let items = self.store.active_items()?;
-        Ok(items
-            .iter()
-            .map(|item| desired_of(item, self.policy(&item.workflow)))
-            .collect())
+        Ok(items.iter().map(|item| desired_of(item, self.policy(&item.workflow))).collect())
     }
 }
 

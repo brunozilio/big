@@ -24,7 +24,6 @@ tracing.workspace = true
 uuid.workspace = true
 jiff.workspace = true
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "sync", "time", "macros", "process"] }
-oxc = { version = "0.159", features = ["transformer", "codegen", "semantic"] }
 
 [dev-dependencies]
 tempfile.workspace = true

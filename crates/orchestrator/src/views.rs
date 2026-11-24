@@ -5,6 +5,7 @@ use serde::Serialize;
 use serde_json::{Map, Value, json};
 use sync::ReconcilePolicy;
 
+use crate::calls::calls_block;
 use crate::git;
 use crate::ledger::Ledger;
 use crate::protocol::{AGENT, WAIT_HUMAN, kind_of};
@@ -222,12 +223,13 @@ pub fn attempts(ledger: &Ledger, step: &str) -> Vec<Attempt> {
     found
 }
 
-pub fn session_of(ledger: &Ledger, step: &str) -> Option<String> {
+pub fn session_of(ledger: &Ledger, step: &str, attempt: Option<u32>) -> Option<String> {
     ledger
         .requested
         .iter()
         .rev()
         .filter(|(_, request)| request.key.step == step && kind_of(&request.effect) == AGENT)
+        .filter(|(_, request)| attempt.is_none_or(|wanted| request.key.attempt == wanted))
         .find_map(|(seq, _)| {
             let progress = ledger.progress.get(seq).and_then(|data| data["session"].as_str());
             let value = ledger.value(*seq).and_then(|value| value["session"].as_str());
@@ -237,12 +239,17 @@ pub fn session_of(ledger: &Ledger, step: &str) -> Option<String> {
 
 pub fn live_blocks(ledger: &Ledger, step: &str) -> Option<Value> {
     let open: Vec<_> = ledger.open().filter(|request| request.key.step == step).collect();
+    if open.is_empty() {
+        return None;
+    }
     if let Some(Effect::WaitHuman { view }) =
         open.iter().rev().map(|request| &request.effect).find(|effect| kind_of(effect) == WAIT_HUMAN)
     {
         return Some(view.clone());
     }
-    let running = open.iter().rev().find(|request| kind_of(&request.effect) == AGENT)?;
+    let Some(running) = open.iter().rev().find(|request| kind_of(&request.effect) == AGENT) else {
+        return calls_block(ledger, step).map(|block| json!([block]));
+    };
     let session = ledger.progress.get(&running.key.seq).and_then(|data| data["session"].as_str())?;
     let planning = match &running.effect {
         Effect::AgentRun { input, .. } => input["mode"] == "plan",
@@ -265,7 +272,7 @@ pub fn view_state(item: &WorkItem, ledger: &Ledger, step: &str, chosen: Option<&
     fields.insert("passed".into(), json!(state == StepState::Passed));
     fields.insert("failed".into(), json!(state == StepState::Failed));
     if !fields.contains_key("session")
-        && let Some(session) = session_of(ledger, step)
+        && let Some(session) = session_of(ledger, step, chosen.map(|attempt| attempt.n))
     {
         fields.insert("session".into(), json!(session));
     }

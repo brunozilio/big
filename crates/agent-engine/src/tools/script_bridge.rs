@@ -80,6 +80,8 @@ pub(crate) fn read_only_tool(arguments: &Value, workspace: &Workspace) -> Result
     let only_reads = || format!("a hook may run only read-only tools such as Read, Grep and Glob, not {name}");
     let (tool, spec) =
         tools.iter().map(|tool| (tool, tool.spec())).find(|(_, spec)| spec.name == name).ok_or_else(only_reads)?;
+    let tidied = crate::tools::checked::without_empty_optionals(&spec.schema, input);
+    let input = tidied.as_ref().unwrap_or(input);
     if let Some(refusal) = crate::tools::checked::refusal(name, &spec.schema, input) {
         return Err(refusal);
     }

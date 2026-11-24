@@ -76,7 +76,7 @@ mod tests {
         let seen = Arc::clone(&asked);
         let browser = BrowserMcp::new(move |session, roots, _ask| {
             seen.lock().unwrap_or_else(std::sync::PoisonError::into_inner).push((session.to_owned(), roots));
-            domain::mcp::LocalMcp::new("browser", Arc::new(Silent))
+            Some(domain::mcp::LocalMcp::new("browser", Arc::new(Silent)))
         });
         let services = testing::services(None).with_browser_mcp(browser);
         let context = Context { services: &services };
@@ -87,6 +87,14 @@ mod tests {
         assert_eq!(prepared.host.credentials.mcp.iter().map(|mcp| mcp.name.as_str()).collect::<Vec<_>>(), ["browser"]);
         let asked = asked.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
         assert_eq!(asked, [("conversation".to_owned(), vec![request.session.cwd.clone()])]);
+    }
+
+    #[test]
+    fn a_turned_off_browser_adds_no_server_to_the_run() {
+        let services = testing::services(None).with_browser_mcp(BrowserMcp::new(|_, _, _| None));
+        let context = Context { services: &services };
+        let (prepared, _) = prepare(&context, RunId::new(), request());
+        assert!(prepared.host.credentials.mcp.is_empty());
     }
 
     #[test]

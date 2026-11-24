@@ -243,10 +243,7 @@ async fn a_retried_result_with_the_same_key_is_found_by_its_marker_and_not_recor
         .answer("zephyr_create_test_execution", json!({ "id": 9, "key": "BIG-E9" }));
     assert_eq!(call(&first, actions::RECORD, args.clone()).await, Ok(json!({ "ref": "BIG-E9" })));
     let calls = first.calls();
-    assert_eq!(
-        calls[0].1,
-        json!({ "projectKey": "BIG", "testCycle": "BIG-R1", "testCase": "BIG-T1", "limit": 50 })
-    );
+    assert_eq!(calls[0].1, json!({ "projectKey": "BIG", "testCycle": "BIG-R1", "testCase": "BIG-T1", "limit": 50 }));
     let stored = calls[1].1["comment"].as_str().unwrap_or_default().to_owned();
     assert!(idempotency::carries_tag(&stored, "k1") && !stored.starts_with('\n'), "{stored}");
 

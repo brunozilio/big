@@ -39,20 +39,6 @@ fn applications_are_kept_in_order_changed_in_place_and_removed() {
 }
 
 #[test]
-fn an_item_keeps_the_workflow_code_it_was_pinned_to() {
-    let store = Store::in_memory(0).expect("the store answers");
-    assert_eq!(store.pinned_workflow("i1").expect("read"), None);
-    store.pin_workflow("i1", "v1", "codigo 1").expect("pinned");
-    store.pin_workflow("i2", "v1", "outro texto com a mesma versão").expect("pinned");
-    assert_eq!(store.pinned_workflow("i1").expect("read"), Some(("v1".to_owned(), "codigo 1".to_owned())));
-    assert_eq!(
-        store.pinned_workflow("i2").expect("read"),
-        Some(("v1".to_owned(), "codigo 1".to_owned())),
-        "a version is kept once"
-    );
-}
-
-#[test]
 fn a_repository_saved_with_a_single_run_command_reads_it_as_a_list() {
     let old =
         r#"{ "directory": "/src/web", "run": "bun dev", "verify": ["bun test"], "e2e": ["npx playwright test"] }"#;

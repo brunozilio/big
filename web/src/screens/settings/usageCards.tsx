@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import type { TooltipProps } from 'recharts'
 import type { UsageDay } from '@/api/contract'
+import { currentLocale } from '@/i18n'
 import { money } from '@/ui/cn'
 import { Card, EmptyState } from '@/ui/display'
 import { Icon, type IconName } from '@/ui/icon'
@@ -17,7 +18,7 @@ export const usd = (v: number) => money(v, 'USD')
 export const axisUsd = (v: number) => (Number.isInteger(v) || v >= 10 ? `$${Math.round(v)}` : `$${v.toFixed(v < 1 ? 2 : 1)}`)
 
 export function compact(n: number): string {
-  return new Intl.NumberFormat('pt-BR', { notation: 'compact', maximumFractionDigits: 1 }).format(n)
+  return new Intl.NumberFormat(currentLocale(), { notation: 'compact', maximumFractionDigits: 1 }).format(n)
 }
 
 export interface Series {
@@ -31,7 +32,7 @@ export function seriesOf(rows: { id: string; name: string }[], daily: UsageDay[]
   const rest = rows.length > top.length
   const series: Series[] = top.map((r, i) => ({ key: `s${i}`, name: r.name, color: palette[i % palette.length] }))
   if (rest) series.push({ key: 'rest', name: 'Outros', color: 'rgb(var(--text-faint))' })
-  const fmt = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short' })
+  const fmt = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(currentLocale(), { day: '2-digit', month: 'short' })
   const data = daily.map((d) => {
     const values = pick(d)
     const point: Record<string, number | string> = { date: fmt(d.date) }

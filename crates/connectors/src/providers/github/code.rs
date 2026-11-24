@@ -30,7 +30,7 @@ pub fn pull_summary(repo: &str, pull: &Value, created: bool) -> Value {
         "number": number,
         "url": text_of(pull, "/html_url"),
         "title": text_of(pull, "/title"),
-        "body": text_of(pull, "/body"),
+        "body": idempotency::strip(&text_of(pull, "/body")),
         "state": if merged { "merged".to_owned() } else { text_of(pull, "/state") },
         "merged": merged,
         "draft": pull["draft"].as_bool().unwrap_or(false),
@@ -96,7 +96,7 @@ fn review(found: &Value) -> Value {
         "id": found["id"].to_string(),
         "author": text_of(found, "/user/login"),
         "verdict": verdict(&found["state"]),
-        "body": text_of(found, "/body"),
+        "body": idempotency::strip(&text_of(found, "/body")),
         "at": text_of(found, "/submitted_at"),
     })
 }
@@ -149,7 +149,7 @@ fn thread_comments(thread: &Value) -> Vec<Value> {
                 "path": thread["path"],
                 "line": thread["line"],
                 "author": text_of(comment, "/author/login"),
-                "body": text_of(comment, "/body"),
+                "body": idempotency::strip(&text_of(comment, "/body")),
                 "resolved": thread["isResolved"].as_bool().unwrap_or(false),
                 "outdated": thread["isOutdated"].as_bool().unwrap_or(false),
                 "at": text_of(comment, "/createdAt"),
@@ -233,15 +233,29 @@ pub async fn merge(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> 
     let (repo, number) = pull_of(api, args)?;
     let method = merge_method(args.optional_text("method"))?;
     let pull = api.get(&format!("/repos/{repo}/pulls/{number}")).await?;
+    let delete = args.optional_flag("delete_branch").unwrap_or(true);
     if merged(&pull) {
-        return Ok(json!({ "merged": true, "already": true, "sha": pull["merge_commit_sha"] }));
+        let deleted = delete && delete_head(api, &repo, &pull).await;
+        return Ok(json!({ "merged": true, "already": true, "sha": pull["merge_commit_sha"], "deleted": deleted }));
     }
     if pull["state"] == "closed" {
         return Err(ActionError::permanent(format!("{repo}#{number} was closed without merging")));
     }
     let body = json!({ "merge_method": method, "sha": text_of(&pull, "/head/sha") });
     let done = api.send(Method::Put, &format!("/repos/{repo}/pulls/{number}/merge"), &body).await?;
-    Ok(json!({ "merged": done["merged"].as_bool().unwrap_or(true), "already": false, "sha": done["sha"] }))
+    let merged = done["merged"].as_bool().unwrap_or(true);
+    let deleted = merged && delete && delete_head(api, &repo, &pull).await;
+    Ok(json!({ "merged": merged, "already": false, "sha": done["sha"], "deleted": deleted }))
+}
+
+async fn delete_head(api: &Api<'_>, repo: &str, pull: &Value) -> bool {
+    let head = text_of(pull, "/head/ref");
+    let own = pull.pointer("/head/repo/full_name").and_then(Value::as_str) == Some(repo);
+    if !own || head.is_empty() || head == text_of(pull, "/base/ref") {
+        return false;
+    }
+    let path = format!("/repos/{repo}/git/refs/heads/{head}");
+    api.raw(api.request(Method::Delete, &path)).await.is_ok()
 }
 
 const REPO_PAGE: usize = 100;
@@ -276,4 +290,28 @@ pub async fn repos(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> 
         }
     }
     Ok(Value::Array(found))
+}
+
+const BRANCH_PAGES: usize = 10;
+
+pub async fn pull_requests(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
+    let repo = repo_of(api, args)?;
+    let listed = api.get(&format!("/repos/{repo}/pulls?state=open&sort=updated&direction=desc&per_page=100")).await?;
+    Ok(Value::Array(list(&listed).iter().map(|pull| pull_summary(&repo, pull, false)).collect()))
+}
+
+pub async fn branches(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
+    let repo = repo_of(api, args)?;
+    let found = api.get(&format!("/repos/{repo}")).await?;
+    let default = text_of(&found, "/default_branch");
+    let mut names = Vec::new();
+    for page in 1..=BRANCH_PAGES {
+        let listed = api.get(&format!("/repos/{repo}/branches?per_page=100&page={page}")).await?;
+        let listed = list(&listed);
+        names.extend(listed.iter().map(|branch| text_of(branch, "/name")).filter(|name| !name.is_empty()));
+        if listed.len() < 100 {
+            break;
+        }
+    }
+    Ok(Value::Array(names.into_iter().map(|name| json!({ "default": name == default, "name": name })).collect()))
 }

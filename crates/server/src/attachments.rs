@@ -1,7 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use axum::extract::{Multipart, State};
-use axum::response::Response;
+use axum::extract::{Multipart, Path as Segment, State};
+use axum::http::header;
+use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 
 use crate::error::{ApiError, ApiResult, json as reply};
@@ -52,6 +53,36 @@ pub async fn upload(State(ctx): State<Ctx>, mut form: Multipart) -> ApiResult<Re
     Err(ApiError::bad("Envie o arquivo no campo file."))
 }
 
+const KINDS: [(&str, &str); 12] = [
+    ("png", "image/png"),
+    ("jpg", "image/jpeg"),
+    ("jpeg", "image/jpeg"),
+    ("gif", "image/gif"),
+    ("webp", "image/webp"),
+    ("webm", "video/webm"),
+    ("mp4", "video/mp4"),
+    ("txt", "text/plain; charset=utf-8"),
+    ("log", "text/plain; charset=utf-8"),
+    ("json", "application/json"),
+    ("html", "text/plain; charset=utf-8"),
+    ("zip", "application/zip"),
+];
+
+pub fn kind_of(name: &str) -> &'static str {
+    let extension = Path::new(name).extension().map(|found| found.to_string_lossy().to_lowercase()).unwrap_or_default();
+    KINDS.iter().find(|(known, _)| *known == extension).map_or("application/octet-stream", |(_, kind)| kind)
+}
+
+pub async fn download(State(ctx): State<Ctx>, Segment(id): Segment<String>) -> ApiResult<Response> {
+    let file = paths(&ctx.backend.attachments(), &json!([id])).into_iter().next();
+    let file = file.ok_or_else(|| ApiError::missing("Não há esse anexo."))?;
+    let name = file.file_name().map(|found| found.to_string_lossy().into_owned()).unwrap_or_default();
+    let bytes = tokio::fs::read(&file).await.map_err(ApiError::failed)?;
+    let disposition = format!("inline; filename=\"{}\"", safe_name(&name));
+    Ok(([(header::CONTENT_TYPE, kind_of(&name).to_owned()), (header::CONTENT_DISPOSITION, disposition)], bytes)
+        .into_response())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -65,5 +96,13 @@ mod tests {
         std::fs::create_dir_all(dir.path().join("ab")).expect("folder");
         std::fs::write(dir.path().join("ab/a.txt"), "x").expect("file");
         assert_eq!(paths(dir.path(), &json!(["ab", "zz", "../x"])), vec![dir.path().join("ab/a.txt")]);
+    }
+
+    #[test]
+    fn evidence_is_served_with_its_kind_and_html_never_renders() {
+        assert_eq!(kind_of("shot.PNG"), "image/png");
+        assert_eq!(kind_of("run.webm"), "video/webm");
+        assert_eq!(kind_of("page.html"), "text/plain; charset=utf-8");
+        assert_eq!(kind_of("trace"), "application/octet-stream");
     }
 }

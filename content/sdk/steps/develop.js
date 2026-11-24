@@ -1,7 +1,7 @@
 import { step, chat, markdown } from "sdk";
-import { agentOptions, branchOf, codeOptions, defined, effects, feedbackText, inLanguage, issueOf, object, planOf, pullRequestsOf, summaryLine } from "./context.js";
+import { agentOptions, attempt, branchOf, codeOptions, defined, effects, feedbackText, inLanguage, issueOf, object, planOf, pullRequestsOf, source, summaryLine } from "./context.js";
 
-const IDLE = "Nada a corrigir: o pull request não tem comentários de review pendentes nem falhas apontadas.";
+const IDLE = "Nothing to fix: the pull request has no pending review comments or reported failures.";
 
 async function pending(ctx, opts) {
   const comments = [];
@@ -14,7 +14,7 @@ async function pending(ctx, opts) {
     }
   }
   if (comments.length === 0) return null;
-  return { step: "review", outcome: "comments", data: { summary: "O pull request tem comentários de review pendentes.", comments } };
+  return { step: "review", outcome: "comments", data: { summary: "The pull request has pending review comments.", comments } };
 }
 
 export function threadsOf(feedback, before) {
@@ -35,11 +35,11 @@ function shown(s) {
 }
 
 function request(item, plan, issue, feedback) {
-  const parts = [`Implemente o item: ${plan.title || item.title || ""}`];
+  const parts = [`Implement the item: ${plan.title || item.title || ""}`];
   if (issue) parts.push(`Issue: ${issue}`);
-  if (plan.text) parts.push(`## Plano aprovado\n\n${plan.text}`);
+  if (plan.text) parts.push(`## Approved plan\n\n${plan.text}`);
   const back = feedbackText(feedback);
-  if (back) parts.push(`## O que precisa ser corrigido\n\n${back}`);
+  if (back) parts.push(`## What needs fixing\n\n${back}`);
   return inLanguage(parts.join("\n\n"));
 }
 
@@ -47,11 +47,11 @@ function uncommitted(result, branch) {
   const trees = Array.isArray(result.repositories) && result.repositories.length > 0 ? result.repositories : [result];
   const known = trees.filter((tree) => tree && typeof tree === "object" && "commit" in tree);
   if (known.length === 0 || known.some((tree) => tree.commit && tree.commit !== tree.base)) return null;
-  if (known.every((tree) => !tree.commit)) return "a pasta de trabalho não é um repositório git, então nada foi commitado nem enviado";
-  return `o agente terminou sem nenhum commit na branch ${branch}`;
+  if (known.every((tree) => !tree.commit)) return "the working folder is not a git repository, so nothing was committed or pushed";
+  return `the agent finished without any commit on branch ${branch}`;
 }
 
-const NUDGE = "Você encerrou sem nenhum commit. Continue o trabalho agora: implemente o plano, rode os testes e faça commit na branch do item. Não pare antes de ter commits.";
+const NUDGE = "You stopped without any commit. Continue the work now: implement the plan, run the tests and commit on the item's branch. Do not stop before there are commits.";
 
 function stalled(result) {
   const trees = Array.isArray(result.repositories) && result.repositories.length > 0 ? result.repositories : [result];
@@ -59,11 +59,64 @@ function stalled(result) {
   return known.length > 0 && known.every((tree) => tree.commit === tree.base);
 }
 
+function trackerOptions(ctx, opts) {
+  const connection = opts.trackerConnection ?? ctx.item.connection ?? undefined;
+  return { ...effects({ ...opts, connection }), ...(connection ? {} : { optional: true }) };
+}
+
+function detailsOf(plan, title) {
+  return plan.subtasks.find((task) => task.title === title)?.details ?? "";
+}
+
+async function subtasksOf(ctx, opts, issue) {
+  if (opts.subtasks === false) return [];
+  const plan = planOf(ctx, opts);
+  const made = source(ctx, opts, "ticket").subtasks;
+  if (Array.isArray(made) && made.length > 0) {
+    return made.filter((task) => task && task.issue).map((task) => ({ issue: task.issue, title: task.title ?? "", details: detailsOf(plan, task.title) }));
+  }
+  if (!issue) return [];
+  const found = await attempt(() => ctx.call("tracker", "issue", { issue: String(issue) }, trackerOptions(ctx, opts)));
+  const listed = Array.isArray(object(found).subtasks) ? found.subtasks : [];
+  return listed.map(object).filter((task) => task.ref && !task.done).map((task) => ({ issue: task.ref, title: task.title ?? "", details: detailsOf(plan, task.title) }));
+}
+
+function statusesOf(ctx, opts) {
+  const declared = ctx.workflow ? ctx.workflow.statuses : [];
+  return { doing: opts.subtaskDoing ?? opts.status, done: opts.subtaskDone ?? declared[declared.length - 1] };
+}
+
+async function move(ctx, opts, issue, status) {
+  if (!status) return;
+  await attempt(() => ctx.call("tracker", "transition", { issue, status }, trackerOptions(ctx, opts)));
+}
+
+function subtaskText(task, index, total) {
+  const parts = [`Now do only subtask ${index + 1} of ${total}: ${task.title} (${task.issue}).`];
+  if (task.details) parts.push(task.details);
+  parts.push("When this subtask is done, commit and stop; the next one comes right after.");
+  return parts.join("\n\n");
+}
+
+async function stepwise(ctx, opts, run, tasks) {
+  const statuses = statusesOf(ctx, opts);
+  const lead = "Work on one subtask at a time, in the plan's order.";
+  let result = null;
+  for (const [index, task] of tasks.entries()) {
+    await move(ctx, opts, task.issue, statuses.doing);
+    const text = subtaskText(task, index, tasks.length);
+    const input = result ? { prompt: inLanguage(text), session: result.session } : { ...run.input, prompt: `${run.input.prompt}\n\n${lead}\n\n${text}` };
+    result = await ctx.agent(run.agent, input, run.options);
+    await move(ctx, opts, task.issue, statuses.done);
+  }
+  return result;
+}
+
 export default step({
   name: "develop",
   label: "Develop",
   icon: "sCode",
-  doing: "Desenvolvendo",
+  doing: "Developing",
   view: shown,
   async run(ctx, opts) {
     const plan = planOf(ctx, opts);
@@ -82,7 +135,9 @@ export default step({
     });
     const worktree = opts.worktree ?? branch ?? ctx.item.id;
     const agent = opts.agent ?? "developer";
-    let result = await ctx.agent(agent, input, agentOptions(opts, { worktree }));
+    const run = { agent, input, options: agentOptions(opts, { worktree }) };
+    const tasks = feedback || previous.session || opts.prompt ? [] : await subtasksOf(ctx, opts, issue);
+    let result = tasks.length > 0 ? await stepwise(ctx, opts, run, tasks) : await ctx.agent(agent, input, run.options);
     for (let nudged = 0; nudged < (opts.nudges ?? 2) && stalled(result); nudged += 1) {
       result = await ctx.agent(agent, { prompt: NUDGE, session: result.session }, agentOptions(opts, { worktree }));
     }

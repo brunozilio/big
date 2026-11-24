@@ -9,6 +9,7 @@ import { AnimatePresence, Collapse, motion, tween, tweenClose } from '@/ui/motio
 import { AskBlock, PermissionBlock, type Respond } from './actionBlocks'
 import { BackgroundWork, hasWork } from './BackgroundWork'
 import { Composer } from './Composer'
+import { useRememberedModel } from './remembered'
 import { PlanBlock } from './PlanCard'
 import { SideAnswers, useSideQuestions } from './SideQuestions'
 import { AgentMark, AgentsContext, emptyThinking, AssistantMessage, StatusLine, ThinkingSteps, ToolRunSummary, TurnHeader, UserMessage } from './events'
@@ -46,8 +47,8 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
   const scroller = useRef<HTMLDivElement>(null)
   const [atBottom, setAtBottom] = useState(true)
   const [sendError, setSendError] = useState<string | null>(null)
-  const [model, setModel] = useState<string | null>(null)
-  const side = useSideQuestions(sessionId, model ?? session?.model ?? null)
+  const [model, setModel] = useRememberedModel()
+  const side = useSideQuestions(sessionId, (text) => api().side(sessionId, { text, model: model ?? session?.model ?? null }))
   const eventCount = session?.events.length ?? 0
   const lastSignature = session ? JSON.stringify(session.events[session.events.length - 1] ?? null).length : 0
 
@@ -122,9 +123,13 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
               {composer && <Composer
                 running={running}
                 onStop={() => void api().stop(session.id)}
-                placeholder={running ? 'Perguntar à parte, sem interromper o agente…' : 'Responder ou pedir o próximo passo…'}
+                placeholder={running ? 'Mandar mensagem ao agente, sem interrompê-lo…' : 'Responder ou pedir o próximo passo…'}
                 suggestion={session.suggestion}
                 onAside={(text) => {
+                  setAtBottom(true)
+                  side.ask(text)
+                }}
+                onBtw={(text) => {
                   setAtBottom(true)
                   side.ask(text)
                 }}
@@ -171,6 +176,7 @@ export type Segment = { kind: 'work'; events: SessionEvent[] } | { kind: 'human'
 export function segmentsOf(events: SessionEvent[], live: boolean): Segment[] {
   const segments: Segment[] = []
   for (const e of events) {
+    if (e.type === 'permission' && e.resolution !== 'pending') continue
     if (human(e)) {
       segments.push({ kind: 'human', event: e })
       continue

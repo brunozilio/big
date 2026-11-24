@@ -14,7 +14,7 @@ use crate::transcript::Message;
 
 const BACKGROUND_AT_MOST: usize = 16;
 
-pub(in crate::agent) type Spawn<'s, 'env> = &'s dyn Fn(Box<dyn FnOnce() + Send + 'env>);
+pub(in crate::agent) type Spawn<'s, 'env> = &'s (dyn Fn(Box<dyn FnOnce() + Send + 'env>) + Sync);
 
 pub(in crate::agent) type BackgroundJob<'env> =
     Box<dyn FnOnce(&Arc<Control>, &crate::tools::Workspace) -> Outcome + Send + 'env>;
@@ -43,6 +43,10 @@ impl BackgroundAgent {
     }
 
     pub(in crate::agent) fn output(&self, block: bool) -> Outcome {
+        self.waited(block).unwrap_or_else(|| Outcome::ok("Task is still running."))
+    }
+
+    pub(in crate::agent) fn waited(&self, block: bool) -> Option<Outcome> {
         let mut result = self.result.locked();
         while block && result.is_none() {
             result = platform::sync::wait(&self.ready, result);
@@ -50,7 +54,11 @@ impl BackgroundAgent {
         if result.is_some() {
             self.collected.store(true, Ordering::Relaxed);
         }
-        result.clone().unwrap_or_else(|| Outcome::ok("Task is still running."))
+        result.clone()
+    }
+
+    fn running(&self) -> bool {
+        self.result.locked().is_none()
     }
 
     pub(in crate::agent) fn is_collected(&self) -> bool {
@@ -89,39 +97,22 @@ impl Background {
         Some((id, task))
     }
 
-    fn find(&self, input: &Value) -> Option<Arc<BackgroundAgent>> {
-        self.0.locked().get(input["task_id"].as_str().unwrap_or_default()).cloned()
+    pub(in crate::agent) fn find(&self, id: &str) -> Option<Arc<BackgroundAgent>> {
+        self.0.locked().get(id).cloned()
     }
 
-    pub(in crate::agent) fn output(&self, input: &Value) -> Outcome {
-        match self.find(input) {
-            Some(task) => task.output(input["block"].as_bool().unwrap_or(true)),
-            None => Outcome::error("Unknown task_id for this run."),
-        }
+    pub(in crate::agent) fn stop(&self, id: &str) -> bool {
+        let Some(task) = self.find(id) else { return false };
+        task.control.cancel();
+        task.waited(true);
+        true
     }
 
-    pub(in crate::agent) fn stop(&self, input: &Value) -> Outcome {
-        match self.find(input) {
-            Some(task) => {
-                task.control.cancel();
-                task.output(true);
-                Outcome::ok("Task stopped and joined.")
-            }
-            None => Outcome::error("Unknown task_id for this run."),
-        }
-    }
-
-    pub(in crate::agent) fn list(&self, planning: impl FnOnce() -> Value) -> Outcome {
-        let tasks = self.0.locked();
-        let planning = planning();
-        let background: Vec<Value> = tasks
-            .iter()
-            .map(|(id, task)| {
-                let status = if task.result.locked().is_some() { "completed" } else { "running" };
-                json!({"task_id": id, "status": status})
-            })
-            .collect();
-        Outcome::ok(json!({"planning": planning, "background": background}).to_string())
+    pub(in crate::agent) fn listed(&self) -> Vec<Value> {
+        self.started()
+            .into_iter()
+            .map(|(id, task)| json!({"task_id": id, "status": if task.running() { "running" } else { "completed" }}))
+            .collect()
     }
 }
 
@@ -140,17 +131,14 @@ impl Agent<'_> {
         run: &ThisRun,
         parent: &[Message],
         spawn: Spawn<'_, 'env>,
-    ) -> Outcome {
+    ) -> Result<String, Outcome> {
         let conversations = run.conversations.clone();
         let input = input.clone();
         let parent = if builtin_agents::is_fork(&input) { parent.to_vec() } else { Vec::new() };
         let job = move |control: &Arc<Control>, workspace: &crate::tools::Workspace| {
             self.sub_agent_with(&input, control, workspace, &parent, &conversations, None)
         };
-        match self.in_background(run, "agent", Box::new(job), spawn) {
-            Ok(id) => Outcome::ok(json!({"task_id":id,"status":"running","instructions":"Use TaskOutput to collect the report before completing the request."}).to_string()),
-            Err(refused) => refused,
-        }
+        self.in_background(run, "agent", Box::new(job), spawn)
     }
 
     pub(in crate::agent) fn in_background<'env>(
@@ -189,12 +177,15 @@ mod tests {
         let background = Background::default();
         let (id, task) = background.start(control()).expect("room");
         assert_eq!(id, "task-1");
-        assert_eq!(background.output(&json!({"task_id": id, "block": false})).content, "Task is still running.");
+        assert_eq!(background.listed(), [json!({"task_id": "task-1", "status": "running"})]);
+        let found = background.find(&id).expect("started");
+        assert_eq!(found.waited(false), None, "still running");
         task.finished(Outcome::ok("report"));
         assert!(background.started().iter().all(|(_, task)| !task.is_collected()), "asking early collects nothing");
-        assert_eq!(background.output(&json!({"task_id": id})).content, "report");
+        assert_eq!(found.waited(true), Some(Outcome::ok("report")));
         assert!(background.started().iter().all(|(_, task)| task.is_collected()));
-        assert!(background.output(&json!({"task_id": "task-9"})).is_error);
+        assert_eq!(background.listed(), [json!({"task_id": "task-1", "status": "completed"})]);
+        assert!(background.find("task-9").is_none() && !background.stop("task-9"));
     }
 
     #[test]

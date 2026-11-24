@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useSyncExternalStore } from 'react'
 import { EFFORTS, type Effort } from '@/api/contract'
 
 const MODEL = 'composer.model'
@@ -7,6 +7,24 @@ const TUNING = 'composer.tuning'
 export interface RememberedTuning {
   effort: Effort
   fast: boolean
+}
+
+const listeners = new Set<() => void>()
+
+function notify(): void {
+  for (const listener of listeners) listener()
+}
+
+function subscribe(listener: () => void): () => void {
+  listeners.add(listener)
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === null || e.key === MODEL || e.key === TUNING) listener()
+  }
+  globalThis.addEventListener?.('storage', onStorage)
+  return () => {
+    listeners.delete(listener)
+    globalThis.removeEventListener?.('storage', onStorage)
+  }
 }
 
 function read(key: string): string | null {
@@ -25,6 +43,8 @@ function write(key: string, value: string | null): void {
     else kept.removeItem(key)
   } catch {
     return
+  } finally {
+    notify()
   }
 }
 
@@ -46,20 +66,21 @@ export function rememberedTuning(fallback: RememberedTuning): RememberedTuning {
   }
 }
 
+function chooseModel(id: string | null): void {
+  write(MODEL, id)
+}
+
+function chooseTuning(next: RememberedTuning): void {
+  write(TUNING, JSON.stringify(next))
+}
+
 export function useRememberedModel() {
-  const [model, setModel] = useState<string | null>(() => rememberedModel())
-  const choose = (id: string | null) => {
-    setModel(id)
-    write(MODEL, id)
-  }
-  return [model, choose] as const
+  const model = useSyncExternalStore(subscribe, rememberedModel, () => null)
+  return [model, chooseModel] as const
 }
 
 export function useRememberedTuning(fallback: RememberedTuning) {
-  const [tuning, setTuning] = useState<RememberedTuning>(() => rememberedTuning(fallback))
-  const choose = (next: RememberedTuning) => {
-    setTuning(next)
-    write(TUNING, JSON.stringify(next))
-  }
-  return [tuning, choose] as const
+  const raw = useSyncExternalStore(subscribe, () => read(TUNING), () => null)
+  const tuning = raw === null ? fallback : rememberedTuning(fallback)
+  return [tuning, chooseTuning] as const
 }

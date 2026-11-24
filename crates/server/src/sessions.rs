@@ -162,7 +162,8 @@ fn send_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<()> {
     let notify: Notify = Arc::new(move |session: &str| nudged.follow(session));
     let agent = shared.backend.orchestrator.session_agent(session)?;
     let mode = session_view::free_mode(agent.as_ref(), &shown);
-    let message = Message { session, folder: row.folder, text: &text, model, effort, agent, mode, shown };
+    let style = shared.backend.store.output_style();
+    let message = Message { session, folder: row.folder, text: &text, model, effort, agent, mode, style, shown };
     shared.chats.send(&shared.backend.client, message, notify)
 }
 
@@ -181,6 +182,7 @@ fn side_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<Value> {
         effort: None,
         agent,
         mode: None,
+        style: None,
         shown: Shown::default(),
     };
     let answer = crate::chats::Chats::side(&shared.backend.client, &message)?;

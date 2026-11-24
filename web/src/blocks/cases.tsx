@@ -8,7 +8,9 @@ import { Checkbox, SegmentedControl, Textarea } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { AnimatePresence, Collapse, motion, tween } from '@/ui/motion'
 import { NoteForm, noteComment, type Note } from './review'
+import { useBlockHost } from './context'
 import { CommentItem, SendError, useSend } from './shared'
+import { useViewed } from './viewed'
 
 type Of<T extends Block['type']> = Extract<Block, { type: T }>
 
@@ -198,23 +200,24 @@ function Header({ block, view, setView, seen, notes, onSent }: { block: Of<'case
 export function CasesBlock({ block }: { block: Of<'cases'> }) {
   const [view, setView] = useState<'cases' | 'chat'>('cases')
   const [notes, setNotes] = useState<Note[]>([])
-  const [viewed, setViewed] = useState<number[]>([])
+  const { item, step } = useBlockHost()
+  const { viewed, toggle, clear } = useViewed(`viewed:cases:${item}:${step}`)
+  const caseId = (c: TestCaseView, i: number) => `${i}-${c.title}`
   const kit: Notes = {
     editable: block.editable,
     notes,
     add: (file, line, body) => setNotes((n) => [...n, { id: `n${n.length}-${file}-${line}`, file, line, body }]),
     remove: (id) => setNotes((n) => n.filter((x) => x.id !== id)),
   }
-  const toggle = (i: number) => setViewed((v) => (v.includes(i) ? v.filter((x) => x !== i) : [...v, i]))
   if (block.cases.length === 0) return <p className="text-base text-muted">Nenhum caso de teste.</p>
   return (
     <div className={cn(view === 'chat' ? 'flex h-full flex-col' : 'space-y-4')}>
-      <Header block={block} view={view} setView={setView} seen={viewed.length} notes={notes} onSent={() => { setNotes([]); setViewed([]) }} />
+      <Header block={block} view={view} setView={setView} seen={block.cases.filter((c, i) => viewed.includes(caseId(c, i))).length} notes={notes} onSent={() => { setNotes([]); clear() }} />
       {view === 'chat' && block.session ? (
         <div className="-mx-4 -mb-4 min-h-0 flex-1"><ChatView sessionId={block.session} composer={block.editable} /></div>
       ) : (
         <div className="space-y-2">
-          {block.cases.map((c, i) => <CaseFile key={`${i}-${c.title}`} entry={c} index={i} viewed={viewed.includes(i)} onViewed={() => toggle(i)} notes={kit} />)}
+          {block.cases.map((c, i) => <CaseFile key={`${i}-${c.title}`} entry={c} index={i} viewed={viewed.includes(caseId(c, i))} onViewed={() => toggle(caseId(c, i))} notes={kit} />)}
         </div>
       )}
     </div>

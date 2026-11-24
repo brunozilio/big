@@ -1,7 +1,7 @@
 use std::path::PathBuf;
 
-use domain::provider::ModelProvider;
 use domain::catalog::Listed;
+use domain::provider::ModelProvider;
 use domain::trace::Record;
 use domain::{EngineEvent, ModelOption, RunId};
 use serde::{Deserialize, Serialize};

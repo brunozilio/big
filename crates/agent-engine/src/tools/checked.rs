@@ -47,6 +47,18 @@ fn without_optional_nulls(schema: &Value, input: &Value) -> Option<Value> {
     Some(Value::Object(kept.map(|(key, value)| (key.clone(), value.clone())).collect()))
 }
 
+pub fn without_empty_optionals(schema: &Value, input: &Value) -> Option<Value> {
+    let fields = input.as_object()?;
+    let required: Vec<&str> =
+        schema["required"].as_array().map(|names| names.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
+    let placeholder = |key: &String, value: &Value| value.as_str() == Some("") && !required.contains(&key.as_str());
+    if !fields.iter().any(|(key, value)| placeholder(key, value)) {
+        return None;
+    }
+    let kept = fields.iter().filter(|(key, value)| !placeholder(key, value));
+    Some(Value::Object(kept.map(|(key, value)| (key.clone(), value.clone())).collect()))
+}
+
 pub fn refusal(name: &str, schema: &Value, input: &Value) -> Option<String> {
     let compiled = compiled(schema);
     let Compiled::Checks(validator) = compiled.as_ref() else { return None };
@@ -106,6 +118,27 @@ mod tests {
         assert_eq!(refusal("T", &schema(), &json!({ "path": "a", "items": null })), None);
         assert!(refusal("T", &schema(), &json!({ "path": null })).is_some());
         assert!(refusal("T", &schema(), &json!({ "path": "a", "other": null })).is_some(), "still not allowed");
+    }
+
+    #[test]
+    fn an_empty_optional_string_is_left_out_and_an_empty_required_one_is_kept() {
+        let read = json!({
+            "type": "object",
+            "properties": { "file_path": { "type": "string" }, "pages": { "type": "string" }, "limit": { "type": "integer" } },
+            "required": ["file_path"]
+        });
+        let trimmed = without_empty_optionals(&read, &json!({ "file_path": "a.pdf", "pages": "", "limit": 3 }));
+        assert_eq!(trimmed, Some(json!({ "file_path": "a.pdf", "limit": 3 })));
+        assert_eq!(without_empty_optionals(&read, &json!({ "file_path": "a.pdf", "pages": "1-2" })), None);
+        assert_eq!(without_empty_optionals(&read, &json!({ "file_path": "" })), None, "a required one stays");
+        let edit = json!({
+            "type": "object",
+            "properties": { "file_path": { "type": "string" }, "old_string": { "type": "string" }, "new_string": { "type": "string" } },
+            "required": ["file_path", "old_string", "new_string"]
+        });
+        let deleting = json!({ "file_path": "a.rs", "old_string": "x", "new_string": "" });
+        assert_eq!(without_empty_optionals(&edit, &deleting), None, "an empty new_string deletes text");
+        assert_eq!(without_empty_optionals(&edit, &json!("text")), None);
     }
 
     #[test]

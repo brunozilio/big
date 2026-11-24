@@ -98,6 +98,7 @@ pub fn permissions(folder: Folder<'_>) -> Result<domain::permission::Permissions
     Ok(domain::permission::PermissionsInfo {
         added_dirs: settings.added_dirs,
         hooks: settings.hooks.listed(),
+        interceptors: settings.interceptors.listed(),
         notices: settings.notices,
         skipped_files: settings.skipped_files,
     })

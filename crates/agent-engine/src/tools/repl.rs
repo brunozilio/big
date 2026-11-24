@@ -1,52 +1,25 @@
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
-use domain::code_mode::{Declared, Mode};
+use domain::code_mode::Declared;
 use platform::sync::Locked;
 use serde_json::Value;
 
-use super::{Outcome, Tool, Workspace};
+use super::Tool;
 use crate::model::ToolSpec;
 
 pub use domain::code_mode::{DESCRIBE as DESCRIBE_TOOL, READ_TEXT, SEARCH as SEARCH_TOOLS, TOOL as REPL_TOOL};
 
 const KEPT: usize = 8;
 const IDLE: Duration = Duration::from_secs(600);
-const HELPERS: &str = "repl/helpers.js";
+const HELPERS: &str = "repl/helpers.ts";
 
 pub const OUT_OF_REACH: [&str; 2] = [REPL_TOOL, "ExitPlanMode"];
 
 pub const TOP_LEVEL: [&str; 2] = [REPL_TOOL, "ExitPlanMode"];
 
-#[derive(Debug)]
-pub struct Repl;
-
-impl Tool for Repl {
-    fn spec(&self) -> ToolSpec {
-        crate::tools::declared(REPL_TOOL, &Value::Null)
-    }
-
-    fn effects(&self, _input: &Value, _workspace: &Workspace) -> Vec<super::Effect> {
-        Vec::new()
-    }
-
-    fn summary(&self, input: &Value) -> String {
-        let described = input["description"].as_str().map(str::trim).filter(|text| !text.is_empty());
-        let first_line = || input["code"].as_str().unwrap_or_default().lines().next().unwrap_or_default().trim();
-        described.unwrap_or_else(first_line).to_owned()
-    }
-
-    fn run(&self, _input: &Value, _workspace: &Workspace) -> Outcome {
-        Outcome::error("REPL runs only inside an agent's turn.")
-    }
-
-    fn offered(&self, workspace: &Workspace) -> bool {
-        workspace.policy.code_mode != Mode::Off
-    }
-
-    fn serial(&self) -> bool {
-        true
-    }
+pub fn tool() -> Option<Box<dyn Tool>> {
+    super::script_tool::shipped(REPL_TOOL).map(|tool| Box::new(tool) as Box<dyn Tool>)
 }
 
 #[derive(Debug)]
@@ -111,8 +84,12 @@ pub fn only(offered: Vec<ToolSpec>, more_to_find: bool) -> Vec<ToolSpec> {
         .map(|spec| Declared { name: &spec.name, description: &spec.description, schema: &spec.schema })
         .collect();
     let catalog = format!("{}\n\n{}", domain::code_mode::RESULT_TYPES, domain::code_mode::declarations(&declared));
-    let introduction = content::text("repl/only.md");
-    let finding = if more_to_find { format!("\n\n{}", content::text("repl/search.md")) } else { String::new() };
+    let introduction = content::render("repl/only.ts", &content::with_brand(&Value::Null));
+    let finding = if more_to_find {
+        format!("\n\n{}", content::render("repl/search.ts", &content::with_brand(&Value::Null)))
+    } else {
+        String::new()
+    };
     kept.into_iter()
         .map(|mut spec| {
             if spec.name == REPL_TOOL {
@@ -137,8 +114,15 @@ mod tests {
 
     #[test]
     fn the_summary_is_the_description_or_else_the_first_line_of_code() {
-        assert_eq!(Repl.summary(&json!({ "code": "x", "description": " Count TODOs " })), "Count TODOs");
-        assert_eq!(Repl.summary(&json!({ "code": "const a = 1\nreturn a" })), "const a = 1");
+        let repl = tool().expect("REPL ships");
+        assert!(repl.script().is_some() && repl.serial(), "REPL is a script tool run one at a time");
+        assert_eq!(repl.summary(&json!({ "code": "x", "description": " Count TODOs " })), "Count TODOs");
+        assert_eq!(repl.summary(&json!({ "code": "const a = 1\nreturn a" })), "const a = 1");
+        let mut workspace = crate::tools::Workspace::new("/tmp");
+        workspace.policy.code_mode = domain::code_mode::Mode::Off;
+        assert!(!repl.offered(&workspace));
+        workspace.policy.code_mode = domain::code_mode::Mode::Only;
+        assert!(repl.offered(&workspace));
     }
 
     #[test]

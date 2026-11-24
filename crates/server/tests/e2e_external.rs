@@ -56,11 +56,11 @@ async fn an_issue_moved_outside_is_put_back_and_a_deploy_approved_outside_lets_t
     let hub = Hub::new();
     let server = hub.start().await;
     let id = to_review(&server, "Mudanças por fora").await;
-    assert_eq!(hub.tracker.statuses_of("K-101"), ["Fazendo", "Revisando"]);
+    assert_eq!(hub.tracker.statuses_of("K-101"), ["Fazendo"]);
     hub.tracker.move_outside("K-101", "A fazer");
-    eventually("the status is put back", || hub.tracker.statuses_of("K-101").len() == 3).await;
-    assert_eq!(hub.tracker.statuses_of("K-101"), ["Fazendo", "Revisando", "Revisando"]);
-    assert_eq!(hub.tracker.state().issues["K-101"].status, "Revisando");
+    eventually("the status is put back", || hub.tracker.statuses_of("K-101").len() == 2).await;
+    assert_eq!(hub.tracker.statuses_of("K-101"), ["Fazendo", "Fazendo"]);
+    assert_eq!(hub.tracker.state().issues["K-101"].status, "Fazendo");
     assert!(
         reconciled(&server, &id).contains(&("status".into(), "reapplied".into())),
         "{:?}",
@@ -99,7 +99,7 @@ async fn a_pull_request_closed_outside_reaches_the_item_by_event_and_the_merge_s
     server.input(&id, "merge", "merge", json!({ "method": "squash" })).await;
     let stuck = server.until(&id, "the merge stops", |item| item["impediment"].is_object()).await;
     assert_eq!(stuck["group"], "you");
-    assert!(stuck["impediment"]["reason"].as_str().is_some_and(|reason| reason.starts_with("Merge falhou")), "{stuck}");
+    assert!(stuck["impediment"]["reason"].as_str().is_some_and(|reason| reason.starts_with("Merge failed")), "{stuck}");
     assert!(
         ["failed", "waiting_human"].contains(&step(&stuck, "merge")["state"].as_str().unwrap_or_default()),
         "{stuck}"

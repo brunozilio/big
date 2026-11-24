@@ -1,10 +1,16 @@
+#![allow(clippy::expect_used, reason = "a failed setup step stops the test")]
+
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
 use agent_engine::lsp::{Downloads, LanguageServer, LanguageServers, Lsp, LspPool, Processes, Starter};
-use agent_engine::tools::{self, Tool, Workspace};
+use agent_engine::tools::{Tool, Workspace};
+
+fn lsp_tool() -> agent_engine::tools::script_tool::ScriptTool {
+    agent_engine::tools::script_tool::shipped("LSP").expect("LSP ships")
+}
 use domain::lsp::ServerSpec;
 use serde_json::json;
 
@@ -21,15 +27,15 @@ fn clangd_answers_symbols_and_reports_an_edit_s_error() {
     let mut workspace = Workspace::new(dir.path());
     workspace.services.lsp = Some(Lsp { servers: pool, specs });
 
-    let outline = tools::Lsp.run(&json!({"operation": "documentSymbol", "file_path": "main.c"}), &workspace);
+    let outline = lsp_tool().run(&json!({"operation": "documentSymbol", "file_path": "main.c"}), &workspace);
     assert!(outline.content.contains("function add"), "{}", outline.content);
     let definition = json!({"operation": "goToDefinition", "file_path": "main.c", "line": 2, "character": 25});
-    let found = tools::Lsp.run(&definition, &workspace);
+    let found = lsp_tool().run(&definition, &workspace);
     assert!(found.content.starts_with("main.c:1:"), "{}", found.content);
 
     workspace.mark_read(&file);
     let edit = json!({"file_path": "main.c", "old_string": "add(1, 2)", "new_string": "add(1, undefined_name)"});
-    let edited = tools::named("Edit").expect("Edit").run(&edit, &workspace);
+    let edited = agent_engine::tools::named("Edit").expect("Edit").run(&edit, &workspace);
     assert!(
         edited.content.contains("<diagnostics>") && edited.content.contains("undefined_name"),
         "{}",
@@ -84,7 +90,7 @@ fn a_missing_server_is_installed_and_then_answers() {
         let mut workspace = Workspace::new(dir.path());
         let specs = Arc::new(domain::lsp::defaults());
         workspace.services.lsp = Some(Lsp { servers: pool.clone(), specs });
-        let outline = tools::Lsp.run(&json!({"operation": "documentSymbol", "file_path": file}), &workspace);
+        let outline = lsp_tool().run(&json!({"operation": "documentSymbol", "file_path": file}), &workspace);
         assert!(!outline.is_error && outline.content.contains("add"), "{server}: {}", outline.content);
         assert!(outline.content.starts_with(&format!("Installed the {server} language server")), "{}", outline.content);
         assert!(data.path().join(server).is_dir(), "{server} was not installed");

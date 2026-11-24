@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-use super::{Effect, Guard, Remembered};
+use super::{Allowed, Effect, Guard, Remembered};
 use crate::PermissionMode;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +57,7 @@ pub struct PolicyContext<'a> {
     pub remembered: &'a Remembered,
     pub bounds: &'a Bounds,
     pub no_prompts: bool,
+    pub allowed: Option<&'a Allowed>,
 }
 
 impl PolicyContext<'_> {

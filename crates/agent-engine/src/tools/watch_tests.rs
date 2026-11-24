@@ -3,6 +3,7 @@ use std::sync::atomic::AtomicUsize;
 use domain::watch::Plan;
 
 use super::*;
+use crate::model::ToolSpec;
 
 #[derive(Debug)]
 struct Status {
@@ -104,6 +105,9 @@ fn a_stopped_watch_says_nothing_and_only_its_client_can_stop_it() {
 #[test]
 fn watch_is_not_run_as_an_ordinary_tool() {
     let (_dir, workspace) = workspace(9304);
-    assert!(Watch.run(&json!({}), &workspace).is_error);
-    assert_eq!(Watch.summary(&json!({ "tool": "Read", "description": "KAN-1 done" })), "KAN-1 done");
+    let watch = crate::tools::named("Watch").expect("Watch ships");
+    assert!(watch.script().is_some(), "Watch is a script tool");
+    assert!(watch.run(&json!({ "tool": "Read" }), &workspace).is_error);
+    assert_eq!(watch.summary(&json!({ "tool": "Read", "description": "KAN-1 done" })), "KAN-1 done");
+    assert_eq!(watch.summary(&json!({ "tool": "Read" })), "Read");
 }

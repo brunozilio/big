@@ -4,24 +4,23 @@ use std::sync::{Arc, PoisonError};
 
 use connectors::ExternalEvent;
 use domain::effect::EffectOutcome;
-use domain::workflow::{ItemId, WorkItem, WorkflowEvent};
+use domain::workflow::{ItemId, StepState, WorkItem, WorkflowEvent};
 use domain::{AskId, Decision};
 use serde_json::{Value, json};
 use sync::{Health, ReconcilePolicy, StoreView, Synchronizer};
 use tokio::sync::broadcast;
 
-use crate::agent::rewind_session;
 use crate::asks::PendingAsk;
 use crate::cards::AgentCard;
 use crate::config::Config;
 use crate::error::{Error, Result};
 use crate::events::{OrchestratorEvent, Wake};
-use crate::git;
 use crate::ledger::Ledger;
 use crate::matching::event_matches;
-use crate::protocol::{AGENT, WAIT_HUMAN, kind_of};
+use crate::protocol::{WAIT_HUMAN, kind_of};
 use crate::provenance;
 use crate::resources::Origin;
+use crate::rewind;
 use crate::runner::ensure;
 use crate::shared::Shared;
 use crate::sink::KernelSink;
@@ -64,6 +63,7 @@ pub fn cancel_item(shared: &Arc<Shared>, id: &ItemId, reason: &str) -> Result<()
         if let Some(parent) = &ended.parent {
             shared.wake(parent, Wake::Poke);
         }
+        crate::release::release(shared, &ended);
         shared.emit(OrchestratorEvent::ItemEnded { item: id.clone() });
     }
     Ok(())
@@ -161,6 +161,11 @@ impl Orchestrator {
         let declared = self.declared(item);
         let mut found = summary(item, &ledger, &times, self.shared.asks.count(&item.id), &declared);
         found.plans = self.shared.asks.plans(&item.id);
+        for step in found.steps.iter_mut().filter(|step| step.state == StepState::Running) {
+            if self.shared.asks.asking(&item.id, &step.id) {
+                step.state = StepState::WaitingHuman;
+            }
+        }
         Ok(found)
     }
 
@@ -183,7 +188,13 @@ impl Orchestrator {
     pub async fn step_view(&self, id: &ItemId, step: &str, attempt: Option<u32>) -> Result<StepView> {
         let item = self.shared.item(id)?;
         let ledger = Ledger::load(&self.shared.store, id)?;
-        let tried = attempts(&ledger, step);
+        let mut tried = attempts(&ledger, step);
+        let held = item.steps.iter().any(|run| run.id == step && run.state == StepState::WaitingHuman);
+        if let Some(last) = tried.last_mut().filter(|last| last.state == StepState::Running)
+            && (held || self.shared.asks.asking(id, step))
+        {
+            last.state = StepState::WaitingHuman;
+        }
         let latest = tried.last().map_or(0, |last| last.n);
         let chosen = attempt.and_then(|wanted| tried.iter().find(|tried| tried.n == wanted && wanted != latest));
         let kind = ledger.step_type(step);
@@ -194,13 +205,9 @@ impl Orchestrator {
                 let request = json!({ "step": kind, "state": view_state(&item, &ledger, step, chosen) });
                 let shared = Arc::clone(&self.shared);
                 let owner = item.clone();
-                tokio::task::spawn_blocking(move || {
-                    let latest =
-                        shared.latest_for(&owner).and_then(|script| script.view(&request).map_err(Error::Script));
-                    latest.or_else(|_| shared.script_for(&owner)?.view(&request).map_err(Error::Script))
-                })
-                .await
-                .map_err(|error| Error::Script(error.to_string()))??
+                tokio::task::spawn_blocking(move || shared.script_for(&owner)?.view(&request).map_err(Error::Script))
+                    .await
+                    .map_err(|error| Error::Script(error.to_string()))??
             }
             (None, None) => json!([]),
         };
@@ -210,7 +217,7 @@ impl Orchestrator {
             kind,
             attempt: chosen.map_or(latest, |chosen| chosen.n),
             attempts: tried.clone(),
-            session: crate::views::session_of(&ledger, step),
+            session: crate::views::session_of(&ledger, step, chosen.map(|chosen| chosen.n)),
             heads_up: item.heads_up.get(step).cloned(),
             blocks,
         })
@@ -254,44 +261,7 @@ impl Orchestrator {
     }
 
     pub async fn rewind(&self, id: &ItemId, step: &str) -> Result<()> {
-        let ledger = Ledger::load(&self.shared.store, id)?;
-        let cut = ledger.cut(step).ok_or_else(|| Error::UnknownStep(step.to_owned()))?;
-        let first = ledger
-            .requested
-            .range(cut..)
-            .filter(|(_, request)| kind_of(&request.effect) == AGENT)
-            .find_map(|(seq, _)| ledger.value(*seq).cloned());
-        if let Some(agent) = first {
-            self.restore(&agent).await;
-        }
-        self.shared.append(id, &[WorkflowEvent::Rewound { to: step.to_owned() }])?;
-        ensure(&self.shared, id);
-        self.shared.wake(id, Wake::Rerun);
-        Ok(())
-    }
-
-    async fn restore(&self, agent: &Value) {
-        let Some(worktree) = agent["worktree"].as_str().map(PathBuf::from) else { return };
-        let mut places: Vec<(PathBuf, String)> = agent["repositories"]
-            .as_array()
-            .map(Vec::as_slice)
-            .unwrap_or_default()
-            .iter()
-            .filter_map(|repo| Some((PathBuf::from(repo["worktree"].as_str()?), repo["base"].as_str()?.to_owned())))
-            .collect();
-        if places.is_empty()
-            && let Some(base) = agent["base"].as_str()
-        {
-            places.push((worktree.clone(), base.to_owned()));
-        }
-        for (place, base) in places {
-            let _ = tokio::task::spawn_blocking(move || git::restore(&place, &base)).await;
-        }
-        let session = agent["session"].as_str();
-        if let (Some(session), Some(checkpoint)) = (session, agent["checkpoint"].as_u64()) {
-            let checkpoint = u32::try_from(checkpoint).unwrap_or(u32::MAX);
-            rewind_session(&self.shared, worktree, session, checkpoint).await;
-        }
+        rewind::rewind(&self.shared, id, step).await
     }
 
     pub fn session_agents(&self, session: &str) -> Result<Vec<AgentCard>> {

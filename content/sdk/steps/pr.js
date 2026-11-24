@@ -77,16 +77,16 @@ export default step({
   label: "Pull request",
   icon: "sPr",
   needs: "code",
-  doing: "Abrindo PR",
+  doing: "Opening PR",
   view: (s) => opened(Array.isArray(s.prs) && s.prs.length > 0 ? s.prs : [s]),
   async run(ctx, opts) {
     const previous = object(ctx.output(ctx.step));
     if (previous.pr) return ctx.pass(previous);
     const head = branchOf(ctx, opts);
     const targets = targetsOf(ctx, opts);
-    if (targets.length === 0) return ctx.fail({ error: "nenhum repositório da aplicação tem conexão de código" });
+    if (targets.length === 0) return ctx.fail({ error: "no repository of the application has a code connection" });
     const known = targets.every((target) => gitOf(ctx, target.id).head || sourcePullRequestOf(ctx, target));
-    if (!head && !known) return ctx.fail({ error: "não há branch para abrir o pull request" });
+    if (!head && !known) return ctx.fail({ error: "there is no branch to open the pull request" });
     const plan = planOf(ctx, opts);
     const issue = issueOf(ctx, opts);
     const summary = summaryLine(source(ctx, opts, "develop").summary);

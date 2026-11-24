@@ -81,7 +81,7 @@ fn result(block: &Block) -> (&str, bool) {
 
 #[test]
 fn a_call_run_side_by_side_that_would_start_background_work_is_refused_instead_of_started() {
-    let bench = Bench::with(vec![Box::new(crate::tools::subagent::AgentTool::default())]);
+    let bench = Bench::with(vec![crate::tools::named(names::AGENT).expect("the Agent tool ships")]);
     let model = ScriptedModel::new([]);
     let emit = |event: EngineEvent| bench.events.locked().push(event);
     let agent = Agent {

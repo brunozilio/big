@@ -1,5 +1,5 @@
 mod ask;
-mod plan_mode;
+pub(in crate::agent) mod plan_mode;
 mod policy;
 
 use domain::EngineEvent;

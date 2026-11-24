@@ -6,7 +6,6 @@ use serde_json::Value;
 use super::Agent;
 use crate::team::launch::{Launching, launch};
 use crate::team::{Team, lead_inbox};
-use crate::tools::Outcome;
 
 impl Agent<'_> {
     fn home(&self) -> Option<PathBuf> {
@@ -22,12 +21,8 @@ impl Agent<'_> {
         .map(|me| (me.team, me.name))
     }
 
-    pub(super) fn teammate(&self, input: &Value) -> Option<Outcome> {
-        let wanted = input["name"].as_str().map(str::trim).filter(|name| !name.is_empty())?;
-        Some(self.start_teammate(wanted, input).unwrap_or_else(Outcome::error))
-    }
-
-    fn start_teammate(&self, wanted: &str, input: &Value) -> Result<Outcome, String> {
+    pub(super) fn start_teammate(&self, input: &Value) -> Result<(String, String), String> {
+        let wanted = input["name"].as_str().map(str::trim).unwrap_or_default();
         let home = self.home().ok_or("teammates need a home folder to keep their team in")?;
         if self.depth > 0 || self.workspace.teammate.is_some() {
             return Err(
@@ -73,16 +68,10 @@ impl Agent<'_> {
             return Err(error);
         }
         lead_inbox::watch(&team, self.workspace.credentials.client);
-        Ok(Outcome::ok(format!(
-            "Started teammate {name} in team {team}. It works on its own, in its own process, and reports to you with \
-             SendMessage; its messages reach you between your steps, and it tells you when it goes idle. Send it more \
-             work with SendMessage (to: \"{name}\"), and end it with SendMessage (to: \"{name}\", message: {{\"type\": \
-             \"shutdown_request\"}}) when the work is done.",
-            team = team.name
-        )))
+        Ok((name, team.name.clone()))
     }
 
-    pub(super) fn team_message(&self, input: &Value) -> Option<Outcome> {
+    pub(super) fn team_message(&self, input: &Value) -> Option<Result<String, String>> {
         let to = input["to"].as_str().map(str::trim)?;
         let (team, me) = self.sender()?;
         let to = if to == "main" { LEAD } else { to };
@@ -92,9 +81,6 @@ impl Agent<'_> {
         let summary = input["summary"].as_str().map(str::trim).filter(|summary| !summary.is_empty());
         let sent = sent_message(&me, &input["message"], || uuid::Uuid::new_v4().to_string())
             .and_then(|text| team.send(to, &me, &text, summary).map_err(String::from));
-        Some(match sent {
-            Ok(()) => Outcome::ok(format!("Sent to {to}.")),
-            Err(problem) => Outcome::error(format!("The message was not sent: {problem}.")),
-        })
+        Some(sent.map(|()| to.to_owned()))
     }
 }

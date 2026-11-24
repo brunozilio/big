@@ -86,7 +86,12 @@ impl Transcript {
                 self.push(Entry::Refused { tool: tool.clone(), reason: reason.clone() });
             }
             EngineEvent::Repeated { tool } => self.push(Entry::Repeated { tool: tool.clone() }),
-            EngineEvent::Notified(all) => all.iter().for_each(|n| self.notice(format!("[{}] {}", n.source, n.text))),
+            EngineEvent::Notified(all) => all.iter().for_each(|n| {
+                if let Some(id) = n.ended_background() {
+                    self.background.retain(|known| known != id);
+                }
+                self.notice(format!("[{}] {}", n.source, n.text));
+            }),
             EngineEvent::Notice(text) => {
                 self.close_thinking();
                 self.notice(text.clone());

@@ -1,11 +1,7 @@
 use std::sync::Mutex;
 
-use serde_json::{Value, json};
-
-use super::{Effect, Outcome, Tool, Workspace, field, required};
 use crate::model::ToolSpec;
 
-use llm_providers::added_tools::{LOADED, WAITING};
 pub use llm_providers::added_tools::{TOOL_SEARCH, loaded_names};
 
 const DEFER_OVER: usize = 20;
@@ -20,6 +16,10 @@ pub struct Deferred {
 }
 
 impl Deferred {
+    pub fn specs(&self) -> &[ToolSpec] {
+        &self.specs
+    }
+
     pub fn loaded(&self) -> Vec<ToolSpec> {
         let loaded = self.loaded.lock().map(|loaded| loaded.clone()).unwrap_or_default();
         loaded.iter().filter_map(|name| self.specs.iter().find(|spec| spec.name == *name)).cloned().collect()
@@ -117,62 +117,14 @@ pub fn defer(specs: Vec<ToolSpec>) -> (Vec<ToolSpec>, Option<Deferred>) {
     if specs.iter().filter(|spec| deferrable(spec)).count() <= DEFER_OVER {
         return (specs, None);
     }
-    let (deferred, mut kept): (Vec<ToolSpec>, Vec<ToolSpec>) = specs.into_iter().partition(deferrable);
-    kept.push(ToolSearch.spec());
+    let (deferred, kept): (Vec<ToolSpec>, Vec<ToolSpec>) = specs.into_iter().partition(deferrable);
     (kept, Some(Deferred { specs: deferred, loaded: Mutex::default() }))
-}
-
-#[derive(Debug)]
-pub struct ToolSearch;
-
-impl Tool for ToolSearch {
-    fn spec(&self) -> ToolSpec {
-        crate::tools::declared(TOOL_SEARCH, &Value::Null)
-    }
-
-    fn effects(&self, _input: &Value, _workspace: &Workspace) -> Vec<Effect> {
-        Vec::new()
-    }
-
-    fn summary(&self, input: &Value) -> String {
-        field(input, "query").unwrap_or_default().to_owned()
-    }
-
-    fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
-        let query = match required(input, "query") {
-            Ok(query) => query,
-            Err(error) => return error,
-        };
-        let Some(deferred) = &workspace.services.deferred else {
-            return Outcome::error("Every tool is already loaded.");
-        };
-        let found = deferred.search(query);
-        if found.is_empty() {
-            return Outcome::error(format!("No tool matches \"{query}\"."));
-        }
-        Outcome::ok(report(&found, &deferred.waiting()))
-    }
-}
-
-fn report(found: &[ToolSpec], waiting: &[&str]) -> String {
-    let shown: Vec<Value> = found
-        .iter()
-        .map(|spec| json!({ "name": spec.name, "description": spec.description, "parameters": spec.schema }))
-        .collect();
-    let rest = if waiting.is_empty() {
-        String::new()
-    } else {
-        format!(
-            "{WAITING}{}. If none above is the tool you need, load it by exact name with the query \
-             \"select:<name>[,<name>]\" instead of calling a loaded tool that does something else.",
-            waiting.join(", ")
-        )
-    };
-    format!("{LOADED}{}{rest}", serde_json::to_string_pretty(&shown).unwrap_or_default())
 }
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     fn spec(name: &str, description: &str) -> ToolSpec {
@@ -197,8 +149,7 @@ mod tests {
         specs.push(spec("mcp__jira__create_issue", "Create a Jira issue"));
         let (kept, deferred) = defer(specs);
         let deferred = deferred.expect("deferred");
-        assert_eq!(kept.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["Read", TOOL_SEARCH]);
-        assert!(!kept[1].description.contains("mcp__jira__"), "the tools block stays the same as servers come and go");
+        assert_eq!(kept.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["Read"]);
         assert!(deferred.announcement().contains("mcp__jira__create_issue"));
         assert!(deferred.loaded().is_empty());
 
@@ -223,16 +174,6 @@ mod tests {
         assert_eq!(child.search("select:mcp__jira__tool1").len(), 1);
     }
 
-    #[test]
-    fn a_search_s_result_says_which_tools_it_loaded() {
-        let found = [spec("mcp__jira__getJiraIssue", "Get an issue"), spec("mcp__jira__tool1", "")];
-        let names = ["mcp__jira__getJiraIssue", "mcp__jira__tool1"];
-        assert_eq!(loaded_names(&report(&found, &["mcp__jira__tool2"])), names);
-        assert_eq!(loaded_names(&report(&found, &[])), names);
-        assert!(loaded_names("No tool matches \"x\".").is_empty());
-        assert!(loaded_names("Every tool is already loaded.").is_empty());
-    }
-
     fn jira() -> Deferred {
         let mut specs: Vec<ToolSpec> = (0..25).map(|n| spec(&format!("mcp__jira__tool{n}"), "")).collect();
         specs.extend([
@@ -249,17 +190,6 @@ mod tests {
         let found = jira().search("transition de issue e jira");
         assert_eq!(found[0].name, "mcp__jira__transitionJiraIssue", "{found:?}");
         assert!(jira().search("e de").is_empty(), "words under three letters match nothing");
-    }
-
-    #[test]
-    fn a_search_names_the_tools_still_waiting_so_the_next_one_can_select_them() {
-        let mut workspace = Workspace::new(".");
-        workspace.services.deferred = Some(std::sync::Arc::new(jira()));
-        let outcome = ToolSearch.run(&json!({"query": "get issue"}), &workspace);
-        assert!(!outcome.is_error, "{}", outcome.content);
-        assert!(outcome.content.contains("Not loaded yet"), "{}", outcome.content);
-        assert!(outcome.content.contains("mcp__jira__transitionJiraIssue"), "{}", outcome.content);
-        assert!(outcome.content.contains("select:"), "{}", outcome.content);
     }
 
     #[test]

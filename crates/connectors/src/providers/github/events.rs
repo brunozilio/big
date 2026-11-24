@@ -9,7 +9,7 @@ use serde_json::{Value, json};
 use super::Api;
 use super::refs::{pull_ref, run_ref};
 use super::states::{state, verdict};
-use crate::contracts;
+use crate::{contracts, idempotency};
 use crate::error::ActionError;
 use crate::http::{Http, Method};
 use crate::provider::{Credentials, EventBatch, EventSource, ExternalEvent, text_of, timestamp};
@@ -102,7 +102,7 @@ impl Poll<'_> {
                 "title": pull["title"],
                 "verdict": verdict(&review["state"]),
                 "author": text_of(review, "/user/login"),
-                "body": review["body"],
+                "body": idempotency::strip(review["body"].as_str().unwrap_or_default()),
             });
             let id = format!("github:{repo}:review:{}", review["id"]);
             self.push(

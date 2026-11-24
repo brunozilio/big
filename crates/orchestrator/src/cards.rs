@@ -13,21 +13,15 @@ pub struct AgentCard {
     pub color: Option<String>,
 }
 
-fn after<'a>(text: &'a str, key: &str) -> Option<&'a str> {
-    let start = text.find(key)? + key.len();
-    let value = text[start..].split_whitespace().next()?;
-    Some(value.trim_matches(|letter| letter == '"' || letter == '\'')).filter(|value| !value.is_empty())
-}
-
 pub fn card(resources: &Resources, name: &str) -> AgentCard {
     let text = resources.agent(name).map(|found| found.text).unwrap_or_default();
-    let (header, _) = agent_engine::frontmatter::parse(&text);
-    let avatar = header.get("avatar").unwrap_or_default();
+    let header = agent_engine::tools::agent_file::header(&text);
+    let field = |value: &Value| value.as_str().filter(|value| !value.is_empty()).map(str::to_owned);
     AgentCard {
         id: name.to_owned(),
-        name: header.get("label").or_else(|| header.get("name")).unwrap_or(name).to_owned(),
-        shape: after(avatar, "shape:").map(str::to_owned),
-        color: after(avatar, "color:").map(str::to_owned),
+        name: field(&header["label"]).or_else(|| field(&header["name"])).unwrap_or_else(|| name.to_owned()),
+        shape: field(&header["avatar"]["shape"]),
+        color: field(&header["avatar"]["color"]),
     }
 }
 

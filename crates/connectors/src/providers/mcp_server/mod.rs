@@ -64,7 +64,12 @@ impl LoopbackSignIn for ServerSignIn {
 
     fn fields(&self) -> Vec<TokenField> {
         vec![
-            TokenField::new(contracts::mcp::URL, "Endereço do servidor MCP", "Por exemplo, https://mcp.exemplo.com/mcp.", false),
+            TokenField::new(
+                contracts::mcp::URL,
+                "Endereço do servidor MCP",
+                "Por exemplo, https://mcp.exemplo.com/mcp.",
+                false,
+            ),
             TokenField::new(LABEL, "Nome", "Os agentes veem as ferramentas como mcp__nome__ferramenta.", false),
         ]
     }
@@ -144,6 +149,7 @@ impl Provider for McpServers {
             button: "Conectar".to_owned(),
             site: "do servidor MCP".to_owned(),
             choose_title: "Servidor MCP".to_owned(),
+            hidden: true,
         }
     }
 

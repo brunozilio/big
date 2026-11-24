@@ -60,6 +60,18 @@ fn the_last_expression_is_the_result_and_top_level_await_works() {
 }
 
 #[test]
+fn a_later_call_may_declare_a_name_again_and_return_from_its_top() {
+    let session = Session::start();
+
+    evaluate(&session, "const r = 1; let old = 'a';", nothing);
+    let again = evaluate(&session, "const r = 2; let old = 'b'; r + old", nothing);
+    let returned = evaluate(&session, "if (r > 1) { return r * 10 }\nreturn 0", nothing);
+
+    assert_eq!(again.outcome, Ok("2b".to_owned()));
+    assert_eq!(returned.outcome, Ok("20".to_owned()));
+}
+
+#[test]
 fn what_one_call_declares_the_next_call_sees() {
     let session = Session::start();
 
@@ -376,4 +388,74 @@ fn a_call_left_unawaited_by_an_ended_script_never_lands_in_the_next_one() {
 
     assert_eq!(first.map(|done| done.outcome), Some(Ok("first".to_owned())));
     assert_eq!(next.outcome, Ok("second".to_owned()));
+}
+
+#[test]
+fn a_name_a_failed_cell_declared_can_be_used_and_declared_again() {
+    let session = Session::start();
+
+    let failed = evaluate(&session, "const kept = 1;\nconst later = JSON.parse('Started in the background as bash_1');\nclass Shape {}", nothing);
+    let used = evaluate(&session, "[kept, typeof later, typeof Shape].join()", nothing);
+    let again =
+        evaluate(&session, "const later = 2;\nclass Shape { size() { return later } }\nnew Shape().size()", nothing);
+    let thrown_after = evaluate(&session, "class Shape { size() { return 3 } }\nthrow new Error('after')", nothing);
+    let replaced = evaluate(&session, "class Shape { size() { return 4 } }\nnew Shape().size()", nothing);
+
+    let failed = failed.outcome.expect_err("the JSON is bad");
+    assert!(failed.starts_with("SyntaxError: unexpected token: 'Started'"), "{failed}");
+    assert_eq!(used.outcome, Ok("1,undefined,undefined".to_owned()));
+    assert_eq!(again.outcome, Ok("2".to_owned()));
+    assert!(thrown_after.outcome.is_err());
+    assert_eq!(replaced.outcome, Ok("4".to_owned()));
+}
+
+#[test]
+fn set_timeout_and_sleep_wait_and_a_cleared_timer_never_fires() {
+    let session = Session::start();
+
+    let done = evaluate(
+        &session,
+        "const order = [];\nsetTimeout(() => order.push('late'), 60);\nconst t = setTimeout(() => order.push('cleared'), 10);\nclearTimeout(t);\nsetTimeout((word) => order.push(word), 20, 'early');\nawait sleep(120);\norder.join()",
+        nothing,
+    );
+    let failing = evaluate(&session, "setTimeout(() => { throw new Error('boom') }, 0);\nawait sleep(20);\n1", nothing);
+
+    assert_eq!(done.outcome, Ok("early,late".to_owned()));
+    assert_eq!(failing.outcome, Ok("1".to_owned()));
+    assert!(failing.logs.iter().any(|line| line.contains("setTimeout callback failed: Error: boom")), "{:?}", failing.logs);
+}
+
+#[test]
+fn a_timer_left_behind_does_not_keep_a_finished_cell_alive() {
+    let session = Session::start();
+    let started = std::time::Instant::now();
+
+    let done = evaluate(&session, "globalThis.fired = 0;\nsetTimeout(() => { globalThis.fired = 1 }, 300);\n'done'", nothing);
+    let finished_in = started.elapsed();
+    std::thread::sleep(Duration::from_millis(400));
+    let after = evaluate(&session, "await sleep(10);\nfired", nothing);
+
+    assert_eq!(done.outcome, Ok("done".to_owned()));
+    assert!(finished_in < Duration::from_millis(250), "{finished_in:?}");
+    assert_eq!(after.outcome, Ok("0".to_owned()));
+}
+
+#[test]
+fn a_stop_or_the_total_limit_ends_a_cell_that_sleeps() {
+    let session = Session::start();
+    let stop = Arc::new(AtomicBool::new(false));
+    let stopper = Arc::clone(&stop);
+    let _stopping = std::thread::spawn(move || {
+        std::thread::sleep(Duration::from_millis(100));
+        stopper.store(true, std::sync::atomic::Ordering::Relaxed);
+    });
+    let started = std::time::Instant::now();
+
+    let (stopped, _) = evaluate_within(&session, "await sleep(60000)", Limits::default(), stop, nothing);
+    let limits = Limits { total: Duration::from_millis(200), ..Limits::default() };
+    let (timed, _) = evaluate_within(&session, "await sleep(60000)", limits, Arc::new(AtomicBool::new(false)), nothing);
+
+    assert_eq!(stopped.outcome, Err("Stopped: the user interrupted the script".to_owned()));
+    assert!(timed.outcome.expect_err("over its limit").starts_with("Timed out"));
+    assert!(started.elapsed() < Duration::from_secs(5));
 }

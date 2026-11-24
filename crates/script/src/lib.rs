@@ -2,7 +2,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+pub mod cell;
 pub mod session;
+pub mod typescript;
 
 use rquickjs::{Context, Ctx, Function, Module, Runtime, Value as JsValue};
 use serde_json::Value;
@@ -32,6 +34,9 @@ const call = (name, value) => {
   if (answer.error !== undefined) throw new Error(answer.error);
   return answer.ok;
 };
+const space = (name) => new Proxy((...args) => call(name, args.length > 1 ? args : args[0]), {
+  get: (run, key) => (typeof key === "string" ? space(`${name}.${key}`) : run[key]),
+});
 globalThis.__ctx = (data) => new Proxy({
   ...data,
   call,
@@ -44,7 +49,7 @@ globalThis.__ctx = (data) => new Proxy({
   writeFile: (path, text) => call("writeFile", { path, text }),
   exec: (command, options) => call("exec", { command, ...(options || {}) }),
   fetch: (url, options) => call("fetch", { url, ...(options || {}) }),
-}, { get: (target, key) => (key in target ? target[key] : (...args) => call(String(key), args.length > 1 ? args : args[0])) });
+}, { get: (target, key) => (key in target ? target[key] : space(String(key))) });
 "#;
 
 pub const MOST_BUSY: Duration = Duration::from_secs(60);
@@ -119,7 +124,7 @@ pub fn run_limited(
     stop: Arc<AtomicBool>,
     limit: Limit,
 ) -> Result<Value, String> {
-    let modules = [(name.to_owned(), source.to_owned())];
+    let modules = [(name.to_owned(), typescript::plain(name, source)?)];
     on_its_own_stack(|| run_here(&modules, name, export, arguments, data, host, stop, limit))
 }
 
@@ -154,6 +159,7 @@ fn run_here(
     let waited = Arc::new(AtomicU64::new(0));
     let host: Arc<dyn Host> = Arc::new(Timed { host, waited: Arc::clone(&waited) });
     let started = Instant::now();
+    let noticed = std::sync::OnceLock::new();
     runtime.set_interrupt_handler(Some(Box::new(move || {
         let past = match limit {
             Limit::Wall(limit) => started.elapsed() > limit,
@@ -165,12 +171,12 @@ fn run_here(
         if past {
             late.store(true, Ordering::Relaxed);
         }
-        late.load(Ordering::Relaxed) || flag.load(Ordering::Relaxed)
+        late.load(Ordering::Relaxed) || stopped_long_enough(&flag, &noticed)
     })));
     let context = Context::full(&runtime).map_err(|error| error.to_string())?;
     context.with(|ctx| {
         let result = evaluate(&ctx, modules, entry, export, arguments, data, host);
-        if stop.load(Ordering::Relaxed) {
+        if stop.load(Ordering::Relaxed) && result.is_err() {
             return Err("cancelled".to_owned());
         }
         if timed_out.load(Ordering::Relaxed) {
@@ -178,6 +184,12 @@ fn run_here(
         }
         result.map_err(|error| describe(&ctx, error))
     })
+}
+
+const STOP_GRACE: Duration = Duration::from_millis(250);
+
+fn stopped_long_enough(flag: &AtomicBool, noticed: &std::sync::OnceLock<Instant>) -> bool {
+    flag.load(Ordering::Relaxed) && noticed.get_or_init(Instant::now).elapsed() > STOP_GRACE
 }
 
 fn evaluate<'js>(
@@ -233,7 +245,8 @@ fn evaluate<'js>(
 }
 
 pub fn exported(name: &str, source: &str, export: &str) -> Result<Value, String> {
-    on_its_own_stack(|| exported_here(name, source, export))
+    let source = typescript::plain(name, source)?;
+    on_its_own_stack(|| exported_here(name, &source, export))
 }
 
 fn exported_here(name: &str, source: &str, export: &str) -> Result<Value, String> {
@@ -252,11 +265,38 @@ fn exported_here(name: &str, source: &str, export: &str) -> Result<Value, String
     })
 }
 
+const OUTLINE: &str =
+    r#"(value) => JSON.stringify(value, (key, item) => typeof item === 'function' ? { "$function": true } : item)"#;
+
+pub fn outline(name: &str, source: &str, export: &str) -> Result<Value, String> {
+    let source = typescript::plain(name, source)?;
+    on_its_own_stack(|| outline_here(name, &source, export))
+}
+
+fn outline_here(name: &str, source: &str, export: &str) -> Result<Value, String> {
+    let runtime = runtime().map_err(|error| error.to_string())?;
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    runtime.set_interrupt_handler(Some(Box::new(move || std::time::Instant::now() > deadline)));
+    let context = Context::full(&runtime).map_err(|error| error.to_string())?;
+    context.with(|ctx| {
+        let evaluated = (|| {
+            let (module, done) = Module::declare(ctx.clone(), name, source)?.eval()?;
+            done.finish::<()>()?;
+            let value: JsValue = module.get(export)?;
+            let shape: Function = ctx.eval(OUTLINE)?;
+            shape.call::<_, Option<String>>((value,))
+        })();
+        let text = evaluated.map_err(|error| describe(&ctx, error))?;
+        Ok(text.and_then(|text| serde_json::from_str(&text).ok()).unwrap_or(Value::Null))
+    })
+}
+
 const EMPTY_FUNCTION: &str = r"(value) => typeof value === 'function'
   && /^(async\s*)?(function\s*[\w$]*\s*)?\([^)]*\)\s*(=>\s*)?\{\s*\}$/.test(value.toString().trim())";
 
 pub fn empty_function(name: &str, source: &str, export: &str) -> bool {
-    on_its_own_stack(|| empty_function_here(name, source, export))
+    let Ok(source) = typescript::plain(name, source) else { return false };
+    on_its_own_stack(|| empty_function_here(name, &source, export))
 }
 
 fn empty_function_here(name: &str, source: &str, export: &str) -> bool {
@@ -277,7 +317,8 @@ fn empty_function_here(name: &str, source: &str, export: &str) -> bool {
 }
 
 pub fn exports(name: &str, source: &str, export: &str) -> bool {
-    on_its_own_stack(|| exports_here(name, source, export))
+    let Ok(source) = typescript::plain(name, source) else { return false };
+    on_its_own_stack(|| exports_here(name, &source, export))
 }
 
 fn exports_here(name: &str, source: &str, export: &str) -> bool {

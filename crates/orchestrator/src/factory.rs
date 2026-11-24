@@ -1,7 +1,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use domain::factory::{Finding, FindingKind, Origin as Source, crossed, findings, generation};
+use domain::factory::{Finding, FindingKind, Origin as Source, crossed, findings, generation, recurring};
 use domain::workflow::{ItemId, WorkItem, WorkflowEvent};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -171,10 +171,11 @@ pub fn observe(shared: &Arc<Shared>, id: &ItemId) -> Result<()> {
                 orchestrator.launch(ESCAPED, &item, &finding.id, &escape_data(&finding))?;
             }
             FindingKind::Failure => {
-                let count = shared.store.count_findings(&finding.workflow, &finding.step, FindingKind::Failure)?;
+                let (count, same) = recurring(shared.store.findings(Some(FindingKind::Failure))?, &finding);
                 if crossed(count, factory.failure_threshold) {
-                    let data = recurring_data(shared, &finding, count)?;
-                    let subject = format!("{}/{}/{count}", finding.workflow, finding.step);
+                    let data = recurring_data(&finding, count, same);
+                    let generation = finding.generation.as_deref().unwrap_or("-");
+                    let subject = format!("{}/{}/{generation}/{count}", finding.workflow, finding.step);
                     orchestrator.launch(RECURRING, &item, &subject, &data)?;
                 }
             }
@@ -194,22 +195,24 @@ fn escape_data(finding: &Finding) -> Value {
     })
 }
 
-fn recurring_data(shared: &Shared, finding: &Finding, count: u64) -> Result<Value> {
-    let mut same: Vec<Finding> = shared
-        .store
-        .findings(Some(FindingKind::Failure))?
-        .into_iter()
-        .filter(|other| other.workflow == finding.workflow && other.step == finding.step)
-        .collect();
+fn recurring_data(finding: &Finding, count: u64, mut same: Vec<Finding>) -> Value {
     let keep = same.len().saturating_sub(RECENT);
     same.drain(..keep);
-    Ok(json!({
+    json!({
         "workflow": finding.workflow,
         "step": finding.step,
         "count": count,
         "generation": finding.generation,
         "findings": same,
-    }))
+    })
+}
+
+fn tuning(item: &WorkItem, data: &Value) -> bool {
+    let factory = &item.input["factory"];
+    item.ending.is_none()
+        && factory["kind"] == RECURRING
+        && factory["data"]["workflow"] == data["workflow"]
+        && factory["data"]["step"] == data["step"]
 }
 
 impl Orchestrator {
@@ -218,6 +221,9 @@ impl Orchestrator {
         let resources = self.shared.resources_in(self.shared.home(&origin.input).as_deref());
         let event = json!({ "kind": kind, "subject": subject, "data": data });
         let existing = self.shared.store.items()?;
+        if kind == RECURRING && existing.iter().any(|item| tuning(item, data)) {
+            return Ok(0);
+        }
         let mut created = 0;
         for workflow in self.triggered(kind, &event) {
             let known =

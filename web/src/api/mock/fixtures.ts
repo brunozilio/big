@@ -5,7 +5,7 @@ const MCP_LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fi
 
 export const MCP_TOOLS = [{ name: 'search' }, { name: 'fetch' }]
 
-export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]; paste?: boolean; choose?: { title: string; options: { id: string; label: string; detail: string }[] } })[] = [
+export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]; paste?: boolean; hidden?: boolean; choose?: { title: string; options: { id: string; label: string; detail: string }[] } })[] = [
   { key: 'github', name: 'GitHub', group: 'Código', description: 'Sua conta GitHub', logo: 'github', button: 'Entrar com GitHub', site: 'do GitHub', signIn: 'device', fields: [], multiple: true, capabilities: ['code'],
     alternatives: [{
       key: 'api_token', label: 'Usar personal access token', button: 'Conectar', site: 'do GitHub', signIn: 'token',
@@ -44,7 +44,7 @@ export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]
     }],
   },
   {
-    key: 'mcp', name: 'Servidor MCP', group: 'Ferramentas', description: 'Ferramentas de um servidor MCP remoto para os agentes', logo: MCP_LOGO, button: 'Conectar', site: 'do servidor MCP', signIn: 'oauth', multiple: true, capabilities: ['mcp'], accounts: [],
+    key: 'mcp', name: 'Servidor MCP', group: 'Ferramentas', hidden: true, description: 'Ferramentas de um servidor MCP remoto para os agentes', logo: MCP_LOGO, button: 'Conectar', site: 'do servidor MCP', signIn: 'oauth', multiple: true, capabilities: ['mcp'], accounts: [],
     fields: [
       { name: 'url', label: 'Endereço do servidor MCP', kind: 'text', mono: true, help: 'Por exemplo, https://mcp.exemplo.com/mcp.' },
       { name: 'label', label: 'Nome', kind: 'text', mono: true, help: 'Os agentes veem as ferramentas como mcp__nome__ferramenta.' },
@@ -68,9 +68,9 @@ export const INITIAL_CONNECTIONS: ConnectionState[] = [
 export const NEED_PROVIDER: Record<Need, string> = { ai: 'claude', tracker: 'jira', code: 'github', cloud: 'aws' }
 
 export const AGENTS: Agent[] = [
-  { id: 'planner', name: 'Planejador', avatar: { kind: 'agent', shape: 'triangle', color: '#e94b9b' } },
-  { id: 'developer', name: 'Desenvolvedor', avatar: { kind: 'agent', shape: 'squircle', color: '#3b82f6' } },
-  { id: 'reviewer', name: 'Revisor', avatar: { kind: 'agent', shape: 'circle', color: '#4fb39c' } },
+  { id: 'planner', name: 'Planner', avatar: { kind: 'agent', shape: 'triangle', color: '#e94b9b' } },
+  { id: 'developer', name: 'Developer', avatar: { kind: 'agent', shape: 'squircle', color: '#3b82f6' } },
+  { id: 'reviewer', name: 'Reviewer', avatar: { kind: 'agent', shape: 'circle', color: '#4fb39c' } },
   { id: 'release', name: 'Release', avatar: { kind: 'agent', shape: 'cloud', color: '#f0a235' } },
 ]
 

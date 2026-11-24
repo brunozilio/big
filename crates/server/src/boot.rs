@@ -22,6 +22,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let services = app::LocalServices::detect();
     let every = brand::store::SNAPSHOT_EVERY.trim().parse().unwrap_or(0);
     let store = Arc::new(Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?);
+    crate::permissions::install(Arc::clone(&store));
     let http = Arc::new(ReqwestHttp::new().map_err(|error| error.message)?);
     let tokens = Arc::new(VaultTokens::new(Arc::clone(&services.secrets)));
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
@@ -31,7 +32,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let connected = crate::connected_mcp::for_runs(Arc::clone(&store), Arc::clone(&connectors), runtime);
     let address = launch.listener.local_addr().map_err(|error| error.to_string())?;
     let hub = browser::Hub::new();
-    let services = services.with_connected_mcp(connected).with_browser_mcp(crate::browsers::for_runs(&hub, &launch.data));
+    let services = services.with_connected_mcp(connected).with_browser_mcp(crate::browsers::for_runs(&hub, &launch.data, Arc::clone(&store)));
     crate::browsers::install(&launch.data, address.port());
     let client = app::Client::builder().services(services.clone()).build().map_err(|error| error.to_string())?;
     let engine = Arc::new(app::KeyedEngine::new(services.clone()));

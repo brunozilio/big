@@ -45,3 +45,26 @@ fn a_run_that_changed_nothing_is_not_reviewed() {
     assert!(!rig.events().iter().any(|event| matches!(event, EngineEvent::Reviewed(_))));
     assert_eq!(model.asked().len(), 2);
 }
+
+#[test]
+fn the_review_of_an_agent_bound_to_a_structured_result_is_not_held_to_that_contract() {
+    let mut rig = Rig::new(PermissionMode::Bypass);
+    rig.workspace.policy.auto_review = true;
+    let contract =
+        agent_engine::tools::structured::offer(json!({"type": "object"}), &mut rig.workspace).expect("schema");
+    let model = ScriptedModel::new([
+        ScriptedModel::reply(vec![tool_use("w", "Write", json!({ "file_path": "made.txt", "content": "hello\n" }))]),
+        ScriptedModel::reply(vec![tool_use("s", "StructuredOutput", json!({ "result": { "ok": true } }))]),
+        text("Done."),
+        text(r#"{"findings": []}"#),
+    ]);
+    let mut history = vec![Message::user("write hello into made.txt")];
+
+    rig.run_with(&model, &mut history, vec![contract]).expect("run");
+
+    let reviewed: Vec<_> = rig.events().into_iter().filter(|event| matches!(event, EngineEvent::Reviewed(_))).collect();
+    assert_eq!(reviewed.len(), 1, "the reviewer answered without being asked for StructuredOutput");
+    let reviewer = &model.asked()[3];
+    assert!(!reviewer.tools.iter().any(|spec| spec.name == "StructuredOutput"));
+    assert_eq!(model.asked().len(), 4);
+}

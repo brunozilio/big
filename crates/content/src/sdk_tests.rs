@@ -117,12 +117,14 @@ fn the_delivery_agents_are_built_in_with_a_header() {
     for (name, color) in
         [("planner", "#e94b9b"), ("developer", "#3b82f6"), ("reviewer", "#4fb39c"), ("release", "#f0a235")]
     {
-        let text = super::builtin_text(&format!("agents/{name}.md")).expect("built in");
-        let header = text.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n")).map(|(head, _)| head);
-        let header = header.unwrap_or_else(|| panic!("{name} has a header"));
-        for key in ["name:", "label:", "description:", "tools:", "permissionMode:", "skills:", "avatar:"] {
-            assert!(header.contains(key), "{name} lacks {key}");
+        let path = format!("agents/{name}.ts");
+        let text = super::builtin_text(&path).expect("built in");
+        let spec = script::exported(&path, &text, "spec").unwrap_or_else(|error| panic!("{name}: {error}"));
+        for key in ["name", "label", "description", "tools", "permissionMode", "skills", "avatar"] {
+            assert!(!spec[key].is_null(), "{name} lacks {key}");
         }
+        assert!(script::exported(&path, &text, "default").expect("body").is_string(), "{name} has a body");
+        let header = spec.to_string();
         assert!(header.contains(color), "{name} keeps its color");
     }
 }

@@ -2,7 +2,6 @@ use domain::{EngineEvent, ToolCall};
 use platform::sync::Locked;
 use serde_json::Value;
 
-use super::in_loop::Handler;
 use crate::agent::Agent;
 use crate::agent::run::ThisRun;
 use crate::agent::subagents::background::Spawn;
@@ -106,7 +105,6 @@ impl Agent<'_> {
         let effects = tool.effects(input, self.workspace);
         domain::permission::change_nothing(&effects)
             && !serial
-            && !Handler::of(name).starts_background_work()
             && !tool.serial()
             && self.workspace.stays_inside(&effects)
     }

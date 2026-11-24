@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { cleanup, render, screen } from '@testing-library/react'
 import type { Application, Item } from '@/api/contract'
 import { mockApi } from '@/api/mock'
-import { gitOf, placesOf, pullSubject, sourcesOf } from '@/screens/items/NewItem'
+import { basesOf, defaultBranch, gitOf, linkedRepos, matchesPull, placesOf, pullSubject, sourcesOf } from '@/screens/items/NewItem'
 import { Origins } from '@/screens/items/parts'
 
 const app: Application = {
@@ -58,5 +58,31 @@ describe('origens do item', () => {
     const view = render(<Origins it={it} />)
     expect(view.container.textContent).toBe('')
     cleanup()
+  })
+})
+
+describe('pickers do composer', () => {
+  test('o branch base padrão é a main, senão o padrão do repositório', () => {
+    expect(defaultBranch([{ name: 'dev', default: true }, { name: 'main', default: false }])).toBe('main')
+    expect(defaultBranch([{ name: 'a', default: false }, { name: 'trunk', default: true }])).toBe('trunk')
+    expect(defaultBranch(undefined)).toBeNull()
+    const places = [{ id: 'r1', name: 'acme/web' }, { id: 'r2', name: 'infra' }]
+    expect(basesOf({ r2: 'x' }, { r1: [{ name: 'main', default: true }] }, places)).toEqual({ r1: 'main', r2: 'x' })
+  })
+
+  test('os pull requests filtram por número, título, branch e autor', () => {
+    const pull = { key: 'acme/web#42', number: 42, title: 'Corrigir frete', head: 'fix/frete', base: 'main', author: 'ana', url: null, draft: false }
+    expect(matchesPull(pull, '42')).toBe(true)
+    expect(matchesPull(pull, 'FRETE')).toBe(true)
+    expect(matchesPull(pull, 'bia')).toBe(false)
+  })
+
+  test('só repositórios conectados entram na busca', () => {
+    const app = { id: 'a', name: 'A', tracker: null, repositories: [
+      { id: 'r1', code: { connection: 'c-gh', repo: 'acme/web' }, directory: '/w', run: [], verify: [] },
+      { id: 'r2', code: null, directory: '/i', run: [], verify: [] },
+    ] }
+    expect(linkedRepos(app)).toEqual([{ place: 'r1', connection: 'c-gh', repo: 'acme/web' }])
+    expect(linkedRepos(null)).toEqual([])
   })
 })

@@ -123,6 +123,7 @@ impl Provider for Github {
             button: "Entrar com GitHub".to_owned(),
             site: "do GitHub".to_owned(),
             choose_title: "Organização".to_owned(),
+            hidden: false,
         }
     }
 
@@ -149,6 +150,8 @@ impl Provider for Github {
             code_actions::RESOLVE_THREAD => code::resolve_thread(&api, args).await,
             code_actions::MERGE => code::merge(&api, args).await,
             code_actions::REPOS => code::repos(&api, args).await,
+            code_actions::PULL_REQUESTS => code::pull_requests(&api, args).await,
+            code_actions::BRANCHES => code::branches(&api, args).await,
             pipeline_actions::RUNS => pipelines::runs(&api, args).await,
             pipeline_actions::RUN => pipelines::run(&api, args).await,
             pipeline_actions::JOB_LOG => pipelines::job_log(&api, args).await,

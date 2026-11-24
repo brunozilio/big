@@ -25,9 +25,8 @@ mod tests {
 
     #[test]
     fn every_builtin_name_the_loop_dispatches_on_belongs_to_a_standard_tool_or_one_the_run_adds() {
-        let mut offered: Vec<String> = crate::tools::standard().iter().map(|tool| tool.spec().name).collect();
-        offered.extend(crate::tools::task::tools().iter().map(|tool| tool.spec().name));
-        for name in [ASK, EXIT_PLAN, WATCH, BASH, READ, WRITE, WEB_FETCH] {
+        let offered: Vec<String> = crate::tools::standard().iter().map(|tool| tool.spec().name).collect();
+        for name in [ASK, EXIT_PLAN, WATCH, BASH, READ, WRITE, WEB_FETCH, AGENT, SEND_MESSAGE] {
             assert!(offered.iter().any(|known| known == name), "{name} is not a standard tool");
         }
         for name in [TASK_OUTPUT, TASK_STOP, TASK_LIST, TASK_GET, TASK_CREATE, TASK_UPDATE] {

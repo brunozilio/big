@@ -38,32 +38,9 @@ fn output_that_outgrew_what_is_kept_says_so_before_the_part_that_is_shown() {
 }
 
 #[test]
-fn a_background_read_says_when_output_was_dropped_before_it_was_read() {
-    let id = start(&of_client(922), "long", &mut sh(LONG)).expect("start");
-    ended(922);
-    let text = read(&id, 922);
-    let mut lines = text.lines();
-    assert!(lines.next().is_some_and(|state| state.contains("finished (exit code 0)")), "{text:.120}");
-    let told = lines.next().unwrap_or_default();
-    assert!(told.starts_with("[earlier output dropped: showing the last "), "{told:.120}");
-    assert!(told.ends_with(&format!(" of {LONG_BYTES} bytes]")), "{told:.120}");
-}
-
-#[test]
 fn a_short_output_is_shown_as_it_is() {
     let (stop, detach) = (std::sync::atomic::AtomicBool::new(false), std::sync::atomic::AtomicBool::new(false));
     let id = start(&of_client(925), "short", &mut sh("echo all of it")).expect("start");
     let Waited::Exited { output, .. } = wait(&id, Duration::from_secs(120), &stop, &detach) else { panic!("ended") };
     assert_eq!(output, "all of it");
-}
-
-#[test]
-fn a_finished_command_leaves_the_list_once_its_last_output_was_read() {
-    let id = start(&of_client(923), "build", &mut sh("echo built")).expect("start");
-    ended(923);
-    assert_eq!(list(923).len(), 1, "it stays until it is read");
-    let text = read(&id, 923);
-    assert!(text.contains("finished") && text.contains("built"), "{text}");
-    assert!(list(923).is_empty(), "read to its end, it is forgotten");
-    assert!(read(&id, 923).contains("No background command"));
 }

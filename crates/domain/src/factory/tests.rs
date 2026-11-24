@@ -141,3 +141,48 @@ fn a_generation_depends_on_every_file_and_not_on_their_order() {
     assert_ne!(one, changed);
     assert_eq!(one.len(), 16);
 }
+
+#[test]
+fn a_step_that_fails_because_the_environment_broke_is_not_a_finding() {
+    let events = vec![
+        started(0, "develop", "develop", json!({})),
+        finished(1, "develop", 1, "passed", json!({}), None),
+        started(2, "checks", "checks", json!({ "onFail": "develop" })),
+        finished(3, "checks", 1, "failed", json!({ "error": "timed out", "kind": "timeout" }), None),
+        started(4, "plan", "plan", json!({})),
+        finished(5, "plan", 1, "failed", json!({ "error": "not signed in", "kind": "permanent" }), None),
+    ];
+    assert!(scan(&events).is_empty(), "the factory cannot fix a timeout or a missing login");
+}
+
+fn failure(item: &str, step: &str, generation: &str, data: Value) -> Finding {
+    Finding {
+        id: format!("{item}:{step}:{generation}"),
+        item: ItemId::from(item),
+        workflow: "entrega".into(),
+        generation: Some(generation.into()),
+        kind: FindingKind::Failure,
+        step: step.into(),
+        gate: None,
+        caught_by: None,
+        detail: json!({ "data": data }),
+        at: 0,
+    }
+}
+
+#[test]
+fn a_recurring_failure_counts_distinct_items_of_the_same_step_in_the_same_generation() {
+    let wrong = json!({ "error": "reprovado" });
+    let all = vec![
+        failure("a", "checks", "g1", wrong.clone()),
+        Finding { id: "a:checks:g1:2".into(), ..failure("a", "checks", "g1", wrong.clone()) },
+        failure("b", "checks", "g1", wrong.clone()),
+        failure("c", "checks", "g0", wrong.clone()),
+        failure("d", "ci", "g1", wrong.clone()),
+        failure("e", "checks", "g1", json!({ "error": "timed out", "kind": "timeout" })),
+    ];
+    let of = failure("b", "checks", "g1", wrong);
+    let (count, same) = recurring(all, &of);
+    assert_eq!(count, 2, "retries of one item count once and other generations do not count");
+    assert_eq!(same.len(), 3);
+}

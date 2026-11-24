@@ -5,6 +5,10 @@ use crate::ledger::Ledger;
 use crate::protocol::{AGENT, kind_of};
 
 impl Orchestrator {
+    pub fn steer(&self, session: &str, text: &str) -> bool {
+        self.shared.steering.steer(session, text)
+    }
+
     pub fn runs_session(&self, session: &str) -> Result<bool> {
         for item in self.shared.store.active_items()? {
             let stopped = item.impediment.as_ref().is_some_and(|found| found.reason.as_deref() != Some(WAITING_ANSWER));

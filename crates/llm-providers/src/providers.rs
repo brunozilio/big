@@ -85,7 +85,21 @@ pub fn infos() -> Vec<ProviderInfo> {
 }
 
 pub fn name(provider: ModelProvider) -> String {
+    if provider.id().trim().is_empty() {
+        return "no provider".to_owned();
+    }
     find(provider).map_or_else(|| provider.id().to_owned(), |known| known.name().to_owned())
+}
+
+pub fn not_connected(provider: ModelProvider, model: &str) -> String {
+    let model = if model.trim().is_empty() { "the chosen model".to_owned() } else { format!("the model `{model}`") };
+    if provider.id().trim().is_empty() {
+        return format!(
+            "no provider is set for {model}: pick a model of a connected provider, or run `{} login`",
+            brand::COMMAND
+        );
+    }
+    format!("{} is not connected, and {model} needs it: run `{} login`", name(provider), brand::COMMAND)
 }
 
 const UNDECLARED_OUTPUT_LIMIT: u64 = 8192;
@@ -146,5 +160,17 @@ mod tests {
         let unknown = ModelProvider::new("nobody");
         assert_eq!(name(unknown), "nobody");
         assert!(get(unknown).is_err());
+    }
+
+    #[test]
+    fn a_missing_connection_always_names_the_provider_or_the_model() {
+        let unset = not_connected(ModelProvider::new(""), "gpt-x");
+        let unnamed = not_connected(ModelProvider::new(" "), "");
+        let known = not_connected(ModelProvider::new("nobody"), "m-1");
+
+        assert!(unset.starts_with("no provider is set for the model `gpt-x`"), "{unset}");
+        assert!(unnamed.starts_with("no provider is set for the chosen model"), "{unnamed}");
+        assert!(known.starts_with("nobody is not connected, and the model `m-1` needs it"), "{known}");
+        assert_eq!(name(ModelProvider::new("")), "no provider");
     }
 }

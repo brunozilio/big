@@ -42,11 +42,15 @@ impl Job {
         workspace.added_dirs =
             crate::brief::added_dirs(&self.request.session, &settings.added_dirs, workspace.home.as_deref());
         workspace.hooks.extend(&main.config.hooks);
+        workspace.interceptors.extend(&main.config.intercept);
+        for script in toolbox.tools.iter().filter_map(|tool| tool.script()) {
+            workspace.interceptors.tool.extend(script.interceptors.iter().cloned());
+        }
         let worktree = self.session_worktree(&main, &mut workspace, session)?;
         self.settle_model(&main, &mut workspace)?;
         if let Some(schema) = settings.schema.clone().or_else(|| main.config.output_schema()) {
-            let structured = tools::structured::Structured::new(schema).map_err(Stop::failed)?;
-            toolbox.tools.push(Box::new(structured));
+            let structured = tools::structured::offer(schema, &mut workspace).map_err(Stop::failed)?;
+            toolbox.tools.push(structured);
         }
         Ok(Runtime { workspace, toolbox, main, worktree })
     }

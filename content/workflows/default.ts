@@ -5,7 +5,7 @@ export default workflow({
   name: "entrega",
   accepts: ["issue", "text"],
   triggers: [on("tracker.issue.created")],
-  statuses: ["A fazer", "Fazendo", "Revisando", "Feito"],
+  statuses: ["A fazer", "Fazendo", "Feito"],
   steps: [
     plan({ agent: "planner", status: "A fazer" }),
     ticket(),
@@ -14,7 +14,7 @@ export default workflow({
     checks({ agent: "verifier", tester: "tester", onFail: "develop", retries: 3 }),
     pr(),
     ci({ onFail: "develop", retries: 3 }),
-    review({ agent: "reviewer", status: "Revisando", onChanges: "develop" }),
+    review({ agent: "reviewer", status: "Fazendo", onChanges: "develop" }),
     merge({ method: "squash" }),
     release({ agent: "release", cloud: true, doneStatus: "Feito" }),
   ],

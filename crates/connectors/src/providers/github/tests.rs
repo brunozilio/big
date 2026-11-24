@@ -23,7 +23,7 @@ async fn call(http: &FakeHttp, action: &str, args: Value, key: &str) -> Result<V
 fn pull(state: &str, merged_at: Option<&str>) -> Value {
     json!({
         "number": 7, "state": state, "merged_at": merged_at, "html_url": "https://github.com/acme/app/pull/7",
-        "title": "T", "head": {"ref": "big/x", "sha": "abc"}, "base": {"ref": "main"}, "merge_commit_sha": "m1",
+        "title": "T", "head": {"ref": "big/x", "sha": "abc", "repo": {"full_name": "acme/app"}}, "base": {"ref": "main"}, "merge_commit_sha": "m1",
     })
 }
 
@@ -96,9 +96,37 @@ async fn merging_a_merged_pull_request_is_a_success() {
         200,
         &pull("closed", Some("2024-01-01T00:00:00Z")).to_string(),
     );
-    let answer = call(&http, code_actions::MERGE, json!({"pr": "acme/app#7"}), "k").await;
-    assert_eq!(answer, Ok(json!({"merged": true, "already": true, "sha": "m1"})));
+    let answer = call(&http, code_actions::MERGE, json!({"pr": "acme/app#7", "delete_branch": false}), "k").await;
+    assert_eq!(answer, Ok(json!({"merged": true, "already": true, "sha": "m1", "deleted": false})));
     assert!(http.sent_to(Method::Put, "/merge").is_empty());
+    assert!(http.sent_to(Method::Delete, "/git/refs").is_empty());
+}
+
+#[tokio::test]
+async fn merge_deletes_the_head_branch_and_a_failed_delete_keeps_the_merge() {
+    let http = FakeHttp::new()
+        .once(Method::Get, "/pulls/7", 200, &pull("open", None).to_string())
+        .once(Method::Put, "/pulls/7/merge", 200, r#"{"merged":true,"sha":"s9"}"#)
+        .once(Method::Delete, "/repos/acme/app/git/refs/heads/big/x", 204, "")
+        .once(Method::Get, "/pulls/7", 200, &pull("closed", Some("2024-01-01T00:00:00Z")).to_string())
+        .once(Method::Delete, "/git/refs/heads/big/x", 422, r#"{"message":"Reference does not exist"}"#);
+    let args = json!({"pr": "acme/app#7"});
+    let answer = call(&http, code_actions::MERGE, args.clone(), "k").await;
+    assert_eq!(answer, Ok(json!({"merged": true, "already": false, "sha": "s9", "deleted": true})));
+    let again = call(&http, code_actions::MERGE, args, "k").await;
+    assert_eq!(again.map(|a| a["deleted"].clone()), Ok(json!(false)));
+}
+
+#[tokio::test]
+async fn a_branch_from_a_fork_is_not_deleted() {
+    let mut forked = pull("open", None);
+    forked["head"]["repo"]["full_name"] = json!("someone/app");
+    let http = FakeHttp::new()
+        .once(Method::Get, "/pulls/7", 200, &forked.to_string())
+        .once(Method::Put, "/pulls/7/merge", 200, r#"{"merged":true,"sha":"s9"}"#);
+    let answer = call(&http, code_actions::MERGE, json!({"pr": "acme/app#7"}), "k").await;
+    assert_eq!(answer.map(|a| a["deleted"].clone()), Ok(json!(false)));
+    assert!(http.sent_to(Method::Delete, "/git/refs").is_empty());
 }
 
 #[tokio::test]
@@ -108,9 +136,9 @@ async fn merge_sends_the_method_and_the_head_it_saw_and_a_moved_head_is_a_confli
         .once(Method::Put, "/pulls/7/merge", 200, r#"{"merged":true,"sha":"s9"}"#)
         .once(Method::Get, "/pulls/7", 200, &pull("open", None).to_string())
         .once(Method::Put, "/pulls/7/merge", 409, r#"{"message":"Head branch was modified"}"#);
-    let args = json!({"pr": "acme/app#7", "method": "squash"});
+    let args = json!({"pr": "acme/app#7", "method": "squash", "delete_branch": false});
     let answer = call(&http, code_actions::MERGE, args.clone(), "k").await;
-    assert_eq!(answer, Ok(json!({"merged": true, "already": false, "sha": "s9"})));
+    assert_eq!(answer, Ok(json!({"merged": true, "already": false, "sha": "s9", "deleted": false})));
     assert_eq!(http.sent()[1].body_json(), json!({"merge_method": "squash", "sha": "abc"}));
     assert_eq!(call(&http, code_actions::MERGE, args, "k").await.map_err(|e| e.class), Err(ErrorClass::Conflict));
 }
@@ -118,18 +146,20 @@ async fn merge_sends_the_method_and_the_head_it_saw_and_a_moved_head_is_a_confli
 #[tokio::test]
 async fn a_pull_request_reads_checks_and_reviews() {
     let checks = r#"{"check_runs":[{"name":"ci","status":"completed","conclusion":"success"},{"name":"lint","status":"in_progress","conclusion":null}]}"#;
-    let reviews =
-        r#"[{"id":1,"user":{"login":"ana"},"state":"APPROVED","body":"ok","submitted_at":"2024-01-01T00:00:00Z"}]"#;
+    let reviews = json!([{"id": 1, "user": {"login": "ana"}, "state": "APPROVED",
+        "body": idempotency::marked("ok", "k/review/0/1"), "submitted_at": "2024-01-01T00:00:00Z"}])
+    .to_string();
     let http = FakeHttp::new()
         .once(Method::Get, "/pulls/7", 200, &pull("open", None).to_string())
         .once(Method::Get, "/commits/abc/check-runs", 200, checks)
-        .once(Method::Get, "/pulls/7/reviews", 200, reviews);
+        .once(Method::Get, "/pulls/7/reviews", 200, &reviews);
     let answer = call(&http, code_actions::PULL_REQUEST, json!({"pr": "acme/app#7"}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer["checks"][0], json!({"name": "ci", "state": "passed", "url": null}));
     assert_eq!(answer["checks"][1]["state"], "running");
     assert_eq!(answer["reviews"][0]["author"], "ana");
     assert_eq!(answer["reviews"][0]["verdict"], "approve");
+    assert_eq!(answer["reviews"][0]["body"], "ok");
     assert_eq!((answer["state"].as_str(), answer["ref"].as_str()), (Some("open"), Some("acme/app#7")));
 }
 
@@ -396,4 +426,23 @@ async fn the_repositories_can_be_filtered_by_name() {
     let Ok(answer) = answer else { panic!("{answer:?}") };
     let names: Vec<&str> = answer.as_array().expect("list").iter().filter_map(|repo| repo["ref"].as_str()).collect();
     assert_eq!(names, ["acme/r1", "acme/r10", "acme/r11"]);
+}
+
+#[tokio::test]
+async fn the_open_pull_requests_of_a_repository_are_listed() {
+    let http = FakeHttp::new().once(Method::Get, "/repos/acme/app/pulls?state=open", 200, &json!([pull("open", None)]).to_string());
+    let answer = call(&http, code_actions::PULL_REQUESTS, json!({ "repo": "acme/app" }), "k").await;
+    let Ok(answer) = answer else { panic!("{answer:?}") };
+    assert_eq!(answer[0]["ref"], json!("acme/app#7"));
+    assert_eq!(answer[0]["head"], json!("big/x"));
+}
+
+#[tokio::test]
+async fn the_branches_mark_the_default_one() {
+    let http = FakeHttp::new()
+        .once(Method::Get, "/repos/acme/app/branches", 200, &json!([{ "name": "dev" }, { "name": "main" }]).to_string())
+        .once(Method::Get, "/repos/acme/app", 200, &json!({ "default_branch": "main" }).to_string());
+    let answer = call(&http, code_actions::BRANCHES, json!({}), "k").await;
+    let Ok(answer) = answer else { panic!("{answer:?}") };
+    assert_eq!(answer, json!([{ "name": "dev", "default": false }, { "name": "main", "default": true }]));
 }

@@ -32,20 +32,20 @@ impl std::fmt::Debug for ConnectedMcp {
 
 pub type BrowserAsk = Arc<dyn Fn(&str, &str) -> Option<String> + Send + Sync>;
 
-type BrowserOf = Arc<dyn Fn(&str, Vec<PathBuf>, Option<BrowserAsk>) -> domain::mcp::LocalMcp + Send + Sync>;
+type BrowserOf = Arc<dyn Fn(&str, Vec<PathBuf>, Option<BrowserAsk>) -> Option<domain::mcp::LocalMcp> + Send + Sync>;
 
 #[derive(Clone, Default)]
 pub struct BrowserMcp(Option<BrowserOf>);
 
 impl BrowserMcp {
     pub fn new(
-        server: impl Fn(&str, Vec<PathBuf>, Option<BrowserAsk>) -> domain::mcp::LocalMcp + Send + Sync + 'static,
+        server: impl Fn(&str, Vec<PathBuf>, Option<BrowserAsk>) -> Option<domain::mcp::LocalMcp> + Send + Sync + 'static,
     ) -> Self {
         Self(Some(Arc::new(server)))
     }
 
     pub fn for_run(&self, session: &str, roots: Vec<PathBuf>, ask: Option<BrowserAsk>) -> Option<domain::mcp::LocalMcp> {
-        self.0.as_ref().map(|server| server(session, roots, ask))
+        self.0.as_ref().and_then(|server| server(session, roots, ask))
     }
 }
 

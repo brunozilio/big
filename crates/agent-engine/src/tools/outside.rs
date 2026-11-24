@@ -42,6 +42,8 @@ fn folded(path: &Path) -> PathBuf {
     out
 }
 
+const SHARED_FOLDERS: [&str; 9] = ["agents", "hooks", "prompts", "repl", "schemas", "sdk", "skills", "styles", "tools"];
+
 impl Workspace {
     fn project_root(&self) -> PathBuf {
         let cwd = settled(&self.cwd);
@@ -67,7 +69,10 @@ impl Workspace {
         let roots = std::iter::once(self.project_root()).chain(self.added_dirs.iter().map(|dir| settled(dir)));
         let saved = settled(&super::persisted::results_dir(&self.session_id));
         let own = content::folder().map(|folder| settled(&folder.join("skills")));
-        domain::permission::Bounds::of(roots.collect(), std::iter::once(saved).chain(own).collect())
+        let shared = self.home.as_ref().map(|home| home.join(brand::DIR)).into_iter().flat_map(|folder| {
+            std::iter::once(brand::INSTRUCTIONS).chain(SHARED_FOLDERS).map(move |part| settled(&folder.join(part)))
+        });
+        domain::permission::Bounds::of(roots.collect(), std::iter::once(saved).chain(own).chain(shared).collect())
     }
 
     pub fn place(&self, path: &str) -> domain::permission::Place {
@@ -136,6 +141,26 @@ mod tests {
             "writing there still asks"
         );
         assert!(!workspace.may_read(&folder.join("mcp.json")), "the owner's settings stay outside");
+    }
+
+    #[test]
+    fn the_product_s_home_folder_reads_freely_but_is_not_written_without_asking() {
+        let home = tempfile::tempdir().expect("home");
+        let own = home.path().join(brand::DIR);
+        std::fs::create_dir_all(&own).expect("own folder");
+        let project = home.path().join("rocket");
+        std::fs::create_dir_all(&project).expect("project");
+        let mut workspace = Workspace::new(&project);
+        workspace.home = Some(home.path().to_path_buf());
+        let instructions = own.join(brand::INSTRUCTIONS);
+        assert!(workspace.may_read(&instructions));
+        assert!(workspace.may_read(&own.join("agents/reviewer.ts")));
+        assert!(!workspace.may_read(&own.join("mcp.json")), "settings may hold secrets");
+        assert!(!workspace.may_read(&own.join("teams/team-1/config.json")), "other sessions' teams stay outside");
+        let agents = own.join("agents");
+        assert!(workspace.stays_inside(&[domain::permission::Effect::ReadTree(workspace.place(&agents.display().to_string()))]));
+        assert!(workspace.bounds().guard(&workspace.place(&instructions.display().to_string()).real).is_some());
+        assert!(!workspace.may_read(&home.path().join(".ssh/id_ed25519")), "the rest of home stays outside");
     }
 
     #[test]

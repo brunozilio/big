@@ -1,5 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { extendTailwindMerge } from 'tailwind-merge'
+import { currentLocale } from '@/i18n'
 
 const radiusRoles = ['control-sm', 'control', 'card', 'overlay']
 
@@ -40,5 +41,5 @@ export function relTime(iso: string): string {
 
 export function money(usd: number, currency: 'BRL' | 'USD' = 'BRL', usdToBrl = 5.4): string {
   const value = currency === 'BRL' ? usd * usdToBrl : usd
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency, maximumFractionDigits: value < 10 ? 2 : 0 }).format(value)
+  return new Intl.NumberFormat(currentLocale(), { style: 'currency', currency, maximumFractionDigits: value < 10 ? 2 : 0 }).format(value)
 }

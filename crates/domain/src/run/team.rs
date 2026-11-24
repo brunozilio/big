@@ -197,6 +197,8 @@ pub struct TeammateSpec {
     pub model: String,
     pub mode: String,
     pub instructions: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead_pid: Option<u32>,
 }
 
 pub const ASK_PREFIX: &str = "teammate-ask:";

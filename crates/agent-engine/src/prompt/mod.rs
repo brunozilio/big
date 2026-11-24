@@ -1,6 +1,7 @@
 mod git;
 mod instruction_files;
 pub(crate) mod markdown;
+pub mod output_style;
 pub mod permissions;
 pub mod rules;
 pub mod settings;
@@ -143,8 +144,8 @@ pub const fn platform() -> &'static str {
 #[cfg(test)]
 mod tests;
 
-pub fn reminder(mode: domain::PermissionMode, depth: usize) -> String {
+pub fn reminder(mode: domain::PermissionMode, depth: usize, teammate: bool) -> String {
     let mode = domain::command::mode_label(mode);
-    let data = serde_json::json!({ "mode": mode, "depth": depth });
+    let data = serde_json::json!({ "mode": mode, "depth": depth, "teammate": teammate });
     render("prompts/reminder.js", &data)
 }

@@ -38,6 +38,11 @@ mod tests {
     }
 
     #[test]
+    fn the_logo_is_a_png() {
+        assert!(LOGO.starts_with(b"\x89PNG"));
+    }
+
+    #[test]
     fn a_section_lists_its_pairs_and_an_unknown_one_is_empty() {
         assert!(section("server").iter().any(|(key, _)| *key == "port"));
         assert!(section("nope").is_empty());

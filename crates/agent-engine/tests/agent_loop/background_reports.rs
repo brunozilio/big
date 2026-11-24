@@ -51,9 +51,7 @@ impl LongReport {
 fn a_long_background_report_is_saved_whole_and_handed_over_by_its_ends() {
     let rig = Rig::new(PermissionMode::Bypass);
     let model = LongReport { parent: AtomicUsize::new(0), handed_over: std::sync::Mutex::default() };
-    let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool::default()));
-    tools.extend(tools::task::tools());
+    let tools = tools::standard();
     let emit = |_| {};
     let agent = Agent {
         api: &model,

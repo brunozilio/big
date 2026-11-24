@@ -69,8 +69,14 @@ pub fn override_path(folder: &Path, path: &str) -> Option<PathBuf> {
 }
 
 pub fn user_text(folder: Option<&Path>, path: &str) -> Option<String> {
-    let file = folder.and_then(|folder| override_path(folder, path))?;
-    std::fs::read_to_string(file).ok().map(|text| brand::text(text.trim_end_matches('\n')))
+    let folder = folder?;
+    let file = override_path(folder, path)?;
+    let bytes = std::fs::read(file).ok()?;
+    if install::untouched(folder, path, &bytes) {
+        return None;
+    }
+    let text = String::from_utf8(bytes).ok()?;
+    Some(brand::text(text.trim_end_matches('\n')))
 }
 
 pub fn source(path: &str) -> Option<String> {

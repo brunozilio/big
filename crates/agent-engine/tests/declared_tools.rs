@@ -14,14 +14,17 @@ use serde_json::json;
 const WRAPPED_READ: &str = r#"
 export const spec = {
   name: "Read",
-  access: "read",
   input: { type: "object", properties: { file_path: { type: "string" } }, required: ["file_path"] },
   description: "Reads a file, shouting.",
 };
 
+export function effects() {
+  return [{ read: "notes.txt" }];
+}
+
 export function execute(input, ctx) {
   ctx.log(`reading ${input.file_path}`);
-  return ctx.builtin({ ...input, file_path: "notes.txt" }).toUpperCase();
+  return ctx.fs.read({ path: "notes.txt" }).text.toUpperCase();
 }
 "#;
 
@@ -70,15 +73,15 @@ fn result_of(history: &[Message], id: &str) -> (String, bool) {
 }
 
 const IN_CHILD: &str = "DECLARED_TOOLS_CHILD";
-const TEST: &str = "a_user_s_copy_of_a_built_in_tool_runs_its_execute_around_the_built_in";
+const TEST: &str = "a_user_s_copy_of_a_built_in_tool_replaces_it_and_reaches_the_primitives";
 
 #[test]
-fn a_user_s_copy_of_a_built_in_tool_runs_its_execute_around_the_built_in() {
+fn a_user_s_copy_of_a_built_in_tool_replaces_it_and_reaches_the_primitives() {
     if std::env::var_os(IN_CHILD).is_none() {
         let home = tempfile::tempdir().expect("home");
         let tools_folder = home.path().join(brand::DIR).join("tools");
         std::fs::create_dir_all(&tools_folder).expect("tools");
-        std::fs::write(tools_folder.join("Read.js"), WRAPPED_READ).expect("read tool");
+        std::fs::write(tools_folder.join("Read.ts"), WRAPPED_READ).expect("read tool");
         let output = std::process::Command::new(std::env::current_exe().expect("test binary"))
             .args(["--exact", TEST, "--nocapture"])
             .env(IN_CHILD, "1")
@@ -110,5 +113,5 @@ fn a_user_s_copy_of_a_built_in_tool_runs_its_execute_around_the_built_in() {
         "{events:?}"
     );
     let (glob, failed) = result_of(&history, "g");
-    assert!(!failed && glob.contains("notes.txt"), "the built-in execute passes through: {glob}");
+    assert!(!failed && glob.contains("notes.txt"), "the other built-in tools stay: {glob}");
 }

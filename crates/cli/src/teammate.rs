@@ -44,6 +44,7 @@ pub fn run(mut args: Args) -> Result<ExitCode, String> {
     let home = std::env::home_dir().ok_or("a teammate needs a home folder")?;
     let spec = spec.ok_or("a teammate is started by its lead, with a --spec file naming its team and name")?;
     let me = Me { team: app::team::Team::named(&home, &spec.team), name: spec.name.clone() };
+    let lead = spec.lead_pid;
     let teammate = domain::team::TeammateOf { team: spec.team, name: spec.name };
     let cwd = match args.cwd.take() {
         Some(dir) => dir,
@@ -61,8 +62,8 @@ pub fn run(mut args: Args) -> Result<ExitCode, String> {
         app::Headless { append_system: args.instructions.take(), teammate: Some(teammate), ..Default::default() };
     session.set_headless(headless);
     let (team, name) = (me.team.clone(), me.name.clone());
-    let asker = Mailbox::new(me.clone());
-    let ended = work(&session, &asker, Mailbox::new(me));
+    let asker = Mailbox::new(me.clone()).led_by(lead);
+    let ended = work(&session, &asker, Mailbox::new(me).led_by(lead));
     team.departed(&name);
     ended.map(|()| ExitCode::SUCCESS)
 }
@@ -93,11 +94,21 @@ pub struct Mailbox {
     me: Me,
     answered_once: bool,
     poll: Duration,
+    lead: Option<u32>,
 }
 
 impl Mailbox {
     pub fn new(me: Me) -> Self {
-        Self { me, answered_once: false, poll: POLL }
+        Self { me, answered_once: false, poll: POLL, lead: None }
+    }
+
+    pub fn led_by(mut self, lead: Option<u32>) -> Self {
+        self.lead = lead;
+        self
+    }
+
+    fn orphaned(&self) -> bool {
+        self.lead.is_some_and(|pid| !platform::alive(pid))
     }
 
     fn went_idle(&self) {
@@ -135,7 +146,7 @@ impl Mailbox {
             if let Some(decision) = self.me.team.take_answer(&self.me.name, &request_id) {
                 return Some(decision);
             }
-            if !self.me.team.exists() || self.me.team.shutting_down(&self.me.name) {
+            if !self.me.team.exists() || self.me.team.shutting_down(&self.me.name) || self.orphaned() {
                 return Some(app::Decision::Deny);
             }
             std::thread::sleep(self.poll);
@@ -157,7 +168,7 @@ impl Iterator for Mailbox {
         }
         self.answered_once = true;
         loop {
-            if !self.me.team.exists() {
+            if !self.me.team.exists() || self.orphaned() {
                 return None;
             }
             let mut work = Vec::new();
@@ -250,6 +261,22 @@ mod tests {
     }
 
     #[test]
+    fn a_teammate_whose_lead_is_gone_stops_waiting_for_work() {
+        let (_dir, team, mut mailbox) = rig();
+        let mut finished = std::process::Command::new(std::env::current_exe().expect("exe"))
+            .arg("--list")
+            .stdout(std::process::Stdio::null())
+            .spawn()
+            .expect("child");
+        let pid = finished.id();
+        finished.wait().expect("wait");
+        mailbox = mailbox.led_by(Some(pid));
+        mailbox.answered_once = false;
+        assert!(team.exists());
+        assert!(mailbox.next().is_none(), "nobody is left to send it work");
+    }
+
+    #[test]
     fn a_teammate_asked_to_shut_down_stops_waiting_for_an_answer() {
         let (_home, team, mailbox) = rig();
         let asked = Protocol::ShutdownRequest { request_id: "r1".into(), from: LEAD.into(), reason: None };
@@ -275,6 +302,7 @@ mod tests {
             model: "m1".into(),
             mode: "edits".into(),
             instructions: "# Team coordination".into(),
+            lead_pid: None,
         };
         std::fs::write(&path, serde_json::to_string(&spec).expect("json")).expect("write");
         let cli = crate::Cli::parse_from([brand::COMMAND, "teammate", "--spec", &path.display().to_string()]);

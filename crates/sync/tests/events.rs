@@ -230,3 +230,35 @@ async fn seen_events_inside_the_retention_survive_the_reconcile_pass() {
     h.sync.tick().await.unwrap();
     assert!(h.store.was_seen(TRACKER_CONNECTION, "recent").unwrap());
 }
+
+#[tokio::test(start_paused = true)]
+async fn a_permanent_failure_is_not_retried_until_the_connection_changes() {
+    let h = harness().await;
+    let tracker = ConnectionId::from(TRACKER_CONNECTION);
+    h.fake.world().fail = Some(ActionError::permanent("the connection has no project to watch"));
+    h.sync.tick().await.unwrap();
+    let polled = h.fake.world().cursors.len();
+    assert!(h.sync.is_parked(&tracker));
+
+    tokio::time::advance(Duration::from_secs(1_000)).await;
+    h.sync.hurry();
+    let (_, next) = h.sync.tick().await.unwrap();
+    assert_eq!(h.fake.world().cursors.len(), polled, "nothing is polled again");
+    assert!(next > Instant::now(), "a parked connection does not keep the loop awake");
+
+    h.fake.world().fail = None;
+    h.store
+        .save_connection(&store::ConnectionRecord {
+            id: TRACKER_CONNECTION.into(),
+            provider: "fake".into(),
+            label: TRACKER_CONNECTION.into(),
+            account: None,
+            capabilities: vec!["tracker".into()],
+            settings: json!({"project": "K"}),
+        })
+        .unwrap();
+    h.sync.tick().await.unwrap();
+    assert_eq!(h.fake.world().cursors.len(), polled + 1, "only the changed connection is polled again");
+    assert!(!h.sync.is_parked(&tracker));
+    assert!(h.sync.is_parked(&ConnectionId::from(HOST_CONNECTION)));
+}

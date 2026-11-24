@@ -5,7 +5,7 @@
       "endedAt": null,
       "n": 1,
       "startedAt": "2026-01-01T00:00:00Z",
-      "state": "running"
+      "state": "waiting_human"
     }
   ],
   "blocks": [

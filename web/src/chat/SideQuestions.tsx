@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { api } from '@/api'
+import type { SideAnswer } from '@/api/contract'
 import { errorText } from '@/api/store'
 import { ChatMarkdown } from '@/ui/chatMarkdown'
 import { Spinner } from '@/ui/display'
@@ -13,23 +13,22 @@ export interface SideQuestion {
   error: string | null
 }
 
-export function useSideQuestions(sessionId: string, model: string | null) {
+export function useSideQuestions(scope: string, send: (question: string) => Promise<SideAnswer>) {
   const [asked, setAsked] = useState<SideQuestion[]>([])
   const next = useRef(0)
-  const current = useRef(sessionId)
+  const current = useRef(scope)
   useEffect(() => {
-    current.current = sessionId
+    current.current = scope
     setAsked([])
-  }, [sessionId])
+  }, [scope])
   const settle = (id: number, patch: Partial<SideQuestion>) => setAsked((list) => list.map((q) => (q.id === id ? { ...q, ...patch } : q)))
   const ask = (question: string) => {
     const id = ++next.current
-    const session = sessionId
+    const asking = scope
     setAsked((list) => [...list, { id, question, answer: null, error: null }])
-    api()
-      .side(session, { text: question, model })
-      .then((r) => current.current === session && settle(id, { answer: r.answer }))
-      .catch((e: unknown) => current.current === session && settle(id, { error: errorText(e) }))
+    send(question)
+      .then((r) => current.current === asking && settle(id, { answer: r.answer }))
+      .catch((e: unknown) => current.current === asking && settle(id, { error: errorText(e) }))
   }
   const dismiss = (id: number) => setAsked((list) => list.filter((q) => q.id !== id))
   return { asked, ask, dismiss }

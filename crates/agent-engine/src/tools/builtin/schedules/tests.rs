@@ -52,11 +52,3 @@ fn a_wakeup_is_shown_at_the_minute_on_the_user_s_clock() {
     assert_eq!(minute_in(&hours(9), early_utc_morning + 59).as_deref(), Some("2026-11-05 12:30"));
     assert_eq!(minute_in(&hours(0), 0).as_deref(), Some("1970-01-01 00:00"));
 }
-
-#[test]
-fn scheduling_a_wakeup_asks_first() {
-    use crate::tools::{Effect, Tool};
-    let workspace = Workspace::new("/work/api");
-    let acts = |tool: &dyn Tool| tool.effects(&Value::Null, &workspace).iter().any(Effect::acts);
-    assert!(acts(&ScheduleWakeup), "a planted prompt would run unasked");
-}

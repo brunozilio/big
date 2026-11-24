@@ -1,6 +1,5 @@
 #![allow(clippy::expect_used)]
 
-
 use std::path::{Path, PathBuf};
 
 use domain::effect::{Effect, EffectOutcome, EffectRequest, IdempotencyKey};

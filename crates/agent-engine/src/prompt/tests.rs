@@ -219,13 +219,24 @@ fn project_import_cannot_read_a_sibling_private_file() {
 #[test]
 fn the_turn_reminder_guides_planning() {
     use domain::PermissionMode;
-    let planning = reminder(PermissionMode::Plan, 0);
+    let planning = reminder(PermissionMode::Plan, 0, false);
     assert!(planning.contains("Planning mode is on.") && planning.contains("**Verification**"));
     assert!(planning.contains("started empty") && planning.contains("write the plan yourself"), "{planning}");
-    let sub_agent = reminder(PermissionMode::Plan, 1);
+    let sub_agent = reminder(PermissionMode::Plan, 1, false);
     assert!(sub_agent.contains("Bash is not offered") && !sub_agent.contains("Planning mode is on."));
-    let asking = reminder(PermissionMode::Ask, 0);
+    let asking = reminder(PermissionMode::Ask, 0, false);
     assert!(!asking.contains("Planning") && !asking.contains("undefined"), "{asking}");
+}
+
+#[test]
+fn a_teammate_is_not_given_the_lead_planner_s_instructions() {
+    use domain::PermissionMode;
+    let teammate = reminder(PermissionMode::Plan, 0, true);
+    assert!(!teammate.contains("Planning mode is on."), "{teammate}");
+    assert!(teammate.contains("do not call ExitPlanMode") && teammate.contains("not the lead"), "{teammate}");
+    assert!(!teammate.contains("Collect background agent reports"), "{teammate}");
+    let working = reminder(PermissionMode::Bypass, 0, true);
+    assert!(working.contains("You are a teammate") && working.contains("autonomous execution"), "{working}");
 }
 
 #[test]

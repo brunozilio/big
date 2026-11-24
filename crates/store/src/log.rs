@@ -111,9 +111,8 @@ impl Store {
 }
 
 fn stored(connection: &Connection, item: &ItemId) -> Result<Option<String>> {
-    let text = connection
-        .query_row("SELECT state FROM items WHERE id = ?1", [item.as_str()], |row| row.get(0))
-        .optional()?;
+    let text =
+        connection.query_row("SELECT state FROM items WHERE id = ?1", [item.as_str()], |row| row.get(0)).optional()?;
     Ok(text)
 }
 

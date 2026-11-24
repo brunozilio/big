@@ -11,11 +11,9 @@ use platform::sync::Locked;
 use crate::tools::Workspace;
 
 mod output;
-mod tools;
 mod wait;
 mod watch;
 use output::{KEPT, Unread, capped};
-pub use tools::{BashOutput, KillShell};
 pub(crate) use wait::{Waited, wait};
 pub(crate) use watch::{Watch, ended_source, watch};
 
@@ -156,8 +154,12 @@ pub fn kill_client(client: u64) {
     leaving.into_iter().for_each(Shell::stop);
 }
 
+pub(crate) fn owned(client: u64, id: &str) -> bool {
+    lock().get(id).is_some_and(|shell| shell.client == client)
+}
+
 pub(crate) fn started_by(client: u64, id: &str) -> bool {
-    let shell = lock().get(id).is_some_and(|shell| shell.client == client);
+    let shell = owned(client, id);
     shell || crate::tools::watch::list(client).iter().any(|(watched, _)| watched == id)
 }
 
@@ -165,7 +167,7 @@ pub fn kill(client: u64, id: &str) -> bool {
     stopped(client, id).is_some()
 }
 
-fn stopped(client: u64, id: &str) -> Option<String> {
+pub(crate) fn stopped(client: u64, id: &str) -> Option<String> {
     let shell = taken(client, id)?;
     let command = shell.command.clone();
     shell.stop();
@@ -182,6 +184,26 @@ pub fn list(client: u64) -> Vec<(String, String, bool)> {
         .collect();
     listed.sort();
     listed
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Read {
+    pub text: String,
+    pub dropped: Option<String>,
+    pub exit: Option<String>,
+    pub seconds: u64,
+}
+
+pub(crate) fn read(client: u64, id: &str) -> Option<Read> {
+    let mut shells = lock();
+    let shell = shells.get_mut(id).filter(|shell| shell.client == client)?;
+    let exit = refresh(shell);
+    let unread = shell.take_unread();
+    let seconds = shell.started.elapsed().as_secs();
+    if shell.collected() {
+        shells.remove(id);
+    }
+    Some(Read { text: unread.text, dropped: unread.dropped, exit, seconds })
 }
 
 pub fn tail(client: u64, id: &str, most: usize) -> Option<String> {
@@ -215,6 +237,13 @@ fn forget_finished_of(now: Instant, client: Option<u64>) {
         let theirs = client.is_none_or(|client| shell.client == client);
         !(theirs && shell.ended.is_some_and(|at| now.saturating_duration_since(at) >= FORGOTTEN_AFTER))
     });
+}
+
+#[cfg(test)]
+pub(crate) fn settled(client: u64) -> bool {
+    let mut shells = lock();
+    let mut mine = shells.iter_mut().filter(|(_, shell)| shell.client == client);
+    mine.all(|(_, shell)| refresh(shell).is_some() && shell.readers.iter().all(std::thread::JoinHandle::is_finished))
 }
 
 #[cfg(all(test, unix))]

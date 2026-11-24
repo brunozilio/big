@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from 'react'
+import { Fragment, useCallback, useEffect, useState } from 'react'
 import type { Block, Comment, FileDiff, Person } from '@/api/contract'
 import { now } from '@/api/clock'
 import { useCall } from '@/api/store'
@@ -11,6 +11,7 @@ import { MarkdownEditor } from '@/ui/markdown'
 import { AnimatePresence, Collapse, motion, tween } from '@/ui/motion'
 import { useBlockHost } from './context'
 import { CommentItem, Loading, SendError, Thread, useSend } from './shared'
+import { useViewed } from './viewed'
 
 type Of<T extends Block['type']> = Extract<Block, { type: T }>
 
@@ -111,8 +112,8 @@ function ReviewFile({ file, comments, editable, viewed, onViewed, review }: { fi
   useEffect(() => setOpen(!viewed), [viewed])
   const count = comments.length + review.notes.filter((n) => n.file === file.path).length
   return (
-    <div className={cn('overflow-hidden rounded-card bg-surface shadow-card transition-opacity', viewed && 'opacity-80')}>
-      <div className="flex h-11 items-center gap-2.5 px-3.5">
+    <div className={cn('overflow-clip rounded-card bg-surface shadow-card transition-opacity', viewed && 'opacity-80')}>
+      <div className={cn('sticky top-[calc(var(--review-bar,0px)-1rem)] z-[5] flex h-11 items-center gap-2.5 rounded-t-card bg-surface px-3.5', open && 'border-b')}>
         <button onClick={() => setOpen(!open)} className="flex min-w-0 flex-1 items-center gap-2.5 text-left">
           <motion.span initial={false} animate={{ rotate: open ? 0 : -90 }} transition={tween} className="flex text-faint"><Icon name="down" size={14} /></motion.span>
           <span className="min-w-0 truncate font-mono text-sm text-fg">{file.path}</span>
@@ -128,7 +129,7 @@ function ReviewFile({ file, comments, editable, viewed, onViewed, review }: { fi
         )}
       </div>
       <Collapse open={open}>
-        <div className="border-t py-2"><DiffLines file={file} comments={comments} editable={editable} review={review} /></div>
+        <div className="py-2"><DiffLines file={file} comments={comments} editable={editable} review={review} /></div>
       </Collapse>
     </div>
   )
@@ -142,15 +143,28 @@ const options: { v: Verdict; t: string; d: string }[] = [
   { v: 'changes', t: 'Pedir mudanças', d: 'Volta para o agente com seus comentários.' },
 ]
 
+function useHeight() {
+  const [height, setHeight] = useState(0)
+  const [node, setNode] = useState<HTMLElement | null>(null)
+  useEffect(() => {
+    if (!node) return
+    const ro = new ResizeObserver(() => setHeight(node.offsetHeight))
+    ro.observe(node)
+    return () => ro.disconnect()
+  }, [node])
+  return { height, ref: useCallback((el: HTMLElement | null) => setNode(el), []) }
+}
+
 export function ReviewBlock({ block }: { block: Of<'review'> }) {
   const { version, item } = useBlockHost()
+  const bar = useHeight()
   const { data: change, error } = useCall(block.connection, 'code.change', { change: block.change }, version)
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<'files' | 'chat'>('files')
   const [kind, setKind] = useState<Verdict>('approve')
   const [body, setBody] = useState('')
   const [notes, setNotes] = useState<Note[]>([])
-  const [viewed, setViewed] = useState<string[]>([])
+  const { viewed, toggle: toggleViewed, clear: clearViewed } = useViewed(`viewed:review:${item}:${block.connection}:${block.change}`)
   const [resolved, setResolved] = useState<string[]>([])
   const { busy, error: sendError, send } = useSend()
   if (!change) return <Loading error={error} />
@@ -170,13 +184,13 @@ export function ReviewBlock({ block }: { block: Of<'review'> }) {
     void send(block.submit, { verdict: kind, body: body.trim(), notes: notes.map(({ file, line, body: text }) => ({ file, line, body: text })) }).then(() => {
       setBody('')
       setNotes([])
-      setViewed([])
+      clearViewed()
       setOpen(false)
     })
   }
   return (
-    <div className={cn(view === 'chat' ? 'flex h-full flex-col' : 'space-y-4')}>
-      <div className="sticky -top-4 z-10 -mx-4 -mt-4 border-b bg-surface px-4 py-3">
+    <div className={cn(view === 'chat' ? 'flex h-full flex-col' : 'space-y-4')} style={{ '--review-bar': `${bar.height}px` } as React.CSSProperties}>
+      <div ref={bar.ref} className="sticky -top-4 z-10 -mx-4 -mt-4 border-b bg-surface px-4 py-3">
         <div className="flex items-center gap-3">
           <SegmentedControl<'files' | 'chat'> size="sm" value={view} onChange={setView} options={[{ value: 'files', label: 'Arquivos', badge: <span className="text-xs tabular-nums text-muted">{seen}/{files.length}</span> }, ...(block.session ? [{ value: 'chat' as const, label: 'Conversa' }] : [])]} />
           {view === 'files' && lineNotes > 0 && <span className="flex items-center gap-1 text-sm text-muted"><Icon name="comment" size={14} />{lineNotes}</span>}
@@ -216,7 +230,7 @@ export function ReviewBlock({ block }: { block: Of<'review'> }) {
           {general.length > 0 && <Thread comments={general} />}
           <div className="space-y-2">
             {files.map((f) => (
-              <ReviewFile key={f.path} file={f} comments={change.comments.filter((c) => c.file === f.path)} editable={waiting} viewed={viewed.includes(f.path)} onViewed={() => setViewed((v) => (v.includes(f.path) ? v.filter((x) => x !== f.path) : [...v, f.path]))} review={review} />
+              <ReviewFile key={f.path} file={f} comments={change.comments.filter((c) => c.file === f.path)} editable={waiting} viewed={viewed.includes(f.path)} onViewed={() => toggleViewed(f.path)} review={review} />
             ))}
           </div>
         </>

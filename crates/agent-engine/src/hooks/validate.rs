@@ -38,8 +38,8 @@ pub fn hook(event: HookEvent, at: usize, hook: &Handler) -> Result<(), String> {
     let kind = hook.kind;
     let why = match kind {
         HandlerKind::Command if hook.command.trim().is_empty() => Some("a command hook needs a `command`".to_owned()),
-        HandlerKind::Script if !hook.command.ends_with(".js") => {
-            Some("a script hook's `command` must be a .js file".to_owned())
+        HandlerKind::Script if !script_file(&hook.command) => {
+            Some("a script hook's `command` must be a .js file, or `file#hooks.Event` inside an agent".to_owned())
         }
         HandlerKind::Http if !web_address(hook.url.as_deref()) => {
             Some("an http hook needs a `url` with http or https and no user or password".to_owned())
@@ -57,6 +57,13 @@ pub fn hook(event: HookEvent, at: usize, hook: &Handler) -> Result<(), String> {
             .then(|| format!("timeout {} is outside 1..600 seconds", hook.timeout))
     });
     why.map_or(Ok(()), |why| Err(format!("{event} hook #{}: {why}", at + 1)))
+}
+
+fn script_file(command: &str) -> bool {
+    match super::scripts::target(command) {
+        (file, "default") => file.ends_with(".js"),
+        (file, _) => file.ends_with(".js") || file.ends_with(".ts"),
+    }
 }
 
 fn web_address(url: Option<&str>) -> bool {

@@ -347,10 +347,8 @@ async fn models_branding_and_attachments() {
     assert_eq!(models["models"][0]["fast"], false);
     fixture("models", &models);
     let branding = world.get("/api/branding").await;
-    assert_eq!(branding, json!({ "name": brand::NAME, "logo": null, "theme": "system" }));
-    let (status, saved) = world
-        .send(Method::PUT, "/api/branding", Some(json!({ "theme": "dark", "logo": "data:image/png;base64,AA==" })))
-        .await;
+    assert_eq!(branding, json!({ "name": brand::NAME, "logo": "/api/branding/logo", "theme": "system" }));
+    let (status, saved) = world.send(Method::PUT, "/api/branding", Some(json!({ "theme": "dark" }))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(saved["theme"], "dark");
     fixture("branding", &world.get("/api/branding").await);
@@ -615,4 +613,58 @@ async fn a_pull_request_origin_is_read_through_the_code_connection_and_finds_its
     assert_eq!(item["title"], "Revisar");
     assert_eq!(item["issue"]["key"], "K-1");
     assert_eq!(kept(&world, &item)["issue"], "K-1");
+}
+
+async fn requested(world: &World, wanted: impl Fn(&domain::PromptRequest) -> bool) -> domain::PromptRequest {
+    for _ in 0..200 {
+        if let Some(found) = world.engine.requests().into_iter().rfind(|request| wanted(request)) {
+            return found;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    panic!("the agent never got that request")
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn btw_opens_a_conversation_in_the_application_folder_that_goes_on_without_making_an_item() {
+    let world = World::new().await;
+    let (app, _) = application(&world, "acme/web").await;
+    let body = json!({ "text": " o swagger está atualizado? ", "application": app, "model": "auto" });
+    let (status, opened) = world.send(Method::POST, "/api/btw", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{opened}");
+    assert_eq!(opened["session"], SESSION);
+    let asked = requested(&world, |r| r.prompt.text == "o swagger está atualizado?").await;
+    assert_eq!(asked.session.cwd.to_string_lossy(), folder(&world, "web"));
+    assert_eq!(asked.policy.permission, domain::PermissionMode::Plan);
+    assert!(asked.session.resume.is_none(), "a fresh session, not one of an item");
+    for _ in 0..200 {
+        if world.get(&format!("/api/sessions/{SESSION}")).await["status"] == "idle" {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    let more = json!({ "text": "e o readme?", "model": null, "attachments": [] });
+    let sent = world.send(Method::POST, &format!("/api/sessions/{SESSION}/messages"), Some(more)).await;
+    assert_eq!(sent.0, StatusCode::NO_CONTENT, "{}", sent.1);
+    let next = requested(&world, |r| r.prompt.text == "e o readme?").await;
+    assert_eq!(next.session.resume.as_ref().map(|s| s.0.as_str()), Some(SESSION));
+    let (_, items) = world.send(Method::GET, "/api/items", None).await;
+    assert_eq!(items.as_array().map(Vec::len), Some(0), "{items}");
+    let empty = json!({ "text": "  ", "application": app });
+    assert_eq!(world.send(Method::POST, "/api/btw", Some(empty)).await.0, StatusCode::BAD_REQUEST);
+    let nowhere = json!({ "text": "oi?" });
+    assert_eq!(world.send(Method::POST, "/api/btw", Some(nowhere)).await.0, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_browser_can_be_turned_off_and_back_on() {
+    let world = World::new().await;
+    assert_eq!(world.get("/api/browser").await["enabled"], json!(true));
+    let (status, off) = world.send(Method::PUT, "/api/browser", Some(json!({ "enabled": false }))).await;
+    assert_eq!((status, &off["enabled"]), (StatusCode::OK, &json!(false)));
+    assert_eq!(world.get("/api/browser").await["enabled"], json!(false));
+    let (status, _) = world.send(Method::PUT, "/api/browser", Some(json!({ "enabled": "no" }))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (_, on) = world.send(Method::PUT, "/api/browser", Some(json!({ "enabled": true }))).await;
+    assert_eq!(on["enabled"], json!(true));
 }

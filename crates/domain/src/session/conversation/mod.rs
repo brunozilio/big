@@ -25,8 +25,13 @@ pub enum ToolState {
 #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum Entry {
     User(String),
-    Attached { names: Vec<String> },
-    Thinking { text: String, done: bool },
+    Attached {
+        names: Vec<String>,
+    },
+    Thinking {
+        text: String,
+        done: bool,
+    },
     Assistant(String),
     Tool {
         id: String,
@@ -37,21 +42,58 @@ pub enum Entry {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         input: Option<serde_json::Value>,
     },
-    Agent { index: usize, kind: String, summary: String, done: Option<bool>, steps: Vec<String> },
-    Diff { diff: String, untracked: Vec<String> },
-    Plan { plan: String, outcome: Outcome },
-    Refused { tool: String, reason: String },
-    Repeated { tool: String },
-    Finished { duration_ms: u64, cost_usd: Option<f64> },
+    Agent {
+        index: usize,
+        kind: String,
+        summary: String,
+        done: Option<bool>,
+        steps: Vec<String>,
+    },
+    Diff {
+        diff: String,
+        untracked: Vec<String>,
+    },
+    Plan {
+        plan: String,
+        outcome: Outcome,
+    },
+    Refused {
+        tool: String,
+        reason: String,
+    },
+    Repeated {
+        tool: String,
+    },
+    Finished {
+        duration_ms: u64,
+        cost_usd: Option<f64>,
+    },
     Interrupted,
-    Compacted { freed: u64 },
-    Scheduled { prompt: String },
-    Rewound { restored: usize, conversation: bool },
+    Compacted {
+        freed: u64,
+    },
+    Scheduled {
+        prompt: String,
+    },
+    Rewound {
+        restored: usize,
+        conversation: bool,
+    },
     Branched,
-    HeadsUp { urgent: bool, title: String, explain: String },
+    HeadsUp {
+        urgent: bool,
+        title: String,
+        explain: String,
+    },
     Recap(String),
-    Lesson { proposal: crate::learning::Proposal, kept: Option<bool> },
-    Held { source: String, text: String },
+    Lesson {
+        proposal: crate::learning::Proposal,
+        kept: Option<bool>,
+    },
+    Held {
+        source: String,
+        text: String,
+    },
     Notice(String),
     Passing(String),
     Error(String),

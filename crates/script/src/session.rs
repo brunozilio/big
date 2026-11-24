@@ -16,6 +16,7 @@ const MEMORY: usize = 512 * 1024 * 1024;
 const STACK: usize = 4 * 1024 * 1024;
 const THREAD_STACK: usize = STACK + crate::BEYOND_THE_LIMIT;
 const STOPPED: &str = "Stopped: the user interrupted the script";
+const LONGEST_TIMER: Duration = Duration::from_secs(24 * 60 * 60);
 const STUCK: &str = "The script is waiting for a promise that nothing will settle";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -161,6 +162,8 @@ struct Accounts {
     calls: HashMap<u32, u64>,
     next: u32,
     settle: mpsc::Sender<Settled>,
+    timers: BTreeMap<u32, (u64, Instant)>,
+    next_timer: u32,
 }
 
 impl Accounts {
@@ -188,7 +191,14 @@ fn serve(jobs: &mpsc::Receiver<Job>, helpers: &str) {
     let watching = Arc::clone(&guard);
     runtime.set_interrupt_handler(Some(Box::new(move || interrupted(&watching))));
     let (settle, settled) = mpsc::channel::<Settled>();
-    let accounts = Rc::new(RefCell::new(Accounts { scripts: BTreeMap::new(), calls: HashMap::new(), next: 0, settle }));
+    let accounts = Rc::new(RefCell::new(Accounts {
+        scripts: BTreeMap::new(),
+        calls: HashMap::new(),
+        next: 0,
+        settle,
+        timers: BTreeMap::new(),
+        next_timer: 0,
+    }));
     context.with(|ctx| {
         let ready =
             install(&ctx, &accounts, helpers).map_err(|error| format!("the helpers failed: {}", failure(&ctx, error)));
@@ -248,12 +258,34 @@ fn install<'js>(ctx: &Ctx<'js>, accounts: &Rc<RefCell<Accounts>>, helpers: &str)
     })?;
     ctx.globals().set("__begin", begin)?;
     ctx.globals().set("__log", log)?;
+    install_timers(ctx, accounts)?;
     ctx.eval::<(), _>(PRELUDE)?;
     let mut options = EvalOptions::default();
     options.global = true;
     options.strict = true;
     options.filename = Some("helpers".to_owned());
     ctx.eval_with_options::<(), _>(helpers, options)
+}
+
+fn install_timers<'js>(ctx: &Ctx<'js>, accounts: &Rc<RefCell<Accounts>>) -> rquickjs::Result<()> {
+    let state = Rc::clone(accounts);
+    let timer = Function::new(ctx.clone(), move |ctx: Ctx<'js>, owners: String, delay: f64| {
+        let mut accounts = state.borrow_mut();
+        let Some(owner) = accounts.owner(&owners) else {
+            return Err(Exception::throw_message(&ctx, "setTimeout: the script that set it has already ended"));
+        };
+        let wait = Duration::try_from_secs_f64(delay.max(0.0) / 1000.0).unwrap_or(LONGEST_TIMER).min(LONGEST_TIMER);
+        accounts.next_timer = accounts.next_timer.wrapping_add(1);
+        let id = accounts.next_timer;
+        accounts.timers.insert(id, (owner, Instant::now() + wait));
+        Ok(id)
+    })?;
+    let state = Rc::clone(accounts);
+    let untimer = Function::new(ctx.clone(), move |id: u32| {
+        state.borrow_mut().timers.remove(&id);
+    })?;
+    ctx.globals().set("__timer", timer)?;
+    ctx.globals().set("__untimer", untimer)
 }
 
 enum Phase<'js> {
@@ -295,18 +327,24 @@ impl<'js> Driver<'js> {
             while let Ok(reply) = settled.try_recv() {
                 moved |= self.deliver(reply);
             }
+            moved |= self.fire_due();
             moved |= self.run_jobs();
             moved |= self.check();
             if moved || self.scripts.is_empty() {
                 continue;
             }
-            if self.accounts.borrow().calls.is_empty() {
+            let (waiting, next_timer) = {
+                let accounts = self.accounts.borrow();
+                (!accounts.calls.is_empty(), accounts.timers.values().map(|(_, due)| *due).min())
+            };
+            if !waiting && next_timer.is_none() {
                 for number in self.scripts.keys().copied().collect::<Vec<_>>() {
                     self.end(number, Err(STUCK.to_owned()));
                 }
                 continue;
             }
-            if let Ok(reply) = settled.recv_timeout(POLL) {
+            let pause = next_timer.map_or(POLL, |due| due.saturating_duration_since(Instant::now()).min(POLL));
+            if let Ok(reply) = settled.recv_timeout(pause) {
                 self.deliver(reply);
             }
         }
@@ -368,8 +406,9 @@ impl<'js> Driver<'js> {
         if let Ok(mut guard) = self.guard.lock() {
             guard.stops.push(Arc::clone(&request.stop));
         }
-        let evaluated = self
-            .segment(request.limits.running, || ctx.eval_with_options::<JsValue, _>(request.code.as_str(), options));
+        let code = crate::cell::persistent(&request.code);
+        let evaluated =
+            self.segment(request.limits.running, || ctx.eval_with_options::<JsValue, _>(code.as_str(), options));
         self.take_trip();
         self.refresh_stops();
         if request.stop.load(Ordering::Relaxed) {
@@ -411,6 +450,44 @@ impl<'js> Driver<'js> {
             let _ = ctx.catch();
         }
         true
+    }
+
+    fn fire_due(&mut self) -> bool {
+        let now = Instant::now();
+        let mut due: Vec<(Instant, u32, u64)> = {
+            let mut accounts = self.accounts.borrow_mut();
+            let ready: Vec<(Instant, u32, u64)> = accounts
+                .timers
+                .iter()
+                .filter(|(_, (_, at))| *at <= now)
+                .map(|(id, (owner, at))| (*at, *id, *owner))
+                .collect();
+            for (_, id, _) in &ready {
+                accounts.timers.remove(id);
+            }
+            ready
+        };
+        due.sort_unstable();
+        let fired = !due.is_empty();
+        for (_, id, owner) in due {
+            let ctx = self.ctx.clone();
+            let ran = ctx
+                .globals()
+                .get::<_, Function>("__fire")
+                .and_then(|fire| self.segment(self.running(), || fire.call::<_, ()>((id,))));
+            self.take_trip();
+            if let Err(error) = ran {
+                let error = failure(&ctx, error);
+                if std::mem::take(&mut self.timed_out)
+                    && let Some(limits) = self.scripts.get(&owner).map(|script| script.limits)
+                {
+                    self.end(owner, Err(timed_out(&limits)));
+                } else if let Some(account) = self.accounts.borrow_mut().scripts.get_mut(&owner) {
+                    account.logs.push(format!("setTimeout callback failed: {error}"));
+                }
+            }
+        }
+        fired
     }
 
     fn run_jobs(&mut self) -> bool {
@@ -516,11 +593,25 @@ impl<'js> Driver<'js> {
     }
 
     fn finish_now(&mut self, number: u64, outcome: Result<String, String>) {
-        let mut accounts = self.accounts.borrow_mut();
-        accounts.calls.retain(|_, owner| *owner != number);
-        if let Some(account) = accounts.scripts.remove(&number) {
-            let evaluation = Evaluation { number, logs: account.logs, outcome, calls: account.made };
-            let _ = account.messages.send(Message::Done(evaluation));
+        let forgotten: Vec<u32> = {
+            let mut accounts = self.accounts.borrow_mut();
+            accounts.calls.retain(|_, owner| *owner != number);
+            let forgotten = accounts.timers.iter().filter(|(_, (owner, _))| *owner == number).map(|(id, _)| *id);
+            let forgotten: Vec<u32> = forgotten.collect();
+            for id in &forgotten {
+                accounts.timers.remove(id);
+            }
+            if let Some(account) = accounts.scripts.remove(&number) {
+                let evaluation = Evaluation { number, logs: account.logs, outcome, calls: account.made };
+                let _ = account.messages.send(Message::Done(evaluation));
+            }
+            forgotten
+        };
+        if !forgotten.is_empty() {
+            let forget = self.ctx.globals().get::<_, Function>("__forget");
+            if forget.and_then(|forget| forget.call::<_, ()>((forgotten,))).is_err() {
+                let _ = self.ctx.catch();
+            }
         }
     }
 }

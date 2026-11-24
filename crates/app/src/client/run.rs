@@ -107,6 +107,10 @@ impl RunControl {
     pub fn cancel(&self) -> Result<(), Error> {
         self.dispatcher.send(ClientCommand::CancelRun { run: self.id })
     }
+
+    pub fn steer(&self, text: &str) -> Result<(), Error> {
+        self.dispatcher.send(ClientCommand::SteerRun { run: self.id, text: text.to_owned() })
+    }
 }
 
 impl Iterator for Run {

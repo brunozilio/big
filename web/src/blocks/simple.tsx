@@ -3,6 +3,7 @@ import type { Block, ButtonVariant } from '@/api/contract'
 import { Button } from '@/ui/button'
 import { Field, Input, Select, Textarea } from '@/ui/form'
 import { Icon, isIconName } from '@/ui/icon'
+import { ToolCallItem } from '@/chat/events'
 import { MarkdownPreview } from '@/ui/markdownProse'
 import { Commands, Muted, SendError, useSend } from './shared'
 
@@ -11,6 +12,17 @@ type Of<T extends Block['type']> = Extract<Block, { type: T }>
 export function MarkdownBlock({ block }: { block: Of<'markdown'> }) {
   if (block.muted) return <Muted>{block.text}</Muted>
   return <MarkdownPreview text={block.text} className="text-base" />
+}
+
+export function CallsBlock({ block }: { block: Of<'calls'> }) {
+  const last = block.calls.length - 1
+  return (
+    <ol>
+      {block.calls.map((call, i) => (
+        <ToolCallItem key={call.id} call={call} last={i === last} single={i === last} />
+      ))}
+    </ol>
+  )
 }
 
 export function LogsBlock({ block }: { block: Of<'logs'> }) {

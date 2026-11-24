@@ -41,7 +41,7 @@ async fn an_item_without_an_issue_goes_from_the_plan_to_production_through_the_a
     assert_eq!(item["current"], "develop");
     server.respond(&asked, json!({ "kind": "permission", "decision": "allowed" })).await;
     let session = server.get(&format!("/api/sessions/{}", asked.session.clone().expect("session"))).await;
-    assert_eq!(session["agents"][0]["name"], "Desenvolvedor", "{session}");
+    assert_eq!(session["agents"][0]["name"], "Developer", "{session}");
     assert_eq!(session["agents"][0]["avatar"]["kind"], "agent");
     assert!(
         session["events"].as_array().is_some_and(|events| events
@@ -55,7 +55,7 @@ async fn an_item_without_an_issue_goes_from_the_plan_to_production_through_the_a
     assert_eq!(step(&review, "develop")["attempts"], 2);
     assert_eq!(review["change"]["key"], "acme/app#1");
     assert_eq!(review["change"]["checks"], "passed");
-    assert_eq!(review["status"], "Revisando");
+    assert_eq!(review["status"], "Fazendo");
     let notes = json!([{ "file": "work-2.txt", "line": 1, "body": "use um nome melhor" }]);
     server.input(&id, "review", "review", json!({ "verdict": "changes", "body": "ajuste", "notes": notes })).await;
     server.until(&id, "the review comes back", |item| step(item, "develop")["attempts"] == 3).await;
@@ -74,7 +74,7 @@ async fn an_item_without_an_issue_goes_from_the_plan_to_production_through_the_a
     assert_eq!(done["change"]["merged"], true);
 
     assert_eq!(hub.tracker.state().created, 1);
-    assert_eq!(hub.tracker.statuses_of("K-101"), ["Fazendo", "Revisando", "Fazendo", "Revisando", "Feito"]);
+    assert_eq!(hub.tracker.statuses_of("K-101"), ["Fazendo", "Feito"]);
     assert_eq!(hub.github.pulls_created(), 1);
     let reviews = hub.github.reviews();
     let asked_changes = reviews.iter().find(|review| review.state == "CHANGES_REQUESTED").expect("changes");
@@ -106,7 +106,7 @@ async fn an_item_from_an_existing_issue_moves_it_through_every_status_without_cr
     approve_review_merge_and_deploy(&server, &id).await;
     server.until(&id, "the delivery", |item| item["group"] == "delivered").await;
     assert_eq!(hub.tracker.state().created, 0);
-    assert_eq!(hub.tracker.statuses_of("K-7"), ["A fazer", "Fazendo", "Revisando", "Feito"]);
+    assert_eq!(hub.tracker.statuses_of("K-7"), ["A fazer", "Fazendo", "Feito"]);
 }
 
 async fn release_view_with(server: &Server, id: &str, kind: &str) -> serde_json::Value {
@@ -140,8 +140,8 @@ async fn a_rejected_deploy_asks_why_with_a_form_and_the_reason_reaches_the_pipel
     let view = release_view_with(&server, &id, "form").await;
     let form =
         view["blocks"].as_array().and_then(|blocks| blocks.iter().find(|block| block["type"] == "form")).expect("form");
-    assert_eq!(form["title"], "Motivo da rejeição");
-    assert_eq!(form["submit"], json!({ "action": "submit", "label": "Rejeitar deploy" }));
+    assert_eq!(form["title"], "Rejection reason");
+    assert_eq!(form["submit"], json!({ "action": "submit", "label": "Reject deploy" }));
     assert_eq!(form["fields"][0]["name"], "reason");
     assert_eq!(form["fields"][0]["kind"], "textarea");
     server.input(&id, "release", "submit", json!({ "reason": "janela de congelamento" })).await;

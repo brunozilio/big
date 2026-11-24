@@ -22,7 +22,7 @@ impl Agent<'_> {
         let mut request = TurnRequest { messages: turn.history.clone(), ..self.turn_template(turn.fell_back.as_ref()) };
         self.intercept_request(&mut request, &turn.rejections)?;
         let mut shown = String::new();
-        match self.streamed(&request, &mut shown) {
+        match self.answered(&request, &mut shown) {
             Ok(reply) => {
                 turn.fallback.succeeded();
                 turn.usage.add(reply.usage);
@@ -32,7 +32,7 @@ impl Agent<'_> {
         }
     }
 
-    fn streamed(&self, request: &TurnRequest, shown: &mut String) -> Result<Reply, ModelError> {
+    pub(super) fn streamed(&self, request: &TurnRequest, shown: &mut String) -> Result<Reply, ModelError> {
         let holds_text = self.holds_text();
         let mut on = |delta: Delta| match delta {
             Delta::Text(_) if holds_text => {}

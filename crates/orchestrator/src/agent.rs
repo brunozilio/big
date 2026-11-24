@@ -8,8 +8,8 @@ use agent_engine::tools::clients::{self, Waiting};
 use domain::effect::{ErrorClass, IdempotencyKey};
 use domain::workflow::{ItemId, WorkflowEvent};
 use domain::{
-    AgentAsk, AskKind, EngineEvent, FailureKind, MainAgentSpec, ModelOption, PermissionMode, Prompt, PromptRequest,
-    RunId, SessionCommand, SessionId,
+    AgentAsk, AskId, AskKind, Decision, EngineEvent, FailureKind, MainAgentSpec, ModelOption, PermissionMode, Prompt,
+    PromptRequest, RunId, SessionCommand, SessionId,
 };
 use serde_json::{Value, json};
 use tokio::sync::mpsc;
@@ -21,7 +21,7 @@ use crate::protocol::Command;
 use crate::repos::{self, Checkout, Worktree};
 use crate::shared::{Shared, now_ms};
 
-pub const RESUME: &str = "A execução anterior foi interrompida. Continue de onde parou e termine a tarefa.";
+pub const RESUME: &str = "A execução anterior foi interrompida. Continue de onde parou e termine a tarefa. Se uma pergunta ou um plano ficou sem resposta por causa da interrupção, pergunte de novo, chamando a mesma ferramenta com as mesmas perguntas ou o mesmo plano, e espere a resposta. Nunca decida no lugar do usuário.";
 
 pub const WAITING_ANSWER: &str = "o agente espera uma resposta";
 
@@ -56,20 +56,21 @@ struct Profile {
 
 impl Profile {
     fn parse(text: &str) -> Profile {
-        let (header, _) = agent_engine::frontmatter::parse(text);
-        let tools = header
-            .get("tools")
+        let header = agent_engine::tools::agent_file::header(text);
+        let tools = header["tools"]
+            .as_array()
             .map(|list| {
-                list.trim_matches(|letter| letter == '[' || letter == ']')
-                    .split(',')
-                    .map(|tool| tool.trim().trim_matches('"').to_owned())
+                list.iter()
+                    .filter_map(|tool| tool.as_str())
+                    .map(str::trim)
                     .filter(|tool| !tool.is_empty())
+                    .map(str::to_owned)
                     .collect()
             })
             .unwrap_or_default();
         Profile {
-            mode: header.get("permissionmode").and_then(domain::command::mode_named),
-            model: header.get("model").map(str::to_owned),
+            mode: header["permissionMode"].as_str().and_then(domain::command::mode_named),
+            model: header["model"].as_str().filter(|model| !model.is_empty()).map(str::to_owned),
             tools,
         }
     }
@@ -144,6 +145,7 @@ fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, re
         request.session.effort = effort;
     }
     request.session.resume = resume.or(carried).map(|id| SessionId(id.to_owned()));
+    request.session.output_style = shared.store.output_style();
     let mode = command.args["mode"].as_str().and_then(domain::command::mode_named).or(profile.mode);
     if let Some(mode) = mode {
         request.policy.permission = mode;
@@ -159,6 +161,9 @@ struct Collected {
     checkpoint: Option<u32>,
     plan: Option<String>,
     failure: Option<FailureKind>,
+    planning: bool,
+    plan_ask: Option<AskId>,
+    approved: bool,
 }
 
 impl Collected {
@@ -179,6 +184,7 @@ impl Collected {
         if later.plan.is_some() {
             self.plan = later.plan;
         }
+        self.approved |= later.approved;
     }
 }
 
@@ -271,8 +277,9 @@ impl AgentEffect<'_> {
     async fn drive(&self, request: &PromptRequest) -> Result<Collected, Failure> {
         let mut collected = self.turn(request).await?;
         let mut next = request.clone();
-        while let Some(prompt) =
-            self.woken(request.host.credentials.client, request.policy.permission, &collected).await
+        while !collected.approved
+            && let Some(prompt) =
+                self.woken(request.host.credentials.client, request.policy.permission, &collected).await
         {
             next.prompt = Prompt::typed(prompt);
             next.session.resume = collected.session.clone().map(SessionId).or(next.session.resume);
@@ -291,7 +298,9 @@ impl AgentEffect<'_> {
         let handle = started.map_err(|error| Failure::permanent(error.to_string()))?;
         let mut running = Running { run: Arc::new(Mutex::new(handle)), done: false };
         self.reopen(&running.run);
-        let followed = self.follow(receiver, &running.run, request.host.credentials.client).await;
+        let planning = request.policy.permission == PermissionMode::Plan;
+        let followed = self.follow(receiver, &running.run, request.host.credentials.client, planning).await;
+        self.shared.steering.release(&running.run);
         self.close_asks();
         let collected = followed?;
         running.done = true;
@@ -307,8 +316,9 @@ impl AgentEffect<'_> {
         mut receiver: mpsc::UnboundedReceiver<EngineEvent>,
         run: &SharedRun,
         client: u64,
+        planning: bool,
     ) -> Result<Collected, Failure> {
-        let mut collected = Collected::default();
+        let mut collected = Collected { planning, ..Collected::default() };
         let mut impeded = false;
         let mut teammates = tokio::time::interval(TEAMMATE_POLL);
         loop {
@@ -364,7 +374,10 @@ impl AgentEffect<'_> {
     fn take(&self, event: EngineEvent, collected: &mut Collected, run: &SharedRun) -> Option<Result<(), Failure>> {
         self.watched(&event, collected);
         match event {
-            EngineEvent::SessionStarted(session) => self.started(session.0, collected),
+            EngineEvent::SessionStarted(session) => {
+                self.shared.steering.follow(&session.0, run);
+                self.started(session.0, collected);
+            }
             EngineEvent::Checkpoint(index) => {
                 collected.checkpoint.get_or_insert(index);
             }
@@ -373,13 +386,20 @@ impl AgentEffect<'_> {
             EngineEvent::Asked(ask) => {
                 if let AskKind::Plan { plan } = &ask.kind {
                     collected.plan = Some(plan.clone());
+                    collected.plan_ask = Some(ask.id.clone());
                 }
                 self.asked(ask, collected, run);
             }
-            EngineEvent::AskWithdrawn(ask) | EngineEvent::Answered { ask, .. } => {
-                if self.shared.asks.close(&ask).is_some() {
-                    self.note(json!({ "asks": { ask.0.clone(): null } }));
-                    self.shared.emit(OrchestratorEvent::AskClosed { item: self.item.clone(), ask });
+            EngineEvent::AskWithdrawn(ask) => self.closed(ask),
+            EngineEvent::Answered { ask, decision } => {
+                let plan_approved = collected.planning
+                    && collected.plan_ask.as_ref() == Some(&ask)
+                    && matches!(decision, Decision::Approve(_));
+                self.closed(ask);
+                if plan_approved {
+                    collected.approved = true;
+                    run.lock().unwrap_or_else(PoisonError::into_inner).cancel();
+                    return Some(Ok(()));
                 }
             }
             EngineEvent::Completed { .. } => return Some(Ok(())),
@@ -389,6 +409,13 @@ impl AgentEffect<'_> {
             _ => {}
         }
         None
+    }
+
+    fn closed(&self, ask: AskId) {
+        if self.shared.asks.close(&ask).is_some() {
+            self.note(json!({ "asks": { ask.0.clone(): null } }));
+            self.shared.emit(OrchestratorEvent::AskClosed { item: self.item.clone(), ask });
+        }
     }
 
     fn watched(&self, event: &EngineEvent, collected: &Collected) {

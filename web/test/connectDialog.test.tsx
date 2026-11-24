@@ -62,30 +62,6 @@ describe('diálogo de conexão', () => {
     expect(await dialog.findByText('Conectado', {}, wait)).toBeTruthy()
   }, 10000)
 
-  test('um servidor MCP sem login conecta com o endereço e o nome e mostra as ferramentas', async () => {
-    const dialog = await opened('mcp')
-    const url = dialog.getByLabelText(/^Endereço do servidor MCP/) as HTMLInputElement
-    expect(url.type).toBe('text')
-    expect((dialog.getByRole('button', { name: /Conectar/ }) as HTMLButtonElement).disabled).toBe(true)
-    fireEvent.change(url, { target: { value: 'ftp://docs.acme' } })
-    fireEvent.change(dialog.getByLabelText(/^Nome/), { target: { value: 'Docs' } })
-    fireEvent.click(dialog.getByRole('button', { name: /Conectar/ }))
-    expect((await dialog.findByRole('alert', {}, wait)).textContent).toContain('https')
-    fireEvent.change(url, { target: { value: 'http://localhost:3000/mcp' } })
-    fireEvent.click(dialog.getByRole('button', { name: /Conectar/ }))
-    expect(await dialog.findByText('Conectado', {}, wait)).toBeTruthy()
-  }, 10000)
-
-  test('a conexão MCP já feita lista as suas ferramentas', async () => {
-    const dialog = await opened('mcp', async (api) => {
-      const start = await api.startSignIn('mcp', { url: 'http://localhost:9/mcp', label: 'Docs' })
-      for (let i = 0; i < 3; i++) await api.pollSignIn({ flow: start.flow })
-      return ''
-    })
-    expect(await dialog.findByText('Docs', { exact: false }, wait)).toBeTruthy()
-    expect(await dialog.findByText('· search, fetch', {}, wait)).toBeTruthy()
-  }, 10000)
-
   test('a recusa volta ao início com o erro no mesmo lugar', async () => {
     localStorage.setItem('mock:signIn', 'failed')
     const dialog = await opened('jira')

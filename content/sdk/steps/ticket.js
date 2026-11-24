@@ -1,15 +1,15 @@
 import { step, issue, markdown, form, actions } from "sdk";
 import { attempt, defined, effects, object, planOf, sourcesOf, waitOptions } from "./context.js";
 
-const UNTRACKED = "Nenhum rastreador de issues está conectado, então o item segue sem issue.";
+const UNTRACKED = "No issue tracker is connected, so the item continues without an issue.";
 
-const CHOOSE = "O rastreador tem mais de um projeto. Escolha onde criar a issue deste item.";
+const CHOOSE = "The tracker has more than one project. Choose where to create this item's issue.";
 
 const RECHECK = "recheck_statuses";
 
 const KEEP = "keep_statuses";
 
-const REQUIRED = "O rastreador exige estes campos para criar a issue. Preencha o que falta.";
+const REQUIRED = "The tracker requires these fields to create the issue. Fill in what is missing.";
 
 const OWN = ["summary", "description", "title"];
 
@@ -28,14 +28,14 @@ function projectFields(projects, opts) {
     const key = projectKey(entry);
     return { value: key, label: entry.name && entry.name !== key ? `${key} · ${entry.name}` : key };
   });
-  const fields = [{ name: "project", label: "Projeto", kind: "select", options }];
-  if (!opts.type) fields.push({ name: "type", label: "Tipo de issue", placeholder: "Deixe vazio para usar o padrão do rastreador" });
+  const fields = [{ name: "project", label: "Project", kind: "select", options }];
+  if (!opts.type) fields.push({ name: "type", label: "Issue type", placeholder: "Leave empty to use the tracker's default" });
   return fields;
 }
 
 async function chooseProject(ctx, opts, projects) {
   const keys = projects.map(projectKey);
-  const view = [markdown(CHOOSE), form(projectFields(projects, opts), { title: "Onde criar a issue", submit: "Criar issue" })];
+  const view = [markdown(CHOOSE), form(projectFields(projects, opts), { title: "Where to create the issue", submit: "Create issue" })];
   for (;;) {
     const answer = await ctx.waitHuman(view, waitOptions(opts));
     const values = object(answer.values);
@@ -95,7 +95,7 @@ async function requiredFields(ctx, opts, chosen, options) {
   const found = await attempt(() => ctx.call("tracker", "fields", wanted, options));
   const fields = askedFields(found, given).map(formField);
   if (fields.length === 0) return preset;
-  const view = [markdown(REQUIRED), form(fields, { title: "Campos obrigatórios", submit: "Criar issue" })];
+  const view = [markdown(REQUIRED), form(fields, { title: "Required fields", submit: "Create issue" })];
   for (;;) {
     const answer = await ctx.waitHuman(view, waitOptions(opts));
     const values = filled(fields, object(answer.values));
@@ -120,8 +120,8 @@ function nameOf(found) {
 }
 
 function missingText(missing, known) {
-  const listed = known.length > 0 ? known.join(", ") : "nenhum";
-  return `Os status ${missing.join(", ")} do workflow não existem no rastreador deste projeto. Status que existem: ${listed}. Ajuste o workflow ou o rastreador; até lá o item não muda de status lá.`;
+  const listed = known.length > 0 ? known.join(", ") : "none";
+  return `The workflow statuses ${missing.join(", ")} do not exist in this project's tracker. Existing statuses: ${listed}. Adjust the workflow or the tracker; until then the item's status does not change there.`;
 }
 
 async function trackerStatuses(ctx, project, options) {
@@ -140,8 +140,8 @@ export async function checkStatuses(ctx, opts, project, options) {
     const text = missingText(missing, known);
     await ctx.impediment(true, text);
     const buttons = [
-      { id: RECHECK, label: "Verificar de novo", icon: "refresh", variant: "primary" },
-      { id: KEEP, label: "Seguir assim", icon: "right" },
+      { id: RECHECK, label: "Check again", icon: "refresh", variant: "primary" },
+      { id: KEEP, label: "Continue as is", icon: "right" },
     ];
     const answer = await ctx.waitHuman([markdown(text), actions(buttons)], waitOptions(opts));
     await ctx.impediment(false);
@@ -164,7 +164,7 @@ export default step({
   label: "Issue",
   icon: "sTicket",
   needs: "tracker",
-  doing: "Criando issue",
+  doing: "Creating issue",
   view: shown,
   async run(ctx, opts) {
     const tracked = sourcesOf(ctx, "issue")[0];

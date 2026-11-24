@@ -1,34 +1,9 @@
-use std::sync::{Arc, Mutex};
-
-use agent_engine::control::Control;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
 use domain::{AskKind, Decision, EngineEvent, PermissionMode};
 use serde_json::json;
 
-use crate::{Rig, tool_use};
-
-fn answering(rig: &Rig, decision: Decision) -> std::thread::JoinHandle<()> {
-    let control: Arc<Control> = Arc::clone(&rig.control);
-    let events: Arc<Mutex<Vec<EngineEvent>>> = Arc::clone(&rig.events);
-    std::thread::spawn(move || {
-        for _ in 0..100 {
-            let asks: Vec<_> = events
-                .lock()
-                .expect("events")
-                .iter()
-                .filter_map(|event| match event {
-                    EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                    _ => None,
-                })
-                .collect();
-            for id in asks {
-                control.answer(&id, decision.clone());
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-    })
-}
+use crate::{Rig, answering, tool_use};
 
 fn results(history: &[Message]) -> Vec<(String, bool)> {
     history
@@ -85,6 +60,8 @@ fn a_plan_approved_for_another_agent_ends_planning_without_implementing() {
         !results[0].1 && results[0].0.contains("approved") && results[0].0.contains("Another agent"),
         "{results:?}"
     );
+    assert_eq!(results.len(), 1, "the run ends on the approval, without asking the model again: {results:?}");
+    assert!(matches!(history.last().and_then(|m| m.blocks.first()), Some(Block::ToolResult { .. })));
 }
 
 #[test]
@@ -129,4 +106,19 @@ fn planning_runs_commands_without_asking_but_still_refuses_writes() {
     assert!(!results[0].1 && results[0].0.contains("planejando"), "{results:?}");
     assert!(results[1].1, "writes stay refused while planning: {results:?}");
     assert!(!rig.dir.path().join("out.txt").exists());
+}
+
+#[test]
+fn reading_a_web_page_is_not_refused_while_planning() {
+    let rig = Rig::new(PermissionMode::Plan);
+    let model = ScriptedModel::new([
+        ScriptedModel::reply(vec![tool_use("f", "WebFetch", json!({"url": "https://docs.rs/serde", "prompt": "what is it"}))]),
+        ScriptedModel::reply(vec![Block::Text("Read it.".into())]),
+    ]);
+    let mut history = vec![Message::user("plan with https://docs.rs/serde")];
+    rig.run(&model, &mut history).expect("run");
+
+    assert!(!rig.events().iter().any(|event| matches!(event, EngineEvent::Refused { .. })), "{:?}", rig.events());
+    let results = results(&history);
+    assert!(!results[0].0.contains("not available while planning"), "{results:?}");
 }

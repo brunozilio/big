@@ -139,3 +139,26 @@ fn a_valid_input_still_runs() {
     rig.run_with(&model, &mut history, vec![Box::new(Strict(Arc::clone(&counted)))]).expect("run");
     assert_eq!(counted.ran.load(Ordering::SeqCst), 1, "{:?}", results(&history));
 }
+
+#[test]
+fn an_empty_placeholder_in_an_optional_field_is_left_out_and_an_empty_required_one_is_kept() {
+    let rig = Rig::new(PermissionMode::Bypass);
+    let counted = Arc::new(Counted::default());
+    let model = ScriptedModel::new([
+        ScriptedModel::reply(vec![tool_use("s", "Strict", json!({ "path": "a", "mode": "" }))]),
+        ScriptedModel::reply(vec![tool_use("r", "Read", json!({ "file_path": "notes.txt", "pages": "" }))]),
+        ScriptedModel::reply(vec![tool_use(
+            "e",
+            "Edit",
+            json!({ "file_path": "notes.txt", "old_string": "beta\n", "new_string": "" }),
+        )]),
+        ScriptedModel::reply(vec![Block::Text("Done".into())]),
+    ]);
+    let mut history = vec![Message::user("go")];
+    rig.run_with(&model, &mut history, vec![Box::new(Strict(Arc::clone(&counted)))]).expect("run");
+
+    let results = results(&history);
+    assert!(results.iter().all(|(_, is_error)| !is_error), "{results:?}");
+    assert_eq!(counted.ran.load(Ordering::SeqCst), 1);
+    assert_eq!(std::fs::read_to_string(rig.dir.path().join("notes.txt")).expect("read"), "alpha\n");
+}

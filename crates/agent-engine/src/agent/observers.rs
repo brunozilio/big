@@ -10,7 +10,6 @@ use super::subagents::background::Spawn;
 use super::{Agent, Ending};
 use crate::model::TurnRequest;
 use crate::tools::Tool;
-use crate::tools::observer_report::{ObserverReport, Reports};
 use crate::tools::subagent::FoundAgent;
 use crate::transcript::{Block, Message, Role};
 
@@ -139,12 +138,7 @@ impl<'env> Agent<'env> {
             let digest = self.digest(observing, &items);
             let watching = Arc::clone(watching);
             spawn(Box::new(move || {
-                let reports = Reports::default();
-                self.deliver(found, observing, digest, Arc::clone(&reports));
-                let client = self.workspace.credentials.client;
-                for report in std::mem::take(&mut *reports.locked()) {
-                    crate::tools::inbox::push(client, report);
-                }
+                self.deliver(found, observing, digest);
                 watching.free(&found.name);
             }));
         }
@@ -160,7 +154,6 @@ impl<'env> Agent<'env> {
         watching.wait_until_free(|| self.control.is_stopped());
         let Some(reason) = ended(outcome).filter(|_| !self.control.is_stopped()) else { return Vec::new() };
         watching.gather(turn, &observing.observers, Some(reason));
-        let reports = Reports::default();
         std::thread::scope(|scope| {
             for name in &observing.observers {
                 let Some(found) = self.observer(name) else { continue };
@@ -169,13 +162,10 @@ impl<'env> Agent<'env> {
                     continue;
                 }
                 let digest = self.digest(observing, &items);
-                let reports = Arc::clone(&reports);
-                scope.spawn(move || self.deliver(found, observing, digest, reports));
+                scope.spawn(move || self.deliver(found, observing, digest));
             }
         });
-        let mut heard = crate::tools::inbox::take_where(self.workspace.credentials.client, is_report);
-        heard.extend(std::mem::take(&mut *reports.locked()));
-        heard
+        crate::tools::inbox::take_where(self.workspace.credentials.client, is_report)
     }
 
     pub(in crate::agent) fn heard(&self, reports: Vec<Notice>, went_well: bool) -> Option<Message> {
@@ -191,12 +181,13 @@ impl<'env> Agent<'env> {
         Some(Message::user(domain::inbox::as_message(&reports)))
     }
 
-    fn deliver(&self, found: &FoundAgent, observing: &Observing, digest: String, reports: Reports) {
+    fn deliver(&self, found: &FoundAgent, observing: &Observing, digest: String) {
         let key =
             format!("{}/{}/{}/{}", self.workspace.session_id, self.workspace.agent_name, observing.depth, found.name);
         let mut history = conversations().remove(&key).unwrap_or_default();
         history.push(Message::user(digest));
-        let tools: Vec<Box<dyn Tool>> = vec![Box::new(ObserverReport { observer: found.name.clone(), reports })];
+        let report = crate::tools::conditional::tool(domain::observer::REPORT_TOOL, &serde_json::Value::Null);
+        let tools: Vec<Box<dyn Tool>> = report.into_iter().map(|tool| Box::new(tool) as Box<dyn Tool>).collect();
         let control = self.control.child();
         let mut workspace = self.workspace.fork(control.shared_stop());
         workspace.agent_name.clone_from(&found.name);

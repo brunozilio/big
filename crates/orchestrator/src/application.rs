@@ -1,8 +1,7 @@
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use agent_engine::model::ToolSpec;
-use agent_engine::tools::{self, Declared, Effect, Outcome, Tool, Workspace};
+use agent_engine::tools::{self, Workspace};
 use serde_json::Value;
 use store::{Application, CodeChoice, Repository, Store};
 
@@ -25,10 +24,8 @@ pub fn offer(client: u64, store: &Arc<Store>, application: String) {
     let store = Arc::clone(store);
     tools::hosted::offer(
         client,
-        Arc::new(move || {
-            vec![Box::new(AddRepository { store: Arc::clone(&store), application: application.clone() })
-                as Box<dyn Tool>]
-        }),
+        ADD_REPOSITORY,
+        Arc::new(move |input, workspace| save(&store, &application, input, workspace).map(Value::String)),
     );
 }
 
@@ -133,43 +130,14 @@ fn described(application: &Application, directory: &str, added: bool) -> String 
     text
 }
 
-struct AddRepository {
-    store: Arc<Store>,
-    application: String,
-}
-
-impl AddRepository {
-    fn save(&self, input: &Value, workspace: &Workspace) -> Result<String, String> {
-        let wanted = wanted(input, workspace)?;
-        let found = self.store.application(&self.application).map_err(|error| error.to_string())?;
-        let mut application = found.ok_or("A aplicação desta tarefa não existe mais.")?;
-        let directory = original(&application, &wanted.directory).unwrap_or_else(|| wanted.directory.clone());
-        let added = apply(&mut application, wanted);
-        self.store.save_application(&application).map_err(|error| error.to_string())?;
-        Ok(described(&application, &directory, added))
-    }
-}
-
-impl Tool for AddRepository {
-    fn spec(&self) -> ToolSpec {
-        tools::declared(ADD_REPOSITORY, &Value::Null)
-    }
-
-    fn effects(&self, _input: &Value, _workspace: &Workspace) -> Vec<Effect> {
-        vec![Effect::Declared(Declared::Edits)]
-    }
-
-    fn summary(&self, input: &Value) -> String {
-        text(input, "directory").unwrap_or_default()
-    }
-
-    fn serial(&self) -> bool {
-        true
-    }
-
-    fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
-        self.save(input, workspace).map_or_else(Outcome::error, Outcome::ok)
-    }
+fn save(store: &Store, application: &str, input: &Value, workspace: &Workspace) -> Result<String, String> {
+    let wanted = wanted(input, workspace)?;
+    let found = store.application(application).map_err(|error| error.to_string())?;
+    let mut application = found.ok_or("A aplicação desta tarefa não existe mais.")?;
+    let directory = original(&application, &wanted.directory).unwrap_or_else(|| wanted.directory.clone());
+    let added = apply(&mut application, wanted);
+    store.save_application(&application).map_err(|error| error.to_string())?;
+    Ok(described(&application, &directory, added))
 }
 
 #[cfg(test)]

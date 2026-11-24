@@ -7,10 +7,6 @@ use platform::sync::Locked;
 use domain::schedule::{MOST, Scheduled};
 use jiff::Timestamp;
 use jiff::tz::TimeZone;
-use serde_json::Value;
-
-use crate::model::ToolSpec;
-use crate::tools::{Outcome, Tool, Workspace, field, required};
 
 fn lock() -> std::sync::MutexGuard<'static, HashMap<u64, Vec<Scheduled>>> {
     static ALL: OnceLock<Mutex<HashMap<u64, Vec<Scheduled>>>> = OnceLock::new();
@@ -69,17 +65,9 @@ fn minute_in(zone: &TimeZone, secs: i64) -> Option<String> {
     Some(at.strftime("%Y-%m-%d %H:%M").to_string())
 }
 
-fn shown(scheduled: &Scheduled) -> String {
-    let at = minute_in(&TimeZone::system(), scheduled.next);
-    format!("{}, at {}: {}", scheduled.id, at.unwrap_or_default(), scheduled.prompt)
+pub fn local_minute(secs: i64) -> String {
+    minute_in(&TimeZone::system(), secs).unwrap_or_default()
 }
 
 #[cfg(test)]
 mod tests;
-
-mod tools;
-pub use tools::ScheduleWakeup;
-
-pub fn tools() -> Vec<Box<dyn Tool>> {
-    vec![Box::new(ScheduleWakeup)]
-}

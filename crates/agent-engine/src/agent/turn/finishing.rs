@@ -14,7 +14,7 @@ impl Agent<'_> {
     pub(super) fn finish(&self, turn: &mut TurnState<'_>, run: &ThisRun, said: bool) -> Result<Next, Ending> {
         let more = match self.steering().or_else(|| self.background_reports(run)) {
             Some(more) => Some(more),
-            None => self.left_to_do(turn, run, said)?,
+            None => self.left_to_do(turn, said)?,
         };
         Ok(match more {
             Some(message) => {
@@ -44,11 +44,11 @@ impl Agent<'_> {
             .then(|| Message::user(format!("{BACKGROUND_REPORTS}\n{}", reports.join("\n\n"))))
     }
 
-    fn left_to_do(&self, turn: &mut TurnState<'_>, run: &ThisRun, said: bool) -> Result<Option<Message>, Ending> {
+    fn left_to_do(&self, turn: &mut TurnState<'_>, said: bool) -> Result<Option<Message>, Ending> {
         if self.control.is_stopped() {
             return Err(Ending::Cancelled);
         }
-        if self.tool(run, names::STRUCTURED_OUTPUT).is_some() && !turn.structured {
+        if self.offers(names::STRUCTURED_OUTPUT) && !turn.structured {
             return turn.cutoffs.structured_nudge().map(Some);
         }
         if let Some(blocked) = self.stop_hook(turn, said, crate::hooks::HookEvent::at_the_end(self.depth > 0))? {

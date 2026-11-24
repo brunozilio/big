@@ -2,10 +2,8 @@ use std::path::{Path, PathBuf};
 
 use crate::frontmatter::parse as parse_frontmatter;
 use domain::Folder;
-use serde_json::Value;
 
-use super::{Effect, Outcome, Tool, Workspace, required};
-use crate::model::ToolSpec;
+use super::{Outcome, Tool, Workspace};
 
 pub const SKILL_TOOL: &str = super::names::SKILL;
 
@@ -124,41 +122,14 @@ fn scan(dir: &Path, namespace: Option<&str>, runs: &dyn Fn(&Path) -> bool) -> Ve
 
 pub use super::skill_listing::listing;
 
-#[derive(Debug, Clone, Default)]
-pub struct SkillTool {
-    pub skills: Vec<FoundSkill>,
+pub fn tool(skills: Vec<FoundSkill>) -> Option<Box<dyn Tool>> {
+    let mut tool = super::conditional::tool(SKILL_TOOL, &serde_json::Value::Null)?;
+    tool.skills = skills;
+    Some(Box::new(tool))
 }
 
-impl Tool for SkillTool {
-    fn skills(&self) -> &[FoundSkill] {
-        &self.skills
-    }
-
-    fn spec(&self) -> ToolSpec {
-        crate::tools::declared(SKILL_TOOL, &Value::Null)
-    }
-
-    fn effects(&self, _input: &Value, _workspace: &Workspace) -> Vec<Effect> {
-        Vec::new()
-    }
-
-    fn summary(&self, input: &Value) -> String {
-        input["skill"].as_str().unwrap_or_default().trim_start_matches('/').to_owned()
-    }
-
-    fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
-        let name = match required(input, "skill") {
-            Ok(name) => name.trim_start_matches('/'),
-            Err(outcome) => return outcome,
-        };
-        let Some(skill) = self.skills.iter().find(|skill| skill.name == name) else {
-            return Outcome::error(format!("There is no skill named {name}. Use one of the available skills."));
-        };
-        if !skill.model_invocation {
-            return Outcome::error(format!("Skill {name} requires explicit user invocation."));
-        }
-        load(skill, input["args"].as_str().unwrap_or_default(), &workspace.cwd, &granted(skill, workspace))
-    }
+pub fn load_for(skill: &FoundSkill, args: &str, workspace: &Workspace) -> Outcome {
+    load(skill, args, &workspace.cwd, &granted(skill, workspace))
 }
 
 pub fn preloaded(skills: &[FoundSkill], name: &str, workspace: &Workspace) -> Outcome {

@@ -149,6 +149,7 @@ pub struct EngineState {
     pub requests: Mutex<Vec<PromptRequest>>,
     pub hold: AtomicBool,
     pub ask: AtomicBool,
+    pub keeps_going: AtomicBool,
     pub limited: AtomicBool,
     pub write: Mutex<Option<String>>,
     pub answers: Mutex<Vec<(AskId, Decision)>>,
@@ -261,8 +262,19 @@ impl AgentEngine for FakeEngine {
             if state.ask.load(Ordering::SeqCst) {
                 let ask =
                     AgentAsk { id: AskId(format!("ask-{number}")), kind: AskKind::Plan { plan: "o plano".into() } };
+                let id = ask.id.clone();
                 sink.emit(run, EngineEvent::Asked(ask));
-                while !stop.load(Ordering::SeqCst) && answers.recv_timeout(Duration::from_millis(10)).is_err() {}
+                let mut decision = None;
+                while !stop.load(Ordering::SeqCst) && decision.is_none() {
+                    decision = answers.recv_timeout(Duration::from_millis(10)).ok();
+                }
+                if let Some(decision) = decision.filter(|_| state.keeps_going.load(Ordering::SeqCst)) {
+                    sink.emit(run, EngineEvent::Answered { ask: id, decision });
+                    while !stop.load(Ordering::SeqCst) {
+                        std::thread::sleep(Duration::from_millis(10));
+                    }
+                    return;
+                }
             }
             if stop.load(Ordering::SeqCst) {
                 return;

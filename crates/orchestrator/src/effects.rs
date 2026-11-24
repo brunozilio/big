@@ -32,8 +32,9 @@ pub fn launch(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> crate::err
         .map(Duration::from_millis)
         .or_else(|| shared.config.limits.timeouts.of(&launch.command.kind))
     {
-        let at = timer(shared, item, &timeout_timer(&launch.key), limit)?;
-        tasks.push(fire_at(shared, item, &launch.key, at, EffectOutcome::TimedOut));
+        let id = timeout_timer(&launch.key);
+        let at = timer(shared, item, &id, limit)?;
+        tasks.push(fire_at(shared, item, (&launch.key, id), at, EffectOutcome::TimedOut));
     }
     match launch.command.kind.as_str() {
         WAIT_HUMAN => crate::chores::recap(shared, item, &launch.key.to_string()),
@@ -57,8 +58,9 @@ pub fn launch(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> crate::err
         }
         SLEEP => {
             let ms = launch.command.args["ms"].as_u64().unwrap_or(0);
-            let at = timer(shared, item, &launch.key.to_string(), Duration::from_millis(ms))?;
-            tasks.push(fire_at(shared, item, &launch.key, at, EffectOutcome::Ok { value: Value::Null }));
+            let id = launch.key.to_string();
+            let at = timer(shared, item, &id, Duration::from_millis(ms))?;
+            tasks.push(fire_at(shared, item, (&launch.key, id), at, EffectOutcome::Ok { value: Value::Null }));
         }
         _ => tasks.push(perform(shared, item, launch)),
     }
@@ -90,11 +92,21 @@ fn timer(shared: &Shared, item: &ItemId, id: &str, after: Duration) -> crate::er
     Ok(at)
 }
 
-fn fire_at(shared: &Arc<Shared>, item: &ItemId, key: &IdempotencyKey, at: i64, outcome: EffectOutcome) -> AbortHandle {
+fn fire_at(
+    shared: &Arc<Shared>,
+    item: &ItemId,
+    (key, id): (&IdempotencyKey, String),
+    at: i64,
+    outcome: EffectOutcome,
+) -> AbortHandle {
     let (shared_task, item, key) = (Arc::clone(shared), item.clone(), key.clone());
     shared.spawn(async move {
         let left = u64::try_from(at.saturating_sub(now_ms())).unwrap_or(0);
         tokio::time::sleep(Duration::from_millis(left)).await;
+        let set = shared_task.item(&item).is_ok_and(|state| state.timers.contains_key(&id));
+        if !set {
+            return;
+        }
         if let Err(error) = shared_task.resolve(&item, &key, outcome) {
             tracing::warn!(%error, "a timer could not resolve its effect");
         }
@@ -122,7 +134,7 @@ fn perform(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> AbortHandle {
     })
 }
 
-pub const NEEDS_CONNECTION: &str = "conecte uma conta para ";
+pub const NEEDS_CONNECTION: &str = "connect an account for ";
 pub const NEEDS_RECONNECT: &str = "reconecte a conta: ";
 
 fn roll() -> f64 {

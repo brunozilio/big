@@ -1,48 +1,43 @@
-use super::{Effect, Outcome, Tool, Workspace};
-use crate::model::ToolSpec;
 use serde_json::{Value, json};
-#[derive(Debug)]
-pub struct Structured {
-    schema: Value,
-    validator: jsonschema::Validator,
+
+use super::{Tool, Workspace, conditional, names};
+
+pub fn offer(schema: Value, workspace: &mut Workspace) -> Result<Box<dyn Tool>, String> {
+    jsonschema::validator_for(&schema).map_err(|e| format!("invalid output JSON schema: {e}"))?;
+    let tool = conditional::tool(names::STRUCTURED_OUTPUT, &json!({ "schema": schema }))
+        .ok_or_else(|| format!("{} is not shipped", names::STRUCTURED_OUTPUT))?;
+    workspace.services.output_schema = Some(schema);
+    Ok(Box::new(tool))
 }
-impl Structured {
-    pub fn new(schema: Value) -> Result<Self, String> {
-        let validator = jsonschema::validator_for(&schema).map_err(|e| format!("invalid output JSON schema: {e}"))?;
-        Ok(Self { schema, validator })
-    }
-}
-impl Tool for Structured {
-    fn spec(&self) -> ToolSpec {
-        crate::tools::declared(super::names::STRUCTURED_OUTPUT, &json!({ "schema": self.schema }))
-    }
-    fn effects(&self, _input: &serde_json::Value, _workspace: &Workspace) -> Vec<Effect> {
-        Vec::new()
-    }
-    fn summary(&self, _: &Value) -> String {
-        "Structured result".into()
-    }
-    fn run(&self, input: &Value, _: &Workspace) -> Outcome {
-        if input.as_object().is_none_or(|o| o.len() != 1 || !o.contains_key("result")) {
-            return Outcome::error("Pass exactly one field named result.");
-        }
-        match self.validator.validate(&input["result"]) {
-            Ok(()) => Outcome::ok("Structured result accepted."),
-            Err(e) => Outcome::error(format!("Invalid structured result: {e}")),
-        }
-    }
-}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::json;
+
     #[test]
     fn validates_nested_result_and_rejects_missing_and_extra_fields() {
-        let tool=Structured::new(json!({"type":"object","properties":{"score":{"type":"number","minimum":0,"maximum":1}},"required":["score"],"additionalProperties":false})).expect("valid test fixture");
-        let workspace = Workspace::new(".");
-        assert!(!tool.run(&json!({"result":{"score":1}}), &workspace).is_error);
+        let mut workspace = Workspace::new(".");
+        let schema = json!({"type":"object","properties":{"score":{"type":"number","minimum":0,"maximum":1}},"required":["score"],"additionalProperties":false});
+        let tool = offer(schema, &mut workspace).expect("valid test fixture");
+        assert_eq!(tool.summary(&json!({})), "Structured result");
+        assert!(tool.effects(&json!({"result":{"score":1}}), &workspace).is_empty());
+        let accepted = tool.run(&json!({"result":{"score":1}}), &workspace);
+        assert_eq!((accepted.content.as_str(), accepted.is_error), ("Structured result accepted.", false));
         for invalid in [json!({}), json!({"score":2}), json!({"score":"1"}), json!({"score":1,"extra":true})] {
-            assert!(tool.run(&json!({"result":invalid}), &workspace).is_error);
+            let refused = tool.run(&json!({"result":invalid}), &workspace);
+            assert!(refused.is_error && refused.content.starts_with("Invalid structured result: "), "{refused:?}");
         }
+        assert_eq!(
+            tool.run(&json!({"result":{"score":1},"more":1}), &workspace).content,
+            "Pass exactly one field named result."
+        );
+    }
+
+    #[test]
+    fn a_schema_that_does_not_compile_is_refused() {
+        let mut workspace = Workspace::new(".");
+        let refused = offer(json!({"type": 7}), &mut workspace).err().unwrap_or_default();
+        assert!(refused.starts_with("invalid output JSON schema"), "{refused}");
+        assert!(workspace.services.output_schema.is_none());
     }
 }

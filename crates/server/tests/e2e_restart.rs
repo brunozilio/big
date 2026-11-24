@@ -5,6 +5,7 @@ mod e2e;
 use std::sync::atomic::Ordering;
 use std::time::Duration;
 
+use axum::http::{Method, StatusCode};
 use e2e::{Hub, step, waiting_on};
 use serde_json::{Value, json};
 
@@ -58,6 +59,11 @@ async fn what_a_running_step_writes_reaches_its_session_before_the_run_ends() {
         shown["status"] == "running" && shown["events"].to_string().contains("trabalhando")
     })
     .await;
+    let message = json!({ "text": "inclua os testes", "model": null, "attachments": [] });
+    let (status, _) = server.send(Method::POST, &format!("/api/sessions/{session}/messages"), Some(message)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "a message to a running step is taken, not refused");
+    let steered = hub.agents.script.steered.lock().expect("steered").clone();
+    assert_eq!(steered, ["inclua os testes"], "the message reaches the running agent");
     hub.agents.script.hold_develop.store(false, Ordering::SeqCst);
     server.until(&id, "develop goes on", |item| item["current"] != "develop").await;
 }
@@ -90,7 +96,7 @@ async fn a_restart_in_the_middle_of_develop_resumes_the_session_without_repeatin
     assert_eq!(hub.agents.runs_of("planner").len(), 1, "the plan is not redone");
     assert_eq!(hub.tracker.state().created, 1);
     assert_eq!(hub.github.pulls_created(), 1);
-    assert_eq!(hub.tracker.statuses_of("K-101"), ["Fazendo", "Revisando"]);
+    assert_eq!(hub.tracker.statuses_of("K-101"), ["Fazendo"]);
 }
 
 #[tokio::test(flavor = "multi_thread")]

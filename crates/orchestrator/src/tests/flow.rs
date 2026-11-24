@@ -279,3 +279,33 @@ async fn a_teammate_s_question_waits_on_the_item_and_the_answer_goes_back_to_the
     let item = ended(&kernel, &id).await;
     assert_eq!(output(&item), json!({ "agent": "feito 1" }));
 }
+
+const CALLING: &str = r#"
+import { workflow, step } from "sdk";
+const busca = step({
+  name: "busca",
+  async run(ctx) {
+    await ctx.call("tracker", "comment", { issue: "K-1", body: "oi" });
+    return ctx.pass(await ctx.call("tracker", "issue", { issue: "K-2" }));
+  },
+});
+export default workflow({ name: "calling", steps: [busca()] });
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_running_step_shows_its_connector_calls_done_and_in_progress() {
+    let world = World::new();
+    world.workflow("calling", CALLING);
+    world.provider.then("tracker.issue", Reply::Hang);
+    let kernel = world.start().await;
+    let id = kernel.create_item("calling", json!({})).expect("item");
+    until(&kernel, &id, |item| item.effects.len() == 2).await;
+    let view = kernel.step_view(&id, "busca", None).await.expect("view");
+    let calls = view.blocks[0]["calls"].as_array().cloned().unwrap_or_default();
+    assert_eq!(view.blocks[0]["type"], "calls", "{}", view.blocks);
+    let states: Vec<(&str, &str)> =
+        calls.iter().filter_map(|call| Some((call["title"].as_str()?, call["state"].as_str()?))).collect();
+    assert_eq!(states, [("comment · K-1", "ok"), ("issue · K-2", "running")]);
+    assert_eq!(calls[0]["tag"], "tracker");
+    assert!(calls[0]["output"].is_string() && calls[1].get("output").is_none(), "{calls:?}");
+}

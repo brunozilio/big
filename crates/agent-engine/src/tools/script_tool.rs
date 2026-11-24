@@ -233,6 +233,32 @@ impl Capabilities {
     }
 }
 
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Exports {
+    pub effects: bool,
+    pub summary: bool,
+    pub shown: bool,
+    pub offered: bool,
+}
+
+impl Exports {
+    fn of(shown: &str, source: &str) -> Self {
+        let has = |export: &str| script::exports(shown, source, export);
+        Self { effects: has("effects"), summary: has("summary"), shown: has("shown"), offered: has("offered") }
+    }
+}
+
+pub fn facts(workspace: &Workspace) -> Value {
+    serde_json::json!({
+        "cwd": workspace.cwd.display().to_string(),
+        "codeMode": format!("{:?}", workspace.policy.code_mode).to_ascii_lowercase(),
+        "services": {
+            "lsp": workspace.services.lsp.is_some(),
+            "deferred": workspace.services.deferred.is_some(),
+        },
+    })
+}
+
 #[derive(Debug, Clone)]
 pub struct ScriptTool {
     pub spec: ToolSpec,
@@ -241,6 +267,10 @@ pub struct ScriptTool {
     pub source: String,
     pub path: PathBuf,
     pub trusted: bool,
+    pub exports: Exports,
+    pub serial: bool,
+    pub skills: Vec<super::skill::FoundSkill>,
+    pub interceptors: Vec<crate::intercept::Interceptor>,
 }
 
 fn declared_by(access: Option<&str>) -> Option<Declared> {
@@ -253,6 +283,10 @@ fn declared_by(access: Option<&str>) -> Option<Declared> {
 
 fn parse(path: &Path, trusted: bool) -> Result<ScriptTool, String> {
     let source = std::fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
+    parse_source(path, source, trusted)
+}
+
+pub(crate) fn parse_source(path: &Path, source: String, trusted: bool) -> Result<ScriptTool, String> {
     let shown = path.display().to_string();
     let spec = script::exported(&shown, &source, "spec").map_err(|error| format!("{shown}: {error}"))?;
     let name = spec["name"]
@@ -261,18 +295,72 @@ fn parse(path: &Path, trusted: bool) -> Result<ScriptTool, String> {
         .ok_or_else(|| format!("{shown}: spec.name is missing"))?;
     let declared = if trusted { declared_by(spec["access"].as_str()) } else { Some(Declared::Executes) };
     let capabilities = Capabilities::read(&spec).map_err(|error| format!("{shown}: {error}"))?;
+    let runs_from = if path.is_relative() { crate::hooks::runs_from(&shown) } else { shown.clone() };
+    let interceptors =
+        crate::intercept::of_tool(name, &runs_from, &shown, &source).map_err(|error| format!("{shown}: {error}"))?;
     Ok(ScriptTool {
         capabilities,
         spec: ToolSpec {
             name: name.to_owned(),
-            description: spec["description"].as_str().unwrap_or_default().to_owned(),
+            description: described(&shown, &source, &spec),
             schema: spec.get("input").cloned().unwrap_or_else(|| serde_json::json!({ "type": "object" })),
         },
         declared,
+        exports: Exports::of(&shown, &source),
+        serial: spec["serial"].as_bool() == Some(true),
         source,
         path: path.to_path_buf(),
         trusted,
+        skills: Vec::new(),
+        interceptors,
     })
+}
+
+fn described(shown: &str, source: &str, spec: &Value) -> String {
+    if let Some(text) = spec["description"].as_str() {
+        return text.to_owned();
+    }
+    let data = content::with_brand(&serde_json::json!({ "shell": platform::shell_name() }));
+    match super::contract::quick(shown, source, "spec.description", &[], &data) {
+        Ok(Value::String(text)) => text,
+        _ => String::new(),
+    }
+}
+
+fn scripted(path: &str) -> bool {
+    let typed = path.ends_with(".ts") || path.ends_with(".js");
+    typed && !path.ends_with(".d.ts") && !path.trim_start_matches("tools/").contains('/')
+}
+
+fn parsed_once(path: &str, source: String) -> Option<ScriptTool> {
+    static PARSED: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<u64, Option<ScriptTool>>>> =
+        std::sync::OnceLock::new();
+    let mut hasher = std::hash::DefaultHasher::new();
+    std::hash::Hash::hash(&(path, &source), &mut hasher);
+    let key = std::hash::Hasher::finish(&hasher);
+    let cache = PARSED.get_or_init(Default::default);
+    if let Some(found) = cache.lock().ok().and_then(|parsed| parsed.get(&key).cloned()) {
+        return found;
+    }
+    let found = (!source.contains("ctx.builtin(") && script::exports(path, &source, "execute"))
+        .then(|| parse_source(Path::new(path), source, true))
+        .and_then(|parsed| parsed.inspect_err(|error| tracing::error!(%error, "a built-in tool does not load")).ok());
+    if let Ok(mut parsed) = cache.lock() {
+        parsed.insert(key, found.clone());
+    }
+    found
+}
+
+pub fn shipped(name: &str) -> Option<ScriptTool> {
+    builtin().into_iter().find(|tool| tool.spec.name == name)
+}
+
+pub fn builtin() -> Vec<ScriptTool> {
+    content::builtin_files("tools/")
+        .into_iter()
+        .filter(|(path, _)| scripted(path))
+        .filter_map(|(path, _)| parsed_once(path, content::source(path)?))
+        .collect()
 }
 
 fn files(folder: &Path) -> Vec<PathBuf> {
@@ -282,9 +370,10 @@ fn files(folder: &Path) -> Vec<PathBuf> {
         .map(|entry| entry.path())
         .filter_map(|path| {
             if path.is_dir() {
-                Some(path.join("tool.js")).filter(|file| file.is_file())
+                [path.join("tool.ts"), path.join("tool.js")].into_iter().find(|file| file.is_file())
             } else {
-                path.extension().is_some_and(|ext| ext == "js").then_some(path)
+                let script = path.extension().is_some_and(|ext| ext == "js" || ext == "ts");
+                (script && crate::intercept::tool_named(&path).is_none()).then_some(path)
             }
         })
         .collect();
@@ -332,31 +421,132 @@ pub fn join(tools: &mut Vec<Box<dyn Tool>>, scripts: Vec<ScriptTool>) {
     }
 }
 
+impl ScriptTool {
+    pub fn shown_path(&self) -> String {
+        self.path.display().to_string()
+    }
+}
+
+impl ScriptTool {
+    fn installing_first(&self, input: &Value, workspace: &Workspace) -> Option<String> {
+        let what = Tool::effects(self, input, workspace).into_iter().find_map(|effect| match effect {
+            Effect::Install { what, .. } => Some(what),
+            _ => None,
+        })?;
+        Some(format!("First {what}\nthen {}", Tool::summary(self, input)))
+    }
+}
+
 impl Tool for ScriptTool {
     fn spec(&self) -> ToolSpec {
         self.spec.clone()
     }
 
-    fn effects(&self, _input: &Value, _workspace: &Workspace) -> Vec<Effect> {
-        self.declared.map(Effect::Declared).into_iter().collect()
+    fn effects(&self, input: &Value, workspace: &Workspace) -> Vec<Effect> {
+        let declared = self.declared.map(Effect::Declared).into_iter().collect();
+        if !self.trusted || !self.exports.effects {
+            return declared;
+        }
+        let data = serde_json::json!({ "cwd": workspace.cwd.display().to_string() });
+        let found =
+            super::contract::quick(&self.shown_path(), &self.source, "effects", std::slice::from_ref(input), &data)
+                .and_then(|value| super::contract::effects(&value, workspace));
+        found.unwrap_or_else(|error| {
+            tracing::warn!(%error, tool = %self.spec.name, "a tool's effects do not read; it is asked about");
+            vec![Effect::Declared(Declared::Executes)]
+        })
     }
 
     fn summary(&self, input: &Value) -> String {
-        input.as_object().and_then(|fields| fields.values().find_map(Value::as_str)).unwrap_or_default().to_owned()
+        let exported = self.exports.summary.then(|| {
+            super::contract::quick(
+                &self.shown_path(),
+                &self.source,
+                "summary",
+                std::slice::from_ref(input),
+                &Value::Null,
+            )
+        });
+        match exported {
+            Some(Ok(Value::String(text))) => text,
+            _ => input
+                .as_object()
+                .and_then(|fields| fields.values().find_map(Value::as_str))
+                .unwrap_or_default()
+                .to_owned(),
+        }
     }
 
-    fn run(&self, _input: &Value, _workspace: &Workspace) -> Outcome {
-        Outcome::error(format!("{} runs only inside an agent", self.spec.name))
+    fn shown(&self, input: &Value, workspace: &Workspace) -> Option<String> {
+        if !self.exports.shown {
+            return self.installing_first(input, workspace);
+        }
+        let data = serde_json::json!({ "cwd": workspace.cwd.display().to_string() });
+        let shown =
+            super::contract::quick(&self.shown_path(), &self.source, "shown", std::slice::from_ref(input), &data);
+        shown.ok().and_then(|value| value.as_str().map(str::to_owned))
+    }
+
+    fn offered(&self, workspace: &Workspace) -> bool {
+        if !self.exports.offered {
+            return true;
+        }
+        match super::contract::quick(&self.shown_path(), &self.source, "offered", &[], &facts(workspace)) {
+            Ok(Value::Bool(offered)) => offered,
+            other => {
+                tracing::warn!(?other, tool = %self.spec.name, "a tool's offered does not answer true or false");
+                false
+            }
+        }
+    }
+
+    fn serial(&self) -> bool {
+        self.serial
+    }
+
+    fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
+        if !self.trusted {
+            return Outcome::error(format!("{} runs only inside an agent", self.spec.name));
+        }
+        super::host::run_alone(self, input, workspace)
     }
 
     fn script(&self) -> Option<&ScriptTool> {
         Some(self)
+    }
+
+    fn skills(&self) -> &[super::skill::FoundSkill] {
+        &self.skills
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tool_s_own_interceptors_are_read_with_it_and_a_wrapper_file_is_not_a_tool() {
+        let home = tempfile::tempdir().expect("home");
+        let project = tempfile::tempdir().expect("project");
+        let user_tools = home.path().join(brand::DIR).join("tools");
+        std::fs::create_dir_all(&user_tools).expect("dir");
+        let source = r#"export const spec = { name: "Deploy" };
+export const intercept = (input, ctx, next) => next(input);
+export function execute() { return "ok"; }"#;
+        std::fs::write(user_tools.join("deploy.js"), source).expect("write");
+        std::fs::write(user_tools.join("Bash.intercept.js"), "export default (v, ctx, next) => next(v);")
+            .expect("write");
+        let tools = load(&crate::scope::Scope::at(project.path(), Some(home.path())));
+        assert_eq!(tools.len(), 1, "the wrapper file is not loaded as a tool");
+        let shown = user_tools.join("deploy.js").display().to_string();
+        let expected = crate::intercept::Interceptor::new(
+            format!("{shown}#intercept"),
+            "Deploy",
+            60,
+            crate::intercept::Level::Tool,
+        );
+        assert_eq!(tools[0].interceptors, [expected]);
+    }
 
     #[test]
     fn tools_come_from_the_user_s_and_the_project_s_folders_and_project_ones_always_ask() {
@@ -467,7 +657,7 @@ mod join_tests {
         };
         let bash = described("Bash");
         assert_eq!(bash.len(), 1);
-        assert!(!bash[0].1, "the built-in Bash stays: {bash:?}");
+        assert_ne!(bash[0].0, "The project's.", "the built-in Bash stays: {bash:?}");
         assert_eq!(described("Echo"), [("The owner's.".to_owned(), true)]);
         assert_eq!(described("Grep"), [("The owner's.".to_owned(), true)], "the owner may replace a built-in");
         assert_eq!(described("Deploy"), [("The project's.".to_owned(), true)]);
@@ -484,8 +674,8 @@ mod copied_content_tests {
         let project = tempfile::tempdir().expect("project");
         let user_tools = home.path().join(brand::DIR).join("tools");
         std::fs::create_dir_all(&user_tools).expect("dir");
-        let bash = content::builtin("tools/Bash.js").expect("Bash ships");
-        std::fs::write(user_tools.join("Bash.js"), bash).expect("copy");
+        let bash = content::builtin("tools/Bash.ts").expect("Bash ships");
+        std::fs::write(user_tools.join("Bash.ts"), bash).expect("copy");
         std::fs::write(user_tools.join("echo.js"), r#"export const spec = { name: "Echo" };"#).expect("write");
         let names: Vec<String> = load(&crate::scope::Scope::at(project.path(), Some(home.path())))
             .into_iter()

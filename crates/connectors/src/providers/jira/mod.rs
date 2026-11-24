@@ -210,6 +210,7 @@ impl Provider for Jira {
             button: "Continuar na Atlassian".to_owned(),
             site: "da Atlassian".to_owned(),
             choose_title: "Site do Jira".to_owned(),
+            hidden: false,
         }
     }
 

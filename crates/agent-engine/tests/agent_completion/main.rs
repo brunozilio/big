@@ -13,7 +13,7 @@ use agent_engine::{
     prompt,
     tools::{
         self, Workspace,
-        subagent::{AgentTool, FoundAgent},
+        subagent::{self, FoundAgent},
         subagent_config::AgentConfig,
     },
     transcript::{Block, Message},
@@ -39,7 +39,7 @@ fn run_named(
         config: AgentConfig::parse(&config).expect("config"),
     };
     let mut tools = tools::standard();
-    tools.push(Box::new(AgentTool { agents: vec![found.clone()] }));
+    subagent::offer(&mut tools, std::slice::from_ref(&found));
     let control = Control::new(mode, Arc::default());
     let emit = |event| assert!(!matches!(event, EngineEvent::Asked(_)), "unexpected interactive ask");
     let agent = Agent {

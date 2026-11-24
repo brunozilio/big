@@ -12,7 +12,7 @@ function groupsOf(ctx, opts) {
   }));
 }
 
-const NOTHING = "Nenhum comando de verificação configurado para este repositório.\n";
+const NOTHING = "No verification command configured for this repository.\n";
 
 async function verify(ctx, opts, group) {
   if (group.commands.length === 0) return defined({ repository: group.repository, name: group.name, output: NOTHING, ran: [] });
@@ -37,16 +37,16 @@ function checked(s) {
   const verifying = s.state === undefined || s.state === "running";
   if (s.session && (s.verdict !== undefined || verifying)) {
     const state = s.verdict === undefined ? "running" : s.approved === false ? "failed" : "done";
-    commands.push({ name: "Verificador: critérios de aceite", state, seconds: null, log: s.verdict ?? "", session: s.session });
+    commands.push({ name: "Verifier: acceptance criteria", state, seconds: null, log: s.verdict ?? "", session: s.session });
   }
   return commands;
 }
 
 function asked(ctx, opts, output) {
   const plan = planOf(ctx, opts);
-  const parts = [`Verifique o item: ${plan.title}`];
+  const parts = [`Verify the item: ${plan.title}`];
   if (plan.story) parts.push(plan.story);
-  if (output) parts.push("## Comandos já rodados\n\n```\n" + tail(output, 3000) + "\n```");
+  if (output) parts.push("## Commands already run\n\n```\n" + tail(output, 3000) + "\n```");
   return inLanguage(parts.join("\n\n"));
 }
 
@@ -66,7 +66,7 @@ export default step({
   name: "checks",
   label: "Checks",
   icon: "sTest",
-  doing: "Rodando checks",
+  doing: "Running checks",
   view: (s) => {
     const commands = checked(s);
     return commands.length === 0 ? [logs(s.output ?? NOTHING)] : [logs(commands)];
@@ -87,7 +87,7 @@ export default step({
     if (!opts.agent) return ctx.pass({ output: ran || e2e ? both : NOTHING, ran: commands, ...listed, ...extra });
     const check = await verified(ctx, opts, both);
     const data = { output: both, ran: commands, session: check.session, verdict: check.verdict, approved: check.approved, ...listed, ...extra };
-    if (!check.approved) return ctx.fail({ ...data, error: "o verificador reprovou a entrega" });
+    if (!check.approved) return ctx.fail({ ...data, error: "the verifier rejected the delivery" });
     return ctx.pass(data);
   },
 });

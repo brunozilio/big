@@ -11,7 +11,7 @@ pub(in crate::agent) struct Called<'r> {
 }
 
 impl Called<'_> {
-    fn call(&self) -> Call<'_> {
+    pub(in crate::agent) fn call(&self) -> Call<'_> {
         Call { tool: self.name, subject: self.subject, effects: self.effects }
     }
 }
@@ -20,12 +20,14 @@ impl Agent<'_> {
     pub(in crate::agent) fn judged(&self, called: &Called<'_>) -> Judgement {
         let remembered = self.control.remembered();
         let bounds = self.workspace.bounds();
+        let allowed = domain::permission::allowed::global();
         let context = PolicyContext {
             mode: self.control.mode(),
             ceiling: self.control.ceiling(),
             remembered: &remembered,
             bounds: &bounds,
             no_prompts: self.control.no_prompts(),
+            allowed: allowed.as_ref(),
         };
         PolicyEngine::judge(&called.call(), &context)
     }

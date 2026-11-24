@@ -30,11 +30,7 @@ impl ApiSource for ProviderApis {
     fn api(&self, request: &PromptRequest) -> Result<Arc<dyn ModelApi>, ModelError> {
         let provider = request.session.model.provider;
         let key = request.host.credentials.model.clone().ok_or_else(|| {
-            ModelError::Unauthorized(format!(
-                "{} is not connected: run `{brand_command} login`",
-                agent_engine::providers::name(provider),
-                brand_command = brand::COMMAND
-            ))
+            ModelError::Unauthorized(agent_engine::providers::not_connected(provider, &request.session.model.id))
         })?;
         let client = |key: ProviderKey| -> Arc<dyn ModelApi> {
             Arc::new(ProviderClient::for_model(request.session.model.clone(), Arc::clone(&self.http), Arc::new(key)))
@@ -237,5 +233,14 @@ mod tests {
         let apis = ProviderApis::new(Arc::new(ScriptedHttp::new([])));
         let missing = apis.api(&request(KEYED, None)).err().expect("no key");
         assert!(matches!(missing, ModelError::Unauthorized(ref why) if why.contains("Keyed")), "{missing:?}");
+    }
+
+    #[test]
+    fn a_model_without_a_provider_is_named_in_the_error() {
+        let apis = ProviderApis::new(Arc::new(ScriptedHttp::new([])));
+        let missing = apis.api(&request(ModelProvider::new(""), None)).err().expect("no key");
+        let why = missing.to_string();
+        assert!(why.contains("no provider is set for the model `m`"), "{why}");
+        assert!(!why.contains(":  is"), "{why}");
     }
 }

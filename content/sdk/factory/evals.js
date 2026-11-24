@@ -17,7 +17,7 @@ export function parseCases(listing) {
     const file = at < 0 ? row : row.slice(0, at);
     try {
       const found = object(JSON.parse(at < 0 ? "" : row.slice(at + 1)));
-      if (typeof found.command !== "string" || !found.command) throw new Error("sem command");
+      if (typeof found.command !== "string" || !found.command) throw new Error("missing command");
       cases.push({ ...found, file, name: found.name ?? file, expect: found.expect === "pass" ? "pass" : "fail" });
     } catch (error) {
       broken.push({ file, error: String(error && error.message ? error.message : error) });
@@ -39,13 +39,13 @@ async function runCase(ctx, opts, entry) {
     const result = await ctx.exec(AT_COMMIT, defined({ env, timeout: opts.timeout }));
     const passed = judged(entry.expect, result.code);
     ok = ok && passed;
-    ran.push({ name: `${entry.name} @ ${String(entry.commit).slice(0, 10)} (espera ${entry.expect})`, state: passed ? "done" : "failed", seconds: null, log: tail(result.output ?? "", 3000) });
+    ran.push({ name: `${entry.name} @ ${String(entry.commit).slice(0, 10)} (expects ${entry.expect})`, state: passed ? "done" : "failed", seconds: null, log: tail(result.output ?? "", 3000) });
   }
   if (entry.head !== "skip") {
     const result = await ctx.exec(entry.command, defined({ timeout: opts.timeout }));
     const passed = result.code === 0;
     ok = ok && passed;
-    ran.push({ name: `${entry.name} @ atual (espera pass)`, state: passed ? "done" : "failed", seconds: null, log: tail(result.output ?? "", 3000) });
+    ran.push({ name: `${entry.name} @ current (expects pass)`, state: passed ? "done" : "failed", seconds: null, log: tail(result.output ?? "", 3000) });
   }
   return { ok, ran };
 }
@@ -58,10 +58,10 @@ function wanted(ctx, opts) {
 
 export default step({
   name: "evals",
-  label: "Avaliações",
+  label: "Evals",
   icon: "sTest",
-  doing: "Rodando as avaliações da fábrica",
-  view: (s) => [logs(Array.isArray(s.ran) && s.ran.length > 0 ? s.ran : s.output ?? "Nenhuma avaliação.")],
+  doing: "Running the factory evals",
+  view: (s) => [logs(Array.isArray(s.ran) && s.ran.length > 0 ? s.ran : s.output ?? "No evals.")],
   async run(ctx, opts) {
     const dir = opts.dir ?? `${object(ctx.item.factory).dir ?? ".big"}/evals`;
     const listed = await ctx.exec(LIST, { env: { EVALS: dir } });
@@ -76,10 +76,10 @@ export default step({
     const missing = wanted(ctx, opts).filter((origin) => !cases.some((entry) => entry.origin === origin));
     if (missing.length > 0) {
       ok = false;
-      ran.push({ name: "caso novo para o achado", state: "failed", seconds: null, log: `falta um caso com origin ${missing.join(", ")}` });
+      ran.push({ name: "new case for the finding", state: "failed", seconds: null, log: `missing a case with origin ${missing.join(", ")}` });
     }
     const data = { cases: cases.length, ran, missing };
-    if (!ok) return ctx.fail({ ...data, error: "as avaliações da fábrica não passaram" });
+    if (!ok) return ctx.fail({ ...data, error: "the factory evals did not pass" });
     return ctx.pass(data);
   },
 });

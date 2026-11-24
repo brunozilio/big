@@ -129,6 +129,10 @@ impl<'a> Args<'a> {
         value.as_u64().or_else(|| value.as_str().and_then(|text| text.parse().ok()))
     }
 
+    pub fn optional_flag(&self, name: &str) -> Option<bool> {
+        self.0.get(name).and_then(Value::as_bool)
+    }
+
     pub fn flag(&self, name: &str) -> Result<bool, ActionError> {
         self.0.get(name).and_then(Value::as_bool).ok_or_else(|| ActionError::missing(name))
     }

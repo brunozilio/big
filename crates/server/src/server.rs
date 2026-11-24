@@ -62,5 +62,21 @@ pub async fn serve(
     let address: SocketAddr = listener.local_addr()?;
     let listener = tokio::net::TcpListener::from_std(listener)?;
     let (router, _ctx) = app(backend, bundle, address.port());
-    axum::serve(listener, router).with_graceful_shutdown(stop).await
+    let (stopped, on_stop) = tokio::sync::oneshot::channel::<()>();
+    let serving = axum::serve(listener, router).with_graceful_shutdown(async move {
+        stop.await;
+        let _ = stopped.send(());
+    });
+    let deadline = async move {
+        match on_stop.await {
+            Ok(()) => tokio::time::sleep(SHUTDOWN_GRACE).await,
+            Err(_) => std::future::pending::<()>().await,
+        }
+    };
+    tokio::select! {
+        served = std::future::IntoFuture::into_future(serving) => served,
+        () = deadline => Ok(()),
+    }
 }
+
+const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(3);

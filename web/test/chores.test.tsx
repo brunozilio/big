@@ -2,11 +2,11 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, renderHook, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { setApi } from '../src/api'
-import type { Api } from '../src/api/contract'
 import { isItem, isLiveEvent, isSession, isStepView } from '../src/api/guards'
 import { mockApi } from '../src/api/mock'
 import { applyLive, boot, getState, stop, useSession } from '../src/api/store'
-import { Composer } from '../src/chat/Composer'
+import { btwOf, Composer } from '../src/chat/Composer'
+import { BtwChat, useBtw } from '../src/chat/BtwChat'
 import { SideAnswers, useSideQuestions } from '../src/chat/SideQuestions'
 import { HeadsUpNote } from '../src/screens/items/ItemModal'
 import { ItemsView } from '../src/screens/items/ItemsView'
@@ -94,23 +94,29 @@ describe('sugestão de próxima mensagem', () => {
 })
 
 describe('pergunta à parte', () => {
-  test('com o agente rodando, Enter pergunta à parte em vez de enviar', () => {
+  test('com o agente rodando, Enter manda a mensagem ao agente e só o botão pergunta à parte', async () => {
     const onAside = mock((_text: string) => undefined)
     const { view, onSubmit } = composer({ running: true, onAside })
     const box = view.getByLabelText('Mensagem') as HTMLTextAreaElement
-    fireEvent.change(box, { target: { value: 'O que falta?' } })
-    expect(view.getByText('Perguntar à parte')).toBeTruthy()
+    fireEvent.change(box, { target: { value: 'Inclua os testes' } })
+    await waitFor(() => expect((view.getByLabelText('Enviar') as HTMLButtonElement).disabled).toBe(false))
     fireEvent.keyDown(box, { key: 'Enter' })
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith(expect.objectContaining({ text: 'Inclua os testes' }))
+    expect(onAside).not.toHaveBeenCalled()
+    expect(box.value).toBe('')
+    expect(view.getByLabelText('Parar')).toBeTruthy()
+    fireEvent.change(box, { target: { value: 'O que falta?' } })
+    fireEvent.click(view.getByText('Perguntar à parte'))
     expect(onAside).toHaveBeenCalledWith('O que falta?')
-    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onSubmit).toHaveBeenCalledTimes(1)
     expect(box.value).toBe('')
   })
 
   test('a resposta aparece numa bolha efêmera com a pergunta', async () => {
-    const side = mock(async () => ({ answer: 'Está rodando os testes.' }))
-    setApi({ side } as unknown as Api)
+    const side = mock(async (_session: string, _question: { text: string; model: string }) => ({ answer: 'Está rodando os testes.' }))
     function Harness() {
-      const q = useSideQuestions('s1', 'opus')
+      const q = useSideQuestions('s1', (text) => side('s1', { text, model: 'opus' }))
       return (
         <>
           <button onClick={() => q.ask('O que falta?')}>perguntar</button>
@@ -127,6 +133,74 @@ describe('pergunta à parte', () => {
     expect(bubble.textContent).toContain('O que falta?')
     fireEvent.click(view.getByLabelText('Fechar pergunta à parte'))
     await waitFor(() => expect(view.queryByTestId('side-question')).toBeNull())
+  })
+
+  test('/btw pergunta à parte sem enviar, mesmo com o agente parado', () => {
+    const onBtw = mock((_text: string) => undefined)
+    const { view, onSubmit } = composer({ onBtw })
+    const box = view.getByLabelText('Mensagem') as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: '/btw o swagger está atualizado?' } })
+    expect(view.getByText('Perguntar à parte')).toBeTruthy()
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(onBtw).toHaveBeenCalledWith('o swagger está atualizado?')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(box.value).toBe('')
+    fireEvent.change(box, { target: { value: '/btw' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(onBtw).toHaveBeenCalledTimes(1)
+    expect(view.getByRole('alert').textContent).toContain('/btw <pergunta>')
+  })
+
+  test('sem quem trate o /btw, o texto segue como mensagem', () => {
+    const { view, onSubmit } = composer({})
+    const box = view.getByLabelText('Mensagem') as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: '/btw oi' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    expect(onSubmit).toHaveBeenCalled()
+  })
+
+  test('só /btw no começo vira pergunta à parte', () => {
+    expect(btwOf('/btw  qual arquivo? ')).toBe('qual arquivo?')
+    expect(btwOf('/btw\nlinha dois')).toBe('linha dois')
+    expect(btwOf('/btw')).toBe('')
+    expect(btwOf('/btwx oi')).toBeNull()
+    expect(btwOf('faça /btw depois')).toBeNull()
+  })
+
+  test('o /btw abre uma conversa livre que responde e continua', async () => {
+    await started()
+    function Harness() {
+      const btw = useBtw('a1', null)
+      return (
+        <MemoryRouter>
+          <TooltipProvider>
+            <button onClick={() => btw.ask('o swagger está atualizado?')}>perguntar</button>
+            {btw.state && <BtwChat state={btw.state} onClose={btw.close} />}
+          </TooltipProvider>
+        </MemoryRouter>
+      )
+    }
+    const view = render(<Harness />)
+    fireEvent.click(view.getByText('perguntar'))
+    await waitFor(() => expect(view.getByText(/está tudo em dia/)).toBeTruthy(), { timeout: 3000 })
+    expect(view.getByTestId('btw-chat').textContent).toContain('Pergunta à parte')
+    expect(view.getByTestId('btw-chat').textContent).not.toContain('não cria atividade')
+    const box = view.getByLabelText('Mensagem') as HTMLTextAreaElement
+    fireEvent.change(box, { target: { value: 'e o readme?' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await waitFor(() => expect(view.getAllByText(/está tudo em dia/)).toHaveLength(2), { timeout: 3000 })
+    fireEvent.click(view.getByLabelText('Fechar pergunta à parte'))
+    await waitFor(() => expect(view.queryByTestId('btw-chat')).toBeNull())
+  })
+
+  test('o mock abre o /btw da aplicação e recusa sem pergunta ou aplicação', async () => {
+    const api = await started()
+    const before = (await api.items()).length
+    const { session } = await api.btw({ text: 'o swagger está atualizado?', application: 'a1' })
+    expect((await api.session(session)).mode).toBe('plan')
+    expect(await api.items()).toHaveLength(before)
+    await expect(api.btw({ text: ' ', application: 'a1' })).rejects.toThrow('Escreva a pergunta.')
+    await expect(api.btw({ text: 'oi', application: null })).rejects.toThrow('Escolha uma aplicação')
   })
 
   test('o mock responde e recusa pergunta vazia', async () => {

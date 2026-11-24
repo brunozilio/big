@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
 import { api } from '@/api'
 import { mins, minutesSince } from '@/api/clock'
@@ -13,7 +13,7 @@ import { cn } from '@/ui/cn'
 import { Card, Spinner } from '@/ui/display'
 import { SegmentedControl } from '@/ui/form'
 import { Icon } from '@/ui/icon'
-import { springPop, tweenClose } from '@/ui/motion'
+import { springPop } from '@/ui/motion'
 import { Dialog, Menu, MenuContent, MenuItem, MenuTrigger } from '@/ui/overlay'
 import { ChangeChip, IssueKey, Node, nodeState, Origins, RowRight, stateLabel } from './parts'
 
@@ -97,11 +97,9 @@ function ItemDetail({ it, step, onStep }: { it: Item; step: string; onStep: (s: 
             })}
           </ul>
         </Card>
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.div key={step} initial={{ opacity: 0, x: 6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -4 }} transition={tweenClose} className="h-full min-h-0 min-w-0">
-            <StepPanel it={it} step={step} />
-          </motion.div>
-        </AnimatePresence>
+        <div key={step} className="h-full min-h-0 min-w-0">
+          <StepPanel it={it} step={step} />
+        </div>
       </div>
     </div>
   )
@@ -114,8 +112,8 @@ export function dockedChat(blocks: Block[]) {
   return { chat: first, rest }
 }
 
-const ATTEMPT_GLYPH: Partial<Record<StepState, 'close' | 'check' | 'skip'>> = { failed: 'close', passed: 'check', skipped: 'skip' }
-const ATTEMPT_TONE: Partial<Record<StepState, string>> = { failed: 'text-danger', passed: 'text-success', skipped: 'text-faint' }
+const ATTEMPT_GLYPH: Partial<Record<StepState, 'close' | 'check' | 'skip' | 'clock'>> = { failed: 'close', passed: 'check', skipped: 'skip', waiting_human: 'clock' }
+const ATTEMPT_TONE: Partial<Record<StepState, string>> = { failed: 'text-danger', passed: 'text-success', skipped: 'text-faint', waiting_human: 'text-warning-fg' }
 
 export function AttemptMark({ state }: { state: StepState }) {
   const glyph = ATTEMPT_GLYPH[state]
@@ -126,11 +124,11 @@ export function AttemptMark({ state }: { state: StepState }) {
   )
 }
 
-function RunPicker({ view, onPick }: { view: StepView; onPick: (n: number | null) => void }) {
+function RunPicker({ view, onPick, className = 'mb-4' }: { view: StepView; onPick: (n: number | null) => void; className?: string }) {
   if (view.attempts.length < 2) return null
   const last = view.attempts[view.attempts.length - 1].n
   return (
-    <div className="mb-4 flex items-center gap-2">
+    <div className={cn('flex items-center gap-2', className)}>
       <span className="text-sm text-muted">Execução</span>
       <SegmentedControl<string>
         size="sm"
@@ -207,6 +205,7 @@ function StepBody({ it, step, view: current, host, onPick: setAttempt }: { it: I
     return (
       <BlockContext.Provider value={host}>
         <div className="flex h-full flex-col overflow-hidden rounded-card bg-bg shadow-card">
+          <RunPicker view={current} onPick={setAttempt} className="shrink-0 px-4 pt-3" />
           <div className="min-h-0 flex-1">
             <ChatView sessionId={docked.chat.session} composer={docked.chat.composer} dock={docked.rest.map((b, i) => <BlockView key={`${current.attempt}-${i}-${b.type}`} block={b} />)} />
           </div>
@@ -218,8 +217,9 @@ function StepBody({ it, step, view: current, host, onPick: setAttempt }: { it: I
     return (
       <BlockContext.Provider value={host}>
         <div className="flex h-full flex-col overflow-hidden rounded-card bg-bg shadow-card">
+          <RunPicker view={current} onPick={setAttempt} className="shrink-0 px-4 pt-3" />
           <div className="min-h-0 flex-1">
-            <BlockView block={current.blocks[0]} />
+            <BlockView key={current.attempt} block={current.blocks[0]} />
           </div>
         </div>
       </BlockContext.Provider>

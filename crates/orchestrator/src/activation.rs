@@ -27,22 +27,6 @@ impl Script {
         Script::built(bundle(resources, &found.path)?, workflow)
     }
 
-    pub fn from_code(code: &str, workflow: &str) -> Result<Script, String> {
-        let modules: Vec<(String, String)> = serde_json::from_str(code).map_err(|error| error.to_string())?;
-        Script::built(Bundle { modules }, workflow)
-    }
-
-    pub fn code(&self) -> String {
-        serde_json::to_string(&self.bundle.modules).unwrap_or_default()
-    }
-
-    pub fn version(&self) -> String {
-        use std::hash::{DefaultHasher, Hash, Hasher};
-        let mut hasher = DefaultHasher::new();
-        self.bundle.modules.hash(&mut hasher);
-        format!("{:016x}", hasher.finish())
-    }
-
     fn built(bundle: Bundle, workflow: &str) -> Result<Script, String> {
         let mut script = Script { bundle, target: Value::Null, described: Value::Null };
         script.described = script.call("host.describe", &[])?;

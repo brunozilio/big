@@ -86,12 +86,38 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
             Ok(json!({ "id": text(&made["id"]), "author": you, "body": body, "at": iso(now_ms()), "kind": "comment" }))
         }
         "code.repos" => repos(&caller, args).await,
+        "code.pulls" => Ok(pulls(&caller.call(code::PULL_REQUESTS, json!({ "repo": arg(args, "repo")? })).await?)),
+        "code.branches" => Ok(branches(&caller.call(code::BRANCHES, json!({ "repo": arg(args, "repo")? })).await?)),
         "code.change" => change(&caller, arg(args, "change")?).await,
         "ci.run" => pipeline(&caller, arg(args, "run")?).await,
         "cloud.accounts_and_roles" => Ok(accounts(&caller.call(cloud::ACCOUNTS_AND_ROLES, json!({})).await?)),
         "mcp.tools" => caller.call(mcp::TOOLS, json!({})).await,
         _ => Err(ApiError::bad(format!("A ação {action} não existe para a página."))),
     }
+}
+
+pub fn pulls(raw: &Value) -> Value {
+    let listed: Vec<Value> = items(raw)
+        .iter()
+        .map(|pull| {
+            json!({
+                "key": text(&pull["ref"]), "number": pull["number"].as_u64().unwrap_or(0), "title": text(&pull["title"]),
+                "head": text(&pull["head"]), "base": text(&pull["base"]), "author": text(&pull["author"]),
+                "url": pull["url"].as_str(), "draft": pull["draft"].as_bool().unwrap_or(false),
+            })
+        })
+        .filter(|pull| !text(&pull["key"]).is_empty())
+        .collect();
+    json!(listed)
+}
+
+pub fn branches(raw: &Value) -> Value {
+    let listed: Vec<Value> = items(raw)
+        .iter()
+        .map(|branch| json!({ "name": text(&branch["name"]), "default": branch["default"].as_bool().unwrap_or(false) }))
+        .filter(|branch| !text(&branch["name"]).is_empty())
+        .collect();
+    json!(listed)
 }
 
 pub fn accounts(raw: &Value) -> Value {

@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use crate::{Rig, tool_use};
 
 fn agent_tool() -> Vec<Box<dyn tools::Tool>> {
-    vec![Box::new(tools::subagent::AgentTool::default())]
+    Vec::new()
 }
 
 fn delegated(rig: &Rig, input: Value) -> (ScriptedModel, String) {
@@ -110,7 +110,8 @@ fn a_sub_agent_started_while_planning_is_offered_only_the_tools_planning_allows(
 
     let planning = offered(PermissionMode::Plan);
     assert!(has(&planning, "Read") && has(&planning, "Grep") && has(&planning, "Glob"), "{planning:?}");
-    assert!(!has(&planning, "Bash") && !has(&planning, "Write") && !has(&planning, "WebFetch"), "{planning:?}");
+    assert!(!has(&planning, "Bash") && !has(&planning, "Write"), "{planning:?}");
+    assert!(has(&planning, "WebFetch") && has(&planning, "WebSearch"), "reading the web is a read: {planning:?}");
 
     let editing = offered(PermissionMode::AcceptEdits);
     assert!(has(&editing, "Bash") && has(&editing, "Write"), "{editing:?}");

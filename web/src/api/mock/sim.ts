@@ -77,7 +77,7 @@ export function onChange(l: () => void) {
   listeners.add(l)
   return () => listeners.delete(l)
 }
-function emit() {
+export function emit() {
   listeners.forEach((l) => l())
 }
 

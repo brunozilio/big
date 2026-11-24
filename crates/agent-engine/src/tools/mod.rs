@@ -1,20 +1,20 @@
 pub mod after;
-pub mod ask;
+pub mod agent_file;
 pub mod builtin;
 pub mod builtin_agents;
 #[cfg(test)]
 mod builtin_skills;
 pub mod checked;
 pub mod clients;
+pub mod conditional;
+pub mod contract;
+pub mod host;
 pub mod hosted;
 pub mod inbox;
-mod lsp;
 pub mod names;
-pub mod observer_report;
 mod outside;
 pub mod peers;
 pub mod persisted;
-pub mod plan_mode;
 pub mod progress;
 pub mod raw_text;
 pub mod read_files;
@@ -22,8 +22,9 @@ pub mod repl;
 pub(crate) mod script_bridge;
 pub(crate) mod script_io;
 pub mod script_tool;
+#[cfg(test)]
+pub(crate) mod scripted_tests;
 pub mod seen_files;
-pub mod send_message;
 pub mod skill;
 mod skill_listing;
 mod skill_script;
@@ -31,7 +32,6 @@ pub mod stopped;
 pub mod structured;
 pub mod subagent;
 pub mod subagent_config;
-pub mod task;
 pub mod tool_search;
 pub mod watch;
 mod workspace;
@@ -42,7 +42,6 @@ use serde_json::Value;
 
 pub use domain::permission::{Declared, Effect, SpawnKind};
 pub use llm_providers::web_search::WEB_SEARCH;
-pub use lsp::Lsp;
 pub(crate) use outside::settled;
 pub use workspace::{
     Launch, Launcher, Models, Network, OnThisMachine, Policy, Starter, WebSearcher, Workspace, env_secrets,
@@ -144,13 +143,7 @@ pub trait Tool: Send + Sync {
 }
 
 pub fn standard() -> Vec<Box<dyn Tool>> {
-    let features: Vec<Box<dyn Tool>> = vec![
-        Box::new(ask::AskUserQuestion),
-        Box::new(plan_mode::ExitPlanMode),
-        Box::new(peers::ListSessions),
-        Box::new(watch::Watch),
-    ];
-    builtin::tools().into_iter().chain(features).collect()
+    script_tool::builtin().into_iter().map(|tool| Box::new(tool) as Box<dyn Tool>).collect()
 }
 
 pub fn named(name: &str) -> Option<Box<dyn Tool>> {
@@ -158,7 +151,12 @@ pub fn named(name: &str) -> Option<Box<dyn Tool>> {
 }
 
 pub fn declared_path(name: &str) -> String {
-    format!("tools/{name}.js")
+    let typed = format!("tools/{name}.ts");
+    if content::builtin(&typed).is_some() {
+        return typed;
+    }
+    let offered = conditional::path(name);
+    if content::builtin(&offered).is_some() { offered } else { format!("tools/{name}.js") }
 }
 
 pub fn declared(name: &str, data: &Value) -> crate::model::ToolSpec {
@@ -176,24 +174,12 @@ pub fn declared(name: &str, data: &Value) -> crate::model::ToolSpec {
     }
 }
 
-pub fn declares_execute(name: &str) -> bool {
-    content::exports(&declared_path(name), "execute")
-}
-
 pub fn changes_nothing(tool: &dyn Tool, input: &Value, workspace: &Workspace) -> bool {
     domain::permission::change_nothing(&tool.effects(input, workspace))
 }
 
-pub(crate) fn writes(path: Option<&str>, workspace: &Workspace) -> Vec<Effect> {
-    vec![path.map_or(Effect::Declared(Declared::Edits), |path| Effect::WritePath(workspace.place(path)))]
-}
-
 pub(crate) fn field<'a>(input: &'a Value, name: &str) -> Option<&'a str> {
     input.get(name).and_then(Value::as_str)
-}
-
-pub(crate) fn required<'a>(input: &'a Value, name: &str) -> Result<&'a str, Outcome> {
-    field(input, name).ok_or_else(|| Outcome::error(format!("Missing required parameter `{name}`.")))
 }
 
 pub(crate) fn clip(text: &str, limit: usize) -> String {
@@ -247,32 +233,39 @@ mod declared_tests {
     #[test]
     fn every_built_in_tool_is_declared_in_content_with_an_execute() {
         let mut tools: Vec<Box<dyn Tool>> = super::standard();
-        tools.push(Box::new(super::Lsp));
-        tools.push(Box::new(super::skill::SkillTool { skills: Vec::new() }));
-        tools.push(Box::new(super::subagent::AgentTool { agents: Vec::new() }));
-        tools.push(Box::new(super::send_message::SendMessageTool));
-        tools.extend(super::task::tools());
-        tools.push(Box::new(super::tool_search::ToolSearch));
+        tools.extend(super::skill::tool(Vec::new()));
         let schema = serde_json::json!({ "type": "string" });
-        tools.push(Box::new(super::structured::Structured::new(schema.clone()).expect("structured")));
+        let mut workspace = super::Workspace::new(".");
+        tools.push(super::structured::offer(schema.clone(), &mut workspace).expect("structured"));
+        let report = super::conditional::tool(domain::observer::REPORT_TOOL, &serde_json::Value::Null);
+        tools.push(Box::new(report.expect("the observer's tool ships")));
         for tool in &tools {
             let spec = tool.spec();
             let name = spec.name.as_str();
             assert!(content::builtin(&super::declared_path(name)).is_some(), "{name} has no content/tools file");
             assert!(!spec.description.trim().is_empty(), "{name} has no description");
             assert_eq!(spec.schema["type"], "object", "{name}");
-            assert!(super::declares_execute(name), "{name} has no execute");
+            assert!(tool.script().is_some(), "{name} is a script");
             assert!(!spec.description.contains("{{"), "{name} keeps a placeholder");
         }
-        let declaring: Vec<&str> = content::builtin_files("tools/")
-            .into_iter()
-            .filter(|(_, source)| {
-                String::from_utf8_lossy(source).lines().any(|line| line.trim_start().starts_with("access:"))
-            })
-            .map(|(path, _)| path)
-            .collect();
-        assert!(declaring.is_empty(), "a tool's effects are declared in Rust, not as `access` in {declaring:?}");
         let structured = tools.iter().find(|tool| tool.spec().name == "StructuredOutput").expect("structured");
         assert_eq!(structured.spec().schema["properties"]["result"], schema, "input is a function of the data");
+    }
+
+    #[test]
+    fn every_shipped_tool_script_keeps_the_whole_contract() {
+        let scripts: Vec<(&str, String)> = content::builtin_files("tools/")
+            .into_iter()
+            .filter(|(path, _)| path.ends_with(".ts") && !path.ends_with(".d.ts"))
+            .map(|(path, source)| (path, String::from_utf8_lossy(source).into_owned()))
+            .collect();
+        assert!(scripts.len() > 30, "{}", scripts.len());
+        for (path, source) in &scripts {
+            for export in ["execute", "effects", "summary"] {
+                assert!(script::exports(path, source, export), "{path} does not export {export}");
+            }
+            assert!(!source.contains("ctx.builtin("), "{path} still calls into a Rust tool");
+            assert!(!source.lines().any(|line| line.trim_start().starts_with("access:")), "{path} declares access");
+        }
     }
 }

@@ -48,7 +48,7 @@ describe('primeira vez', () => {
     render(<TooltipProvider><Onboarding onDone={() => (done += 1)} /></TooltipProvider>)
     expect(screen.getByText('Conecte suas ferramentas')).toBeTruthy()
     const shown = () => Array.from(document.querySelectorAll<HTMLElement>('[data-provider]')).map((el) => el.dataset.provider)
-    expect(shown()).toEqual(['github', 'jira', 'aws', 'zephyr', 'mcp'])
+    expect(shown()).toEqual(['github', 'jira', 'aws', 'zephyr'])
     fireEvent.click(screen.getByText('Continuar'))
     expect(await screen.findByText('Conecte um provedor de IA')).toBeTruthy()
     expect(shown().length).toBeGreaterThan(0)

@@ -5,6 +5,7 @@ use serde_json::{Value, json};
 use super::Agent;
 use super::dispatch::Calling;
 use super::run::ThisRun;
+use super::subagents::background::Spawn;
 use crate::model::ToolSpec;
 use crate::tools::script_bridge::hosted;
 use crate::tools::script_tool::{Capabilities, Capability, Origin, ScriptTool};
@@ -12,7 +13,16 @@ use crate::tools::skill::FoundSkill;
 use crate::tools::{Outcome, Tool, Workspace};
 use crate::transcript::{Block, Message};
 
+mod agents;
+mod background;
 mod host_calls;
+mod peers;
+mod plan;
+mod repl;
+mod skill;
+mod spaces;
+mod user;
+mod watch;
 
 use host_calls::HostCall;
 
@@ -24,18 +34,23 @@ struct Script<'a> {
     source: &'a str,
     origin: Origin,
     capabilities: Capabilities,
+    effects: Vec<crate::tools::Effect>,
+    streams: crate::model::script_http::Streams,
 }
 
 #[derive(Clone, Copy)]
-struct Within<'a> {
+struct Within<'a, 'env> {
     id: &'a str,
     parent: &'a [Message],
     run: &'a ThisRun,
+    spawn: Option<Spawn<'a, 'env>>,
+    permission: Option<domain::permission::RuleKind>,
 }
 
-impl<'a> Within<'a> {
-    fn the_call(calling: &Calling<'a, '_>) -> Self {
-        Self { id: calling.id, parent: calling.parent, run: calling.run }
+impl<'a, 'env> Within<'a, 'env> {
+    fn the_call(calling: &Calling<'a, 'env>) -> Self {
+        let permission = calling.permission;
+        Self { id: calling.id, parent: calling.parent, run: calling.run, spawn: calling.spawn, permission }
     }
 }
 
@@ -43,13 +58,13 @@ thread_local! {
     static DEPTH: Cell<usize> = const { Cell::new(0) };
 }
 
-struct ScriptCall<'a, 'b> {
-    agent: &'a Agent<'b>,
-    tool: &'a ScriptTool,
-    within: Within<'a>,
+struct ScriptCall<'w, 'env, 'b> {
+    agent: &'env Agent<'b>,
+    tool: &'w ScriptTool,
+    within: Within<'w, 'env>,
 }
 
-impl Tool for ScriptCall<'_, '_> {
+impl Tool for ScriptCall<'_, '_, '_> {
     fn spec(&self) -> ToolSpec {
         self.tool.spec.clone()
     }
@@ -81,23 +96,22 @@ fn reported(result: Result<Value, String>, last: Option<Outcome>, stopped: bool,
     match (result, last) {
         (Ok(Value::String(text)), Some(outcome)) if text == outcome.content => outcome,
         (Err(_), Some(outcome)) if stopped => outcome,
-        (Ok(Value::String(text)), _) => Outcome::ok(text),
-        (Ok(Value::Null), _) => Outcome::ok(""),
-        (Ok(value), _) => Outcome::ok(value.to_string()),
+        (Ok(value), _) => crate::tools::contract::outcome(value),
         (Err(error), _) => Outcome::error(format!("{name} failed: {error}")),
     }
 }
 
 impl Agent<'_> {
-    pub(in crate::agent) fn script_call(
-        &self,
-        calling: &Calling<'_, '_>,
+    pub(in crate::agent) fn script_call<'env>(
+        &'env self,
+        calling: &Calling<'_, 'env>,
         tool: &ScriptTool,
         summary: &str,
         input: &Value,
     ) -> Outcome {
         let call = ScriptCall { agent: self, tool, within: Within::the_call(calling) };
-        self.permitted(calling.id, &call, summary, input, calling.permission)
+        let shown = tool.shown(input, self.workspace);
+        self.permitted_as(calling.id, &call, summary, shown.as_deref(), input, calling.permission)
     }
 
     pub(in crate::agent) fn project_skill<'t>(&self, tool: &'t dyn Tool, input: &Value) -> Option<&'t FoundSkill> {
@@ -105,16 +119,20 @@ impl Agent<'_> {
         tool.skills().iter().find(|skill| skill.name == name && skill.project_script())
     }
 
-    pub(in crate::agent) fn skill_call(
-        &self,
-        calling: &Calling<'_, '_>,
+    pub(in crate::agent) fn skill_call<'env>(
+        &'env self,
+        calling: &Calling<'_, 'env>,
         tool: &dyn Tool,
         skill: &FoundSkill,
         summary: &str,
         input: &Value,
     ) -> Outcome {
         let shown = format!("{summary}, the project's script {}", skill.file.display());
-        self.permitted_as(calling.id, tool, summary, Some(&shown), input, calling.permission)
+        let Some(script) = tool.script() else {
+            return self.permitted_as(calling.id, tool, summary, Some(&shown), input, calling.permission);
+        };
+        let call = ScriptCall { agent: self, tool: script, within: Within::the_call(calling) };
+        self.permitted_as(calling.id, &call, summary, Some(&shown), input, calling.permission)
     }
 
     fn script_context(&self) -> Value {
@@ -131,40 +149,22 @@ impl Agent<'_> {
             "session": self.workspace.session_id,
             "tools": self.tools.iter().map(|tool| tool.spec().name).collect::<Vec<_>>(),
             "skills": skills,
-            "agents": self.agents.iter().map(|agent| json!({ "name": agent.name, "description": agent.description })).collect::<Vec<_>>(),
+            "agents": self.agents.iter().map(|agent| json!({ "name": agent.name, "description": agent.description, "background": agent.config.background })).collect::<Vec<_>>(),
         })
     }
 
-    fn run_script(&self, within: Within<'_>, tool: &ScriptTool, input: &Value) -> Outcome {
+    fn run_script<'env>(&'env self, within: Within<'_, 'env>, tool: &ScriptTool, input: &Value) -> Outcome {
         let path = tool.path.display().to_string();
         let origin = Origin::trusted(tool.trusted);
         let capabilities = tool.capabilities.clone();
-        let script = Script { name: &tool.spec.name, path: &path, source: &tool.source, origin, capabilities };
-        self.run_js(within, &script, input, None)
+        let effects = tool.effects(input, self.workspace);
+        let streams = crate::model::script_http::Streams::default();
+        let script =
+            Script { name: &tool.spec.name, path: &path, source: &tool.source, origin, capabilities, effects, streams };
+        self.run_js(within, &script, input)
     }
 
-    pub(in crate::agent) fn execute_declared(
-        &self,
-        calling: &Calling<'_, '_>,
-        input: &Value,
-        builtin: &dyn Fn(&Value) -> Outcome,
-    ) -> Outcome {
-        let name = calling.name;
-        let path = crate::tools::declared_path(name);
-        let Some(source) = content::source(&path) else { return builtin(input) };
-        let spec = content::value(&path, "spec").unwrap_or_default();
-        let capabilities = Capabilities::read(&spec).unwrap_or_default();
-        let script = Script { name, path: &path, source: &source, origin: Origin::Owner, capabilities };
-        self.run_js(Within::the_call(calling), &script, input, Some(builtin))
-    }
-
-    fn run_js(
-        &self,
-        within: Within<'_>,
-        script: &Script<'_>,
-        input: &Value,
-        builtin: Option<&dyn Fn(&Value) -> Outcome>,
-    ) -> Outcome {
+    fn run_js<'env>(&'env self, within: Within<'_, 'env>, script: &Script<'_>, input: &Value) -> Outcome {
         let depth = DEPTH.with(Cell::get);
         if depth >= DEEPEST {
             return Outcome::error(format!("{} called tools {DEEPEST} levels deep; stopped", script.name));
@@ -178,25 +178,28 @@ impl Agent<'_> {
         let result = hosted(
             "the script crashed",
             move |host| script::run(&path, &source, export, &[input], &data, host, stop),
-            |function, arguments| match function {
-                "builtin" => built_in(builtin, &arguments, &last, script.name),
-                function => self.serve(within, script, function, arguments),
-            },
+            |function, arguments| kept(self.serve(within, script, function, arguments), function, &last),
         );
         DEPTH.with(|cell| cell.set(depth));
         let stopped = self.workspace.stop.load(std::sync::atomic::Ordering::Relaxed);
         reported(result, last.into_inner(), stopped, script.name)
     }
 
-    fn serve(
-        &self,
-        within: Within<'_>,
+    fn serve<'env>(
+        &'env self,
+        within: Within<'_, 'env>,
         script: &Script<'_>,
         function: &str,
         arguments: Value,
     ) -> Result<Value, String> {
         if let Some(capability) = Capability::of(function) {
             return self.host_call(within, script, capability, &arguments);
+        }
+        if crate::tools::host::named(function) {
+            return self.primitive(script, function, &arguments);
+        }
+        if let Some(answer) = self.loop_space(within, script, function, &arguments) {
+            return answer;
         }
         match function {
             "tool" => {
@@ -218,7 +221,7 @@ impl Agent<'_> {
 
     fn host_call(
         &self,
-        within: Within<'_>,
+        within: Within<'_, '_>,
         script: &Script<'_>,
         capability: Capability,
         arguments: &Value,
@@ -231,22 +234,31 @@ impl Agent<'_> {
         HostCall::answer(self.permitted_as(&id, &call, &subject, Some(&shown), arguments, None))
     }
 
+    fn primitive(&self, script: &Script<'_>, function: &str, arguments: &Value) -> Result<Value, String> {
+        if script.origin != Origin::Owner {
+            return Err(format!(
+                "ctx.{function} is for the owner's tools; a project tool reaches the app through readFile, writeFile, \
+                 exec and fetch"
+            ));
+        }
+        let fence = crate::tools::host::Fence::of(&script.effects);
+        let reach = crate::tools::host::Reach { workspace: self.workspace, fence, streams: Some(&script.streams) };
+        crate::tools::host::call(&reach, function, arguments)
+    }
+
     fn script_llm(&self, arguments: &Value) -> Result<Value, String> {
         crate::tools::script_bridge::ask_model(self.api, &self.request, arguments, self.control.stop_flag())
     }
 }
 
-fn built_in(
-    builtin: Option<&dyn Fn(&Value) -> Outcome>,
-    arguments: &Value,
-    last: &RefCell<Option<Outcome>>,
-    name: &str,
-) -> Result<Value, String> {
-    let builtin = builtin.ok_or_else(|| format!("{name} has no built-in to call"))?;
-    let outcome = builtin(arguments);
-    let content = Value::String(outcome.content.clone());
-    last.replace(Some(outcome));
-    Ok(content)
+fn kept(answer: Result<Value, String>, function: &str, last: &RefCell<Option<Outcome>>) -> Result<Value, String> {
+    if let Ok(value) = &answer
+        && spaces::named(function).is_some()
+        && value.get("content").is_some()
+    {
+        last.replace(Some(crate::tools::contract::outcome(value.clone())));
+    }
+    answer
 }
 
 #[cfg(test)]
@@ -254,10 +266,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_script_s_answer_keeps_the_built_in_s_outcome_when_it_passed_it_through() {
+    fn no_group_of_primitives_hides_behind_a_field_of_the_context() {
+        let fields =
+            ["cwd", "model", "mode", "session", "tools", "skills", "agents", "brand", "services", "codeMode", "shell"];
+        for field in fields {
+            let function = format!("{field}.anything");
+            assert!(!crate::tools::host::named(&function), "ctx.{field} hides a primitive group");
+            assert!(spaces::named(&function).is_none(), "ctx.{field} hides a loop primitive group");
+        }
+        let context = ["cwd", "model", "mode", "session", "tools", "skills", "agents"];
+        assert!(context.iter().all(|field| fields.contains(field)));
+    }
+
+    #[test]
+    fn a_script_s_answer_keeps_a_primitive_s_outcome_when_it_passed_it_through() {
         let built = Outcome::ok("listing").showing("3 files");
         let same = reported(Ok(json!("listing")), Some(built.clone()), false, "Glob");
-        assert_eq!(same, built, "what the built-in showed survives the script");
+        assert_eq!(same, built, "what the primitive showed survives the script");
         let rewritten = reported(Ok(json!("2 files")), Some(built.clone()), false, "Glob");
         assert_eq!(rewritten, Outcome::ok("2 files"));
         assert_eq!(reported(Ok(Value::Null), None, false, "Glob"), Outcome::ok(""));

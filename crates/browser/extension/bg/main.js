@@ -1,12 +1,12 @@
-import { PORT } from "../config.js";
 import { attach } from "./cdp.js";
 import { computer, shot, viewport } from "./computer.js";
 import { captureFrame, gif } from "./frames.js";
-import { connect, handle, identity, rename, send, status } from "./link.js";
+import { connect, handle, identity, send } from "./link.js";
 import { readConsole, readNetwork } from "./logs.js";
 import { candidates, formInput, javascript, pageText, putFiles, readPage } from "./page.js";
 import { ToolError, blobToBase64, clip, fail, fromBase64, ok, refuse, sleep } from "./results.js";
-import { answered, ask, cancel, ensure, forgetOnce } from "./sites.js";
+import { ensure } from "./sites.js";
+import { answered, ask, cancel } from "./ask.js";
 import * as shortcuts from "./shortcuts.js";
 import { context, create, groupOf, listing, loaded, newTab, owned, tabsOf } from "./tabs.js";
 
@@ -27,9 +27,9 @@ async function withContext(session, result, tabId, always) {
   return result;
 }
 
-async function onPage(session, input, tool) {
+async function onPage(session, input, sites) {
   const tab = await owned(session, input.tabId);
-  await ensure(tab.url, tool, input.action_summary);
+  ensure(tab.url, sites);
   await attach(tab.id).catch(() => {});
   return tab;
 }
@@ -74,7 +74,7 @@ async function standaloneTab(session) {
   return first;
 }
 
-async function navigate({ session, input, standalone }) {
+async function navigate({ session, input, standalone, sites }) {
   const history = input.url === "back" || input.url === "forward";
   const missingTab = input.tabId === undefined || input.tabId === null;
   if (missingTab && (history || !standalone)) {
@@ -83,7 +83,7 @@ async function navigate({ session, input, standalone }) {
   const tab = missingTab ? await standaloneTab(session) : await owned(session, input.tabId);
   const started = Date.now();
   if (history) {
-    await ensure(tab.url, "navigate");
+    ensure(tab.url, sites);
     try {
       await (input.url === "back" ? chrome.tabs.goBack(tab.id) : chrome.tabs.goForward(tab.id));
     } catch {
@@ -91,7 +91,7 @@ async function navigate({ session, input, standalone }) {
     }
   } else {
     const url = normalized(input.url);
-    await ensure(url, "navigate");
+    ensure(url, sites);
     await attach(tab.id).catch(() => {});
     await chrome.tabs.update(tab.id, { url });
   }
@@ -110,52 +110,52 @@ function described(input) {
   return { type: input.action, summary: input.action_summary, detail };
 }
 
-async function computerTool({ session, input }) {
-  const tab = await onPage(session, input, "computer");
+async function computerTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
   const done = await computer(tab, input);
   const action = ["screenshot", "zoom", "wait"].includes(input.action) ? null : { ...described(input), point: done.point, from: done.from, to: done.to };
   if (input.action !== "zoom" && input.action !== "wait") await captureFrame(await chrome.tabs.get(tab.id), done.view || (await viewport(tab.id).catch(() => null)), action);
   return withContext(session, done.result, tab.id, false);
 }
 
-async function readPageTool({ session, input }) {
-  const tab = await onPage(session, input, "read_page");
+async function readPageTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
   return ok(await readPage(tab, input));
 }
 
-async function findTool({ session, input }) {
+async function findTool({ session, input, sites }) {
   if (!String(input.query || "").trim()) refuse("`query` is required: describe what to find.");
-  const tab = await onPage(session, input, "find");
+  const tab = await onPage(session, input, sites);
   return candidates(tab);
 }
 
-async function formInputTool({ session, input }) {
-  const tab = await onPage(session, input, "form_input");
+async function formInputTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
   const message = await formInput(tab, input.ref, input.value);
   await captureFrame(tab, await viewport(tab.id).catch(() => null), { type: "form_input", summary: input.action_summary, detail: input.ref });
   return withContext(session, ok(message), tab.id, false);
 }
 
-async function pageTextTool({ session, input }) {
-  const tab = await onPage(session, input, "get_page_text");
+async function pageTextTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
   return ok(await pageText(tab));
 }
 
-async function javascriptTool({ session, input }) {
+async function javascriptTool({ session, input, sites }) {
   if (input.action !== "javascript_exec") refuse("`action` must be 'javascript_exec'.");
-  const tab = await onPage(session, input, "javascript_tool");
+  const tab = await onPage(session, input, sites);
   const answer = await javascript(tab, input.text);
   if (answer.error) return fail(answer.error);
   return withContext(session, ok(answer.value), tab.id, false);
 }
 
-async function consoleTool({ session, input }) {
-  const tab = await onPage(session, input, "read_console_messages");
+async function consoleTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
   return ok(readConsole(tab, input));
 }
 
-async function networkTool({ session, input }) {
-  const tab = await onPage(session, input, "read_network_requests");
+async function networkTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
   return ok(readNetwork(tab, input));
 }
 
@@ -198,8 +198,8 @@ function uploaded(placed, where) {
   return placed.how === "input" ? `Uploaded ${names} to ${where}.` : `Dropped ${names} on ${placed.on || "the page"} (${where}).`;
 }
 
-async function uploadImageTool({ session, input }) {
-  const tab = await onPage(session, input, "upload_image");
+async function uploadImageTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
   const kept = shot(input.imageId);
   const filename = String(input.filename || "image.png");
   const png = /\.png$/i.test(filename);
@@ -208,8 +208,8 @@ async function uploadImageTool({ session, input }) {
   return withContext(session, ok(uploaded(placed, input.ref || `(${input.coordinate.join(", ")})`)), tab.id, false);
 }
 
-async function fileUploadTool({ session, input }) {
-  const tab = await onPage(session, input, "file_upload");
+async function fileUploadTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
   if (!input.ref) refuse("`ref` is required: the file input from read_page or find.");
   if (!Array.isArray(input.files) || input.files.length === 0) refuse("No files were attached to the upload.");
   const placed = await putFiles(tab, { ref: input.ref }, input.files);
@@ -220,13 +220,13 @@ async function shortcutsList() {
   return ok(await shortcuts.listed());
 }
 
-async function shortcutsExecute({ session, input }) {
+async function shortcutsExecute({ session, input, sites }) {
   const tab = await owned(session, input.tabId);
   const shortcut = await shortcuts.find(input.shortcutId);
   let opened = "";
   if (shortcut.url) {
     const url = normalized(shortcut.url);
-    await ensure(url, "shortcuts_execute");
+    ensure(url, sites);
     const started = Date.now();
     await chrome.tabs.update(tab.id, { url });
     await sleep(150);
@@ -261,49 +261,15 @@ const TOOLS = {
 async function call(message) {
   const run = TOOLS[message.tool];
   if (!run) return fail(`This browser extension does not know the tool "${message.tool}". Update the extension.`);
-  if (await stopped()) return fail("The user stopped the agent in the browser extension. Tell the user; they can resume it from the extension's popup.");
-  const started = Date.now();
+  const session = String(message.session || "default");
   let result;
   try {
-    result = await run({ session: String(message.session || "default"), input: message.input || {}, standalone: message.standalone !== false });
+    result = await run({ session, input: message.input || {}, standalone: message.standalone !== false, sites: message.sites || [] });
   } catch (error) {
     result = fail(error instanceof ToolError ? error.message : `${message.tool} failed: ${error?.message || error}`);
   }
-  await audit(message, result, Date.now() - started);
+  result.tabs = (await tabsOf(await groupOf(session)).catch(() => [])).map((tab) => ({ id: tab.id, url: tab.url || "" }));
   return result;
-}
-
-async function stopped() {
-  return (await chrome.storage.local.get("stopped")).stopped === true;
-}
-
-async function audit(message, result, ms) {
-  const input = message.input || {};
-  const tab = Number.isFinite(Number(input.tabId)) ? await chrome.tabs.get(Number(input.tabId)).catch(() => null) : null;
-  let host = "";
-  try {
-    host = new URL(tab?.url || "").hostname;
-  } catch {}
-  const entry = {
-    at: new Date().toISOString(),
-    tool: message.tool,
-    action: input.action || "",
-    summary: clip(input.action_summary || "", 120),
-    host,
-    ok: result?.isError !== true,
-    ms,
-  };
-  const log = (await chrome.storage.local.get("audit")).audit || [];
-  log.push(entry);
-  await chrome.storage.local.set({ audit: log.slice(-500) });
-}
-
-async function stopAll() {
-  await chrome.storage.local.set({ stopped: true });
-  forgetOnce();
-  for (const target of await chrome.debugger.getTargets()) {
-    if (target.attached && target.tabId !== undefined) await chrome.debugger.detach({ tabId: target.tabId }).catch(() => {});
-  }
 }
 
 async function pair(id) {
@@ -325,31 +291,8 @@ function pairEnded(id) {
 
 handle({ call, pair, pairEnded });
 
-chrome.runtime.onMessage.addListener((message, _sender, reply) => {
-  if (message?.type === "ask-answer") {
-    answered(message.id, message);
-    return false;
-  }
-  if (message?.type === "status") {
-    identity().then((me) => reply({ state: status(), port: PORT, ...me }));
-    return true;
-  }
-  if (message?.type === "rename") {
-    rename(String(message.name || "").trim()).then(() => reply({ done: true }));
-    return true;
-  }
-  if (message?.type === "stop") {
-    stopAll().then(() => reply({ done: true }));
-    return true;
-  }
-  if (message?.type === "resume") {
-    chrome.storage.local.set({ stopped: false }).then(() => reply({ done: true }));
-    return true;
-  }
-  if (message?.type === "reconnect") {
-    connect();
-    reply({ done: true });
-  }
+chrome.runtime.onMessage.addListener((message) => {
+  if (message?.type === "ask-answer") answered(message.id, message);
   return false;
 });
 

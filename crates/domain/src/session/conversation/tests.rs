@@ -127,6 +127,17 @@ fn background_commands_are_counted_until_stopped_or_finished() {
 }
 
 #[test]
+fn a_background_command_that_ends_on_its_own_is_no_longer_counted() {
+    let mut transcript = Transcript::default();
+    transcript.apply(&EngineEvent::BackgroundStarted { id: "bash_5".into() });
+    transcript.apply(&EngineEvent::BackgroundStarted { id: "bash_6".into() });
+    let ended = crate::inbox::Notice::new("background bash_5", "`npm start` finished (killed by a signal).");
+    let lines = crate::inbox::Notice::new("monitor bash_6", "ready");
+    transcript.apply(&EngineEvent::Notified(vec![ended, lines]));
+    assert_eq!(transcript.background, ["bash_6"]);
+}
+
+#[test]
 fn passing_notices_give_way_to_the_next_one_and_all_go_when_cleared() {
     let mut transcript = Transcript::default();
     transcript.notice("kept");

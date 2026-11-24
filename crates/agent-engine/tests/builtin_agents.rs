@@ -28,7 +28,7 @@ fn run(model: &ScriptedModel, history: &mut Vec<Message>) -> Vec<TurnRequest> {
     let emit = move |event: EngineEvent| sink.lock().expect("events").push(event);
     let agents = builtin_agents::all();
     let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool { agents: agents.clone() }));
+    tools::subagent::offer(&mut tools, &agents);
     let agent = Agent {
         api: model,
         tools: &tools,

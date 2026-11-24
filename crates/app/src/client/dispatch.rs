@@ -43,7 +43,9 @@ impl Shared {
                 }
             }
             ServerEvent::Reply { id, reply } => self.answer(id, reply),
-            ServerEvent::Unsolicited(unsolicited) => tracing::debug!(?unsolicited, "the backend told something unasked"),
+            ServerEvent::Unsolicited(unsolicited) => {
+                tracing::debug!(?unsolicited, "the backend told something unasked")
+            }
         }
     }
 

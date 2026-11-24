@@ -1,14 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
-use oxc::allocator::Allocator;
-use oxc::ast::ast::{Statement, StringLiteral};
-use oxc::codegen::Codegen;
-use oxc::parser::Parser;
-use oxc::semantic::SemanticBuilder;
-use oxc::span::SourceType;
-use oxc::str::JSStr;
-use oxc::transformer::{TransformOptions, Transformer};
+use script::typescript::compile;
 
 use crate::resources::{Resources, script_candidates};
 
@@ -81,44 +74,4 @@ fn normalized(path: &Path) -> Option<String> {
         }
     }
     Some(parts.to_string_lossy().replace('\\', "/"))
-}
-
-pub fn compile(
-    id: &str,
-    text: &str,
-    mut resolve: impl FnMut(&str) -> Result<String, String>,
-) -> Result<(String, Vec<String>), String> {
-    let allocator = Allocator::default();
-    let typed = id.ends_with(".ts") || id.ends_with(".mts");
-    let source_type = if typed { SourceType::ts() } else { SourceType::mjs() };
-    let parsed = Parser::new(&allocator, text, source_type).parse();
-    if let Some(error) = parsed.diagnostics.iter().next() {
-        return Err(format!("{id}: {error}"));
-    }
-    let mut program = parsed.program;
-    let scoping = SemanticBuilder::new().build(&program).semantic.into_scoping();
-    let transformed = Transformer::new(&allocator, Path::new(id), &TransformOptions::default())
-        .build_with_scoping(scoping, &mut program);
-    if let Some(error) = transformed.diagnostics.iter().next() {
-        return Err(format!("{id}: {error}"));
-    }
-    let mut imports = Vec::new();
-    for statement in program.body.iter_mut() {
-        let Some(source) = source_of(statement) else { continue };
-        let spec = source.value.as_str().unwrap_or_default().to_owned();
-        let target = resolve(&spec).map_err(|error| format!("{id}: {error}"))?;
-        source.value = JSStr::from_str_in(&target, &&allocator);
-        source.raw = None;
-        imports.push(target);
-    }
-    Ok((Codegen::new().build(&program).code, imports))
-}
-
-fn source_of<'s, 'a>(statement: &'s mut Statement<'a>) -> Option<&'s mut StringLiteral<'a>> {
-    match statement {
-        Statement::ImportDeclaration(declaration) => Some(&mut declaration.source),
-        Statement::ExportAllDeclaration(declaration) => Some(&mut declaration.source),
-        Statement::ExportFromDeclaration(declaration) => Some(&mut declaration.source),
-        _ => None,
-    }
 }

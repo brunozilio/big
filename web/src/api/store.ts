@@ -198,8 +198,20 @@ export function useLoad<T>(load: (() => Promise<T>) | null, deps: unknown[]): Lo
   return result
 }
 
+const seenSteps = new Map<string, StepView>()
+
+function stepKey(item: string, step: string, attempt: number | null) {
+  return `${item}/${step}/${attempt ?? ''}`
+}
+
 export function useStepView(item: Item | null, step: string | null, attempt: number | null, nonce = 0): Loaded<StepView> {
-  return useLoad(item && step ? () => api().step(item.id, step, attempt) : null, [item?.id, item?.updatedAt, step, attempt, nonce])
+  const key = item && step ? stepKey(item.id, step, attempt) : ''
+  const loaded = useLoad(item && step ? () => api().step(item.id, step, attempt).then((view) => ({ key, view })) : null, [item?.id, item?.updatedAt, step, attempt, nonce])
+  const fresh = loaded.data?.key === key ? loaded.data.view : null
+  useEffect(() => {
+    if (fresh) seenSteps.set(key, fresh)
+  }, [key, fresh])
+  return { ...loaded, data: fresh ?? seenSteps.get(key) ?? loaded.data?.view ?? null }
 }
 
 export function useCall<A extends CallAction>(connection: string, action: A, args: CallArgs<A>, version: string | undefined): Loaded<CallResult<A>> {

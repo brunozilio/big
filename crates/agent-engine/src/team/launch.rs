@@ -37,6 +37,7 @@ fn spec(launching: &Launching<'_>) -> (PathBuf, domain::team::TeammateSpec) {
         model: launching.model.to_owned(),
         mode: domain::command::mode_label(launching.mode).to_owned(),
         instructions: launching.instructions.to_owned(),
+        lead_pid: Some(std::process::id()),
     };
     (path, details)
 }

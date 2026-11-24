@@ -35,8 +35,8 @@ fn a_ticket_with_several_projects_asks_where_to_create_the_issue_with_a_form() {
     let shown = views(&asked);
     assert_eq!(shown.len(), 2, "an unknown project asks again");
     let asked_form = block(shown[0], "form").expect("a form");
-    assert_eq!(asked_form["title"], "Onde criar a issue");
-    assert_eq!(asked_form["submit"], "Criar issue");
+    assert_eq!(asked_form["title"], "Where to create the issue");
+    assert_eq!(asked_form["submit"], "Create issue");
     assert_eq!(asked_form["fields"][0]["kind"], "select");
     assert_eq!(asked_form["fields"][0]["options"][0], json!({ "value": "OPS", "label": "OPS · Operações" }));
     assert_eq!(asked_form["fields"][1]["name"], "type");
@@ -156,7 +156,7 @@ fn a_ticket_asks_for_the_required_fields_the_tracker_wants_and_sends_them_with_t
     let shown = views(&asked);
     assert_eq!(shown.len(), 2, "a value outside the allowed ones asks again");
     let asked_form = block(shown[0], "form").expect("a form");
-    assert_eq!(asked_form["title"], "Campos obrigatórios");
+    assert_eq!(asked_form["title"], "Required fields");
     let fields = asked_form["fields"].as_array().expect("fields");
     assert_eq!(fields.len(), 2, "the summary is the step's own: {asked_form}");
     assert_eq!(fields[0]["kind"], "select");
@@ -227,7 +227,7 @@ fn linked_case() -> Value {
 
 fn drafting(args: &Value, cases: &Value) -> Option<Value> {
     let prompt = args["input"]["prompt"].as_str().unwrap_or_default();
-    if prompt.starts_with("Automatize") {
+    if prompt.starts_with("Automate") {
         return None;
     }
     Some(json!({ "text": "", "session": "test-1", "output": { "cases": cases } }))
@@ -260,7 +260,7 @@ fn the_cases_already_linked_to_the_issue_are_reused_and_only_the_missing_ones_ar
     let testers: Vec<&Value> =
         of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "tester").collect();
     let draft = testers[0]["args"]["input"]["prompt"].as_str().expect("prompt");
-    assert!(draft.contains("Z-T7") && draft.contains("Login pela tela") && draft.contains("Não os repita"), "{draft}");
+    assert!(draft.contains("Z-T7") && draft.contains("Login pela tela") && draft.contains("Do not repeat them"), "{draft}");
     let created: Vec<&Value> =
         calls(&asked, "create_case").iter().map(|command| &command["args"]["args"]["title"]).collect();
     assert_eq!(created, [&json!("Cadastrar cliente pela API")], "the linked case is not created again");
@@ -277,7 +277,7 @@ fn when_the_linked_cases_cover_everything_nothing_is_created_and_nobody_approves
     let run = of_kind(&asked, "agent")
         .into_iter()
         .filter_map(|command| command["args"]["input"]["prompt"].as_str())
-        .find(|prompt| prompt.starts_with("Automatize"))
+        .find(|prompt| prompt.starts_with("Automate"))
         .expect("the E2E run");
     assert!(run.contains("Z-T7"), "{run}");
 }
@@ -314,7 +314,7 @@ fn a_missing_test_connection_tells_what_to_connect_and_lets_the_person_retry_or_
     assert!(of_kind(&asked, "agent").is_empty(), "the tester waits for the connection");
     let shown = views(&asked);
     let text = block(shown[0], "markdown").and_then(|found| found["text"].as_str()).expect("what is missing");
-    assert!(text.contains("casos de teste") && text.contains("Conexões"), "{text}");
+    assert!(text.contains("test cases") && text.contains("Connections"), "{text}");
     let ids: Vec<&Value> = block(shown[0], "actions").expect("actions")["buttons"]
         .as_array()
         .expect("buttons")
@@ -323,7 +323,7 @@ fn a_missing_test_connection_tells_what_to_connect_and_lets_the_person_retry_or_
         .collect();
     assert_eq!(ids, ["retry", "skip", "cancel"]);
     let impediment = &of_kind(&asked, "impediment.set")[0]["args"];
-    assert_eq!(impediment, &json!({ "on": true, "reason": "conecte uma conta para tests" }));
+    assert_eq!(impediment, &json!({ "on": true, "reason": "connect an account for tests" }));
     assert_eq!(step_view("cases", result["result"]["data"].clone())[0]["type"], "markdown");
 }
 

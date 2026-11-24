@@ -40,7 +40,7 @@ function setState(next) {
   const colors = { connected: "#1a7f37", connecting: "#bf8700", disconnected: "#cf222e" };
   chrome.action.setBadgeText({ text: next === "connected" ? "" : "!" }).catch(() => {});
   chrome.action.setBadgeBackgroundColor({ color: colors[next] }).catch(() => {});
-  chrome.action.setTitle({ title: `${NAME} Browser: ${next}` }).catch(() => {});
+  chrome.action.setTitle({ title: `${NAME}: ${next}` }).catch(() => {});
 }
 
 export function connect() {
@@ -98,9 +98,4 @@ async function receive(raw) {
     const result = await onCall(message);
     send({ type: "result", id: message.id, result });
   }
-}
-
-export async function rename(name) {
-  await chrome.storage.local.set({ deviceName: name });
-  send({ type: "rename", name });
 }

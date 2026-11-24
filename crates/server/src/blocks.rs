@@ -84,6 +84,7 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
         "markdown" => json!({ "type": "markdown", "text": text(&raw["text"]), "muted": raw["muted"] == true }),
         "cases" => cases(place, raw),
         "logs" => logs(raw),
+        "calls" => json!({ "type": "calls", "calls": raw["calls"].as_array().cloned().unwrap_or_default() }),
         "form" => form(raw),
         "actions" => json!({
             "type": "actions",

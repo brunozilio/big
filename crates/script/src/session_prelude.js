@@ -1,8 +1,13 @@
 (() => {
   const begin = globalThis.__begin;
   const log = globalThis.__log;
+  const timer = globalThis.__timer;
+  const untimer = globalThis.__untimer;
   delete globalThis.__begin;
   delete globalThis.__log;
+  delete globalThis.__timer;
+  delete globalThis.__untimer;
+  const timers = new Map();
   const pending = new Map();
   const ring = [];
   const RING = 1000;
@@ -71,6 +76,31 @@
     for (const name of names) {
       if (identifier.test(name) && !(name in globalThis)) fixed(name, (input) => call(name, input));
     }
+  });
+  fixed("setTimeout", (callback, delay = 0, ...args) => {
+    if (typeof callback !== "function") throw new TypeError("setTimeout needs a function to call");
+    const wait = Number(delay);
+    const who = owners();
+    const id = timer(who, Number.isFinite(wait) && wait > 0 ? wait : 0);
+    timers.set(id, { run: () => callback(...args), who });
+    return id;
+  });
+  fixed("clearTimeout", (id) => {
+    if (timers.delete(id)) untimer(id);
+  });
+  fixed("sleep", (ms = 0) => new Promise((resolve) => setTimeout(resolve, ms)));
+  fixed("__fire", (id) => {
+    const waiting = timers.get(id);
+    if (waiting === undefined) return;
+    timers.delete(id);
+    try {
+      waiting.run();
+    } catch (error) {
+      log(waiting.who, `setTimeout callback failed: ${failure(error)}`);
+    }
+  });
+  fixed("__forget", (ids) => {
+    for (const id of ids) timers.delete(id);
   });
   fixed("tools", new Proxy(Object.freeze({}), { get: (_, name) => (typeof name === "string" ? (input) => call(name, input) : undefined) }));
   fixed("self", Object.freeze({ log: (...parts) => void log(owners(), parts.map(show).join(" ")) }));

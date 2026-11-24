@@ -9,7 +9,7 @@ async function decide(ctx, opts, run, pending) {
   if (opts.approve === "auto") return "approve";
   const view = [
     pipeline(run),
-    markdown(`Deploy aguardando aprovação: ${environments(pending)}`),
+    markdown(`Deploy awaiting approval: ${environments(pending)}`),
     actions(["approve_deploy", "reject_deploy"]),
   ];
   const raced = await ctx.race([
@@ -20,13 +20,13 @@ async function decide(ctx, opts, run, pending) {
   return raced.value.action === "approve_deploy" ? "approve" : "reject";
 }
 
-const REASON = [{ name: "reason", label: "Motivo", kind: "textarea", placeholder: "O que impede este deploy" }];
+const REASON = [{ name: "reason", label: "Reason", kind: "textarea", placeholder: "What blocks this deploy" }];
 
 async function rejectionReason(ctx, opts, pending) {
   if (opts.approve === "auto") return null;
   const view = [
-    markdown(`Você rejeitou o deploy em ${environments(pending)}. Diga o motivo para registrar na release e no item.`),
-    form(REASON, { title: "Motivo da rejeição", submit: "Rejeitar deploy" }),
+    markdown(`You rejected the deploy to ${environments(pending)}. Give the reason to record on the release and the item.`),
+    form(REASON, { title: "Rejection reason", submit: "Reject deploy" }),
   ];
   for (;;) {
     const answer = await ctx.waitHuman(view, waitOptions(opts));
@@ -68,10 +68,10 @@ async function follow(ctx, opts, target, seen) {
     const events = ["pipelines.run.finished", "pipelines.deployment.waiting"];
     const current = await settle(ctx, options, found.ref, WAITING, events);
     if (SUCCEEDED.includes(current.state)) return { ...data, state: current.state };
-    if (FINISHED.includes(current.state)) return { ...data, state: current.state, summary: `A release terminou como ${current.state}.` };
+    if (FINISHED.includes(current.state)) return { ...data, state: current.state, summary: `The release finished as ${current.state}.` };
     const { decision, pending, why } = await gate(ctx, options, found.ref);
     if (decision === "reject") {
-      const reason = `o deploy em ${environments(pending)} foi rejeitado${why ? `: ${why}` : ""}`;
+      const reason = `the deploy to ${environments(pending)} was rejected${why ? `: ${why}` : ""}`;
       await ctx.impediment(true, reason, effects(options));
       return { ...data, state: "rejected", rejected: true, error: reason, ...(why ? { why } : {}) };
     }
@@ -81,7 +81,7 @@ async function follow(ctx, opts, target, seen) {
 
 function described(runs) {
   return runs
-    .map((run) => `- ${run.name ? `${run.name}: ` : ""}execução ${run.run} terminou como ${run.state}${run.error ? ` (${run.error})` : ""}`)
+    .map((run) => `- ${run.name ? `${run.name}: ` : ""}run ${run.run} finished as ${run.state}${run.error ? ` (${run.error})` : ""}`)
     .join("\n");
 }
 
@@ -89,12 +89,12 @@ async function narrate(ctx, opts, runs, failed) {
   const prs = pullRequestsOf(ctx, opts).map((entry) => entry.pr).filter(Boolean);
   const merged = source(ctx, opts, "merge");
   const ask = failed
-    ? "A release falhou. Leia o log do pipeline, diga a causa provável e se a falha é da mudança ou do ambiente."
-    : "A release terminou. Escreva as notas da release para quem usa o produto.";
+    ? "The release failed. Read the pipeline log, state the likely cause and whether the failure comes from the change or the environment."
+    : "The release finished. Write the release notes for the product's users.";
   const prompt = [
     ask,
     prs.length > 0 ? `Pull requests: ${prs.join(", ")}` : null,
-    merged.sha ? `Commit publicado: ${merged.sha}` : null,
+    merged.sha ? `Published commit: ${merged.sha}` : null,
     `Pipelines:\n${described(runs)}`,
   ].filter(Boolean).join("\n\n");
   const input = defined({ prompt: inLanguage(prompt), prs, runs: runs.map((run) => run.run), failed: Boolean(failed) });
@@ -106,11 +106,12 @@ async function narrate(ctx, opts, runs, failed) {
 const NONE = "none";
 
 function shown(s) {
-  if (s.state === NONE) return [markdown("Nenhum pipeline de deploy configurado.")];
   const listed = Array.isArray(s.runs) && s.runs.length > 0 ? s.runs : s.run ? [s] : [];
+  const none = listed.length > 0 ? listed.every((run) => run.state === NONE) : Boolean(s.ref);
+  if (none) return [markdown("No release pipeline configured.")];
   const runs = listed.map((run) => pipeline(run.run));
   const rejected = [s, ...listed].find((run) => run.why);
-  const why = rejected ? [markdown(`**Deploy rejeitado.** ${rejected.why}`)] : [];
+  const why = rejected ? [markdown(`**Deploy rejected.** ${rejected.why}`)] : [];
   return [...runs, ...why, ...(s.notes ? [markdown(s.notes)] : []), ...(s.session ? [chat(s.session)] : [])];
 }
 
@@ -123,10 +124,10 @@ export default step({
   view: shown,
   async run(ctx, opts) {
     const targets = targetsOf(ctx, opts);
-    if (targets.some((target) => !target.ref)) return ctx.fail({ error: "não há commit nem branch para acompanhar a release" });
+    if (targets.some((target) => !target.ref)) return ctx.fail({ error: "there is no commit or branch to follow the release" });
     const seen = object(ctx.output(ctx.step)).seen ?? [];
     const runs = await eachOf(ctx, targets, (branch, target) => follow(branch, opts, target, seen));
-    if (runs.every((run) => run.state === NONE)) return ctx.skip({ state: NONE, ref: runs[0].ref });
+    if (runs.every((run) => run.state === NONE)) return ctx.skip({ state: NONE, ref: runs[0].ref, runs });
     const first = runs[0];
     const data = { run: first.run, url: first.url, seen: [...seen, ...runs.filter((run) => run.run).map((run) => run.run)] };
     const listed = runs.length > 1 || first.repository ? { ...data, runs } : data;

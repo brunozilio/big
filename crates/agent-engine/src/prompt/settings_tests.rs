@@ -116,4 +116,3 @@ fn a_project_s_scripts_get_nothing_until_the_owner_s_settings_turn_it_on() {
     let scripts = load(repo.path(), Some(home.path())).expect("load").scripts;
     assert_eq!(scripts.project, ScriptAccess { files: true, processes: false, network: false });
 }
-

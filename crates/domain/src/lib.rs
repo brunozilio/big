@@ -6,6 +6,7 @@ pub mod factory;
 pub mod features;
 pub mod identity;
 pub mod knowledge;
+pub mod language;
 pub mod models;
 pub mod run;
 pub mod safety;
@@ -24,12 +25,13 @@ pub use run::{
 pub use safety::{permission, redact, shell};
 pub use session::{catalog, chat, conversation, repeats, usage};
 pub use tools::{
-    agents, brief_edits, channel_relay, code_mode, executable, extensions, hooks, inbox, lsp, mcp, mcp_config,
+    agents, brief_edits, browser_sites, channel_relay, code_mode, executable, extensions, hooks, inbox, lsp, mcp, mcp_config,
     mcp_oauth, output, schedule, site, skill, tool_name, watch, web_reading,
 };
 
 pub use command::Command;
 pub use identity::ids::{Id, SecretId, SessionId};
+pub use language::Language;
 pub use knowledge::memory::{
     Author, Forgotten, Memory, MemoryBook, MemoryBrief, MemoryEdit, MemoryId, MemoryKind, Provenance, RecallBudget,
     Revision,

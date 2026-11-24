@@ -1,6 +1,6 @@
 use agent_engine::model::ToolSpec;
 use agent_engine::model::scripted::ScriptedModel;
-use agent_engine::tools::tool_search::{ToolSearch, defer};
+use agent_engine::tools::tool_search::defer;
 use agent_engine::tools::{Effect, Outcome, Tool, Workspace};
 use agent_engine::transcript::{Block, Message};
 use domain::PermissionMode;
@@ -46,7 +46,7 @@ fn tools_waiting_behind_tool_search_are_named_in_a_reminder() {
     });
     rig.workspace.services.deferred = defer(specs.collect()).1.map(std::sync::Arc::new);
     let model = ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Done.".into())])]);
-    rig.run_with(&model, &mut vec![Message::user("hi")], vec![Box::new(ToolSearch)]).expect("run");
+    rig.run_with(&model, &mut vec![Message::user("hi")], Vec::new()).expect("run");
     let sent = &model.asked()[0].messages[0];
     let reminder =
         sent.blocks.iter().find_map(|b| if let Block::Reminder(text) = b { Some(text.as_str()) } else { None });
@@ -86,7 +86,7 @@ fn calling_a_waiting_tool(load_on_call: bool) -> (ScriptedModel, String) {
         ScriptedModel::reply(vec![tool_use("t", "mcp__jira__tool3", json!({}))]),
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
     ]);
-    let tools: Vec<Box<dyn Tool>> = vec![Box::new(ToolSearch), Box::new(Waiting)];
+    let tools: Vec<Box<dyn Tool>> = vec![Box::new(Waiting)];
     rig.run_hiding(&model, &mut vec![Message::user("list issues")], tools, &["mcp__jira__tool3"]).expect("run");
     let result = first_result(&model);
     (model, result)

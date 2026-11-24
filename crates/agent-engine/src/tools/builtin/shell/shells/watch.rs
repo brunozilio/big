@@ -15,7 +15,7 @@ pub(crate) enum Watch {
 }
 
 pub(crate) fn ended_source(id: &str) -> String {
-    format!("background {id}")
+    format!("{}{id}", domain::inbox::BACKGROUND_SOURCE)
 }
 
 pub(crate) fn watch(id: String, client: u64, what: Watch) {

@@ -55,8 +55,7 @@ fn the_lead_messages_a_teammate_by_name_and_asks_it_to_shut_down() {
     ]);
     let mut history = vec![Message::user("coordinate")];
 
-    rig.run_with(&model, &mut history, vec![Box::new(agent_engine::tools::send_message::SendMessageTool)])
-        .expect("run");
+    rig.run_with(&model, &mut history, Vec::new()).expect("run");
 
     let results = results(&history);
     assert_eq!(results[0], "Sent to tester.");
@@ -85,9 +84,8 @@ fn a_named_agent_is_a_teammate_and_a_bad_name_starts_nothing() {
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
     ]);
     let mut history = vec![Message::user("go")];
-    let agent_tool = agent_engine::tools::subagent::AgentTool { agents: Vec::new() };
 
-    rig.run_with(&model, &mut history, vec![Box::new(agent_tool)]).expect("run");
+    rig.run_with(&model, &mut history, Vec::new()).expect("run");
 
     let results = results(&history);
     assert!(results[0].contains("is not a teammate name"), "{}", results[0]);

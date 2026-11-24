@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react'
 import { ago } from '@/api/clock'
-import type { Command, Comment, Person } from '@/api/contract'
+import { ROUTES, type Command, type Comment, type EvidenceFile, type Person } from '@/api/contract'
 import { errorText } from '@/api/store'
 import { cn } from '@/ui/cn'
 import { Spinner } from '@/ui/display'
@@ -70,7 +70,26 @@ function CommandLog({ log }: { log: string }) {
   )
 }
 
+const IMAGE = /\.(png|jpe?g|gif|webp)$/i
+const VIDEO = /\.(webm|mp4)$/i
+
+function Evidence({ file }: { file: EvidenceFile }) {
+  const url = ROUTES.attachment(file.id)
+  if (IMAGE.test(file.name)) return <a href={url} target="_blank" rel="noreferrer"><img src={url} alt={file.name} className="max-h-[360px] rounded-control border" /></a>
+  if (VIDEO.test(file.name)) return <video src={url} controls preload="metadata" className="max-h-[360px] rounded-control border" />
+  return <a href={url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 font-mono text-sm text-fg2 hover:text-fg"><Icon name="file" size={14} />{file.name}</a>
+}
+
 function CommandBody({ command }: { command: Command }) {
+  const files = command.files ?? []
+  if (!command.session && files.length > 0) {
+    return (
+      <div>
+        {command.log && <CommandLog log={command.log} />}
+        <div className="mx-1.5 mb-2 mt-1 flex flex-wrap items-start gap-2">{files.map((f) => <Evidence key={f.id} file={f} />)}</div>
+      </div>
+    )
+  }
   if (!command.session) return <CommandLog log={command.log} />
   return (
     <div className="mx-1.5 mb-2 mt-1 h-[440px] overflow-hidden rounded-control border bg-bg">

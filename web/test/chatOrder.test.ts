@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { SessionEvent } from '../src/api/contract'
 import { segmentsOf, withoutRepeatedPlans } from '../src/chat/ChatView'
-import { parsePlan, stressed, structured, subtasksOf } from '../src/chat/planDoc'
+import { parsePlan, storied, stressed, structured, subtasksOf } from '../src/chat/planDoc'
 
 const ev = (id: string, type: string, extra: Record<string, unknown> = {}) => ({ id, at: '', type, ...extra }) as unknown as SessionEvent
 
@@ -37,5 +37,10 @@ describe('plano no formato do Jira', () => {
 
   test('destaca Dado, Quando e Então', () => {
     expect(stressed('Dado que estou na busca, quando filtro, então vejo')).toBe('**Dado que** estou na busca, **Quando** filtro, **Então** vejo')
+  })
+
+  test('destaca Como, Eu quero e Para que', () => {
+    expect(storied('Como cliente, eu quero buscar para que eu ache.')).toBe('**Como** cliente, **Eu quero** buscar **Para que** eu ache.')
+    expect(storied('Como pessoa da API, eu quero gerenciar produtos para manter o catálogo.')).toBe('**Como** pessoa da API, **Eu quero** gerenciar produtos **Para** manter o catálogo.')
   })
 })

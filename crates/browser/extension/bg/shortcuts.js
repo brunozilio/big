@@ -16,7 +16,7 @@ export function command(name) {
 export async function listed() {
   const shortcuts = await all();
   if (shortcuts.length === 0) {
-    return "The user has no saved shortcuts. They can add one in the browser extension's popup (a name, an optional start URL and the instructions).";
+    return "The user has no saved shortcuts.";
   }
   const lines = shortcuts.map((shortcut) => {
     const start = shortcut.url ? `\n  Starts at: ${shortcut.url}` : "";

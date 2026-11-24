@@ -11,6 +11,7 @@ mod engine;
 pub mod fake;
 pub mod frontmatter;
 pub mod hooks;
+pub mod intercept;
 pub use language_servers as lsp;
 mod lsp_fetch;
 pub use lsp_fetch::NetFetch;

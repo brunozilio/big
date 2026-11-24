@@ -81,12 +81,3 @@ export function LogoTile({ logo, name, size = 44, className }: { logo: string; n
     </span>
   )
 }
-
-export function readImageFile(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result))
-    reader.onerror = () => reject(reader.error)
-    reader.readAsDataURL(file)
-  })
-}

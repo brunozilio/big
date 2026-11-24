@@ -30,12 +30,21 @@ impl Job {
         let environment = self.environment(&workspace, &toolbox, setup, brief, session);
         let mut system = prompt::system(&environment);
         workspace.prompt_context = Some(environment);
+        let style = self.request.session.output_style.as_deref().and_then(prompt::output_style::find);
+        workspace.style_reminder = style.as_ref().and_then(|style| style.turn_reminder.clone());
+        system.push_str(&style.map(|style| style.system()).unwrap_or_default());
         let extra = self.extra_instructions(&main, setup, &toolbox, &workspace)?;
         let offered = Agent::specs(&toolbox.tools).into_iter().filter(|spec| main.config.allows(&spec.name)).collect();
-        let (offered, deferred) = tools::tool_search::defer(offered);
+        let (mut offered, deferred) = tools::tool_search::defer(offered);
         if let Some(deferred) = deferred {
-            toolbox.tools.push(Box::new(tools::tool_search::ToolSearch));
             workspace.services.deferred = Some(Arc::new(deferred));
+            let present: Vec<String> = toolbox.tools.iter().map(|tool| tool.spec().name).collect();
+            let now_offered: Vec<_> = tools::script_tool::builtin()
+                .into_iter()
+                .filter(|script| !present.contains(&script.spec.name) && tools::Tool::offered(script, &workspace))
+                .collect();
+            offered.extend(now_offered.iter().map(|script| script.spec.clone()));
+            toolbox.tools.extend(now_offered.into_iter().map(|script| Box::new(script) as Box<dyn tools::Tool>));
         }
         system.push_str(&extra);
         let template = TurnRequest {

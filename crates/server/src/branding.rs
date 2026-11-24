@@ -1,20 +1,26 @@
 use axum::Json;
 use axum::extract::State;
-use axum::response::Response;
+use axum::http::header;
+use axum::response::{IntoResponse, Response};
+use domain::Language;
 use serde_json::{Value, json};
 use store::Store;
 
 use crate::error::{ApiError, ApiResult, json as reply};
 use crate::state::Ctx;
 
+pub const LOGO_ROUTE: &str = "/api/branding/logo";
 const THEMES: [&str; 3] = ["system", "light", "dark"];
-const MOST_LOGO_BYTES: usize = 2 * 1024 * 1024;
 
 pub fn current(store: &Store) -> ApiResult<Value> {
     let kept = store.branding()?;
-    let logo = kept.get("logo").and_then(Value::as_str).filter(|logo| !logo.is_empty());
     let theme = kept.get("theme").and_then(Value::as_str).filter(|theme| THEMES.contains(theme)).unwrap_or("system");
-    Ok(json!({ "name": brand::NAME, "logo": logo, "theme": theme }))
+    let styles = app::output_styles();
+    let style = kept.get("output_style").and_then(Value::as_str).filter(|key| styles.iter().any(|style| style.key == *key));
+    Ok(json!({
+        "name": brand::NAME, "logo": LOGO_ROUTE, "theme": theme, "language": store.language()?.code(),
+        "output_style": style, "output_styles": styles,
+    }))
 }
 
 pub fn apply(store: &Store, patch: &Value) -> ApiResult<Value> {
@@ -23,12 +29,17 @@ pub fn apply(store: &Store, patch: &Value) -> ApiResult<Value> {
         let theme = theme.ok_or_else(|| ApiError::bad("O tema é system, light ou dark."))?;
         store.set_branding("theme", &json!(theme))?;
     }
-    if let Some(logo) = patch.get("logo") {
-        match logo {
-            Value::Null => store.set_branding("logo", &json!(""))?,
-            Value::String(text) if text.len() <= MOST_LOGO_BYTES => store.set_branding("logo", logo)?,
-            Value::String(_) => return Err(ApiError::bad("O logo passa de 2 MB.")),
-            _ => return Err(ApiError::bad("O logo é um texto (URL ou data URL) ou null.")),
+    if let Some(language) = patch.get("language") {
+        let language = language.as_str().and_then(Language::named);
+        let language = language.ok_or_else(|| ApiError::bad("O idioma é en, es ou pt-BR."))?;
+        store.set_branding("language", &json!(language.code()))?;
+    }
+    if let Some(style) = patch.get("output_style") {
+        let known = |key: &str| app::output_styles().iter().any(|style| style.key == key);
+        match style {
+            Value::Null => store.set_branding("output_style", &Value::Null)?,
+            Value::String(key) if known(key) => store.set_branding("output_style", &json!(key))?,
+            _ => return Err(ApiError::bad("Esse estilo de resposta não existe.")),
         }
     }
     current(store)
@@ -44,17 +55,47 @@ pub async fn put(State(ctx): State<Ctx>, Json(patch): Json<Value>) -> ApiResult<
     Ok(reply(branding))
 }
 
+pub async fn logo() -> Response {
+    ([(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "no-cache")], brand::LOGO).into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn the_name_is_the_brand_s_and_the_rest_is_kept() {
+    fn the_name_and_logo_are_the_brand_s_and_the_theme_is_kept() {
         let store = Store::in_memory(0).expect("store");
-        assert_eq!(current(&store).ok(), Some(json!({ "name": brand::NAME, "logo": null, "theme": "system" })));
+        let first = current(&store).expect("current");
+        assert_eq!(first["theme"], "system");
+        assert_eq!(first["name"], brand::NAME);
+        assert_eq!(first["output_style"], Value::Null);
         let saved = apply(&store, &json!({ "theme": "dark", "logo": "data:x" })).expect("saved");
         assert_eq!(saved["theme"], "dark");
-        assert_eq!(apply(&store, &json!({ "logo": null })).expect("cleared")["logo"], Value::Null);
+        assert_eq!(saved["logo"], LOGO_ROUTE);
         assert!(apply(&store, &json!({ "theme": "pink" })).is_err());
+    }
+
+    #[test]
+    fn the_language_starts_in_portuguese_and_only_a_known_one_is_kept() {
+        let store = Store::in_memory(0).expect("store");
+        assert_eq!(current(&store).expect("current")["language"], "pt-BR");
+        assert_eq!(apply(&store, &json!({ "language": "en" })).expect("saved")["language"], "en");
+        assert_eq!(store.language().expect("language"), Language::English);
+        assert!(apply(&store, &json!({ "language": "fr" })).is_err());
+        assert!(apply(&store, &json!({ "language": 3 })).is_err());
+        assert_eq!(current(&store).expect("current")["language"], "en");
+    }
+
+    #[test]
+    fn the_output_style_is_one_of_the_listed_or_none() {
+        let store = Store::in_memory(0).expect("store");
+        let listed = current(&store).expect("current")["output_styles"].clone();
+        assert!(listed.as_array().is_some_and(|styles| styles.iter().any(|style| style["key"] == "concise")));
+        assert_eq!(apply(&store, &json!({ "output_style": "concise" })).expect("saved")["output_style"], "concise");
+        assert_eq!(store.output_style().as_deref(), Some("concise"));
+        assert!(apply(&store, &json!({ "output_style": "nope" })).is_err());
+        assert_eq!(apply(&store, &json!({ "output_style": null })).expect("cleared")["output_style"], Value::Null);
+        assert_eq!(store.output_style(), None);
     }
 }

@@ -8,6 +8,8 @@ pub struct Services {
     pub deferred: Option<Arc<crate::tools::tool_search::Deferred>>,
     pub search: Option<WebSearcher>,
     pub launch: super::Launch,
+    pub mcp: Vec<Arc<crate::mcp::McpServer>>,
+    pub output_schema: Option<serde_json::Value>,
 }
 
 #[derive(Clone)]

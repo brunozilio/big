@@ -64,6 +64,22 @@ export function Checkbox({ checked, onCheckedChange, label, disabled }: { checke
   )
 }
 
+export function Switch({ checked, onCheckedChange, label, disabled }: { checked: boolean; onCheckedChange: (v: boolean) => void; label: string; disabled?: boolean }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onCheckedChange(!checked)}
+      className={cn('relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors disabled:opacity-45', checked ? 'bg-info' : 'bg-inset shadow-[inset_0_0_0_1px_rgb(var(--border-strong))]')}
+    >
+      <motion.span className="size-4 rounded-full bg-white shadow-sm" initial={false} animate={{ x: checked ? 18 : 2 }} transition={springSnap} />
+    </button>
+  )
+}
+
 export interface SelectOption {
   value: string
   label: ReactNode

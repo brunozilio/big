@@ -9,32 +9,8 @@ use domain::inbox::Notice;
 use domain::watch::{LASTS, Step, Watching};
 use serde_json::{Value, json};
 
-use super::{Outcome, Tool, Workspace, field, inbox};
-use crate::model::ToolSpec;
-
-pub const WATCH_TOOL: &str = super::names::WATCH;
+use super::{Outcome, Tool, Workspace, inbox};
 const NAP: Duration = Duration::from_millis(200);
-
-#[derive(Debug)]
-pub struct Watch;
-
-impl Tool for Watch {
-    fn spec(&self) -> ToolSpec {
-        crate::tools::declared(WATCH_TOOL, &Value::Null)
-    }
-
-    fn effects(&self, _input: &Value, _workspace: &Workspace) -> Vec<super::Effect> {
-        vec![super::Effect::Spawn(super::SpawnKind::Watch)]
-    }
-
-    fn summary(&self, input: &Value) -> String {
-        field(input, "description").or(field(input, "tool")).unwrap_or_default().to_owned()
-    }
-
-    fn run(&self, _input: &Value, _workspace: &Workspace) -> Outcome {
-        Outcome::error("Watch runs only inside an agent.")
-    }
-}
 
 struct Entry {
     client: u64,

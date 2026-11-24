@@ -41,14 +41,16 @@ impl Reminders {
 impl crate::agent::Agent<'_> {
     pub(super) fn runtime_reminder(&self, budget: &Budget, quiet_tasks: usize, run: &ThisRun) -> String {
         let context = self.workspace.prompt_context.as_ref();
-        let reminder = crate::prompt::reminder(self.control.mode(), self.depth);
+        let reminder = crate::prompt::reminder(self.control.mode(), self.depth, self.workspace.teammate.is_some());
         let today = crate::engine::date::today();
         let offers_search = self.request.tools.iter().any(|spec| spec.name == crate::tools::tool_search::TOOL_SEARCH);
         let deferred =
             self.workspace.services.deferred.as_ref().filter(|_| offers_search).map(|deferred| deferred.announcement());
+        let style = self.workspace.style_reminder.clone();
         let tasks = if quiet_tasks >= QUIET_TURNS { self.open_tasks(run) } else { Vec::new() };
         let notes: String = [
             deferred,
+            style,
             context.and_then(|context| date_changed(&context.date, &today)),
             context_left(budget.used, budget.threshold),
             tasks_left_alone(quiet_tasks, &tasks),

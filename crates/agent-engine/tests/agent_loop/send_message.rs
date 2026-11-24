@@ -11,9 +11,7 @@ use serde_json::json;
 use crate::{Rig, request, tool_use};
 
 fn run(rig: &Rig, model: &dyn ModelApi) -> Vec<Message> {
-    let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool::default()));
-    tools.push(Box::new(tools::send_message::SendMessageTool));
+    let tools = tools::standard();
     let events = Arc::clone(&rig.events);
     let emit = move |event: EngineEvent| events.lock().expect("events").push(event);
     let agent = Agent {

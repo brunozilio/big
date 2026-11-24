@@ -105,6 +105,18 @@ export function stressed(criterion: string): string {
   return criterion.replace(/(^|[,;.]\s*)(dado que|dado|quando|então|e)(?=\s)/gi, (_, lead: string, word: string) => `${lead}**${word.charAt(0).toUpperCase()}${word.slice(1)}**`)
 }
 
+const capital = (word: string) => `**${word.charAt(0).toUpperCase()}${word.slice(1)}**`
+
+export function storied(story: string): string {
+  const lead = story.replace(/^(\s*)(como)(?=\s)/i, (_, space: string, word: string) => `${space}${capital(word)}`)
+  const want = /(,?\s*)(eu quero)(?=\s)/i.exec(lead)
+  if (!want) return lead
+  const cut = want.index + want[0].length
+  const head = `${lead.slice(0, want.index)}${want[1]}${capital(want[2])}`
+  const tail = lead.slice(cut).replace(/(\s)(para que|para)(?=\s)/i, (_, space: string, word: string) => `${space}${capital(word)}`)
+  return `${head}${tail}`
+}
+
 export function fileEntry(item: string): { path: string; note: string } {
   const hit = /^\*{0,2}`?([^`\s*]+)`?\*{0,2}:?(?:\s+(?:[—–-]\s+)?(.*))?$/s.exec(item.trim())
   if (!hit) return { path: item.trim(), note: '' }

@@ -48,6 +48,8 @@ pub struct AgentConfig {
     #[serde(default)]
     pub hooks: crate::hooks::Hooks,
     #[serde(default)]
+    pub intercept: crate::intercept::Interceptors,
+    #[serde(default)]
     pub observers: Vec<String>,
     #[serde(default)]
     pub observer_message: Option<String>,
@@ -62,6 +64,16 @@ pub struct AgentConfig {
     pub error: Option<String>,
 }
 impl AgentConfig {
+    fn extensions(&mut self, value: &Value) -> Result<(), String> {
+        if let Some(hooks) = value.get("hooks") {
+            self.hooks = crate::hooks::Hooks::parse(hooks)?;
+        }
+        if let Some(intercept) = value.get("intercept") {
+            self.intercept = crate::intercept::Interceptors::parse(intercept)?.at(crate::intercept::Level::Agent);
+        }
+        Ok(())
+    }
+
     pub fn parse(value: &Value) -> Result<Self, String> {
         let list = |key: &str| crate::prompt::markdown::list(&value[key]).map_err(|e| format!("{key}: {e}"));
         let mut config = Self {
@@ -104,9 +116,7 @@ impl AgentConfig {
             }
             config.worktree = true;
         }
-        if let Some(hooks) = value.get("hooks") {
-            config.hooks = crate::hooks::Hooks::parse(hooks)?;
-        }
+        config.extensions(value)?;
         for name in config.tools.iter().flatten().chain(&config.disallowed_tools) {
             if name.is_empty()
                 || !name.trim_end_matches('*').chars().all(|c| c.is_ascii_alphanumeric() || "_-:".contains(c))
@@ -256,12 +266,12 @@ mod tests {
     #[test]
     fn a_label_an_avatar_and_the_inherited_model_are_read_and_bad_ones_refused() {
         let config = AgentConfig::parse(&json!({
-            "label": "Planejador",
+            "label": "Planner",
             "model": "inherit",
             "avatar": {"shape": "triangle", "color": "#E94B9B"}
         }))
         .expect("config");
-        assert_eq!(config.label.as_deref(), Some("Planejador"));
+        assert_eq!(config.label.as_deref(), Some("Planner"));
         assert_eq!(config.model, None, "inherit leaves the choice to whoever runs the agent");
         assert_eq!(config.avatar, Some(Avatar { shape: "triangle".into(), color: "#e94b9b".into() }));
         for value in [

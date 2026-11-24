@@ -23,8 +23,7 @@ fn an_ask_from_a_sub_agent_is_told_first_as_that_agent_s() {
         ScriptedModel::reply(vec![Block::Text("It was not allowed.".into())]),
         ScriptedModel::reply(vec![Block::Text("Nothing written.".into())]),
     ]);
-    let mut tools = tools::standard();
-    tools.push(Box::new(tools::subagent::AgentTool::default()));
+    let tools = tools::standard();
     let events = Arc::clone(&rig.events);
     let emit = move |event: EngineEvent| events.lock().expect("events").push(event);
     let control = Arc::clone(&rig.control);

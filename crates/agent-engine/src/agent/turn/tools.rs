@@ -2,6 +2,7 @@ use domain::EngineEvent;
 use domain::stuck::nudge;
 
 use super::{Call, Next, TurnState};
+use crate::agent::permission::plan_mode::HANDED_OFF;
 use crate::agent::run::ThisRun;
 use crate::agent::subagents::background::Spawn;
 use crate::agent::{Agent, Ending};
@@ -25,11 +26,16 @@ impl Agent<'_> {
         if let Some(model) = self.help_when_stuck(calls, &mut results, run) {
             turn.fell_back = Some(model);
         }
-        results.extend(self.steered());
+        let steered = self.steered();
+        let handed_off = steered.is_empty() && handed_off(calls, &results);
+        results.extend(steered);
         results.extend(self.notices());
         turn.history.push(Message { role: Role::User, blocks: results });
         if let Some(why) = self.workspace.tracking.refusals_stop() {
             return Err(Ending::Failed(ModelError::Provider(why)));
+        }
+        if handed_off {
+            return Ok(Next::Done(Ok(turn.usage)));
         }
         Ok(Next::AskModel)
     }
@@ -100,4 +106,11 @@ impl Agent<'_> {
         (self.emit)(EngineEvent::Notified(notices));
         Some(Block::Text(message))
     }
+}
+
+fn handed_off(calls: &[Call], results: &[Block]) -> bool {
+    calls.iter().zip(results).any(|((_, name, _), result)| {
+        name == names::EXIT_PLAN
+            && matches!(result, Block::ToolResult { content, is_error: false, .. } if content == HANDED_OFF)
+    })
 }

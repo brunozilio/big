@@ -69,6 +69,10 @@ impl CommandHandler {
                 let reach = self.runs.control(run, |handle| handle.answer(&ask, &decision));
                 Self::reached("answer_ask", run, reach)
             }
+            ClientCommand::SteerRun { run, text } => {
+                let reach = self.runs.control(run, |handle| handle.steer(text));
+                Self::reached("steer_run", run, reach)
+            }
             ClientCommand::ListModels => {
                 providers.discover_models(self.services.engine.models(), replies);
                 return None;

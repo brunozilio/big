@@ -1,3 +1,4 @@
+use agent_engine::tools::agent_file;
 use std::fmt;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -114,16 +115,22 @@ impl Resources {
 
     pub fn find(&self, path: &str) -> Option<Resource> {
         let alias = path.strip_prefix("sdk/").filter(|rest| OVERRIDABLE.iter().any(|dir| rest.starts_with(dir)));
+        let candidates: Vec<(&str, &str)> =
+            [Some(path), alias].into_iter().flatten().map(|file| (path, file)).collect();
+        self.first(&candidates)
+    }
+
+    fn first(&self, candidates: &[(&str, &str)]) -> Option<Resource> {
         for (origin, dir) in &self.layers {
-            for candidate in [Some(path), alias].into_iter().flatten() {
-                let Some(file) = content::override_path(dir, candidate) else { continue };
-                if let Ok(text) = std::fs::read_to_string(file) {
-                    let text = brand::text(text.trim_end_matches('\n'));
-                    return Some(Resource { path: path.to_owned(), origin: *origin, text });
+            for (path, candidate) in candidates {
+                if let Some(text) = content::user_text(Some(dir), candidate) {
+                    return Some(Resource { path: (*path).to_owned(), origin: *origin, text });
                 }
             }
         }
-        (self.builtin)(path).map(|text| Resource { path: path.to_owned(), origin: Origin::Builtin, text })
+        candidates.iter().find_map(|(path, _)| {
+            (self.builtin)(path).map(|text| Resource { path: (*path).to_owned(), origin: Origin::Builtin, text })
+        })
     }
 
     pub fn script(&self, base: &str) -> Option<Resource> {
@@ -131,7 +138,28 @@ impl Resources {
     }
 
     pub fn agent(&self, name: &str) -> Option<Resource> {
-        self.find(&format!("agents/{name}.md"))
+        let paths: Vec<String> = agent_file::EXTENSIONS.iter().map(|ext| format!("agents/{name}.{ext}")).collect();
+        let candidates: Vec<(&str, &str)> = paths.iter().map(|path| (path.as_str(), path.as_str())).collect();
+        let found = self.first(&candidates)?;
+        match agent_file::markdown(&found.path, &found.text, &self.runs_from(&found)) {
+            Ok(text) => Some(Resource { text, ..found }),
+            Err(error) => {
+                tracing::error!(%error, path = found.path, "the agent does not load");
+                None
+            }
+        }
+    }
+
+    fn runs_from(&self, found: &Resource) -> String {
+        if found.origin == Origin::Builtin {
+            return format!("{}{}", agent_engine::hooks::BUILTIN_SCRIPT, found.path);
+        }
+        self.layers
+            .iter()
+            .filter(|(origin, _)| *origin == found.origin)
+            .filter_map(|(_, dir)| content::override_path(dir, &found.path))
+            .find(|file| file.is_file())
+            .map_or_else(|| found.path.clone(), |file| file.display().to_string())
     }
 
     pub fn workflow(&self, name: &str) -> Option<Resource> {

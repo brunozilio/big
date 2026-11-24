@@ -16,7 +16,7 @@ export class EffectError extends Error {
 
 export class StepFailed extends Error {
   constructor(step, outcome) {
-    super(`a etapa ${step} falhou`);
+    super(`step ${step} failed`);
     this.name = "StepFailed";
     this.step = step;
     this.outcome = outcome;
@@ -25,16 +25,17 @@ export class StepFailed extends Error {
 
 export class Cancelled extends Error {
   constructor(reason) {
-    super(reason || "cancelado");
+    super(reason || "cancelled");
     this.name = "Cancelled";
     this.reason = reason || null;
   }
 }
 
 class Nondeterminism extends Error {
-  constructor(message) {
+  constructor(message, seq) {
     super(message);
     this.name = "Nondeterminism";
+    this.seq = seq;
   }
 }
 
@@ -156,17 +157,17 @@ class Runtime {
 
   deliver(entry) {
     const known = this.commands.get(entry.seq);
-    if (!known) throw new Nondeterminism(`o comando ${entry.seq} não foi emitido nesta reexecução`);
+    if (!known) throw new Nondeterminism(`command ${entry.seq} was not issued in this replay`, entry.seq);
     if (entry.kind !== undefined && entry.kind !== known.command.kind) {
-      throw new Nondeterminism(`o comando ${entry.seq} era ${entry.kind} e agora é ${known.command.kind}`);
+      throw new Nondeterminism(`command ${entry.seq} was ${entry.kind} and is now ${known.command.kind}`, entry.seq);
     }
-    if (known.resolved) throw new Nondeterminism(`o comando ${entry.seq} foi resolvido duas vezes`);
+    if (known.resolved) throw new Nondeterminism(`command ${entry.seq} was resolved twice`, entry.seq);
     known.resolved = true;
     if (entry.at !== undefined) this.clock = Number(entry.at);
     this.activity += 1;
     if (this.gone(known.command)) return;
     if (entry.cancelled) {
-      known.waiting.reject(new EffectError("cancelled", "cancelado", null, entry.seq));
+      known.waiting.reject(new EffectError("cancelled", "cancelled", null, entry.seq));
     } else if (entry.error) {
       const { kind, message, data } = entry.error;
       known.waiting.reject(new EffectError(kind || "permanent", message, data, entry.seq));
@@ -389,7 +390,7 @@ function fork(ctx, mode, branches) {
         errors[index] = error;
         left -= 1;
         if (mode === "race" || mode === "all") decide(index, "rejected", () => done.reject(error));
-        else if (left === 0) decide(index, "rejected", () => done.reject(new AggregateError(errors, "nenhum ramo terminou bem")));
+        else if (left === 0) decide(index, "rejected", () => done.reject(new AggregateError(errors, "no branch finished successfully")));
       },
     );
   });
@@ -427,7 +428,7 @@ async function runStep(ctx, type, call, from) {
 
 export function step(definition) {
   if (!definition || typeof definition.name !== "string" || typeof definition.run !== "function") {
-    throw new TypeError("step({ name, run }) precisa de name e run");
+    throw new TypeError("step({ name, run }) needs name and run");
   }
   const type = Object.freeze({
     name: definition.name,
@@ -445,7 +446,7 @@ export function step(definition) {
       return runStep(first, type, { id: options.id, options }).then((result) => {
         if (result.outcome === "cancelled") throw new Cancelled(result.reason);
         if (result.outcome === "failed") throw new StepFailed(options.id || type.name, result);
-        if (result.outcome === "goto") throw new TypeError("goto só vale dentro de workflow({ steps })");
+        if (result.outcome === "goto") throw new TypeError("goto only works inside workflow({ steps })");
         return result;
       });
     }
@@ -459,27 +460,27 @@ export function step(definition) {
 
 function indexOf(steps, id) {
   const index = steps.findIndex((call) => call.id === id);
-  if (index < 0) throw new TypeError(`não existe etapa ${id} neste workflow`);
+  if (index < 0) throw new TypeError(`there is no step ${id} in this workflow`);
   return index;
 }
 
 const decisions = [
-  { id: "retry", label: "Tentar de novo", icon: "refresh", variant: "primary" },
-  { id: "skip", label: "Pular etapa", icon: "right" },
-  { id: "cancel", label: "Cancelar item", icon: "stop", variant: "danger" },
+  { id: "retry", label: "Try again", icon: "refresh", variant: "primary" },
+  { id: "skip", label: "Skip step", icon: "right" },
+  { id: "cancel", label: "Cancel item", icon: "stop", variant: "danger" },
 ];
 
 function failure(type, call, result) {
   const label = type && type.label ? type.label : call.id;
   const data = result && result.data && typeof result.data === "object" ? result.data : {};
   const cause = typeof data.error === "string" && data.error.trim() ? data.error.trim() : null;
-  return { reason: cause ? `${label} falhou: ${cause}` : `${label} falhou`, label, cause };
+  return { reason: cause ? `${label} failed: ${cause}` : `${label} failed`, label, cause };
 }
 
 async function exhausted(ctx, call, result) {
   const { reason, label, cause } = failure(registry.steps.get(call.step), call, result);
   await ctx.impediment(true, reason);
-  const text = cause ? `**${label} falhou.** ${cause}` : `**${label} falhou.**`;
+  const text = cause ? `**${label} failed.** ${cause}` : `**${label} failed.**`;
   const answer = await ctx.waitHuman([markdown(text), actions(decisions)]);
   await ctx.impediment(false);
   const chosen = answer && typeof answer === "object" ? answer.action : answer;
@@ -495,7 +496,7 @@ async function sequence(ctx, steps) {
   while (at < steps.length) {
     const call = steps[at];
     const type = registry.steps.get(call.step);
-    if (!type) throw new TypeError(`etapa desconhecida: ${call.step}`);
+    if (!type) throw new TypeError(`unknown step: ${call.step}`);
     const result = await runStep(ctx, type, call, from);
     last = result;
     const moved = result.outcome === "passed" || result.outcome === "skipped";
@@ -526,7 +527,7 @@ async function sequence(ctx, steps) {
 }
 
 export function workflow(definition) {
-  if (!definition || typeof definition.name !== "string") throw new TypeError("workflow({ name }) precisa de name");
+  if (!definition || typeof definition.name !== "string") throw new TypeError("workflow({ name }) needs name");
   const steps = (definition.steps || []).map((call) => (typeof call === "function" ? call() : call));
   const run = definition.run || ((ctx) => sequence(ctx, steps));
   const shape = Object.freeze({
@@ -559,12 +560,12 @@ function target(activation, runtime) {
   const wanted = activation.target || {};
   if (wanted.step !== undefined) {
     const type = registry.steps.get(wanted.step);
-    if (!type) throw new TypeError(`etapa desconhecida: ${wanted.step}`);
+    if (!type) throw new TypeError(`unknown step: ${wanted.step}`);
     return (ctx) => runStep(ctx, type, { id: wanted.id || type.name, options: wanted.options || {} });
   }
   const name = wanted.workflow === undefined ? [...registry.workflows.keys()][0] : wanted.workflow;
   const found = registry.workflows.get(name);
-  if (!found) throw new TypeError(`workflow desconhecido: ${name}`);
+  if (!found) throw new TypeError(`unknown workflow: ${name}`);
   runtime.workflow = declared(found);
   return (ctx, item) => found.run(ctx, item);
 }
@@ -583,7 +584,7 @@ function failed(runtime, error) {
   if (error instanceof Cancelled) {
     runtime.finished = { state: "cancelled", reason: error.reason };
   } else if (error instanceof Nondeterminism) {
-    runtime.finished = { state: "nondeterministic", error: { kind: "nondeterminism", message: error.message } };
+    runtime.finished = { state: "nondeterministic", error: { kind: "nondeterminism", message: error.message, seq: error.seq } };
   } else {
     const kind = error instanceof EffectError ? error.kind : "error";
     const message = error && error.message ? error.message : String(error);
@@ -622,7 +623,7 @@ async function activate(activation) {
 
 function view(request) {
   const type = registry.steps.get(request.step);
-  if (!type) throw new TypeError(`etapa desconhecida: ${request.step}`);
+  if (!type) throw new TypeError(`unknown step: ${request.step}`);
   return blocks(type.view(request.state || {}));
 }
 

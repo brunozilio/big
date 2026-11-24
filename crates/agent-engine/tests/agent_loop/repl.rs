@@ -38,7 +38,7 @@ fn scripts(rig: &Rig, codes: &[&str]) -> Vec<Message> {
     replies.push(ScriptedModel::reply(vec![Block::Text("Done.".into())]));
     let model = ScriptedModel::new(replies);
     let mut history = vec![Message::user("go")];
-    rig.run_with(&model, &mut history, vec![Box::new(agent_engine::tools::repl::Repl)]).expect("run");
+    rig.run_with(&model, &mut history, Vec::new()).expect("run");
     history
 }
 
@@ -162,8 +162,7 @@ fn a_long_script_is_dispatched_keeps_running_and_shares_its_context() {
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
     ]);
     let mut history = vec![Message::user("go")];
-    let tools: Vec<Box<dyn agent_engine::tools::Tool>> =
-        vec![Box::new(agent_engine::tools::repl::Repl), Box::new(Slow)];
+    let tools: Vec<Box<dyn agent_engine::tools::Tool>> = vec![Box::new(Slow)];
 
     rig.run_with(&model, &mut history, tools).expect("run");
 
@@ -194,8 +193,7 @@ fn a_dispatched_script_left_uncollected_is_handed_over_before_the_turn_ends() {
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
     ]);
     let mut history = vec![Message::user("go")];
-    let tools: Vec<Box<dyn agent_engine::tools::Tool>> =
-        vec![Box::new(agent_engine::tools::repl::Repl), Box::new(Slow)];
+    let tools: Vec<Box<dyn agent_engine::tools::Tool>> = vec![Box::new(Slow)];
 
     rig.run_with(&model, &mut history, tools).expect("run");
 
@@ -253,8 +251,7 @@ fn a_built_in_tool_resolves_with_an_error_and_an_mcp_tool_throws() {
     ]);
     let mut history = vec![Message::user("go")];
 
-    let tools: Vec<Box<dyn agent_engine::tools::Tool>> =
-        vec![Box::new(agent_engine::tools::repl::Repl), Box::new(Broken)];
+    let tools: Vec<Box<dyn agent_engine::tools::Tool>> = vec![Box::new(Broken)];
     rig.run_with(&model, &mut history, tools).expect("run");
 
     let (content, failed) = &results(&history)[0];
@@ -324,7 +321,7 @@ fn in_code_only_mode_the_model_sees_the_repl_and_reaches_the_rest_from_scripts()
     ]);
     let mut history = vec![Message::user("go")];
 
-    rig.run_with(&model, &mut history, vec![Box::new(agent_engine::tools::repl::Repl)]).expect("run");
+    rig.run_with(&model, &mut history, Vec::new()).expect("run");
 
     let offered: Vec<String> = model.asked()[0].tools.iter().map(|spec| spec.name.clone()).collect();
     assert!(offered.contains(&"REPL".to_owned()), "{offered:?}");
@@ -374,7 +371,7 @@ fn reads_in_a_script_do_not_count_as_reads_the_model_has_seen() {
     ]);
     let mut history = vec![Message::user("go")];
 
-    rig.run_with(&model, &mut history, vec![Box::new(agent_engine::tools::repl::Repl)]).expect("run");
+    rig.run_with(&model, &mut history, Vec::new()).expect("run");
 
     let results = results(&history);
     assert_eq!(
@@ -406,7 +403,7 @@ fn a_script_after_earlier_ones_in_a_new_context_is_told_their_values_are_gone() 
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
     ]);
 
-    rig.run_with(&model, &mut history, vec![Box::new(agent_engine::tools::repl::Repl)]).expect("run");
+    rig.run_with(&model, &mut history, Vec::new()).expect("run");
 
     let results = results(&history);
     assert!(
@@ -520,8 +517,7 @@ fn run_tools(rig: &Rig, input: serde_json::Value, tools: Vec<Box<dyn agent_engin
 #[test]
 fn what_a_script_carries_from_an_mcp_server_comes_back_as_its_report() {
     let rig = code_mode(PermissionMode::AcceptEdits);
-    let tools: Vec<Box<dyn agent_engine::tools::Tool>> =
-        vec![Box::new(agent_engine::tools::repl::Repl), Box::new(Tracker)];
+    let tools: Vec<Box<dyn agent_engine::tools::Tool>> = vec![Box::new(Tracker)];
 
     let (content, failed) = run_tools(&rig, json!({ "code": "await mcp__tracker__list({})" }), tools);
 
@@ -534,7 +530,7 @@ fn describe_tool_gives_a_tool_s_whole_declaration() {
     let rig = code_mode(PermissionMode::AcceptEdits);
     let code = "[await describeTool('Grep'), await describeTool('Nope')]";
 
-    let (content, failed) = run_tools(&rig, json!({ "code": code }), vec![Box::new(agent_engine::tools::repl::Repl)]);
+    let (content, failed) = run_tools(&rig, json!({ "code": code }), Vec::new());
 
     assert!(!failed, "{content}");
     assert!(content.contains("declare function Grep(input: {"), "{content}");
@@ -544,9 +540,7 @@ fn describe_tool_gives_a_tool_s_whole_declaration() {
 #[test]
 fn the_timeout_counts_the_script_s_own_running_not_its_waits_on_tools() {
     let rig = code_mode(PermissionMode::AcceptEdits);
-    let tools = || -> Vec<Box<dyn agent_engine::tools::Tool>> {
-        vec![Box::new(agent_engine::tools::repl::Repl), Box::new(Slow)]
-    };
+    let tools = || -> Vec<Box<dyn agent_engine::tools::Tool>> { vec![Box::new(Slow)] };
 
     let waited = run_tools(
         &rig,
@@ -611,8 +605,7 @@ fn an_image_a_script_s_call_returned_reaches_the_model_beside_the_script_s_outpu
         ScriptedModel::reply(vec![Block::Text("Seen.".into())]),
     ]);
     let mut history = vec![Message::user("go")];
-    let tools: Vec<Box<dyn agent_engine::tools::Tool>> =
-        vec![Box::new(agent_engine::tools::repl::Repl), Box::new(Snap)];
+    let tools: Vec<Box<dyn agent_engine::tools::Tool>> = vec![Box::new(Snap)];
 
     rig.run_with(&model, &mut history, tools).expect("run");
 
@@ -633,8 +626,7 @@ fn an_image_a_script_s_call_returned_reaches_the_model_beside_the_script_s_outpu
 fn a_tool_that_answers_in_json_gives_the_script_an_object() {
     let rig = code_mode(PermissionMode::AcceptEdits);
     let code = "const made = await TaskCreate({ subject: 'Build' }); [typeof made, made.task_id, made.subject]";
-    let mut tools: Vec<Box<dyn agent_engine::tools::Tool>> = vec![Box::new(agent_engine::tools::repl::Repl)];
-    tools.extend(agent_engine::tools::task::tools());
+    let tools: Vec<Box<dyn agent_engine::tools::Tool>> = Vec::new();
 
     let (content, failed) = &run_tools(&rig, json!({ "code": code }), tools);
     assert!(!failed, "{content}");

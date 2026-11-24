@@ -4,6 +4,7 @@ mod claims;
 mod launcher;
 mod models;
 mod policy;
+mod recall;
 mod services;
 mod starter;
 #[cfg(test)]
@@ -29,7 +30,9 @@ pub struct Workspace {
     pub credentials: domain::credentials::RunCredentials,
     pub environment: Vec<(String, String)>,
     pub prompt_context: Option<crate::prompt::Environment>,
+    pub style_reminder: Option<String>,
     pub hooks: crate::hooks::Hooks,
+    pub interceptors: crate::intercept::Interceptors,
     pub home: Option<PathBuf>,
     pub added_dirs: Vec<PathBuf>,
     pub agent_name: String,
@@ -55,7 +58,9 @@ impl Workspace {
             credentials: Default::default(),
             environment: Vec::new(),
             prompt_context: None,
+            style_reminder: None,
             hooks: Default::default(),
+            interceptors: Default::default(),
             home: None,
             added_dirs: Vec::new(),
             agent_name: "main".into(),
@@ -99,7 +104,9 @@ impl Workspace {
             credentials: self.credentials.clone(),
             environment: self.environment.clone(),
             prompt_context: self.prompt_context.clone(),
+            style_reminder: None,
             hooks: self.hooks.clone(),
+            interceptors: self.interceptors.clone(),
             home: self.home.clone(),
             added_dirs: self.added_dirs.clone(),
             agent_name: self.agent_name.clone(),

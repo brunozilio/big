@@ -233,9 +233,6 @@ export function AskBlock({ event, readOnly, respond }: { event: Ev<'ask'>; readO
         title=""
         collapsed={
           <div className="w-full rounded-card bg-subtle p-5 shadow-[0_0_0_1px_rgb(var(--border))]">
-            <p className="mb-3 flex items-center gap-2 text-base text-muted">
-              <ResolvedCheck /> Respondido
-            </p>
             <div className="space-y-3.5">
               {event.questions.map((q, i) => (
                 <div key={q.question}>
@@ -259,27 +256,9 @@ export function AskBlock({ event, readOnly, respond }: { event: Ev<'ask'>; readO
   )
 }
 
-const permissionLabel = { allowed: 'Permitido uma vez', always: 'Sempre permitido nesta sessão', denied: 'Negado' } as const
-
 export function PermissionBlock({ event, readOnly, respond }: { event: Ev<'permission'>; readOnly?: boolean; respond: Respond }) {
   const { busy, error, send } = useSend(respond)
-  if (event.resolution !== 'pending') {
-    return (
-      <ActionBlock
-        tone="info"
-        title=""
-        collapsed={
-          <>
-            <ResolvedCheck tone={event.resolution === 'denied' ? 'danger' : 'success'} />
-            {permissionLabel[event.resolution]}
-            <code className="rounded-sm bg-inset px-1.5 py-0.5 font-mono text-xs text-fg2">{event.tool}</code>
-          </>
-        }
-      >
-        {null}
-      </ActionBlock>
-    )
-  }
+  if (event.resolution !== 'pending') return null
   const decide = (decision: 'allowed' | 'always' | 'denied') => send(event.id, { kind: 'permission', decision })
   return (
     <ActionBlock tone="warning" title="Aguardando sua aprovação" icon={<Icon name="hourglass" size={17} strokeWidth={2} />}>
@@ -297,7 +276,7 @@ export function PermissionBlock({ event, readOnly, respond }: { event: Ev<'permi
           Permitir uma vez
         </Button>
         <Button size="sm" disabled={readOnly || busy} onClick={() => decide('always')}>
-          Sempre nesta sessão
+          Sempre permitir
         </Button>
         <Button size="sm" variant="ghost" className="text-danger-fg hover:text-danger-fg" disabled={readOnly || busy} onClick={() => decide('denied')}>
           Negar

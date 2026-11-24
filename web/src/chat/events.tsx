@@ -9,6 +9,8 @@ import { PersonAvatar, personName, ProviderLogo } from '@/ui/domain'
 import { Icon, type IconName } from '@/ui/icon'
 import { AnimatePresence, Collapse, IconSwap, motion, tween } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
+import { NoticeLine, NoticeMessage } from './Notices'
+import { parseNotices, statusNotice } from './noticeText'
 
 export type Ev<T extends SessionEvent['type']> = Extract<SessionEvent, { type: T }>
 
@@ -27,6 +29,12 @@ export function AgentMark({ size = 18, spinning, className, agent }: { size?: nu
 }
 
 export function UserMessage({ event }: { event: Ev<'user'> }) {
+  const notices = parseNotices(event.text)
+  if (notices) return <NoticeMessage notices={notices} />
+  return <PersonMessage event={event} />
+}
+
+function PersonMessage({ event }: { event: Ev<'user'> }) {
   const [expanded, setExpanded] = useState(false)
   const long = event.text.length > 320
   return (
@@ -41,8 +49,8 @@ export function UserMessage({ event }: { event: Ev<'user'> }) {
           <span className="tabular-nums">{event.attachments}</span> {plural(event.attachments, 'anexo', 'anexos')}
         </span>
       )}
-      <div className="max-w-[85%] whitespace-pre-wrap rounded-overlay bg-primary px-4 py-3 text-md leading-6 text-primary-fg shadow-[0_1px_2px_rgb(0_0_0/0.12)] sm:max-w-[75%]">
-        {long && !expanded ? `${event.text.slice(0, 320)}…` : event.text}
+      <div className="prose-chat prose-user max-w-[85%] rounded-overlay bg-primary px-4 py-3 text-md leading-6 text-primary-fg shadow-[0_1px_2px_rgb(0_0_0/0.12)] sm:max-w-[75%]">
+        <ChatMarkdown text={long && !expanded ? `${event.text.slice(0, 320)}…` : event.text} />
         {long && (
           <button className="ml-2 text-sm underline opacity-70" onClick={() => setExpanded(!expanded)}>
             {expanded ? 'mostrar menos' : 'mostrar mais'}
@@ -255,6 +263,8 @@ export function StatusLine({ event }: { event: Ev<'status'> }) {
   if (report) return <ObserverReport report={report} />
   const notice = backgroundNotice(event.text)
   if (notice) return <BackgroundDone notice={notice} />
+  const sent = statusNotice(event.text)
+  if (sent) return <NoticeLine notice={sent} />
   if (event.status !== 'error') return <p className="text-sm text-muted">{event.text}</p>
   return (
     <p className="flex items-center gap-2 text-sm text-muted">

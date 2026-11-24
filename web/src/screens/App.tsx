@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { retry, useStore } from '@/api/store'
 import { useBrandTitle, useThemeSync } from '@/app/theme'
+import { useLanguageSync } from '@/i18n/sync'
 import { Button, IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { ProductMark } from '@/ui/domain'
@@ -18,6 +19,7 @@ import { SettingsView, type SettingsTab } from './settings/Settings'
 
 export function App() {
   useThemeSync()
+  useLanguageSync()
   useBrandTitle()
   const location = useLocation()
   const navigate = useNavigate()
@@ -67,7 +69,7 @@ function DeliveryPage() {
   const [search, setSearch] = useSearchParams()
   const [fresh, setFresh] = useState<string | null>(null)
   const settings = location.pathname.startsWith('/settings')
-  const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'applications' || params.tab === 'usage' ? params.tab : 'connections'
+  const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'browser' || params.tab === 'applications' || params.tab === 'usage' ? params.tab : 'connections'
   const connecting = search.get('connect')
   const items = useStore((s) => s.items)
   const openId = params.id ?? null

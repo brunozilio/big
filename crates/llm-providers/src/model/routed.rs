@@ -41,11 +41,7 @@ impl Routed {
             return Ok(Arc::clone(api));
         }
         let Some((_, key)) = self.others.iter().find(|(connected, _)| *connected == provider) else {
-            return Err(ModelError::Unauthorized(format!(
-                "{} is not connected: run `{} login`",
-                crate::providers::name(provider),
-                brand::COMMAND
-            )));
+            return Err(ModelError::Unauthorized(crate::providers::not_connected(provider, model)));
         };
         let option = ModelOption::new(model, model).served_by(provider);
         let api: Arc<dyn ModelApi> =

@@ -144,6 +144,7 @@ impl Provider for Zephyr {
             button: "Continuar na SmartBear".to_owned(),
             site: "da SmartBear".to_owned(),
             choose_title: "Conta do Zephyr".to_owned(),
+            hidden: false,
         }
     }
 

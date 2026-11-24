@@ -8,6 +8,8 @@ mod escalation;
 mod follow_through;
 mod input_validation;
 mod interception;
+mod intercepted_model;
+mod intercepted_tools;
 mod lsp_install;
 mod model_hooks;
 mod native_search;
@@ -115,4 +117,42 @@ impl Rig {
     fn events(&self) -> Vec<EngineEvent> {
         self.events.lock().expect("events").clone()
     }
+}
+
+pub(crate) struct Answerer {
+    done: Arc<std::sync::atomic::AtomicBool>,
+    thread: std::thread::JoinHandle<()>,
+}
+
+impl Answerer {
+    pub(crate) fn join(self) -> std::thread::Result<()> {
+        self.done.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.thread.join()
+    }
+}
+
+pub(crate) fn answering(rig: &Rig, decision: domain::Decision) -> Answerer {
+    let control = Arc::clone(&rig.control);
+    let events = Arc::clone(&rig.events);
+    let done = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let finished = Arc::clone(&done);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let thread = std::thread::spawn(move || {
+        while !finished.load(std::sync::atomic::Ordering::SeqCst) && std::time::Instant::now() < deadline {
+            let asks: Vec<_> = events
+                .lock()
+                .expect("events")
+                .iter()
+                .filter_map(|event| match event {
+                    EngineEvent::Asked(ask) => Some(ask.id.clone()),
+                    _ => None,
+                })
+                .collect();
+            for id in asks {
+                control.answer(&id, decision.clone());
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    });
+    Answerer { done, thread }
 }

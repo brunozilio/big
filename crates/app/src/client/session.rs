@@ -29,6 +29,7 @@ pub struct Headless {
     pub append_system: Option<String>,
     pub fallback_model: Option<String>,
     pub teammate: Option<domain::team::TeammateOf>,
+    pub output_style: Option<String>,
 }
 
 impl Session {
@@ -96,6 +97,7 @@ impl Session {
         request.session.append_system.clone_from(&self.headless.append_system);
         request.session.fallback_model.clone_from(&self.headless.fallback_model);
         request.session.teammate.clone_from(&self.headless.teammate);
+        request.session.output_style.clone_from(&self.headless.output_style);
         let watch = RunWatch::of(request.session.command);
         let run = Run::start(&self.dispatcher, |run| ClientCommand::SubmitPrompt { run, request })?;
         Ok(run.of_session(Arc::clone(&self.carried), watch))

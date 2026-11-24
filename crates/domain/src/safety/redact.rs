@@ -17,6 +17,8 @@ const TOKEN_PREFIXES: &[(&str, usize)] = &[
     ("xoxs-", 10),
 ];
 
+const PARSE_ERRORS: &[&str] = &["unexpected", "invalid", "unknown", "unterminated", "illegal", "bad"];
+
 const SECRET_KEYS: &[&str] = &["password", "passwd", "secret", "token", "api_key", "apikey", "api-key"];
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -49,18 +51,26 @@ fn env_values(text: &str) -> impl Iterator<Item = String> + '_ {
 pub fn redact(text: &str, known: &Known) -> String {
     let mut out = String::with_capacity(text.len());
     let mut redact_next = false;
+    let mut previous = "";
     let mut rest = text;
     while !rest.is_empty() {
         let split = rest.find(char::is_whitespace).unwrap_or(rest.len());
         let (piece, after) = rest.split_at(split);
         if !piece.is_empty() {
             out.push_str(&word(piece, &mut redact_next));
+            redact_next &= !names_a_parse_error(previous, piece);
+            previous = piece;
         }
         let gap = after.find(|c: char| !c.is_whitespace()).unwrap_or(after.len());
         out.push_str(&after[..gap]);
         rest = &after[gap..];
     }
     known.0.iter().fold(out, |text, value| text.replace(value.as_str(), REDACTED))
+}
+
+fn names_a_parse_error(previous: &str, label: &str) -> bool {
+    let previous = core(previous).to_ascii_lowercase();
+    PARSE_ERRORS.contains(&previous.as_str()) && core(label).eq_ignore_ascii_case("token:")
 }
 
 pub(crate) fn word(word: &str, redact_next: &mut bool) -> String {
@@ -150,6 +160,17 @@ mod tests {
 
         assert_eq!(shown, "connecting to [redacted] ok, SHORT=abc");
         assert!(Known::from_env_files(["A=b"]).is_empty(), "short values would hide ordinary words");
+    }
+
+    #[test]
+    fn a_parse_error_shows_its_bad_token_unless_the_token_is_a_secret() {
+        let parse = "SyntaxError: unexpected token: 'Started'\n    at <input>:1:1";
+        let named = "Invalid token: \"background\" and token: abc123";
+        let leaked = "SyntaxError: unexpected token: 'ghp_0123456789abcdefghij'";
+
+        assert_eq!(redact(parse, &Known::default()), parse);
+        assert_eq!(redact(named, &Known::default()), "Invalid token: \"background\" and token: [redacted]");
+        assert_eq!(redact(leaked, &Known::default()), "SyntaxError: unexpected token: '[redacted]'");
     }
 
     #[test]

@@ -5,7 +5,7 @@ use serde_json::Value;
 const DECLARED: &str = include_str!("tools.json");
 
 pub fn server_name() -> String {
-    format!("{}_browser", brand::COMMAND.replace('-', "_"))
+    domain::mcp::browser_server()
 }
 
 pub fn tools() -> &'static [Value] {

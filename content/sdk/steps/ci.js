@@ -21,12 +21,12 @@ async function follow(ctx, opts, target, seen) {
 }
 
 function shown(run) {
-  if (run.state === NONE) return markdown("Nenhum pipeline de CI configurado.");
+  if (run.state === NONE) return markdown("No CI pipeline configured.");
   return pipeline(run.run);
 }
 
 function failure(failed) {
-  const summary = failed.map((run) => `O pipeline ${run.pipeline}${run.name ? ` de ${run.name}` : ""} terminou como ${run.state}.`);
+  const summary = failed.map((run) => `Pipeline ${run.pipeline}${run.name ? ` for ${run.name}` : ""} finished as ${run.state}.`);
   const output = failed.map((run) => (failed.length > 1 && run.name ? `# ${run.name}\n${run.output}` : run.output));
   return { summary: summary.join("\n"), output: output.join("\n\n") };
 }
@@ -36,12 +36,12 @@ export default step({
   label: "CI",
   icon: "sCi",
   needs: "pipelines",
-  doing: "Aguardando CI",
+  doing: "Waiting for CI",
   view: (s) => (Array.isArray(s.runs) && s.runs.length > 0 ? s.runs : [s]).filter((run) => run.run || run.state === NONE).map(shown),
   async run(ctx, opts) {
     const targets = targetsOf(ctx, opts);
     if (targets.some((target) => !target.head)) {
-      return ctx.fail({ error: "não há branch nem pull request para acompanhar o pipeline" });
+      return ctx.fail({ error: "there is no branch or pull request to follow the pipeline" });
     }
     const seen = object(ctx.output(ctx.step)).seen ?? [];
     const runs = await eachOf(ctx, targets, (branch, target) => follow(branch, opts, target, seen));

@@ -16,10 +16,28 @@ fn asks() -> MutexGuard<'static, Waiting> {
     ASKS.get_or_init(Mutex::default).locked()
 }
 
+fn idle() -> MutexGuard<'static, std::collections::HashSet<(String, String)>> {
+    static IDLE: OnceLock<Mutex<std::collections::HashSet<(String, String)>>> = OnceLock::new();
+    IDLE.get_or_init(Mutex::default).locked()
+}
+
+fn noted(team: &Team, mail: &domain::team::Mail) {
+    let member = (team.name.clone(), mail.from.clone());
+    match domain::team::Protocol::of(&mail.text) {
+        Some(domain::team::Protocol::IdleNotification { .. }) => idle().insert(member),
+        _ => idle().remove(&member),
+    };
+}
+
+pub fn woke(team: &str, member: &str) {
+    idle().remove(&(team.to_owned(), member.to_owned()));
+}
+
 pub fn deliver(team: &Team, agent: &str, client: u64) -> usize {
     let mails = team.unread(agent);
     let count = mails.len();
     for mail in &mails {
+        noted(team, mail);
         match TeammateAsk::of(&team.name, mail) {
             Some(ask) => asks().entry(client).or_default().push((ask, team.clone())),
             None => crate::tools::inbox::push(client, domain::inbox::teammate_notice(mail)),
@@ -67,10 +85,12 @@ pub fn closing(client: u64) {
 
 pub fn teammates_working(client: u64) -> bool {
     let teams = watched().get(&client).cloned().unwrap_or_default();
-    teams
-        .iter()
-        .filter_map(Team::read)
-        .any(|config| config.members.iter().any(|member| member.active && member.name != LEAD))
+    teams.iter().filter_map(|team| team.read().map(|config| (team.name.clone(), config))).any(|(team, config)| {
+        let resting = idle();
+        config.members.iter().any(|member| {
+            member.active && member.name != LEAD && !resting.contains(&(team.clone(), member.name.clone()))
+        })
+    })
 }
 
 pub fn watch(team: &Team, client: u64) {

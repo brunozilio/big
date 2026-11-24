@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::log::now;
-use crate::{Result, Store, unsigned};
+use crate::{Result, Store};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Generation {
@@ -49,15 +49,6 @@ impl Store {
             .query_map([kind.map(FindingKind::as_str)], |row| row.get::<_, String>(0))?
             .collect::<rusqlite::Result<Vec<_>>>()?;
         Ok(texts.iter().map(|text| serde_json::from_str(text)).collect::<serde_json::Result<_>>()?)
-    }
-
-    pub fn count_findings(&self, workflow: &str, step: &str, kind: FindingKind) -> Result<u64> {
-        let count: i64 = self.locked().query_row(
-            "SELECT COUNT(*) FROM factory_findings WHERE workflow = ?1 AND step = ?2 AND kind = ?3",
-            params![workflow, step, kind.as_str()],
-            |row| row.get(0),
-        )?;
-        unsigned(count)
     }
 
     pub fn record_generation(&self, version: &str, chain: &[String], files: &Value) -> Result<bool> {
@@ -123,7 +114,7 @@ mod tests {
             .record_findings(&[finding("a", FindingKind::Failure, "g1"), finding("b", FindingKind::Escape, "g1")])
             .expect("record");
         assert_eq!(again.iter().map(|found| found.id.as_str()).collect::<Vec<_>>(), vec!["b"]);
-        assert_eq!(store.count_findings("entrega", "checks", FindingKind::Failure).expect("count"), 1);
+        assert_eq!(store.findings(Some(FindingKind::Failure)).expect("list").len(), 1);
         assert_eq!(store.findings(Some(FindingKind::Escape)).expect("list").len(), 1);
         assert_eq!(store.findings(None).expect("list").len(), 2);
     }

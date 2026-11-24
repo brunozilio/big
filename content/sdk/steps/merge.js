@@ -23,11 +23,11 @@ export default step({
   label: "Merge",
   icon: "sMerge",
   needs: "code",
-  doing: "Mergeando",
+  doing: "Merging",
   view: shown,
   async run(ctx, opts) {
     const prs = pullRequestsOf(ctx, opts);
-    if (prs.length === 0) return ctx.fail({ error: "não há pull request para mergear" });
+    if (prs.length === 0) return ctx.fail({ error: "there is no pull request to merge" });
     const pr = prs[0].pr;
     const methods = ordered(opts);
     let method = methods[0];
@@ -39,7 +39,7 @@ export default step({
     const merges = await eachOf(ctx, prs, (branch, entry) => mergeOne(branch, opts, entry, method));
     const listed = prs.length > 1 || prs[0].repository ? { merges } : {};
     if (merges.some((done) => !done.merged)) {
-      return ctx.fail({ pr, method, methods, ...listed, error: "o pull request não foi mergeado" });
+      return ctx.fail({ pr, method, methods, ...listed, error: "the pull request was not merged" });
     }
     return ctx.pass({ pr, method, methods, merged: true, sha: merges[0].sha, ...listed });
   },

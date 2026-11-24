@@ -1,8 +1,8 @@
 mod after;
 mod batches;
-mod in_loop;
+pub(in crate::agent) mod in_loop;
+mod intercepted;
 mod task_list;
-mod watch;
 
 use domain::{EngineEvent, ToolCall};
 use platform::sync::Locked;
@@ -49,6 +49,8 @@ impl Agent<'_> {
         spawn: Option<Spawn<'_, 'env>>,
     ) -> Block {
         let tool = self.tool(run, name);
+        let tidied = tool.and_then(|tool| self.without_placeholders(name, tool, input));
+        let input = tidied.as_ref().unwrap_or(input);
         let offered = self.offers(name) || self.loads_on_call(name);
         let pre = self.before(id, name, input, tool.is_some() && offered);
         let input = pre.updated_input.as_ref().unwrap_or(input);
@@ -57,7 +59,7 @@ impl Agent<'_> {
         let calling = Calling { id, name, tool, parent, run, spawn, permission: pre.permission };
         let mut outcome = match self.refused_before_running(&calling, input, &pre, &rule_context, offered) {
             Some(refusal) => refusal,
-            None => self.ran(&calling, input),
+            None => self.intercepted(&calling, input),
         };
         self.after(&calling, input, &pre.context, &mut outcome);
         self.finished(id, outcome)
@@ -162,14 +164,19 @@ impl Agent<'_> {
         }
     }
 
-    fn ran<'env>(&'env self, calling: &Calling<'_, 'env>, input: &Value) -> Outcome {
-        let declared =
-            calling.tool.is_some_and(|tool| tool.script().is_none()) && crate::tools::declares_execute(calling.name);
-        if declared {
-            self.execute_declared(calling, input, &|input| self.in_loop(calling, input))
-        } else {
-            self.in_loop(calling, input)
+    fn without_placeholders(&self, name: &str, tool: &dyn Tool, input: &Value) -> Option<Value> {
+        let empty = input.as_object()?.values().any(|value| value.as_str() == Some(""));
+        if !empty {
+            return None;
         }
+        match self.request.tools.iter().find(|spec| spec.name == name) {
+            Some(offered) => crate::tools::checked::without_empty_optionals(&offered.schema, input),
+            None => crate::tools::checked::without_empty_optionals(&tool.spec().schema, input),
+        }
+    }
+
+    fn ran<'env>(&'env self, calling: &Calling<'_, 'env>, input: &Value) -> Outcome {
+        self.in_loop(calling, input)
     }
 }
 

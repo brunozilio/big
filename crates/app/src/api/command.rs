@@ -24,6 +24,10 @@ pub enum ClientCommand {
         ask: AskId,
         decision: Decision,
     },
+    SteerRun {
+        run: RunId,
+        text: String,
+    },
     ListModels,
     ListProviders,
     SignInProvider {
@@ -54,6 +58,7 @@ impl ClientCommand {
             Self::SubmitPrompt { .. } => "submit_prompt",
             Self::CancelRun { .. } => "cancel_run",
             Self::AnswerAsk { .. } => "answer_ask",
+            Self::SteerRun { .. } => "steer_run",
             Self::ListModels => "list_models",
             Self::ListProviders => "list_providers",
             Self::SignInProvider { .. } => "sign_in_provider",
@@ -79,6 +84,7 @@ mod tests {
             ClientCommand::SubmitPrompt { run, request },
             ClientCommand::CancelRun { run },
             ClientCommand::AnswerAsk { run, ask: AskId("a".into()), decision: Decision::Answer(vec![vec![0]]) },
+            ClientCommand::SteerRun { run, text: "also the tests".into() },
             ClientCommand::ListModels,
             ClientCommand::ListProviders,
             ClientCommand::SignInProvider { provider: ModelProvider::new("browser-sub"), back: None },

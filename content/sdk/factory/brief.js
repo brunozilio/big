@@ -6,7 +6,7 @@ function line(finding) {
   const detail = object(found.detail);
   const data = object(detail.data);
   const cause = data.error ?? data.command ?? data.verdict ?? data.body ?? "";
-  const gate = found.gate ? ` · portão ${found.gate} → pego por ${found.caught_by}` : "";
+  const gate = found.gate ? ` · gate ${found.gate} → caught by ${found.caught_by}` : "";
   return `- \`${found.id}\` (${found.kind})${gate}${cause ? `: ${String(cause).slice(0, 400)}` : ""}`;
 }
 
@@ -22,26 +22,26 @@ export function briefOf(item) {
   const findings = Array.isArray(data.findings) ? data.findings : [];
   const dir = factory.dir ?? "";
   const escape = factory.kind === "factory.gate.escaped";
-  const title = item.title || (escape ? "Revisar avaliação" : "Ajustar a fábrica");
+  const title = item.title || (escape ? "Review eval" : "Adjust the factory");
   const goal = escape
-    ? `O portão \`${data.gate}\` do workflow \`${data.workflow}\` aprovou um trabalho de \`${data.step}\` que depois foi devolvido por \`${data.caught_by}\`. Escreva um caso de avaliação em \`${dir}/evals/\` que reproduza esse defeito: um comando que falha no commit defeituoso e passa no código atual.`
-    : `A etapa \`${data.step}\` do workflow \`${data.workflow}\` falhou ${data.count} vezes. Ajuste a fábrica em \`${dir}/\` (agentes, skills, prompts, etapas ou o workflow) para que ela pare de falhar assim, sem afrouxar nenhum portão.`;
+    ? `Gate \`${data.gate}\` of workflow \`${data.workflow}\` approved work from \`${data.step}\` that was later sent back by \`${data.caught_by}\`. Write an eval case in \`${dir}/evals/\` that reproduces this defect: a command that fails on the defective commit and passes on the current code.`
+    : `Step \`${data.step}\` of workflow \`${data.workflow}\` failed ${data.count} times. Adjust the factory in \`${dir}/\` (agents, skills, prompts, steps or the workflow) so it stops failing this way, without loosening any gate.`;
   const text = [
     `# ${title}`,
     "",
-    "## Descrição",
+    "## Description",
     goal,
     "",
-    "## Achados",
-    findings.map(line).join("\n") || "- nenhum",
+    "## Findings",
+    findings.map(line).join("\n") || "- none",
     "",
-    "## Evidência",
+    "## Evidence",
     evidence(findings),
     "",
-    "## Critérios de aceite",
+    "## Acceptance criteria",
     escape
-      ? "- Dado o novo caso, quando ele roda no commit defeituoso, então o comando falha.\n- Dado o novo caso, quando ele roda no código atual, então o comando passa.\n- O caso traz `origin` com o id do achado."
-      : "- Dado o conjunto de avaliações em `evals/`, quando roda, então todos os casos continuam válidos.\n- A mudança fica só em arquivos da fábrica.",
+      ? "- Given the new case, when it runs on the defective commit, then the command fails.\n- Given the new case, when it runs on the current code, then the command passes.\n- The case carries `origin` with the finding's id."
+      : "- Given the eval set in `evals/`, when it runs, then every case stays valid.\n- The change touches only factory files.",
   ].join("\n");
   return { title, plan: text, story: goal };
 }
@@ -50,14 +50,14 @@ export default step({
   name: "brief",
   label: "Briefing",
   icon: "sPlan",
-  doing: "Montando o briefing",
+  doing: "Building the briefing",
   view: (s) => [markdown(s.plan ?? ""), ...(s.state === "waiting_human" ? [actions(["approve", "reject"])] : [])],
   async run(ctx, opts) {
     const made = briefOf(ctx.item);
     const autonomy = object(ctx.item.factory).autonomy ?? "near";
     if ((opts.autonomy ?? autonomy) === "in") {
       const answer = await ctx.waitHuman([markdown(made.plan), actions(["approve", "reject"])]);
-      if (answer.action !== "approve") return ctx.cancel("o briefing da fábrica foi recusado");
+      if (answer.action !== "approve") return ctx.cancel("the factory briefing was rejected");
     }
     return ctx.pass(made);
   },

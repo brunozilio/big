@@ -145,10 +145,10 @@ describe('adaptador mock', () => {
     expect(await api.models()).toEqual({ models: [], default: null })
   })
 
-  test('branding guarda logo e tema sem nome fixo na página', async () => {
+  test('branding guarda o tema e o logo vem do servidor', async () => {
     const api = fresh()
-    const saved = await api.saveBranding({ theme: 'dark', logo: 'data:image/png;base64,AA==' })
+    const saved = await api.saveBranding({ theme: 'dark' })
     expect(saved.theme).toBe('dark')
-    expect(saved.logo).toContain('data:')
+    expect(saved.logo).toBe('/api/branding/logo')
   })
 })

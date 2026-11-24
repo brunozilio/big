@@ -106,7 +106,7 @@ fn the_user_s_own_tool_runs_without_asking_and_its_log_reaches_the_screen() {
 }
 
 #[test]
-fn a_tool_that_exports_execute_runs_it_and_has_no_built_in_to_call() {
+fn a_tool_that_exports_execute_runs_it_and_no_rust_tool_is_left_to_call() {
     let rig = Rig::new(PermissionMode::Bypass);
     let home = tempfile::tempdir().expect("home");
     let folder = home.path().join(brand::DIR).join("tools");
@@ -123,7 +123,7 @@ export function execute(input, ctx) {
     rig.run_with(&model(), &mut history, script_tools(home.path(), rig.dir.path())).expect("run");
     assert_eq!(std::fs::read_to_string(rig.dir.path().join("mark.txt")).expect("mark"), "executed");
     let answered = history.iter().flat_map(|message| message.blocks.iter()).any(
-        |block| matches!(block, Block::ToolResult { content, .. } if content.contains("Mark has no built-in to call")),
+        |block| matches!(block, Block::ToolResult { content, .. } if content.contains("ctx.builtin is not a function")),
     );
     assert!(answered, "{history:?}");
 }
@@ -188,8 +188,7 @@ export function run(input, ctx) {
         ScriptedModel::reply(vec![tool_use("o", "TaskOutput", json!({"task_id": "task-1"}))]),
         ScriptedModel::reply(vec![Block::Text("Ok.".into())]),
     ]);
-    let mut extra: Vec<Box<dyn Tool>> = vec![Box::new(agent_engine::tools::subagent::AgentTool::default())];
-    extra.extend(agent_engine::tools::task::tools());
+    let mut extra: Vec<Box<dyn Tool>> = Vec::new();
     extra.extend(script_tools(home.path(), rig.dir.path()));
     let mut history = vec![Message::user("review")];
     rig.run_with(&model, &mut history, extra).expect("run");

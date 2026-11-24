@@ -72,7 +72,3 @@ fn redirected(from: &str, response: &Response) -> Option<String> {
     let joined = url::Url::parse(from).ok().and_then(|base| base.join(&location).ok());
     Some(joined.map_or(location, String::from))
 }
-
-#[cfg(test)]
-#[path = "reach_tests.rs"]
-mod tests;

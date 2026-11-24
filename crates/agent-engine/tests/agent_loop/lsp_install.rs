@@ -3,12 +3,12 @@ use std::sync::atomic::Ordering;
 
 use agent_engine::lsp::fake::ScriptedServer;
 use agent_engine::model::scripted::ScriptedModel;
-use agent_engine::tools::{Lsp, Tool};
+use agent_engine::tools::Tool;
 use agent_engine::transcript::{Block, Message};
 use domain::{AskKind, Decision, EngineEvent, PermissionMode};
 use serde_json::json;
 
-use crate::{Rig, tool_use};
+use crate::{Rig, answering, tool_use};
 
 const PENDING: &str = "install the rust-analyzer language server: download https://example.invalid/ra.gz";
 
@@ -33,7 +33,7 @@ fn hover(rig: &Rig) -> (String, bool) {
         ScriptedModel::reply(vec![Block::Text("Done".into())]),
     ]);
     let mut history = vec![Message::user("hover")];
-    let extra: Vec<Box<dyn Tool>> = vec![Box::new(Lsp)];
+    let extra: Vec<Box<dyn Tool>> = Vec::new();
     rig.run_with(&model, &mut history, extra).expect("run");
     history
         .iter()
@@ -43,28 +43,6 @@ fn hover(rig: &Rig) -> (String, bool) {
             _ => None,
         })
         .expect("a result")
-}
-
-fn answering(rig: &Rig, decision: Decision) -> std::thread::JoinHandle<()> {
-    let control = Arc::clone(&rig.control);
-    let events = Arc::clone(&rig.events);
-    std::thread::spawn(move || {
-        for _ in 0..150 {
-            let asks: Vec<_> = events
-                .lock()
-                .expect("events")
-                .iter()
-                .filter_map(|event| match event {
-                    EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                    _ => None,
-                })
-                .collect();
-            for id in asks {
-                control.answer(&id, decision.clone());
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-    })
 }
 
 fn asked(rig: &Rig) -> Vec<String> {

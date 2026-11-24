@@ -1,5 +1,5 @@
 use domain::EngineEvent;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::agent::Agent;
 use crate::agent::run::ThisRun;
@@ -7,11 +7,8 @@ use crate::tools::names;
 
 impl Agent<'_> {
     fn listed_tasks(&self, run: &ThisRun) -> Option<Vec<Value>> {
-        let list = self.tool(run, names::TASK_LIST)?;
-        match serde_json::from_str::<Value>(&list.run(&json!({}), self.workspace).content) {
-            Ok(Value::Array(tasks)) => Some(tasks),
-            _ => None,
-        }
+        self.tool(run, names::TASK_LIST)?;
+        crate::tools::host::tasks::listed(self.workspace).ok()
     }
 
     pub(in crate::agent) fn open_tasks(&self, run: &ThisRun) -> Vec<String> {
@@ -48,6 +45,8 @@ fn as_items(tasks: &[Value]) -> Vec<domain::events::TaskItem> {
 
 #[cfg(test)]
 mod tests {
+    use serde_json::json;
+
     use super::*;
 
     #[test]

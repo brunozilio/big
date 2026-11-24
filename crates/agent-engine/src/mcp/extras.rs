@@ -3,129 +3,19 @@ use std::sync::Arc;
 use serde_json::{Value, json};
 
 use super::McpServer;
-use crate::model::ToolSpec;
-use crate::tools::{Outcome, Tool, Workspace, clip, field, required};
-
-const SHOWN: usize = 60_000;
+use crate::tools::Tool;
 
 pub fn resource_tools(servers: &[Arc<McpServer>]) -> Vec<Box<dyn Tool>> {
-    let with: Vec<Arc<McpServer>> = servers.iter().filter(|server| server.offers("resources")).cloned().collect();
-    if with.is_empty() {
+    let names: Vec<&str> =
+        servers.iter().filter(|server| server.offers("resources")).map(|server| server.name()).collect();
+    if names.is_empty() {
         return Vec::new();
     }
-    vec![Box::new(ListResources(with.clone())), Box::new(ReadResource(with))]
-}
-
-fn server<'a>(servers: &'a [Arc<McpServer>], name: &str) -> Result<&'a Arc<McpServer>, String> {
-    servers.iter().find(|server| server.name() == name).ok_or_else(|| {
-        let names: Vec<&str> = servers.iter().map(|server| server.name()).collect();
-        format!("No MCP server {name} with resources; these have some: {}", names.join(", "))
-    })
-}
-
-pub struct ListResources(Vec<Arc<McpServer>>);
-
-impl std::fmt::Debug for ListResources {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ListMcpResources")
-    }
-}
-
-fn resource(input: &Value) -> Vec<crate::tools::Effect> {
-    let named = |key| field(input, key).unwrap_or_default().to_owned();
-    vec![crate::tools::Effect::Resource { server: named("server"), uri: named("uri") }]
-}
-
-impl Tool for ListResources {
-    fn spec(&self) -> ToolSpec {
-        let names: Vec<&str> = self.0.iter().map(|server| server.name()).collect();
-        crate::tools::declared("ListMcpResources", &json!({ "servers": names }))
-    }
-
-    fn effects(&self, input: &Value, _workspace: &Workspace) -> Vec<crate::tools::Effect> {
-        resource(input)
-    }
-
-    fn summary(&self, input: &Value) -> String {
-        field(input, "server").unwrap_or_default().to_owned()
-    }
-
-    fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
-        let wanted = match required(input, "server") {
-            Ok(name) => name,
-            Err(error) => return error,
-        };
-        if let Err(error) = server(&self.0, wanted) {
-            return Outcome::error(error);
-        }
-        let mut out = String::new();
-        for server in self.0.iter().filter(|server| server.name() == wanted) {
-            match server.ask("resources/list", json!({}), &workspace.stop) {
-                Ok(listed) => {
-                    for resource in listed["resources"].as_array().into_iter().flatten() {
-                        let uri = resource["uri"].as_str().unwrap_or_default();
-                        let name = resource["name"].as_str().unwrap_or(uri);
-                        let about = resource["description"].as_str().unwrap_or_default();
-                        out.push_str(&format!("{}: {name} <{uri}> {about}\n", server.name()));
-                    }
-                }
-                Err(error) => out.push_str(&format!("{}: could not list: {error}\n", server.name())),
-            }
-        }
-        if out.is_empty() { Outcome::ok("No resources.") } else { Outcome::ok(clip(out.trim_end(), SHOWN)) }
-    }
-}
-
-pub struct ReadResource(Vec<Arc<McpServer>>);
-
-impl std::fmt::Debug for ReadResource {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ReadMcpResource")
-    }
-}
-
-impl Tool for ReadResource {
-    fn spec(&self) -> ToolSpec {
-        crate::tools::declared("ReadMcpResource", &Value::Null)
-    }
-
-    fn effects(&self, input: &Value, _workspace: &Workspace) -> Vec<crate::tools::Effect> {
-        resource(input)
-    }
-
-    fn summary(&self, input: &Value) -> String {
-        field(input, "uri").unwrap_or_default().to_owned()
-    }
-
-    fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
-        let (name, uri) = match (required(input, "server"), required(input, "uri")) {
-            (Ok(name), Ok(uri)) => (name, uri),
-            (Err(error), _) | (_, Err(error)) => return error,
-        };
-        let server = match server(&self.0, name) {
-            Ok(server) => server,
-            Err(error) => return Outcome::error(error),
-        };
-        match server.ask("resources/read", json!({ "uri": uri }), &workspace.stop) {
-            Ok(read) => {
-                let text: Vec<String> = read["contents"]
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .map(|content| match content["text"].as_str() {
-                        Some(text) => text.to_owned(),
-                        None => format!(
-                            "[{} bytes of {}]",
-                            content["blob"].as_str().map_or(0, str::len),
-                            content["mimeType"].as_str().unwrap_or("data")
-                        ),
-                    })
-                    .collect();
-                Outcome::ok(clip(&text.join("\n\n"), SHOWN))
-            }
-            Err(error) => Outcome::error(error),
-        }
-    }
+    [("ListMcpResources", json!({ "servers": names })), ("ReadMcpResource", Value::Null)]
+        .into_iter()
+        .filter_map(|(name, data)| crate::tools::conditional::tool(name, &data))
+        .map(|tool| Box::new(tool) as Box<dyn Tool>)
+        .collect()
 }
 
 pub fn expand_prompt(servers: &[Arc<McpServer>], typed: &str, stop: &platform::Stop) -> Option<Result<String, String>> {

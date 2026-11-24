@@ -100,13 +100,13 @@ export function IssueKey({ issue }: { issue: ExternalRef }) {
   const inner = (
     <>
       <ProviderLogo logo={issue.logo} name={issue.name} size={15} />
-      <span className="leading-none">{issue.key}</span>
+      <span className="whitespace-nowrap leading-none">{issue.key}</span>
     </>
   )
-  if (!issue.url) return <span className="flex w-[88px] shrink-0 items-center gap-2 text-base text-fg2">{inner}</span>
+  if (!issue.url) return <span className="flex min-w-[88px] shrink-0 items-center gap-2 text-base text-fg2">{inner}</span>
   return (
     <Tooltip content={`Abrir no ${issue.name}`}>
-      <a href={issue.url} target="_blank" rel="noreferrer" {...stop} className="flex w-[88px] shrink-0 items-center gap-2 text-base text-fg2 transition-colors hover:text-fg">
+      <a href={issue.url} target="_blank" rel="noreferrer" {...stop} className="flex min-w-[88px] shrink-0 items-center gap-2 text-base text-fg2 transition-colors hover:text-fg">
         {inner}
       </a>
     </Tooltip>

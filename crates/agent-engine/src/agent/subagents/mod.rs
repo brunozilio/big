@@ -17,7 +17,7 @@ use crate::agent_runtime::WorktreeLease;
 use crate::control::Control;
 use crate::model::{ModelError, ToolSpec, TurnRequest};
 use crate::tools::names::{self, ToolName};
-use crate::tools::subagent::{self, AgentTool, FoundAgent};
+use crate::tools::subagent::{self, FoundAgent};
 use crate::tools::subagent_config::AgentConfig;
 use crate::tools::{Outcome, Workspace, builtin_agents};
 use crate::transcript::{Message, Usage};
@@ -127,8 +127,7 @@ impl Agent<'_> {
         if self.depth > 0 {
             return Err(Outcome::error("A sub-agent cannot start other sub-agents; do the work yourself."));
         }
-        let known = AgentTool { agents: self.agents.to_vec() };
-        let agent = known.chosen(spawning.input).map_err(Outcome::error)?.cloned();
+        let agent = subagent::chosen(self.agents, spawning.input).map_err(Outcome::error)?.cloned();
         let forked = agent.as_ref().is_some_and(|agent| {
             agent.name == builtin_agents::FORK && agent.instructions == builtin_agents::fork_preamble()
         });
@@ -189,6 +188,7 @@ impl Agent<'_> {
             scoped_hooks.0.entry(crate::hooks::HookEvent::SubagentStop).or_default().extend(stop);
         }
         child_workspace.hooks.extend(&scoped_hooks);
+        child_workspace.interceptors.extend(&config.intercept);
         child_workspace
     }
 
@@ -297,8 +297,10 @@ impl Agent<'_> {
     }
 
     fn refused_while_planning(&self, name: &str, run: &ThisRun) -> bool {
-        self.tool(run, name)
-            .is_some_and(|tool| !crate::tools::changes_nothing(tool, &serde_json::Value::Null, self.workspace))
+        self.tool(run, name).is_some_and(|tool| {
+            let effects = tool.effects(&serde_json::Value::Null, self.workspace);
+            !(domain::permission::change_nothing(&effects) || domain::permission::only_fetch(&effects))
+        })
     }
 
     fn reported(&self, ran: Ran, lane: Lane, planned: &Planned, spawning: &Spawning<'_>) -> Outcome {

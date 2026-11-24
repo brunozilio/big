@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 import { request } from '@/api/http'
 import { Button } from '@/ui/button'
 import { Card } from '@/ui/display'
+import { Switch } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 
 export interface ConnectedBrowser {
@@ -12,11 +13,14 @@ export interface ConnectedBrowser {
 }
 
 export interface BrowserStatus {
+  enabled: boolean
   server: string
   browsers: ConnectedBrowser[]
   extensionFolder: string
   tools: string[]
 }
+
+type Loaded = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; status: BrowserStatus }
 
 const PLATFORMS: Record<string, string> = { mac: 'macOS', win: 'Windows', linux: 'Linux', cros: 'ChromeOS' }
 
@@ -25,13 +29,13 @@ export function platformName(platform: string) {
 }
 
 function useBrowserStatus() {
-  const [status, setStatus] = useState<BrowserStatus | null>(null)
+  const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' })
   useEffect(() => {
     let alive = true
     const load = () =>
       request<BrowserStatus>('GET', '/api/browser')
-        .then((next) => alive && setStatus(next))
-        .catch(() => alive && setStatus(null))
+        .then((status) => alive && setLoaded({ state: 'ready', status }))
+        .catch(() => alive && setLoaded({ state: 'failed' }))
     void load()
     const timer = setInterval(load, 3000)
     return () => {
@@ -39,68 +43,102 @@ function useBrowserStatus() {
       clearInterval(timer)
     }
   }, [])
-  return status
+  const setEnabled = (enabled: boolean) => {
+    setLoaded((now) => (now.state === 'ready' ? { state: 'ready', status: { ...now.status, enabled } } : now))
+    void request<BrowserStatus>('PUT', '/api/browser', { enabled })
+      .then((status) => setLoaded({ state: 'ready', status }))
+      .catch(() => setLoaded({ state: 'failed' }))
+  }
+  return { loaded, setEnabled }
 }
 
-function Steps({ folder }: { folder: string }) {
+function CopyPath({ path }: { path: string }) {
   const [copied, setCopied] = useState(false)
   const copy = () => {
-    void navigator.clipboard?.writeText(folder).then(() => {
+    void navigator.clipboard?.writeText(path).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     })
   }
   return (
-    <ol className="list-decimal space-y-1.5 pl-5 text-sm text-muted">
-      <li>No Chrome, abra <code className="text-fg">chrome://extensions</code> e ative o Modo do desenvolvedor.</li>
-      <li>
-        Clique em Carregar sem compactação e escolha a pasta:
-        <span className="mt-1 flex items-center gap-2">
-          <code className="min-w-0 flex-1 truncate rounded bg-secondary px-2 py-1 text-fg" title={folder}>{folder}</code>
-          <Button size="sm" variant="secondary" icon={<Icon name={copied ? 'check' : 'copy'} size={14} />} onClick={copy}>{copied ? 'Copiado' : 'Copiar'}</Button>
-        </span>
-      </li>
-      <li>A extensão se conecta sozinha a este app enquanto ele estiver aberto.</li>
-    </ol>
+    <span className="mt-2 flex items-center gap-2">
+      <code className="min-w-0 flex-1 truncate rounded-md bg-secondary px-2.5 py-1.5 text-sm text-fg" title={path}>{path}</code>
+      <Button size="sm" variant="secondary" icon={<Icon name={copied ? 'check' : 'copy'} size={14} />} onClick={copy}>{copied ? 'Copiado' : 'Copiar'}</Button>
+    </span>
   )
 }
 
-export function BrowserSection() {
-  const status = useBrowserStatus()
-  if (!status) return null
-  const connected = status.browsers.length > 0
+function Step({ n, children }: { n: number; children: ReactNode }) {
   return (
-    <section data-group="Navegador">
-      <h2 className="mb-2.5 text-base font-medium text-muted">Navegador</h2>
-      <Card className="space-y-3 px-4 py-3.5">
-        <div className="flex items-center gap-3">
-          <span className={connected ? 'flex size-8 items-center justify-center rounded-full bg-success-soft text-success-fg' : 'flex size-8 items-center justify-center rounded-full bg-secondary text-muted'}>
-            <Icon name="globe" size={16} />
-          </span>
-          <div className="min-w-0 flex-1">
-            <p className="text-base font-medium text-fg">Chrome</p>
-            <p className="text-sm text-muted">
-              {connected
-                ? `${status.browsers.length === 1 ? '1 navegador conectado' : `${status.browsers.length} navegadores conectados`} · ${status.tools.length} ferramentas para os agentes`
-                : 'Nenhum navegador conectado. Os agentes usam o seu Chrome, com os seus logins, pela extensão.'}
-            </p>
-          </div>
+    <li className="flex gap-3">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-medium text-fg">{n}</span>
+      <div className="min-w-0 flex-1 pt-0.5 text-sm text-fg">{children}</div>
+    </li>
+  )
+}
+
+function Setup({ folder }: { folder: string }) {
+  return (
+    <Card className="px-4 py-4">
+      <h3 className="mb-4 text-sm font-medium text-fg">Como configurar</h3>
+      <ol className="space-y-4">
+        <Step n={1}>
+          Abra{' '}
+          <a href="chrome://extensions" target="_blank" rel="noreferrer" className="font-mono text-info underline-offset-2 hover:underline">chrome://extensions</a>{' '}
+          e ative o Modo do desenvolvedor.
+        </Step>
+        <Step n={2}>
+          Clique em Carregar sem compactação e selecione esta pasta:
+          <CopyPath path={folder} />
+        </Step>
+        <Step n={3}>Pronto. Esta página atualiza quando o Chrome conectar.</Step>
+      </ol>
+    </Card>
+  )
+}
+
+function Connected({ browsers }: { browsers: ConnectedBrowser[] }) {
+  return (
+    <Card className="divide-y">
+      {browsers.map((b) => (
+        <div key={b.deviceId} className="flex items-center gap-3 px-4 py-3">
+          <Icon name="globe" size={16} className="text-muted" />
+          <span className="text-sm font-medium text-fg">{b.name}</span>
+          <span className="text-sm text-muted">{platformName(b.platform)}</span>
         </div>
-        {connected ? (
-          <ul className="space-y-1.5">
-            {status.browsers.map((b) => (
-              <li key={b.deviceId} className="flex items-center gap-2 text-sm">
-                <Icon name="check" size={13} className="text-success-fg" />
-                <span className="font-medium text-fg">{b.name}</span>
-                <span className="text-muted">{platformName(b.platform)}</span>
-                <span className="ml-auto truncate font-mono text-xs text-muted" title={b.deviceId}>{b.deviceId.slice(0, 8)}</span>
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <Steps folder={status.extensionFolder} />
-        )}
+      ))}
+    </Card>
+  )
+}
+
+function StatusBadge({ connected }: { connected: boolean }) {
+  return connected ? (
+    <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">
+      <Icon name="check" size={12} />
+      Conectado
+    </span>
+  ) : (
+    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted">Não conectado</span>
+  )
+}
+
+export function BrowserView() {
+  const { loaded, setEnabled } = useBrowserStatus()
+  if (loaded.state === 'loading') return null
+  if (loaded.state === 'failed') return <p role="alert" className="text-sm text-danger-fg">Não foi possível verificar o navegador.</p>
+  const { enabled, browsers, extensionFolder } = loaded.status
+  const connected = browsers.length > 0
+  return (
+    <section className="space-y-3">
+      <Card className="flex items-center gap-4 px-4 py-3.5">
+        <div className="flex min-w-0 flex-1 items-center gap-2.5">
+          <p className="text-base font-medium text-fg">Chrome</p>
+          <StatusBadge connected={connected} />
+        </div>
+        <span className="text-sm text-muted">{enabled ? 'Ativado' : 'Desativado'}</span>
+        <Switch label="Usar o navegador" checked={enabled} onCheckedChange={setEnabled} />
       </Card>
+      {connected ? <Connected browsers={browsers} /> : <Setup folder={extensionFolder} />}
     </section>
   )
 }

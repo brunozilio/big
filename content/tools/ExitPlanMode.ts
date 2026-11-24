@@ -76,7 +76,7 @@ export function execute(input: Input, ctx) {
   }
   if ("stopped" in answer) {
     return failed(
-      "Not run: the run was stopped while waiting for the user's answer, so the plan did not run and nothing was changed.",
+      "Not run: the run was stopped while waiting for the user's answer, so the user never saw the plan and nothing was changed. Call this tool again with the same plan and wait for the answer. Never decide for the user.",
     );
   }
   if ("kept" in answer) {

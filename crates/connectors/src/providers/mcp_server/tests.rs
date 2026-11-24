@@ -5,7 +5,8 @@ use super::*;
 use crate::http::{FakeHttp, HttpResponse, Method};
 
 const SERVER: &str = "https://tools.test/mcp";
-const RESOURCE_METADATA: &str = r#"{"resource":"https://tools.test/mcp","authorization_servers":["https://auth.tools.test"]}"#;
+const RESOURCE_METADATA: &str =
+    r#"{"resource":"https://tools.test/mcp","authorization_servers":["https://auth.tools.test"]}"#;
 const AUTH_METADATA: &str = r#"{"authorization_endpoint":"https://auth.tools.test/authorize","token_endpoint":"https://auth.tools.test/token","registration_endpoint":"https://auth.tools.test/register"}"#;
 
 fn initialized(http: FakeHttp) -> FakeHttp {

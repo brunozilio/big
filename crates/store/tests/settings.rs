@@ -60,3 +60,22 @@ fn branding_is_a_set_of_named_values() {
     assert_eq!(branding.get("logo"), Some(&json!({"svg": "<svg/>"})));
     assert_eq!(branding.len(), 2);
 }
+
+#[test]
+fn a_preference_is_kept_and_replaced() {
+    let store = Store::in_memory(0).expect("the store answers");
+    assert_eq!(store.preference("browser.enabled").expect("the store answers"), None);
+    store.set_preference("browser.enabled", &json!(false)).expect("the store answers");
+    store.set_preference("browser.enabled", &json!(true)).expect("the store answers");
+    assert_eq!(store.preference("browser.enabled").expect("the store answers"), Some(json!(true)));
+}
+
+#[test]
+fn the_language_defaults_to_portuguese_and_keeps_a_known_code() {
+    let store = Store::in_memory(0).expect("the store answers");
+    assert_eq!(store.language().expect("the store answers"), domain::Language::Portuguese);
+    store.set_branding("language", &json!("es")).expect("the store answers");
+    assert_eq!(store.language().expect("the store answers"), domain::Language::Spanish);
+    store.set_branding("language", &json!("fr")).expect("the store answers");
+    assert_eq!(store.language().expect("the store answers"), domain::Language::Portuguese);
+}

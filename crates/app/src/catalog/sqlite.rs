@@ -62,7 +62,6 @@ impl SessionCatalog for SqliteSessionCatalog {
             true
         })
     }
-
 }
 
 pub(super) fn is_empty(connection: &Connection) -> rusqlite::Result<bool> {

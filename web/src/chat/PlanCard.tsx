@@ -6,9 +6,9 @@ import { ProviderLogo } from '@/ui/domain'
 import { Textarea } from '@/ui/form'
 import { Icon, type IconName } from '@/ui/icon'
 import { Collapse, motion, tween } from '@/ui/motion'
-import { Failure, ResolvedCheck, useSend, type Respond } from './actionBlocks'
+import { ResolvedCheck, useSend, type Respond } from './actionBlocks'
 import { AgentMark, type Ev } from './events'
-import { fileEntry, parsePlan, stressed, structured, subtasksOf, type PlanSection } from './planDoc'
+import { fileEntry, parsePlan, storied, stressed, structured, subtasksOf, type PlanSection } from './planDoc'
 
 export interface PlanDestination {
   name: string
@@ -98,6 +98,7 @@ function Subtasks({ body }: { body: string }) {
 function SectionBody({ section }: { section: PlanSection }) {
   const { kind, items, body } = section
   if (kind === 'subtasks') return <Subtasks body={body} />
+  if (kind === 'story') return <Md text={storied(body)} />
   if (kind === 'criteria' && items.length > 0) return <Marked items={items.map(stressed)} icon="check" tone="text-success-fg" />
   if (items.length === 0 || kind === 'context' || kind === 'other') return <Md text={body} />
   if (kind === 'steps') return <Steps items={items} />
@@ -132,7 +133,6 @@ function Header({ event }: { event: Ev<'plan'> }) {
     <div className="flex items-center gap-3 border-b px-5 py-4">
       <AgentMark size={20} agent={event.agent} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm text-muted">Plano</p>
         <p className="truncate text-lg font-medium tracking-tightish text-fg">{titleOf(event.text)}</p>
       </div>
       <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-sm font-medium', tone)}>{label}</span>
@@ -159,9 +159,16 @@ function Decide({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: bo
         <Textarea rows={3} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="O que precisa mudar no plano?" className="mb-3 bg-surface" />
       </Collapse>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
-        <p className="min-w-0 flex-1 text-md text-muted">
-          {revising ? 'O planejador refaz o plano com o que você pedir.' : target ? null : 'O desenvolvimento só começa depois que você aprovar.'}
-        </p>
+        {error ? (
+          <p role="alert" className="flex min-w-0 flex-1 items-center gap-1.5 text-md text-danger-fg">
+            <Icon name="alert" size={14} className="shrink-0" />
+            {error}
+          </p>
+        ) : (
+          <p className="min-w-0 flex-1 text-md text-muted">
+            {revising ? 'O planejador refaz o plano com o que você pedir.' : target ? null : 'O desenvolvimento só começa depois que você aprovar.'}
+          </p>
+        )}
         <div className="flex shrink-0 gap-2">
           {revising ? (
             <>
@@ -176,7 +183,6 @@ function Decide({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: bo
           )}
         </div>
       </div>
-      <Failure text={error} />
     </div>
   )
 }

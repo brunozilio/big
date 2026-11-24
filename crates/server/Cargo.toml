@@ -21,7 +21,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 axum = { workspace = true, features = ["multipart", "ws"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time", "fs"] }
 futures-util.workspace = true
 base64.workspace = true
 getrandom.workspace = true

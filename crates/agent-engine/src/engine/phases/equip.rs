@@ -4,7 +4,7 @@ use crate::brief::Brief;
 use crate::engine::job::Job;
 use crate::engine::stop::Stop;
 use crate::mcp::McpServer;
-use crate::tools::subagent::{self, AgentTool, FoundAgent};
+use crate::tools::subagent::{self, FoundAgent};
 use crate::tools::subagent_config::AgentConfig;
 use crate::tools::{self, Tool, Workspace};
 use domain::MainAgentSpec;
@@ -24,9 +24,7 @@ impl MainAgent {
         let found = match asked {
             Some(spec) => Some(Self::asked(&brief.agents, spec)?),
             None => match &brief.settings.agent {
-                Some(name) => AgentTool { agents: brief.agents.clone() }
-                    .chosen(&serde_json::json!({"subagent_type":name}))?
-                    .cloned(),
+                Some(name) => subagent::chosen(&brief.agents, &serde_json::json!({"subagent_type":name}))?.cloned(),
                 None => None,
             },
         };
@@ -37,8 +35,7 @@ impl MainAgent {
     fn asked(agents: &[FoundAgent], spec: &MainAgentSpec) -> Result<FoundAgent, String> {
         let mut found = match &spec.definition {
             Some(text) => subagent::parsed(&spec.name, &text.replace("{{NAME}}", brand::NAME), None, true),
-            None => AgentTool { agents: agents.to_vec() }
-                .chosen(&serde_json::json!({"subagent_type": spec.name}))?
+            None => subagent::chosen(agents, &serde_json::json!({"subagent_type": spec.name}))?
                 .cloned()
                 .ok_or_else(|| format!("There is no agent named {}.", spec.name))?,
         };
@@ -66,14 +63,11 @@ impl Job {
     pub(in crate::engine) fn equip(&mut self, brief: &Brief, mut workspace: Workspace) -> Result<Equipped, Stop> {
         workspace.rules.clone_from(&brief.rules);
         let mut tools = tools::standard();
-        self.offer_language_servers(brief, &mut workspace, &mut tools);
+        self.offer_language_servers(brief, &mut workspace);
         if !brief.skills.is_empty() {
-            tools.push(Box::new(tools::skill::SkillTool { skills: brief.skills.clone() }));
+            tools.extend(tools::skill::tool(brief.skills.clone()));
         }
-        tools.push(Box::new(AgentTool { agents: brief.agents.clone() }));
-        tools.push(Box::new(tools::send_message::SendMessageTool));
-        tools.push(Box::new(tools::repl::Repl));
-        tools.extend(tools::task::tools());
+        subagent::offer(&mut tools, &brief.agents);
         tools.extend(tools::hosted::tools(self.request.host.credentials.client));
         let main = MainAgent::chosen(brief, self.request.session.agent.as_ref()).map_err(Stop::failed)?;
         self.control = self.control.reconfigured(main.config.permission, main.config.dont_ask);
@@ -81,6 +75,7 @@ impl Job {
         workspace.observing = main.config.observing();
         let stop = self.control.stop_flag();
         let servers = self.live.connect(&self.request, &brief.mcp(), &self.mcp, stop);
+        workspace.services.mcp.clone_from(&servers);
         tools.extend(crate::mcp::tools_of(&servers, stop));
         tools::script_tool::join(&mut tools, self.live.scripts(brief, &self.request.session.cwd));
         if let Some(expanded) = crate::mcp::extras::expand_prompt(&servers, &self.request.prompt.text, stop) {
@@ -89,12 +84,11 @@ impl Job {
         Ok(Equipped { workspace, toolbox: Toolbox { tools, servers }, main })
     }
 
-    fn offer_language_servers(&self, brief: &Brief, workspace: &mut Workspace, tools: &mut Vec<Box<dyn Tool>>) {
+    fn offer_language_servers(&self, brief: &Brief, workspace: &mut Workspace) {
         let specs = domain::lsp::servers(domain::lsp::defaults(), &brief.settings.lsp_servers);
         let lsp = crate::lsp::Lsp { servers: Arc::clone(&self.lsp), specs: Arc::new(specs) };
         if !lsp.available().is_empty() {
             workspace.services.lsp = Some(lsp);
-            tools.push(Box::new(tools::Lsp));
         }
     }
 }

@@ -169,6 +169,13 @@ export interface Command {
   seconds: number | null
   log: string
   session?: string | null
+  files?: EvidenceFile[]
+}
+
+export interface EvidenceFile {
+  id: string
+  name: string
+  size?: number
 }
 
 export interface FormField {
@@ -225,6 +232,7 @@ export type Block =
   | { type: 'markdown'; text: string; muted?: boolean }
   | { type: 'cases'; cases: TestCaseView[]; session: string | null; editable: boolean; approve: string | null; changes: string | null }
   | { type: 'logs'; commands: Command[] }
+  | { type: 'calls'; calls: ToolCall[] }
   | { type: 'form'; title?: string; fields: FormField[]; submit: { action: string; label: string } }
   | { type: 'actions'; buttons: ActionButton[] }
 
@@ -265,6 +273,22 @@ export interface CodeRepo {
   url: string | null
   defaultBranch: string | null
   private: boolean
+}
+
+export interface OpenPull {
+  key: string
+  number: number
+  title: string
+  head: string
+  base: string
+  author: string
+  url: string | null
+  draft: boolean
+}
+
+export interface CodeBranch {
+  name: string
+  default: boolean
 }
 
 export interface IssueData {
@@ -333,6 +357,8 @@ export type ConnectionCall =
   | { action: 'tracker.projects'; args: { query?: string }; result: TrackerProject[] }
   | { action: 'tests.projects'; args: { query?: string }; result: TrackerProject[] }
   | { action: 'code.repos'; args: { query?: string }; result: CodeRepo[] }
+  | { action: 'code.pulls'; args: { repo: string }; result: OpenPull[] }
+  | { action: 'code.branches'; args: { repo: string }; result: CodeBranch[] }
   | { action: 'tracker.issue'; args: { key: string }; result: IssueData }
   | { action: 'tracker.comment'; args: { key: string; body: string }; result: Comment }
   | { action: 'code.change'; args: { change: string }; result: ChangeData }
@@ -435,6 +461,16 @@ export interface SideQuestion {
 
 export interface SideAnswer {
   answer: string
+}
+
+export interface BtwOpened {
+  session: string
+}
+
+export interface Btw {
+  text: string
+  application: string | null
+  model?: string | null
 }
 
 export type AskResponse =
@@ -596,15 +632,27 @@ export interface Models {
 
 export type Theme = 'system' | 'light' | 'dark'
 
+export type Language = 'en' | 'es' | 'pt-BR'
+
+export interface OutputStyle {
+  key: string
+  name: string
+  description: string
+}
+
 export interface Branding {
   name: string
   logo: string | null
   theme: Theme
+  language: Language
+  output_style: string | null
+  output_styles: OutputStyle[]
 }
 
 export interface BrandingPatch {
-  logo?: string | null
   theme?: Theme
+  language?: Language
+  output_style?: string | null
 }
 
 export interface TrackerChoice {
@@ -686,6 +734,7 @@ export interface Api {
   session(id: string): Promise<Session>
   send(session: string, message: NewMessage): Promise<void>
   side(session: string, question: SideQuestion): Promise<SideAnswer>
+  btw(question: Btw): Promise<BtwOpened>
   respond(session: string, event: string, response: AskResponse): Promise<void>
   stop(session: string): Promise<void>
   connections(): Promise<Connections>
@@ -716,6 +765,7 @@ export const ROUTES = {
   session: (id: string) => `/api/sessions/${encodeURIComponent(id)}`,
   messages: (id: string) => `/api/sessions/${encodeURIComponent(id)}/messages`,
   side: (id: string) => `/api/sessions/${encodeURIComponent(id)}/side`,
+  btw: '/api/btw',
   respond: (id: string) => `/api/sessions/${encodeURIComponent(id)}/respond`,
   stop: (id: string) => `/api/sessions/${encodeURIComponent(id)}/stop`,
   connections: '/api/connections',
@@ -730,5 +780,6 @@ export const ROUTES = {
   application: (id: string) => `/api/applications/${encodeURIComponent(id)}`,
   dirs: (path: string | null) => (path ? `/api/fs/dirs?path=${encodeURIComponent(path)}` : '/api/fs/dirs'),
   attachments: '/api/attachments',
+  attachment: (id: string) => `/api/attachments/${encodeURIComponent(id)}`,
   live: '/api/live',
 } as const

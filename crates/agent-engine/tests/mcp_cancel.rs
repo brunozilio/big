@@ -58,6 +58,7 @@ fn planning_mode_rejects_builtin_mutations() {
         remembered: &remembered,
         bounds: &bounds,
         no_prompts: false,
+        allowed: None,
     };
     let decide = |server: &str, tool: &str| {
         let effects = remote_effects(server, tool);

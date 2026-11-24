@@ -46,6 +46,8 @@ fn reviewed(agent: &Agent<'_>, brief: &str) -> Result<Vec<domain::review::Findin
     let control = agent.control.child_configured(None, true);
     let mut workspace = agent.workspace.fork(control.shared_stop());
     workspace.hooks = Default::default();
+    workspace.services.output_schema = None;
+    workspace.services.deferred = None;
     workspace.agent_name = KIND.into();
     let index = agent.control.next_agent();
     (agent.emit)(EngineEvent::AgentSpawned {

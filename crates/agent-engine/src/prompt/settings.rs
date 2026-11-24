@@ -12,6 +12,8 @@ pub struct Settings {
     #[serde(default)]
     pub hooks: crate::hooks::Hooks,
     #[serde(default)]
+    pub interceptors: crate::intercept::Interceptors,
+    #[serde(default)]
     pub escalation: Option<String>,
     #[serde(default)]
     pub fallbacks: Vec<String>,
@@ -52,6 +54,8 @@ pub fn load(scope: &Scope) -> Result<Settings, String> {
     let roots = roots(scope.cwd(), home);
     let mut merged = Settings::default();
     merged.hooks.extend(&crate::hooks::Hooks::gathered(home, &roots, &|file| scope.honours(file)));
+    merged.interceptors =
+        crate::intercept::Interceptors::gathered(home, scope.cwd(), &roots, &|file| scope.honours(file));
     let mut problems = Vec::new();
     let mut skipped = Vec::new();
     for (path, users) in files(&roots, home) {

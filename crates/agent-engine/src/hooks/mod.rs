@@ -8,8 +8,10 @@ mod validate;
 
 pub use self::brief::Briefed;
 pub use self::handlers::{HookRunError, command, http};
+pub(crate) use self::script_hook::declared;
 pub use self::script_hook::script;
 pub use self::scripts::BUILTIN as BUILTIN_SCRIPT;
+pub(crate) use self::scripts::{runs_from, source as script_source, target as script_target};
 pub(crate) use self::validate::TIMEOUT_SECONDS;
 use crate::tools::Workspace;
 pub use domain::hooks::{HandlerKind, HookEvent};

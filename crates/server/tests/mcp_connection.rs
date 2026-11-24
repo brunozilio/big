@@ -21,12 +21,9 @@ async fn connected(world: &World, fields: Value) -> (StatusCode, Value) {
 async fn a_remote_mcp_server_becomes_a_connection_whose_tools_every_run_gets() {
     let world = World::new().await;
     let listed = world.get("/api/connections").await;
-    let provider = listed["providers"].as_array().and_then(|all| all.iter().find(|p| p["key"] == "mcp")).cloned();
-    let provider = provider.expect("the MCP provider is listed");
-    assert_eq!((provider["signIn"].as_str(), provider["group"].as_str()), (Some("oauth"), Some("Ferramentas")));
-    let names: Vec<&str> =
-        provider["fields"].as_array().into_iter().flatten().filter_map(|f| f["name"].as_str()).collect();
-    assert_eq!(names, ["url", "label"]);
+    let listed_keys: Vec<&str> =
+        listed["providers"].as_array().into_iter().flatten().filter_map(|p| p["key"].as_str()).collect();
+    assert!(!listed_keys.contains(&"mcp"), "the MCP provider stays out of the connections list");
     let unsafe_address = connected(&world, json!({ "url": "http://open.test/mcp", "label": "Docs" })).await;
     assert_eq!(unsafe_address.0, StatusCode::BAD_REQUEST, "{}", unsafe_address.1);
     let (status, done) = connected(&world, json!({ "url": " https://open.test/mcp ", "label": "Docs Abertos" })).await;

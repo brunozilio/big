@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -8,6 +8,8 @@ use crate::workflow::{ItemId, WorkflowEvent};
 pub const STEP_STARTED: &str = "step.started";
 pub const STEP_FINISHED: &str = "step.finished";
 pub const HUMAN: &str = "human";
+
+const ENVIRONMENT: [&str; 7] = ["timeout", "transient", "rate_limited", "auth", "conflict", "permanent", "cancelled"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -106,6 +108,9 @@ impl Scan {
             self.passed.push(Passed { step: step.to_owned(), attempt, order, data: result.clone() });
             return;
         }
+        if environmental(result) {
+            return;
+        }
         let back = match outcome {
             "failed" => self.started.get(step).and_then(|run| run.options["onFail"].as_str()).map(str::to_owned),
             "goto" => data["to"].as_str().map(str::to_owned),
@@ -172,6 +177,21 @@ fn finding(
         detail,
         at,
     }
+}
+
+pub fn environmental(result: &Value) -> bool {
+    result["error"].is_string() && result["kind"].as_str().is_some_and(|kind| ENVIRONMENT.contains(&kind))
+}
+
+pub fn recurring(all: Vec<Finding>, of: &Finding) -> (u64, Vec<Finding>) {
+    let same: Vec<Finding> = all
+        .into_iter()
+        .filter(|other| other.kind == FindingKind::Failure)
+        .filter(|other| other.workflow == of.workflow && other.step == of.step && other.generation == of.generation)
+        .filter(|other| !environmental(&other.detail["data"]))
+        .collect();
+    let items: BTreeSet<&ItemId> = same.iter().map(|found| &found.item).collect();
+    (u64::try_from(items.len()).unwrap_or(u64::MAX), same)
 }
 
 pub fn generation<'a>(files: impl IntoIterator<Item = (&'a str, &'a str)>) -> String {

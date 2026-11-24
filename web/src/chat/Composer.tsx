@@ -3,14 +3,22 @@ import { cn } from '@/ui/cn'
 import { Icon } from '@/ui/icon'
 import { Button } from '@/ui/button'
 import { AnimatePresence, dur, easeOut, IconSwap, motion, tween } from '@/ui/motion'
-import { Tooltip } from '@/ui/overlay'
+import { Menu, MenuContent, MenuItem, MenuTrigger, Tooltip } from '@/ui/overlay'
 import { AttachmentStrip, useAttachments } from './Attachments'
 import type { Effort } from '@/api/contract'
 import { DEFAULT_EFFORT, ModelPicker, useModels } from './ModelPicker'
+import { useRememberedModel, useRememberedTuning } from './remembered'
 
 export interface Tuning {
   effort: Effort
   fast: boolean
+}
+
+export interface ComposerImport {
+  key: string
+  label: string
+  icon: ReactNode
+  onSelect: () => void
 }
 
 export interface ComposerSubmit {
@@ -19,6 +27,13 @@ export interface ComposerSubmit {
   model: string | null
   effort: Effort
   fast: boolean
+}
+
+const BTW = /^\/btw(?:\s+([\s\S]*))?$/
+
+export function btwOf(text: string): string | null {
+  const found = BTW.exec(text.trim())
+  return found ? (found[1] ?? '').trim() : null
 }
 
 export function Composer({
@@ -36,6 +51,8 @@ export function Composer({
   onTuning,
   suggestion,
   onAside,
+  onBtw,
+  imports,
 }: {
   onSubmit: (input: ComposerSubmit) => void
   running?: boolean
@@ -51,21 +68,24 @@ export function Composer({
   onTuning?: (tuning: Tuning) => void
   suggestion?: string | null
   onAside?: (text: string) => void
+  onBtw?: (question: string) => void
+  imports?: ComposerImport[]
 }) {
   const [text, setText] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
   const attachments = useAttachments(setRefusal)
   const [dragging, setDragging] = useState(false)
   const [focused, setFocused] = useState(false)
-  const [ownModel, setOwnModel] = useState<string | null>(null)
-  const [ownTuning, setOwnTuning] = useState<Tuning>({ effort: DEFAULT_EFFORT, fast: false })
+  const [ownModel, setOwnModel] = useRememberedModel()
+  const [ownTuning, setOwnTuning] = useRememberedTuning({ effort: DEFAULT_EFFORT, fast: false })
   const { effort, fast } = tuning ?? ownTuning
   const tune = (patch: Partial<Tuning>) => (onTuning ?? setOwnTuning)({ effort, fast, ...patch })
   const models = useModels()
   const noModel = models.loaded && models.list.length === 0
   const ref = useRef<HTMLTextAreaElement>(null)
   const fileInput = useRef<HTMLInputElement>(null)
-  const chosen = model === undefined ? ownModel : model
+  const wanted = model === undefined ? ownModel : model
+  const chosen = wanted && models.loaded && !models.list.some((m) => m.id === wanted) ? null : wanted
   const chooseModel = onModel ?? setOwnModel
 
   useEffect(() => {
@@ -78,13 +98,28 @@ export function Composer({
   const hasText = text.trim().length > 0
   const ready = (hasText || !!allowEmpty) && !disabled && !attachments.uploading && !noModel
   const aside = !!running && !!onAside
+  const btw = onBtw ? btwOf(text) : null
   const suggested = !running && !hasText && !disabled && suggestion ? suggestion : null
 
-  const submit = () => {
-    if (aside) {
-      if (!hasText || disabled) return
-      onAside(text.trim())
+  const askAside = () => {
+    if (btw !== null && onBtw) {
+      if (!btw || disabled) {
+        setRefusal('Escreva a pergunta: /btw <pergunta>')
+        return
+      }
+      onBtw(btw)
       setText('')
+      setRefusal(null)
+      return
+    }
+    if (!aside || !hasText || disabled) return
+    onAside(text.trim())
+    setText('')
+  }
+
+  const submit = () => {
+    if (btw !== null && onBtw) {
+      askAside()
       return
     }
     if (!ready) return
@@ -130,6 +165,11 @@ export function Composer({
           onBlur={() => setFocused(false)}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
+            if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'u') {
+              e.preventDefault()
+              fileInput.current?.click()
+              return
+            }
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               submit()
@@ -157,16 +197,12 @@ export function Composer({
           }}
         />
         <div className="flex items-center gap-1 px-2.5 pb-3">
-          <Tooltip content="Anexar arquivo">
-            <button aria-label="Anexar arquivo" onClick={() => fileInput.current?.click()} className="flex size-8 items-center justify-center rounded-full text-fg2 transition-colors hover:bg-inset hover:text-fg">
-              <Icon name="attach" size={18} />
-            </button>
-          </Tooltip>
+          <AddMenu onFiles={() => fileInput.current?.click()} imports={imports ?? []} />
           {leading}
           <span className="ml-auto flex items-center">
-            {aside && hasText && <AsideButton onAsk={submit} disabled={!!disabled} />}
+            {(btw !== null || (aside && hasText)) && <AsideButton onAsk={askAside} disabled={!!disabled || btw === ''} />}
             <ModelPicker value={chosen} onChange={chooseModel} effort={effort} onEffort={(next) => tune({ effort: next })} fast={fast} onFast={(next) => tune({ fast: next })} />
-            <SendButton running={!!running} ready={ready} onSend={submit} onStop={onStop} />
+            <SendButton running={!!running && !hasText} ready={ready && btw === null} onSend={submit} onStop={onStop} />
           </span>
         </div>
       </motion.div>
@@ -178,6 +214,30 @@ export function Composer({
         )}
       </AnimatePresence>
     </div>
+  )
+}
+
+const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
+
+function AddMenu({ onFiles, imports }: { onFiles: () => void; imports: ComposerImport[] }) {
+  const imported = useRef(false)
+  return (
+    <Menu>
+      <MenuTrigger asChild>
+        <button aria-label="Adicionar" className="flex size-8 items-center justify-center rounded-full text-fg2 transition-colors hover:bg-inset hover:text-fg data-[state=open]:bg-inset data-[state=open]:text-fg">
+          <Icon name="plus" size={18} />
+        </button>
+      </MenuTrigger>
+      <MenuContent align="start" side="top" className="min-w-64" onCloseAutoFocus={(e) => {
+        if (imported.current) e.preventDefault()
+        imported.current = false
+      }}>
+        <MenuItem icon={<Icon name="attach" size={16} />} onSelect={onFiles} right={<span className="text-sm text-faint">{MOD}U</span>}>Adicionar arquivos ou fotos</MenuItem>
+        {imports.map((i) => (
+          <MenuItem key={i.key} icon={i.icon} onSelect={() => { imported.current = true; i.onSelect() }}>{i.label}</MenuItem>
+        ))}
+      </MenuContent>
+    </Menu>
   )
 }
 
@@ -194,7 +254,7 @@ function SuggestionChip({ text, onPick }: { text: string; onPick: () => void }) 
 
 function AsideButton({ onAsk, disabled }: { onAsk: () => void; disabled: boolean }) {
   return (
-    <Tooltip content="Pergunta sem interromper o agente  ↵">
+    <Tooltip content="Pergunta sem interromper nem criar atividade  ↵">
       <Button size="sm" variant="soft" disabled={disabled} onClick={onAsk} icon={<Icon name="help" size={15} />} className="mr-1">
         Perguntar à parte
       </Button>

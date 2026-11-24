@@ -70,7 +70,7 @@ pub struct SessionMessage;
 
 impl Tool for SessionMessage {
     fn spec(&self) -> ToolSpec {
-        crate::tools::send_message::SendMessageTool.spec()
+        crate::tools::declared(super::names::SEND_MESSAGE, &Value::Null)
     }
 
     fn effects(&self, input: &Value, _workspace: &Workspace) -> Vec<super::Effect> {
@@ -90,38 +90,6 @@ impl Tool for SessionMessage {
             Ok(name) => Outcome::ok(format!("Sent to session {name}; its answer, if any, reaches you as an event.")),
             Err(error) => Outcome::error(error.to_string()),
         }
-    }
-}
-
-#[derive(Debug)]
-pub struct ListSessions;
-
-impl Tool for ListSessions {
-    fn spec(&self) -> ToolSpec {
-        crate::tools::declared("ListSessions", &Value::Null)
-    }
-
-    fn effects(&self, _input: &Value, _workspace: &Workspace) -> Vec<super::Effect> {
-        Vec::new()
-    }
-
-    fn summary(&self, _input: &Value) -> String {
-        String::new()
-    }
-
-    fn run(&self, _input: &Value, workspace: &Workspace) -> Outcome {
-        let client = workspace.credentials.client;
-        let sessions = open();
-        let me = sessions.iter().find(|peer| peer.client == client).map_or("unnamed", |peer| peer.name.as_str());
-        let others: Vec<String> = sessions
-            .iter()
-            .filter(|peer| peer.client != client)
-            .map(|peer| format!("{} ({})", peer.name, peer.cwd.display()))
-            .collect();
-        if others.is_empty() {
-            return Outcome::ok(format!("This session is {me}; no other session is open."));
-        }
-        Outcome::ok(format!("This session is {me}. Others:\n{}", others.join("\n")))
     }
 }
 

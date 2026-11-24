@@ -2,29 +2,27 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '@/api'
-import type { Connection, Provider, Theme } from '@/api/contract'
+import type { BrandingPatch, Connection, OutputStyle, Provider, Theme } from '@/api/contract'
 import { errorText, setBranding, useStore } from '@/api/store'
 import { cn } from '@/ui/cn'
 import { Card } from '@/ui/display'
-import { ProductMark } from '@/ui/domain'
-import { SegmentedControl, UnderlineTabs } from '@/ui/form'
+import { SegmentedControl, Select, UnderlineTabs } from '@/ui/form'
 import { Icon } from '@/ui/icon'
-import { LogoUpload } from '@/ui/logoUpload'
 import { stagger, tween, tweenClose } from '@/ui/motion'
-import { BrowserSection } from './Browser'
+import { BrowserView } from './Browser'
 import { ConnectionCard } from './ConnectionCard'
 import { ApplicationsView } from './Applications'
 import { UsageView } from './Usage'
 
-export type SettingsTab = 'connections' | 'applications' | 'usage' | 'appearance'
+export type SettingsTab = 'connections' | 'browser' | 'applications' | 'usage' | 'appearance'
 
 export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTab: (t: SettingsTab) => void; onConnect: (provider: string) => void }) {
   return (
     <>
-      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: 'Conexões' }, { value: 'applications', label: 'Aplicações' }, { value: 'usage', label: 'Uso' }, { value: 'appearance', label: 'Personalização' }]} />
+      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: 'Conexões' }, { value: 'browser', label: 'Navegador' }, { value: 'applications', label: 'Aplicações' }, { value: 'usage', label: 'Uso' }, { value: 'appearance', label: 'Personalização' }]} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tweenClose}>
-          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : <CustomView />}
+          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : <CustomView />}
         </motion.div>
       </AnimatePresence>
     </>
@@ -34,7 +32,7 @@ export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTa
 function CustomView() {
   const branding = useStore((s) => s.branding)
   const [error, setError] = useState<string | null>(null)
-  const save = (patch: { logo?: string | null; theme?: Theme }) => {
+  const save = (patch: BrandingPatch) => {
     setError(null)
     api()
       .saveBranding(patch)
@@ -43,12 +41,6 @@ function CustomView() {
   }
   return (
     <div className="space-y-8">
-      <section>
-        <h2 className="mb-2.5 text-base font-medium text-muted">Marca</h2>
-        <Card className="px-4 py-4">
-          <LogoUpload value={branding?.logo ?? null} onChange={(logo) => save({ logo })} preview={<ProductMark size={64} />} />
-        </Card>
-      </section>
       <section>
         <h2 className="mb-2.5 text-base font-medium text-muted">Aparência</h2>
         <Card className="flex items-center gap-4 px-4 py-3.5">
@@ -68,8 +60,28 @@ function CustomView() {
           />
         </Card>
       </section>
+      <OutputStyleSection styles={branding?.output_styles ?? []} value={branding?.output_style ?? null} onChange={(output_style) => save({ output_style })} />
       {error && <p role="alert" className="text-sm text-danger-fg">{error}</p>}
     </div>
+  )
+}
+
+const DEFAULT_STYLE = 'default'
+
+function OutputStyleSection({ styles, value, onChange }: { styles: OutputStyle[]; value: string | null; onChange: (key: string | null) => void }) {
+  const chosen = styles.find((s) => s.key === value)
+  const options = [{ value: DEFAULT_STYLE, label: 'Padrão' }, ...styles.map((s) => ({ value: s.key, label: s.name }))]
+  return (
+    <section>
+      <h2 className="mb-2.5 text-base font-medium text-muted">Respostas</h2>
+      <Card className="flex items-center gap-4 px-4 py-3.5">
+        <div className="min-w-0 flex-1">
+          <p className="text-base font-medium text-fg">Estilo de resposta</p>
+          <p className="text-sm text-muted">{chosen?.description ?? 'Como o agente escreve e trabalha nas conversas'}</p>
+        </div>
+        <Select size="sm" label="Estilo de resposta" className="w-44" value={chosen?.key ?? DEFAULT_STYLE} options={options} onValueChange={(v) => onChange(v === DEFAULT_STYLE ? null : v)} />
+      </Card>
+    </section>
   )
 }
 
@@ -99,7 +111,6 @@ function ConnectionsView({ onConnect }: { onConnect: (provider: string) => void 
           </div>
         </motion.section>
       ))}
-      <BrowserSection />
     </div>
   )
 }

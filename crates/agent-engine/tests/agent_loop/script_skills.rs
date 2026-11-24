@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::script_tool::ScriptAccess;
-use agent_engine::tools::skill::{FoundSkill, SkillTool, discover, expand_command, expand_initial};
+use agent_engine::tools::skill::{FoundSkill, discover, expand_command, expand_initial};
 use agent_engine::tools::{Tool, Workspace};
 use agent_engine::transcript::{Block, Message};
 use domain::{AskKind, Decision, EngineEvent, ModelOption, PermissionMode, PromptRequest};
@@ -51,7 +51,8 @@ fn load_mark(rig: &Rig, skills: Vec<FoundSkill>) {
         ScriptedModel::reply(vec![tool_use("s", "Skill", json!({ "skill": "mark" }))]),
         ScriptedModel::reply(vec![Block::Text("Ok.".into())]),
     ]);
-    let tool: Box<dyn Tool> = Box::new(SkillTool { skills });
+    let tool: Box<dyn Tool> = agent_engine::tools::skill::tool(skills).expect("Skill ships");
+    assert!(tool.script().is_some(), "Skill is a script tool");
     rig.run_with(&model, &mut vec![Message::user("mark")], vec![tool]).expect("run");
 }
 

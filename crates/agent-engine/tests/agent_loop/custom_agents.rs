@@ -12,7 +12,7 @@ use crate::{Rig, request, tool_use};
 fn configured_agent_filters_tools_enforces_runtime_denial_and_selects_model_effort() {
     agent_engine::providers::install_testing();
     use agent_engine::tools::{
-        subagent::{AgentTool, FoundAgent},
+        subagent::{self, FoundAgent},
         subagent_config::AgentConfig,
     };
     let mut rig = Rig::new(PermissionMode::Bypass);
@@ -38,7 +38,7 @@ fn configured_agent_filters_tools_enforces_runtime_denial_and_selects_model_effo
         ScriptedModel::reply(vec![Block::Text("Reviewed.".into())]),
     ]);
     let mut tools = tools::standard();
-    tools.push(Box::new(AgentTool { agents: vec![found.clone()] }));
+    subagent::offer(&mut tools, std::slice::from_ref(&found));
     let emit = |_| {};
     let agent = Agent {
         api: &model,
@@ -64,7 +64,7 @@ fn configured_agent_filters_tools_enforces_runtime_denial_and_selects_model_effo
 #[test]
 fn custom_agent_turn_limit_stops_child_and_parent_can_continue() {
     use agent_engine::tools::{
-        subagent::{AgentTool, FoundAgent},
+        subagent::{self, FoundAgent},
         subagent_config::AgentConfig,
     };
     let rig = Rig::new(PermissionMode::Bypass);
@@ -84,7 +84,7 @@ fn custom_agent_turn_limit_stops_child_and_parent_can_continue() {
         ScriptedModel::reply(vec![Block::Text("Parent continued.".into())]),
     ]);
     let mut tools = tools::standard();
-    tools.push(Box::new(AgentTool { agents: vec![found.clone()] }));
+    subagent::offer(&mut tools, std::slice::from_ref(&found));
     let emit = |_| {};
     let agent = Agent {
         api: &model,

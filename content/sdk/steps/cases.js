@@ -1,7 +1,7 @@
 import { step, markdown, testCases } from "sdk";
 import { agentOptions, attempt, defined, effects, inLanguage, issueOf, missingConnection, object, planOf, waitOptions } from "./context.js";
 
-const KINDS = { api: "API", ui: "Tela" };
+const KINDS = { api: "API", ui: "UI" };
 
 const APPROVE = "approve_cases";
 
@@ -81,21 +81,21 @@ function described(entry) {
 }
 
 export function listing(cases) {
-  if (!Array.isArray(cases) || cases.length === 0) return "Nenhum caso de teste.";
+  if (!Array.isArray(cases) || cases.length === 0) return "No test cases.";
   return cases.map(described).join("\n\n");
 }
 
-const REUSE = "Esses casos já existem e estão ligados à issue. Não os repita: escreva só os casos que faltam para cobrir os critérios de aceite. Se nenhum faltar, devolva a lista de casos vazia.";
+const REUSE = "These cases already exist and are linked to the issue. Do not repeat them: write only the cases still missing to cover the acceptance criteria. If none are missing, return an empty list of cases.";
 
 function asked(ctx, opts, issue, feedback, existing) {
   if (opts.prompt) return opts.prompt;
   const plan = planOf(ctx, opts);
-  const parts = [`Escreva os casos de teste E2E, de API e de tela, para o item: ${plan.title}`];
+  const parts = [`Write the E2E test cases, for the API and the UI, for the item: ${plan.title}`];
   if (issue) parts.push(`Issue: ${issue}`);
   if (plan.story) parts.push(plan.story);
-  if (plan.text && plan.text !== plan.story) parts.push(`## Plano\n\n${plan.text}`);
-  if (existing.length > 0) parts.push(`## Casos que já existem\n\n${listing(existing)}\n\n${REUSE}`);
-  if (feedback) parts.push(`## Mudanças pedidas\n\n${feedback}`);
+  if (plan.text && plan.text !== plan.story) parts.push(`## Plan\n\n${plan.text}`);
+  if (existing.length > 0) parts.push(`## Existing cases\n\n${listing(existing)}\n\n${REUSE}`);
+  if (feedback) parts.push(`## Requested changes\n\n${feedback}`);
   return inLanguage(parts.join("\n\n"));
 }
 
@@ -153,17 +153,18 @@ async function linkedCases(ctx, given, issue) {
       const listed = (Array.isArray(found) ? found : []).map(object).filter((entry) => entry.ref && entry.title);
       return listed.map(bdd);
     }
-    const chosen = await missingConnection(ctx, given, "tests", "casos de teste");
-    if (chosen !== "retry") return chosen === SKIPPED ? SKIPPED : ctx.cancel("cancelado por falta de conexão de casos de teste");
+    const chosen = await missingConnection(ctx, given, "tests", "test cases");
+    if (chosen !== "retry") return chosen === SKIPPED ? SKIPPED : ctx.cancel("cancelled for lack of a test case connection");
   }
 }
+
+const TOGETHER = 5;
 
 async function created(ctx, given, cases, issue, existing) {
   const opts = testsOptions(ctx, given);
   const issueId = await trackerId(ctx, opts, issue);
   const labels = Array.isArray(opts.labels) ? opts.labels : ["e2e"];
-  const made = [];
-  for (const entry of cases) {
+  const one = async (entry) => {
     const precondition = gherkin("Dado", entry.given);
     const args = defined({
       project: opts.project,
@@ -177,7 +178,11 @@ async function created(ctx, given, cases, issue, existing) {
       issue_id: issueId,
     });
     const found = await ctx.call("tests", "create_case", args, effects(opts));
-    made.push({ ...entry, ref: found.ref, url: found.url ?? null });
+    return { ...entry, ref: found.ref, url: found.url ?? null };
+  };
+  const made = cases.length > 0 ? [await one(cases[0])] : [];
+  for (let start = 1; start < cases.length; start += TOGETHER) {
+    made.push(...(await Promise.all(cases.slice(start, start + TOGETHER).map(one))));
   }
   const title = issue ? `${issue} · ${planOf(ctx, opts).title}` : planOf(ctx, opts).title;
   const cycle = await ctx.call("tests", "create_cycle", defined({ project: opts.project, title, issue: issue ?? undefined, issue_id: issueId }), effects(opts));
@@ -186,19 +191,19 @@ async function created(ctx, given, cases, issue, existing) {
 
 export default step({
   name: "cases",
-  label: "Casos de teste",
+  label: "Test cases",
   icon: "hNoteEdit",
   needs: "tests",
-  doing: "Escrevendo casos de teste",
+  doing: "Writing test cases",
   view: (s) => (Array.isArray(s.cases) ? [testCases(s.cases.map(bdd), defined({ session: s.session }))] : s.reason ? [markdown(s.reason)] : []),
   async run(ctx, opts) {
     const issue = issueOf(ctx, opts);
     const existing = await linkedCases(ctx, opts, issue);
-    if (existing === SKIPPED) return ctx.skip({ reason: "Etapa pulada: nenhuma conexão de casos de teste." });
+    if (existing === SKIPPED) return ctx.skip({ reason: "Step skipped: no test case connection." });
     if (!Array.isArray(existing)) return existing;
     let draft = await drafted(ctx, opts, issue, undefined, undefined, existing);
     for (;;) {
-      if (draft.cases.length === 0 && existing.length === 0) return ctx.fail({ session: draft.session, error: "o testador não escreveu nenhum caso de teste" });
+      if (draft.cases.length === 0 && existing.length === 0) return ctx.fail({ session: draft.session, error: "the tester wrote no test cases" });
       const verdict = draft.cases.length === 0 ? { approved: true } : await judged(ctx, opts, { ...draft, cases: [...existing, ...draft.cases] });
       if (verdict.approved) {
         const made = await created(ctx, opts, draft.cases, issue, existing);

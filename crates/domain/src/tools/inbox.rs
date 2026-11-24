@@ -25,12 +25,17 @@ impl Notice {
         self.source.strip_prefix(CHANNEL_SOURCE)
     }
 
+    pub fn ended_background(&self) -> Option<&str> {
+        self.source.strip_prefix(BACKGROUND_SOURCE)
+    }
+
     pub fn meta(&self, key: &str) -> Option<&str> {
         self.meta.iter().find(|(name, _)| name == key).map(|(_, value)| value.as_str())
     }
 }
 
 const CHANNEL_SOURCE: &str = "channel ";
+pub const BACKGROUND_SOURCE: &str = "background ";
 const TEAMMATE_SOURCE: &str = "teammate ";
 
 pub fn teammate_notice(mail: &crate::team::Mail) -> Notice {

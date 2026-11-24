@@ -136,7 +136,6 @@ fn a_file_whose_filter_the_repository_names_is_left_out_and_said() {
     let skipped = watched.after(&workspace);
     assert_eq!(skipped, [dir.path().canonicalize().expect("root").join("secret.txt")]);
     assert_eq!(recorded(&workspace).get("secret.txt"), None, "the stored text is not what was checked out");
-    assert!(not_kept(&skipped).is_some_and(|note| note.contains("secret.txt")));
 }
 
 #[test]

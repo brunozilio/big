@@ -1,4 +1,4 @@
-import type { Application, ApplicationDraft, CloudAccount, CloudChoice, CodeRepo, DirListing } from '../contract'
+import type { Application, ApplicationDraft, CloudAccount, CloudChoice, CodeBranch, CodeRepo, DirListing, OpenPull } from '../contract'
 
 export const MOCK_HOME = '/Users/voce'
 
@@ -107,4 +107,15 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
   })
   const tracker = draft.tracker && draft.tracker.project && draft.tracker.connection ? draft.tracker : null
   return { id, name, tracker, cloud: checkedCloud(draft.cloud), repositories, skipDependabot: draft.skipDependabot !== false }
+}
+
+export function openPulls(repo: string): OpenPull[] {
+  return [
+    { key: `${repo}#42`, number: 42, title: 'Corrigir cálculo do frete', head: 'fix/frete', base: 'main', author: 'ana', url: null, draft: false },
+    { key: `${repo}#38`, number: 38, title: 'Novo checkout em uma página', head: 'feat/checkout', base: 'main', author: 'bia', url: null, draft: true },
+  ]
+}
+
+export function codeBranches(): CodeBranch[] {
+  return ['main', 'develop', 'release/2.4', 'fix/frete', 'feat/checkout'].map((name) => ({ name, default: name === 'main' }))
 }

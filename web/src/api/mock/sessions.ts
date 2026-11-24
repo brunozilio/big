@@ -1,6 +1,6 @@
 import type { AskQuestion, Session, SessionEvent, ToolCall } from '../contract'
 import { AGENTS, PEOPLE } from './fixtures'
-import { IDX, REPO, STEPS, diffOf, fileOf, isPaused, isReviewWaiting, moduleOf, store, type Attempt, type SimItem } from './sim'
+import { IDX, REPO, STEPS, diffOf, emit, fileOf, isPaused, isReviewWaiting, moduleOf, store, type Attempt, type SimItem } from './sim'
 import { iso } from './view'
 
 const you = PEOPLE['u-you']
@@ -91,7 +91,40 @@ function reviewSession(it: SimItem): Session {
   return { id: `r-${it.id}`, title: `Review · ${it.key}`, status: replying ? 'running' : isReviewWaiting(it) ? 'idle' : 'idle', mode: 'ask', model: it.model, agents: AGENTS, events: ev, suggestion: replying ? null : 'Quais testes cobrem essa mudança?' }
 }
 
+const free = new Map<string, Session>()
+
+function answerFree(s: Session, text: string) {
+  const at = new Date().toISOString()
+  const n = s.events.length
+  s.events.push({ id: `b${n}-u`, at, type: 'user', author: you, text, attachments: 0 })
+  s.status = 'running'
+  emit()
+  setTimeout(() => {
+    const done = new Date().toISOString()
+    s.events.push({ id: `b${n}-t`, at: done, type: 'tools', calls: [{ id: 'g', kind: 'search', title: `Buscou em ${REPO}`, tag: 'search', state: 'ok', durationMs: 300 }], seconds: 2, live: false })
+    s.events.push({ id: `b${n}-a`, at: done, type: 'assistant', text: `Olhei o código sem mexer em nada. Sobre “${text}”: está tudo em dia.` })
+    s.status = 'idle'
+    emit()
+  }, 900)
+}
+
+export function openFree(text: string): string {
+  const id = `b-${free.size + 1}`
+  const s: Session = { id, title: text, status: 'idle', mode: 'plan', model: 'auto', agents: [], events: [], suggestion: null }
+  free.set(id, s)
+  answerFree(s, text)
+  return id
+}
+
+export function chatFree(id: string, text: string): boolean {
+  const s = free.get(id)
+  if (s) answerFree(s, text)
+  return !!s
+}
+
 export function sessionById(id: string): Session | null {
+  const opened = free.get(id)
+  if (opened) return { ...opened, events: [...opened.events] }
   const [kind, raw] = id.split('-')
   const it = store.items.find((x) => String(x.id) === raw)
   if (!it) return null

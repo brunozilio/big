@@ -32,7 +32,9 @@ fn call(store: &Arc<Store>, cwd: &std::path::Path, input: &serde_json::Value) ->
     offer(client, store, "app".into());
     let tools = hosted::tools(client);
     let tool = tools.iter().find(|tool| tool.spec().name == ADD_REPOSITORY).expect("offered");
-    let outcome = tool.run(input, &Workspace::new(cwd));
+    let mut workspace = Workspace::new(cwd);
+    workspace.credentials.client = client;
+    let outcome = tool.run(input, &workspace);
     clients::release(client);
     outcome
 }

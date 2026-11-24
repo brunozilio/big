@@ -18,6 +18,22 @@ fn scripts_in(folder: &Path) -> Vec<PathBuf> {
     files
 }
 
+fn fragment(export: &str) -> bool {
+    ["hooks.", "intercept."].iter().any(|start| export.starts_with(start)) && !export.contains('/')
+}
+
+pub fn target(command: &str) -> (&str, &str) {
+    match command.rsplit_once('#') {
+        Some((file, export)) if fragment(export) => (file, export),
+        _ => (command, "default"),
+    }
+}
+
+pub fn runs_from(path: &str) -> String {
+    let overridden = content::folder().and_then(|folder| content::override_path(&folder, path)).filter(|f| f.is_file());
+    overridden.map_or_else(|| format!("{BUILTIN}{path}"), |file| file.display().to_string())
+}
+
 pub fn source(command: &str) -> Result<String, String> {
     match command.strip_prefix(BUILTIN) {
         Some(path) => content::builtin_text(path).ok_or_else(|| format!("{path}: no such built-in hook")),

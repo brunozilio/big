@@ -10,7 +10,7 @@ pub struct Installed {
     pub removed: Vec<String>,
 }
 
-fn fingerprint(bytes: &[u8]) -> String {
+pub(crate) fn fingerprint(bytes: &[u8]) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     for byte in bytes {
         hash ^= u64::from(*byte);
@@ -19,7 +19,7 @@ fn fingerprint(bytes: &[u8]) -> String {
     format!("{hash:016x}")
 }
 
-fn read_manifest(folder: &Path) -> BTreeMap<String, String> {
+pub(crate) fn read_manifest(folder: &Path) -> BTreeMap<String, String> {
     std::fs::read_to_string(folder.join(MANIFEST))
         .ok()
         .and_then(|text| serde_json::from_str(&text).ok())
@@ -34,6 +34,10 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     let staging = path.with_file_name(format!(".{name}.{}", std::process::id()));
     std::fs::write(&staging, bytes)?;
     std::fs::rename(&staging, path)
+}
+
+pub(crate) fn untouched(folder: &Path, path: &str, bytes: &[u8]) -> bool {
+    read_manifest(folder).get(path).is_some_and(|known| *known == fingerprint(bytes))
 }
 
 pub fn install_files(folder: &Path, files: &[(&str, &[u8])]) -> std::io::Result<Installed> {
@@ -106,6 +110,18 @@ pub fn install_once() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_untouched_installed_copy_gives_way_to_the_built_in_and_an_edited_one_wins() {
+        let folder = tempfile::tempdir().expect("folder");
+        let shipped: [(&str, &[u8]); 1] = [("tools/A.ts", b"old")];
+        install_files(folder.path(), &shipped).expect("install");
+        assert_eq!(crate::user_text(Some(folder.path()), "tools/A.ts"), None, "an untouched copy is not an override");
+        std::fs::write(folder.path().join("tools/A.ts"), "mine").expect("edit");
+        assert_eq!(crate::user_text(Some(folder.path()), "tools/A.ts").as_deref(), Some("mine"));
+        std::fs::write(folder.path().join("tools/B.ts"), "new").expect("write");
+        assert_eq!(crate::user_text(Some(folder.path()), "tools/B.ts").as_deref(), Some("new"), "a file of the owner's own");
+    }
 
     #[test]
     fn copies_are_written_updated_while_untouched_and_kept_once_edited() {

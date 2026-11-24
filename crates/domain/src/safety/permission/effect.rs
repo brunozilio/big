@@ -41,6 +41,7 @@ pub enum Effect {
     WritePath(Place),
     Exec(Exec),
     Net { host: Option<String> },
+    Fetch { host: Option<String> },
     Spawn(SpawnKind),
     Cancel { own: bool },
     Session { to: String },
@@ -65,6 +66,7 @@ impl Effect {
             | Self::Declared(Declared::Edits) => false,
             Self::Exec(_)
             | Self::Net { .. }
+            | Self::Fetch { .. }
             | Self::Spawn(SpawnKind::BackgroundShell | SpawnKind::Schedule)
             | Self::Cancel { own: false }
             | Self::Session { .. }
@@ -82,4 +84,14 @@ impl Effect {
 
 pub fn change_nothing(effects: &[Effect]) -> bool {
     !effects.iter().any(|effect| effect.acts() || effect.changes_files())
+}
+
+pub fn only_fetch(effects: &[Effect]) -> bool {
+    !effects.is_empty() && effects.iter().all(|effect| matches!(effect, Effect::Fetch { .. }))
+}
+
+pub fn only_browser(effects: &[Effect]) -> bool {
+    let browser = crate::mcp::browser_server();
+    let remote = |effect: &Effect| matches!(effect, Effect::Remote { server } if *server == browser);
+    effects.iter().any(remote) && effects.iter().all(|effect| remote(effect) || matches!(effect, Effect::Fetch { .. }))
 }

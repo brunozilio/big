@@ -8,7 +8,7 @@ import { ChangeBlock, MergeBlock } from './change'
 import { IssueBlock } from './issue'
 import { PipelineBlock } from './pipeline'
 import { ReviewBlock } from './review'
-import { ActionsBlock, FormBlock, LogsBlock, MarkdownBlock } from './simple'
+import { ActionsBlock, CallsBlock, FormBlock, LogsBlock, MarkdownBlock } from './simple'
 
 type Of<T extends BlockType> = Extract<Block, { type: T }>
 
@@ -32,6 +32,7 @@ export const registry: { [K in BlockType]: ComponentType<{ block: Of<K> }> } = {
   markdown: MarkdownBlock,
   cases: CasesBlock,
   logs: LogsBlock,
+  calls: CallsBlock,
   form: FormBlock,
   actions: ActionsBlock,
 }

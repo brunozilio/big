@@ -5,7 +5,7 @@ export const SUCCEEDED = ["passed", "skipped"];
 
 const LIMIT = 8000;
 
-export const LANGUAGE = "Responda e escreva tudo em português do Brasil.";
+export const LANGUAGE = "Reply and write everything in Brazilian Portuguese.";
 
 export function inLanguage(text) {
   return `${text}\n\n${LANGUAGE}`;
@@ -231,7 +231,7 @@ function comment(entry) {
 export function feedbackText(from) {
   if (!from) return "";
   const data = object(from.data);
-  const parts = [`A etapa ${from.step} devolveu o trabalho.`];
+  const parts = [`Step ${from.step} sent the work back.`];
   if (data.summary) parts.push(String(data.summary));
   if (data.error) parts.push(String(data.error));
   if (data.body) parts.push(String(data.body));
@@ -292,14 +292,14 @@ export async function failedLogs(ctx, opts, run) {
 }
 
 const CHOICES = [
-  { id: "retry", label: "Já conectei, tentar de novo", icon: "refresh", variant: "primary" },
-  { id: "skip", label: "Pular etapa", icon: "right" },
-  { id: "cancel", label: "Cancelar item", icon: "stop", variant: "danger" },
+  { id: "retry", label: "I connected it, try again", icon: "refresh", variant: "primary" },
+  { id: "skip", label: "Skip step", icon: "right" },
+  { id: "cancel", label: "Cancel item", icon: "stop", variant: "danger" },
 ];
 
 export async function missingConnection(ctx, opts, capability, what) {
-  const reason = `conecte uma conta para ${capability}`;
-  const text = `**Falta uma conexão de ${what}.** Conecte uma conta em Configurações › Conexões e tente de novo, ou siga sem esta etapa.`;
+  const reason = `connect an account for ${capability}`;
+  const text = `**A ${what} connection is missing.** Connect an account in Settings › Connections and try again, or continue without this step.`;
   await ctx.impediment(true, reason);
   const answer = await ctx.waitHuman([markdown(text), actions(CHOICES)], waitOptions(opts));
   await ctx.impediment(false);
