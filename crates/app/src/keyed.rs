@@ -66,9 +66,8 @@ impl AgentEngine for KeyedEngine {
         if request.host.memory.is_none() {
             request.host.memory = Some(MemoryBrief::new(None));
         }
-        let refuse = |_: RunId, _: PromptRequest| Err::<(), String>("an agent run starts no other run here".into());
         let client = request.host.credentials.client;
-        let prepared = crate::prepare::prepare(&self.services, client, run, &request, &refuse);
+        let prepared = crate::prepare::prepare(&self.services, client, run, &request);
         let listing = Listing::of(&self.services, &prepared.request);
         let sink = Arc::new(Listed { listing, ending: prepared.ending, inner: sink });
         self.services.engine.start(run, &prepared.request, sink)

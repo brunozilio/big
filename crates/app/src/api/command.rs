@@ -1,10 +1,10 @@
 use std::path::PathBuf;
 
 use domain::provider::ModelProvider;
-use domain::{AskId, Decision, PermissionMode, PromptRequest, RunId};
+use domain::{AskId, Decision, PromptRequest, RunId, SessionId};
 use serde::{Deserialize, Serialize};
 
-use crate::api::{FeatureRequest, RequestId};
+use crate::api::RequestId;
 
 pub const SIGN_IN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(300);
 
@@ -24,77 +24,24 @@ pub enum ClientCommand {
         ask: AskId,
         decision: Decision,
     },
-    SetPermissionMode {
-        run: RunId,
-        mode: PermissionMode,
-    },
-    SteerRun {
-        run: RunId,
-        text: String,
-    },
-    UnsteerRun {
-        run: RunId,
-    },
-    BackgroundRun {
-        run: RunId,
-    },
     ListModels,
-    RegisterPeer {
-        path: PathBuf,
-    },
-    ListSkills {
-        path: PathBuf,
-    },
-    ListAgents {
-        path: PathBuf,
-    },
-    LoadSettings,
-    SaveSettings {
-        settings: serde_json::Value,
-    },
-    ChangeSettings {
-        changes: Vec<crate::settings::SettingsChange>,
-    },
     ListProviders,
-    ConnectProvider {
-        provider: ModelProvider,
-        key: String,
-    },
     SignInProvider {
         provider: ModelProvider,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         back: Option<String>,
     },
-    CloseAndSignIn {
-        provider: ModelProvider,
-        port: u16,
-        pid: u32,
-    },
     DisconnectProvider {
         provider: ModelProvider,
-    },
-    UseProviderAccount {
-        provider: ModelProvider,
-        account: String,
     },
     RemoveProviderAccount {
         provider: ModelProvider,
         account: String,
     },
-    SetProviderBalance {
-        provider: ModelProvider,
-        balance: domain::account_pool::Balance,
-    },
-    TakeNotices {
-        for_agent: bool,
-    },
-    AnswerTeammate {
-        ask: domain::team::TeammateAsk,
-        decision: domain::Decision,
-    },
-    Feature(FeatureRequest),
-    ListPermissions {
-        path: PathBuf,
+    ListSessions,
+    SessionHistory {
+        session: SessionId,
+        cwd: PathBuf,
     },
     CancelRequest {
         request: RequestId,
@@ -107,29 +54,13 @@ impl ClientCommand {
             Self::SubmitPrompt { .. } => "submit_prompt",
             Self::CancelRun { .. } => "cancel_run",
             Self::AnswerAsk { .. } => "answer_ask",
-            Self::SetPermissionMode { .. } => "set_permission_mode",
-            Self::SteerRun { .. } => "steer_run",
-            Self::UnsteerRun { .. } => "unsteer_run",
-            Self::BackgroundRun { .. } => "background_run",
             Self::ListModels => "list_models",
-            Self::RegisterPeer { .. } => "register_peer",
-            Self::ListSkills { .. } => "list_skills",
-            Self::ListAgents { .. } => "list_agents",
-            Self::LoadSettings => "load_settings",
-            Self::SaveSettings { .. } => "save_settings",
-            Self::ChangeSettings { .. } => "change_settings",
             Self::ListProviders => "list_providers",
-            Self::ConnectProvider { .. } => "connect_provider",
             Self::SignInProvider { .. } => "sign_in_provider",
-            Self::CloseAndSignIn { .. } => "close_and_sign_in",
             Self::DisconnectProvider { .. } => "disconnect_provider",
-            Self::UseProviderAccount { .. } => "use_provider_account",
             Self::RemoveProviderAccount { .. } => "remove_provider_account",
-            Self::SetProviderBalance { .. } => "set_provider_balance",
-            Self::ListPermissions { .. } => "list_permissions",
-            Self::TakeNotices { .. } => "take_notices",
-            Self::AnswerTeammate { .. } => "answer_teammate",
-            Self::Feature(_) => "feature",
+            Self::ListSessions => "list_sessions",
+            Self::SessionHistory { .. } => "session_history",
             Self::CancelRequest { .. } => "cancel_request",
         }
     }
@@ -148,53 +79,17 @@ mod tests {
             ClientCommand::SubmitPrompt { run, request },
             ClientCommand::CancelRun { run },
             ClientCommand::AnswerAsk { run, ask: AskId("a".into()), decision: Decision::Answer(vec![vec![0]]) },
-            ClientCommand::SetPermissionMode { run, mode: PermissionMode::Plan },
-            ClientCommand::SteerRun { run, text: "use tabs".into() },
-            ClientCommand::UnsteerRun { run },
-            ClientCommand::BackgroundRun { run },
             ClientCommand::ListModels,
-            ClientCommand::RegisterPeer { path: "/repo".into() },
-            ClientCommand::ListSkills { path: "/repo".into() },
-            ClientCommand::ListAgents { path: "/repo".into() },
-            ClientCommand::LoadSettings,
-            ClientCommand::SaveSettings { settings: serde_json::json!({"model": "m"}) },
-            ClientCommand::ChangeSettings {
-                changes: vec![
-                    crate::settings::SettingsChange::set(["model"], serde_json::json!("m")),
-                    crate::settings::SettingsChange::Remove { path: vec!["mode".into()] },
-                ],
-            },
             ClientCommand::ListProviders,
-            ClientCommand::ConnectProvider { provider: ModelProvider::new("keyed"), key: "sk".into() },
             ClientCommand::SignInProvider { provider: ModelProvider::new("browser-sub"), back: None },
             ClientCommand::SignInProvider {
                 provider: ModelProvider::new("browser-sub"),
                 back: Some("http://127.0.0.1:7999/settings".into()),
             },
-            ClientCommand::CloseAndSignIn { provider: ModelProvider::new("browser-sub"), port: 49153, pid: 998 },
             ClientCommand::DisconnectProvider { provider: ModelProvider::new("keyed") },
-            ClientCommand::UseProviderAccount { provider: ModelProvider::new("keyed"), account: "2".into() },
             ClientCommand::RemoveProviderAccount { provider: ModelProvider::new("keyed"), account: "a@x.io".into() },
-            ClientCommand::SetProviderBalance {
-                provider: ModelProvider::new("keyed"),
-                balance: domain::account_pool::Balance::RoundRobin,
-            },
-            ClientCommand::ListPermissions { path: "/repo".into() },
-            ClientCommand::TakeNotices { for_agent: true },
-            ClientCommand::AnswerTeammate {
-                ask: domain::team::TeammateAsk {
-                    team: "team-1".into(),
-                    teammate: "tester".into(),
-                    request_id: "p1".into(),
-                    asked: domain::team::Asked::Permission {
-                        tool_name: "Bash".into(),
-                        description: "npm test".into(),
-                        rememberable: true,
-                    },
-                },
-                decision: domain::Decision::Allow,
-            },
-            ClientCommand::Feature(FeatureRequest::OutputSavings),
+            ClientCommand::ListSessions,
+            ClientCommand::SessionHistory { session: SessionId("s".into()), cwd: "/repo".into() },
             ClientCommand::CancelRequest { request: RequestId(7) },
         ];
         for command in commands {

@@ -12,6 +12,14 @@ fn model() -> Model {
     Model::new("scripted", "Scripted")
 }
 
+fn text(run: app::Run) -> String {
+    run.filter_map(|event| match event {
+        EngineEvent::TextDelta(text) => Some(text),
+        _ => None,
+    })
+    .collect()
+}
+
 fn learned(engine: &FakeEngine) -> Option<PromptRequest> {
     engine.requests().into_iter().find(|request| request.session.command == Some(SessionCommand::Learn))
 }
@@ -30,10 +38,10 @@ fn a_run_the_user_corrected_enough_proposes_a_lesson_on_its_own_session() {
     );
     let mut services = LocalServices::with_engine(Arc::new(engine.clone()));
     services.providers = services.providers.with_secrets(Arc::new(InMemorySecretStore::default()));
-    let client = Client::builder().data_dir(data.path()).services(services).build().expect(brand::COMMAND);
+    let client = Client::builder().services(services.kept_in(data.path())).build().expect(brand::COMMAND);
     let session = client.session(data.path(), model());
 
-    session.send("install it").expect("run").text().expect("text");
+    text(session.send("install it").expect("run"));
 
     let until = Instant::now() + Duration::from_secs(5);
     while learned(&engine).is_none() && Instant::now() < until {

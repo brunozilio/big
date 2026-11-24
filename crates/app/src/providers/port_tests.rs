@@ -11,7 +11,6 @@ const PORT: u16 = 49153;
 #[derive(Default)]
 struct FakePorts {
     holder: Mutex<Option<PortHolder>>,
-    closed: Mutex<Vec<u32>>,
 }
 
 impl FakePorts {
@@ -20,22 +19,11 @@ impl FakePorts {
         *ports.holder.lock().expect("holder") = Some(PortHolder { pid, app: app.into() });
         Arc::new(ports)
     }
-
-    fn closed(&self) -> Vec<u32> {
-        self.closed.lock().expect("closed").clone()
-    }
 }
 
 impl Ports for FakePorts {
     fn holder(&self, port: u16) -> Option<PortHolder> {
         self.holder.lock().expect("holder").clone().filter(|_| port == PORT)
-    }
-
-    fn close(&self, port: u16, pid: u32) -> Result<(), String> {
-        assert_eq!(port, PORT);
-        self.closed.lock().expect("closed").push(pid);
-        *self.holder.lock().expect("holder") = None;
-        Ok(())
     }
 }
 
@@ -93,13 +81,13 @@ fn a_retry_replaces_the_sign_in_this_process_still_had_waiting_on_the_port() {
     let (tx, rx) = crossbeam_channel::unbounded();
     let outbox = Outbox::new(tx, Arc::new(|| {}));
     let browser = ModelProvider::new("browser-sub");
-    providers.sign_in(browser, &outbox.answering(RequestId(1)));
+    providers.sign_in_returning(browser, None, &outbox.answering(RequestId(1)));
     assert!(matches!(
         next(&rx),
         Reply::Providers(ProviderEvent::AuthorizeAt { url, .. }) if url.ends_with("never-answered")
     ));
 
-    providers.sign_in(browser, &outbox.answering(RequestId(2)));
+    providers.sign_in_returning(browser, None, &outbox.answering(RequestId(2)));
 
     let mut replaced = Vec::new();
     let mut retried = Vec::new();
@@ -116,7 +104,6 @@ fn a_retry_replaces_the_sign_in_this_process_still_had_waiting_on_the_port() {
         Reply::Providers(ProviderEvent::AuthorizeAt { url, .. }) if url.ends_with("browser-sub")
     ));
     assert!(listed(&retried[1]).iter().any(|p| p.provider == browser && p.account.is_some()));
-    assert!(ports.closed().is_empty(), "no process was closed to get the port back");
     let more = rx.recv_timeout(std::time::Duration::from_millis(200));
     assert!(more.is_err(), "each sign-in ends once: {more:?}");
 }
@@ -133,37 +120,6 @@ fn busy(holder: Option<PortHolder>) -> Reply {
 fn a_taken_callback_port_names_the_app_holding_it() {
     let ports = FakePorts::held_by(998, "Visual Studio Code");
     let (outbox, rx) = outbox();
-    signing_in(&ports).sign_in(ModelProvider::new("browser-sub"), &outbox);
+    signing_in(&ports).sign_in_returning(ModelProvider::new("browser-sub"), None, &outbox);
     assert_eq!(next(&rx), busy(Some(PortHolder { pid: 998, app: "Visual Studio Code".into() })));
-    assert!(ports.closed().is_empty());
-}
-
-#[test]
-fn closing_the_holder_frees_the_port_and_the_sign_in_goes_on() {
-    let ports = FakePorts::held_by(998, "Visual Studio Code");
-    let providers = signing_in(&ports);
-    let (outbox, rx) = outbox();
-    providers.close_and_sign_in(ModelProvider::new("browser-sub"), PORT, 998, &outbox);
-    assert!(matches!(next(&rx), Reply::Providers(ProviderEvent::AuthorizeAt { .. })));
-    assert!(listed(&next(&rx)).iter().any(|p| p.provider == ModelProvider::new("browser-sub") && p.account.is_some()));
-    assert_eq!(ports.closed(), [998]);
-}
-
-#[test]
-fn a_port_now_held_by_another_process_is_not_closed_and_is_asked_about_again() {
-    let ports = FakePorts::held_by(1234, "Other");
-    let (outbox, rx) = outbox();
-    signing_in(&ports).close_and_sign_in(ModelProvider::new("browser-sub"), PORT, 998, &outbox);
-    assert_eq!(next(&rx), busy(Some(PortHolder { pid: 1234, app: "Other".into() })));
-    assert!(ports.closed().is_empty());
-}
-
-#[test]
-fn this_very_process_is_never_closed_to_free_the_port() {
-    let ports = FakePorts::held_by(std::process::id(), "this app");
-    let (outbox, rx) = outbox();
-    signing_in(&ports).close_and_sign_in(ModelProvider::new("browser-sub"), PORT, std::process::id(), &outbox);
-    let message = failure(&next(&rx));
-    assert!(message.contains(&PORT.to_string()), "{message}");
-    assert!(ports.closed().is_empty(), "closing the holder would have ended this session");
 }

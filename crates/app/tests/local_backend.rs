@@ -5,24 +5,10 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use agent_engine::fake::FakeEngine;
-use app::api::features::memory::{MemoryOp, MemoryRequest};
-use app::api::{ClientCommand, Envelope, FeatureError, FeatureName, FeatureRequest, Reply, RequestId, ServerEvent};
+use app::api::{ClientCommand, Envelope, Reply, RequestId, ServerEvent};
 use app::{Backend, LocalBackend, LocalServices, Wake};
 use crossbeam_channel::Receiver;
 use domain::{AgentAsk, AskId, AskKind, Decision, EngineEvent, ModelOption, PromptRequest, RunId};
-use serde_json::json;
-
-fn project_with_a_skill_and_an_agent() -> tempfile::TempDir {
-    let project = tempfile::tempdir().expect("project");
-    let root = project.path().join(brand::DIR);
-    std::fs::create_dir_all(root.join("skills/motion")).expect("skills");
-    std::fs::create_dir_all(root.join("agents")).expect("agents");
-    std::fs::write(root.join("skills/motion/SKILL.md"), "---\nname: motion\ndescription: Motion\n---\nMove.")
-        .expect("skill");
-    std::fs::write(root.join("agents/reviewer.md"), "---\nname: reviewer\ndescription: Reviews\n---\nReview.")
-        .expect("agent");
-    project
-}
 
 fn model() -> ModelOption {
     ModelOption::new("claude-opus-5-5", "Opus 5.5")
@@ -126,11 +112,8 @@ fn every_command_that_says_nothing_else_is_acknowledged() {
     let (backend, woke) = backend(scripted());
     let unknown = RunId::new();
     for command in [
-        ClientCommand::SaveSettings { settings: json!({ "model": "m" }) },
         ClientCommand::CancelRun { run: unknown },
-        ClientCommand::SteerRun { run: unknown, text: "use tabs".into() },
-        ClientCommand::UnsteerRun { run: unknown },
-        ClientCommand::BackgroundRun { run: unknown },
+        ClientCommand::AnswerAsk { run: unknown, ask: AskId("a".into()), decision: Decision::Allow },
         ClientCommand::CancelRequest { request: RequestId(u64::MAX) },
     ] {
         let name = command.name();
@@ -170,60 +153,12 @@ fn answers_reach_the_run_that_asked() {
 }
 
 #[test]
-fn queries_answer_models_skills_and_agents() {
+fn queries_answer_models_and_sessions() {
     let (backend, woke) = backend(scripted());
     assert_eq!(answer(&backend, &woke, ClientCommand::ListModels), Reply::Models(vec![model()]));
-
-    let dir = project_with_a_skill_and_an_agent();
-    let skills = answer(&backend, &woke, ClientCommand::ListSkills { path: dir.path().to_path_buf() });
-    assert!(matches!(&skills, Reply::Skills(list) if list.iter().any(|s| s.name == "motion")));
-
-    let agents = answer(&backend, &woke, ClientCommand::ListAgents { path: dir.path().to_path_buf() });
-    assert!(matches!(&agents, Reply::Agents(list) if list.iter().any(|a| a.name == "reviewer")));
-}
-
-#[test]
-fn an_optimization_is_a_run_over_the_memory_without_the_search_tool() {
-    let engine = scripted();
-    let (backend, woke) = backend_with(engine.clone());
-    let dir = tempfile::tempdir().expect("tempdir");
-    let path = dir.path().to_path_buf();
-    let fact = domain::MemoryEdit::Remember {
-        kind: domain::MemoryKind::Semantic,
-        text: "Uses wgpu".into(),
-        tags: vec![],
-        touches: vec![],
-    };
-    answer(&backend, &woke, memory(&path, MemoryOp::Edit { edits: vec![fact] }));
-
-    let run = RunId::new();
-    send(&backend, memory(&path, MemoryOp::Optimize { run, model: model() }));
-    collect(&backend, &woke, run_ended);
-    let mut remembering = PromptRequest::plain(path.clone(), "hi", model());
-    remembering.host.memory = Some(domain::MemoryBrief::default());
-    send(&backend, ClientCommand::SubmitPrompt { run: RunId::new(), request: remembering });
-    collect(&backend, &woke, run_ended);
-
-    let [optimizing, plain] = &engine.requests()[..] else { panic!("two runs: {:?}", engine.requests()) };
-    assert!(
-        optimizing.prompt.text.contains("long-term memory")
-            && optimizing.prompt.text.contains("[0] semantic, from the user: Uses wgpu")
-    );
-    assert!(optimizing.host.memory.as_ref().is_some_and(|brief| brief.optimizing && brief.recalled.is_empty()));
-    assert!(optimizing.host.credentials.mcp.is_empty(), "no memory_search while tidying");
-    assert!(!plain.host.memory.as_ref().is_some_and(|brief| brief.optimizing), "a client cannot ask for it");
-    assert!(plain.host.credentials.mcp.is_empty(), "memory that fits in the prompt is not searched");
-
-    let undo = answer(&backend, &woke, memory(&path, MemoryOp::Undo));
-    assert!(
-        matches!(&undo, Reply::FeatureFailed(FeatureError::Failed { feature: FeatureName::Memory, message })
-            if message.contains("nothing to undo")),
-        "an optimization that changed nothing leaves nothing to undo: {undo:?}"
-    );
-}
-
-fn memory(path: &std::path::Path, op: MemoryOp) -> ClientCommand {
-    ClientCommand::Feature(FeatureRequest::Memory(MemoryRequest { path: path.to_path_buf(), op }))
+    assert_eq!(answer(&backend, &woke, ClientCommand::ListSessions), Reply::Sessions(Vec::new()));
+    let history = ClientCommand::SessionHistory { session: domain::SessionId("none".into()), cwd: "/repo".into() };
+    assert_eq!(answer(&backend, &woke, history), Reply::History(Vec::new()));
 }
 
 #[test]

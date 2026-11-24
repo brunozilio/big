@@ -183,43 +183,6 @@ pub fn sent_message(from: &str, message: &Value, request_id: impl FnOnce() -> St
     Ok(protocol.text())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum TeammateMode {
-    #[default]
-    Process,
-    Tmux,
-    Iterm2,
-    Auto,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub struct Terminal {
-    pub inside_tmux: bool,
-    pub in_iterm2: bool,
-}
-
-impl TeammateMode {
-    pub fn named(name: &str) -> Option<Self> {
-        match name {
-            "process" => Some(Self::Process),
-            "tmux" => Some(Self::Tmux),
-            "iterm2" => Some(Self::Iterm2),
-            "auto" => Some(Self::Auto),
-            _ => None,
-        }
-    }
-
-    pub fn resolved(self, terminal: Terminal) -> Self {
-        match self {
-            Self::Auto if terminal.inside_tmux => Self::Tmux,
-            Self::Auto if terminal.in_iterm2 => Self::Iterm2,
-            Self::Auto => Self::Process,
-            chosen => chosen,
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TeammateOf {
     pub team: String,
@@ -234,10 +197,6 @@ pub struct TeammateSpec {
     pub model: String,
     pub mode: String,
     pub instructions: String,
-}
-
-pub fn safe_in_a_terminal_command(path: &str) -> bool {
-    !path.is_empty() && path.chars().all(|c| c.is_ascii_alphanumeric() || "/._-".contains(c))
 }
 
 pub const ASK_PREFIX: &str = "teammate-ask:";
@@ -492,24 +451,6 @@ mod tests {
             Some(crate::Decision::DenyWith("smaller".into()))
         );
         assert_eq!(decided(&ask.answer(&crate::Decision::Deny)), Some(crate::Decision::Deny));
-    }
-
-    #[test]
-    fn auto_picks_tmux_inside_tmux_then_iterm2_then_a_background_process() {
-        let tmux = Terminal { inside_tmux: true, in_iterm2: true };
-        let iterm2 = Terminal { inside_tmux: false, in_iterm2: true };
-        assert_eq!(TeammateMode::named("auto").map(|mode| mode.resolved(tmux)), Some(TeammateMode::Tmux));
-        assert_eq!(TeammateMode::Auto.resolved(iterm2), TeammateMode::Iterm2);
-        assert_eq!(TeammateMode::Auto.resolved(Terminal::default()), TeammateMode::Process);
-        assert_eq!(
-            TeammateMode::Tmux.resolved(Terminal::default()),
-            TeammateMode::Tmux,
-            "asked for, even outside tmux"
-        );
-        assert_eq!(TeammateMode::named("iterm2"), Some(TeammateMode::Iterm2));
-        assert_eq!(TeammateMode::default(), TeammateMode::Process);
-        assert!(safe_in_a_terminal_command("/Users/me/.local/bin/app-1.2"));
-        assert!(!safe_in_a_terminal_command("/Users/me/My Apps/app") && !safe_in_a_terminal_command("/a/\"b"));
     }
 
     #[test]

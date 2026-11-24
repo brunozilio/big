@@ -1,5 +1,5 @@
 use crate::api::Reply;
-use domain::account_pool::{self, Balance};
+use domain::account_pool;
 use domain::provider::{ModelProvider, ProviderBook, ProviderKey};
 use llm_providers::Config;
 use platform::sync::Locked;
@@ -25,23 +25,10 @@ pub(super) fn unnamed(config: &Config, label: String, kept: usize) -> String {
 }
 
 impl ModelProviders {
-    pub fn use_account(&self, provider: ModelProvider, wanted: &str) -> Reply {
-        let result = self.change(&mut |book| book.use_account(provider, wanted).map(|_| ()));
-        self.answer(provider, result)
-    }
-
     pub fn remove_account(&self, provider: ModelProvider, wanted: &str) -> Reply {
         let result = self.change(&mut |book| {
             let removed = book.remove(provider, wanted)?;
             self.secrets.delete(slot(provider, &removed.id));
-            Ok(())
-        });
-        self.answer(provider, result)
-    }
-
-    pub fn set_balance(&self, provider: ModelProvider, balance: Balance) -> Reply {
-        let result = self.change(&mut |book| {
-            book.set_balance(provider, balance);
             Ok(())
         });
         self.answer(provider, result)

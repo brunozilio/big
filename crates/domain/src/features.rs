@@ -8,7 +8,7 @@ mod tests {
 
     use super::*;
 
-    const ALL: [&str; 29] = [
+    const ALL: [&str; 25] = [
         flags::REDACT_SECRETS,
         flags::BUDGET,
         flags::ESCALATION,
@@ -20,7 +20,6 @@ mod tests {
         flags::OUTPUT_CLEANUP,
         flags::OUTPUT_FILTERS,
         flags::OUTPUT_SAVINGS,
-        flags::GIT_OFFER,
         flags::TEAM_MEMORY,
         flags::WEB_MAIN_CONTENT,
         flags::WEB_CLEANUP,
@@ -31,13 +30,10 @@ mod tests {
         flags::CODE_MODE,
         flags::MEMORY_ANCHORS,
         flags::STRUCTURED_LEARNINGS,
-        flags::LEARNING_CHECK,
         flags::BLAST_RADIUS,
         flags::CODE_MAP,
-        flags::MEMORY_SEED,
         flags::MEMORY_SCORECARD,
         flags::MEMORY_SEARCH,
-        flags::TRACE,
     ];
 
     #[test]

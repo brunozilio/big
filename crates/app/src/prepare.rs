@@ -5,7 +5,7 @@ use domain::{EngineEvent, PromptRequest, RunId};
 use platform::sync::Locked;
 
 use crate::api::Unsolicited;
-use crate::features::context::{Context, Finish, Submit};
+use crate::features::context::{Context, Finish};
 use crate::features::trace::export::Watch;
 use crate::services::LocalServices;
 
@@ -49,7 +49,6 @@ pub(crate) fn prepare(
     client: u64,
     run: RunId,
     request: &PromptRequest,
-    submit: Submit<'_>,
 ) -> Prepared {
     agent_engine::tools::peers::register(client, &request.session.cwd);
     let providers = &services.providers;
@@ -64,7 +63,7 @@ pub(crate) fn prepare(
     credentials.client = client;
     credentials.mcp_tokens = Some(services.mcp_auth.for_run());
     let request = services.extensions.brief(request, services.home());
-    let context = Context { client, services, submit };
+    let context = Context { services };
     let (request, finishes) = crate::features::prepare(&context, run, request);
     let exported = services
         .exporter

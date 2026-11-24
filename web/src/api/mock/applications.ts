@@ -1,4 +1,4 @@
-import type { Application, ApplicationDraft, CodeRepo, DirListing } from '../contract'
+import type { Application, ApplicationDraft, CloudAccount, CloudChoice, CodeRepo, DirListing } from '../contract'
 
 export const MOCK_HOME = '/Users/voce'
 
@@ -79,6 +79,17 @@ export function initialApplications(): Application[] {
 
 let counter = 0
 
+export const CLOUD_ACCOUNTS: CloudAccount[] = [
+  { id: '111122223333', name: 'acme-prod', email: 'ops@acme.com.br', roles: ['AdministratorAccess', 'Deploy'] },
+  { id: '444455556666', name: 'acme-dev', email: 'dev@acme.com.br', roles: ['Developer'] },
+]
+
+function checkedCloud(chosen: CloudChoice | null | undefined): CloudChoice | null {
+  if (!chosen) return null
+  const picked = { connection: chosen.connection.trim(), account: chosen.account.trim(), role: chosen.role.trim() }
+  return picked.connection && picked.account ? picked : null
+}
+
 export function checkedApplication(draft: ApplicationDraft, id: string): Application {
   const name = draft.name.trim()
   if (!name) throw new Error('Dê um nome à aplicação.')
@@ -95,5 +106,5 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
     }
   })
   const tracker = draft.tracker && draft.tracker.project && draft.tracker.connection ? draft.tracker : null
-  return { id, name, tracker, repositories, skipDependabot: draft.skipDependabot !== false }
+  return { id, name, tracker, cloud: checkedCloud(draft.cloud), repositories, skipDependabot: draft.skipDependabot !== false }
 }

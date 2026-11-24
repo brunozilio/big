@@ -9,7 +9,7 @@ impl Store {
     pub fn append(&self, item: &ItemId, events: &[WorkflowEvent]) -> Result<WorkItem> {
         let every = self.snapshot_every;
         self.write(|transaction| {
-            let before = projection(transaction, item)?.unwrap_or_default();
+            let before = current(transaction, item)?.unwrap_or_default();
             let start = before.version;
             let at = now();
             let mut state = before;
@@ -34,32 +34,55 @@ impl Store {
     }
 
     pub fn load(&self, item: &ItemId) -> Result<Option<WorkItem>> {
-        let connection = self.locked();
-        let snapshot: Option<String> = connection
-            .query_row(
-                "SELECT state FROM snapshots WHERE item = ?1 ORDER BY seq DESC LIMIT 1",
-                [item.as_str()],
-                |row| row.get(0),
-            )
-            .optional()?;
-        let base = snapshot.map(|text| serde_json::from_str::<WorkItem>(&text)).transpose()?;
-        let after = base.as_ref().map_or(0, |state| state.version);
-        let events = events_after(&connection, item, after)?;
-        if base.is_none() && events.is_empty() {
-            return Ok(None);
-        }
-        Ok(Some(events.iter().map(|(_, event)| event).fold(base.unwrap_or_default(), reduce)))
+        rebuilt(&self.locked(), item)
     }
 
     pub fn item(&self, item: &ItemId) -> Result<Option<WorkItem>> {
-        projection(&self.locked(), item)
+        let stored = {
+            let connection = self.locked();
+            stored(&connection, item)?
+        };
+        match stored.map(|text| serde_json::from_str::<WorkItem>(&text)) {
+            Some(Ok(state)) => Ok(Some(state)),
+            Some(Err(_)) => self.heal(item),
+            None => Ok(None),
+        }
     }
 
     pub fn items(&self) -> Result<Vec<WorkItem>> {
-        let connection = self.locked();
-        let mut statement = connection.prepare("SELECT state FROM items ORDER BY rowid")?;
-        let texts = statement.query_map([], |row| row.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
-        Ok(texts.iter().map(|text| serde_json::from_str(text)).collect::<serde_json::Result<_>>()?)
+        self.listed("SELECT id, state FROM items ORDER BY rowid")
+    }
+
+    pub fn active_items(&self) -> Result<Vec<WorkItem>> {
+        self.listed("SELECT id, state FROM items WHERE ended = 0 ORDER BY rowid")
+    }
+
+    fn listed(&self, query: &str) -> Result<Vec<WorkItem>> {
+        let rows = {
+            let connection = self.locked();
+            let mut statement = connection.prepare(query)?;
+            statement
+                .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
+                .collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        let mut items = Vec::with_capacity(rows.len());
+        for (id, text) in rows {
+            match serde_json::from_str::<WorkItem>(&text) {
+                Ok(state) => items.push(state),
+                Err(_) => items.extend(self.heal(&ItemId::from(id))?),
+            }
+        }
+        Ok(items)
+    }
+
+    fn heal(&self, item: &ItemId) -> Result<Option<WorkItem>> {
+        self.write(|transaction| {
+            let state = rebuilt(transaction, item)?;
+            if let Some(state) = &state {
+                project(transaction, item, state)?;
+            }
+            Ok(state)
+        })
     }
 
     pub fn events(&self, item: &ItemId, after: u64) -> Result<Vec<(u64, WorkflowEvent)>> {
@@ -87,10 +110,41 @@ impl Store {
     }
 }
 
-fn projection(connection: &Connection, item: &ItemId) -> Result<Option<WorkItem>> {
-    let text: Option<String> =
-        connection.query_row("SELECT state FROM items WHERE id = ?1", [item.as_str()], |row| row.get(0)).optional()?;
-    Ok(text.map(|text| serde_json::from_str(&text)).transpose()?)
+fn stored(connection: &Connection, item: &ItemId) -> Result<Option<String>> {
+    let text = connection
+        .query_row("SELECT state FROM items WHERE id = ?1", [item.as_str()], |row| row.get(0))
+        .optional()?;
+    Ok(text)
+}
+
+fn current(connection: &Connection, item: &ItemId) -> Result<Option<WorkItem>> {
+    match stored(connection, item)?.map(|text| serde_json::from_str::<WorkItem>(&text)) {
+        Some(Ok(state)) => Ok(Some(state)),
+        Some(Err(_)) | None => rebuilt(connection, item),
+    }
+}
+
+fn rebuilt(connection: &Connection, item: &ItemId) -> Result<Option<WorkItem>> {
+    let base = latest_snapshot(connection, item)?;
+    let after = base.as_ref().map_or(0, |state| state.version);
+    let events = events_after(connection, item, after)?;
+    if base.is_none() && events.is_empty() {
+        return Ok(None);
+    }
+    Ok(Some(events.iter().map(|(_, event)| event).fold(base.unwrap_or_default(), reduce)))
+}
+
+fn latest_snapshot(connection: &Connection, item: &ItemId) -> Result<Option<WorkItem>> {
+    let mut statement = connection.prepare("SELECT seq, state FROM snapshots WHERE item = ?1 ORDER BY seq DESC")?;
+    let mut rows = statement.query([item.as_str()])?;
+    while let Some(row) = rows.next()? {
+        let seq = unsigned(row.get(0)?)?;
+        let decoded = serde_json::from_str::<WorkItem>(&row.get::<_, String>(1)?).ok();
+        if let Some(state) = decoded.filter(|state| state.version == seq) {
+            return Ok(Some(state));
+        }
+    }
+    Ok(None)
 }
 
 fn project(transaction: &Transaction<'_>, item: &ItemId, state: &WorkItem) -> Result<()> {

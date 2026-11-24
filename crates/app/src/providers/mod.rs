@@ -8,7 +8,6 @@ mod signing;
 mod store;
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use platform::sync::Locked;
@@ -50,7 +49,6 @@ pub struct ModelProviders {
     runs: Arc<Mutex<HashMap<ModelProvider, u64>>>,
     lock: Arc<Mutex<()>>,
     in_flight: Arc<Mutex<HashMap<ModelProvider, Arc<signing::InFlight>>>>,
-    told_unkept: Arc<AtomicBool>,
     clock: Clock,
 }
 
@@ -75,7 +73,6 @@ impl ModelProviders {
             runs: Arc::default(),
             lock: Arc::default(),
             in_flight: Arc::default(),
-            told_unkept: Arc::default(),
             clock: Arc::new(system_clock),
         }
     }
@@ -127,15 +124,6 @@ impl ModelProviders {
             .and_then(|()| self.parse(provider, raw))
             .and_then(|(config, label)| self.keep(provider, label, &config));
         self.answer(provider, result)
-    }
-
-    pub fn unkept_notice(&self) -> Option<String> {
-        let reason = self.secrets.unkept()?;
-        let told = self.told_unkept.swap(true, Ordering::SeqCst);
-        (!told).then(|| {
-            let refusal = crate::secrets::refusal(&reason);
-            format!("{refusal}. Connecting a provider or signing in fails until this is fixed.")
-        })
     }
 
     fn parse(&self, provider: ModelProvider, raw: &str) -> Result<(Config, String), String> {

@@ -40,3 +40,20 @@ fn a_change_and_a_pipeline_take_the_page_s_shape() {
     assert_eq!(shown["jobs"][1]["state"], "failed");
     assert_eq!(shown["jobs"][1]["steps"][0]["state"], "running");
 }
+
+#[test]
+fn the_cloud_accounts_take_the_page_s_shape() {
+    let raw = json!({ "accounts": [
+        { "id": "111", "name": "prod", "email": "p@x", "roles": ["Admin", "", "ReadOnly"] },
+        { "id": 222, "name": "arn:aws:iam::222:user/ana" },
+        { "id": "", "name": "sem id", "roles": [] },
+    ] });
+    assert_eq!(
+        accounts(&raw),
+        json!([
+            { "id": "111", "name": "prod", "email": "p@x", "roles": ["Admin", "ReadOnly"] },
+            { "id": "222", "name": "arn:aws:iam::222:user/ana", "email": "", "roles": [] },
+        ])
+    );
+    assert_eq!(accounts(&json!({})), json!([]));
+}

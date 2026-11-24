@@ -1,5 +1,5 @@
-import { step, testCases } from "sdk";
-import { agentOptions, defined, effects, inLanguage, issueOf, object, planOf, waitOptions } from "./context.js";
+import { step, markdown, testCases } from "sdk";
+import { agentOptions, attempt, defined, effects, inLanguage, issueOf, missingConnection, object, planOf, waitOptions } from "./context.js";
 
 const KINDS = { api: "API", ui: "Tela" };
 
@@ -85,22 +85,31 @@ export function listing(cases) {
   return cases.map(described).join("\n\n");
 }
 
-function asked(ctx, opts, issue, feedback) {
+const REUSE = "Esses casos já existem e estão ligados à issue. Não os repita: escreva só os casos que faltam para cobrir os critérios de aceite. Se nenhum faltar, devolva a lista de casos vazia.";
+
+function asked(ctx, opts, issue, feedback, existing) {
   if (opts.prompt) return opts.prompt;
   const plan = planOf(ctx, opts);
   const parts = [`Escreva os casos de teste E2E, de API e de tela, para o item: ${plan.title}`];
   if (issue) parts.push(`Issue: ${issue}`);
   if (plan.story) parts.push(plan.story);
   if (plan.text && plan.text !== plan.story) parts.push(`## Plano\n\n${plan.text}`);
+  if (existing.length > 0) parts.push(`## Casos que já existem\n\n${listing(existing)}\n\n${REUSE}`);
   if (feedback) parts.push(`## Mudanças pedidas\n\n${feedback}`);
   return inLanguage(parts.join("\n\n"));
 }
 
-async function drafted(ctx, opts, issue, session, feedback) {
-  const input = defined({ prompt: asked(ctx, opts, issue, feedback), session });
+const sameTitle = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
+
+export function missingOnly(cases, existing) {
+  return cases.filter((entry) => !existing.some((known) => (entry.ref && entry.ref === known.ref) || sameTitle(entry.title, known.title)));
+}
+
+async function drafted(ctx, opts, issue, session, feedback, existing) {
+  const input = defined({ prompt: asked(ctx, opts, issue, feedback, existing), session });
   const worktree = opts.worktree ?? ctx.item.branch ?? undefined;
   const result = await ctx.agent(opts.agent ?? "tester", input, agentOptions(opts, { mode: opts.mode ?? "plan", worktree }));
-  return { session: result.session, cases: casesOf(result) };
+  return { session: result.session, cases: missingOnly(casesOf(result), existing) };
 }
 
 async function judged(ctx, opts, draft) {
@@ -133,7 +142,23 @@ async function trackerId(ctx, opts, issue) {
   }
 }
 
-async function created(ctx, given, cases, issue) {
+const SKIPPED = "skip";
+
+async function linkedCases(ctx, given, issue) {
+  if (!issue || given.reuse === false) return [];
+  const opts = testsOptions(ctx, given);
+  for (;;) {
+    const found = await attempt(() => ctx.call("tests", "cases", { issue }, { ...effects(opts), optional: true }));
+    if (found !== null) {
+      const listed = (Array.isArray(found) ? found : []).map(object).filter((entry) => entry.ref && entry.title);
+      return listed.map(bdd);
+    }
+    const chosen = await missingConnection(ctx, given, "tests", "casos de teste");
+    if (chosen !== "retry") return chosen === SKIPPED ? SKIPPED : ctx.cancel("cancelado por falta de conexão de casos de teste");
+  }
+}
+
+async function created(ctx, given, cases, issue, existing) {
   const opts = testsOptions(ctx, given);
   const issueId = await trackerId(ctx, opts, issue);
   const labels = Array.isArray(opts.labels) ? opts.labels : ["e2e"];
@@ -156,7 +181,7 @@ async function created(ctx, given, cases, issue) {
   }
   const title = issue ? `${issue} · ${planOf(ctx, opts).title}` : planOf(ctx, opts).title;
   const cycle = await ctx.call("tests", "create_cycle", defined({ project: opts.project, title, issue: issue ?? undefined, issue_id: issueId }), effects(opts));
-  return { cases: made, cycle: cycle.ref, cycleUrl: cycle.url ?? null };
+  return defined({ cases: [...existing, ...made], reused: existing.length > 0 ? existing.map((entry) => entry.ref) : undefined, cycle: cycle.ref, cycleUrl: cycle.url ?? null });
 }
 
 export default step({
@@ -165,18 +190,21 @@ export default step({
   icon: "hNoteEdit",
   needs: "tests",
   doing: "Escrevendo casos de teste",
-  view: (s) => (Array.isArray(s.cases) ? [testCases(s.cases.map(bdd), defined({ session: s.session }))] : []),
+  view: (s) => (Array.isArray(s.cases) ? [testCases(s.cases.map(bdd), defined({ session: s.session }))] : s.reason ? [markdown(s.reason)] : []),
   async run(ctx, opts) {
     const issue = issueOf(ctx, opts);
-    let draft = await drafted(ctx, opts, issue, undefined, undefined);
+    const existing = await linkedCases(ctx, opts, issue);
+    if (existing === SKIPPED) return ctx.skip({ reason: "Etapa pulada: nenhuma conexão de casos de teste." });
+    if (!Array.isArray(existing)) return existing;
+    let draft = await drafted(ctx, opts, issue, undefined, undefined, existing);
     for (;;) {
-      if (draft.cases.length === 0) return ctx.fail({ session: draft.session, error: "o testador não escreveu nenhum caso de teste" });
-      const verdict = await judged(ctx, opts, draft);
+      if (draft.cases.length === 0 && existing.length === 0) return ctx.fail({ session: draft.session, error: "o testador não escreveu nenhum caso de teste" });
+      const verdict = draft.cases.length === 0 ? { approved: true } : await judged(ctx, opts, { ...draft, cases: [...existing, ...draft.cases] });
       if (verdict.approved) {
-        const made = await created(ctx, opts, draft.cases, issue);
+        const made = await created(ctx, opts, draft.cases, issue, existing);
         return ctx.pass(defined({ session: draft.session, issue: issue ?? undefined, by: verdict.by, ...made }));
       }
-      draft = await drafted(ctx, opts, issue, draft.session, verdict.changes);
+      draft = await drafted(ctx, opts, issue, draft.session, verdict.changes, existing);
     }
   },
 });

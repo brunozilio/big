@@ -36,10 +36,9 @@ impl StoreView {
 #[async_trait]
 impl ItemView for StoreView {
     async fn active(&self) -> Result<Vec<Desired>, Error> {
-        let items = self.store.items()?;
+        let items = self.store.active_items()?;
         Ok(items
             .iter()
-            .filter(|item| !item.is_ended())
             .map(|item| desired_of(item, self.policy(&item.workflow)))
             .collect())
     }

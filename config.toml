@@ -44,11 +44,15 @@ gates = "checks,ci,review"
 failure_threshold = 3
 autonomy = "near"
 
+[store]
+snapshot_every = "200"
+
 [sync]
 fast_poll_seconds = "15"
 slow_poll_seconds = "180"
 reconcile_minutes = "10"
 error_backoff_seconds = "5"
+seen_retention_days = "30"
 
 [agent]
 stream_idle_seconds = "300"
@@ -75,7 +79,6 @@ load_on_call = true
 output_cleanup = true
 output_filters = true
 output_savings = true
-git_offer = true
 team_memory = true
 web_main_content = true
 web_cleanup = true
@@ -86,13 +89,10 @@ web_empty_page_error = true
 code_mode = true
 memory_anchors = true
 structured_learnings = true
-learning_check = true
 blast_radius = true
 code_map = true
-memory_seed = true
 memory_scorecard = true
 memory_search = true
-trace = true
 
 [pricing]
 claude_subscription = "anthropic"
@@ -166,7 +166,10 @@ gemini_3_5_flash_lite = "0.3 2.5 0.03 0"
 gemini_3_1_pro_preview = "2 12 0.2 0 | 200000 4 18 0.4 0"
 
 [prices_xai]
-grok_4_7 = "2 6 0.5 0 | 200000 4 12 1 0"
-grok_4_6 = "2 6 0.5 0 | 200000 4 12 1 0"
-grok_4_5 = "2 6 0.3 0 | 200000 4 12 0.6 0"
-grok_4_3 = "1.25 2.5 0.2 0"
+grok_4_7 = "2 6 0.5 0 | 199999 4 12 1 0"
+grok_4_6 = "2 6 0.5 0 | 199999 4 12 1 0"
+grok_4_5 = "2 6 0.3 0 | 199999 4 12 0.6 0"
+grok_4_3 = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"
+grok_4_20_0309_reasoning = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"
+grok_4_20_0309_non_reasoning = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"
+grok_4_20_multi_agent_0309 = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"

@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 pub const KEY: &str = "tracker-fake";
 pub const CONNECTION: &str = "trk";
 pub const STATUSES: [&str; 4] = ["A fazer", "Fazendo", "Revisando", "Feito"];
+const STAGES: [&str; 3] = ["Etapa 1", "Etapa 2", "Etapa 3"];
 
 #[derive(Debug, Clone, Default)]
 pub struct Issue {
@@ -101,7 +102,7 @@ fn create(state: &mut State, args: &Value, key: &str) -> Result<Value, ActionErr
 fn transition(state: &mut State, args: &Value) -> Result<Value, ActionError> {
     let key = text(args, "issue")?.to_owned();
     let to = text(args, "status")?.to_owned();
-    if !STATUSES.contains(&to.as_str()) && !to.starts_with("Etapa") {
+    if !STATUSES.contains(&to.as_str()) && !STAGES.contains(&to.as_str()) {
         return Err(ActionError::permanent(format!("{key} cannot go to {to}")));
     }
     let issue = state.issues.get_mut(&key).ok_or_else(|| ActionError::permanent(format!("no issue {key}")))?;
@@ -155,12 +156,18 @@ fn answer(state: &mut State, action: &str, args: &Value, key: &str) -> Result<Va
             Ok(json!({ "on": on, "reason": args["reason"] }))
         }
         "tracker.statuses" => Ok(json!(
-            STATUSES.iter().map(|name| json!({ "id": name, "name": name, "category": null })).collect::<Vec<_>>()
+            STATUSES
+                .iter()
+                .chain(STAGES.iter())
+                .map(|name| json!({ "id": name, "name": name, "category": null }))
+                .collect::<Vec<_>>()
         )),
+        "tracker.projects" => Ok(json!([{ "id": "1", "key": "K", "name": "Kanban" }])),
         "tracker.search" => {
             let issues: Vec<Value> = state.issues.iter().map(|(key, issue)| summary(key, issue)).collect();
             Ok(json!({ "issues": issues, "cursor": null }))
         }
+        "tests.cases" => Ok(json!([])),
         "tests.create_case" => Ok(json!({ "ref": "K-T1", "title": args["title"], "url": "" })),
         "tests.create_cycle" => Ok(json!({ "ref": "K-R1", "url": "" })),
         "tests.record" => Ok(json!({ "ref": "K-E1" })),

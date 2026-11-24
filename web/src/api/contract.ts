@@ -337,6 +337,7 @@ export type ConnectionCall =
   | { action: 'tracker.comment'; args: { key: string; body: string }; result: Comment }
   | { action: 'code.change'; args: { change: string }; result: ChangeData }
   | { action: 'ci.run'; args: { run: string }; result: PipelineRun }
+  | { action: 'cloud.accounts_and_roles'; args: Record<string, never>; result: CloudAccount[] }
 
 export type CallAction = ConnectionCall['action']
 export type CallArgs<A extends CallAction> = Extract<ConnectionCall, { action: A }>['args']
@@ -611,6 +612,19 @@ export interface CodeChoice {
   repo: string
 }
 
+export interface CloudChoice {
+  connection: string
+  account: string
+  role: string
+}
+
+export interface CloudAccount {
+  id: string
+  name: string
+  email: string
+  roles: string[]
+}
+
 export interface ApplicationRepository {
   id: string
   code: CodeChoice | null
@@ -624,6 +638,7 @@ export interface Application {
   name: string
   tracker: TrackerChoice | null
   tests?: TrackerChoice | null
+  cloud?: CloudChoice | null
   repositories: ApplicationRepository[]
   skipDependabot?: boolean
 }

@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use connectors::contracts;
 use domain::effect::{Call, ErrorClass};
 use serde_json::{Value, json};
+use store::CloudChoice;
 
 use crate::agent::Failure;
 use crate::effects::connector;
@@ -44,18 +45,34 @@ impl Drop for Lease {
     }
 }
 
-fn wanted(command: &Command) -> Option<Call> {
-    let connection = match &command.args["cloud"] {
+fn wanted(command: &Command, chosen: Option<&CloudChoice>) -> Option<(Call, bool)> {
+    let asked = match &command.args["cloud"] {
         Value::Bool(true) => None,
         Value::String(id) if !id.is_empty() => Some(id.clone()),
         _ => return None,
     };
-    Some(Call {
+    let optional = asked.is_none();
+    let chosen = chosen.filter(|chosen| asked.as_ref().is_none_or(|id| id == &chosen.connection));
+    let mut args = json!({});
+    if let Some(chosen) = chosen {
+        args["account"] = json!(chosen.account);
+        if !chosen.role.is_empty() {
+            args["role"] = json!(chosen.role);
+        }
+    }
+    let connection = asked.or_else(|| chosen.map(|chosen| chosen.connection.clone()));
+    let call = Call {
         capability: contracts::CLOUD.to_owned(),
         action: contracts::cloud::IDENTITY.to_owned(),
         connection,
-        args: json!({}),
-    })
+        args,
+    };
+    Some((call, optional))
+}
+
+fn chosen(shared: &Shared, input: &Value) -> Option<CloudChoice> {
+    let id = crate::application::id_of(input)?;
+    shared.store.application(&id).ok().flatten().and_then(|application| application.cloud)
 }
 
 fn token() -> String {
@@ -100,9 +117,8 @@ fn environment(file: &std::path::Path, region: Option<&str>) -> Vec<(String, Str
     environment
 }
 
-pub async fn lease(shared: &Arc<Shared>, command: &Command) -> Result<Option<Lease>, Failure> {
-    let Some(call) = wanted(command) else { return Ok(None) };
-    let optional = call.connection.is_none();
+pub async fn lease(shared: &Arc<Shared>, command: &Command, input: &Value) -> Result<Option<Lease>, Failure> {
+    let Some((call, optional)) = wanted(command, chosen(shared, input).as_ref()) else { return Ok(None) };
     let (connection, _) = match crate::effects::connection_of(shared, &call) {
         Ok(found) => found,
         Err(Failure::Blocked(_)) if optional => return Ok(None),
@@ -170,9 +186,8 @@ mod tests {
         assert!(unknown.get("SessionToken").is_none());
     }
 
-    #[test]
-    fn an_agent_asks_for_the_cloud_with_true_or_a_connection() {
-        let command = |cloud: Value| Command {
+    fn command(cloud: Value) -> Command {
+        Command {
             seq: 1,
             kind: crate::protocol::AGENT.into(),
             branch: String::new(),
@@ -183,11 +198,34 @@ mod tests {
             retry: None,
             timeout: None,
             optional: false,
-        };
-        assert_eq!(wanted(&command(json!(true))).map(|call| call.connection), Some(None));
-        assert_eq!(wanted(&command(json!("aws-1"))).map(|call| call.connection), Some(Some("aws-1".to_owned())));
-        assert!(wanted(&command(json!(false))).is_none());
-        assert!(wanted(&command(Value::Null)).is_none());
+        }
+    }
+
+    #[test]
+    fn an_agent_asks_for_the_cloud_with_true_or_a_connection() {
+        let asked = |cloud: Value| wanted(&command(cloud), None).map(|(call, optional)| (call.connection, optional));
+        assert_eq!(asked(json!(true)), Some((None, true)));
+        assert_eq!(asked(json!("aws-1")), Some((Some("aws-1".to_owned()), false)));
+        assert_eq!(wanted(&command(json!(true)), None).map(|(call, _)| call.args), Some(json!({})));
+        assert!(wanted(&command(json!(false)), None).is_none());
+        assert!(wanted(&command(Value::Null), None).is_none());
+    }
+
+    #[test]
+    fn the_account_and_role_chosen_for_the_application_go_to_the_identity_call() {
+        let chosen = CloudChoice { connection: "cl-1".into(), account: "111".into(), role: "Deploy".into() };
+        let Some((call, optional)) = wanted(&command(json!(true)), Some(&chosen)) else { panic!("no call") };
+        assert_eq!(call.connection.as_deref(), Some("cl-1"));
+        assert_eq!(call.args, json!({ "account": "111", "role": "Deploy" }));
+        assert_eq!(call.action, contracts::cloud::IDENTITY);
+        assert!(optional, "an agent that only wants the cloud still runs without it");
+        let same = wanted(&command(json!("cl-1")), Some(&chosen)).map(|(call, _)| call.args);
+        assert_eq!(same, Some(json!({ "account": "111", "role": "Deploy" })));
+        let other = wanted(&command(json!("cl-2")), Some(&chosen)).map(|(call, _)| (call.connection, call.args));
+        assert_eq!(other, Some((Some("cl-2".to_owned()), json!({}))));
+        let account_only = CloudChoice { role: String::new(), ..chosen };
+        let args = wanted(&command(json!(true)), Some(&account_only)).map(|(call, _)| call.args);
+        assert_eq!(args, Some(json!({ "account": "111" })));
     }
 
     #[test]

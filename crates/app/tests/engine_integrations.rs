@@ -8,8 +8,7 @@ use agent_engine::{
     sessions::InMemorySessions,
     transcript::Block,
 };
-use app::api::features::memory::{MemoryOp, MemoryRequest};
-use app::api::{ClientCommand, Envelope, FeatureRequest, RequestId, ServerEvent, Unsolicited};
+use app::api::{ClientCommand, Envelope, RequestId, ServerEvent, Unsolicited};
 use app::{Backend, LocalBackend, LocalServices};
 use domain::{
     EngineEvent, MemoryBrief, MemoryEdit, MemoryKind, ModelOption, ModelProvider, PermissionMode, PromptRequest, RunId,
@@ -91,7 +90,6 @@ fn native_backend_searches_memory_and_learns() {
     let engine = Engine::new(Arc::new(Source), Arc::new(InMemorySessions::default()));
     let mut services = LocalServices::with_engine(Arc::new(engine)).kept_in(&dir.path().join("data"));
     services.providers = services.providers.with_store(Arc::new(app::InMemoryProviderStore::default()));
-    let backend = LocalBackend::new(services, Arc::new(|| {})).expect("valid test fixture");
     let fact = MemoryEdit::Remember {
         kind: MemoryKind::Semantic,
         text: "The release codename is PERSIMMON.".into(),
@@ -105,10 +103,9 @@ fn native_backend_searches_memory_and_learns() {
         tags: vec![],
         touches: vec![],
     }));
-    let seed = MemoryRequest { path: dir.path().to_path_buf(), op: MemoryOp::Edit { edits } };
-    backend
-        .send(Envelope::local(RequestId(1), ClientCommand::Feature(FeatureRequest::Memory(seed))))
-        .expect("valid test fixture");
+    let by = domain::Provenance { author: domain::Author::User, now: 0, origin: None };
+    services.memories.edit(dir.path(), &edits, by).expect("valid test fixture");
+    let backend = LocalBackend::new(services, Arc::new(|| {})).expect("valid test fixture");
     let model = ModelOption::new("fixture", "Fixture inference").served_by(ModelProvider::new("keyed"));
     let mut request = PromptRequest::plain(dir.path().into(), "Look it up and remember the tabs preference.", model);
     request.policy.permission = PermissionMode::Bypass;

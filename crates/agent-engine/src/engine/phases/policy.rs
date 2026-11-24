@@ -56,7 +56,6 @@ pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path) -> Policy {
         session_claims: on(flags::SESSION_CLAIMS),
         load_on_call: on(flags::LOAD_ON_CALL),
         code_mode: domain::code_mode::Mode::configured(),
-        teammate_mode: settings.teammate_mode,
         web: domain::web_reading::WebReading::configured(),
         output: domain::output::Shaping::configured(),
         bash_output: settings.bash_output,

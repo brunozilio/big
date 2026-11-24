@@ -6,7 +6,7 @@ use crate::protocol::{AGENT, kind_of};
 
 impl Orchestrator {
     pub fn runs_session(&self, session: &str) -> Result<bool> {
-        for item in self.shared.store.items()?.into_iter().filter(|item| !item.is_ended()) {
+        for item in self.shared.store.active_items()? {
             let stopped = item.impediment.as_ref().is_some_and(|found| found.reason.as_deref() != Some(WAITING_ANSWER));
             if stopped {
                 continue;

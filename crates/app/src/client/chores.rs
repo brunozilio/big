@@ -1,4 +1,4 @@
-use domain::{ChoreAnswer, Decision, EngineEvent, PromptRequest, SessionCommand};
+use domain::{ChoreAnswer, Decision, EngineEvent, SessionCommand};
 
 use crate::Error;
 use crate::client::run::Run;
@@ -9,29 +9,8 @@ impl Session {
         self.chore(SessionCommand::Side, question)
     }
 
-    pub fn title(&self, prompt: &str) -> Result<Run, Error> {
-        let mut request = PromptRequest::plain(self.cwd().to_owned(), prompt, self.model().clone());
-        request.session.command = Some(SessionCommand::Title);
-        self.start(request)
-    }
-
     pub fn suggest(&self) -> Result<Run, Error> {
         self.chore(SessionCommand::Suggest, "")
-    }
-
-    pub fn recap(&self) -> Result<Run, Error> {
-        self.chore(SessionCommand::Recap, "")
-    }
-
-    pub fn heads_up(&self) -> Result<Run, Error> {
-        self.chore(SessionCommand::HeadsUp, "")
-    }
-
-    fn chore(&self, command: SessionCommand, prompt: &str) -> Result<Run, Error> {
-        let mut request = PromptRequest::plain(self.cwd().to_owned(), prompt, self.model().clone());
-        request.session.resume = Some(self.id().ok_or(Error::NothingToAsk)?);
-        request.session.command = Some(command);
-        self.start(request)
     }
 }
 

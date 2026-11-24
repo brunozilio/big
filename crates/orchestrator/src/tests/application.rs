@@ -14,6 +14,7 @@ fn stored(web: &str) -> Arc<Store> {
         name: "Loja".into(),
         tracker: None,
         tests: None,
+        cloud: None,
         repositories: vec![Repository {
             id: "r1".into(),
             code: Some(CodeChoice { connection: "c-code".into(), repo: "acme/web".into() }),

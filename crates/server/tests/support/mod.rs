@@ -64,7 +64,7 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value)>>,
 }
 
-const ACTIONS: [&str; 8] = [
+const ACTIONS: [&str; 9] = [
     "code.repos",
     "tracker.issue",
     "tracker.search",
@@ -73,6 +73,7 @@ const ACTIONS: [&str; 8] = [
     "code.pull_request",
     "code.files_diff",
     "code.review_comments",
+    "cloud.accounts_and_roles",
 ];
 
 #[async_trait]
@@ -132,6 +133,9 @@ impl Provider for FakeProvider {
                   "default_branch": "main", "private": true },
             ]),
             "pipelines.run" => json!({ "ref": "o/r/runs/9", "pipeline": "CI", "state": "passed", "jobs": [] }),
+            "cloud.accounts_and_roles" => json!({ "accounts": [
+                { "id": "111122223333", "name": "prod", "email": "ops@acme.test", "roles": ["Admin", "Deploy"] },
+            ] }),
             _ => json!({}),
         })
     }

@@ -76,6 +76,10 @@ const MIGRATIONS: &[&str] = &[
         first_seen INTEGER NOT NULL
     );
 ",
+    "
+    ALTER TABLE event_cursors ADD COLUMN moved INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX seen_events_by_at ON seen_events (at);
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

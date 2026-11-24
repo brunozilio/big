@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { isBlock, isItem, isLiveEvent, isSession, isStepView } from '../src/api/guards'
+import { isApplication, isBlock, isCloudAccount, isItem, isLiveEvent, isSession, isStepView } from '../src/api/guards'
 import type { Application, Branding, CallResult, Connections, Models } from '../src/api/contract'
 
 const load = (name: string): unknown => JSON.parse(readFileSync(join(import.meta.dir, 'fixtures', 'server', `${name}.json`), 'utf8'))
@@ -63,11 +63,19 @@ describe('respostas reais do servidor', () => {
     expect(change.files.every((f) => typeof f.diff === 'string' && typeof f.firstLine === 'number')).toBe(true)
     const projects = load('call-projects') as CallResult<'tracker.projects'>
     expect(projects.every((p) => typeof p.key === 'string' && typeof p.name === 'string' && (p.avatar === null || typeof p.avatar === 'string'))).toBe(true)
+    const accounts = load('call-cloud-accounts') as unknown[]
+    expect(accounts.length).toBeGreaterThan(0)
+    expect(accounts.every(isCloudAccount)).toBe(true)
+    expect(isCloudAccount({ id: '1', name: 'x', email: '', roles: [3] })).toBe(false)
   })
 
   test('aplicações', () => {
     const applications = load('applications') as Application[]
     expect(applications.length).toBeGreaterThan(0)
+    expect(applications.every(isApplication)).toBe(true)
+    const chosen = { ...applications[0], cloud: { connection: 'c1', account: '111122223333', role: 'Deploy' } }
+    expect(isApplication(chosen)).toBe(true)
+    expect(isApplication({ ...applications[0], cloud: { connection: 'c1' } })).toBe(false)
     for (const a of applications) {
       expect(typeof a.id === 'string' && typeof a.name === 'string' && Array.isArray(a.repositories)).toBe(true)
       expect(a.tracker === null || (typeof a.tracker.connection === 'string' && typeof a.tracker.project === 'string')).toBe(true)

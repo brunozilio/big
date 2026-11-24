@@ -5,13 +5,12 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use app::{Backend, LocalBackend, LocalServices, Wake};
-use domain::{Effort, EngineEvent, MemoryBrief, MemoryEdit, MemoryKind, PromptRequest, RunId};
+use domain::{Author, Effort, EngineEvent, MemoryBrief, MemoryEdit, MemoryKind, PromptRequest, Provenance, RunId};
 #[path = "support/live_engine.rs"]
 mod live_engine;
-use app::api::features::memory::{MemoryOp, MemoryRequest};
-use app::api::{ClientCommand, Envelope, FeatureRequest, RequestId, ServerEvent, Unsolicited};
+use app::api::{ClientCommand, Envelope, RequestId, ServerEvent, Unsolicited};
 
-fn seed(backend: &LocalBackend, project: &Path) {
+fn seed(services: &LocalServices, project: &Path) {
     let mut edits = vec![MemoryEdit::Remember {
         kind: MemoryKind::Semantic,
         text: "The release codename of this project is PERSIMMON.".into(),
@@ -24,8 +23,8 @@ fn seed(backend: &LocalBackend, project: &Path) {
         tags: vec![],
         touches: vec![],
     }));
-    let request = MemoryRequest { path: project.to_path_buf(), op: MemoryOp::Edit { edits } };
-    backend.send(Envelope::local(RequestId(1), ClientCommand::Feature(FeatureRequest::Memory(request)))).expect("seed");
+    let by = Provenance { author: Author::User, now: 0, origin: None };
+    services.memories.edit(project, &edits, by).expect("seed");
 }
 
 #[test]
@@ -33,9 +32,9 @@ fn seed(backend: &LocalBackend, project: &Path) {
 fn an_agent_searches_and_writes_project_memory() {
     let project = tempfile::tempdir().expect("tempdir");
     let services = LocalServices::with_engine(Arc::new(live_engine::engine()));
+    seed(&services, project.path());
     let wake: Wake = Arc::new(|| {});
     let backend = LocalBackend::new(services, wake).expect("backend");
-    seed(&backend, project.path());
     let mut request = PromptRequest::plain(
         project.path().to_path_buf(),
         "Find the release codename in the project's memory with your memory search tool, then remember \

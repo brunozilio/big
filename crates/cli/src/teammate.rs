@@ -50,7 +50,7 @@ pub fn run(mut args: Args) -> Result<ExitCode, String> {
         None => std::env::current_dir().map_err(|error| error.to_string())?,
     };
     let cwd = std::fs::canonicalize(&cwd).map_err(|error| format!("{}: {error}", cwd.display()))?;
-    let client = app::Client::builder().cwd(&cwd).build().map_err(|error| error.to_string())?;
+    let client = app::Client::builder().build().map_err(|error| error.to_string())?;
     let models = client.models().map_err(|error| error.to_string())?;
     let model = domain::model::choose_model(&models, args.model.as_deref()).ok_or("no model is available")?;
     let mut session = client.session(cwd, model);

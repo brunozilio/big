@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api'
-import type { Application, ApplicationDraft, ApplicationRepository, CodeRepo, Connection, DirListing, Provider, TrackerProject } from '@/api/contract'
+import type { Application, ApplicationDraft, ApplicationRepository, CloudAccount, CloudChoice, CodeRepo, Connection, DirListing, Provider, TrackerProject } from '@/api/contract'
 import { errorText, setApplications, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card, EmptyState } from '@/ui/display'
@@ -52,6 +52,44 @@ export function useListed<T>(sources: Source[], load: (connection: string) => Pr
 export const loadProjects = (connection: string) => api().call(connection, 'tracker.projects', {})
 export const loadTestProjects = (connection: string) => api().call(connection, 'tests.projects', {})
 export const loadRepos = (connection: string) => api().call(connection, 'code.repos', {})
+export const loadCloudAccounts = (connection: string) => api().call(connection, 'cloud.accounts_and_roles', {})
+
+export function cloudOptions(accounts: CloudAccount[]): { key: string; label: string }[] {
+  return accounts.flatMap((a) => {
+    const name = a.name || a.id
+    if (a.roles.length === 0) return [{ key: a.id, label: name }]
+    return a.roles.map((role) => ({ key: `${a.id}/${role}`, label: `${name} · ${role}` }))
+  })
+}
+
+export function cloudKey(chosen: CloudChoice): string {
+  return choiceKey(chosen.connection, chosen.role ? `${chosen.account}/${chosen.role}` : chosen.account)
+}
+
+export function cloudChoice(value: string): CloudChoice | null {
+  const picked = fromKey(value)
+  if (!picked) return null
+  const at = picked.key.indexOf('/')
+  const account = at < 0 ? picked.key : picked.key.slice(0, at)
+  return { connection: picked.connection, account, role: at < 0 ? '' : picked.key.slice(at + 1) }
+}
+
+function CloudField({ open, value, onChange }: { open: boolean; value: CloudChoice | null; onChange: (next: CloudChoice | null) => void }) {
+  const clouds = useSources('cloud')
+  const accounts = useListed<CloudAccount>(clouds, loadCloudAccounts, open)
+  if (clouds.length === 0) return null
+  const options = [
+    { value: NONE, label: 'Padrão da conexão' },
+    ...clouds.flatMap((s) => cloudOptions(accounts[s.connection.id] ?? []).map((o) => ({ value: choiceKey(s.connection.id, o.key), label: o.label, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
+  ]
+  const current = value ? cloudKey(value) : NONE
+  if (value && !options.some((o) => o.value === current)) options.push({ value: current, label: value.role ? `${value.account} · ${value.role}` : value.account })
+  return (
+    <Field label="Conta e papel na nuvem">
+      <Select label="Conta e papel na nuvem" className="w-full" leading={<Icon name="cloud" size={16} className="shrink-0 text-faint" />} value={current} options={options} onValueChange={(v) => onChange(cloudChoice(v))} />
+    </Field>
+  )
+}
 
 export function folderName(directory: string): string {
   return directory.split('/').filter(Boolean).pop() ?? directory
@@ -225,6 +263,7 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
                 }} />
               </Field>
             )}
+            <CloudField open={open} value={draft.cloud ?? null} onChange={(cloud) => setDraft((d) => ({ ...d, cloud }))} />
           </div>
           <div className="flex items-center gap-2.5">
             <span className="flex"><Checkbox label="Ignorar dependabot" checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} /></span>

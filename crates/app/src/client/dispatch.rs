@@ -1,9 +1,9 @@
-use std::collections::{HashMap, VecDeque};
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::api::{Backend, ClientCommand, Envelope, Reply, RequestId, ServerEvent, Unsolicited};
+use crate::api::{Backend, ClientCommand, Envelope, Reply, RequestId, ServerEvent};
 use crossbeam_channel::{Receiver, RecvTimeoutError, Sender};
 use domain::{EngineEvent, RunId};
 use platform::sync::Locked;
@@ -12,7 +12,6 @@ use crate::Error;
 
 const ANSWER_TIMEOUT: Duration = Duration::from_secs(120);
 const SIGN_IN_MARGIN: Duration = Duration::from_secs(30);
-const UNSOLICITED_KEPT: usize = 256;
 const SHUT_DOWN: &str = "the backend has shut down";
 
 pub(crate) fn sign_in_patience() -> Duration {
@@ -21,14 +20,12 @@ pub(crate) fn sign_in_patience() -> Duration {
 
 struct Waiter {
     replies: Sender<Reply>,
-    long: bool,
 }
 
 #[derive(Default)]
 struct Shared {
     routes: Mutex<HashMap<RunId, Sender<EngineEvent>>>,
     waiters: Mutex<HashMap<RequestId, Waiter>>,
-    unsolicited: Mutex<VecDeque<Unsolicited>>,
     closed: AtomicBool,
 }
 
@@ -46,13 +43,7 @@ impl Shared {
                 }
             }
             ServerEvent::Reply { id, reply } => self.answer(id, reply),
-            ServerEvent::Unsolicited(unsolicited) => {
-                let mut kept = self.unsolicited.locked();
-                if kept.len() == UNSOLICITED_KEPT {
-                    kept.pop_front();
-                }
-                kept.push_back(unsolicited);
-            }
+            ServerEvent::Unsolicited(unsolicited) => tracing::debug!(?unsolicited, "the backend told something unasked"),
         }
     }
 
@@ -165,13 +156,9 @@ impl Dispatcher {
     }
 
     pub(crate) fn ask(&self, command: ClientCommand) -> Result<Pending, Error> {
-        self.asking(command, false)
-    }
-
-    fn asking(&self, command: ClientCommand, long: bool) -> Result<Pending, Error> {
         let id = self.next_id();
         let (replies, answered) = crossbeam_channel::unbounded();
-        self.shared.waiters.locked().insert(id, Waiter { replies, long });
+        self.shared.waiters.locked().insert(id, Waiter { replies });
         let pending = Pending { id, replies: answered, shared: Arc::clone(&self.shared) };
         if self.shared.closed.load(Ordering::SeqCst) {
             return Err(Error::Backend(SHUT_DOWN.into()));
@@ -185,7 +172,7 @@ impl Dispatcher {
         command: ClientCommand,
         pick: impl FnMut(Reply) -> Option<Result<T, String>>,
     ) -> Result<T, Error> {
-        self.asking(command, false)?.answer(ANSWER_TIMEOUT, pick)
+        self.ask(command)?.answer(ANSWER_TIMEOUT, pick)
     }
 
     pub(crate) fn flow<T>(
@@ -194,7 +181,7 @@ impl Dispatcher {
         within: Duration,
         pick: impl FnMut(Reply) -> Option<Result<T, String>>,
     ) -> Result<T, Error> {
-        let pending = self.asking(command, true)?;
+        let pending = self.ask(command)?;
         let answer = pending.answer(within, pick);
         if matches!(answer, Err(Error::Timeout)) {
             self.cancel(pending.id);
@@ -202,22 +189,10 @@ impl Dispatcher {
         answer
     }
 
-    pub(crate) fn cancel_flows(&self) {
-        let flows: Vec<RequestId> =
-            self.shared.waiters.locked().iter().filter(|(_, waiter)| waiter.long).map(|(id, _)| *id).collect();
-        for flow in flows {
-            self.cancel(flow);
-        }
-    }
-
     fn cancel(&self, request: RequestId) {
         if let Err(error) = self.send(ClientCommand::CancelRequest { request }) {
             tracing::debug!(%request, %error, "could not cancel a request");
         }
-    }
-
-    pub(crate) fn unsolicited(&self) -> Vec<Unsolicited> {
-        self.shared.unsolicited.locked().drain(..).collect()
     }
 
     pub(crate) fn follow(&self, run: RunId) -> Receiver<EngineEvent> {

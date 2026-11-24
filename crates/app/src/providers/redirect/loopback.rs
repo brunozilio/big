@@ -94,7 +94,8 @@ impl Loopback {
         format!("http://{}:{}{}", if self.localhost { "localhost" } else { "127.0.0.1" }, self.port, self.path)
     }
 
-    pub fn wait_callback(&self, state: &str) -> Result<(String, String), String> {
+    #[cfg(test)]
+    fn wait_callback(&self, state: &str) -> Result<(String, String), String> {
         self.wait_query(state, SIGN_IN_TIMEOUT)
     }
 
@@ -108,6 +109,7 @@ impl Loopback {
         self.wait_query(state, timeout).map(|(code, _)| code)
     }
 
+    #[cfg(test)]
     fn wait_query(&self, state: &str, timeout: Duration) -> Result<(String, String), String> {
         let pending = self.next_within(state, &[], timeout)?;
         let query = pending.query.clone();

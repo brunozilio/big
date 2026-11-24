@@ -18,11 +18,6 @@ impl Memories {
         held
     }
 
-    pub fn score(&self, project: &Path) -> String {
-        let mut books = self.lock();
-        self.book(&mut books, project).scorecard.report()
-    }
-
     pub(super) fn keep_score(&self, request: &PromptRequest, held: bool, outcome: &RunOutcome) {
         if !domain::features::on(brand::features::MEMORY_SCORECARD) {
             return;

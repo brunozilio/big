@@ -27,7 +27,7 @@ mod tests {
         let services = testing::services(Some(data.path()));
         let request = PromptRequest::plain(dir.path().into(), "speed up compact_history", ModelOption::new("m", "M"));
 
-        let (prepared, finish) = testing::with(1, &services, |context| prepare(context, RunId::new(), request));
+        let (prepared, finish) = testing::with(&services, |context| prepare(context, RunId::new(), request));
 
         assert!(finish.is_none());
         let map = prepared.host.code_map.expect("map");

@@ -118,3 +118,32 @@ async fn the_accounts_to_choose_are_the_portal_accounts() {
         Ok(("lab · 9".to_owned(), json!("Admin")))
     );
 }
+
+#[tokio::test]
+async fn the_account_and_role_asked_for_win_over_the_ones_chosen_at_sign_in() {
+    let chosen = json!({ "region": "eu-west-1", "account": "111", "role": "Admin" });
+    let creds = Credentials::new(&ConnectionId::from("aws3"), "sso-at", chosen);
+    let http = FakeHttp::new().once(
+        Method::Get,
+        "/federation/credentials?account_id=222&role_name=Deploy",
+        200,
+        r#"{"roleCredentials":{"accessKeyId":"ASIB","secretAccessKey":"s","sessionToken":"t","expiration":4102444800000}}"#,
+    );
+    let asked = checked(&http, &creds, cloud::IDENTITY, &json!({"account": "222", "role": "Deploy"}), "").await;
+    assert_eq!(asked.map(|a| (a["account"].clone(), a["role"].clone())), Ok((json!("222"), json!("Deploy"))));
+    let http = FakeHttp::new().once(
+        Method::Get,
+        "/federation/credentials?account_id=111&role_name=Admin",
+        200,
+        r#"{"roleCredentials":{"accessKeyId":"ASIC","secretAccessKey":"s","sessionToken":"t","expiration":4102444800000}}"#,
+    );
+    let kept = checked(&http, &creds, cloud::IDENTITY, &json!({}), "").await;
+    assert_eq!(kept.map(|a| a["access_key_id"].clone()), Ok(json!("ASIC")));
+}
+
+#[tokio::test]
+async fn console_credentials_answer_for_their_own_account_whatever_is_asked() {
+    let http = FakeHttp::new().always(Method::Post, "sts.us-east-1.amazonaws.com", 200, CALLER);
+    let answer = checked(&http, &console(), cloud::IDENTITY, &json!({"account": "123456789012"}), "").await;
+    assert_eq!(answer.map(|a| a["access_key_id"].clone()), Ok(json!("ASIA1")));
+}

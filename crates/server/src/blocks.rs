@@ -39,6 +39,17 @@ fn field(raw: &Value) -> Value {
     value
 }
 
+fn form(raw: &Value) -> Value {
+    let fields =
+        raw["fields"].as_array().map(|fields| fields.iter().map(field).collect::<Vec<_>>()).unwrap_or_default();
+    let label = raw["submit"].as_str().filter(|label| !label.trim().is_empty()).unwrap_or("Enviar");
+    let mut value = json!({ "type": "form", "fields": fields, "submit": { "action": SUBMIT, "label": label } });
+    if let Some(title) = raw["title"].as_str().filter(|title| !title.trim().is_empty()) {
+        value["title"] = json!(title);
+    }
+    value
+}
+
 fn button(raw: &Value) -> Value {
     let action = raw["action"].as_str().or(raw["id"].as_str()).unwrap_or_default();
     let mut value = json!({ "action": action, "label": raw["label"].as_str().unwrap_or(action) });
@@ -73,11 +84,7 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
         "markdown" => json!({ "type": "markdown", "text": text(&raw["text"]), "muted": raw["muted"] == true }),
         "cases" => cases(place, raw),
         "logs" => logs(raw),
-        "form" => json!({
-            "type": "form",
-            "fields": raw["fields"].as_array().map(|fields| fields.iter().map(field).collect::<Vec<_>>()).unwrap_or_default(),
-            "submit": { "action": SUBMIT, "label": "Enviar" },
-        }),
+        "form" => form(raw),
         "actions" => json!({
             "type": "actions",
             "buttons": raw["buttons"].as_array().map(|all| all.iter().map(button).collect::<Vec<_>>()).unwrap_or_default(),
@@ -214,6 +221,25 @@ mod tests {
         assert_eq!(first["ref"], "T-1");
         assert_eq!(first["when"], json!(["envio"]));
         assert_eq!(first["then"], json!(["201", "o corpo traz o id"]));
+    }
+
+    #[test]
+    fn a_form_keeps_its_title_and_submit_label_and_its_answer_reaches_the_step_as_is() {
+        let place = Place { connections: &[], waiting: true };
+        let raw = json!({ "type": "form", "title": "Onde criar a issue", "submit": "Criar issue", "fields": [
+            { "name": "project", "label": "Projeto", "kind": "select", "options": [{ "value": "OPS", "label": "OPS" }] },
+            { "name": "type", "label": "Tipo de issue", "kind": "date" },
+        ] });
+        let blocks = normalized(&place, &raw);
+        assert_eq!(blocks[0]["title"], "Onde criar a issue");
+        assert_eq!(blocks[0]["submit"], json!({ "action": SUBMIT, "label": "Criar issue" }));
+        assert_eq!(blocks[0]["fields"][0]["options"][0]["value"], "OPS");
+        assert_eq!(blocks[0]["fields"][1]["kind"], "text");
+        let plain = normalized(&place, &json!({ "type": "form", "fields": [] }));
+        assert_eq!(plain[0]["submit"]["label"], "Enviar");
+        assert_eq!(plain[0].get("title"), None);
+        let values = json!({ "project": "OPS", "type": "" });
+        assert_eq!(input(SUBMIT, values.clone()), (SUBMIT.to_owned(), values));
     }
 
     #[test]

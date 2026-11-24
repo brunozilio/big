@@ -73,6 +73,7 @@ fn sync_config() -> sync::SyncConfig {
         fast_poll: Duration::from_millis(100),
         slow_poll: Duration::from_millis(200),
         reconcile_every: Duration::from_millis(300),
+        seen_retention: Duration::from_secs(3600),
         retry: domain::effect::RetryPolicy {
             max: u32::MAX,
             initial: Duration::from_millis(50),

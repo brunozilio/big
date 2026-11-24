@@ -52,7 +52,9 @@ pub struct State {
     pub sent: Vec<String>,
     pub merges: usize,
     pub deploy_reviews: Vec<String>,
+    pub deploy_comments: Vec<String>,
     pub ci_running: bool,
+    pub resolved: Vec<String>,
     next: u64,
 }
 
@@ -162,6 +164,19 @@ impl Github {
         }
     }
 
+    pub fn open_threads(&self) -> Vec<String> {
+        let state = self.state();
+        let numbers: Vec<u64> = state.pulls.iter().map(|pull| pull.number).collect();
+        let listed = numbers.iter().flat_map(|number| {
+            let found = threads(&state, &json!({ "variables": { "number": number } }));
+            found["data"]["repository"]["pullRequest"]["reviewThreads"]["nodes"].as_array().cloned().unwrap_or_default()
+        });
+        listed
+            .filter(|node| node["isResolved"] == false)
+            .filter_map(|node| node["id"].as_str().map(str::to_owned))
+            .collect()
+    }
+
     pub fn ci_runs(&self) -> usize {
         self.state().runs.iter().filter(|run| run.name == "CI").count()
     }
@@ -209,7 +224,13 @@ impl Github {
     fn route(&self, method: Method, path: &str, body: &Value) -> Result<HttpResponse, ActionError> {
         let mut state = self.state();
         let Some((repo, rest)) = self.split(path) else {
-            return if path == "/graphql" { reply(200, &threads(&state, body)) } else { missing() };
+            return match path {
+                "/graphql" if body["query"].as_str().is_some_and(|query| query.contains("resolveReviewThread")) => {
+                    reply(200, &resolve(&mut state, body))
+                }
+                "/graphql" => reply(200, &threads(&state, body)),
+                _ => missing(),
+            };
         };
         let rest = rest.as_str();
         let bare = rest.split('?').next().unwrap_or_default();
@@ -349,6 +370,7 @@ fn pulls(
 fn runs(state: &mut State, method: Method, id: &str, rest: &[&str], body: &Value) -> Result<HttpResponse, ActionError> {
     let id: u64 = id.parse().unwrap_or_default();
     let reviews = &mut state.deploy_reviews;
+    let comments = &mut state.deploy_comments;
     let Some(run) = state.runs.iter_mut().find(|run| run.id == id) else { return missing() };
     match (method, rest) {
         (Method::Get, []) => reply(200, &run_json(run)),
@@ -369,6 +391,7 @@ fn runs(state: &mut State, method: Method, id: &str, rest: &[&str], body: &Value
         (Method::Post, ["pending_deployments"]) => {
             let approved = body["state"] == "approved";
             reviews.push(body["state"].as_str().unwrap_or_default().to_owned());
+            comments.push(body["comment"].as_str().unwrap_or_default().to_owned());
             run.status = "completed".into();
             run.conclusion = Some(if approved { "success" } else { "failure" }.into());
             run.updated = now();
@@ -376,6 +399,14 @@ fn runs(state: &mut State, method: Method, id: &str, rest: &[&str], body: &Value
         }
         _ => missing(),
     }
+}
+
+fn resolve(state: &mut State, body: &Value) -> Value {
+    let thread = body["variables"]["thread"].as_str().unwrap_or_default().to_owned();
+    if !state.resolved.contains(&thread) {
+        state.resolved.push(thread.clone());
+    }
+    json!({ "data": { "resolveReviewThread": { "thread": { "id": thread, "isResolved": true } } } })
 }
 
 fn threads(state: &State, body: &Value) -> Value {
@@ -388,7 +419,8 @@ fn threads(state: &State, body: &Value) -> Value {
         .flat_map(|review| review.lines.iter().map(move |line| (review.id, line)))
         .enumerate()
         .map(|(at, (review, line))| {
-            json!({ "id": format!("T{review}-{at}"), "isResolved": false, "isOutdated": false, "path": line["path"], "line": line["line"],
+            let id = format!("T{review}-{at}");
+            json!({ "id": id, "isResolved": state.resolved.contains(&id), "isOutdated": false, "path": line["path"], "line": line["line"],
                 "comments": { "nodes": [{ "id": format!("C{review}-{at}"), "body": line["body"], "createdAt": now(), "author": { "login": "você" } }] } })
         })
         .collect();

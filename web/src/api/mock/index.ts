@@ -1,7 +1,7 @@
 import { setClock } from '../clock'
 import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
-import { CODE_REPOS, checkedApplication, initialApplications, listDirs } from './applications'
+import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, initialApplications, listDirs } from './applications'
 import { INITIAL_CONNECTIONS, MODELS, PROVIDERS, usageFixture, usageLimitsFixture } from './fixtures'
 import { itemOfSession, sessionById } from './sessions'
 import {
@@ -133,6 +133,8 @@ export function mockApi(options: MockOptions = {}): Api {
           return changeData(a.change) as CallResult<A>
         case 'ci.run':
           return pipelineRun(a.run) as CallResult<A>
+        case 'cloud.accounts_and_roles':
+          return CLOUD_ACCOUNTS as CallResult<A>
       }
       throw new Error(`ação ${action} desconhecida`)
     }, 120)

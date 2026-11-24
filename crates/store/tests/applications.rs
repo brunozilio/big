@@ -1,4 +1,4 @@
-use store::{Application, CodeChoice, Repository, Store, TrackerChoice};
+use store::{Application, CloudChoice, CodeChoice, Repository, Store, TrackerChoice};
 
 fn application(id: &str, name: &str) -> Application {
     Application {
@@ -7,6 +7,7 @@ fn application(id: &str, name: &str) -> Application {
         name: name.into(),
         tracker: Some(TrackerChoice { connection: "c-tracker".into(), project: "APP".into() }),
         tests: Some(TrackerChoice { connection: "c-tests".into(), project: "APP".into() }),
+        cloud: Some(CloudChoice { connection: "c-cloud".into(), account: "111".into(), role: "Deploy".into() }),
         repositories: vec![
             Repository {
                 id: "r1".into(),
@@ -66,6 +67,7 @@ fn a_repository_saved_with_a_single_run_command_reads_it_as_a_list() {
 fn an_application_saved_before_the_dependabot_flag_skips_its_runs() {
     let old: Application = serde_json::from_str(r#"{"id":"a","name":"Loja","repositories":[]}"#).expect("old data");
     assert!(old.skip_dependabot);
+    assert_eq!(old.cloud, None, "agents keep the connection's own account and role");
     let off: Application = serde_json::from_str(r#"{"name":"Loja","skipDependabot":false}"#).expect("turned off");
     assert!(!off.skip_dependabot);
 }

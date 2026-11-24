@@ -25,32 +25,12 @@ fn failed(provider: ModelProvider, message: String) -> Reply {
 }
 
 impl ModelProviders {
-    pub fn sign_in(&self, provider: ModelProvider, replies: &Replies) {
-        self.sign_in_returning(provider, None, replies);
-    }
-
     pub fn sign_in_returning(&self, provider: ModelProvider, back: Option<String>, replies: &Replies) {
         if let Some(message) = self.cannot_sign_in(provider) {
             return replies.send(failed(provider, message));
         }
         let (this, replies) = (self.clone(), replies.clone());
         platform::named::spawn("provider-sign-in", move || this.signing_in(provider, back.as_deref(), &replies));
-    }
-
-    pub fn close_and_sign_in(&self, provider: ModelProvider, port: u16, pid: u32, replies: &Replies) {
-        if let Some(message) = self.secrets.unkept().map(|reason| crate::secrets::refusal(&reason)) {
-            return replies.send(failed(provider, message));
-        }
-        let (this, replies) = (self.clone(), replies.clone());
-        platform::named::spawn("provider-sign-in", move || {
-            if pid != std::process::id()
-                && this.ports.holder(port).is_some_and(|holder| holder.pid == pid)
-                && let Err(message) = this.ports.close(port, pid)
-            {
-                return replies.send(failed(provider, message));
-            }
-            this.signing_in(provider, None, &replies);
-        });
     }
 
     fn cannot_sign_in(&self, provider: ModelProvider) -> Option<String> {

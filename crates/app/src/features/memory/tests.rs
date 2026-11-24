@@ -1,9 +1,7 @@
-use crate::api::features::memory::{MemoryOp, MemoryReply, MemoryRequest};
 use domain::{Forgotten, MemoryKind, ModelOption};
 
 use super::*;
 use crate::dirs::project_key;
-use crate::features::context::Context;
 
 fn plain() -> Memories {
     Memories::new(Arc::new(InMemoryStore::default()))
@@ -54,7 +52,7 @@ fn every_twentieth_request_goes_without_memory_and_the_score_compares_both() {
         memories.finish(&briefed, &outcome);
     }
     assert_eq!(held, [20]);
-    let report = memories.score(dir.path());
+    let report = memories.store.load(dir.path()).scorecard.report();
     assert!(report.contains("With memory: 19 runs, 0.0 corrections"), "{report}");
     assert!(report.contains("Without memory: 1 runs, 100.0 corrections"), "{report}");
 }
@@ -111,7 +109,7 @@ fn a_run_is_briefed_and_its_edits_applied_on_completion() {
     std::fs::write(&brief.output, r#"{"remember":[{"kind":"episodic","text":"Tuned the renderer"}],"forget":[0]}"#)
         .expect("write");
     let applied = memories.finish(&briefed, &ended(true)).expect("changed").expect("saved");
-    assert_eq!((applied.optimizing, applied.added, applied.changed, applied.forgotten), (false, 1, 0, 1));
+    assert_eq!((applied.added, applied.changed, applied.forgotten), (1, 0, 1));
     let learned = listed(&applied.listing);
     assert_eq!(learned.len(), 1);
     assert_eq!((learned[0].kind, learned[0].author), (MemoryKind::Episodic, Author::Agent));
@@ -155,36 +153,6 @@ fn a_failed_run_changes_nothing() {
 }
 
 #[test]
-fn an_optimisation_can_be_undone_until_the_next_edit() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let memories = plain();
-    let both = [remember("Uses wgpu"), remember("The renderer uses wgpu")];
-    memories.edit(dir.path(), &both, by_user()).expect("edit");
-    let request = memories.optimization(dir.path(), ModelOption::new("opus", "Opus"));
-    assert!(request.prompt.text.contains("[0] semantic (render), from the user: Uses wgpu"));
-    let briefed = memories.brief(RunId::new(), &request, false);
-    let brief = briefed.host.memory.clone().expect("brief");
-    assert!(brief.optimizing && brief.recalled.is_empty() && !brief.tool);
-
-    std::fs::write(&brief.output, r#"{"forget":[0]}"#).expect("write");
-    let optimized = memories.finish(&briefed, &ended(true)).expect("changed").expect("saved");
-    assert_eq!((optimized.optimizing, optimized.added, optimized.forgotten), (true, 0, 1));
-    let optimized = optimized.listing;
-    assert_eq!(listed(&optimized).len(), 1);
-    assert_eq!(forgotten(&optimized).iter().map(|f| f.memory.id).collect::<Vec<_>>(), vec![MemoryId(0)]);
-    let undone = memories.undo(dir.path()).expect("undone");
-    assert_eq!(listed(&undone).len(), 2, "both memories are back");
-    assert!(forgotten(&undone).is_empty());
-    assert!(memories.undo(dir.path()).is_err(), "undone only once");
-
-    let briefed = memories.brief(RunId::new(), &request, false);
-    std::fs::write(&briefed.host.memory.clone().expect("brief").output, r#"{"forget":[1]}"#).expect("write");
-    let _ = memories.finish(&briefed, &ended(true));
-    memories.edit(dir.path(), &[remember("Inter is the font")], by_user()).expect("edit");
-    assert!(memories.undo(dir.path()).is_err(), "an edit ends the undo");
-}
-
-#[test]
 fn a_tool_shortens_what_is_recalled() {
     let memories = plain();
     let dir = tempfile::tempdir().expect("tempdir");
@@ -205,35 +173,6 @@ fn memory_that_fits_in_the_prompt_offers_no_search() {
     memories.edit(dir.path(), &[remember("Uses wgpu")], by_user()).expect("edit");
     let small = memories.brief(RunId::new(), &request(dir.path()), true).host.memory.expect("brief");
     assert_eq!((small.recalled.len(), small.tool), (1, false), "everything is already recalled");
-}
-
-#[test]
-fn the_feature_keeps_memory_in_the_data_folder_and_starts_optimisations() {
-    let data = tempfile::tempdir().expect("data");
-    let project = tempfile::tempdir().expect("project");
-    let services = crate::features::context::testing::services(Some(data.path()));
-    let asking = |op: MemoryOp| MemoryRequest { path: project.path().to_path_buf(), op };
-    crate::features::context::testing::with(1, &services, |context| {
-        let edited = handle(context, asking(MemoryOp::Edit { edits: vec![remember("Uses wgpu")] })).expect("edited");
-        assert!(matches!(&edited, MemoryReply::Listing(listing) if listing.memories.len() == 1), "{edited:?}");
-        let found = handle(context, asking(MemoryOp::Search { query: "wgpu".into() })).expect("found");
-        assert!(matches!(&found, MemoryReply::Found { scores, .. } if scores[0].0 == MemoryId(0)), "{found:?}");
-        assert!(handle(context, asking(MemoryOp::Undo)).is_err());
-    });
-    assert!(data.path().join("app.db").is_file());
-
-    let started = std::sync::Mutex::new(Vec::new());
-    let submit = |run: RunId, request: PromptRequest| {
-        started.lock().expect("lock").push((run, request));
-        Ok(())
-    };
-    let context = Context { client: 1, services: &services, submit: &submit };
-    let run = RunId::new();
-    let optimize = asking(MemoryOp::Optimize { run, model: ModelOption::new("m", "M") });
-    assert_eq!(handle(&context, optimize).expect("started"), MemoryReply::Optimizing { run });
-    let started = started.into_inner().expect("lock");
-    assert_eq!(started[0].0, run);
-    assert!(started[0].1.host.memory.as_ref().is_some_and(|brief| brief.optimizing));
 }
 
 #[test]
@@ -259,7 +198,6 @@ fn what_another_process_changed_is_read_not_what_this_one_remembers_reading() {
     elsewhere.edit(project, &[remember("Ships on Linux")], by_user()).expect("elsewhere");
 
     assert_eq!(listed(&here.load(project)).len(), 2, "the list");
-    assert_eq!(here.search(project, "linux").first().map(|hit| hit.0), Some(MemoryId(1)), "the search");
     let found = here.find(project, "linux", 5, &mut MemorySearches::default());
     assert!(matches!(&found, SearchAnswer::Found(found) if found[0].text == "Ships on Linux"), "{found:?}");
     let recalled = here.brief(RunId::new(), &request(project), false).host.memory.expect("brief").recalled;
@@ -271,28 +209,6 @@ fn what_another_process_changed_is_read_not_what_this_one_remembers_reading() {
 
     elsewhere.edit(project, &[MemoryEdit::Forget { id: MemoryId(0) }], by_user()).expect("forget");
     assert_eq!(forgotten(&here.load(project)).len(), 1);
-    assert!(here.search(project, "wgpu").iter().all(|hit| hit.0 != MemoryId(0)));
-}
-
-#[test]
-fn an_optimisation_can_still_be_undone_after_the_program_restarts() {
-    let dir = tempfile::tempdir().expect("tempdir");
-    let project = tempfile::tempdir().expect("project");
-    let before = on_disk(dir.path());
-    before.edit(project.path(), &[remember("Uses wgpu"), remember("The renderer uses wgpu")], by_user()).expect("edit");
-    let request = before.optimization(project.path(), ModelOption::new("opus", "Opus"));
-    let briefed = before.brief(RunId::new(), &request, false);
-    std::fs::write(&briefed.host.memory.clone().expect("brief").output, r#"{"forget":[0]}"#).expect("write");
-    before.finish(&briefed, &ended(true)).expect("changed").expect("saved");
-    drop(before);
-
-    let restarted = on_disk(dir.path());
-    assert_eq!(listed(&restarted.load(project.path())).len(), 1, "optimised");
-    let undone = restarted.undo(project.path()).expect("undone");
-
-    assert_eq!(listed(&undone).len(), 2, "both memories are back");
-    assert!(on_disk(dir.path()).undo(project.path()).is_err(), "undone only once, whichever process asks");
-    restarted.brief(RunId::new(), &request, false);
-    on_disk(dir.path()).edit(project.path(), &[remember("Inter is the font")], by_user()).expect("edit");
-    assert!(restarted.undo(project.path()).is_err(), "an edit ends the undo, whichever process made it");
+    let found = here.find(project, "wgpu", 5, &mut MemorySearches::default());
+    assert!(!matches!(&found, SearchAnswer::Found(found) if found.iter().any(|m| m.id == MemoryId(0))), "{found:?}");
 }

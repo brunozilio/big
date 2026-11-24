@@ -107,3 +107,22 @@ async fn an_unknown_token_has_no_credentials() {
     let kernel = world.start().await;
     assert!(matches!(kernel.cloud_credentials("nope").await, Err(crate::Error::UnknownCloudToken)));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_agent_gets_the_account_and_role_chosen_for_its_application() {
+    let mut world = World::new();
+    world.cloud = true;
+    world.provider.always("cloud.identity", json!({ "access_key_id": "AK", "secret_access_key": "SK", "region": "" }));
+    let chosen = store::CloudChoice { connection: "aws".into(), account: "111".into(), role: "Deploy".into() };
+    let application =
+        store::Application { id: "app".into(), name: "Loja".into(), cloud: Some(chosen), ..Default::default() };
+    world.store().save_application(&application).expect("application");
+    world.workflow("cloudy", CLOUDY);
+    let kernel = world.start().await;
+    let id = kernel.create_item("cloudy", json!({ "application": { "id": "app" } })).expect("item");
+    ended(&kernel, &id).await;
+    let calls = world.provider.calls.lock().expect("lock").clone();
+    let asked: Vec<Value> =
+        calls.into_iter().filter(|(name, _, _)| name == "cloud.identity").map(|(_, args, _)| args).collect();
+    assert_eq!(asked.first(), Some(&json!({ "account": "111", "role": "Deploy" })), "{asked:?}");
+}

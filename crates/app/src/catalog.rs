@@ -3,7 +3,7 @@ mod sqlite;
 #[cfg(test)]
 mod tests;
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 use domain::SessionId;
@@ -12,18 +12,12 @@ use platform::sync::Locked;
 
 pub use sqlite::SqliteSessionCatalog;
 
-pub(crate) const RECENT: usize = 30;
-
 pub trait SessionCatalog: Send + Sync {
     fn read(&self) -> Catalog;
     fn update(&self, change: &mut dyn FnMut(&mut Catalog));
 
     fn is_empty(&self) -> bool {
         self.read().listed().is_empty()
-    }
-
-    fn recent(&self, cwd: &Path, limit: usize) -> Vec<SessionId> {
-        newest_in(&self.read(), cwd, limit)
     }
 }
 
@@ -40,15 +34,6 @@ impl SessionCatalog for InMemorySessionCatalog {
     fn update(&self, change: &mut dyn FnMut(&mut Catalog)) {
         change(&mut self.kept.locked());
     }
-}
-
-fn newest_in(catalog: &Catalog, cwd: &Path, limit: usize) -> Vec<SessionId> {
-    catalog.listed().iter().filter(|row| row.cwd == cwd).take(limit).map(|row| row.session.clone()).collect()
-}
-
-#[cfg(test)]
-pub(crate) fn recent_sessions(catalog: &Catalog, cwd: &Path) -> Vec<SessionId> {
-    newest_in(catalog, cwd, RECENT)
 }
 
 pub(crate) struct Listing {

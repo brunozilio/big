@@ -18,8 +18,6 @@ pub struct Settings {
     #[serde(default)]
     pub small_model: Option<String>,
     #[serde(default)]
-    pub teammate_mode: domain::team::TeammateMode,
-    #[serde(default)]
     pub mcp_approval: domain::mcp_config::McpApproval,
     #[serde(default)]
     pub lsp_servers: Vec<LspLayer>,
@@ -190,12 +188,6 @@ impl Layer<'_> {
         }
         if let Some(value) = settings.get("smallModel") {
             merged.small_model = model_name(value, "smallModel")?;
-        }
-        if let Some(value) = settings.get("teammateMode") {
-            merged.teammate_mode = value
-                .as_str()
-                .and_then(domain::team::TeammateMode::named)
-                .ok_or("teammateMode must be process, tmux, iterm2 or auto")?;
         }
         Ok(())
     }

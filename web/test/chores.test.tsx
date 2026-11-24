@@ -38,15 +38,14 @@ function composer(props: Partial<Parameters<typeof Composer>[0]>) {
 }
 
 describe('resumo do item', () => {
-  test('itens com você mostram o resumo numa linha', async () => {
+  test('o card da lista mostra só o título, sem o resumo', async () => {
     const api = await started()
     const items = await api.items()
     const recaps = items.filter((i) => i.recap)
     expect(recaps.length).toBeGreaterThan(0)
     expect(recaps.every((i) => i.group === 'you' && isItem(i))).toBe(true)
     const view = render(<TooltipProvider><ItemsView onOpen={() => undefined} onConnect={() => undefined} fresh={null} /></TooltipProvider>)
-    const shown = view.getAllByTestId('item-recap').map((n) => n.textContent)
-    expect(shown).toEqual(expect.arrayContaining(recaps.map((i) => i.recap)))
+    for (const it of recaps) expect(view.queryByText(it.recap ?? '')).toBeNull()
   })
 })
 

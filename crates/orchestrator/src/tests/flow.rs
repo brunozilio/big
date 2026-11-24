@@ -238,3 +238,44 @@ async fn a_teammate_message_after_the_turn_wakes_the_agent_in_the_same_session_b
         "the client is released when the step ends"
     );
 }
+
+const ASKING_TEAM: &str = r#"
+import { workflow } from "sdk";
+
+export default workflow({
+  name: "asking",
+  async run(ctx, item) {
+    const done = await ctx.agent("worker", "a equipe pede permissão");
+    return { agent: done.text };
+  },
+});
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_teammate_s_question_waits_on_the_item_and_the_answer_goes_back_to_the_teammate() {
+    let world = World::new();
+    world.workflow("asking", ASKING_TEAM);
+    let kernel = world.start().await;
+    let id = kernel.create_item("asking", json!({ "title": "x" })).expect("item");
+    let mut asked = Vec::new();
+    for _ in 0..500 {
+        asked = kernel.asks();
+        if !asked.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+    }
+    let pending = asked.first().cloned().expect("the teammate's question reached the item");
+    assert_eq!(pending.item, id);
+    assert_eq!(pending.ask.id.0, "teammate-tester-r1");
+    assert!(matches!(&pending.ask.kind, domain::AskKind::Permission { tool, .. } if tool == "Bash"));
+    kernel.answer_ask(&pending.ask.id, &domain::Decision::Allow).expect("answer");
+    let cwd = world.engine.requests()[0].session.cwd.clone();
+    let team = agent_engine::team::Team::named(&cwd.join(".equipe"), "t");
+    let answers = team.unread("tester");
+    assert!(answers.iter().any(|mail| mail.text.contains("r1")), "{answers:?}");
+    assert!(kernel.asks().is_empty(), "answered once, not asked again");
+    team.left("tester");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item), json!({ "agent": "feito 1" }));
+}

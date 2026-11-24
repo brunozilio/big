@@ -8,11 +8,25 @@ async function pending(ctx, opts) {
   for (const entry of pullRequestsOf(ctx, opts)) {
     const threads = await ctx.call("code", "review_comments", { pr: entry.pr }, effects(codeOptions(opts, entry)));
     for (const found of Array.isArray(threads) ? threads : []) {
-      if (!found.resolved && !found.outdated) comments.push(defined({ path: found.path, line: found.line, body: found.body, author: found.author }));
+      if (!found.resolved && !found.outdated) {
+        comments.push(defined({ pr: entry.pr, thread: found.thread, path: found.path, line: found.line, body: found.body, author: found.author }));
+      }
     }
   }
   if (comments.length === 0) return null;
   return { step: "review", outcome: "comments", data: { summary: "O pull request tem comentários de review pendentes.", comments } };
+}
+
+export function threadsOf(feedback, before) {
+  const data = object(object(feedback).data);
+  const comments = Array.isArray(data.comments) ? data.comments : [];
+  const threads = (Array.isArray(before) ? before : []).filter((entry) => entry && entry.pr && entry.thread);
+  for (const comment of comments.map(object)) {
+    const pr = comment.pr ?? data.pr;
+    if (!comment.thread || !pr || threads.some((known) => known.thread === comment.thread)) continue;
+    threads.push({ pr, thread: comment.thread });
+  }
+  return threads;
 }
 
 function shown(s) {
@@ -73,9 +87,19 @@ export default step({
       result = await ctx.agent(agent, { prompt: NUDGE, session: result.session }, agentOptions(opts, { worktree }));
     }
     const output = object(result.output);
+    const threads = threadsOf(feedback, previous.threads);
+    const handed = threads.length > 0 ? threads : undefined;
     const missing = uncommitted(result, output.branch ?? branch);
-    if (missing) return ctx.fail({ error: missing, session: result.session });
+    if (missing) return ctx.fail(defined({ error: missing, session: result.session, threads: handed }));
     const repositories = Array.isArray(result.repositories) && result.repositories.some((repository) => repository.id) ? result.repositories : undefined;
-    return ctx.pass(defined({ session: result.session, branch: output.branch ?? branch, summary: output.summary ?? summaryLine(result.text), repositories }));
+    return ctx.pass(
+      defined({
+        session: result.session,
+        branch: output.branch ?? branch,
+        summary: output.summary ?? summaryLine(result.text),
+        repositories,
+        threads: handed,
+      }),
+    );
   },
 });

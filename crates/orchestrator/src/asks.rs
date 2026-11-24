@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use agent_engine::RunHandle;
 use domain::effect::IdempotencyKey;
+use domain::team::TeammateAsk;
 use domain::workflow::ItemId;
 use domain::{AgentAsk, AskId, AskKind, Decision};
 use serde::{Deserialize, Serialize};
@@ -22,6 +23,7 @@ struct OpenAsk {
     pending: PendingAsk,
     key: IdempotencyKey,
     run: Option<SharedRun>,
+    teammate: Option<(u64, TeammateAsk)>,
     restored: bool,
 }
 
@@ -60,14 +62,23 @@ impl Asks {
                 || (known.restored && known.key == key && known.pending.ask.kind == pending.ask.kind)
         });
         *open = kept;
-        open.push(OpenAsk { pending, key, run: Some(run), restored: false });
+        open.push(OpenAsk { pending, key, run: Some(run), teammate: None, restored: false });
         replaced.into_iter().map(|gone| gone.pending).collect()
+    }
+
+    pub fn open_teammate(&self, pending: PendingAsk, key: IdempotencyKey, client: u64, asked: TeammateAsk) -> bool {
+        let mut open = self.held();
+        if open.iter().any(|known| known.pending.ask.id == pending.ask.id) {
+            return false;
+        }
+        open.push(OpenAsk { pending, key, run: None, teammate: Some((client, asked)), restored: false });
+        true
     }
 
     pub fn restore(&self, pending: PendingAsk, key: IdempotencyKey) {
         let mut open = self.held();
         if !open.iter().any(|known| known.pending.ask.id == pending.ask.id) {
-            open.push(OpenAsk { pending, key, run: None, restored: true });
+            open.push(OpenAsk { pending, key, run: None, teammate: None, restored: true });
         }
     }
 
@@ -114,11 +125,17 @@ impl Asks {
     }
 
     pub fn answer(&self, ask: &AskId, decision: &Decision) -> Option<Answered> {
-        let (run, key, kind, restored) = {
+        let (run, key, kind, restored, teammate) = {
             let open = self.held();
             let known = open.iter().find(|known| &known.pending.ask.id == ask)?;
-            (known.run.clone(), known.key.clone(), known.pending.ask.kind.clone(), known.restored)
+            let teammate = known.teammate.clone();
+            (known.run.clone(), known.key.clone(), known.pending.ask.kind.clone(), known.restored, teammate)
         };
+        if let Some((client, asked)) = &teammate
+            && let Err(error) = agent_engine::team::lead_inbox::answer(*client, asked, decision)
+        {
+            tracing::warn!(%error, "a teammate's question could not be answered");
+        }
         if let Some(run) = &run {
             run.lock().unwrap_or_else(PoisonError::into_inner).answer(ask, decision);
         }
@@ -137,7 +154,7 @@ impl Asks {
 }
 
 pub fn restore(shared: &crate::shared::Shared) -> crate::error::Result<()> {
-    for item in shared.store.items()?.into_iter().filter(|item| !item.is_ended()) {
+    for item in shared.store.active_items()? {
         for entry in item.effects.values().filter(|entry| entry.outcome.is_none()) {
             let Some(open) = entry.progress["asks"].as_object() else { continue };
             for pending in open.values().filter_map(|value| serde_json::from_value::<PendingAsk>(value.clone()).ok()) {

@@ -112,7 +112,7 @@ async fn folder_id(api: &Api<'_>, project: &str, name: &str) -> Result<Value, Ac
 
 fn with_marker(text: Option<&str>, key: &str) -> Option<String> {
     match text {
-        _ if !key.is_empty() => Some(idempotency::marked(text.unwrap_or_default(), key).trim_start().to_owned()),
+        _ if !key.is_empty() => Some(idempotency::tagged(text.unwrap_or_default(), key)),
         Some(text) => Some(text.to_owned()),
         None => None,
     }
@@ -162,7 +162,7 @@ async fn keyed_cycle(api: &Api<'_>, project: &str, key: &str) -> Result<Option<V
         let wanted = json!({ "projectKey": project, "maxResults": LOOKUP_PAGE, "startAt": start });
         let answer = api.tool("zephyr_get_test_cycles", wanted).await?;
         let cycles = mcp::items(&answer, "values");
-        if let Some(found) = cycles.iter().find(|cycle| idempotency::carries(&text_of(cycle, "/description"), key)) {
+        if let Some(found) = cycles.iter().find(|cycle| idempotency::carries_tag(&text_of(cycle, "/description"), key)) {
             return Ok(Some(found.clone()));
         }
         let fetched = u64::try_from(cycles.len()).unwrap_or(0);
@@ -272,7 +272,7 @@ pub async fn record(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Value, A
     let project = valid_key(project.ok_or_else(|| ActionError::blocked(NO_PROJECT))?)?;
     if !key.is_empty() {
         let wanted = json!({ "projectKey": project, "testCycle": cycle, "testCase": case, "limit": PAGE });
-        let marked = |execution: &Value| idempotency::carries(&text_of(execution, "/comment"), key);
+        let marked = |execution: &Value| idempotency::carries_tag(&text_of(execution, "/comment"), key);
         if let Some(found) = by_cursor(api, "zephyr_get_test_executions", wanted, marked).await? {
             return Ok(json!({ "ref": reference(&found) }));
         }

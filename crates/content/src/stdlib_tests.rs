@@ -169,6 +169,7 @@ impl Fake {
                 json!({ "ref": "Z-T1", "title": inner["title"], "url": "https://tests/Z-T1" })
             }
             (Some("tests"), Some("create_cycle")) => json!({ "ref": "Z-R1", "url": "https://tests/Z-R1" }),
+            (Some("tests"), Some("cases")) => json!([]),
             _ => json!({ "ok": true }),
         }
     }
@@ -201,6 +202,9 @@ impl Fake {
         }
         if view.iter().any(|block| block["approve"] == "approve_cases") {
             return json!({ "action": "approve_cases", "values": {}, "by": "ana" });
+        }
+        if view.iter().any(|block| block["type"] == "form" && block["fields"][0]["name"] == "reason") {
+            return json!({ "action": "submit", "values": { "reason": "janela de congelamento" }, "by": "ana" });
         }
         if offers("approve_deploy") {
             let action = if self.reject_deploy { "reject_deploy" } else { "approve_deploy" };
@@ -374,6 +378,13 @@ fn the_default_workflow_delivers_an_item_end_to_end() {
     let verdicts: Vec<&Value> =
         calls(&asked, "submit_review").iter().map(|command| &command["args"]["args"]["verdict"]).collect();
     assert_eq!(verdicts, ["request_changes", "approve"]);
+    let resolved: Vec<&Value> =
+        calls(&asked, "resolve_thread").iter().map(|command| &command["args"]["args"]).collect();
+    assert_eq!(
+        resolved,
+        [&json!({ "thread": "t1", "pr": "PR-7" })],
+        "the approval resolves the thread the developer fixed"
+    );
     assert_eq!(calls(&asked, "merge")[0]["args"]["args"], json!({ "pr": "PR-7", "method": "squash" }));
     let reviewed = calls(&asked, "review_deployment");
     assert_eq!(reviewed[0]["args"]["args"], json!({ "run": "REL-1", "deployments": ["D1"], "decision": "approve" }));
@@ -721,7 +732,18 @@ fn a_known_issue_is_reused_and_a_rejected_deploy_raises_an_impediment() {
     let impediments: Vec<&Value> = of_kind(&asked, "impediment.set").iter().map(|command| &command["args"]).collect();
     assert_eq!(impediments[0]["on"], true);
     assert!(impediments[0]["reason"].as_str().is_some_and(|reason| reason.contains("producao")));
-    assert_eq!(impediments[0], &json!({ "on": true, "reason": "o deploy em producao foi rejeitado" }));
+    assert_eq!(
+        impediments[0],
+        &json!({ "on": true, "reason": "o deploy em producao foi rejeitado: janela de congelamento" })
+    );
+    let asked_reason = of_kind(&asked, "wait.human")
+        .into_iter()
+        .find(|command| {
+            command["args"]["view"].as_array().is_some_and(|view| view.iter().any(|block| block["type"] == "form"))
+        })
+        .expect("the person is asked why");
+    assert_eq!(asked_reason["args"]["view"][1]["fields"][0]["kind"], "textarea");
+    assert_eq!(calls(&asked, "review_deployment")[0]["args"]["args"]["comment"], "janela de congelamento");
     assert!(
         impediments.iter().any(|args| args["on"] == true
             && args["reason"].as_str().is_some_and(|reason| reason.starts_with("Release falhou")))
@@ -1008,9 +1030,11 @@ fn a_ticket_without_any_tracker_is_skipped_with_a_reason_instead_of_blocking() {
             _ => None,
         }
     });
-    let created = calls(&asked, "create_issue");
-    assert_eq!(created.len(), 1);
-    assert_eq!(created[0].get("connection"), None);
+    let listed = calls(&asked, "projects");
+    assert_eq!(listed.len(), 1);
+    assert_eq!(listed[0].get("connection"), None);
+    assert_eq!(listed[0]["optional"], true);
+    assert!(calls(&asked, "create_issue").is_empty(), "no tracker, nothing to create");
     assert_eq!(result["result"]["outcome"], "skipped", "{result}");
     let reason = result["result"]["data"]["reason"].as_str().expect("a reason");
     assert!(reason.contains("rastreador"), "{reason}");
@@ -1179,3 +1203,6 @@ fn cases_go_to_the_test_project_chosen_in_the_application() {
     assert_eq!(cycle["args"]["args"]["project"], "QA");
     assert_eq!(cycle["args"]["args"]["issue"], "T-1");
 }
+
+#[path = "stdlib_input_tests.rs"]
+mod input;

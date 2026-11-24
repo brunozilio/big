@@ -1,4 +1,4 @@
-use connectors::contracts::{code, pipelines, tests as suite, tracker};
+use connectors::contracts::{cloud, code, pipelines, tests as suite, tracker};
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use serde_json::{Value, json};
 use store::ConnectionRecord;
@@ -88,8 +88,21 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
         "code.repos" => repos(&caller, args).await,
         "code.change" => change(&caller, arg(args, "change")?).await,
         "ci.run" => pipeline(&caller, arg(args, "run")?).await,
+        "cloud.accounts_and_roles" => Ok(accounts(&caller.call(cloud::ACCOUNTS_AND_ROLES, json!({})).await?)),
         _ => Err(ApiError::bad(format!("A ação {action} não existe para a página."))),
     }
+}
+
+pub fn accounts(raw: &Value) -> Value {
+    let listed: Vec<Value> = list(raw, "accounts")
+        .iter()
+        .map(|account| {
+            let roles: Vec<String> = items(&account["roles"]).iter().map(text).filter(|role| !role.is_empty()).collect();
+            json!({ "id": text(&account["id"]), "name": text(&account["name"]), "email": text(&account["email"]), "roles": roles })
+        })
+        .filter(|account| !text(&account["id"]).is_empty())
+        .collect();
+    json!(listed)
 }
 
 async fn search(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {

@@ -16,6 +16,14 @@ pub struct CodeChoice {
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloudChoice {
+    pub connection: String,
+    pub account: String,
+    #[serde(default)]
+    pub role: String,
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Repository {
     #[serde(default)]
     pub id: String,
@@ -51,6 +59,8 @@ pub struct Application {
     pub tracker: Option<TrackerChoice>,
     #[serde(default)]
     pub tests: Option<TrackerChoice>,
+    #[serde(default)]
+    pub cloud: Option<CloudChoice>,
     #[serde(default)]
     pub repositories: Vec<Repository>,
     #[serde(rename = "skipDependabot", default = "on")]

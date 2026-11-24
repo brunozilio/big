@@ -4,7 +4,6 @@ use std::sync::{Arc, Mutex};
 use platform::sync::Locked;
 
 use crate::api::ClientCommand;
-use domain::budget::Spending;
 use domain::memory::MemoryBrief;
 use domain::session_run::{Carried, RunWatch};
 use domain::{Effort, ModelOption, PermissionMode, PromptRequest, SessionId};
@@ -19,11 +18,7 @@ pub struct Session {
     cwd: PathBuf,
     model: ModelOption,
     effort: Effort,
-    memory: bool,
     carried: Arc<Mutex<Carried>>,
-    added_dirs: Vec<PathBuf>,
-    roles: domain::model_roles::ModelRoles,
-    fallbacks: Vec<String>,
     headless: Headless,
     agent: Option<domain::MainAgentSpec>,
 }
@@ -43,54 +38,18 @@ impl Session {
             cwd,
             model,
             effort: Effort::Medium,
-            memory: true,
             carried: Arc::default(),
-            added_dirs: Vec::new(),
-            roles: Default::default(),
-            fallbacks: Vec::new(),
             headless: Headless::default(),
             agent: None,
         }
-    }
-
-    pub fn set_budget(&self, limit_usd: Option<f64>) {
-        self.carried.locked().spending.limit_usd = limit_usd;
-    }
-
-    pub fn spending(&self) -> Spending {
-        self.carried.locked().spending
-    }
-
-    pub fn fork_next(&self) {
-        self.carried.locked().fork_next();
     }
 
     pub fn set_headless(&mut self, headless: Headless) {
         self.headless = headless;
     }
 
-    pub fn add_dir(&mut self, dir: PathBuf) {
-        if !self.added_dirs.contains(&dir) {
-            self.added_dirs.push(dir);
-        }
-    }
-
-    pub fn added_dirs(&self) -> &[PathBuf] {
-        &self.added_dirs
-    }
-
     pub fn effort(mut self, effort: Effort) -> Self {
         self.effort = effort;
-        self
-    }
-
-    pub fn permission(self, mode: PermissionMode) -> Self {
-        self.carried.locked().mode = mode;
-        self
-    }
-
-    pub fn memory(mut self, on: bool) -> Self {
-        self.memory = on;
         self
     }
 
@@ -104,36 +63,8 @@ impl Session {
         self
     }
 
-    pub fn set_model(&mut self, model: ModelOption) {
-        self.model = model;
-    }
-
-    pub fn set_roles(&mut self, roles: domain::model_roles::ModelRoles) {
-        self.roles = roles;
-    }
-
-    pub fn set_fallbacks(&mut self, fallbacks: Vec<String>) {
-        self.fallbacks = fallbacks;
-    }
-
     pub fn set_permission(&mut self, mode: PermissionMode) {
         self.carried.locked().mode = mode;
-    }
-
-    pub fn set_effort(&mut self, effort: Effort) {
-        self.effort = effort;
-    }
-
-    pub fn effort_level(&self) -> Effort {
-        self.effort
-    }
-
-    pub fn model(&self) -> &ModelOption {
-        &self.model
-    }
-
-    pub fn permission_mode(&self) -> PermissionMode {
-        self.carried.locked().mode
     }
 
     pub fn id(&self) -> Option<SessionId> {
@@ -141,80 +72,30 @@ impl Session {
     }
 
     pub fn send(&self, prompt: &str) -> Result<Run, Error> {
-        self.send_with_images(prompt, Vec::new())
-    }
-
-    pub fn send_with_images(&self, prompt: &str, images: Vec<crate::Image>) -> Result<Run, Error> {
-        self.send_shown(prompt, images, None)
-    }
-
-    pub fn send_shown(
-        &self,
-        prompt: &str,
-        images: Vec<crate::Image>,
-        shown: Option<domain::request::Shown>,
-    ) -> Result<Run, Error> {
         let mut request = PromptRequest::plain(self.cwd.clone(), prompt, self.model.clone());
-        request.prompt.images = images;
-        request.prompt.shown = shown;
         request.session.effort = self.effort;
-        request.host.memory = self.memory.then(|| MemoryBrief::new(None));
+        request.host.memory = Some(MemoryBrief::new(None));
         request.session.agent.clone_from(&self.agent);
         {
-            let mut carried = self.carried.locked();
+            let carried = self.carried.locked();
             request.policy.permission = carried.mode;
             request.session.resume = carried.id.clone();
-            request.session.fork = carried.forks();
         }
         self.start(request)
     }
 
-    pub fn measure_context(&self) -> Result<Run, Error> {
-        let mut request = PromptRequest::plain(self.cwd.clone(), "", self.model.clone());
-        request.session.resume = self.id();
-        request.policy.permission = self.permission_mode();
-        request.session.command = Some(domain::SessionCommand::MeasureContext);
-        self.start(request)
-    }
-
-    pub fn compact(&self) -> Result<Run, Error> {
-        self.compact_on("")
-    }
-
-    pub fn compact_on(&self, focus: &str) -> Result<Run, Error> {
-        let mut request = PromptRequest::plain(self.cwd.clone(), focus, self.model.clone());
-        request.session.resume = Some(self.id().ok_or(Error::NothingToCompact)?);
-        request.session.command = Some(domain::SessionCommand::Compact);
-        self.start(request)
-    }
-
-    pub fn rewind(&self, index: u32) -> Result<Run, Error> {
-        let mut request = PromptRequest::plain(self.cwd.clone(), "", self.model.clone());
+    pub(crate) fn chore(&self, command: domain::SessionCommand, prompt: &str) -> Result<Run, Error> {
+        let mut request = PromptRequest::plain(self.cwd.clone(), prompt, self.model.clone());
         request.session.resume = Some(self.id().ok_or(Error::NothingToAsk)?);
-        request.session.command = Some(domain::SessionCommand::Rewind(index));
+        request.session.command = Some(command);
         self.start(request)
     }
 
-    pub fn branch(&self, index: u32) -> Result<Run, Error> {
-        let mut request = PromptRequest::plain(self.cwd.clone(), "", self.model.clone());
-        request.session.resume = Some(self.id().ok_or(Error::NothingToAsk)?);
-        request.session.command = Some(domain::SessionCommand::Branch(index));
-        self.start(request)
-    }
-
-    pub(crate) fn cwd(&self) -> &std::path::Path {
-        &self.cwd
-    }
-
-    pub(crate) fn start(&self, mut request: PromptRequest) -> Result<Run, Error> {
-        request.session.add_dirs = self.added_dirs.clone();
+    fn start(&self, mut request: PromptRequest) -> Result<Run, Error> {
         request.policy.max_turns = self.headless.max_turns;
         request.session.append_system.clone_from(&self.headless.append_system);
         request.session.fallback_model.clone_from(&self.headless.fallback_model);
         request.session.teammate.clone_from(&self.headless.teammate);
-        request.session.roles.clone_from(&self.roles);
-        request.session.fallbacks.clone_from(&self.fallbacks);
-        request.policy.budget = self.spending().budget();
         let watch = RunWatch::of(request.session.command);
         let run = Run::start(&self.dispatcher, |run| ClientCommand::SubmitPrompt { run, request })?;
         Ok(run.of_session(Arc::clone(&self.carried), watch))

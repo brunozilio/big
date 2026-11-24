@@ -1,5 +1,5 @@
 import { step, actions, markdown, review as changes } from "sdk";
-import { agentOptions, codeOptions, defined, effects, inLanguage, object, planOf, pullRequestsOf, waitOptions } from "./context.js";
+import { agentOptions, codeOptions, defined, effects, inLanguage, object, planOf, pullRequestsOf, source, waitOptions } from "./context.js";
 
 const VERDICTS = ["approve", "request_changes", "comment"];
 
@@ -28,7 +28,7 @@ async function changesAsked(ctx, opts, pr, answer) {
   const threads = await ctx.call("code", "review_comments", { pr }, effects(opts));
   const comments = (Array.isArray(threads) ? threads : [])
     .filter((entry) => !entry.resolved)
-    .map((entry) => defined({ path: entry.path, line: entry.line, body: entry.body, author: entry.author }));
+    .map((entry) => defined({ pr, thread: entry.thread, path: entry.path, line: entry.line, body: entry.body, author: entry.author }));
   return { pr, verdict: "request_changes", body: values.body ?? null, comments, by: answer.by ?? null };
 }
 
@@ -54,6 +54,20 @@ async function judge(ctx, opts, entry, many, session) {
   }
 }
 
+async function resolveAddressed(ctx, opts, pr) {
+  const handed = source(ctx, opts, "develop").threads;
+  const wanted = (Array.isArray(handed) ? handed : []).filter((entry) => entry && entry.pr === pr && entry.thread).map((entry) => entry.thread);
+  if (wanted.length === 0) return [];
+  const threads = await ctx.call("code", "review_comments", { pr }, effects(opts));
+  const open = new Set((Array.isArray(threads) ? threads : []).filter((entry) => !entry.resolved).map((entry) => entry.thread));
+  const resolved = [];
+  for (const thread of wanted.filter((id) => open.has(id))) {
+    await ctx.call("code", "resolve_thread", { thread, pr }, effects(opts));
+    resolved.push(thread);
+  }
+  return resolved;
+}
+
 export default step({
   name: "review",
   label: "Review",
@@ -66,6 +80,7 @@ export default step({
     if (prs.length === 0) return ctx.fail({ error: "não há pull request para revisar" });
     let session;
     let by;
+    const resolved = [];
     for (const entry of prs) {
       const options = codeOptions(opts, entry);
       if (opts.agent) session = await automatic(ctx, options, entry.pr);
@@ -75,8 +90,9 @@ export default step({
         return target ? ctx.goto(target, judged.data) : ctx.pass(judged.data);
       }
       by = judged.by;
+      if (opts.resolve !== false) resolved.push(...(await resolveAddressed(ctx, options, entry.pr)));
     }
     const listed = prs.length > 1 ? { prs: prs.map((entry) => entry.pr) } : {};
-    return ctx.pass(defined({ pr: prs[0].pr, verdict: "approve", by, session, ...listed }));
+    return ctx.pass(defined({ pr: prs[0].pr, verdict: "approve", by, session, resolved: resolved.length > 0 ? resolved : undefined, ...listed }));
   },
 });

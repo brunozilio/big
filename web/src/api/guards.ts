@@ -1,4 +1,4 @@
-import { BOARD_GROUPS, STEP_STATES, type Block, type BlockType, type Item, type LiveEvent, type Session, type SessionEvent, type StepView } from './contract'
+import { BOARD_GROUPS, STEP_STATES, type Application, type Block, type BlockType, type CloudAccount, type Item, type LiveEvent, type Session, type SessionEvent, type StepView } from './contract'
 
 type Shape = Record<string, unknown>
 
@@ -114,4 +114,18 @@ export function isLiveEvent(v: unknown): v is LiveEvent {
     default:
       return false
   }
+}
+
+const choice = (v: unknown, ...keys: string[]) => v === null || v === undefined || (obj(v) && keys.every((k) => str(v[k])))
+
+function isRepository(v: unknown): v is Application['repositories'][number] {
+  return obj(v) && str(v.id) && str(v.directory) && arr(v.run, str) && arr(v.verify, str) && choice(v.code, 'connection', 'repo')
+}
+
+export function isApplication(v: unknown): v is Application {
+  return obj(v) && str(v.id) && str(v.name) && choice(v.tracker, 'connection', 'project') && choice(v.tests, 'connection', 'project') && choice(v.cloud, 'connection', 'account', 'role') && arr(v.repositories, isRepository)
+}
+
+export function isCloudAccount(v: unknown): v is CloudAccount {
+  return obj(v) && str(v.id) && str(v.name) && str(v.email) && arr(v.roles, str)
 }

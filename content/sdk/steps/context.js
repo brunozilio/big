@@ -1,3 +1,5 @@
+import { markdown, actions } from "sdk";
+
 export const FINISHED = ["passed", "failed", "cancelled", "skipped"];
 export const SUCCEEDED = ["passed", "skipped"];
 
@@ -287,4 +289,28 @@ export async function failedLogs(ctx, opts, run) {
     texts.push(`## ${job.name}\n${tail(object(log).text, 4000)}`);
   }
   return texts.join("\n\n");
+}
+
+const CHOICES = [
+  { id: "retry", label: "Já conectei, tentar de novo", icon: "refresh", variant: "primary" },
+  { id: "skip", label: "Pular etapa", icon: "right" },
+  { id: "cancel", label: "Cancelar item", icon: "stop", variant: "danger" },
+];
+
+export async function missingConnection(ctx, opts, capability, what) {
+  const reason = `conecte uma conta para ${capability}`;
+  const text = `**Falta uma conexão de ${what}.** Conecte uma conta em Configurações › Conexões e tente de novo, ou siga sem esta etapa.`;
+  await ctx.impediment(true, reason);
+  const answer = await ctx.waitHuman([markdown(text), actions(CHOICES)], waitOptions(opts));
+  await ctx.impediment(false);
+  const chosen = object(answer).action;
+  return chosen === "skip" || chosen === "cancel" ? chosen : "retry";
+}
+
+export async function attempt(work) {
+  try {
+    return await work();
+  } catch {
+    return undefined;
+  }
 }

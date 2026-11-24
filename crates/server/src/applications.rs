@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::{Path as UrlPath, State};
 use axum::response::Response;
 use serde_json::Value;
-use store::{Application, CodeChoice, Repository, TrackerChoice};
+use store::{Application, CloudChoice, CodeChoice, Repository, TrackerChoice};
 
 use crate::attachments::random_id;
 use crate::error::{ApiError, ApiResult, done, json as reply};
@@ -34,6 +34,14 @@ fn repository(found: Repository) -> ApiResult<Repository> {
     Ok(Repository { id, code, directory, run: lines(&found.run), verify: lines(&found.verify) })
 }
 
+fn cloud(chosen: CloudChoice) -> CloudChoice {
+    CloudChoice {
+        connection: trimmed(&chosen.connection),
+        account: trimmed(&chosen.account),
+        role: trimmed(&chosen.role),
+    }
+}
+
 pub fn checked(mut application: Application) -> ApiResult<Application> {
     application.name = trimmed(&application.name);
     if application.name.is_empty() {
@@ -46,6 +54,8 @@ pub fn checked(mut application: Application) -> ApiResult<Application> {
         .tracker
         .map(|chosen| TrackerChoice { connection: trimmed(&chosen.connection), project: trimmed(&chosen.project) })
         .filter(|chosen| !chosen.connection.is_empty() && !chosen.project.is_empty());
+    application.cloud =
+        application.cloud.map(cloud).filter(|chosen| !chosen.connection.is_empty() && !chosen.account.is_empty());
     let mut kept: Vec<Repository> = Vec::new();
     for found in application.repositories {
         let mut found = repository(found)?;

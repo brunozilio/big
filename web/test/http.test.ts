@@ -24,6 +24,7 @@ describe('cliente HTTP', () => {
     await api.startSignIn('github', {})
     await api.pollSignIn({ flow: 'f1' })
     await api.saveBranding({ theme: 'dark' })
+    await api.call('c-cloud', 'cloud.accounts_and_roles', {})
     expect(calls.map((c) => `${c.method} ${c.url}`)).toEqual([
       `GET ${ROUTES.items}`,
       'POST /api/items/7/rerun',
@@ -34,9 +35,11 @@ describe('cliente HTTP', () => {
       'POST /api/connections/github/start',
       'POST /api/connections/device/poll',
       'PUT /api/branding',
+      'POST /api/connections/c-cloud/call',
     ])
     expect(calls[4].body).toEqual({ action: 'ci.run', args: { run: 'r1' } })
     expect(calls[5].body).toEqual({ event: 'e1', response: { kind: 'plan', decision: 'approve' } })
+    expect(calls[9].body).toEqual({ action: 'cloud.accounts_and_roles', args: {} })
   })
 
   test('pergunta à parte vai para a rota side com texto e modelo', async () => {

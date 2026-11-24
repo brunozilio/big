@@ -6,7 +6,7 @@ import { mockApi } from '../src/api/mock'
 import { MOCK_HOME } from '../src/api/mock/applications'
 import { boot, getState, stop } from '../src/api/store'
 import { NewItem } from '../src/screens/items/NewItem'
-import { ApplicationsView, suggestedCode } from '../src/screens/settings/Applications'
+import { ApplicationsView, cloudChoice, cloudKey, cloudOptions, suggestedCode } from '../src/screens/settings/Applications'
 import { FolderDialog } from '../src/screens/settings/FolderDialog'
 import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '../src/ui/overlay'
@@ -111,6 +111,57 @@ describe('aba Aplicações', () => {
     await waitFor(() => expect(box.getAttribute('aria-checked')).toBe('false'))
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(getState().applications?.[0]?.skipDependabot).toBe(false))
+  })
+})
+
+describe('conta e papel na nuvem', () => {
+  const withCloud = (): Api => {
+    const base = fresh()
+    const aws = { id: 'c-aws', provider: 'aws', label: 'AWS', account: 'acme', capabilities: ['cloud'], status: 'ok' as const }
+    return { ...base, connections: async () => {
+      const found = await base.connections()
+      return { ...found, connections: [...found.connections, aws] }
+    } }
+  }
+
+  test('cada papel de cada conta vira uma opção, e a conta sem papel vira uma só', () => {
+    const accounts = [{ id: '111', name: 'prod', email: '', roles: ['Admin', 'Deploy'] }, { id: '222', name: '', email: '', roles: [] }]
+    expect(cloudOptions(accounts)).toEqual([
+      { key: '111/Admin', label: 'prod · Admin' },
+      { key: '111/Deploy', label: 'prod · Deploy' },
+      { key: '222', label: '222' },
+    ])
+    expect(cloudChoice('c-aws::111/Deploy')).toEqual({ connection: 'c-aws', account: '111', role: 'Deploy' })
+    expect(cloudChoice('c-aws::222')).toEqual({ connection: 'c-aws', account: '222', role: '' })
+    expect(cloudChoice('none')).toBeNull()
+    expect(cloudKey({ connection: 'c-aws', account: '111', role: 'Deploy' })).toBe('c-aws::111/Deploy')
+  })
+
+  test('sem conexão de nuvem o campo não aparece', async () => {
+    await started()
+    const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    await view.findByLabelText('Nome')
+    expect(view.queryByRole('combobox', { name: 'Conta e papel na nuvem' })).toBeNull()
+  })
+
+  test('lista as contas e papéis da conexão e guarda a escolha na aplicação', async () => {
+    const base = withCloud()
+    const asked: string[] = []
+    const spy = { ...base, call: ((connection, action, args) => (asked.push(`${connection} ${action}`), base.call(connection, action, args))) as typeof base.call }
+    await started(spy)
+    const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    const field = await view.findByRole('combobox', { name: 'Conta e papel na nuvem' })
+    expect(field.textContent).toContain('Padrão da conexão')
+    await waitFor(() => expect(asked).toContain('c-aws cloud.accounts_and_roles'))
+    fireEvent.keyDown(field, { key: 'Enter' })
+    const option = await view.findByRole('option', { name: 'acme-prod · Deploy' })
+    expect(view.getByRole('option', { name: 'acme-dev · Developer' })).toBeTruthy()
+    fireEvent.keyDown(option, { key: 'Enter' })
+    await waitFor(() => expect(field.textContent).toContain('acme-prod · Deploy'))
+    fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(getState().applications?.[0]?.cloud).toEqual({ connection: 'c-aws', account: '111122223333', role: 'Deploy' }))
   })
 })
 

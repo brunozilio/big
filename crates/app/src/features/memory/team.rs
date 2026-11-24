@@ -36,25 +36,6 @@ pub fn load_in(project: &Path) -> Vec<Memory> {
         .collect()
 }
 
-pub fn share(gate: &Scope, memory: &Memory) -> Result<PathBuf, String> {
-    let project = gate.cwd();
-    let structured = on(flags::STRUCTURED_LEARNINGS);
-    let by = if structured {
-        team::Sharer { author: git_user(project), date: Some(agent_engine::today()), structured }
-    } else {
-        team::Sharer::default()
-    };
-    let (name, text) = team::file(memory, &by);
-    let path = folder(project).join(name);
-    platform::store::Document::hand_edited(&path).write_text(&text).map_err(|error| error.to_string())?;
-    Ok(path)
-}
-
-fn git_user(project: &Path) -> Option<String> {
-    let name = crate::git::run(project, &["config", "user.name"], crate::git::LOCAL).ok()?.trim().to_owned();
-    (!name.is_empty()).then_some(name)
-}
-
 #[cfg(test)]
 mod tests {
     use domain::memory::{Author, MemoryId, MemoryKind};
@@ -80,10 +61,11 @@ mod tests {
         };
 
         let gate = Scope::at(project.path(), None);
-        let path = share(&gate, &mine).expect("shared");
+        let (name, text) = team::file(&mine, &team::Sharer::default());
+        std::fs::create_dir_all(folder(project.path())).expect("folder");
+        std::fs::write(folder(project.path()).join(name), text).expect("shared");
         let loaded = load(&gate);
 
-        assert!(path.starts_with(folder(project.path())));
         assert_eq!(loaded.len(), 1);
         assert!(team::is_team(loaded[0].id));
         assert_eq!(

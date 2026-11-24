@@ -56,7 +56,13 @@ export const testCases = (list, options) =>
   });
 export const logs = (input) =>
   Array.isArray(input) ? block("logs", { commands: input }) : block("logs", { text: String(input === undefined ? "" : input) });
-export const form = (fields) => block("form", { fields: fields || [] });
+export const form = (fields, options) => {
+  const chosen = options || {};
+  const extra = {};
+  if (chosen.title) extra.title = String(chosen.title);
+  if (chosen.submit) extra.submit = String(chosen.submit);
+  return block("form", { fields: fields || [], ...extra });
+};
 export const actions = (buttons) =>
   block("actions", {
     buttons: (buttons || []).map((button) => (typeof button === "string" ? { id: button, label: button } : button)),
@@ -118,6 +124,7 @@ class Runtime {
     this.clock = Number(activation.start || 0);
     this.random = generator(String(activation.seed === undefined ? "" : activation.seed));
     this.finished = null;
+    this.workflow = null;
   }
 
   next() {
@@ -229,6 +236,10 @@ class Ctx {
 
   get item() {
     return this.runtime.item;
+  }
+
+  get workflow() {
+    return this.runtime.workflow;
   }
 
   output(step) {
@@ -533,7 +544,18 @@ export function workflow(definition) {
   return shape;
 }
 
-function target(activation) {
+function declared(found) {
+  const named = [...found.statuses];
+  for (const call of found.steps) {
+    const options = call && call.options ? call.options : {};
+    for (const name of [options.status, options.doneStatus]) {
+      if (typeof name === "string" && name && !named.includes(name)) named.push(name);
+    }
+  }
+  return Object.freeze({ name: found.name, statuses: Object.freeze(named) });
+}
+
+function target(activation, runtime) {
   const wanted = activation.target || {};
   if (wanted.step !== undefined) {
     const type = registry.steps.get(wanted.step);
@@ -543,6 +565,7 @@ function target(activation) {
   const name = wanted.workflow === undefined ? [...registry.workflows.keys()][0] : wanted.workflow;
   const found = registry.workflows.get(name);
   if (!found) throw new TypeError(`workflow desconhecido: ${name}`);
+  runtime.workflow = declared(found);
   return (ctx, item) => found.run(ctx, item);
 }
 
@@ -572,7 +595,7 @@ async function activate(activation) {
   const input = activation || {};
   const runtime = new Runtime(input);
   try {
-    const handler = target(input);
+    const handler = target(input, runtime);
     const ctx = new Ctx(runtime, ROOT);
     Promise.resolve()
       .then(() => handler(ctx, input.item || {}))

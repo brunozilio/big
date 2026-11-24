@@ -19,9 +19,9 @@ impl Backend for Gone {
     }
 }
 
-fn settings(reply: Reply) -> Option<Result<Option<serde_json::Value>, String>> {
+fn sessions(reply: Reply) -> Option<Result<usize, String>> {
     match reply {
-        Reply::Settings { settings } => Some(Ok(settings)),
+        Reply::Sessions(listed) => Some(Ok(listed.len())),
         _ => None,
     }
 }
@@ -66,20 +66,20 @@ fn an_error_for_one_request_does_not_fail_another_concurrent_request() {
     let held = Arc::new(Mutex::new(None));
     let slot = Arc::clone(&held);
     let (client, outlet, _) = scripted(move |command, outlet| match &command.payload {
-        ClientCommand::LoadSettings => *slot.locked() = Some(command.id),
+        ClientCommand::ListSessions => *slot.locked() = Some(command.id),
         ClientCommand::ListModels => outlet.reply(command.id, Reply::error("no catalog")),
         _ => {}
     });
     let asking = Arc::clone(&client);
-    let waiting = std::thread::spawn(move || asking.call(ClientCommand::LoadSettings, settings));
+    let waiting = std::thread::spawn(move || asking.call(ClientCommand::ListSessions, sessions));
     let asked = until(|| *held.locked());
 
     let failed = client.call(ClientCommand::ListModels, models);
 
     assert!(matches!(&failed, Err(Error::Backend(message)) if message == "no catalog"), "{failed:?}");
-    outlet.reply(asked, Reply::Settings { settings: Some(serde_json::json!({ "vim": true })) });
+    outlet.reply(asked, Reply::Sessions(Vec::new()));
     let answered = waiting.join().expect("join");
-    assert!(matches!(&answered, Ok(Some(kept)) if kept["vim"] == true), "{answered:?}");
+    assert!(matches!(&answered, Ok(0)), "{answered:?}");
 }
 
 #[test]
@@ -88,8 +88,8 @@ fn two_calls_from_two_threads_run_concurrently() {
     let slot = Arc::clone(&earlier);
     let (client, _, _) = scripted(move |command, outlet| match &command.payload {
         ClientCommand::ListModels => *slot.locked() = Some(command.id),
-        ClientCommand::LoadSettings => {
-            outlet.reply(command.id, Reply::Settings { settings: None });
+        ClientCommand::ListSessions => {
+            outlet.reply(command.id, Reply::Sessions(Vec::new()));
             if let Some(first) = slot.locked().take() {
                 outlet.reply(first, Reply::Models(Vec::new()));
             }
@@ -100,34 +100,11 @@ fn two_calls_from_two_threads_run_concurrently() {
     let first = std::thread::spawn(move || asking.call(ClientCommand::ListModels, models));
     until(|| earlier.locked().map(|_| ()));
 
-    let second = within_five_seconds(move || client.call(ClientCommand::LoadSettings, settings));
+    let second = within_five_seconds(move || client.call(ClientCommand::ListSessions, sessions));
 
-    assert!(matches!(second, Ok(None)), "the second call was answered while the first still waited: {second:?}");
+    assert!(matches!(second, Ok(0)), "the second call was answered while the first still waited: {second:?}");
     let first = first.join().expect("join");
     assert!(matches!(first, Ok(0)), "{first:?}");
-}
-
-#[test]
-fn an_unsolicited_event_is_delivered_even_when_no_call_is_waiting() {
-    let (client, outlet, _) = scripted(|_, _| {});
-    let failed = Unsolicited::CatalogFailed { provider: ModelProvider::new("keyed"), message: "401".into() };
-    outlet.emit(ServerEvent::Unsolicited(failed.clone()));
-    let told = until(|| Some(client.unsolicited()).filter(|told| !told.is_empty()));
-    assert_eq!(told, [failed]);
-    assert!(client.unsolicited().is_empty(), "told once");
-}
-
-#[test]
-fn only_the_latest_unsolicited_events_are_kept_when_nobody_reads_them() {
-    let (client, outlet, _) = scripted(|command, outlet| outlet.reply(command.id, Reply::Done));
-    for n in 0..=UNSOLICITED_KEPT {
-        let failed = Unsolicited::MemoryFailed { path: "/repo".into(), message: n.to_string() };
-        outlet.emit(ServerEvent::Unsolicited(failed));
-    }
-    client.call(ClientCommand::LoadSettings, |_| Some(Ok(()))).expect("answered after them");
-    let kept = client.unsolicited();
-    assert_eq!(kept.len(), UNSOLICITED_KEPT);
-    assert!(matches!(&kept[0], Unsolicited::MemoryFailed { message, .. } if message == "1"), "the oldest went first");
 }
 
 #[test]
@@ -137,11 +114,11 @@ fn a_reply_for_a_forgotten_id_is_dropped() {
             outlet.reply(command.id, Reply::Models(Vec::new()));
         }
     });
-    let forgotten = client.ask(ClientCommand::LoadSettings).expect("asked");
+    let forgotten = client.ask(ClientCommand::ListSessions).expect("asked");
     let id = forgotten.id;
     drop(forgotten);
 
-    outlet.reply(id, Reply::Settings { settings: None });
+    outlet.reply(id, Reply::Sessions(Vec::new()));
     outlet.reply(RequestId(u64::MAX), Reply::error("for a request never made"));
 
     let answered = client.call(ClientCommand::ListModels, models);
@@ -172,7 +149,7 @@ fn a_sign_in_that_takes_longer_than_an_ordinary_answer_still_completes() {
         });
     });
     let ordinary = Duration::from_millis(50);
-    let impatient = client.asking(sign_in(), false).expect("asked").answer(ordinary, opened);
+    let impatient = client.ask(sign_in()).expect("asked").answer(ordinary, opened);
     assert!(matches!(impatient, Err(Error::Timeout)), "an ordinary answer would have given up: {impatient:?}");
 
     let mut shown = Vec::new();
@@ -202,37 +179,18 @@ fn a_sign_in_the_client_gave_up_on_is_cancelled_in_the_backend() {
 }
 
 #[test]
-fn a_pending_sign_in_is_cancelled_from_another_thread_without_waiting_for_it() {
-    let (client, _, asked) = scripted(|command, outlet| {
-        if let ClientCommand::CancelRequest { request } = &command.payload {
-            let message = "this sign-in was cancelled".to_owned();
-            outlet.reply(*request, Reply::Providers(ProviderEvent::Failed { provider: browser(), message }));
-            outlet.reply(command.id, Reply::Done);
-        }
-    });
-    let signing = Arc::clone(&client);
-    let waiting = std::thread::spawn(move || signing.flow(sign_in(), Duration::from_secs(30), opened));
-    until(|| (!asked.locked().is_empty()).then_some(()));
-
-    client.cancel_flows();
-
-    let ended = within_five_seconds(move || waiting.join().expect("join"));
-    assert!(matches!(&ended, Err(Error::Backend(message)) if message.contains("cancelled")), "{ended:?}");
-}
-
-#[test]
 fn a_call_waiting_on_a_backend_that_went_away_fails_instead_of_waiting_out_its_time() {
     let (wake, woken) = crossbeam_channel::bounded::<()>(1);
     let client = Arc::new(Dispatcher::new(Box::new(Quiet), woken));
     let asking = Arc::clone(&client);
-    let waiting = std::thread::spawn(move || asking.call(ClientCommand::LoadSettings, settings));
+    let waiting = std::thread::spawn(move || asking.call(ClientCommand::ListSessions, sessions));
     until(|| (!client.shared.waiters.locked().is_empty()).then_some(()));
 
     drop(wake);
 
     let ended = within_five_seconds(move || waiting.join().expect("join"));
     assert!(matches!(&ended, Err(Error::Backend(message)) if message == SHUT_DOWN), "{ended:?}");
-    let later = client.call(ClientCommand::LoadSettings, settings);
+    let later = client.call(ClientCommand::ListSessions, sessions);
     assert!(matches!(&later, Err(Error::Backend(message)) if message == SHUT_DOWN), "{later:?}");
 }
 
@@ -258,7 +216,7 @@ fn a_backend_whose_worker_died_fails_every_waiting_call_and_run_though_its_wake_
     let (wake, woken) = crossbeam_channel::bounded::<()>(1);
     let client = Arc::new(Dispatcher::new(Box::new(Dies(Arc::clone(&dead))), woken));
     let asking = Arc::clone(&client);
-    let waiting = std::thread::spawn(move || asking.call(ClientCommand::LoadSettings, settings));
+    let waiting = std::thread::spawn(move || asking.call(ClientCommand::ListSessions, sessions));
     until(|| (!client.shared.waiters.locked().is_empty()).then_some(()));
     let followed = client.follow(domain::RunId::new());
 
@@ -269,6 +227,6 @@ fn a_backend_whose_worker_died_fails_every_waiting_call_and_run_though_its_wake_
     assert!(matches!(&ended, Err(Error::Backend(message)) if message == SHUT_DOWN), "{ended:?}");
     let run = within_five_seconds(move || followed.recv());
     assert!(run.is_err(), "the run's channel closed, which its reader turns into a failure: {run:?}");
-    let later = client.call(ClientCommand::LoadSettings, settings);
+    let later = client.call(ClientCommand::ListSessions, sessions);
     assert!(matches!(&later, Err(Error::Backend(message)) if message == SHUT_DOWN), "{later:?}");
 }

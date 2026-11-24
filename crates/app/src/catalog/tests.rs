@@ -58,7 +58,7 @@ fn what_a_user_does() -> Vec<Change> {
 
 fn keeps_what_the_domain_decides(kept: &dyn SessionCatalog) {
     let mut expected = Catalog::default();
-    assert!(kept.is_empty() && kept.read().listed().is_empty() && kept.recent(Path::new("/w"), RECENT).is_empty());
+    assert!(kept.is_empty() && kept.read().listed().is_empty());
 
     for (step, change) in what_a_user_does().into_iter().enumerate() {
         change(&mut expected);
@@ -66,11 +66,6 @@ fn keeps_what_the_domain_decides(kept: &dyn SessionCatalog) {
 
         assert_eq!(kept.read(), expected, "after step {step}");
         assert_eq!(kept.is_empty(), expected.listed().is_empty(), "after step {step}");
-        for cwd in ["/w", "/other", "/moved", "/nowhere"] {
-            let cwd = Path::new(cwd);
-            assert_eq!(kept.recent(cwd, RECENT), recent_sessions(&expected, cwd), "after step {step}");
-            assert_eq!(kept.recent(cwd, 2), newest_in(&expected, cwd, 2), "after step {step}");
-        }
     }
     assert_eq!(expected.listed().len(), KEPT - 1, "the script reached the most a catalog keeps");
 }
@@ -82,16 +77,6 @@ fn every_catalog_keeps_exactly_what_the_domain_decides() {
     keeps_what_the_domain_decides(&SqliteSessionCatalog::new(Db::in_memory().expect("in memory")));
     keeps_what_the_domain_decides(&SqliteSessionCatalog::new(Db::open(&dir.path().join("app.db")).expect("on disk")));
     keeps_what_the_domain_decides(&LegacySessionCatalog::new(dir.path().join("users")));
-}
-
-#[test]
-fn a_folder_s_recent_sessions_are_its_own_newest_first() {
-    let mut catalog = Catalog::default();
-    catalog.started(&id("old"), Path::new("/w"), 1);
-    catalog.started(&id("elsewhere"), Path::new("/other"), 2);
-    catalog.started(&id("new"), Path::new("/w"), 3);
-    assert_eq!(recent_sessions(&catalog, Path::new("/w")), [id("new"), id("old")]);
-    assert!(recent_sessions(&catalog, Path::new("/nowhere")).is_empty());
 }
 
 #[test]
@@ -282,5 +267,5 @@ fn a_catalog_whose_database_cannot_be_written_is_left_as_it_was() {
 
     kept.update(&mut |catalog| catalog.started(&id("b"), Path::new("/w"), 2));
 
-    assert!(kept.read().listed().is_empty() && kept.is_empty() && kept.recent(Path::new("/w"), RECENT).is_empty());
+    assert!(kept.read().listed().is_empty() && kept.is_empty());
 }

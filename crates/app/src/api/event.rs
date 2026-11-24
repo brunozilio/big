@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 
 use domain::provider::ModelProvider;
-use domain::{CustomAgent, EngineEvent, ModelOption, RunId, Skill};
+use domain::catalog::Listed;
+use domain::trace::Record;
+use domain::{EngineEvent, ModelOption, RunId};
 use serde::{Deserialize, Serialize};
 
-use crate::api::features::memory::MemoryApplied;
-use crate::api::{FeatureError, FeatureReply, ProviderEvent, RequestId};
+use crate::api::memory::MemoryApplied;
+use crate::api::{ProviderEvent, RequestId};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
@@ -20,29 +22,10 @@ pub enum ServerEvent {
 pub enum Reply {
     Done,
     Models(Vec<ModelOption>),
-    Settings { settings: Option<serde_json::Value> },
-    Skills(Vec<Skill>),
-    Agents(Vec<CustomAgent>),
-    Notices(Notices),
-    Feature(FeatureReply),
-    FeatureFailed(FeatureError),
-    Permissions { path: PathBuf, permissions: domain::permission::PermissionsInfo },
+    Sessions(Vec<Listed>),
+    History(Vec<Record>),
     Providers(ProviderEvent),
     Error { message: String },
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Notices {
-    pub for_user: Vec<String>,
-    pub for_agent: Vec<domain::inbox::Notice>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub teammate_asks: Vec<domain::team::TeammateAsk>,
-}
-
-impl Notices {
-    pub fn is_empty(&self) -> bool {
-        self.for_user.is_empty() && self.for_agent.is_empty() && self.teammate_asks.is_empty()
-    }
 }
 
 impl Reply {
@@ -74,7 +57,7 @@ pub enum Unsolicited {
 mod tests {
     use domain::provider::PortHolder;
 
-    use crate::api::features::memory::MemoryListing;
+    use crate::api::memory::MemoryListing;
 
     use super::*;
 
@@ -98,34 +81,8 @@ mod tests {
         let mut replies = vec![
             Reply::Done,
             Reply::Models(vec![ModelOption::new("m", "M")]),
-            Reply::Settings { settings: None },
-            Reply::Settings { settings: Some(serde_json::json!({ "model": "m" })) },
-            Reply::Skills(Vec::new()),
-            Reply::Agents(Vec::new()),
-            Reply::Notices(Notices {
-                for_user: vec!["keys cannot be kept".into()],
-                for_agent: vec![domain::inbox::Notice::new("monitor bash_1", "ready")],
-                teammate_asks: vec![domain::team::TeammateAsk {
-                    team: "team-1".into(),
-                    teammate: "tester".into(),
-                    request_id: "p1".into(),
-                    asked: domain::team::Asked::Permission {
-                        tool_name: "Bash".into(),
-                        description: "npm test".into(),
-                        rememberable: true,
-                    },
-                }],
-            }),
-            Reply::Feature(FeatureReply::Sessions(crate::api::features::sessions::SessionsReply::Length(7))),
-            Reply::Feature(FeatureReply::Trace(crate::api::features::trace::TraceReply::Report(
-                serde_json::json!({ "sessions": [] }),
-            ))),
-            Reply::FeatureFailed(FeatureError::FeatureOff { feature: crate::api::FeatureName::Memory }),
-            Reply::FeatureFailed(FeatureError::Failed {
-                feature: crate::api::FeatureName::Memory,
-                message: "nothing to undo".into(),
-            }),
-            Reply::Permissions { path: "/repo".into(), permissions: Default::default() },
+            Reply::Sessions(Vec::new()),
+            Reply::History(Vec::new()),
             Reply::error("could not save the settings"),
         ];
         replies.extend(provider_events().into_iter().map(Reply::Providers));
@@ -150,7 +107,6 @@ mod tests {
             ServerEvent::Run { run: RunId::new(), event: EngineEvent::TextDelta("hi".into()) },
             ServerEvent::Run { run: RunId::new(), event: EngineEvent::Cancelled },
             ServerEvent::Unsolicited(Unsolicited::MemoryApplied(MemoryApplied {
-                optimizing: false,
                 added: 1,
                 changed: 0,
                 forgotten: 0,

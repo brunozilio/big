@@ -176,7 +176,6 @@ fn one_value_per_published_key() -> Vec<(&'static str, Value)> {
         ("agent", json!("reviewer")),
         ("bashOutputLimit", json!(4_000)),
         ("smallModel", json!("s")),
-        ("teammateMode", json!("tmux")),
         ("escalationModel", json!("e")),
         ("fallbackModel", json!(["f"])),
         ("jsonSchema", json!({ "type": "object" })),

@@ -78,7 +78,7 @@ impl Orchestrator {
         }
         crate::asks::restore(&shared)?;
         crate::factory::watch(&shared);
-        for item in shared.store.items()?.into_iter().filter(|item| !item.is_ended()) {
+        for item in shared.store.active_items()? {
             ensure(&shared, &item.id);
         }
         Ok(Handle { orchestrator: Orchestrator { shared } })

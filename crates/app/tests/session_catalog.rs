@@ -5,8 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use agent_engine::fake::FakeEngine;
-use app::api::features::sessions::{SessionsReply, SessionsRequest};
-use app::api::{ClientCommand, Envelope, FeatureReply, FeatureRequest, Reply, RequestId, ServerEvent};
+use app::api::{ClientCommand, Envelope, Reply, RequestId, ServerEvent};
 use app::{Backend, LocalBackend, LocalServices, Wake};
 use crossbeam_channel::Receiver;
 use domain::catalog::Listed;
@@ -52,18 +51,11 @@ fn run(backend: &LocalBackend, woke: &Receiver<()>, request: PromptRequest, stop
     until(backend, woke, |event| matches!(event, ServerEvent::Run { event, .. } if stop(event)));
 }
 
-fn sessions(backend: &LocalBackend, woke: &Receiver<()>, request: SessionsRequest) -> SessionsReply {
-    let asked = RequestId(2);
-    backend.send(Envelope::local(asked, ClientCommand::Feature(FeatureRequest::Sessions(request)))).expect("send");
-    match until(backend, woke, |event| matches!(event, ServerEvent::Reply { id, .. } if *id == asked)) {
-        ServerEvent::Reply { reply: Reply::Feature(FeatureReply::Sessions(reply)), .. } => reply,
-        other => panic!("{other:?}"),
-    }
-}
-
 fn listed(backend: &LocalBackend, woke: &Receiver<()>) -> Vec<Listed> {
-    match sessions(backend, woke, SessionsRequest::List) {
-        SessionsReply::Listed(listed) => listed,
+    let asked = RequestId(2);
+    backend.send(Envelope::local(asked, ClientCommand::ListSessions)).expect("send");
+    match until(backend, woke, |event| matches!(event, ServerEvent::Reply { id, .. } if *id == asked)) {
+        ServerEvent::Reply { reply: Reply::Sessions(listed), .. } => listed,
         other => panic!("{other:?}"),
     }
 }
@@ -90,14 +82,6 @@ fn a_run_lists_its_session_and_how_it_ended() {
     let row = &rows[0];
     assert_eq!((&row.session, row.cwd.as_path()), (&s1(), std::path::Path::new("/repo")));
     assert_eq!((row.status, row.unread), (SessionStatus::Done, true));
-
-    sessions(&backend, &woke, SessionsRequest::Rename { session: s1(), title: "Greeting".into() });
-    sessions(&backend, &woke, SessionsRequest::Seen { session: s1() });
-    let row = listed(&backend, &woke).remove(0);
-    assert_eq!((row.title.as_deref(), row.unread), (Some("Greeting"), false));
-
-    sessions(&backend, &woke, SessionsRequest::Delete { session: s1() });
-    assert!(listed(&backend, &woke).is_empty());
 }
 
 #[test]

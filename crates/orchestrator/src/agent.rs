@@ -191,6 +191,7 @@ impl Drop for Client {
 }
 
 const WAKE_POLL: Duration = Duration::from_secs(1);
+const TEAMMATE_POLL: Duration = Duration::from_millis(500);
 
 struct Running {
     run: SharedRun,
@@ -226,7 +227,7 @@ impl AgentEffect<'_> {
         let first = trees.first().ok_or_else(|| Failure::permanent("the item has no repository"))?;
         let cwd = first.path.clone();
         let bases = heads(&trees).await?;
-        let cloud = crate::cloud::lease(self.shared, self.command).await?;
+        let cloud = crate::cloud::lease(self.shared, self.command, &state.input).await?;
         let mut request = request(self.shared, &profile, self.command, &cwd, self.resume.as_deref());
         request.session.agent = Some(MainAgentSpec { name: name.clone(), definition: Some(definition.text.clone()) });
         let client = Client(clients::fresh());
@@ -270,7 +271,9 @@ impl AgentEffect<'_> {
     async fn drive(&self, request: &PromptRequest) -> Result<Collected, Failure> {
         let mut collected = self.turn(request).await?;
         let mut next = request.clone();
-        while let Some(prompt) = woken(request.host.credentials.client, request.policy.permission).await {
+        while let Some(prompt) =
+            self.woken(request.host.credentials.client, request.policy.permission, &collected).await
+        {
             next.prompt = Prompt::typed(prompt);
             next.session.resume = collected.session.clone().map(SessionId).or(next.session.resume);
             let later = self.turn(&next).await?;
@@ -288,7 +291,7 @@ impl AgentEffect<'_> {
         let handle = started.map_err(|error| Failure::permanent(error.to_string()))?;
         let mut running = Running { run: Arc::new(Mutex::new(handle)), done: false };
         self.reopen(&running.run);
-        let followed = self.follow(receiver, &running.run).await;
+        let followed = self.follow(receiver, &running.run, request.host.credentials.client).await;
         self.close_asks();
         let collected = followed?;
         running.done = true;
@@ -303,13 +306,19 @@ impl AgentEffect<'_> {
         &self,
         mut receiver: mpsc::UnboundedReceiver<EngineEvent>,
         run: &SharedRun,
+        client: u64,
     ) -> Result<Collected, Failure> {
         let mut collected = Collected::default();
         let mut impeded = false;
+        let mut teammates = tokio::time::interval(TEAMMATE_POLL);
         loop {
             let deadline = self.ask_deadline(impeded);
             let event = tokio::select! {
                 event = receiver.recv() => event,
+                _ = teammates.tick() => {
+                    self.teammates_asked(client, &collected);
+                    continue;
+                }
                 () = sleep_for(deadline) => {
                     impeded = true;
                     self.impede(true);
@@ -420,6 +429,43 @@ impl AgentEffect<'_> {
         }
     }
 
+    async fn woken(&self, client: u64, mode: PermissionMode, collected: &Collected) -> Option<String> {
+        loop {
+            self.teammates_asked(client, collected);
+            match clients::waiting(client, mode, schedules::now()) {
+                Waiting::Idle => return None,
+                Waiting::Due(prompt) => return Some(prompt),
+                Waiting::Later(_) => tokio::time::sleep(WAKE_POLL).await,
+            }
+        }
+    }
+
+    fn teammates_asked(&self, client: u64, collected: &Collected) {
+        for asked in agent_engine::team::lead_inbox::take_asks(client) {
+            let kind = match &asked.asked {
+                domain::team::Asked::Permission { tool_name, description, rememberable } => AskKind::Permission {
+                    tool: tool_name.clone(),
+                    subject: description.clone(),
+                    rememberable: *rememberable,
+                },
+                domain::team::Asked::Plan { plan } => AskKind::Plan { plan: plan.clone() },
+            };
+            let id = domain::AskId(format!("teammate-{}-{}", asked.teammate, asked.request_id));
+            let pending = PendingAsk {
+                item: self.item.clone(),
+                step: self.key.step.clone(),
+                session: collected.session.clone(),
+                ask: AgentAsk { id: id.clone(), kind },
+                since: now_ms(),
+            };
+            if !self.shared.asks.open_teammate(pending.clone(), self.key.clone(), client, asked) {
+                continue;
+            }
+            self.note(json!({ "asks": { id.0.clone(): serde_json::to_value(&pending).unwrap_or(Value::Null) } }));
+            self.announce(pending);
+        }
+    }
+
     fn announce(&self, pending: PendingAsk) {
         self.shared.emit(OrchestratorEvent::Asked {
             item: pending.item,
@@ -457,16 +503,6 @@ impl AgentEffect<'_> {
         self.note(json!({ "asks": asks }));
         self.announce(pending);
         crate::chores::recap(self.shared, self.item, &ask.id.0);
-    }
-}
-
-async fn woken(client: u64, mode: PermissionMode) -> Option<String> {
-    loop {
-        match clients::waiting(client, mode, schedules::now()) {
-            Waiting::Idle => return None,
-            Waiting::Due(prompt) => return Some(prompt),
-            Waiting::Later(_) => tokio::time::sleep(WAKE_POLL).await,
-        }
     }
 }
 

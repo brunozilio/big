@@ -11,8 +11,6 @@ use crate::backend::Backend;
 use crate::connections::StoredSettings;
 use crate::vault::VaultTokens;
 
-const SNAPSHOT_EVERY: u64 = 200;
-
 #[derive(Debug)]
 pub struct Launch {
     pub repo: PathBuf,
@@ -24,7 +22,8 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let services = app::LocalServices::detect();
     let client = app::Client::builder().services(services.clone()).build().map_err(|error| error.to_string())?;
     let engine = Arc::new(app::KeyedEngine::new(services.clone()));
-    let store = Arc::new(Store::open(&launch.data.join("app.db"), SNAPSHOT_EVERY).map_err(|error| error.to_string())?);
+    let every = brand::store::SNAPSHOT_EVERY.trim().parse().unwrap_or(0);
+    let store = Arc::new(Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?);
     let http = Arc::new(ReqwestHttp::new().map_err(|error| error.message)?);
     let tokens = Arc::new(VaultTokens::new(Arc::clone(&services.secrets)));
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));

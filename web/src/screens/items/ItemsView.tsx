@@ -77,12 +77,9 @@ function Row({ it, fresh, onOpen, onConnect }: { it: Item; fresh: boolean; onOpe
         className="group flex min-h-[52px] w-full cursor-pointer items-center gap-3 rounded-control px-2.5 text-left transition-colors hover:bg-hover"
       >
         {it.issue ? <IssueKey issue={it.issue} /> : <OriginChip it={it} />}
-        <span className="flex min-w-0 flex-col py-1.5">
-          <span className="flex min-w-0 items-center gap-2">
-            <span className="truncate text-md text-fg" title={it.title}>{it.title}</span>
-            {it.live && <LiveDot />}
-          </span>
-          {it.recap && <span data-testid="item-recap" className="truncate text-sm text-muted" title={it.recap}>{it.recap}</span>}
+        <span className="flex min-w-0 items-center gap-2">
+          <span className="truncate text-md text-fg" title={it.title}>{it.title}</span>
+          {it.live && <LiveDot />}
         </span>
         <span className="ml-auto flex max-w-[60%] shrink-0 items-center justify-end gap-3" {...stop}>
           <RowRight it={it} onStep={(s) => onOpen(s)} onConnect={onConnect} />

@@ -2,19 +2,9 @@ pub mod run;
 
 use std::path::{Path, PathBuf};
 
-use crate::api::features::code_map::{CodeMapReply, CodeMapRequest};
-
 use crate::features::context::Context;
 
 pub const MOST_FILES: usize = 12;
-
-pub fn handle(context: &Context<'_>, request: CodeMapRequest) -> Result<CodeMapReply, String> {
-    let CodeMapRequest { path, prompt } = request;
-    let map = pointers(context, &path, &prompt);
-    Ok(CodeMapReply { path, map })
-}
-
-pub fn forget(_client: u64) {}
 
 pub fn pointers(context: &Context<'_>, project: &Path, prompt: &str) -> Option<String> {
     let home = context.services.home();
@@ -58,7 +48,7 @@ mod tests {
         let data = tempfile::tempdir().expect("data");
         let services = testing::services(Some(data.path()));
 
-        let shown = testing::with(1, &services, |context| {
+        let shown = testing::with(&services, |context| {
             pointers(context, dir.path(), "why does merge_near_duplicates drop things?")
         })
         .expect("pointers");
@@ -74,15 +64,10 @@ mod tests {
         let plain = tempfile::tempdir().expect("plain");
         let dir = project();
 
-        testing::with(1, &services, |context| {
+        testing::with(&services, |context| {
             assert_eq!(pointers(context, plain.path(), "merge_near_duplicates"), None);
             assert_eq!(pointers(context, dir.path(), "hello there"), None);
-            let asked = |prompt: &str| CodeMapRequest { path: dir.path().to_path_buf(), prompt: prompt.into() };
-            let none = CodeMapReply { path: dir.path().to_path_buf(), map: None };
-            assert_eq!(handle(context, asked("")), Ok(none.clone()), "an empty prompt points nowhere");
-            assert_eq!(handle(context, asked("hello there")), Ok(none));
-            let found = handle(context, asked("merge_near_duplicates")).expect("answered");
-            assert!(found.map.is_some_and(|map| map.contains("src/retry.rs")));
+            assert_eq!(pointers(context, dir.path(), ""), None, "an empty prompt points nowhere");
         });
     }
 
@@ -95,7 +80,7 @@ mod tests {
         let data = tempfile::tempdir().expect("data");
         let services = testing::services(Some(data.path()));
 
-        let shown = testing::with(1, &services, |context| pointers(context, dir.path(), "merge_near_duplicates"));
+        let shown = testing::with(&services, |context| pointers(context, dir.path(), "merge_near_duplicates"));
 
         let configured = domain::features::on(brand::features::CODE_MAP);
         assert_eq!(shown.is_some_and(|map| map.contains("src/retry.rs")), configured);

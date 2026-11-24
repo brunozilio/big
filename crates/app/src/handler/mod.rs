@@ -6,11 +6,10 @@ mod sent;
 
 use std::sync::Arc;
 
-use crate::api::{ClientCommand, Envelope, Notices, Reply, ServerEvent};
+use crate::api::{ClientCommand, Envelope, Reply, ServerEvent};
 use agent_engine::EventSink;
 use domain::{EngineEvent, PromptRequest, RunId};
 
-use crate::features::context::Context;
 use crate::handler::flows::Flows;
 use crate::handler::outbox::{Outbox, Replies};
 use crate::handler::runs::{Reach, RunTable};
@@ -28,7 +27,8 @@ pub struct CommandHandler {
 impl Drop for CommandHandler {
     fn drop(&mut self) {
         agent_engine::tools::peers::forget(self.client);
-        crate::features::forget(self.client);
+        agent_engine::tools::builtin::shell::shells::kill_client(self.client);
+        agent_engine::tools::builtin::shell::savings::forget(self.client);
         agent_engine::tools::inbox::forget_client(self.client);
         agent_engine::tools::watch::forget_client(self.client);
         agent_engine::team::lead_inbox::closing(self.client);
@@ -58,15 +58,8 @@ impl CommandHandler {
         }
     }
 
-    #[allow(
-        clippy::too_many_lines,
-        clippy::cognitive_complexity,
-        reason = "split planned: one match over every client command, to become a handler per command"
-    )]
     fn answer(&self, command: ClientCommand, replies: &Replies) -> Option<Reply> {
         let providers = &self.services.providers;
-        let home = self.services.home();
-        let home = home.as_deref();
         Some(match command {
             ClientCommand::SubmitPrompt { run, request } => {
                 Reply::done_or(self.submit(run, &crate::handler::sent::as_sent(&request)))
@@ -76,76 +69,25 @@ impl CommandHandler {
                 let reach = self.runs.control(run, |handle| handle.answer(&ask, &decision));
                 Self::reached("answer_ask", run, reach)
             }
-            ClientCommand::SetPermissionMode { run, mode } => {
-                let reach = self.runs.control(run, |handle| handle.set_mode(mode));
-                Self::reached("set_permission_mode", run, reach)
-            }
-            ClientCommand::SteerRun { run, text } => {
-                let reach = self.runs.control(run, |handle| handle.steer(text));
-                Self::reached("steer_run", run, reach)
-            }
-            ClientCommand::UnsteerRun { run } => {
-                let reach = self.runs.control(run, |handle| handle.unsteer());
-                Self::reached("unsteer_run", run, reach)
-            }
-            ClientCommand::BackgroundRun { run } => {
-                let reach = self.runs.control(run, |handle| handle.background());
-                Self::reached("background_run", run, reach)
-            }
             ClientCommand::ListModels => {
                 providers.discover_models(self.services.engine.models(), replies);
                 return None;
             }
-            ClientCommand::RegisterPeer { path } => {
-                agent_engine::tools::peers::register(self.client, &path);
-                Reply::Done
-            }
-            ClientCommand::ListSkills { path } => {
-                Reply::Skills(crate::extensions::skills(&path, &self.services.extensions, home))
-            }
-            ClientCommand::ListAgents { path } => {
-                Reply::Agents(crate::extensions::agents(&path, &self.services.extensions, home))
-            }
-            ClientCommand::LoadSettings => Reply::Settings { settings: self.services.settings.load() },
-            ClientCommand::SaveSettings { settings } => {
-                Reply::done_or(self.services.settings.save(&settings).map_err(|error| {
-                    tracing::warn!(%error, "could not keep settings");
-                    format!("Could not save the settings: {error}")
-                }))
-            }
-            ClientCommand::ChangeSettings { changes } => {
-                Reply::done_or(self.services.settings.change(&changes).map_err(|error| {
-                    tracing::warn!(%error, "could not keep the changed settings");
-                    format!("Could not save the settings: {error}")
-                }))
-            }
             ClientCommand::ListProviders => providers.list(),
-            ClientCommand::ConnectProvider { provider, key } => providers.connect(provider, &key),
             ClientCommand::SignInProvider { provider, back } => {
                 self.flows.began(replies);
                 providers.sign_in_returning(provider, back, replies);
                 return None;
             }
-            ClientCommand::CloseAndSignIn { provider, port, pid } => {
-                self.flows.began(replies);
-                providers.close_and_sign_in(provider, port, pid, replies);
-                return None;
-            }
             ClientCommand::DisconnectProvider { provider } => providers.disconnect(provider),
-            ClientCommand::UseProviderAccount { provider, account } => providers.use_account(provider, &account),
             ClientCommand::RemoveProviderAccount { provider, account } => providers.remove_account(provider, &account),
-            ClientCommand::SetProviderBalance { provider, balance } => providers.set_balance(provider, balance),
-            ClientCommand::TakeNotices { for_agent } => Reply::Notices(self.notices(for_agent)),
-            ClientCommand::AnswerTeammate { ask, decision } => {
-                Reply::done_or(agent_engine::team::lead_inbox::answer(self.client, &ask, &decision))
-            }
-            ClientCommand::Feature(request) => {
-                match self.with_context(|context| crate::features::handle(context, request)) {
-                    Ok(reply) => Reply::Feature(reply),
-                    Err(error) => Reply::FeatureFailed(error),
+            ClientCommand::ListSessions => Reply::Sessions(crate::sessions::listed(&self.services)),
+            ClientCommand::SessionHistory { session, cwd } => {
+                match crate::sessions::history(&self.services, &cwd, &session) {
+                    Ok(records) => Reply::History(records),
+                    Err(message) => Reply::error(message),
                 }
             }
-            ClientCommand::ListPermissions { path } => crate::permissions::list(&path, &self.services.extensions, home),
             ClientCommand::CancelRequest { request } => {
                 if !self.flows.cancel(request) {
                     tracing::debug!(%request, "nothing left to cancel for this request");
@@ -155,24 +97,8 @@ impl CommandHandler {
         })
     }
 
-    fn notices(&self, for_agent: bool) -> Notices {
-        let unkept_keys = self.services.providers.unkept_notice();
-        let unkept_database = self.services.database.told_once(crate::degraded::database_notice);
-        let arrived = if for_agent { agent_engine::tools::inbox::take(self.client) } else { Vec::new() };
-        Notices {
-            for_user: unkept_keys.into_iter().chain(unkept_database).collect(),
-            for_agent: arrived,
-            teammate_asks: agent_engine::team::lead_inbox::take_asks(self.client),
-        }
-    }
-
     pub fn cancel_all(&self) {
         self.runs.cancel_all();
-    }
-
-    fn with_context<T>(&self, body: impl FnOnce(&Context<'_>) -> T) -> T {
-        let submit = |run: RunId, request: PromptRequest| self.submit(run, &request);
-        body(&Context { client: self.client, services: &self.services, submit: &submit })
     }
 
     fn submit(&self, run: RunId, request: &PromptRequest) -> Result<(), String> {
@@ -188,8 +114,7 @@ impl CommandHandler {
     fn start(&self, run: RunId, request: &PromptRequest) -> Result<(), String> {
         let mut request = request.clone();
         request.host.credentials.mcp = Vec::new();
-        let submit = |run: RunId, request: PromptRequest| self.submit(run, &request);
-        let prepared = crate::prepare::prepare(&self.services, self.client, run, &request, &submit);
+        let prepared = crate::prepare::prepare(&self.services, self.client, run, &request);
         let sink = Arc::new(RunSink {
             runs: Arc::clone(&self.runs),
             listing: crate::catalog::Listing::of(&self.services, &prepared.request),

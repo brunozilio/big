@@ -272,6 +272,20 @@ impl AgentEngine for FakeEngine {
                 sink.emit(run, EngineEvent::Failed("HTTP 400: You have reached the limit.".into()));
                 return;
             }
+            if request.prompt.text.contains("a equipe pede permissão") {
+                let team = agent_engine::team::Team::named(&request.session.cwd.join(".equipe"), "t");
+                let _ = team.open("s");
+                let _ = team.join("tester", domain::team::Member::default());
+                agent_engine::team::lead_inbox::watch(&team, request.host.credentials.client);
+                let asked = domain::team::Protocol::PermissionRequest {
+                    request_id: "r1".into(),
+                    from: "tester".into(),
+                    tool_name: "Bash".into(),
+                    description: "rodar a migração".into(),
+                    rememberable: false,
+                };
+                let _ = team.send(domain::team::LEAD, "tester", &asked.text(), None);
+            }
             if request.prompt.text.contains("chame a equipe") {
                 let mail = domain::inbox::Notice::new("teammate tester", "terminei a parte da equipe");
                 agent_engine::tools::inbox::push(request.host.credentials.client, mail);

@@ -49,7 +49,6 @@ fn a_new_database_holds_every_table_at_the_newest_version() {
 
     assert_eq!(version(&db), 1);
     assert_eq!(tables(&db), ["memories", "memory_books", "memory_undo_points", "schema_version", "sessions"]);
-    assert_eq!(db.path(), Some(dir.path().join("app.db").as_path()));
 }
 
 #[test]
@@ -85,7 +84,6 @@ fn a_database_in_memory_has_the_same_tables_and_is_its_own() {
     one.write(|transaction| transaction.execute("INSERT INTO memory_books (project) VALUES ('p')", [])).expect("write");
 
     assert_eq!(tables(&one), tables(&other));
-    assert_eq!(one.path(), None);
     let books = |db: &Db| {
         db.read(|connection| connection.query_row("SELECT count(*) FROM memory_books", [], |row| row.get::<_, i64>(0)))
     };

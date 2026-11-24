@@ -96,14 +96,7 @@ impl Drop for Workers {
 fn is_query(command: &ClientCommand) -> bool {
     matches!(
         command,
-        ClientCommand::RegisterPeer { .. }
-            | ClientCommand::ListSkills { .. }
-            | ClientCommand::ListAgents { .. }
-            | ClientCommand::ListPermissions { .. }
-            | ClientCommand::TakeNotices { .. }
-            | ClientCommand::AnswerTeammate { .. }
-            | ClientCommand::Feature(_)
-            | ClientCommand::CancelRequest { .. }
+        ClientCommand::ListSessions | ClientCommand::SessionHistory { .. } | ClientCommand::CancelRequest { .. }
     )
 }
 

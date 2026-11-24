@@ -31,7 +31,7 @@ fn a_sessions_history_is_what_was_asked_and_what_happened_in_order() {
     );
 
     assert_eq!(
-        history(&store, dir.path(), &id).expect("history"),
+        kept_history(&store, dir.path(), &id).expect("history"),
         [
             Record::Prompted { at_ms: 1, prompt: "say hi".into() },
             Record::Event { at_ms: 2, event: EngineEvent::TextDelta("Hi.".into()) },
@@ -47,21 +47,17 @@ fn another_folder_has_no_history_of_it() {
     let id = SessionId("s1".into());
     kept(&store, dir.path(), &id, vec![Entry::Prompted { at_ms: 1, prompt: "mine".into() }]);
 
-    assert_eq!(history(&store, Path::new("/elsewhere"), &id).expect("history"), []);
+    assert_eq!(kept_history(&store, Path::new("/elsewhere"), &id).expect("history"), []);
 }
 
 #[test]
-fn a_sessions_length_grows_with_what_is_written() {
-    let dir = tempfile::tempdir().expect("dir");
-    let store = FileSessions::new(dir.path().join("sessions"));
+fn the_listing_is_the_catalog_and_an_unknown_session_has_no_history() {
+    let services = crate::features::context::testing::services(None);
     let id = SessionId("s1".into());
-    assert_eq!(length(&store, dir.path(), &id), Ok(0));
+    services.catalog.update(&mut |catalog| catalog.started(&id, Path::new("/repo"), 1));
 
-    kept(&store, dir.path(), &id, vec![Entry::Prompted { at_ms: 1, prompt: "one".into() }]);
-    let once = length(&store, dir.path(), &id).expect("length");
-    kept(&store, dir.path(), &id, vec![Entry::Prompted { at_ms: 2, prompt: "two".into() }]);
+    let listed = listed(&services);
 
-    assert!(once > 0);
-    assert!(length(&store, dir.path(), &id).expect("length") > once);
-    assert_eq!(length(&store, Path::new("/elsewhere"), &id), Ok(0));
+    assert_eq!(listed.iter().map(|row| &row.session).collect::<Vec<_>>(), [&id]);
+    assert_eq!(history(&services, Path::new("/repo"), &id).expect("history"), []);
 }

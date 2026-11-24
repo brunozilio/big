@@ -66,9 +66,8 @@ fn proposed(
     let mut request = PromptRequest::plain(cwd, brief, model);
     request.session.resume = Some(session);
     request.session.command = Some(SessionCommand::Learn);
-    let refuse = |_: RunId, _: PromptRequest| Err::<(), String>("a lesson starts no other run".into());
     let run = RunId::new();
-    let prepared = crate::prepare::prepare(services, 0, run, &request, &refuse);
+    let prepared = crate::prepare::prepare(services, 0, run, &request);
     let (sender, receiver) = mpsc::channel();
     let sink: Arc<dyn agent_engine::EventSink> = Arc::new(move |_: RunId, event: EngineEvent| {
         let _ = sender.send(event);

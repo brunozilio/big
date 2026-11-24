@@ -63,18 +63,6 @@ impl SessionCatalog for SqliteSessionCatalog {
         })
     }
 
-    fn recent(&self, cwd: &Path, limit: usize) -> Vec<SessionId> {
-        let found = self.db.read(|connection| {
-            let mut newest = connection
-                .prepare("SELECT session FROM sessions WHERE cwd = ?1 ORDER BY updated DESC, tie LIMIT ?2")?;
-            let found = newest.query_map(params![text(cwd), stored(limit as u64)], |row| row.get(0).map(SessionId))?;
-            found.collect::<rusqlite::Result<Vec<SessionId>>>()
-        });
-        found.unwrap_or_else(|error| {
-            tracing::warn!(%error, "the folder's recent sessions could not be read");
-            Vec::new()
-        })
-    }
 }
 
 pub(super) fn is_empty(connection: &Connection) -> rusqlite::Result<bool> {

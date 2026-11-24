@@ -10,8 +10,10 @@ use domain::connection::ConnectionId;
 use domain::workflow::WorkflowEvent;
 use serde_json::json;
 use store::Store;
-use support::{Fake, HOST_CONNECTION, TRACKER_CONNECTION, event, harness, harness_on, standard_item, wait};
-use sync::ConnectionState;
+use support::{
+    Fake, HOST_CONNECTION, TRACKER_CONNECTION, config, event, harness, harness_on, harness_with, standard_item, wait,
+};
+use sync::{ConnectionState, SyncConfig};
 use tokio::time::Instant;
 
 const STATUS: &str = "tracker.status.changed";
@@ -208,4 +210,23 @@ async fn a_sink_failure_mid_batch_keeps_the_cursor_and_delivers_the_rest_once_la
     let ids: Vec<String> = h.sink.delivered().into_iter().map(|e| e.id).collect();
     assert_eq!(ids, ["a", "b"]);
     assert_eq!(h.store.cursor(TRACKER_CONNECTION).unwrap().as_deref(), Some("1"));
+}
+
+#[tokio::test]
+async fn the_reconcile_pass_forgets_seen_events_past_the_retention() {
+    let short = SyncConfig { seen_retention: Duration::ZERO, ..config() };
+    let h = harness_with(Arc::new(Store::in_memory(0).unwrap()), Fake::leaked(), short).await;
+    h.store.mark_seen(TRACKER_CONNECTION, "old").unwrap();
+    std::thread::sleep(Duration::from_millis(3));
+    h.sync.tick().await.unwrap();
+    assert!(!h.store.was_seen(TRACKER_CONNECTION, "old").unwrap());
+}
+
+#[tokio::test]
+async fn seen_events_inside_the_retention_survive_the_reconcile_pass() {
+    let h = harness().await;
+    h.store.mark_seen(TRACKER_CONNECTION, "recent").unwrap();
+    std::thread::sleep(Duration::from_millis(3));
+    h.sync.tick().await.unwrap();
+    assert!(h.store.was_seen(TRACKER_CONNECTION, "recent").unwrap());
 }

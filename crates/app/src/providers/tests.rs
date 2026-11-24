@@ -144,7 +144,7 @@ fn signing_in_to_a_subscription_opens_the_browser_then_keeps_the_tokens() {
     let rig = rig();
     let providers = rig.providers.clone().with_sign_in(Arc::new(FakeSignIn(Ok(()))));
     let (outbox, rx) = outbox();
-    providers.sign_in(ModelProvider::new("browser-sub"), &outbox);
+    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, &outbox);
     assert!(matches!(
         next(&rx),
         Reply::Providers(ProviderEvent::AuthorizeAt { provider, url, code: None })
@@ -161,7 +161,7 @@ fn a_code_sign_in_shows_the_code_to_type_and_keeps_its_own_account() {
     let rig = rig();
     let providers = rig.providers.clone().with_sign_in(Arc::new(FakeSignIn(Ok(()))));
     let (outbox, rx) = outbox();
-    providers.sign_in(ModelProvider::new("device-sub"), &outbox);
+    providers.sign_in_returning(ModelProvider::new("device-sub"), None, &outbox);
     assert!(matches!(
         next(&rx),
         Reply::Providers(ProviderEvent::AuthorizeAt { provider, code: Some(code), .. })
@@ -181,10 +181,10 @@ fn a_failed_sign_in_or_an_api_provider_keeps_nothing() {
         .clone()
         .with_sign_in(Arc::new(FakeSignIn(Err(llm_providers::ProviderError::Invalid("closed the tab".into())))));
     let (outbox, rx) = outbox();
-    providers.sign_in(ModelProvider::new("browser-sub"), &outbox);
+    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, &outbox);
     next(&rx);
     assert_eq!(failure(&next(&rx)), "closed the tab");
-    providers.sign_in(ModelProvider::new("keyed-too"), &outbox);
+    providers.sign_in_returning(ModelProvider::new("keyed-too"), None, &outbox);
     assert!(failure(&next(&rx)).contains("API key"));
     assert!(listed(&providers.list()).iter().all(|p| p.account.is_none()));
 }
@@ -202,17 +202,8 @@ fn connecting_fails_clearly_when_keys_cannot_be_kept() {
     assert_eq!(failure(&providers.connect(ModelProvider::new("keyed"), "sk-proj-0123456789abcd")), refused);
     assert!(listed(&providers.list()).iter().all(|p| p.account.is_none()));
     let (outbox, rx) = outbox();
-    providers.sign_in(ModelProvider::new("browser-sub"), &outbox);
+    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, &outbox);
     assert_eq!(failure(&next(&rx)), refused, "the browser is not opened for a sign-in that would be lost");
-}
-
-#[test]
-fn the_client_is_told_once_that_keys_cannot_be_kept() {
-    let providers = unkept();
-    let notice = providers.clone().unkept_notice().expect("told");
-    assert!(notice.starts_with("keys cannot be kept on this machine: the disk is read-only"), "{notice}");
-    assert_eq!(providers.unkept_notice(), None, "once for the whole process");
-    assert_eq!(rig().providers.unkept_notice(), None, "nothing to say when keys are kept");
 }
 
 struct ByKey;

@@ -1,0 +1,11 @@
+[
+  {
+    "email": "ops@acme.test",
+    "id": "111122223333",
+    "name": "prod",
+    "roles": [
+      "Admin",
+      "Deploy"
+    ]
+  }
+]

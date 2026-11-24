@@ -6,9 +6,11 @@ use super::mcp::MemoryEndpoint;
 use crate::features::context::{Context, Finish};
 
 pub fn prepare(context: &Context<'_>, run: RunId, request: PromptRequest) -> (PromptRequest, Option<Finish>) {
-    let Some(brief) = &request.host.memory else { return (request, None) };
+    if request.host.memory.is_none() {
+        return (request, None);
+    }
     let memories = super::of(context.services);
-    let wanted = !brief.optimizing && domain::features::on(brand::features::MEMORY_SEARCH);
+    let wanted = domain::features::on(brand::features::MEMORY_SEARCH);
     let mut request = memories.brief(run, &request, wanted);
     if let Some(brief) = request.host.memory.as_ref().filter(|brief| brief.tool) {
         let first = request.session.resume.is_none();

@@ -6,7 +6,7 @@ mod schema;
 mod tests;
 
 use std::fs::OpenOptions;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -27,7 +27,6 @@ pub struct Db {
 
 struct Kept {
     connection: Mutex<Connection>,
-    path: Option<PathBuf>,
     place: String,
     wait: Duration,
 }
@@ -47,7 +46,7 @@ impl Db {
         let place = "the database in memory".to_owned();
         let connection =
             Connection::open_in_memory().map_err(|source| Error::Sqlite { place: place.clone(), source })?;
-        Self::ready(Kept { connection: Mutex::new(connection), path: None, place, wait: WAIT }, schema::MIGRATIONS)
+        Self::ready(Kept { connection: Mutex::new(connection), place, wait: WAIT }, schema::MIGRATIONS)
     }
 
     pub(crate) fn opened(path: &Path, wait: Duration, migrations: &[&str]) -> Result<Self, Error> {
@@ -55,7 +54,7 @@ impl Db {
         made_private(path).map_err(|source| Error::Io { place: place.clone(), source })?;
         let connection = Connection::open(path).map_err(|source| Error::Sqlite { place: place.clone(), source })?;
         Self::ready(
-            Kept { connection: Mutex::new(connection), path: Some(path.to_path_buf()), place, wait },
+            Kept { connection: Mutex::new(connection), place, wait },
             migrations,
         )
     }
@@ -89,10 +88,6 @@ impl Db {
             Refused::Sqlite(source) => self.error(source),
             Refused::Newer { found, known } => Error::Newer { place: self.kept.place.clone(), found, known },
         })
-    }
-
-    pub fn path(&self) -> Option<&Path> {
-        self.kept.path.as_deref()
     }
 
     pub(crate) fn read<R>(&self, query: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, Error> {

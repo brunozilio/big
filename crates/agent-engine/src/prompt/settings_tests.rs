@@ -117,20 +117,3 @@ fn a_project_s_scripts_get_nothing_until_the_owner_s_settings_turn_it_on() {
     assert_eq!(scripts.project, ScriptAccess { files: true, processes: false, network: false });
 }
 
-#[test]
-fn teammate_mode_says_where_teammates_start_and_an_unknown_one_is_named_and_left_out() {
-    let home = tempfile::tempdir().expect("home");
-    let repo = tempfile::tempdir().expect("repo");
-    let user = home.path().join(brand::DIR);
-    std::fs::create_dir_all(&user).expect("user");
-    assert_eq!(
-        load(repo.path(), Some(home.path())).expect("settings").teammate_mode,
-        domain::team::TeammateMode::Process
-    );
-    std::fs::write(user.join("settings.json"), r#"{"teammateMode":"auto"}"#).expect("write");
-    assert_eq!(load(repo.path(), Some(home.path())).expect("settings").teammate_mode, domain::team::TeammateMode::Auto);
-    std::fs::write(user.join("settings.json"), r#"{"teammateMode":"kitty"}"#).expect("write");
-    let refused = load(repo.path(), Some(home.path())).expect("settings");
-    assert_eq!(refused.teammate_mode, domain::team::TeammateMode::Process, "an unknown mode is not used");
-    assert!(refused.notices.iter().any(|notice| notice.contains("teammateMode")), "{:?}", refused.notices);
-}

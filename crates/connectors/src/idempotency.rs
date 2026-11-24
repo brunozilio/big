@@ -17,6 +17,18 @@ pub fn carries(body: &str, key: &str) -> bool {
     !key.is_empty() && body.contains(&marker(key))
 }
 
+pub fn tag(key: &str) -> String {
+    format!("[{}]", label(key))
+}
+
+pub fn tagged(body: &str, key: &str) -> String {
+    if key.is_empty() { body.to_owned() } else { format!("{body}\n\n{}", tag(key)).trim_start().to_owned() }
+}
+
+pub fn carries_tag(body: &str, key: &str) -> bool {
+    !key.is_empty() && (body.contains(&tag(key)) || carries(body, key))
+}
+
 pub fn branch(name: &str) -> String {
     let prefix = format!("{}/", brand::COMMAND);
     if name.starts_with(&prefix) { name.to_owned() } else { format!("{prefix}{name}") }
@@ -35,6 +47,18 @@ mod tests {
         assert!(!carries(&body, "item/step/0/2"));
         assert!(!carries(&body, ""));
         assert_eq!(marked("plain", ""), "plain");
+    }
+
+    #[test]
+    fn a_tag_is_plain_text_that_survives_rich_text_and_old_markers_still_count() {
+        let body = tagged("descrição", "item/step/0/1");
+        assert!(body.starts_with("descrição") && !body.contains('<'));
+        assert!(carries_tag(&body, "item/step/0/1"));
+        assert!(carries_tag(&format!("<p>{body}</p>"), "item/step/0/1"), "kept through HTML wrapping");
+        assert!(!carries_tag(&body, "item/step/0/2"));
+        assert!(carries_tag(&marked("x", "k"), "k"), "a marker written before still counts");
+        assert_eq!(tagged("", "k"), tag("k"));
+        assert_eq!(tagged("plain", ""), "plain");
     }
 
     #[test]

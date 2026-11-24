@@ -12,10 +12,6 @@ impl OwnerHome {
         Self(std::env::home_dir())
     }
 
-    pub fn at(home: impl Into<PathBuf>) -> Self {
-        Self(Some(home.into()))
-    }
-
     pub fn none() -> Self {
         Self(None)
     }
@@ -33,7 +29,7 @@ mod tests {
 
     #[test]
     fn the_owner_gets_the_home_given_or_none() {
-        assert_eq!(OwnerHome::at("/home/me").home(), Some(PathBuf::from("/home/me")));
+        assert_eq!(OwnerHome(Some("/home/me".into())).home(), Some(PathBuf::from("/home/me")));
         assert_eq!(OwnerHome::none().home(), None);
     }
 }

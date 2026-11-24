@@ -1,4 +1,4 @@
-import { step, actions, chat, markdown, pipeline } from "sdk";
+import { step, actions, chat, form, markdown, pipeline } from "sdk";
 import { inLanguage, FINISHED, SUCCEEDED, agentOptions, defined, eachOf, effects, findRun, object, pipelineOptions, pullRequestsOf, repoOf, settle, source, targetFields, waitOptions } from "./context.js";
 
 const WAITING = [...FINISHED, "waiting"];
@@ -20,6 +20,21 @@ async function decide(ctx, opts, run, pending) {
   return raced.value.action === "approve_deploy" ? "approve" : "reject";
 }
 
+const REASON = [{ name: "reason", label: "Motivo", kind: "textarea", placeholder: "O que impede este deploy" }];
+
+async function rejectionReason(ctx, opts, pending) {
+  if (opts.approve === "auto") return null;
+  const view = [
+    markdown(`Você rejeitou o deploy em ${environments(pending)}. Diga o motivo para registrar na release e no item.`),
+    form(REASON, { title: "Motivo da rejeição", submit: "Rejeitar deploy" }),
+  ];
+  for (;;) {
+    const answer = await ctx.waitHuman(view, waitOptions(opts));
+    const reason = String(object(answer.values).reason ?? "").trim();
+    if (reason) return reason;
+  }
+}
+
 async function gate(ctx, opts, run) {
   const listed = await ctx.call("pipelines", "pending_deployments", { run }, effects(opts));
   const pending = (Array.isArray(listed) ? listed : []).filter((deployment) => deployment.canApprove !== false);
@@ -27,8 +42,10 @@ async function gate(ctx, opts, run) {
   const decision = await decide(ctx, opts, run, pending);
   if (decision === "outside") return { decision, pending };
   const deployments = pending.map((deployment) => deployment.id);
-  await ctx.call("pipelines", "review_deployment", { run, deployments, decision }, effects(opts));
-  return { decision, pending };
+  const why = decision === "reject" ? await rejectionReason(ctx, opts, pending) : null;
+  const args = defined({ run, deployments, decision, comment: why ?? undefined });
+  await ctx.call("pipelines", "review_deployment", args, effects(opts));
+  return { decision, pending, why };
 }
 
 function targetsOf(ctx, opts) {
@@ -52,11 +69,11 @@ async function follow(ctx, opts, target, seen) {
     const current = await settle(ctx, options, found.ref, WAITING, events);
     if (SUCCEEDED.includes(current.state)) return { ...data, state: current.state };
     if (FINISHED.includes(current.state)) return { ...data, state: current.state, summary: `A release terminou como ${current.state}.` };
-    const { decision, pending } = await gate(ctx, options, found.ref);
+    const { decision, pending, why } = await gate(ctx, options, found.ref);
     if (decision === "reject") {
-      const reason = `o deploy em ${environments(pending)} foi rejeitado`;
+      const reason = `o deploy em ${environments(pending)} foi rejeitado${why ? `: ${why}` : ""}`;
       await ctx.impediment(true, reason, effects(options));
-      return { ...data, state: "rejected", rejected: true, error: reason };
+      return { ...data, state: "rejected", rejected: true, error: reason, ...(why ? { why } : {}) };
     }
     if (decision === null) await ctx.sleep(opts.every ?? 30000);
   }
@@ -90,8 +107,11 @@ const NONE = "none";
 
 function shown(s) {
   if (s.state === NONE) return [markdown("Nenhum pipeline de deploy configurado.")];
-  const runs = (Array.isArray(s.runs) && s.runs.length > 0 ? s.runs : s.run ? [s] : []).map((run) => pipeline(run.run));
-  return [...runs, ...(s.notes ? [markdown(s.notes)] : []), ...(s.session ? [chat(s.session)] : [])];
+  const listed = Array.isArray(s.runs) && s.runs.length > 0 ? s.runs : s.run ? [s] : [];
+  const runs = listed.map((run) => pipeline(run.run));
+  const rejected = [s, ...listed].find((run) => run.why);
+  const why = rejected ? [markdown(`**Deploy rejeitado.** ${rejected.why}`)] : [];
+  return [...runs, ...why, ...(s.notes ? [markdown(s.notes)] : []), ...(s.session ? [chat(s.session)] : [])];
 }
 
 export default step({

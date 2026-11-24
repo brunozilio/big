@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 const HOME: &str = "crates/platform/";
 
-const SYSTEM: [&str; 6] = ["HOME", "PATH", "TMUX", "TERM_PROGRAM", "SHELL", "GIT_CONFIG_COUNT"];
+const SYSTEM: [&str; 4] = ["HOME", "PATH", "SHELL", "GIT_CONFIG_COUNT"];
 
 const READS: [&str; 2] = ["env::var(", "env::var_os("];
 
@@ -82,7 +82,7 @@ mod tests {
         assert_eq!(reads("fn a() { std::env::var(brand::env(\"LOG\")).ok(); }").len(), 2);
         assert_eq!(reads("fn a() { std::env::var_os(NAME) }"), ["env::var_os(NAME)"]);
         assert_eq!(reads("fn a() { std::env::var(\"RUST_LOG\") }"), ["env::var(\"RUST_LOG\")"]);
-        assert!(reads("fn a() { std::env::var_os( \"PATH\" ); env::var(\"TMUX\") }").is_empty());
+        assert!(reads("fn a() { std::env::var_os( \"PATH\" ); env::var(\"HOME\") }").is_empty());
         assert!(reads("fn a() {}\n#[cfg(test)]\nmod tests { fn t() { std::env::var(\"X\"); } }").is_empty());
     }
 

@@ -239,7 +239,7 @@ pub const TRACKER_CONNECTION: &str = "trk";
 pub const HOST_CONNECTION: &str = "host";
 
 pub fn config() -> SyncConfig {
-    SyncConfig::from_values("10", "100", "5", "2")
+    SyncConfig::from_values("10", "100", "5", "2", "30")
 }
 
 pub struct Harness {
@@ -263,6 +263,10 @@ fn record(id: &str, capabilities: &[&str]) -> ConnectionRecord {
 }
 
 pub async fn harness_on(store: Arc<Store>, fake: &'static Fake) -> Harness {
+    harness_with(store, fake, config()).await
+}
+
+pub async fn harness_with(store: Arc<Store>, fake: &'static Fake, config: SyncConfig) -> Harness {
     store.save_connection(&record(TRACKER_CONNECTION, &[contracts::TRACKER])).unwrap();
     store.save_connection(&record(HOST_CONNECTION, &[contracts::CODE, contracts::PIPELINES])).unwrap();
     let tokens = Arc::new(MemoryTokenStore::new());
@@ -274,7 +278,7 @@ pub async fn harness_on(store: Arc<Store>, fake: &'static Fake) -> Harness {
     let connectors = Arc::new(Connectors::with_providers(&[provider], Arc::new(FakeHttp::new()), keeper));
     let sink = Arc::new(FakeSink::new(store.clone()));
     let view = Arc::new(StoreView::new(store.clone()));
-    let sync = Synchronizer::new(store.clone(), connectors, sink.clone(), view.clone(), config());
+    let sync = Synchronizer::new(store.clone(), connectors, sink.clone(), view.clone(), config);
     Harness { fake, store, sink, view, tokens, sync }
 }
 

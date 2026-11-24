@@ -39,5 +39,8 @@ fn every_configured_source_has_a_price_table() {
             assert!(!brand::section(&format!("{TABLE}{source}")).is_empty(), "no [{TABLE}{source}] in the config");
         }
     }
-    assert!(listed("xai", "grok-subscription:grok-4.6", 0).is_some());
+    let input = |model: &str, tokens| listed("xai", model, tokens).map(|rates| rates.input);
+    assert_eq!(input("grok-subscription:grok-4.6", 199_999), Some(2_000_000));
+    assert_eq!(input("grok-subscription:grok-4.6", 200_000), Some(4_000_000), "from 200k the whole request costs more");
+    assert_eq!(input("grok-subscription:grok-4.20-0309-reasoning", 0), Some(1_250_000));
 }

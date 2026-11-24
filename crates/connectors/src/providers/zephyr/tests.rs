@@ -221,10 +221,10 @@ async fn a_retried_cycle_with_the_same_key_is_found_by_its_marker_and_not_create
     let calls = first.calls();
     assert_eq!(calls[0].1, json!({ "projectKey": "BIG", "maxResults": 1000, "startAt": 0 }));
     let stored = calls[1].1["description"].as_str().unwrap_or_default().to_owned();
-    assert!(stored.starts_with('d') && idempotency::carries(&stored, "k1"), "{stored}");
+    assert!(stored.starts_with('d') && idempotency::carries_tag(&stored, "k1") && !stored.contains('<'), "{stored}");
 
     let other = json!({ "id": 4, "key": "BIG-R4", "name": "Run 1", "description": idempotency::marked("d", "k0") });
-    let mine = json!({ "id": 5, "key": "BIG-R5", "name": "Run 1", "description": stored });
+    let mine = json!({ "id": 5, "key": "BIG-R5", "name": "Run 1", "description": format!("<p>{stored}</p>") });
     let retried = ZephyrMcp::new()
         .answer("zephyr_get_test_cycles", json!({ "values": [other], "isLast": false }))
         .answer("zephyr_get_test_cycles", json!({ "values": [mine], "isLast": true }));
@@ -248,7 +248,7 @@ async fn a_retried_result_with_the_same_key_is_found_by_its_marker_and_not_recor
         json!({ "projectKey": "BIG", "testCycle": "BIG-R1", "testCase": "BIG-T1", "limit": 50 })
     );
     let stored = calls[1].1["comment"].as_str().unwrap_or_default().to_owned();
-    assert!(idempotency::carries(&stored, "k1") && !stored.starts_with('\n'), "{stored}");
+    assert!(idempotency::carries_tag(&stored, "k1") && !stored.starts_with('\n'), "{stored}");
 
     let other = json!({ "id": 8, "key": "BIG-E8", "comment": null });
     let mine = json!({ "id": 9, "key": "BIG-E9", "comment": stored });

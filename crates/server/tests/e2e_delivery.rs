@@ -81,6 +81,10 @@ async fn an_item_without_an_issue_goes_from_the_plan_to_production_through_the_a
     assert_eq!(asked_changes.lines[0]["path"], "work-2.txt");
     assert_eq!(asked_changes.lines[0]["line"], 1);
     assert!(reviews.iter().any(|review| review.state == "APPROVED"));
+    let resolved = hub.github.state().resolved.clone();
+    assert!(!resolved.is_empty(), "the approval resolves the threads the developer was handed");
+    let open = hub.github.open_threads();
+    assert!(open.is_empty(), "every thread handed to the developer is resolved: {open:?}");
     assert_eq!(hub.github.state().merges, 1);
     assert_eq!(hub.github.state().deploy_reviews, ["approved"]);
     let steps = server.get(&format!("/api/items/{id}/steps/ci")).await;
@@ -103,4 +107,51 @@ async fn an_item_from_an_existing_issue_moves_it_through_every_status_without_cr
     server.until(&id, "the delivery", |item| item["group"] == "delivered").await;
     assert_eq!(hub.tracker.state().created, 0);
     assert_eq!(hub.tracker.statuses_of("K-7"), ["A fazer", "Fazendo", "Revisando", "Feito"]);
+}
+
+async fn release_view_with(server: &Server, id: &str, kind: &str) -> serde_json::Value {
+    for _ in 0..1500 {
+        let view = server.get(&format!("/api/items/{id}/steps/release")).await;
+        if view["blocks"].as_array().is_some_and(|blocks| blocks.iter().any(|block| block["type"] == kind)) {
+            return view;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("the release never showed a {kind} block")
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_rejected_deploy_asks_why_with_a_form_and_the_reason_reaches_the_pipeline_and_the_item() {
+    let hub = Hub::new();
+    hub.tracker.add_issue("K-7", "Corrigir o login", "Backlog");
+    let server = hub.start().await;
+    let body =
+        json!({ "text": "", "issue": { "connection": "trk", "key": "K-7" }, "model": "auto", "attachments": [] });
+    let id = server.create(body).await;
+    approve_plan(&server, &id).await;
+    server.until(&id, "the review waits", |item| waiting_on(item, "review")).await;
+    server.input(&id, "review", "review", json!({ "verdict": "approve", "body": "ok", "notes": [] })).await;
+    server.until(&id, "the merge waits", |item| waiting_on(item, "merge")).await;
+    server.input(&id, "merge", "merge", json!({ "method": "squash" })).await;
+    server.until(&id, "the deploy waits", |item| waiting_on(item, "release")).await;
+    release_view_with(&server, &id, "actions").await;
+    server.input(&id, "release", "reject_deploy", json!({})).await;
+
+    let view = release_view_with(&server, &id, "form").await;
+    let form =
+        view["blocks"].as_array().and_then(|blocks| blocks.iter().find(|block| block["type"] == "form")).expect("form");
+    assert_eq!(form["title"], "Motivo da rejeição");
+    assert_eq!(form["submit"], json!({ "action": "submit", "label": "Rejeitar deploy" }));
+    assert_eq!(form["fields"][0]["name"], "reason");
+    assert_eq!(form["fields"][0]["kind"], "textarea");
+    server.input(&id, "release", "submit", json!({ "reason": "janela de congelamento" })).await;
+
+    let stuck = server
+        .until(&id, "the release stops with the reason", |item| {
+            item["impediment"]["detail"].as_str().is_some_and(|detail| detail.contains("janela de congelamento"))
+        })
+        .await;
+    assert_eq!(stuck["group"], "you");
+    assert_eq!(hub.github.state().deploy_reviews, ["rejected"]);
+    assert_eq!(hub.github.state().deploy_comments, ["janela de congelamento"]);
 }

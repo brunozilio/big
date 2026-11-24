@@ -139,3 +139,40 @@ async fn the_page_lists_the_repositories_of_a_code_connection() {
                  "defaultBranch": "main", "private": true }])
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_application_keeps_the_cloud_account_and_role_its_agents_use() {
+    let world = World::new().await;
+    let mut record = world.store.connections().expect("connections").into_iter().next().expect("c1");
+    record.capabilities.push("cloud".into());
+    world.store.save_connection(&record).expect("cloud");
+    let call = json!({ "action": "cloud.accounts_and_roles", "args": {} });
+    let (status, listed) = world.send(Method::POST, "/api/connections/c1/call", Some(call)).await;
+    assert_eq!(status, StatusCode::OK, "{listed}");
+    assert_eq!(
+        listed,
+        json!([{ "id": "111122223333", "name": "prod", "email": "ops@acme.test", "roles": ["Admin", "Deploy"] }])
+    );
+    fixture("call-cloud-accounts", &listed);
+
+    let web = folder(&world, "web");
+    let body = json!({
+        "name": "Loja", "cloud": { "connection": " c1 ", "account": "111122223333", "role": " Deploy " },
+        "repositories": [{ "directory": web }],
+    });
+    let (status, made) = world.send(Method::POST, "/api/applications", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{made}");
+    assert_eq!(made["cloud"], json!({ "connection": "c1", "account": "111122223333", "role": "Deploy" }));
+    let id = made["id"].as_str().expect("id").to_owned();
+    let kept = world.store.application(&id).expect("read").expect("there");
+    assert_eq!(kept.cloud.map(|chosen| chosen.role), Some("Deploy".to_owned()));
+
+    let mut cleared = made.clone();
+    cleared["cloud"] = json!({ "connection": "c1", "account": " ", "role": "Deploy" });
+    let (status, saved) = world.send(Method::PUT, &format!("/api/applications/{id}"), Some(cleared)).await;
+    assert_eq!(
+        (status, saved["cloud"].clone()),
+        (StatusCode::OK, Value::Null),
+        "no account is the connection's default"
+    );
+}

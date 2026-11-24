@@ -46,18 +46,6 @@ fn a_second_key_is_a_second_account_and_the_one_in_use() {
 }
 
 #[test]
-fn switching_accounts_changes_the_key_the_next_run_gets() {
-    let (providers, _) = rig();
-    providers.connect(KEYED, FIRST);
-    providers.connect(KEYED, SECOND);
-    providers.use_account(KEYED, "1");
-    assert_eq!(in_use(&providers), FIRST);
-    providers.use_account(KEYED, "…bbbb");
-    assert_eq!(in_use(&providers), SECOND);
-    assert!(matches!(providers.use_account(KEYED, "9"), Reply::Providers(ProviderEvent::Failed { .. })));
-}
-
-#[test]
 fn the_same_key_again_keeps_one_account() {
     let (providers, _) = rig();
     providers.connect(KEYED, FIRST);
@@ -118,29 +106,6 @@ fn without_a_balance_a_run_gets_only_the_account_in_use() {
     providers.connect(KEYED, FIRST);
     providers.connect(KEYED, SECOND);
     assert_eq!(order(&providers), [SECOND]);
-}
-
-#[test]
-fn failover_offers_the_account_in_use_first_and_the_others_after() {
-    let (providers, _) = rig();
-    providers.connect(KEYED, FIRST);
-    providers.connect(KEYED, SECOND);
-    providers.set_balance(KEYED, domain::account_pool::Balance::Failover);
-    assert_eq!(order(&providers), [SECOND, FIRST]);
-    assert_eq!(order(&providers), [SECOND, FIRST]);
-}
-
-#[test]
-fn round_robin_starts_each_run_on_the_next_account() {
-    let (providers, _) = rig();
-    providers.connect(KEYED, FIRST);
-    providers.connect(KEYED, SECOND);
-    let event = providers.set_balance(KEYED, domain::account_pool::Balance::RoundRobin);
-    let Reply::Providers(ProviderEvent::Listed { providers: listed }) = event else { panic!("listed") };
-    assert!(listed.iter().any(|p| p.provider == KEYED && p.balance == domain::account_pool::Balance::RoundRobin));
-    assert_eq!(order(&providers), [FIRST, SECOND]);
-    assert_eq!(order(&providers), [SECOND, FIRST]);
-    assert_eq!(order(&providers), [FIRST, SECOND]);
 }
 
 #[test]
