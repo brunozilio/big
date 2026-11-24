@@ -34,6 +34,11 @@ describe('aba de permissões', () => {
     expect(grantOf('Site(*.gov.br)')).toEqual({ kind: 'site', value: '*.gov.br' })
     expect(grantOf('mcp__atlassian__*')).toEqual({ kind: 'tool', value: 'mcp__atlassian__*' })
     expect(grantOf('   ')).toBeNull()
+    expect(grantOf('Site(https://www.gov.br/pt-br)')).toEqual({ kind: 'site', value: 'www.gov.br' })
+    expect(grantOf('mcp__jira__search')).toEqual({ kind: 'tool', value: 'mcp__jira__search' })
+    for (const bad of ['qualquer coisa', 'Bash()', 'Site(gov)', 'Site(não é site)', 'Foo(bar)', 'mcp__jira', 'mcp__x__y__z', 'rm -rf /', 'webfetch']) {
+      expect(grantOf(bad)).toBeNull()
+    }
     for (const grant of [{ kind: 'command', value: 'cargo test' }, { kind: 'site', value: 'gov.br' }, { kind: 'tool', value: 'WebSearch' }] as Grant[]) {
       expect(grantOf(ruleOf(grant))).toEqual(grant)
     }
@@ -51,7 +56,8 @@ describe('aba de permissões', () => {
     await waitFor(() => expect(list.textContent).toContain('Bash(git status:*)'))
     fireEvent.click(view.getByLabelText(/Bash\(cargo test:\*\)/))
     await waitFor(() => expect(list.textContent).not.toContain('cargo test'))
-    expect(puts[puts.length - 1]).toEqual([{ kind: 'site', value: 'gov.br' }, { kind: 'command', value: 'git status' }])
+    expect(puts[0]).toEqual([{ kind: 'command', value: 'git status' }, { kind: 'command', value: 'cargo test' }, { kind: 'site', value: 'gov.br' }])
+    expect(puts[puts.length - 1]).toEqual([{ kind: 'command', value: 'git status' }, { kind: 'site', value: 'gov.br' }])
   })
 
   test('descobrir traz tudo marcado e só entra o que ficou marcado', async () => {
@@ -70,7 +76,21 @@ describe('aba de permissões', () => {
     fireEvent.click(docs)
     fireEvent.click(view.getByRole('button', { name: 'Adicionar 1' }))
     await waitFor(() => expect(puts.length).toBe(1))
-    expect(puts[0]).toEqual([{ kind: 'command', value: 'cargo test' }, { kind: 'command', value: 'bun test' }])
+    expect(puts[0]).toEqual([{ kind: 'command', value: 'bun test' }, { kind: 'command', value: 'cargo test' }])
     expect(view.queryByRole('checkbox')).toBeNull()
+  })
+
+  test('regra inválida ou repetida não entra e diz o porquê', async () => {
+    const puts = serve([{ kind: 'command', value: 'cargo test' }])
+    const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    const box = await view.findByLabelText('Adicionar regra…')
+    fireEvent.change(box, { target: { value: 'qualquer coisa' } })
+    fireEvent.submit(box)
+    expect((await view.findByRole('alert')).textContent).toContain('Regra inválida')
+    fireEvent.change(box, { target: { value: 'Bash(cargo test:*)' } })
+    expect(view.queryByRole('alert')).toBeNull()
+    fireEvent.submit(box)
+    expect((await view.findByRole('alert')).textContent).toContain('já está na lista')
+    expect(puts).toEqual([])
   })
 })

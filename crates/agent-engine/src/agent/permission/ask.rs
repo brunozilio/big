@@ -38,7 +38,7 @@ impl Agent<'_> {
         if *standing == Standing::Acts && domain::permission::allowed::global().is_some() {
             let learned = Allowed::learned(&asking.called.call());
             if !learned.is_empty() {
-                domain::permission::allowed::change(|allowed| learned.into_iter().for_each(|grant| _ = allowed.add(grant)));
+                domain::permission::allowed::change(|allowed| learned.into_iter().rev().for_each(|grant| _ = allowed.add_first(grant)));
                 return;
             }
         }

@@ -229,3 +229,17 @@ fn suggestions_are_read_from_rules_and_the_risky_ones_dropped() {
     );
     assert!(parse_suggestions("sem json").is_empty());
 }
+
+#[test]
+fn a_tool_rule_must_name_a_tool_and_a_new_rule_can_go_first() {
+    let mut list = Allowed::of([Grant::Command("ls".into())]);
+    for bad in ["qualquer coisa", "mcp__", "mcp__jira", "mcp____x", "web fetch", "rm -rf"] {
+        assert!(!list.add(Grant::Tool(bad.into())), "{bad}");
+    }
+    for good in ["WebSearch", "mcp__jira__search", "mcp__atlassian__*", "mcp__big_browser__get_page*"] {
+        assert!(list.add(Grant::Tool(good.into())), "{good}");
+    }
+    assert!(list.add_first(Grant::Site("docs.rs".into())));
+    assert!(!list.add_first(Grant::Site("docs.rs".into())));
+    assert_eq!(list.grants()[0], Grant::Site("docs.rs".into()));
+}

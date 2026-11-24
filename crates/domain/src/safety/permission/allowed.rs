@@ -19,9 +19,18 @@ impl Grant {
             |text: String| Some(text.split_whitespace().collect::<Vec<_>>().join(" ")).filter(|t| !t.is_empty());
         match self {
             Self::Command(text) => clean(text).map(Self::Command),
-            Self::Tool(text) => clean(text).map(Self::Tool),
+            Self::Tool(text) => clean(text).filter(|tool| tool_named(tool)).map(Self::Tool),
             Self::Site(text) => clean(site_of(&text)).map(Self::Site),
         }
+    }
+}
+
+fn tool_named(tool: &str) -> bool {
+    let word = |part: &str| !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'));
+    match tool.strip_prefix("mcp__").map(|rest| rest.split_once("__")) {
+        Some(Some((server, name))) => word(server) && (name == "*" || word(name.strip_suffix('*').unwrap_or(name))),
+        Some(None) => false,
+        None => tool.starts_with(|c: char| c.is_ascii_uppercase()) && tool.chars().all(|c| c.is_ascii_alphanumeric()),
     }
 }
 
@@ -66,6 +75,16 @@ impl Allowed {
         match grant.tidy() {
             Some(grant) if !self.grants.contains(&grant) => {
                 self.grants.push(grant);
+                true
+            }
+            _ => false,
+        }
+    }
+
+    pub fn add_first(&mut self, grant: Grant) -> bool {
+        match grant.tidy() {
+            Some(grant) if !self.grants.contains(&grant) => {
+                self.grants.insert(0, grant);
                 true
             }
             _ => false,
