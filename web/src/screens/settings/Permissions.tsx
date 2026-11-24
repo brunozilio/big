@@ -95,7 +95,6 @@ export function PermissionsView() {
   const same = (a: Grant, b: Grant) => a.kind === b.kind && a.value === b.value
   return (
     <section className="space-y-3">
-      <p className="text-sm text-muted">{t('settings.perm_intro')}</p>
       <PermissionsDiscovery onAdd={(found) => save([...grants, ...found.filter((grant) => !grants.some((g) => same(g, grant)))])} />
       <Card>
         <ul aria-label={t('settings.tab_permissions')} className="divide-y">
