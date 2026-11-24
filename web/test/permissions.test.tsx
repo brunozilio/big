@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { type Grant, PermissionsView, grantOf, ruleOf, withBehavior } from '../src/screens/settings/Permissions'
 import { PermissionBlock } from '../src/chat/actionBlocks'
+import { ChipPicker } from '../src/ui/chipPicker'
 import { TooltipProvider } from '../src/ui/overlay'
 
 const realFetch = globalThis.fetch
@@ -141,5 +142,20 @@ describe('aba de permissões', () => {
     cleanup()
     const plain = render(<TooltipProvider><PermissionBlock event={event(undefined)} respond={respond} /></TooltipProvider>)
     expect(plain.getByRole('button', { name: /Sempre permitir/ })).toBeTruthy()
+  })
+
+  test('uma ação do seletor tem atalho de letra quando a busca está vazia', async () => {
+    let added = 0
+    const view = render(<TooltipProvider><ChipPicker label="Aplicação" value="a" options={[{ value: 'a', label: 'Checkout' }, { value: 'b', label: 'Nexus' }]} actions={[{ key: 'add', label: 'Adicionar aplicação', shortcut: 'N', onSelect: () => (added += 1) }]} onChange={() => undefined} /></TooltipProvider>)
+    fireEvent.click(view.getByRole('combobox', { name: 'Aplicação' }))
+    const search = await view.findByLabelText('Aplicação…')
+    expect((await view.findByRole('option', { name: 'Adicionar aplicação' })).textContent).toContain('N')
+    fireEvent.change(search, { target: { value: 'n' } })
+    fireEvent.keyDown(search, { key: 'N' })
+    expect(added).toBe(0)
+    fireEvent.change(search, { target: { value: '' } })
+    fireEvent.keyDown(search, { key: 'n' })
+    expect(added).toBe(1)
+    expect(view.queryByRole('option')).toBeNull()
   })
 })

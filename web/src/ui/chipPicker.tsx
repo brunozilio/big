@@ -17,6 +17,7 @@ export interface PickerAction {
   key: string
   label: ReactNode
   icon?: ReactNode
+  shortcut?: string
   onSelect: () => void
 }
 
@@ -25,6 +26,7 @@ function ActionRow({ action, lit, onPick, onHover }: { action: PickerAction; lit
     <div role="option" tabIndex={-1} aria-selected={false} onClick={onPick} onKeyDown={(e) => e.key === 'Enter' && onPick()} onMouseMove={onHover} className={cn('flex h-9 w-full shrink-0 cursor-pointer items-center gap-2.5 rounded-control-sm px-2.5 text-left text-base text-fg2 outline-none transition-colors', lit && 'bg-hover text-fg')}>
       {action.icon && <span aria-hidden className="flex w-4 shrink-0 justify-center text-muted">{action.icon}</span>}
       <span className="flex-1 truncate">{action.label}</span>
+      {action.shortcut && <span aria-hidden className="shrink-0 text-sm text-muted">{action.shortcut}</span>}
     </div>
   )
 }
@@ -141,6 +143,11 @@ export function ChipPicker<T extends string>({ value, options, onChange, label, 
     if (numbered && !query && Number.isInteger(digit) && digit >= 1 && digit <= options.length) {
       e.preventDefault()
       return pick(options[digit - 1])
+    }
+    const shortcut = query ? undefined : actions.find((action) => action.shortcut?.toLowerCase() === e.key.toLowerCase())
+    if (shortcut && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      e.preventDefault()
+      return act(shortcut)
     }
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault()
