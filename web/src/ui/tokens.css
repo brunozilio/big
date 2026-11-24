@@ -148,7 +148,7 @@ body {
 }
 * { @apply border-line; }
 :focus-visible { outline: 2px solid rgb(var(--focus)); outline-offset: 2px; }
-textarea:focus-visible, input:focus-visible { outline: none; }
+textarea:focus-visible, input:focus-visible, [contenteditable]:focus-visible { outline: none; }
 input, textarea { caret-color: rgb(var(--text)); }
 h1, h2, h3 { text-wrap: balance; }
 p { text-wrap: pretty; }
@@ -159,7 +159,8 @@ svg.lucide { stroke-width: 1.6; }
   input, textarea, select { font-size: 16px !important; }
 }
 
-.ring-field:focus-visible, .ring-field-within:focus-within {
+.ring-field:not(textarea, input):focus-visible,
+.ring-field-within:focus-within:not(:has(textarea:focus, input:focus, [contenteditable]:focus)) {
   box-shadow: inset 0 0 0 1px rgb(var(--focus)), inset 0 0 0 3px rgb(var(--focus) / 0.12);
 }
 
@@ -306,6 +307,13 @@ svg.lucide { stroke-width: 1.6; }
 .prose-chat table { border-collapse: collapse; font-size: 14px; }
 .prose-chat th, .prose-chat td { border-bottom: 1px solid rgb(var(--border)); padding: 6px 12px 6px 0; text-align: left; }
 .prose-chat .not-prose code { background: transparent; padding: 0; border-radius: 0; font-size: inherit; }
+.prose-user { color: rgb(var(--primary-fg)); }
+.prose-user strong, .prose-user h1, .prose-user h2, .prose-user h3, .prose-user a { color: inherit; }
+.prose-user p { white-space: pre-wrap; }
+.prose-user a { text-decoration: underline; }
+.prose-user :not(pre) > code { background: rgb(var(--primary-fg) / 0.15); }
+.prose-user blockquote { border-left-color: rgb(var(--primary-fg) / 0.4); }
+.prose-user th, .prose-user td { border-bottom-color: rgb(var(--primary-fg) / 0.2); }
 .prose-thought { color: inherit; font-size: inherit; line-height: inherit; }
 .prose-thought p { margin-bottom: 6px; }
 
