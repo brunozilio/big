@@ -11,7 +11,7 @@ use sync::Pushed;
 use tokio::io::AsyncWriteExt;
 use tokio::task::AbortHandle;
 
-use crate::agent::{AgentEffect, Failure, worktree};
+use crate::agent::{AgentEffect, Failure, blocking, worktree};
 use crate::events::Wake;
 use crate::git;
 use crate::matching::{event_matches, matches};
@@ -282,7 +282,11 @@ async fn exec(shared: &Shared, item: &WorkItem, command: &Command) -> Result<Val
         child.wait_with_output().await.map_err(|error| Failure::Class(ErrorClass::Transient, error.to_string()))?;
     let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
     let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-    Ok(
-        json!({ "code": output.status.code().unwrap_or(-1), "output": format!("{stdout}{stderr}"), "stdout": stdout, "stderr": stderr }),
-    )
+    let mut answer = json!({ "code": output.status.code().unwrap_or(-1), "output": format!("{stdout}{stderr}"), "stdout": stdout, "stderr": stderr });
+    if command.args["keep"].is_array() {
+        let (store, wanted) = (crate::kept::store(&shared.config.data), command.args["keep"].clone());
+        let kept = blocking(move || crate::kept::keep(&store, &worktree, &wanted)).await?;
+        answer["kept"] = json!(kept);
+    }
+    Ok(answer)
 }

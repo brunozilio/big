@@ -1,7 +1,7 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use domain::effect::{EffectOutcome, EffectRequest, IdempotencyKey};
+use domain::effect::{Effect, EffectOutcome, EffectRequest, IdempotencyKey};
 use domain::workflow::{ItemId, StepState, WorkItem, WorkflowEvent};
 use serde_json::{Value, json};
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
@@ -299,9 +299,12 @@ impl Runner {
             pending.into_iter().filter(|command| !self.inflight.contains_key(&command.seq)).collect();
         let mut requests = Vec::new();
         let mut launches = Vec::new();
-        for command in fresh {
+        for mut command in fresh {
             let key = match ledger.requested.get(&command.seq) {
                 Some(known) => {
+                    if let Effect::AgentRun { input, .. } = &known.effect {
+                        command.args.clone_from(input);
+                    }
                     if let Some(refreshed) = refreshed(ledger, known, &command) {
                         requests.push(WorkflowEvent::EffectRequested(refreshed));
                     }

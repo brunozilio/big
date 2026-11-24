@@ -75,6 +75,22 @@ async fn an_agent_killed_midway_resumes_its_session_and_is_told_to_continue() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn an_agent_resumed_after_its_branch_got_a_name_keeps_the_folder_its_session_lives_in() {
+    let world = World::new();
+    world.engine.state.hold.store(true, Ordering::SeqCst);
+    let body = "const r = await ctx.agent(\"worker\", \"faça\", { worktree: ctx.item.branch }); return ctx.pass({ session: r.session });";
+    world.workflow("agent", &single("agent", body));
+    let started =
+        |item: &WorkItem| item.branch.is_some() && item.effects.values().any(|entry| !entry.progress.is_null());
+    let (kernel, id) = interrupted(&world, "agent", started).await;
+    ended(&kernel, &id).await;
+    let requests = world.engine.requests();
+    assert_eq!(requests.len(), 2);
+    assert_eq!(requests[1].session.resume, Some(domain::SessionId("s1".into())));
+    assert_eq!(requests[0].session.cwd, requests[1].session.cwd);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_human_wait_survives_a_restart_and_resolves_with_the_answer() {
     let world = World::new();
     let body =

@@ -14,6 +14,7 @@ mod error;
 mod events;
 mod factory;
 mod git;
+mod kept;
 mod ledger;
 mod matching;
 mod naming;
