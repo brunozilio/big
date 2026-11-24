@@ -187,3 +187,22 @@ fn always_allowing_learns_the_command_prefix_the_site_or_the_tool() {
     assert!(list.site_allowed("www.gov.br") && list.site_allowed("sso.acesso.gov.br"));
     assert!(!list.site_allowed("gov.br") && !list.site_allowed("evilgov.br"));
 }
+
+#[test]
+fn the_defaults_read_and_build_but_never_write_through_a_redirection() {
+    let bounds = bounds();
+    let none = Remembered::default();
+    let list = Allowed::of(allowed::defaults());
+    let judged = |command: &str| {
+        let effects = vec![Effect::exec(command)];
+        let call = Call { tool: "Bash", subject: "", effects: &effects };
+        let cx = PolicyContext { allowed: Some(&list), ..context(PermissionMode::Bypass, &none, &bounds) };
+        outcome(&PolicyEngine::decide(&call, &cx))
+    };
+    for command in ["git status -s", "ls -la | grep x", "cargo test 2>&1 | tail -5", "cat a.rs > /dev/null"] {
+        assert_eq!(judged(command), Outcome::Allow, "{command}");
+    }
+    for command in ["cat a.rs > b.rs", "echo x >> ~/.zshrc", "rm -rf target", "git push", "curl x.dev"] {
+        assert_eq!(judged(command), Outcome::Ask, "{command}");
+    }
+}

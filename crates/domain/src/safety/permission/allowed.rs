@@ -116,9 +116,12 @@ impl Allowed {
     }
 
     fn simple_allowed(&self, simple: &str) -> bool {
-        let words = SimpleCommand::of(simple).map(|parsed| parsed.words).unwrap_or_default();
+        let parsed = SimpleCommand::of(simple);
+        let writes = parsed.as_ref().is_none_or(|parsed| parsed.redirections.iter().any(writes_a_file));
+        let words = parsed.map(|parsed| parsed.words).unwrap_or_default();
         self.grants.iter().any(|grant| match grant {
             Grant::Command(rule) if rule == "*" => true,
+            Grant::Command(_) if writes => false,
             Grant::Command(rule) => {
                 let wanted: Vec<&str> = rule.split_whitespace().collect();
                 let last_is_star = wanted.last() == Some(&"*");
@@ -165,6 +168,22 @@ impl Allowed {
         }
         learned
     }
+}
+
+fn writes_a_file(redirection: &crate::shell::Redirection) -> bool {
+    !redirection.reads_a_file() && !matches!(redirection.target.as_str(), "/dev/null" | "&1" | "&2" | "1" | "2")
+}
+
+const DEFAULT_COMMANDS: &[&str] = &[
+    "ls", "pwd", "cat", "head", "tail", "wc", "grep", "rg", "tree", "which", "file", "stat", "du", "df", "sort",
+    "uniq", "diff", "echo", "date", "uname", "whoami", "git status", "git diff", "git log", "git show",
+    "git rev-parse", "git blame", "git ls-files", "cargo check", "cargo build",
+    "cargo test", "cargo nextest", "cargo clippy", "cargo fmt", "cargo tree", "cargo metadata", "bun test",
+    "npm test", "node --version", "python3 --version",
+];
+
+pub fn defaults() -> Vec<Grant> {
+    DEFAULT_COMMANDS.iter().map(|command| Grant::Command((*command).to_owned())).collect()
 }
 
 fn is_browser(effect: &Effect) -> bool {
