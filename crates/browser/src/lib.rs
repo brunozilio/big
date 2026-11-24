@@ -1,0 +1,35 @@
+mod batch;
+mod extension;
+mod files;
+mod find;
+mod recording;
+mod hub;
+mod session;
+mod socket;
+mod spec;
+
+pub use extension::{Installed, install};
+pub use hub::{BrowserInfo, Hub};
+pub use session::{Ask, Session};
+pub use socket::{ROUTE, connect};
+pub use spec::{server_name, tools};
+
+#[derive(Debug, Clone)]
+pub struct Settings {
+    pub call: std::time::Duration,
+    pub pairing: std::time::Duration,
+    pub upload_limit: u64,
+    pub files: std::path::PathBuf,
+}
+
+impl Settings {
+    pub fn configured(data: &std::path::Path) -> Self {
+        let number = |text: &str, default: u64| text.trim().parse().unwrap_or(default);
+        Self {
+            call: std::time::Duration::from_secs(number(brand::browser::CALL_SECONDS, 150)),
+            pairing: std::time::Duration::from_secs(number(brand::browser::SWITCH_SECONDS, 120)),
+            upload_limit: number(brand::browser::UPLOAD_LIMIT_MB, 10) * 1024 * 1024,
+            files: data.join(brand::browser::FILES_FOLDER),
+        }
+    }
+}

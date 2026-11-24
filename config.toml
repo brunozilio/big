@@ -23,6 +23,13 @@ open_browser = true
 assets_dir = ""
 max_parallel_items = 4
 
+[browser]
+call_seconds = "150"
+switch_seconds = "120"
+upload_limit_mb = "10"
+extension_folder = "browser-extension"
+files_folder = "browser-files"
+
 [retry]
 max = 5
 initial_ms = 1000

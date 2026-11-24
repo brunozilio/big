@@ -344,6 +344,7 @@ impl World {
             client,
             engine: Some(keyed),
             data,
+            browser: browser::Hub::new(),
         };
         let (router, ctx_live) = server::app(backend, BUNDLE, 7999);
         World { store, connectors, dir, provider, engine, handle, router, ctx_live }

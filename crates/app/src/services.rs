@@ -30,6 +30,31 @@ impl std::fmt::Debug for ConnectedMcp {
     }
 }
 
+pub type BrowserAsk = Arc<dyn Fn(&str, &str) -> Option<String> + Send + Sync>;
+
+type BrowserOf = Arc<dyn Fn(&str, Vec<PathBuf>, Option<BrowserAsk>) -> domain::mcp::LocalMcp + Send + Sync>;
+
+#[derive(Clone, Default)]
+pub struct BrowserMcp(Option<BrowserOf>);
+
+impl BrowserMcp {
+    pub fn new(
+        server: impl Fn(&str, Vec<PathBuf>, Option<BrowserAsk>) -> domain::mcp::LocalMcp + Send + Sync + 'static,
+    ) -> Self {
+        Self(Some(Arc::new(server)))
+    }
+
+    pub fn for_run(&self, session: &str, roots: Vec<PathBuf>, ask: Option<BrowserAsk>) -> Option<domain::mcp::LocalMcp> {
+        self.0.as_ref().map(|server| server(session, roots, ask))
+    }
+}
+
+impl std::fmt::Debug for BrowserMcp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("BrowserMcp").field(&self.0.is_some()).finish()
+    }
+}
+
 #[derive(Clone)]
 pub struct LocalServices {
     pub engine: Arc<dyn AgentEngine>,
@@ -45,6 +70,7 @@ pub struct LocalServices {
     pub mcp_auth: crate::McpAuth,
     pub secrets: Arc<dyn crate::SecretStore>,
     pub connected_mcp: ConnectedMcp,
+    pub browser_mcp: BrowserMcp,
     pub(crate) exporter: Option<crate::features::trace::export::Exporter>,
 }
 
@@ -109,7 +135,13 @@ impl LocalServices {
             mcp_auth: crate::McpAuth::new(Arc::clone(&stores.secrets), http),
             secrets: stores.secrets,
             connected_mcp: ConnectedMcp::default(),
+            browser_mcp: BrowserMcp::default(),
         }
+    }
+
+    pub fn with_browser_mcp(mut self, browser: BrowserMcp) -> Self {
+        self.browser_mcp = browser;
+        self
     }
 
     pub fn with_connected_mcp(mut self, connected: ConnectedMcp) -> Self {

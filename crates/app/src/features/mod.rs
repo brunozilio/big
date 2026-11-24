@@ -1,3 +1,4 @@
+mod browser;
 mod code_map;
 pub mod context;
 pub(crate) mod memory;
@@ -9,7 +10,7 @@ use crate::features::context::{Context, Finish};
 
 type Prepare = fn(&Context<'_>, RunId, PromptRequest) -> (PromptRequest, Option<Finish>);
 
-const PREPARING: [Prepare; 2] = [code_map::run::prepare, memory::run::prepare];
+const PREPARING: [Prepare; 3] = [code_map::run::prepare, memory::run::prepare, browser::prepare];
 
 pub fn prepare(context: &Context<'_>, run: RunId, request: PromptRequest) -> (PromptRequest, Vec<Finish>) {
     let mut request = request;

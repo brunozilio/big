@@ -9,6 +9,7 @@ mod callback_port;
 mod calls;
 mod chats;
 mod cloud;
+mod browsers;
 mod connected_mcp;
 mod connections;
 mod error;

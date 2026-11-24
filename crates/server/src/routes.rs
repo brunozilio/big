@@ -41,6 +41,8 @@ fn api() -> Router<Ctx> {
         .route(&cloud::route(), get(cloud::credentials))
         .route("/api/fs/dirs", get(folders::dirs))
         .route("/api/attachments", post(attachments::upload))
+        .route("/api/browser", get(crate::browsers::status))
+        .route(browser::ROUTE, get(crate::browsers::connect))
         .route("/api/live", get(live))
         .route("/api/{*rest}", any(|| async { ApiError::missing("Não há esse endereço.") }))
 }

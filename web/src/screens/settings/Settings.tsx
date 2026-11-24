@@ -11,6 +11,7 @@ import { SegmentedControl, UnderlineTabs } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { LogoUpload } from '@/ui/logoUpload'
 import { stagger, tween, tweenClose } from '@/ui/motion'
+import { BrowserSection } from './Browser'
 import { ConnectionCard } from './ConnectionCard'
 import { ApplicationsView } from './Applications'
 import { UsageView } from './Usage'
@@ -98,6 +99,7 @@ function ConnectionsView({ onConnect }: { onConnect: (provider: string) => void 
           </div>
         </motion.section>
       ))}
+      <BrowserSection />
     </div>
   )
 }

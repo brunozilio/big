@@ -13,6 +13,7 @@ pub struct Backend {
     pub client: app::Client,
     pub engine: Option<Arc<app::KeyedEngine>>,
     pub data: PathBuf,
+    pub browser: browser::Hub,
 }
 
 impl std::fmt::Debug for Backend {

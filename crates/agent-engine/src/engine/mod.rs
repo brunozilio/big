@@ -8,6 +8,7 @@ pub(crate) mod roles;
 mod sent;
 mod session;
 mod small_model;
+pub use small_model::pick as pick_small_model;
 mod snapshot;
 mod stop;
 mod task;

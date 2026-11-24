@@ -1,0 +1,38 @@
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --fg: #1f2328;
+  --muted: #656d76;
+  --line: #d0d7de;
+  --accent: #d97706;
+  --ok: #1a7f37;
+  --bad: #cf222e;
+  --field: #f6f8fa;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg: #161b22; --fg: #e6edf3; --muted: #8d96a0; --line: #30363d; --field: #0d1117; }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+main { padding: 16px; display: grid; gap: 14px; }
+body.popup main { width: 360px; }
+h1 { font-size: 15px; margin: 0; display: flex; align-items: center; gap: 8px; }
+h2 { font-size: 12px; margin: 0 0 6px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--bad); display: inline-block; }
+.dot.connected { background: var(--ok); }
+.dot.connecting { background: var(--accent); }
+.muted { color: var(--muted); }
+section { display: grid; gap: 6px; }
+input, textarea, select { width: 100%; font: inherit; color: inherit; background: var(--field); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; }
+textarea { min-height: 64px; resize: vertical; }
+button { font: inherit; border-radius: 6px; border: 1px solid var(--line); background: var(--field); color: inherit; padding: 6px 10px; cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+button.danger { color: var(--bad); }
+.row { display: flex; gap: 8px; align-items: center; }
+.row > * { flex: 1; }
+.row > button { flex: 0 0 auto; }
+ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+li { display: flex; justify-content: space-between; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.host { font-weight: 600; font-size: 15px; word-break: break-all; }
+.actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }

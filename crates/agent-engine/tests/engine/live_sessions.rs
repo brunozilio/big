@@ -120,7 +120,11 @@ fn an_instruction_file_edited_between_runs_reaches_the_next_run() {
 
     let systems: Vec<String> = project.models.iter().map(|model| model.asked()[0].system.clone()).collect();
     assert!(systems[0].contains("Indent with tabs."), "{}", systems[0]);
-    assert!(systems[1].contains("Indent with four spaces.") && !systems[1].contains("tabs"), "{}", systems[1]);
+    assert!(
+        systems[1].contains("Indent with four spaces.") && !systems[1].contains("Indent with tabs."),
+        "{}",
+        systems[1]
+    );
     assert!(systems[2].contains("Indent with four spaces."));
 }
 

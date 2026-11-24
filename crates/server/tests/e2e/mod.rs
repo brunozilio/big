@@ -165,6 +165,7 @@ impl Hub {
             client,
             engine: Some(keyed),
             data,
+            browser: browser::Hub::new(),
         };
         let (router, _) = server::app(backend, &[], 7998);
         Server { handle, router, store }
