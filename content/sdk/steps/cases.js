@@ -147,6 +147,7 @@ async function created(ctx, given, cases, issue) {
       precondition: precondition || undefined,
       labels: [...labels, entry.kind === "ui" ? "tela" : "api"],
       steps: [{ action: gherkin("Quando", entry.when), expected: gherkin("Então", entry.then) }],
+      folder: opts.folder ?? issue ?? undefined,
       issue: issue ?? undefined,
       issue_id: issueId,
     });

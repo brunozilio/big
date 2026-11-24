@@ -262,6 +262,7 @@ pub fn tests() -> Vec<ActionSpec> {
             ("precondition", "string"),
             ("labels", "array"),
             ("steps", "array"),
+            ("folder", "string"),
             ("issue", "string"),
             ("issue_id", "string"),
         ],

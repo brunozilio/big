@@ -1,6 +1,6 @@
 use serde_json::{Map, Value, json};
 
-use super::{Api, NO_PROJECT, valid_key};
+use super::{Api, MOST_PAGES, NO_PROJECT, PAGE, last_page, valid_key};
 use crate::error::ActionError;
 use crate::mcp;
 use crate::provider::{Args, text_of};
@@ -72,6 +72,41 @@ fn step_of(step: &Value) -> Value {
     json!({ "inline": inline })
 }
 
+const CASE_FOLDERS: &str = "TEST_CASE";
+
+async fn existing_folder(api: &Api<'_>, project: &str, name: &str) -> Result<Option<Value>, ActionError> {
+    for page in 0..MOST_PAGES {
+        let wanted =
+            json!({ "projectKey": project, "folderType": CASE_FOLDERS, "startAt": page * PAGE, "maxResults": PAGE });
+        let answer = api.tool("zephyr_get_folders", wanted).await?;
+        let folders = mcp::items(&answer, "values");
+        let found =
+            folders.iter().find(|folder| folder["parentId"].is_null() && same_title(&text_of(folder, "/name"), name));
+        if let Some(found) = found {
+            return Ok(Some(found.clone()));
+        }
+        if last_page(&answer, folders.len()) {
+            break;
+        }
+    }
+    Ok(None)
+}
+
+async fn folder_id(api: &Api<'_>, project: &str, name: &str) -> Result<Value, ActionError> {
+    let folder = match existing_folder(api, project, name).await? {
+        Some(found) => found,
+        None => {
+            let wanted = json!({ "projectKey": project, "name": name, "folderType": CASE_FOLDERS });
+            api.tool("zephyr_create_folder", wanted).await?
+        }
+    };
+    match &folder["id"] {
+        Value::Number(id) => Ok(Value::Number(id.clone())),
+        Value::String(id) => Ok(id.parse::<u64>().map_or_else(|_| json!(id), |id| json!(id))),
+        _ => Err(ActionError::decode("the test folder has no id")),
+    }
+}
+
 fn new_case(project: &str, title: &str, args: Args<'_>) -> Value {
     let mut arguments = Map::new();
     arguments.insert("projectKey".to_owned(), json!(project));
@@ -95,7 +130,11 @@ pub async fn create_case(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionE
         return Ok(json!({ "ref": found["ref"], "title": found["title"], "url": "", "created": false }));
     }
     let project = api.project(args)?;
-    let made = api.tool("zephyr_create_test_case", new_case(project, title, args)).await?;
+    let mut wanted = new_case(project, title, args);
+    if let Some(folder) = args.optional_text("folder").map(str::trim).filter(|folder| !folder.is_empty()) {
+        wanted["folderId"] = folder_id(api, project, folder).await?;
+    }
+    let made = api.tool("zephyr_create_test_case", wanted).await?;
     let key = text_of(&made, "/key");
     if key.is_empty() {
         return Err(ActionError::decode("the new test case has no key"));

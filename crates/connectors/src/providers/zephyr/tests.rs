@@ -144,6 +144,31 @@ async fn without_a_chosen_project_the_case_goes_to_the_project_of_its_issue() {
 }
 
 #[tokio::test]
+async fn a_case_goes_into_the_folder_of_its_issue_made_once() {
+    let folders = json!({ "values": [{ "id": 3, "name": "DEMO-17", "parentId": 9 }], "isLast": true });
+    let http = ZephyrMcp::new()
+        .answer("zephyr_get_issue_link_test_cases", json!({ "result": [] }))
+        .answer("zephyr_get_folders", folders)
+        .answer("zephyr_create_folder", json!({ "id": 41, "self": "https://api/folders/41" }))
+        .answer("zephyr_create_test_case", json!({ "key": "DEMO-T1" }));
+    let args = json!({ "title": "T", "issue": "DEMO-17", "folder": "DEMO-17" });
+    Zephyr.call(&http, &creds(json!({})), actions::CREATE_CASE, &args, "k").await.expect("made");
+    let calls = http.calls();
+    assert_eq!(calls[2].1, json!({ "projectKey": "DEMO", "name": "DEMO-17", "folderType": "TEST_CASE" }));
+    assert_eq!(calls[3].1["folderId"], 41);
+
+    let found = json!({ "values": [{ "id": 41, "name": "DEMO-17", "parentId": null }], "isLast": true });
+    let http = ZephyrMcp::new()
+        .answer("zephyr_get_issue_link_test_cases", json!({ "result": [] }))
+        .answer("zephyr_get_folders", found)
+        .answer("zephyr_create_test_case", json!({ "key": "DEMO-T2" }));
+    Zephyr.call(&http, &creds(json!({})), actions::CREATE_CASE, &args, "k").await.expect("made");
+    let names: Vec<String> = http.calls().into_iter().map(|(name, _)| name).collect();
+    assert!(!names.contains(&"zephyr_create_folder".to_owned()), "{names:?}");
+    assert_eq!(http.calls()[2].1["folderId"], 41);
+}
+
+#[tokio::test]
 async fn projects_are_paged_filtered_and_the_only_one_becomes_the_account_project() {
     let first: Vec<Value> = (0..50).map(|n| json!({ "id": n, "key": format!("P{n}") })).collect();
     let http = ZephyrMcp::new()

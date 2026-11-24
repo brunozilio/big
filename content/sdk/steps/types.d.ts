@@ -133,6 +133,7 @@ export interface TestCase {
 
 export interface CasesOptions extends AgentStepOptions, HumanStepOptions {
   issue?: string;
+  folder?: string;
   project?: string;
   labels?: string[];
   approve?: "human" | "auto";

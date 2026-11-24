@@ -32,6 +32,7 @@ export interface Tests {
       precondition?: string;
       labels?: string[];
       steps?: TestStep[];
+      folder?: string;
       issue?: IssueRef;
       issue_id?: string | number;
     };

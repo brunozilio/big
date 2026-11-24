@@ -941,6 +941,7 @@ fn test_cases_are_written_reviewed_by_a_person_and_created_linked_to_the_issue()
     assert_eq!(created["issue"], "T-9");
     assert_eq!(created["issue_id"], "10009");
     assert_eq!(created["precondition"], "Dado nenhum cliente Ana");
+    assert_eq!(created["folder"], "T-9");
     let step = json!({ "action": "Quando envio POST /clientes com nome=Ana", "expected": "Então a resposta tem status 201\nE Ana fica gravada" });
     assert_eq!(created["steps"], json!([step]));
     assert_eq!(calls(&asked, "create_cycle")[0]["args"]["args"]["issue_id"], "10009");
