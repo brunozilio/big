@@ -97,6 +97,7 @@ pub(crate) fn described(error: &(dyn std::error::Error + 'static)) -> String {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct Ask<'a> {
+    pub method: &'a str,
     pub url: &'a str,
     pub headers: &'a [(String, String)],
     pub body: Option<&'a str>,
@@ -107,7 +108,8 @@ pub(crate) struct Ask<'a> {
 
 impl<'a> Ask<'a> {
     pub(crate) fn new(url: &'a str, headers: &'a [(String, String)], body: Option<&'a str>) -> Self {
-        Self { url, headers, body, total: None, idle: None, one_hop: false }
+        let method = if body.is_some() { "POST" } else { "GET" };
+        Self { method, url, headers, body, total: None, idle: None, one_hop: false }
     }
 }
 
@@ -137,17 +139,15 @@ pub(crate) async fn fetch(ask: Ask<'_>, cancel: &CancellationToken) -> Result<Re
 async fn sent(ask: Ask<'_>, roots: Roots, cancel: &CancellationToken) -> Result<reqwest::Response, ModelError> {
     let shared = ready(roots, cancel).await?;
     let client = if ask.one_hop { &shared.web } else { &shared.client };
-    let mut request = match ask.body {
-        Some(body) => {
-            let request = client.post(ask.url).body(body.to_owned());
-            if ask.headers.iter().any(|(key, _)| key.eq_ignore_ascii_case("content-type")) {
-                request
-            } else {
-                request.header("content-type", "application/json")
-            }
+    let method = reqwest::Method::from_bytes(ask.method.to_ascii_uppercase().as_bytes())
+        .map_err(|_| ModelError::Network(format!("{} is not an HTTP method", ask.method)))?;
+    let mut request = client.request(method, ask.url);
+    if let Some(body) = ask.body {
+        request = request.body(body.to_owned());
+        if !ask.headers.iter().any(|(key, _)| key.eq_ignore_ascii_case("content-type")) {
+            request = request.header("content-type", "application/json");
         }
-        None => client.get(ask.url),
-    };
+    }
     for (key, value) in ask.headers {
         request = request.header(key, value);
     }

@@ -758,6 +758,7 @@ dependencies = [
  "domain",
  "getrandom 0.3.4",
  "jiff",
+ "platform",
  "reqwest",
  "ring",
  "serde",
@@ -2747,8 +2748,10 @@ version = "0.0.1"
 dependencies = [
  "base64 0.23.1",
  "crossbeam-channel",
+ "jiff",
  "keyring",
  "libc",
+ "ring",
  "serde",
  "serde_json",
  "tempfile",
@@ -2756,6 +2759,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
+ "url",
  "windows-sys 0.61.2",
 ]
 

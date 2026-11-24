@@ -45,7 +45,33 @@ pub fn stream_idle() -> Duration {
     idle_from(Some(brand::agent::STREAM_IDLE_SECONDS))
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Outgoing<'a> {
+    pub method: &'a str,
+    pub url: &'a str,
+    pub headers: &'a [(String, String)],
+    pub body: Option<&'a str>,
+    pub streaming: bool,
+}
+
 pub trait Http: Send + Sync {
+    fn send<'a>(
+        &'a self,
+        out: Outgoing<'a>,
+        cancel: &'a CancellationToken,
+    ) -> BoxFuture<'a, Result<Response, ModelError>> {
+        let body = out.body.unwrap_or_default();
+        match (out.method.to_ascii_uppercase().as_str(), out.body.is_some(), out.streaming) {
+            ("GET", false, true) => self.get_stream(out.url, out.headers, cancel),
+            ("GET", false, false) => self.request_cancellable(out.url, out.headers, None, cancel),
+            ("POST", _, true) => self.post_streaming(out.url, out.headers, body, cancel),
+            ("POST", _, false) => self.post_cancellable(out.url, out.headers, body, cancel),
+            (method, ..) => Box::pin(std::future::ready(Err(ModelError::Network(format!(
+                "{method} with this body is not supported by this HTTP transport"
+            ))))),
+        }
+    }
+
     fn post_streaming<'a>(
         &'a self,
         url: &'a str,
@@ -160,6 +186,20 @@ impl NetHttp {
 }
 
 impl Http for NetHttp {
+    fn send<'a>(
+        &'a self,
+        out: Outgoing<'a>,
+        cancel: &'a CancellationToken,
+    ) -> BoxFuture<'a, Result<Response, ModelError>> {
+        let ask = Ask { method: out.method, ..Ask::new(out.url, out.headers, out.body) };
+        let ask = if out.streaming {
+            Ask { idle: Some(stream_idle()), ..ask }
+        } else {
+            Ask { total: Some(cancellable_http::STREAM_TIMEOUT), ..ask }
+        };
+        Box::pin(cancellable_http::fetch(ask, cancel))
+    }
+
     fn post_streaming<'a>(
         &'a self,
         url: &'a str,

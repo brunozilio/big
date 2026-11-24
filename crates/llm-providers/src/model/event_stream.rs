@@ -143,7 +143,7 @@ mod tests {
     }
 
     #[test]
-    fn reads_kiros_recorded_stream_frame_by_frame() {
+    fn reads_a_recorded_stream_frame_by_frame() {
         let frames = all(include_bytes!("testdata/text.bin")).unwrap_or_default();
         let kinds: Vec<_> = frames.iter().filter_map(|f| f.header(":event-type")).collect();
         assert_eq!(kinds[0], "initial-response");

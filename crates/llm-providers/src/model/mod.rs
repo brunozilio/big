@@ -2,6 +2,8 @@ mod body;
 mod cancellable_http;
 pub mod client;
 pub(crate) mod conversation_key;
+pub mod event_stream;
+pub mod framing;
 pub mod http;
 pub mod pooled;
 pub(crate) mod retry;
@@ -10,6 +12,7 @@ pub mod routed;
 pub mod scripted;
 #[cfg(any(test, feature = "test-support"))]
 mod scripted_http;
+pub mod script_http;
 pub mod sse;
 pub(crate) mod sse_read;
 pub mod web_client;

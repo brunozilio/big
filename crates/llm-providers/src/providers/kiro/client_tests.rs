@@ -14,7 +14,7 @@ use crate::providers::testing::request;
 const KIRO: ModelProvider = ModelProvider::new("kiro-subscription");
 
 const ARN: &str = "arn:aws:codewhisperer:eu-central-1:699475941385:profile/EHGA3GRVQMUK";
-const TOOL_USE: &[u8] = include_bytes!("wire/testdata/tool_use.bin");
+const TOOL_USE: &[u8] = include_bytes!("../../model/testdata/tool_use.bin");
 
 #[derive(Default)]
 struct Wire {

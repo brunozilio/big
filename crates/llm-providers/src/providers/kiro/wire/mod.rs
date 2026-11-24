@@ -1,5 +1,4 @@
 mod body;
-mod frames;
 mod stream;
 
 use std::sync::Arc;
@@ -7,7 +6,7 @@ use std::time::Duration;
 
 pub use body::body;
 #[doc(hidden)]
-pub use frames::{Frame, next as next_frame};
+pub use crate::model::event_stream::{Frame, next as next_frame};
 pub use stream::Folder;
 
 use crate::model::http::Http;
@@ -57,7 +56,7 @@ impl Attempt for Conversation {
             }
             let mut folder = Folder::new(self.window);
             let mut body = response.body;
-            while let Some(frame) = frames::next(&mut body, cancel).await? {
+            while let Some(frame) = crate::model::event_stream::next(&mut body, cancel).await? {
                 folder.frame(&frame, on)?;
             }
             Ok(folder.finish()?)
@@ -126,7 +125,7 @@ mod tests {
     #[test]
     fn a_throttled_turn_is_retried_then_answered() {
         let busy = br#"{"__type":"com.amazon.kiro#ThrottlingException","message":"slow"}"#.to_vec();
-        let (reply, sent) = run(vec![(429, busy), (200, include_bytes!("testdata/text.bin").to_vec())]);
+        let (reply, sent) = run(vec![(429, busy), (200, include_bytes!("../../../model/testdata/text.bin").to_vec())]);
         assert_eq!(sent, 2);
         assert_eq!(reply.map(|r| r.stop), Ok(StopReason::EndTurn));
     }

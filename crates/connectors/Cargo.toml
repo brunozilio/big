@@ -9,6 +9,7 @@ license.workspace = true
 [dependencies]
 domain.workspace = true
 brand.workspace = true
+platform.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true

@@ -1,6 +1,7 @@
 pub mod atomic;
 pub mod bounded;
 pub mod child;
+pub mod crypto;
 pub mod environment;
 pub mod file_lock;
 pub mod git;

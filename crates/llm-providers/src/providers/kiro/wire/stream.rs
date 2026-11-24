@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::frames::Frame;
+use crate::model::event_stream::Frame;
 use crate::model::{Delta, ModelError, Reply};
 use crate::transcript::{Block, Message, StopReason, Usage};
 
@@ -180,7 +180,7 @@ pub fn error(kind: &str, body: &Value) -> ModelError {
 
 #[cfg(test)]
 mod tests {
-    use super::super::frames::{self, encode};
+    use crate::model::event_stream::{self as frames, encode};
     use super::*;
     use serde_json::json;
 
@@ -200,7 +200,7 @@ mod tests {
 
     #[test]
     fn a_recorded_tool_call_becomes_one_tool_use() {
-        let (reply, seen) = fold(include_bytes!("testdata/tool_use.bin"), Some(200_000));
+        let (reply, seen) = fold(include_bytes!("../../../model/testdata/tool_use.bin"), Some(200_000));
         let reply = reply.unwrap_or_else(|e| panic!("{e}"));
         assert!(seen.is_empty());
         assert_eq!(reply.stop, StopReason::ToolUse);
@@ -217,7 +217,7 @@ mod tests {
 
     #[test]
     fn recorded_text_streams_as_it_arrives() {
-        let (reply, seen) = fold(include_bytes!("testdata/text.bin"), None);
+        let (reply, seen) = fold(include_bytes!("../../../model/testdata/text.bin"), None);
         let reply = reply.unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(reply.message.text(), "It contains: `pineapple 42`");
         assert_eq!(seen.len(), 5);
@@ -228,7 +228,7 @@ mod tests {
 
     #[test]
     fn a_stream_that_names_no_model_leaves_the_served_model_unknown() {
-        let (reply, _) = fold(include_bytes!("testdata/tool_use.bin"), None);
+        let (reply, _) = fold(include_bytes!("../../../model/testdata/tool_use.bin"), None);
         assert_eq!(reply.map(|r| r.served), Ok(None));
     }
 

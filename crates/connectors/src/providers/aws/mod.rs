@@ -13,7 +13,7 @@ use crate::oauth::{DeviceApp, Dialect, Loopback, SsoSpec};
 use crate::provider::{AccountOption, Args, Credentials, Provider, text_of, unknown_action};
 
 pub use login::ConsoleLogin;
-pub use sts::{Keys, signature};
+pub use sts::Keys;
 
 pub const KEY: &str = "aws";
 pub const SSO: &str = "sso";
