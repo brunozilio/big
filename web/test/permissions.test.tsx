@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
-import { type Grant, PermissionsView } from '../src/screens/settings/Permissions'
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { type Grant, PermissionsView, grantOf, ruleOf } from '../src/screens/settings/Permissions'
 import { TooltipProvider } from '../src/ui/overlay'
 
 const realFetch = globalThis.fetch
@@ -24,17 +24,31 @@ function serve(start: Grant[]) {
 }
 
 describe('aba de permissões', () => {
-  test('lista comandos, sites e ferramentas, adiciona e remove', async () => {
+  test('as regras se escrevem como no Claude Code', () => {
+    expect(grantOf('Bash(cargo test:*)')).toEqual({ kind: 'command', value: 'cargo test' })
+    expect(grantOf('Bash(git status)')).toEqual({ kind: 'command', value: 'git status' })
+    expect(grantOf('Bash')).toEqual({ kind: 'command', value: '*' })
+    expect(grantOf('WebFetch(domain:gov.br)')).toEqual({ kind: 'site', value: 'gov.br' })
+    expect(grantOf('Site(docs.rs)')).toEqual({ kind: 'site', value: 'docs.rs' })
+    expect(grantOf('mcp__atlassian__*')).toEqual({ kind: 'tool', value: 'mcp__atlassian__*' })
+    expect(grantOf('   ')).toBeNull()
+    for (const grant of [{ kind: 'command', value: 'cargo test' }, { kind: 'site', value: 'gov.br' }, { kind: 'tool', value: 'WebSearch' }] as Grant[]) {
+      expect(grantOf(ruleOf(grant))).toEqual(grant)
+    }
+  })
+
+  test('uma lista só: adiciona pelo campo do topo e remove pela linha', async () => {
     const puts = serve([{ kind: 'command', value: 'cargo test' }, { kind: 'site', value: 'gov.br' }])
     const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
-    await waitFor(() => expect(within(view.getByTestId('permissions-command')).getByText('cargo test')).toBeTruthy())
-    expect(within(view.getByTestId('permissions-site')).getByText('gov.br')).toBeTruthy()
-    expect(within(view.getByTestId('permissions-tool')).getByText('Nenhuma ferramenta permitida.')).toBeTruthy()
-    fireEvent.change(view.getByLabelText('Nova permissão'), { target: { value: 'git status' } })
-    fireEvent.click(view.getByText('Permitir'))
-    await waitFor(() => expect(within(view.getByTestId('permissions-command')).getByText('git status')).toBeTruthy())
-    fireEvent.click(view.getByLabelText('Remover cargo test'))
-    await waitFor(() => expect(within(view.getByTestId('permissions-command')).queryByText('cargo test')).toBeNull())
+    const list = await view.findByRole('list', { name: 'Permissões' })
+    await waitFor(() => expect(list.textContent).toContain('Bash(cargo test:*)'))
+    expect(list.textContent).toContain('Site(gov.br)')
+    const box = view.getByLabelText('Adicionar regra…')
+    fireEvent.change(box, { target: { value: 'Bash(git status)' } })
+    fireEvent.submit(box)
+    await waitFor(() => expect(list.textContent).toContain('Bash(git status:*)'))
+    fireEvent.click(view.getByLabelText(/Bash\(cargo test:\*\)/))
+    await waitFor(() => expect(list.textContent).not.toContain('cargo test'))
     expect(puts[puts.length - 1]).toEqual([{ kind: 'site', value: 'gov.br' }, { kind: 'command', value: 'git status' }])
   })
 })

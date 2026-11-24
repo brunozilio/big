@@ -1,10 +1,9 @@
 import { type FormEvent, useEffect, useState } from 'react'
 import { request } from '@/api/http'
-import { Button, IconButton } from '@/ui/button'
+import { IconButton } from '@/ui/button'
 import { Card } from '@/ui/display'
-import { Input, SegmentedControl } from '@/ui/form'
 import { Icon } from '@/ui/icon'
-import { type T, useT } from '@/i18n'
+import { useT } from '@/i18n'
 
 export type GrantKind = 'command' | 'site' | 'tool'
 
@@ -15,11 +14,22 @@ export interface Grant {
 
 type Loaded = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; grants: Grant[] }
 
-const KINDS = (t: T): { kind: GrantKind; title: string; empty: string; placeholder: string; help: string }[] => [
-  { kind: 'command', title: t('settings.perm_commands'), empty: t('settings.perm_commandsEmpty'), placeholder: 'cargo test', help: t('settings.perm_commandsHelp') },
-  { kind: 'site', title: t('settings.perm_sites'), empty: t('settings.perm_sitesEmpty'), placeholder: 'gov.br', help: t('settings.perm_sitesHelp') },
-  { kind: 'tool', title: t('settings.perm_tools'), empty: t('settings.perm_toolsEmpty'), placeholder: 'mcp__atlassian__*', help: t('settings.perm_toolsHelp') },
-]
+export function ruleOf(grant: Grant): string {
+  if (grant.kind === 'command') return grant.value === '*' ? 'Bash' : `Bash(${grant.value}:*)`
+  if (grant.kind === 'site') return `Site(${grant.value})`
+  return grant.value
+}
+
+export function grantOf(rule: string): Grant | null {
+  const text = rule.trim()
+  if (!text) return null
+  if (text === 'Bash' || text === 'Bash(*)') return { kind: 'command', value: '*' }
+  const call = /^(\w+)\((.*)\)$/.exec(text)
+  const inner = call?.[2].trim() ?? ''
+  if (call?.[1] === 'Bash' && inner) return { kind: 'command', value: inner.replace(/:\*$/, '').trim() }
+  if ((call?.[1] === 'Site' || call?.[1] === 'WebFetch') && inner) return { kind: 'site', value: inner.replace(/^domain:/, '').trim() }
+  return { kind: 'tool', value: text }
+}
 
 function usePermissions() {
   const t = useT()
@@ -43,41 +53,35 @@ function usePermissions() {
   return { loaded, error, save }
 }
 
-function Row({ grant, onRemove }: { grant: Grant; onRemove: () => void }) {
+function Row({ rule, onRemove }: { rule: string; onRemove: () => void }) {
   const t = useT()
   return (
-    <div className="flex items-center gap-3 px-4 py-2.5">
-      <code className="min-w-0 flex-1 truncate font-mono text-sm text-fg" title={grant.value}>{grant.value}</code>
-      <IconButton tooltip={t('settings.remove')} aria-label={t('settings.removeNamed', { name: grant.value })} onClick={onRemove}>
+    <li className="group flex items-center gap-3 px-4 py-2">
+      <code className="min-w-0 flex-1 truncate font-mono text-sm text-fg" title={rule}>{rule}</code>
+      <IconButton size="sm" tooltip={t('settings.remove')} aria-label={t('settings.removeNamed', { name: rule })} onClick={onRemove} className="opacity-60 group-hover:opacity-100">
         <Icon name="close" size={14} />
       </IconButton>
-    </div>
+    </li>
   )
 }
 
 function Adder({ onAdd }: { onAdd: (grant: Grant) => void }) {
   const t = useT()
-  const kinds = KINDS(t)
-  const [kind, setKind] = useState<GrantKind>('command')
   const [value, setValue] = useState('')
-  const shown = kinds.find((k) => k.kind === kind) ?? kinds[0]
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    if (!value.trim()) return
-    onAdd({ kind, value: value.trim() })
+    const grant = grantOf(value)
+    if (!grant) return
+    onAdd(grant)
     setValue('')
   }
   return (
-    <Card className="space-y-3 px-4 py-4">
-      <form onSubmit={submit} className="flex flex-wrap items-center gap-2">
-        <SegmentedControl<GrantKind> size="sm" value={kind} onChange={setKind} options={kinds.map((k) => ({ value: k.kind, label: k.title }))} />
-        <Input aria-label={t('settings.perm_new')} className="min-w-[12rem] flex-1" placeholder={shown.placeholder} value={value} onChange={(e) => setValue(e.target.value)} />
-        <Button size="sm" variant="primary" type="submit" disabled={!value.trim()}>
-          {t('settings.perm_allow')}
-        </Button>
+    <li>
+      <form onSubmit={submit} className="flex items-center gap-3 px-4 py-2">
+        <Icon name="plus" size={14} className="text-muted" />
+        <input aria-label={t('settings.perm_new')} placeholder={t('settings.perm_new')} value={value} onChange={(e) => setValue(e.target.value)} className="min-w-0 flex-1 bg-transparent font-mono text-sm text-fg outline-none placeholder:font-sans placeholder:text-muted" />
       </form>
-      <p className="text-sm text-muted">{shown.help}</p>
-    </Card>
+    </li>
   )
 }
 
@@ -89,21 +93,16 @@ export function PermissionsView() {
   const { grants } = loaded
   const same = (a: Grant, b: Grant) => a.kind === b.kind && a.value === b.value
   return (
-    <section className="space-y-5">
+    <section className="space-y-3">
       <p className="text-sm text-muted">{t('settings.perm_intro')}</p>
-      <Adder onAdd={(grant) => save([...grants, grant])} />
+      <Card>
+        <ul aria-label={t('settings.tab_permissions')} className="divide-y">
+          <Adder onAdd={(grant) => save([...grants, grant])} />
+          {grants.length === 0 ? <li className="px-4 py-3 text-sm text-muted">{t('settings.perm_empty')}</li> : grants.map((grant) => <Row key={`${grant.kind}:${grant.value}`} rule={ruleOf(grant)} onRemove={() => save(grants.filter((g) => !same(g, grant)))} />)}
+        </ul>
+      </Card>
+      <p className="text-xs text-muted">{t('settings.perm_help')}</p>
       {error && <p role="alert" className="text-sm text-danger-fg">{error}</p>}
-      {KINDS(t).map(({ kind, title, empty }) => {
-        const listed = grants.filter((g) => g.kind === kind)
-        return (
-          <div key={kind} data-testid={`permissions-${kind}`}>
-            <h3 className="mb-2 text-sm font-medium text-fg">{title}</h3>
-            <Card className="divide-y">
-              {listed.length === 0 ? <p className="px-4 py-3 text-sm text-muted">{empty}</p> : listed.map((grant) => <Row key={grant.value} grant={grant} onRemove={() => save(grants.filter((g) => !same(g, grant)))} />)}
-            </Card>
-          </div>
-        )
-      })}
     </section>
   )
 }
