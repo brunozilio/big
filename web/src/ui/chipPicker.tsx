@@ -63,14 +63,14 @@ const Trigger = forwardRef<HTMLButtonElement, TriggerProps>(function Trigger({ l
   const shared = { ...props, ref, type: 'button' as const, role: 'combobox', 'aria-label': label, onKeyDown: keyed }
   if (look === 'chip') {
     return (
-      <button {...shared} className={cn('inline-flex h-7 max-w-full shrink-0 items-center gap-1.5 rounded-full bg-inset px-2.5 text-sm font-medium text-fg2 shadow-[inset_0_0_0_1px_rgb(var(--border))] transition-colors hover:bg-hover hover:text-fg data-[state=open]:bg-hover data-[state=open]:text-fg', className)}>
+      <button {...shared} className={cn('inline-flex h-7 max-w-full shrink-0 items-center gap-1.5 rounded-full bg-inset px-2.5 text-sm font-medium text-fg2 shadow-[inset_0_0_0_1px_rgb(var(--border))] outline-none transition-colors hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-fg focus-visible:outline-none data-[state=open]:bg-hover data-[state=open]:text-fg', className)}>
         {current?.icon ?? leading}
         <span className="truncate">{shown}</span>
       </button>
     )
   }
   return (
-    <button {...shared} className={cn('inline-flex items-center justify-between gap-2 rounded-control bg-surface px-3 text-fg shadow-card transition-colors hover:bg-hover data-[state=open]:bg-hover', size === 'sm' ? 'h-8 text-sm' : 'h-10 text-base', className)}>
+    <button {...shared} className={cn('inline-flex items-center justify-between gap-2 rounded-control bg-surface px-3 text-fg shadow-card outline-none transition-colors hover:bg-hover focus-visible:bg-hover focus-visible:outline-none data-[state=open]:bg-hover', size === 'sm' ? 'h-8 text-sm' : 'h-10 text-base', className)}>
       <span className="flex min-w-0 items-center gap-2 truncate">
         {current?.icon ?? leading}
         <span className="truncate">{shown}</span>
