@@ -9,6 +9,8 @@ use crate::marks::iso;
 pub struct Shown {
     pub transcript: Transcript,
     pub times: Vec<i64>,
+    pub ended: Vec<Option<i64>>,
+    pub running: Vec<usize>,
     pub mode: String,
     pub model: String,
 }
@@ -29,6 +31,10 @@ pub fn mode_named(permission: &str) -> &'static str {
         "ask" => "ask",
         _ => "accept_edits",
     }
+}
+
+pub fn free_mode(agent: Option<&domain::MainAgentSpec>, shown: &Shown) -> Option<PermissionMode> {
+    (agent.is_none() && shown.mode == "plan").then_some(PermissionMode::Plan)
 }
 
 impl Shown {
@@ -57,6 +63,31 @@ impl Shown {
         while self.times.len() < count {
             self.times.push(at);
         }
+        self.settle(at);
+    }
+
+    fn settle(&mut self, at: i64) {
+        let entries = &self.transcript.entries;
+        let seen = self.ended.len().min(entries.len());
+        self.ended.truncate(entries.len());
+        self.running.retain(|index| *index < entries.len());
+        for index in seen..entries.len() {
+            self.ended.push(None);
+            self.running.push(index);
+        }
+        let ended = &mut self.ended;
+        self.running.retain(|index| {
+            let still = entries.get(*index).is_some_and(running);
+            if !still && let Some(slot) = ended.get_mut(*index) {
+                *slot = Some(at);
+            }
+            still
+        });
+    }
+
+    pub fn took(&self, index: usize) -> i64 {
+        let started = self.times.get(index).copied().unwrap_or(0);
+        self.ended.get(index).copied().flatten().map_or(0, |ended| (ended - started).max(0))
     }
 }
 
@@ -79,15 +110,23 @@ fn tool_state(state: &ToolState) -> &'static str {
     }
 }
 
-fn call(entry: &Entry) -> Option<Value> {
+fn running(entry: &Entry) -> bool {
+    match entry {
+        Entry::Tool { state, .. } => matches!(state, ToolState::Running),
+        Entry::Agent { done, .. } => done.is_none(),
+        _ => false,
+    }
+}
+
+fn call(entry: &Entry, took: i64) -> Option<Value> {
     match entry {
         Entry::Tool { id, name, summary, state, output, input } => Some(json!({
             "id": id, "kind": tool_kind(name), "title": if summary.is_empty() { name } else { summary },
-            "tag": name, "state": tool_state(state), "output": output, "input": input, "durationMs": 0,
+            "tag": name, "state": tool_state(state), "output": output, "input": input, "durationMs": took,
         })),
         Entry::Agent { index, kind, summary, done, steps } => Some(json!({
             "id": format!("agent-{index}"), "kind": "subagent", "title": summary, "tag": kind,
-            "state": match done { None => "running", Some(true) => "ok", Some(false) => "error" }, "durationMs": 0,
+            "state": match done { None => "running", Some(true) => "ok", Some(false) => "error" }, "durationMs": took,
             "steps": steps,
         })),
         _ => None,
@@ -99,9 +138,10 @@ fn into_script(calls: &mut [Value], entry: &Entry) -> bool {
     if kind != ToolName::Repl.as_str() {
         return false;
     }
-    let script = calls.iter_mut().rev().find(|call| {
-        call["tag"] == kind.as_str() && call["title"] == summary.as_str() && call.get("steps").is_none()
-    });
+    let script = calls
+        .iter_mut()
+        .rev()
+        .find(|call| call["tag"] == kind.as_str() && call["title"] == summary.as_str() && call.get("steps").is_none());
     let Some(script) = script else { return false };
     script["steps"] = json!(steps);
     true
@@ -208,11 +248,12 @@ pub fn ask_event(ask: &AgentAsk, at: i64) -> Value {
     stamped(event, ask.id.0.clone(), at)
 }
 
-pub fn events(shown: &Shown, pending: Option<&AgentAsk>) -> Vec<Value> {
+pub fn events(shown: &Shown, pending: &[AgentAsk]) -> Vec<Value> {
     let entries = &shown.transcript.entries;
     let time = |at: usize| shown.times.get(at).copied().unwrap_or(0);
     let mut listed: Vec<Value> = Vec::new();
     let mut tools: Option<(usize, Vec<Value>)> = None;
+    let plan_ask = pending.iter().find(|ask| matches!(ask.kind, AskKind::Plan { .. }));
     let mut plan_taken = false;
     let close = |tools: &mut Option<(usize, Vec<Value>)>, listed: &mut Vec<Value>| {
         if let Some((first, calls)) = tools.take() {
@@ -229,7 +270,7 @@ pub fn events(shown: &Shown, pending: Option<&AgentAsk>) -> Vec<Value> {
             }
             continue;
         }
-        if let Some(found) = call(entry) {
+        if let Some(found) = call(entry, shown.took(at)) {
             let (_, calls) = tools.get_or_insert_with(|| (at, Vec::new()));
             if !into_script(calls, entry) {
                 calls.push(found);
@@ -243,8 +284,8 @@ pub fn events(shown: &Shown, pending: Option<&AgentAsk>) -> Vec<Value> {
         };
         let Some(event) = single(entry, attached) else { continue };
         let waiting_plan = matches!(entry, Entry::Plan { outcome: Outcome::Waiting, .. });
-        let id = match pending {
-            Some(ask) if waiting_plan && matches!(ask.kind, AskKind::Plan { .. }) => {
+        let id = match plan_ask {
+            Some(ask) if waiting_plan && !plan_taken => {
                 plan_taken = true;
                 ask.id.0.clone()
             }
@@ -253,10 +294,38 @@ pub fn events(shown: &Shown, pending: Option<&AgentAsk>) -> Vec<Value> {
         listed.push(stamped(event, id, time(at)));
     }
     close(&mut tools, &mut listed);
-    if let Some(ask) = pending.filter(|_| !plan_taken) {
-        listed.push(ask_event(ask, shown.times.last().copied().unwrap_or(0)));
+    let last = shown.times.last().copied().unwrap_or(0);
+    for ask in pending.iter().filter(|ask| !(plan_taken && plan_ask.is_some_and(|plan| plan.id == ask.id))) {
+        listed.push(ask_event(ask, last));
     }
     listed
+}
+
+fn asked(event: &Value) -> Option<Vec<&str>> {
+    if event["type"] != "ask" {
+        return None;
+    }
+    Some(event["questions"].as_array()?.iter().map(|question| question["question"].as_str().unwrap_or_default()).collect())
+}
+
+fn from_transcript(event: &Value) -> bool {
+    event["id"].as_str().is_some_and(|id| id.starts_with('e') && id[1..].chars().all(|c| c.is_ascii_digit()))
+}
+
+fn same_ask(known: &Value, event: &Value) -> bool {
+    from_transcript(known) && asked(event).is_some() && asked(known) == asked(event)
+}
+
+pub fn merge_answered(events: &mut Vec<Value>, answered: Vec<Value>) {
+    for event in answered {
+        let at = events.iter().position(|known| known["id"] == event["id"]);
+        let at = at.or_else(|| events.iter().position(|known| same_ask(known, &event)));
+        match at {
+            Some(at) => events[at] = event,
+            None => events.push(event),
+        }
+    }
+    events.sort_by(|left, right| left["at"].as_str().cmp(&right["at"].as_str()));
 }
 
 pub fn work(transcript: &Transcript) -> Value {
@@ -279,6 +348,16 @@ pub fn status(transcript: &Transcript, pending: bool) -> &'static str {
     }
 }
 
+fn chose(said: &str, label: &str, multi: bool) -> bool {
+    if said == label {
+        return true;
+    }
+    multi
+        && (said.starts_with(&format!("{label}, "))
+            || said.ends_with(&format!(", {label}"))
+            || said.contains(&format!(", {label}, ")))
+}
+
 fn answers(questions: &[domain::Question], given: &Value) -> Vec<Vec<usize>> {
     let given: Vec<&str> =
         given.as_array().map(|all| all.iter().filter_map(Value::as_str).collect()).unwrap_or_default();
@@ -287,12 +366,11 @@ fn answers(questions: &[domain::Question], given: &Value) -> Vec<Vec<usize>> {
         .enumerate()
         .map(|(at, question)| {
             let said = given.get(at).copied().unwrap_or_default();
-            let labels: Vec<&str> = said.split(", ").collect();
             question
                 .options
                 .iter()
                 .enumerate()
-                .filter(|(_, choice)| labels.contains(&choice.label.as_str()))
+                .filter(|(_, choice)| chose(said, &choice.label, question.multi))
                 .map(|(n, _)| n)
                 .collect()
         })

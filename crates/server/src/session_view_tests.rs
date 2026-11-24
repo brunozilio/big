@@ -21,7 +21,7 @@ fn records() -> Vec<Record> {
 #[test]
 fn a_session_s_records_become_the_page_s_events_with_their_times() {
     let shown = Shown::of(&records());
-    let events = events(&shown, None);
+    let events = events(&shown, &[]);
     let kinds: Vec<&str> = events.iter().filter_map(|event| event["type"].as_str()).collect();
     assert_eq!(kinds, ["user", "tools", "assistant"]);
     assert_eq!(events[0]["at"], "1970-01-01T00:00:01Z");
@@ -43,7 +43,7 @@ fn a_pending_question_is_shown_last_and_its_answer_becomes_indices() {
     };
     let ask = AgentAsk { id: AskId("a1".into()), kind: AskKind::Questions(vec![question]) };
     let shown = Shown::of(&records());
-    let listed = events(&shown, Some(&ask));
+    let listed = events(&shown, std::slice::from_ref(&ask));
     let last = listed.last().cloned().unwrap_or_default();
     assert_eq!(last["id"], "a1");
     assert_eq!(last["questions"][0]["multiSelect"], true);
@@ -109,7 +109,7 @@ fn a_subagent_shows_its_steps_and_the_session_lists_its_tasks_and_background_wor
         ),
     ];
     let shown = Shown::of(&records);
-    let listed = events(&shown, None);
+    let listed = events(&shown, &[]);
     let agent = &listed[1]["calls"][0];
     assert_eq!((agent["kind"].as_str(), agent["tag"].as_str()), (Some("subagent"), Some("explore")));
     assert_eq!(agent["steps"].as_array().map(Vec::len), Some(1));
@@ -125,7 +125,12 @@ fn a_script_shows_its_code_its_steps_and_its_answer_in_one_row() {
     let inner = EngineEvent::ToolStarted(ToolCall::new("repl-2", "Read", "a.rs"));
     let records: Vec<Record> = [
         EngineEvent::ToolStarted(script),
-        EngineEvent::AgentSpawned { index: 1, kind: "REPL".into(), summary: "Ler testes".into(), prompt: "return 1".into() },
+        EngineEvent::AgentSpawned {
+            index: 1,
+            kind: "REPL".into(),
+            summary: "Ler testes".into(),
+            prompt: "return 1".into(),
+        },
         EngineEvent::AgentEvent { index: 1, event: Box::new(inner) },
         EngineEvent::ToolResult { id: "r1".into(), output: "1".into(), failed: false },
     ]
@@ -133,7 +138,7 @@ fn a_script_shows_its_code_its_steps_and_its_answer_in_one_row() {
     .map(|event| Record::Event { at_ms: 1_000, event })
     .collect();
 
-    let events = events(&Shown::of(&records), None);
+    let events = events(&Shown::of(&records), &[]);
     let calls = events[0]["calls"].as_array().expect("the calls");
 
     assert_eq!(calls.len(), 1);
@@ -158,7 +163,7 @@ fn a_question_is_never_a_tool_row_and_once_answered_shows_its_answers() {
     };
     let mut records = records();
     records.push(Record::Event { at_ms: 4_000, event: EngineEvent::ToolStarted(asked) });
-    let waiting = events(&Shown::of(&records), None);
+    let waiting = events(&Shown::of(&records), &[]);
     assert!(waiting.iter().all(|event| event["type"] != "ask"));
     assert_eq!(waiting.iter().filter(|event| event["type"] == "tools").count(), 1);
     let output = "The user answered: \"Qual?\" = \"verde\". Go on with these answers in mind.";
@@ -167,9 +172,98 @@ fn a_question_is_never_a_tool_row_and_once_answered_shows_its_answers() {
         event: EngineEvent::ToolResult { id: "q1".into(), output: output.into(), failed: false },
     });
     records.push(Record::Event { at_ms: 5_000, event: EngineEvent::ToolFinished { id: "q1".into() } });
-    let done = events(&Shown::of(&records), None);
+    let done = events(&Shown::of(&records), &[]);
     let ask = done.iter().find(|event| event["type"] == "ask").cloned().unwrap_or_default();
     assert_eq!(ask["answers"], json!(["verde"]));
     assert_eq!(ask["questions"][0]["options"][1]["label"], "verde");
-    assert!(done.iter().all(|event| event["calls"].as_array().is_none_or(|calls| calls.iter().all(|c| c["tag"] != "AskUserQuestion"))));
+    assert!(done.iter().all(|event| {
+        event["calls"].as_array().is_none_or(|calls| calls.iter().all(|c| c["tag"] != "AskUserQuestion"))
+    }));
+}
+
+#[test]
+fn a_conversation_opened_in_plan_mode_outside_any_item_stays_in_plan_mode() {
+    let run = domain::trace::RunInfo {
+        model: "m".into(),
+        provider: "p".into(),
+        permission: format!("{:?}", PermissionMode::Plan),
+        effort: "medium".into(),
+        cwd: "/repo".into(),
+        branch: None,
+        recent: None,
+        status: None,
+    };
+    let opened = Shown::of(&[Record::Opened { at_ms: 1, run }]);
+    assert_eq!(free_mode(None, &opened), Some(PermissionMode::Plan));
+    let agent = domain::MainAgentSpec { name: "developer".into(), definition: None };
+    assert_eq!(free_mode(Some(&agent), &opened), None, "an item's agent keeps its own mode");
+    assert_eq!(free_mode(None, &Shown::of(&records())), None);
+}
+
+#[test]
+fn an_answer_whose_label_has_commas_is_read_whole() {
+    let choice = |label: &str| Choice { label: label.into(), description: String::new() };
+    let single = Question {
+        header: "Estados".into(),
+        text: "Quais estados?".into(),
+        options: vec![choice("Pendente, aprovado e cancelado"), choice("Outro")],
+        multi: false,
+    };
+    let multi = Question {
+        header: "Rotas".into(),
+        text: "Quais rotas?".into(),
+        options: vec![choice("GET, POST"), choice("DELETE"), choice("PATCH")],
+        multi: true,
+    };
+    let kind = AskKind::Questions(vec![single, multi]);
+    let response =
+        serde_json::json!({ "kind": "ask", "answers": ["Pendente, aprovado e cancelado", "GET, POST, PATCH"] });
+    assert_eq!(decision(&kind, &response), Some(Decision::Answer(vec![vec![0], vec![0, 2]])));
+}
+
+#[test]
+fn a_plan_asked_beside_a_question_keeps_its_own_ask_id() {
+    let plan = AgentAsk { id: AskId("plan-1".into()), kind: AskKind::Plan { plan: "1. Fazer".into() } };
+    let question = Question { header: "Escopo".into(), text: "Qual?".into(), options: Vec::new(), multi: false };
+    let asked = AgentAsk { id: AskId("q-1".into()), kind: AskKind::Questions(vec![question]) };
+    let mut records = records();
+    records.push(Record::Event { at_ms: 4_000, event: EngineEvent::Asked(plan.clone()) });
+    records.push(Record::Event { at_ms: 4_000, event: EngineEvent::Asked(asked.clone()) });
+    let listed = events(&Shown::of(&records), &[asked, plan]);
+    let plans: Vec<&Value> = listed.iter().filter(|event| event["type"] == "plan").collect();
+    assert_eq!(plans.len(), 1);
+    assert_eq!(plans[0]["id"], "plan-1");
+    assert_eq!(listed.last().map(|event| event["id"].clone()), Some(json!("q-1")));
+}
+
+#[test]
+fn a_tool_call_shows_how_long_it_took() {
+    let call = ToolCall { id: "t1".into(), name: "Bash".into(), summary: "sleep".into(), output: None, failed: false, input: None };
+    let records = vec![
+        Record::Prompted { at_ms: 1_000, prompt: "faça".into() },
+        Record::Event { at_ms: 1_200, event: EngineEvent::ToolStarted(call) },
+        Record::Event { at_ms: 4_600, event: EngineEvent::ToolResult { id: "t1".into(), output: "ok".into(), failed: false } },
+        Record::Event { at_ms: 4_700, event: EngineEvent::ToolFinished { id: "t1".into() } },
+    ];
+    let shown = Shown::of(&records);
+    let listed = events(&shown, &[]);
+    let calls: Vec<&Value> = listed.iter().filter_map(|event| event["calls"].as_array()).flatten().collect();
+    assert_eq!(calls.len(), 1, "{listed:?}");
+    assert_eq!(calls[0]["durationMs"], 3_500);
+}
+
+#[test]
+fn an_answered_question_already_in_the_transcript_is_shown_once_under_the_ask_id() {
+    let questions = json!([{ "question": "Qual?", "header": "Cor", "multiSelect": false, "options": [] }]);
+    let mut listed = vec![
+        json!({ "id": "e1", "type": "user", "at": "1970-01-01T00:00:01Z" }),
+        json!({ "id": "e4", "type": "ask", "questions": questions, "answers": ["verde"], "at": "1970-01-01T00:00:04Z" }),
+    ];
+    let resolved = json!({ "id": "call_9", "type": "ask", "questions": questions, "answers": ["verde"], "at": "1970-01-01T00:00:05Z" });
+    merge_answered(&mut listed, vec![resolved]);
+    let ids: Vec<&str> = listed.iter().filter_map(|event| event["id"].as_str()).collect();
+    assert_eq!(ids, ["e1", "call_9"]);
+    let other = json!({ "id": "call_10", "type": "ask", "questions": questions, "answers": ["azul"], "at": "1970-01-01T00:00:06Z" });
+    merge_answered(&mut listed, vec![other]);
+    assert_eq!(listed.iter().filter(|event| event["type"] == "ask").count(), 2);
 }

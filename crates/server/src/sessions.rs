@@ -38,9 +38,9 @@ fn shown(shared: &Shared, session: &str, folder: &std::path::Path) -> ApiResult<
     Ok(Shown::of(&records))
 }
 
-fn kernel_ask(shared: &Shared, session: &str) -> Option<AgentAsk> {
+fn kernel_asks(shared: &Shared, session: &str) -> Vec<AgentAsk> {
     let asks = shared.backend.orchestrator.asks();
-    asks.into_iter().find(|pending| pending.session.as_deref() == Some(session)).map(|pending| pending.ask)
+    asks.into_iter().filter(|pending| pending.session.as_deref() == Some(session)).map(|pending| pending.ask).collect()
 }
 
 fn title_of(row: &Row, shown: &Shown) -> String {
@@ -53,13 +53,7 @@ fn title_of(row: &Row, shown: &Shown) -> String {
 fn with_answered(shared: &Shared, session: &str, mut events: Vec<Value>) -> ApiResult<Vec<Value>> {
     let mut answered = shared.backend.orchestrator.answered(session)?;
     answered.extend(held(&shared.answered).get(session).cloned().unwrap_or_default());
-    for event in answered {
-        match events.iter_mut().find(|known| known["id"] == event["id"]) {
-            Some(known) => *known = event,
-            None => events.push(event),
-        }
-    }
-    events.sort_by(|left, right| left["at"].as_str().cmp(&right["at"].as_str()));
+    session_view::merge_answered(&mut events, answered);
     Ok(events)
 }
 
@@ -84,9 +78,12 @@ fn rendered(shared: &Shared, session: &str, row: &Row, shown: &Shown) -> ApiResu
     let (events, status, mode, model) = match shared.chats.view(session) {
         Some(going) => going,
         None => {
-            let pending = kernel_ask(shared, session).or_else(|| shown.transcript.ask().map(|found| found.ask.clone()));
-            let events = session_view::events(shown, pending.as_ref());
-            let status = session_view::status(&shown.transcript, pending.is_some());
+            let mut pending = kernel_asks(shared, session);
+            if pending.is_empty() {
+                pending.extend(shown.transcript.ask().map(|found| found.ask.clone()));
+            }
+            let events = session_view::events(shown, &pending);
+            let status = session_view::status(&shown.transcript, !pending.is_empty());
             let orphaned = status == "running" && !shared.backend.orchestrator.runs_session(session).unwrap_or(true);
             (events, if orphaned { "idle" } else { status }, shown.mode.clone(), shown.model.clone())
         }
@@ -147,21 +144,25 @@ fn prompt(shared: &Shared, body: &Value) -> ApiResult<String> {
 
 fn send_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<()> {
     let shared = ctx.as_ref();
-    if kernel_ask(shared, session).is_some() {
+    if !kernel_asks(shared, session).is_empty() {
         return Err(ApiError::busy("O agente espera uma resposta; responda o pedido aberto."));
+    }
+    let text = prompt(shared, body)?;
+    if shared.chats.steer(session, &text)? || shared.backend.orchestrator.steer(session, &text) {
+        return Ok(());
     }
     let row = row(shared, session)?;
     let shown = shown(shared, session, &row.folder)?;
     if !shared.chats.running(session) && session_view::status(&shown.transcript, false) == "running" {
         return Err(ApiError::busy("O agente ainda está trabalhando nesta sessão."));
     }
-    let text = prompt(shared, body)?;
     let model = chosen_model(shared, body["model"].as_str())?;
     let effort = crate::models::tuning(body)?;
     let nudged = Arc::clone(ctx);
     let notify: Notify = Arc::new(move |session: &str| nudged.follow(session));
     let agent = shared.backend.orchestrator.session_agent(session)?;
-    let message = Message { session, folder: row.folder, text: &text, model, effort, agent, shown };
+    let mode = session_view::free_mode(agent.as_ref(), &shown);
+    let message = Message { session, folder: row.folder, text: &text, model, effort, agent, mode, shown };
     shared.chats.send(&shared.backend.client, message, notify)
 }
 
@@ -172,8 +173,16 @@ fn side_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<Value> {
     let row = row(shared, session)?;
     let model = chosen_model(shared, body["model"].as_str())?;
     let agent = shared.backend.orchestrator.session_agent(session)?;
-    let message =
-        Message { session, folder: row.folder, text: &text, model, effort: None, agent, shown: Shown::default() };
+    let message = Message {
+        session,
+        folder: row.folder,
+        text: &text,
+        model,
+        effort: None,
+        agent,
+        mode: None,
+        shown: Shown::default(),
+    };
     let answer = crate::chats::Chats::side(&shared.backend.client, &message)?;
     Ok(json!({ "answer": answer }))
 }
@@ -193,7 +202,7 @@ pub async fn send(State(ctx): State<Ctx>, Path(id): Path<String>, Json(body): Js
 }
 
 fn answer_now(shared: &Shared, session: &str, event: &str, response: &Value) -> ApiResult<()> {
-    let from_kernel = kernel_ask(shared, session).filter(|ask| ask.id.0 == event);
+    let from_kernel = kernel_asks(shared, session).into_iter().find(|ask| ask.id.0 == event);
     let ask = from_kernel.clone().or_else(|| shared.chats.pending(session).filter(|ask| ask.id.0 == event));
     let ask = ask.ok_or_else(|| ApiError::missing("Esse pedido já foi respondido ou não existe."))?;
     let decision = session_view::decision(&ask.kind, response)
