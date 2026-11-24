@@ -141,3 +141,35 @@ fn a_script_shows_its_code_its_steps_and_its_answer_in_one_row() {
     assert_eq!(calls[0]["output"], "1");
     assert_eq!(calls[0]["steps"], serde_json::json!(["Read(a.rs)"]));
 }
+
+#[test]
+fn a_question_is_never_a_tool_row_and_once_answered_shows_its_answers() {
+    let input = json!({ "questions": [{
+        "question": "Qual?", "header": "Cor", "multiSelect": false,
+        "options": [{ "label": "azul", "description": "" }, { "label": "verde", "description": "" }],
+    }] });
+    let asked = ToolCall {
+        id: "q1".into(),
+        name: "AskUserQuestion".into(),
+        summary: "Qual?".into(),
+        output: None,
+        failed: false,
+        input: Some(input),
+    };
+    let mut records = records();
+    records.push(Record::Event { at_ms: 4_000, event: EngineEvent::ToolStarted(asked) });
+    let waiting = events(&Shown::of(&records), None);
+    assert!(waiting.iter().all(|event| event["type"] != "ask"));
+    assert_eq!(waiting.iter().filter(|event| event["type"] == "tools").count(), 1);
+    let output = "The user answered: \"Qual?\" = \"verde\". Go on with these answers in mind.";
+    records.push(Record::Event {
+        at_ms: 5_000,
+        event: EngineEvent::ToolResult { id: "q1".into(), output: output.into(), failed: false },
+    });
+    records.push(Record::Event { at_ms: 5_000, event: EngineEvent::ToolFinished { id: "q1".into() } });
+    let done = events(&Shown::of(&records), None);
+    let ask = done.iter().find(|event| event["type"] == "ask").cloned().unwrap_or_default();
+    assert_eq!(ask["answers"], json!(["verde"]));
+    assert_eq!(ask["questions"][0]["options"][1]["label"], "verde");
+    assert!(done.iter().all(|event| event["calls"].as_array().is_none_or(|calls| calls.iter().all(|c| c["tag"] != "AskUserQuestion"))));
+}

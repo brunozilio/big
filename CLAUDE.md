@@ -1,6 +1,7 @@
 # Regras do projeto
 
 - Todo comando cargo usa `CARGO_TARGET_DIR` explícito, por exemplo `CARGO_TARGET_DIR="$PWD/target/agents/<tarefa>"`. Nunca use o target padrão e nunca rode `cargo clean` nele.
+- Ao terminar a tarefa (verificação rodada), apague o próprio target: `rm -rf "$PWD/target/agents/<tarefa>"`. Só o seu; nunca o de outra tarefa nem o `target/agents/big`. Reaproveite um target já existente quando a tarefa continuar a anterior.
 - Sem comentários no código; o `xtask lint` reprova.
 - Sem `unwrap` fora de testes.
 - Funções com menos de 100 linhas.

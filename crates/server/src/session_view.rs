@@ -107,6 +107,44 @@ fn into_script(calls: &mut [Value], entry: &Entry) -> bool {
     true
 }
 
+fn is_question(entry: &Entry) -> bool {
+    matches!(entry, Entry::Tool { name, .. } if name == ToolName::AskUserQuestion.as_str())
+}
+
+fn picked(output: &str, question: &str) -> String {
+    let key = format!("\"{question}\" = \"");
+    output
+        .split_once(&key)
+        .and_then(|(_, rest)| rest.split_once('"'))
+        .map(|(answer, _)| answer)
+        .filter(|answer| *answer != "(no answer)")
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn answered(entry: &Entry) -> Option<Value> {
+    let Entry::Tool { state, output, input, .. } = entry else { return None };
+    if *state == ToolState::Running {
+        return None;
+    }
+    let output = output.as_deref().unwrap_or_default();
+    let questions: Vec<Value> = input.as_ref()?["questions"]
+        .as_array()?
+        .iter()
+        .map(|question| {
+            json!({
+                "question": question["question"].as_str().unwrap_or_default(),
+                "header": question["header"].as_str().unwrap_or_default(),
+                "multiSelect": question["multiSelect"].as_bool().unwrap_or(false),
+                "options": question["options"].as_array().cloned().unwrap_or_default(),
+            })
+        })
+        .collect();
+    let answers: Vec<String> =
+        questions.iter().map(|question| picked(output, question["question"].as_str().unwrap_or_default())).collect();
+    Some(json!({ "type": "ask", "questions": questions, "answers": answers }))
+}
+
 fn plan(text: &str, resolution: &str) -> Value {
     json!({ "type": "plan", "text": text, "resolution": resolution })
 }
@@ -184,6 +222,13 @@ pub fn events(shown: &Shown, pending: Option<&AgentAsk>) -> Vec<Value> {
         }
     };
     for (at, entry) in entries.iter().enumerate() {
+        if is_question(entry) {
+            close(&mut tools, &mut listed);
+            if let Some(event) = answered(entry) {
+                listed.push(stamped(event, format!("e{at}"), time(at)));
+            }
+            continue;
+        }
         if let Some(found) = call(entry) {
             let (_, calls) = tools.get_or_insert_with(|| (at, Vec::new()));
             if !into_script(calls, entry) {
