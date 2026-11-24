@@ -102,7 +102,6 @@ export function PermissionsView() {
           {grants.length === 0 ? <li className="px-4 py-3 text-sm text-muted">{t('settings.perm_empty')}</li> : grants.map((grant) => <Row key={`${grant.kind}:${grant.value}`} rule={ruleOf(grant)} onRemove={() => save(grants.filter((g) => !same(g, grant)))} />)}
         </ul>
       </Card>
-      <p className="text-xs text-muted">{t('settings.perm_help')}</p>
       {error && <p role="alert" className="text-sm text-danger-fg">{error}</p>}
     </section>
   )
