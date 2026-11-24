@@ -45,6 +45,7 @@ fn api() -> Router<Ctx> {
         .route("/api/attachments", post(attachments::upload))
         .route("/api/attachments/{id}", get(attachments::download))
         .route("/api/permissions", get(crate::permissions::get).put(crate::permissions::put))
+        .route("/api/permissions/discover", post(crate::discover::discover))
         .route("/api/browser", get(crate::browsers::status).put(crate::browsers::set))
         .route(browser::ROUTE, get(crate::browsers::connect))
         .route("/api/live", get(live))

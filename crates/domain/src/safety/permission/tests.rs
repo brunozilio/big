@@ -206,3 +206,26 @@ fn the_defaults_read_and_build_but_never_write_through_a_redirection() {
         assert_eq!(judged(command), Outcome::Ask, "{command}");
     }
 }
+
+#[test]
+fn suggestions_are_read_from_rules_and_the_risky_ones_dropped() {
+    let answer = r#"Aqui: {"rules":[
+        {"rule":"Bash(cargo nextest run:*)","why":"verificação do CLAUDE.md"},
+        {"rule":"Bash(bun test:*)","why":"script test"},
+        {"rule":"Bash(git push:*)","why":"x"},
+        {"rule":"Bash(rm -rf target:*)","why":"x"},
+        {"rule":"Bash(cargo:*)","why":"x"},
+        {"rule":"Bash","why":"x"},
+        {"rule":"Site(docs.rs)","why":"docs"},
+        {"rule":"WebFetch(domain:*.gov.br)","why":"gov"},
+        {"rule":"mcp__atlassian__*","why":"jira"},
+        {"rule":"mcp__*","why":"x"},
+        {"rule":"Bash(bun test:*)","why":"repetida"}
+    ]}"#;
+    let rules: Vec<String> = parse_suggestions(answer).iter().map(|s| s.grant.rule()).collect();
+    assert_eq!(
+        rules,
+        ["Bash(cargo nextest run:*)", "Bash(bun test:*)", "Site(docs.rs)", "Site(*.gov.br)", "mcp__atlassian__*"]
+    );
+    assert!(parse_suggestions("sem json").is_empty());
+}

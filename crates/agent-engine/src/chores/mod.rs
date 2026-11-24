@@ -27,6 +27,7 @@ pub fn answer(
             branch_name(api, template, history, stop)?.map(|name| ChoreAnswer::Title(spoken(&name)))
         }
         SessionCommand::Learn => lesson(api, template, history, prompt, stop)?.map(ChoreAnswer::Learned),
+        SessionCommand::Permissions => Some(ChoreAnswer::Permissions(permissions(api, template, prompt, stop)?)),
         SessionCommand::MeasureContext
         | SessionCommand::Compact
         | SessionCommand::Rewind(_)
@@ -116,6 +117,17 @@ pub fn lesson(
     messages.push(Message::user(format!("{signals}\n\n{}", crate::prompt::text("chore-learn"))));
     let answer = ask(api, template, template.system.clone(), messages, 600, stop)?;
     Ok(domain::learning::parse(&answer))
+}
+
+pub fn permissions(
+    api: &dyn ModelApi,
+    template: &TurnRequest,
+    evidence: &str,
+    stop: &Stop,
+) -> Result<Vec<domain::permission::Suggested>, ModelError> {
+    let message = Message::user(format!("<evidence>\n{}\n</evidence>", evidence.trim()));
+    let answer = ask(api, template, crate::prompt::text("chore-permissions"), vec![message], 2000, stop)?;
+    Ok(domain::permission::parse_suggestions(&answer))
 }
 
 pub fn side_answer(

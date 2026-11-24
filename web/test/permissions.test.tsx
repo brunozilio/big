@@ -10,10 +10,11 @@ afterEach(() => {
   globalThis.fetch = realFetch
 })
 
-function serve(start: Grant[]) {
+function serve(start: Grant[], suggestions: unknown[] = []) {
   let grants = start
   const puts: Grant[][] = []
-  globalThis.fetch = (async (_path: string, init?: RequestInit) => {
+  globalThis.fetch = (async (path: string, init?: RequestInit) => {
+    if (String(path).endsWith('/discover')) return new Response(JSON.stringify({ suggestions }), { status: 200 })
     if (init?.method === 'PUT') {
       grants = (JSON.parse(String(init.body)) as { grants: Grant[] }).grants
       puts.push(grants)
@@ -51,5 +52,25 @@ describe('aba de permissões', () => {
     fireEvent.click(view.getByLabelText(/Bash\(cargo test:\*\)/))
     await waitFor(() => expect(list.textContent).not.toContain('cargo test'))
     expect(puts[puts.length - 1]).toEqual([{ kind: 'site', value: 'gov.br' }, { kind: 'command', value: 'git status' }])
+  })
+
+  test('descobrir traz tudo marcado e só entra o que ficou marcado', async () => {
+    const suggestions = [
+      { grant: { kind: 'command', value: 'bun test' }, why: 'script test do package.json' },
+      { grant: { kind: 'site', value: 'docs.rs' }, why: 'lido 9× em 4 sessões' },
+    ]
+    const puts = serve([{ kind: 'command', value: 'cargo test' }], suggestions)
+    const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    fireEvent.click(await view.findByRole('button', { name: /Descobrir permissões/ }))
+    const bun = await view.findByRole('checkbox', { name: 'Bash(bun test:*)' })
+    const docs = view.getByRole('checkbox', { name: 'Site(docs.rs)' })
+    expect(bun.getAttribute('data-state')).toBe('checked')
+    expect(docs.getAttribute('data-state')).toBe('checked')
+    expect(view.getByText('script test do package.json')).toBeTruthy()
+    fireEvent.click(docs)
+    fireEvent.click(view.getByRole('button', { name: 'Adicionar 1' }))
+    await waitFor(() => expect(puts.length).toBe(1))
+    expect(puts[0]).toEqual([{ kind: 'command', value: 'cargo test' }, { kind: 'command', value: 'bun test' }])
+    expect(view.queryByRole('checkbox')).toBeNull()
   })
 })

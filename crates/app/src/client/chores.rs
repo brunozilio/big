@@ -12,6 +12,10 @@ impl Session {
     pub fn suggest(&self) -> Result<Run, Error> {
         self.chore(SessionCommand::Suggest, "")
     }
+
+    pub fn discover_permissions(&self, evidence: &str) -> Result<Run, Error> {
+        self.standalone_chore(SessionCommand::Permissions, evidence)
+    }
 }
 
 impl Run {
@@ -19,6 +23,13 @@ impl Run {
         match self.chore_answer()? {
             Some(ChoreAnswer::Side(text)) => Ok(text),
             _ => Err(Error::Run("the side question got no answer".into())),
+        }
+    }
+
+    pub fn suggested_permissions(self) -> Result<Vec<domain::permission::Suggested>, Error> {
+        match self.chore_answer()? {
+            Some(ChoreAnswer::Permissions(found)) => Ok(found),
+            _ => Err(Error::Run("the permission discovery got no answer".into())),
         }
     }
 

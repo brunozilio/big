@@ -92,6 +92,12 @@ impl Session {
         self.start(request)
     }
 
+    pub(crate) fn standalone_chore(&self, command: domain::SessionCommand, prompt: &str) -> Result<Run, Error> {
+        let mut request = PromptRequest::plain(self.cwd.clone(), prompt, self.model.clone());
+        request.session.command = Some(command);
+        self.start(request)
+    }
+
     fn start(&self, mut request: PromptRequest) -> Result<Run, Error> {
         request.policy.max_turns = self.headless.max_turns;
         request.session.append_system.clone_from(&self.headless.append_system);

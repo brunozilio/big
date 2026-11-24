@@ -4,6 +4,7 @@ import { IconButton } from '@/ui/button'
 import { Card } from '@/ui/display'
 import { Icon } from '@/ui/icon'
 import { useT } from '@/i18n'
+import { PermissionsDiscovery } from './PermissionsDiscovery'
 
 export type GrantKind = 'command' | 'site' | 'tool'
 
@@ -95,6 +96,7 @@ export function PermissionsView() {
   return (
     <section className="space-y-3">
       <p className="text-sm text-muted">{t('settings.perm_intro')}</p>
+      <PermissionsDiscovery onAdd={(found) => save([...grants, ...found.filter((grant) => !grants.some((g) => same(g, grant)))])} />
       <Card>
         <ul aria-label={t('settings.tab_permissions')} className="divide-y">
           <Adder onAdd={(grant) => save([...grants, grant])} />

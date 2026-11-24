@@ -17,7 +17,7 @@ pub(in crate::engine) struct LoadedSession {
 impl Job {
     pub(in crate::engine) fn load_session(&mut self) -> Result<LoadedSession, Stop> {
         let command = self.request.session.command;
-        if command.is_some_and(|c| c != SessionCommand::Title) && self.request.session.resume.is_none() {
+        if command.is_some_and(|c| !c.stands_alone()) && self.request.session.resume.is_none() {
             return Err(Stop::failed("There is no conversation to work on yet."));
         }
         self.hold_the_answered_session()?;
@@ -82,8 +82,11 @@ impl Job {
         let ledger = Arc::new(Ledger::default());
         let api =
             Metered { calls: None, budget: None, ..self.metered(api, &ledger, self.request.session.model.clone()) };
+        let small = (command == SessionCommand::Permissions)
+            .then(|| self.small_model(&self.request.session.roles))
+            .flatten();
         let template = TurnRequest {
-            model: self.request.session.model.id.clone(),
+            model: small.unwrap_or_else(|| self.request.session.model.id.clone()),
             system: crate::prompt::text("chores"),
             messages: Vec::new(),
             tools: Vec::new(),

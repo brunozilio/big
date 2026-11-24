@@ -100,6 +100,7 @@ mod tests {
             SessionCommand::HeadsUp,
             SessionCommand::Rename,
             SessionCommand::Learn,
+            SessionCommand::Permissions,
         ] {
             assert_eq!(Touches::of(Some(chore)), Touches::default(), "{chore:?}");
         }

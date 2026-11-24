@@ -55,7 +55,7 @@ impl Job {
         Ok(Runtime { workspace, toolbox, main, worktree })
     }
 
-    fn small_model(&self, roles: &ModelRoles) -> Option<String> {
+    pub(in crate::engine) fn small_model(&self, roles: &ModelRoles) -> Option<String> {
         let small = small_model::pick(
             self.request.session.model.provider,
             &self.request.session.model.id,

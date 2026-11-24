@@ -72,14 +72,26 @@ pub enum SessionCommand {
     Rewind(u32),
     Branch(u32),
     Learn,
+    Permissions,
 }
 
 impl SessionCommand {
     pub fn is_chore(self) -> bool {
         matches!(
             self,
-            Self::Title | Self::Suggest | Self::Recap | Self::Side | Self::HeadsUp | Self::Rename | Self::Learn
+            Self::Title
+                | Self::Suggest
+                | Self::Recap
+                | Self::Side
+                | Self::HeadsUp
+                | Self::Rename
+                | Self::Learn
+                | Self::Permissions
         )
+    }
+
+    pub fn stands_alone(self) -> bool {
+        matches!(self, Self::Title | Self::Permissions)
     }
 }
 
@@ -99,6 +111,7 @@ pub enum ChoreAnswer {
     Side(String),
     HeadsUp(HeadsUp),
     Learned(crate::learning::Proposal),
+    Permissions(Vec<crate::permission::Suggested>),
 }
 
 pub fn compact_tokens(tokens: u64) -> String {

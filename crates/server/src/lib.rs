@@ -13,6 +13,7 @@ mod cloud;
 mod browsers;
 mod connected_mcp;
 mod connections;
+mod discover;
 mod error;
 mod folders;
 mod item_view;
