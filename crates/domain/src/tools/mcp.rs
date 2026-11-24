@@ -73,3 +73,56 @@ impl PartialEq for LocalMcp {
 }
 
 impl Eq for LocalMcp {}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct RemoteMcp {
+    pub name: String,
+    pub url: String,
+    pub token: Option<String>,
+}
+
+pub fn slug(label: &str) -> String {
+    let mut slug = String::new();
+    for c in label.trim().chars().flat_map(char::to_lowercase) {
+        if c.is_ascii_alphanumeric() {
+            slug.push(c);
+        } else if !slug.is_empty() && !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    slug.trim_end_matches('-').to_owned()
+}
+
+impl RemoteMcp {
+    pub fn named(label: &str, url: &str, token: &str) -> Option<Self> {
+        let name = slug(label);
+        let token = (!token.is_empty()).then(|| token.to_owned());
+        (!name.is_empty()).then(|| Self { name, url: url.to_owned(), token })
+    }
+}
+
+impl std::fmt::Debug for RemoteMcp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RemoteMcp")
+            .field("name", &self.name)
+            .field("url", &self.url)
+            .field("token", &self.token.is_some())
+            .finish()
+    }
+}
+
+#[cfg(test)]
+mod remote_tests {
+    use super::*;
+
+    #[test]
+    fn a_connection_label_becomes_a_tool_safe_name_and_its_token_never_prints() {
+        assert_eq!(slug("  Linear Prod "), "linear-prod");
+        assert_eq!(slug("Ação__MCP!!"), "a-o-mcp");
+        assert_eq!(RemoteMcp::named("???", "https://x", "t"), None);
+        let remote = RemoteMcp::named("Linear", "https://x/mcp", "secret-token");
+        assert_eq!(remote.as_ref().map(|r| r.token.as_deref()), Some(Some("secret-token")));
+        assert!(!format!("{remote:?}").contains("secret"));
+        assert_eq!(RemoteMcp::named("Linear", "https://x/mcp", "").and_then(|r| r.token), None);
+    }
+}

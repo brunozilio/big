@@ -39,5 +39,5 @@ pub use secrets::{InMemorySecretStore, SecretStore};
 pub mod team {
     pub use agent_engine::team::{Me, Team};
 }
-pub use services::LocalServices;
+pub use services::{ConnectedMcp, LocalServices};
 pub use settings::{SettingsError, SettingsStore};

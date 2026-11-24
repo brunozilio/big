@@ -97,6 +97,19 @@ describe('adaptador mock', () => {
     expect((await api.call('c-jira', 'tracker.search', { query: '' })).length).toBeGreaterThan(0)
   })
 
+  test('um servidor MCP pede login só quando não é local e recusa endereço inseguro', async () => {
+    const api = fresh()
+    expect((await api.startSignIn('mcp', { url: 'https://mcp.linear.app/mcp', label: 'Linear' })).kind).toBe('redirect')
+    await expect(api.startSignIn('mcp', { url: 'http://docs.acme/mcp', label: 'Docs' })).rejects.toThrow('https')
+    const start = await api.startSignIn('mcp', { url: 'http://localhost:9/mcp', label: '' })
+    expect(start.kind).toBe('token')
+    let poll = await api.pollSignIn({ flow: start.flow })
+    while (poll.state === 'pending') poll = await api.pollSignIn({ flow: start.flow })
+    expect(poll.state === 'done' && poll.connection.label).toBe('localhost')
+    expect(poll.state === 'done' && poll.connection.capabilities).toEqual(['mcp'])
+    expect((await api.call('c-mcp', 'mcp.tools', {})).map((t) => t.name)).toEqual(['search', 'fetch'])
+  })
+
   test('conectar a nuvem destrava o item parado e avisa pelo feed', async () => {
     const api = fresh()
     const events: LiveEvent[] = []

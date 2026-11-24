@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react'
 import { api } from '@/api'
-import type { Connection, FormField, SignInPoll, SignInStart } from '@/api/contract'
+import type { Connection, FormField, McpTool, SignInPoll, SignInStart } from '@/api/contract'
+import { isMcpTool } from '@/api/guards'
 import { errorText } from '@/api/store'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
@@ -75,6 +76,28 @@ export function ConnectHeader({ logo, name, description }: { logo: string; name:
   )
 }
 
+function toolsText(tools: McpTool[]) {
+  if (tools.length === 0) return 'Nenhuma ferramenta'
+  const names = tools.slice(0, 3).map((t) => t.name).join(', ')
+  return tools.length > 3 ? `${names} e mais ${tools.length - 3}` : names
+}
+
+function McpTools({ connection }: { connection: string }) {
+  const [text, setText] = useState<string | null>(null)
+  useEffect(() => {
+    let live = true
+    api()
+      .call(connection, 'mcp.tools', {})
+      .then((tools) => live && setText(Array.isArray(tools) && tools.every(isMcpTool) ? toolsText(tools) : null))
+      .catch(() => live && setText(null))
+    return () => {
+      live = false
+    }
+  }, [connection])
+  if (!text) return null
+  return <span className="ml-2 text-sm text-muted">· {text}</span>
+}
+
 export function ConnectedAccounts({ accounts, onDisconnect }: { accounts: Connection[]; onDisconnect: (id: string) => void }) {
   if (accounts.length === 0) return null
   return (
@@ -86,7 +109,10 @@ export function ConnectedAccounts({ accounts, onDisconnect }: { accounts: Connec
             <span className={cn('flex size-[18px] items-center justify-center rounded-full text-white', c.status === 'error' ? 'bg-danger' : 'bg-success')}>
               <Icon name={c.status === 'error' ? 'alert' : 'check'} size={11} strokeWidth={2.6} />
             </span>
-            <span className="min-w-0 flex-1 truncate text-base text-fg">{c.account || c.label}</span>
+            <span className="min-w-0 flex-1 truncate text-base text-fg">
+              {c.account || c.label}
+              {c.capabilities.includes('mcp') && <McpTools connection={c.id} />}
+            </span>
             <Button size="sm" variant="ghost" onClick={() => onDisconnect(c.id)}>Desconectar</Button>
           </li>
         ))}

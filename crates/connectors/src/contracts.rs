@@ -7,6 +7,7 @@ pub const CODE: &str = "code";
 pub const PIPELINES: &str = "pipelines";
 pub const CLOUD: &str = "cloud";
 pub const TESTS: &str = "tests";
+pub const MCP: &str = "mcp";
 
 pub mod tracker {
     pub const CREATE_ISSUE: &str = "tracker.create_issue";
@@ -17,6 +18,7 @@ pub mod tracker {
     pub const SET_IMPEDIMENT: &str = "tracker.set_impediment";
     pub const SEARCH: &str = "tracker.search";
     pub const PROJECTS: &str = "tracker.projects";
+    pub const FIELDS: &str = "tracker.fields";
 }
 
 pub mod code {
@@ -51,6 +53,11 @@ pub mod tests {
     pub const PROJECTS: &str = "tests.projects";
 }
 
+pub mod mcp {
+    pub const TOOLS: &str = "mcp.tools";
+    pub const URL: &str = "url";
+}
+
 fn list() -> Value {
     json!({ "type": "array" })
 }
@@ -60,6 +67,7 @@ fn issue_output() -> Value {
         &[("ref", "string"), ("title", "string"), ("status", "string"), ("url", "string")],
         &[
             ("id", "string"),
+            ("project", "string"),
             ("description", "string"),
             ("impediment", "object"),
             ("subtasks", "array"),
@@ -81,6 +89,14 @@ fn project_list() -> Value {
     json!({ "type": "array", "items": project })
 }
 
+fn field_list() -> Value {
+    let field = object(
+        &[("key", "string"), ("name", "string"), ("type", "string")],
+        &[("required", "boolean"), ("values", "array")],
+    );
+    json!({ "type": "array", "items": field })
+}
+
 pub fn tracker() -> Vec<ActionSpec> {
     let new_issue = object(
         &[("title", "string")],
@@ -90,6 +106,7 @@ pub fn tracker() -> Vec<ActionSpec> {
             ("type", "string"),
             ("parent", "string"),
             ("labels", "array"),
+            ("fields", "object"),
         ],
     );
     vec![
@@ -129,6 +146,7 @@ pub fn tracker() -> Vec<ActionSpec> {
             object(&[("issues", "array")], &[("cursor", "string")]),
         ),
         ActionSpec::read(tracker::PROJECTS, object(&[], &[("query", "string")]), project_list()),
+        ActionSpec::read(tracker::FIELDS, object(&[], &[("project", "string"), ("type", "string")]), field_list()),
     ]
 }
 
@@ -295,13 +313,17 @@ pub fn tests() -> Vec<ActionSpec> {
     ]
 }
 
+pub fn mcp() -> Vec<ActionSpec> {
+    vec![ActionSpec::read(mcp::TOOLS, object(&[], &[]), list())]
+}
+
 #[cfg(test)]
 mod checks {
     use super::*;
 
     #[test]
     fn every_standard_action_is_named_after_its_capability() {
-        let all = [(TRACKER, tracker()), (CODE, code()), (PIPELINES, pipelines()), (CLOUD, cloud()), (TESTS, tests())];
+        let all = [(TRACKER, tracker()), (CODE, code()), (PIPELINES, pipelines()), (CLOUD, cloud()), (TESTS, tests()), (MCP, mcp())];
         for (capability, actions) in all {
             assert!(!actions.is_empty());
             for action in actions {
@@ -313,7 +335,7 @@ mod checks {
 
     #[test]
     fn writes_declare_how_they_stay_idempotent() {
-        let all: Vec<ActionSpec> = [tracker(), code(), pipelines(), cloud(), tests()].concat();
+        let all: Vec<ActionSpec> = [tracker(), code(), pipelines(), cloud(), tests(), mcp()].concat();
         let lookups: Vec<&str> =
             all.iter().filter(|a| a.idempotent == Idempotency::Lookup).map(|a| a.name.as_str()).collect();
         assert!(lookups.contains(&tracker::CREATE_ISSUE));

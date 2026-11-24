@@ -102,4 +102,28 @@ mod tests {
         assert!(sent.iter().all(|sent| sent.host.credentials.client == 7), "the run keeps the client it was given");
         assert!(sent.iter().all(|sent| sent.host.credentials.mcp_tokens.is_some()), "the run carries its MCP tokens");
     }
+
+    #[test]
+    fn every_run_gets_the_connected_mcp_servers_as_they_are_now() {
+        let engine = FakeEngine::new(Vec::new(), Vec::new());
+        let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = Arc::clone(&asked);
+        let connected = crate::ConnectedMcp::new(move || {
+            let n = counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            domain::mcp::RemoteMcp::named("Linear", "https://linear.test/mcp", &format!("t{n}")).into_iter().collect()
+        });
+        let services = LocalServices::with_engine(Arc::new(engine.clone())).with_connected_mcp(connected);
+        let keyed = KeyedEngine::new(services);
+        let request = PromptRequest::plain(Path::new("/work").to_path_buf(), "oi", ModelOption::new("m", "M"));
+        let sink: Arc<dyn EventSink> = Arc::new(|_: RunId, _: EngineEvent| {});
+        for _ in 0..2 {
+            assert!(keyed.start(RunId::new(), &request, Arc::clone(&sink)).is_ok());
+        }
+        let tokens: Vec<Option<String>> = engine
+            .requests()
+            .iter()
+            .flat_map(|sent| sent.host.credentials.remote_mcp.iter().map(|remote| remote.token.clone()))
+            .collect();
+        assert_eq!(tokens, [Some("t0".to_owned()), Some("t1".to_owned())]);
+    }
 }

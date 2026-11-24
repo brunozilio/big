@@ -2,6 +2,7 @@ mod adf;
 mod events;
 #[cfg(test)]
 mod fake;
+mod metadata;
 mod operations;
 mod tracker;
 
@@ -230,7 +231,8 @@ impl Provider for Jira {
             actions::CREATE_ISSUE => tracker::create_issue(&api, args, idempotency_key).await,
             actions::ISSUE => tracker::issue(&api, args.text("issue")?).await,
             actions::COMMENT => tracker::comment(&api, args.text("issue")?, args.text("body")?, idempotency_key).await,
-            actions::STATUSES => tracker::statuses(&api, api.project(args)?).await,
+            actions::STATUSES => metadata::statuses(&api, api.project(args)?).await,
+            actions::FIELDS => metadata::fields(&api, args).await,
             actions::TRANSITION => tracker::transition(&api, args.text("issue")?, args.text("status")?).await,
             actions::SET_IMPEDIMENT => tracker::set_impediment(&api, args, idempotency_key).await,
             actions::SEARCH => tracker::search(&api, args).await,

@@ -2,7 +2,7 @@ import { setClock } from '../clock'
 import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
 import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, initialApplications, listDirs } from './applications'
-import { INITIAL_CONNECTIONS, MODELS, PROVIDERS, usageFixture, usageLimitsFixture } from './fixtures'
+import { INITIAL_CONNECTIONS, MCP_TOOLS, MODELS, PROVIDERS, usageFixture, usageLimitsFixture } from './fixtures'
 import { itemOfSession, sessionById } from './sessions'
 import {
   approveDeploy, approvePlan, cancelItem, chat, connect, createItem, disconnect, isStepId, mergePr, onChange, rejectDeploy, rerunFrom, reset, resolvePause, revisePlan, store, submitReview, tick,
@@ -27,7 +27,15 @@ export function wireModels(): Models {
   return { models: served, default: served[0]?.id ?? null }
 }
 
-interface Flow { provider: string; polls: number; chosen: string | null; started: number }
+interface Flow { provider: string; polls: number; chosen: string | null; started: number; fields: Record<string, string> }
+
+function mcpServer(fields: Record<string, string>) {
+  const url = (fields.url ?? '').trim()
+  if (!url) throw new Error('Informe o endereço do servidor MCP.')
+  const local = /^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)
+  if (!local && !url.startsWith('https://')) throw new Error('Use um endereço https, ou http só em localhost.')
+  return { open: local, host: url.replace(/^\w+:\/\//, '').split(/[/:?#]/)[0] ?? url }
+}
 
 export function mockApi(options: MockOptions = {}): Api {
   const tickMs = options.tickMs ?? 700
@@ -135,17 +143,20 @@ export function mockApi(options: MockOptions = {}): Api {
           return pipelineRun(a.run) as CallResult<A>
         case 'cloud.accounts_and_roles':
           return CLOUD_ACCOUNTS as CallResult<A>
+        case 'mcp.tools':
+          return MCP_TOOLS as CallResult<A>
       }
       throw new Error(`ação ${action} desconhecida`)
     }, 120)
 
-  const startSignIn = (provider: string, method?: string): Promise<SignInStart> =>
+  const startSignIn = (provider: string, fields: Record<string, string>, method?: string): Promise<SignInStart> =>
     wait(() => {
       const p = PROVIDERS.find((x) => x.key === provider)
       if (!p) throw new Error(`provedor ${provider} desconhecido`)
+      const server = provider === 'mcp' ? mcpServer(fields) : null
       const flow = `f-${provider}-${Date.now()}`
-      flows.set(flow, { provider, polls: 0, chosen: null, started: Date.now() })
-      if (method === 'api_token' || method === 'access_keys') return { flow, kind: 'token' }
+      flows.set(flow, { provider, polls: 0, chosen: null, started: Date.now(), fields })
+      if (method === 'api_token' || method === 'access_keys' || server?.open) return { flow, kind: 'token' }
       if (p.signIn === 'device' || p.signIn === 'sso' || method === 'sso') {
         const url = provider === 'aws' ? 'https://device.sso.us-east-1.amazonaws.com/' : provider === 'grok' ? 'https://accounts.x.ai/device' : 'https://github.com/login/device'
         return { flow, kind: 'device', url, code: provider === 'aws' ? 'KQTX-WMPB' : 'WDJB-MJHT', expiresIn: 900, interval: 1 }
@@ -157,7 +168,9 @@ export function mockApi(options: MockOptions = {}): Api {
     const p = PROVIDERS.find((x) => x.key === f.provider)
     const option = p?.choose?.options.find((o) => o.id === choice)
     const n = store.connections.filter((c) => c.provider === f.provider).length
-    const c = { id: `c-${f.provider}${n ? `-${n + 1}` : ''}`, provider: f.provider, label: option?.label ?? p?.name ?? f.provider, account: option ? `${option.label} · ${option.detail}` : p?.accounts[0] ?? '', capabilities: p?.capabilities ?? [] }
+    const named = f.fields.label?.trim() || (f.provider === 'mcp' ? mcpServer(f.fields).host : '')
+    const label = option?.label ?? (named || p?.name || f.provider)
+    const c = { id: `c-${f.provider}${n ? `-${n + 1}` : ''}`, provider: f.provider, label, account: option ? `${option.label} · ${option.detail}` : named || (p?.accounts[0] ?? ''), capabilities: p?.capabilities ?? [] }
     connect(c)
     publish({ type: 'connections', connections: wireConnections() })
     return { ...c, status: 'ok' }
@@ -256,7 +269,7 @@ export function mockApi(options: MockOptions = {}): Api {
     }, 120).then(() => undefined),
     stop: () => wait(() => undefined),
     connections: () => wait(wireConnections),
-    startSignIn: (provider, _fields, method) => startSignIn(provider, method),
+    startSignIn: (provider, fields, method) => startSignIn(provider, fields, method),
     pollSignIn,
     disconnect: (id) => wait(() => {
       disconnect(id)

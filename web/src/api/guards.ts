@@ -1,4 +1,4 @@
-import { BOARD_GROUPS, STEP_STATES, type Application, type Block, type BlockType, type CloudAccount, type Item, type LiveEvent, type Session, type SessionEvent, type StepView } from './contract'
+import { BOARD_GROUPS, STEP_STATES, type Application, type Block, type BlockType, type CloudAccount, type Item, type LiveEvent, type McpTool, type Session, type SessionEvent, type StepView } from './contract'
 
 type Shape = Record<string, unknown>
 
@@ -128,4 +128,8 @@ export function isApplication(v: unknown): v is Application {
 
 export function isCloudAccount(v: unknown): v is CloudAccount {
   return obj(v) && str(v.id) && str(v.name) && str(v.email) && arr(v.roles, str)
+}
+
+export function isMcpTool(v: unknown): v is McpTool {
+  return obj(v) && str(v.name) && v.name.length > 0
 }

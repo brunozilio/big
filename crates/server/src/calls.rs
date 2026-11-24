@@ -1,4 +1,4 @@
-use connectors::contracts::{cloud, code, pipelines, tests as suite, tracker};
+use connectors::contracts::{cloud, code, mcp, pipelines, tests as suite, tracker};
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use serde_json::{Value, json};
 use store::ConnectionRecord;
@@ -89,6 +89,7 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
         "code.change" => change(&caller, arg(args, "change")?).await,
         "ci.run" => pipeline(&caller, arg(args, "run")?).await,
         "cloud.accounts_and_roles" => Ok(accounts(&caller.call(cloud::ACCOUNTS_AND_ROLES, json!({})).await?)),
+        "mcp.tools" => caller.call(mcp::TOOLS, json!({})).await,
         _ => Err(ApiError::bad(format!("A ação {action} não existe para a página."))),
     }
 }

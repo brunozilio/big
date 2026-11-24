@@ -5,7 +5,7 @@ use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, header};
 use axum::response::{Html, IntoResponse, Redirect, Response};
-use connectors::{AuthSpec, ProviderDescriptor, SettingsSink};
+use connectors::{AuthSpec, ProviderDescriptor, SettingsSink, TokenField};
 use domain::connection::ConnectionId;
 use serde_json::{Value, json};
 use store::{ConnectionRecord, Store};
@@ -20,14 +20,29 @@ fn group(descriptor: &ProviderDescriptor) -> &'static str {
     match first {
         "tracker" => "Tarefas",
         "cloud" => "Nuvem",
+        "mcp" => "Ferramentas",
         "tests" => "Testes",
         _ => "Código",
     }
 }
 
+fn fields_of(fields: &[TokenField]) -> Value {
+    let fields: Vec<Value> = fields
+        .iter()
+        .map(|field| {
+            let help = (!field.help.is_empty()).then_some(&field.help);
+            json!({
+                "name": field.name, "label": field.label, "kind": "text", "mono": true,
+                "secret": field.secret, "help": help,
+            })
+        })
+        .collect();
+    Value::Array(fields)
+}
+
 fn sign_in_of(auth: &AuthSpec) -> (&'static str, Value) {
     match auth {
-        AuthSpec::Loopback(_) => ("oauth", json!([])),
+        AuthSpec::Loopback(sign_in) => ("oauth", fields_of(&sign_in.0.fields())),
         AuthSpec::Device(_) => ("device", json!([])),
         AuthSpec::Sso(spec) => {
             let start = json!({
@@ -38,20 +53,7 @@ fn sign_in_of(auth: &AuthSpec) -> (&'static str, Value) {
                 json!({ "name": "region", "label": "Região", "kind": "text", "mono": true, "value": spec.region });
             ("sso", json!([start, region]))
         }
-        AuthSpec::Token(spec) => {
-            let fields: Vec<Value> = spec
-                .fields
-                .iter()
-                .map(|field| {
-                    let help = (!field.help.is_empty()).then_some(&field.help);
-                    json!({
-                        "name": field.name, "label": field.label, "kind": "text", "mono": true,
-                        "secret": field.secret, "help": help,
-                    })
-                })
-                .collect();
-            ("token", Value::Array(fields))
-        }
+        AuthSpec::Token(spec) => ("token", fields_of(&spec.fields)),
     }
 }
 

@@ -1,6 +1,10 @@
 import type { Agent, Model, Person, Provider, Usage, UsageDays, UsageLimits } from '../contract'
 import type { ConnectionState, Need } from './sim'
 
+const MCP_LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/></g></svg>'
+
+export const MCP_TOOLS = [{ name: 'search' }, { name: 'fetch' }]
+
 export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]; paste?: boolean; choose?: { title: string; options: { id: string; label: string; detail: string }[] } })[] = [
   { key: 'github', name: 'GitHub', group: 'Código', description: 'Sua conta GitHub', logo: 'github', button: 'Entrar com GitHub', site: 'do GitHub', signIn: 'device', fields: [], multiple: true, capabilities: ['code'],
     alternatives: [{
@@ -38,6 +42,13 @@ export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]
       key: 'api_token', label: 'Usar API token', button: 'Conectar', site: 'do Zephyr', signIn: 'token',
       fields: [{ name: 'token', label: 'API token do Zephyr', kind: 'text', mono: true, secret: true, help: 'No Jira, abra ⚙ → Configurações gerais → Apps → Zephyr API Access Tokens e clique em Gerar token de acesso.' }],
     }],
+  },
+  {
+    key: 'mcp', name: 'Servidor MCP', group: 'Ferramentas', description: 'Ferramentas de um servidor MCP remoto para os agentes', logo: MCP_LOGO, button: 'Conectar', site: 'do servidor MCP', signIn: 'oauth', multiple: true, capabilities: ['mcp'], accounts: [],
+    fields: [
+      { name: 'url', label: 'Endereço do servidor MCP', kind: 'text', mono: true, help: 'Por exemplo, https://mcp.exemplo.com/mcp.' },
+      { name: 'label', label: 'Nome', kind: 'text', mono: true, help: 'Os agentes veem as ferramentas como mcp__nome__ferramenta.' },
+    ],
   },
   { key: 'claude', name: 'Claude', group: 'Provedores de IA', description: 'Sua conta Claude', logo: 'claude', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Claude Team · ti@acme.com.br'] },
   { key: 'chatgpt', name: 'ChatGPT', group: 'Provedores de IA', description: 'Sua conta ChatGPT', logo: 'chatgpt', signIn: 'browser', paste: true, fields: [], multiple: false, capabilities: ['ai'], accounts: ['ChatGPT Business · ti@acme.com.br'] },

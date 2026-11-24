@@ -146,6 +146,11 @@ impl Connectors {
         Ok(Credentials::new(&connection.id, &token, settings.clone()))
     }
 
+    pub async fn access_token(&self, connection: &Connection) -> Result<String, ActionError> {
+        let entry = self.entry(&connection.provider)?;
+        self.keeper.access_token_of(&connection.id, &entry.descriptor.auth, &entry.alternatives).await
+    }
+
     pub async fn call(
         &self,
         connection: &Connection,

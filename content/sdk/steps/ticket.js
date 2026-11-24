@@ -9,6 +9,10 @@ const RECHECK = "recheck_statuses";
 
 const KEEP = "keep_statuses";
 
+const REQUIRED = "O rastreador exige estes campos para criar a issue. Preencha o que falta.";
+
+const OWN = ["summary", "description", "title"];
+
 function shown(s) {
   if (s.issue) return [issue(s.issue), ...(s.unknownStatuses ? [markdown(missingText(s.unknownStatuses, s.trackerStatuses ?? []))] : [])];
   return s.reason ? [markdown(s.reason)] : [];
@@ -51,6 +55,64 @@ async function destination(ctx, opts, options) {
   if (projects.length === 0) return {};
   if (projects.length === 1) return { project: projectKey(projects[0]) };
   return chooseProject(ctx, opts, projects);
+}
+
+function askedFields(found, given) {
+  return (Array.isArray(found) ? found : [])
+    .map(object)
+    .filter((field) => typeof field.key === "string" && field.key && field.required !== false)
+    .filter((field) => !OWN.includes(field.key) && given[field.key] === undefined);
+}
+
+function choicesOf(field) {
+  return (Array.isArray(field.values) ? field.values : [])
+    .map(object)
+    .filter((choice) => choice.id !== undefined && choice.id !== null)
+    .map((choice) => ({ value: String(choice.id), label: String(choice.name ?? choice.id) }));
+}
+
+function formField(field) {
+  const label = field.name || field.key;
+  const options = choicesOf(field);
+  return options.length > 0 ? { name: field.key, label, kind: "select", options } : { name: field.key, label };
+}
+
+function filled(fields, values) {
+  const chosen = {};
+  for (const field of fields) {
+    const value = String(values[field.name] ?? "").trim();
+    if (!value || (field.options && !field.options.some((option) => option.value === value))) return null;
+    chosen[field.name] = value;
+  }
+  return chosen;
+}
+
+async function requiredFields(ctx, opts, chosen, options) {
+  const given = object(opts.fields);
+  const preset = Object.keys(given).length > 0 ? given : undefined;
+  if (!chosen.project) return preset;
+  const wanted = defined({ project: chosen.project, type: opts.type ?? chosen.type, parent: opts.parent });
+  const found = await attempt(() => ctx.call("tracker", "fields", wanted, options));
+  const fields = askedFields(found, given).map(formField);
+  if (fields.length === 0) return preset;
+  const view = [markdown(REQUIRED), form(fields, { title: "Campos obrigatórios", submit: "Criar issue" })];
+  for (;;) {
+    const answer = await ctx.waitHuman(view, waitOptions(opts));
+    const values = filled(fields, object(answer.values));
+    if (values) return { ...given, ...values };
+  }
+}
+
+function keyPrefix(key) {
+  const found = /^([A-Za-z][A-Za-z0-9_]*)-\d+$/.exec(String(key));
+  return found ? found[1] : null;
+}
+
+async function issueProject(ctx, opts, existing, options) {
+  const known = opts.project ?? ctx.item.project ?? keyPrefix(existing);
+  if (known || !ctx.workflow || ctx.workflow.statuses.length === 0 || opts.checkStatuses === false) return known;
+  const found = await attempt(() => ctx.call("tracker", "issue", { issue: String(existing) }, options));
+  return object(found).project ?? null;
 }
 
 function nameOf(found) {
@@ -110,12 +172,14 @@ export default step({
     const options = { ...effects({ ...opts, connection }), ...(connection ? {} : { optional: true }) };
     const existing = opts.issue ?? ctx.item.issue ?? tracked?.subject ?? object(ctx.output(ctx.step)).issue;
     if (existing) {
-      const checked = await checkStatuses(ctx, opts, opts.project ?? ctx.item.project, options);
+      const project = await issueProject(ctx, opts, existing, options);
+      const checked = await checkStatuses(ctx, opts, project, options);
       return ctx.pass({ issue: existing, created: false, ...checked });
     }
     const chosen = await destination(ctx, opts, options);
     if (chosen === null) return ctx.skip({ created: false, reason: UNTRACKED });
     const plan = planOf(ctx, opts);
+    const fields = await requiredFields(ctx, opts, chosen, options);
     const args = defined({
       project: chosen.project,
       title: plan.title,
@@ -123,6 +187,7 @@ export default step({
       type: opts.type ?? chosen.type,
       labels: opts.labels,
       parent: opts.parent,
+      fields,
     });
     const created = await ctx.call("tracker", "create_issue", args, options);
     if (!created) return ctx.skip({ created: false, reason: UNTRACKED });

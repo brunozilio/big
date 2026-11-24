@@ -1,14 +1,16 @@
 use serde_json::{Map, Value, json};
 
 use super::adf::adf_to_markdown;
+use super::metadata::{self, kind_of};
 use super::operations::{found_list, id_of};
 use super::{Api, jql_key, jql_text, listed, visible_projects};
 use crate::error::ActionError;
 use crate::idempotency;
 use crate::provider::{Args, text_of};
 
-const ISSUE_FIELDS: [&str; 11] = [
+const ISSUE_FIELDS: [&str; 12] = [
     "summary",
+    "project",
     "description",
     "status",
     "issuetype",
@@ -76,7 +78,8 @@ pub async fn create_issue(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Va
         return Ok(answer);
     }
     let parent = args.optional_text("parent");
-    let kind = args.optional_text("type").unwrap_or(if parent.is_some() { "Subtask" } else { "Task" });
+    let kind = kind_of(args);
+    let extra = metadata::extra(api, project, args).await?;
     let mut labels: Vec<Value> = args.list("labels").to_vec();
     if !key.is_empty() {
         labels.push(json!(idempotency::label(key)));
@@ -93,6 +96,9 @@ pub async fn create_issue(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<Va
     }
     if !labels.is_empty() {
         arguments["labels"] = json!(labels);
+    }
+    if let Some(extra) = extra {
+        arguments["additional_fields"] = extra;
     }
     let answer = api.tool("createJiraIssue", arguments).await?;
     let mut made = summary(api, &answer);
@@ -154,11 +160,13 @@ pub async fn issue(api: &Api<'_>, issue: &str) -> Result<Value, ActionError> {
     let answer = read(api, issue, &fields).await?;
     let fields = &answer["fields"];
     let kind = text_of(fields, "/issuetype/name");
+    let project = text_of(fields, "/project/key");
     let mut found = summary(api, &answer);
     let extra = json!({
         "id": id_of(&answer, "/id"),
         "description": markdown(&fields["description"]),
         "type": if kind.is_empty() { Value::Null } else { json!(kind) },
+        "project": if project.is_empty() { Value::Null } else { json!(project) },
         "labels": fields["labels"].as_array().cloned().unwrap_or_default(),
         "assignee": person(&fields["assignee"]),
         "impediment": { "on": flagged(flag_of(fields, &api.flag_field)), "reason": null },
@@ -202,31 +210,6 @@ pub async fn comment(api: &Api<'_>, issue: &str, body: &str, key: &str) -> Resul
     made["body"] = json!(body);
     made["created"] = json!(true);
     Ok(made)
-}
-
-fn remember(seen: &mut Vec<Value>, status: &Value) {
-    let id = id_of(status, "/id");
-    if !id.is_empty() && !seen.iter().any(|known| known["id"] == id.as_str()) {
-        let category = text_of(status, "/statusCategory/key");
-        seen.push(json!({
-            "id": id,
-            "name": text_of(status, "/name"),
-            "category": if category.is_empty() { Value::Null } else { json!(category) },
-        }));
-    }
-}
-
-pub async fn statuses(api: &Api<'_>, project: &str) -> Result<Value, ActionError> {
-    let jql = format!("project = \"{project}\" ORDER BY updated DESC");
-    let page = api.search(&jql, &["status"], None).await?;
-    let issues = listed(&page, "issues");
-    let mut seen: Vec<Value> = Vec::new();
-    issues.iter().for_each(|issue| remember(&mut seen, &issue["fields"]["status"]));
-    if let Some(first) = issues.first() {
-        let transitions = api.transitions(&text_of(first, "/key")).await?;
-        transitions.iter().for_each(|transition| remember(&mut seen, &transition["to"]));
-    }
-    Ok(Value::Array(seen))
 }
 
 fn landed(answer: &Value) -> String {

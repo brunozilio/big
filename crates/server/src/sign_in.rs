@@ -137,12 +137,17 @@ pub async fn start(
     let opened = |waiting: Waiting| shared.flows.open_with(provider, waiting, method, fields.clone());
     match &auth {
         AuthSpec::Loopback(sign_in) => {
+            let sign_in = sign_in.entered(fields).map_err(ApiError::bad)?;
+            if let Some(grant) = sign_in.0.without_sign_in(http).await? {
+                let flow = shared.flows.granted(provider, grant, method, fields.clone())?;
+                return Ok(json!({ "flow": flow, "kind": "token" }));
+            }
             if let Some(port) = sign_in.0.callback_port().filter(|port| *port != shared.port) {
                 crate::callback_port::open(shared, port).await?;
             }
             let authorization = sign_in.0.begin(http, shared.port).await?;
             let url = authorization.url.clone();
-            let flow = opened(Waiting::Redirect { sign_in: sign_in.clone(), authorization })?;
+            let flow = opened(Waiting::Redirect { sign_in, authorization })?;
             Ok(json!({ "flow": flow, "kind": "redirect", "url": url, "paste": false, "returns": true }))
         }
         AuthSpec::Device(app) => device(shared, app.clone(), None, &opened).await,
@@ -302,7 +307,7 @@ async fn accounts(shared: &Shared, flow: &Flow, mut grant: Grant) -> Stage {
     if let Err(error) = keeper.keep(&ConnectionId::from(probe.as_str()), &grant).await {
         return Stage::Failed(error.message);
     }
-    let settings = region.map_or_else(|| json!({}), |region| json!({ "region": region.trim() }));
+    let settings = entered(&flow.fields);
     let listed = shared.backend.connectors.accounts(&connection(&probe, &found), &settings).await;
     let _ = keeper.store().remove(&ConnectionId::from(probe.as_str())).await;
     let chooses = shared.backend.connectors.chooses(&found.key);
@@ -315,6 +320,14 @@ async fn accounts(shared: &Shared, flow: &Flow, mut grant: Grant) -> Stage {
         }
         Err(error) => Stage::Failed(error.message),
     }
+}
+
+fn entered(fields: &Value) -> Value {
+    let texts = fields.as_object().into_iter().flatten().filter_map(|(name, value)| {
+        let text = value.as_str().map(str::trim).filter(|text| !text.is_empty())?;
+        Some((name.clone(), json!(text)))
+    });
+    Value::Object(texts.collect())
 }
 
 fn nothing_to_choose(found: &ProviderDescriptor) -> String {

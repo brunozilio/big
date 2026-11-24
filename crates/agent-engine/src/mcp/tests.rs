@@ -280,3 +280,26 @@ fn a_server_the_owner_signed_in_to_gets_their_token_and_one_refusing_says_how_to
     let error = error.expect_err("refused");
     assert!(error.needs_sign_in() && error.to_string().contains("headers of its entry in mcp.json"), "{error}");
 }
+
+#[test]
+fn a_connected_server_joins_the_run_with_its_token_and_a_configured_name_wins() {
+    let (_dir, mut request) = docs_request();
+    let docs = domain::mcp::RemoteMcp::named("Docs", "https://other.test/mcp", "x");
+    let linear = domain::mcp::RemoteMcp::named("Linear Prod", "https://linear.test/mcp", "oauth-2");
+    let open = domain::mcp::RemoteMcp::named("Open", "https://open.test/mcp", "");
+    request.host.credentials.remote_mcp = [docs, linear, open].into_iter().flatten().collect();
+    let specs = wanted(&request, &McpSources::default());
+    let shown: Vec<(String, String)> = specs.iter().map(|spec| (spec.name().to_owned(), spec.target())).collect();
+    assert_eq!(
+        shown,
+        [
+            ("docs".to_owned(), "http://127.0.0.1:7/mcp".to_owned()),
+            ("linear-prod".to_owned(), "https://linear.test/mcp".to_owned()),
+            ("open".to_owned(), "https://open.test/mcp".to_owned()),
+        ]
+    );
+    let ServerSpec::Http { headers, .. } = &specs[1] else { panic!("not http") };
+    assert_eq!(headers, &[("Authorization".to_owned(), "Bearer oauth-2".to_owned())]);
+    let ServerSpec::Http { headers, .. } = &specs[2] else { panic!("not http") };
+    assert!(headers.is_empty());
+}

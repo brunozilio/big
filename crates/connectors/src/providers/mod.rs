@@ -1,11 +1,12 @@
 pub mod aws;
 pub mod github;
 pub mod jira;
+pub mod mcp_server;
 pub mod zephyr;
 
 use crate::provider::Provider;
 
-pub static ALL: &[&dyn Provider] = &[&github::Github, &jira::Jira, &aws::Aws, &zephyr::Zephyr];
+pub static ALL: &[&dyn Provider] = &[&github::Github, &jira::Jira, &aws::Aws, &zephyr::Zephyr, &mcp_server::McpServers];
 
 #[cfg(test)]
 mod tests {

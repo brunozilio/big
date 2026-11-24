@@ -20,6 +20,16 @@ pub const PROJECTS: Operation =
 pub const TRANSITIONS: Operation =
     Operation { name: "listJiraIssueTransitions", topic: "transition", query: "list transitions of a jira issue" };
 
+pub const STATUSES: Operation =
+    Operation { name: "listJiraStatuses", topic: "status", query: "list the statuses of a jira project" };
+pub const ISSUE_TYPES: Operation = Operation {
+    name: "listJiraProjectIssueTypesMetadata",
+    topic: "type",
+    query: "list the issue types of a jira project",
+};
+pub const TYPE_FIELDS: Operation =
+    Operation { name: "getJiraIssueTypeMetaWithFields", topic: "field", query: "get the fields of a jira issue type" };
+
 async fn execute_read(mcp: &McpClient<'_>, cloud: &str, name: &str, inputs: &Value) -> Result<Value, ActionError> {
     mcp.call("executeRead", json!({ "cloudId": cloud, "name": name, "inputs": inputs })).await
 }

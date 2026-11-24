@@ -123,6 +123,104 @@ fn statuses_the_tracker_has_need_nobody() {
     assert!(views(&unknown).is_empty(), "a tracker that lists nothing is not checked");
 }
 
+fn required_fields() -> Value {
+    json!([
+        { "key": "summary", "name": "Resumo", "type": "string", "required": true },
+        { "key": "customfield_1", "name": "Ambiente", "type": "option", "required": true,
+          "values": [{ "id": "1", "name": "Produção" }, { "id": "2", "name": "Homologação" }] },
+        { "key": "customfield_2", "name": "Cliente", "type": "string", "required": true },
+    ])
+}
+
+#[test]
+fn a_ticket_asks_for_the_required_fields_the_tracker_wants_and_sends_them_with_the_issue() {
+    let mut fake = Fake::default();
+    let mut chosen = item(Value::Null);
+    chosen["project"] = json!("OPS");
+    let mut answers = 0;
+    let (result, asked) = drive(&source("workflows/so-ticket.ts", ONLY_TICKET), &chosen, |command| {
+        if command["kind"] == "call" && command["args"]["action"] == "fields" {
+            return Some(required_fields());
+        }
+        if command["kind"] == "wait.human" {
+            answers += 1;
+            let ambiente = if answers == 1 { "9" } else { "2" };
+            return Some(
+                json!({ "action": "submit", "values": { "customfield_1": ambiente, "customfield_2": " ACME " }, "by": "ana" }),
+            );
+        }
+        fake.reply(command)
+    });
+    assert_eq!(result["result"]["outcome"], "passed", "{result}");
+    assert_eq!(calls(&asked, "fields")[0]["args"]["args"], json!({ "project": "OPS" }));
+    let shown = views(&asked);
+    assert_eq!(shown.len(), 2, "a value outside the allowed ones asks again");
+    let asked_form = block(shown[0], "form").expect("a form");
+    assert_eq!(asked_form["title"], "Campos obrigatórios");
+    let fields = asked_form["fields"].as_array().expect("fields");
+    assert_eq!(fields.len(), 2, "the summary is the step's own: {asked_form}");
+    assert_eq!(fields[0]["kind"], "select");
+    assert_eq!(fields[0]["options"][1], json!({ "value": "2", "label": "Homologação" }));
+    assert_eq!((&fields[1]["name"], &fields[1]["label"]), (&json!("customfield_2"), &json!("Cliente")));
+    assert_ne!(fields[1]["kind"], "select");
+    let created = &calls(&asked, "create_issue")[0]["args"]["args"];
+    assert_eq!(created["fields"], json!({ "customfield_1": "2", "customfield_2": "ACME" }));
+}
+
+#[test]
+fn required_fields_the_workflow_already_gives_are_not_asked() {
+    let mut fake = Fake::default();
+    let mut chosen = item(Value::Null);
+    chosen["project"] = json!("OPS");
+    let given = ONLY_TICKET
+        .replace("ticket(ctx, {})", "ticket(ctx, { fields: { customfield_1: \"1\", customfield_2: \"ACME\" } })");
+    let (result, asked) = drive(&source("workflows/so-ticket.ts", &given), &chosen, |command| {
+        if command["kind"] == "call" && command["args"]["action"] == "fields" {
+            return Some(required_fields());
+        }
+        fake.reply(command)
+    });
+    assert_eq!(result["result"]["outcome"], "passed", "{result}");
+    assert!(views(&asked).is_empty());
+    assert_eq!(
+        calls(&asked, "create_issue")[0]["args"]["args"]["fields"],
+        json!({ "customfield_1": "1", "customfield_2": "ACME" })
+    );
+}
+
+fn checked_issue(issue: &str, found: Value) -> Vec<Value> {
+    let mut fake = Fake::default();
+    let (result, asked) = drive(&source("workflows/conferido.ts", CHECKED), &item(json!(issue)), |command| {
+        if command["kind"] == "call" && command["args"]["action"] == "statuses" {
+            return Some(json!([{ "name": "A fazer" }]));
+        }
+        if command["kind"] == "call" && command["args"]["action"] == "issue" {
+            return Some(found.clone());
+        }
+        if command["kind"] == "wait.human" {
+            return Some(json!({ "action": "keep_statuses", "values": {}, "by": "ana" }));
+        }
+        fake.reply(command)
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    assert!(calls(&asked, "create_issue").is_empty());
+    asked
+}
+
+#[test]
+fn an_item_started_from_an_issue_checks_the_statuses_of_the_issue_project() {
+    let asked = checked_issue("WEB-12", Value::Null);
+    assert!(calls(&asked, "issue").is_empty(), "the key already names the project");
+    assert_eq!(calls(&asked, "statuses")[0]["args"]["args"], json!({ "project": "WEB" }));
+    assert_eq!(of_kind(&asked, "impediment.set")[0]["args"]["on"], true);
+    let asked = checked_issue(
+        "10042",
+        json!({ "ref": "APP-3", "title": "x", "status": "A fazer", "url": "", "project": "APP" }),
+    );
+    assert_eq!(calls(&asked, "issue")[0]["args"]["args"], json!({ "issue": "10042" }));
+    assert_eq!(calls(&asked, "statuses")[0]["args"]["args"], json!({ "project": "APP" }));
+}
+
 fn linked_case() -> Value {
     json!([{ "ref": "Z-T7", "title": "Login pela tela", "precondition": "um usuário ativo" }])
 }

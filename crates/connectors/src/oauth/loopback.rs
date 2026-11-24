@@ -5,6 +5,7 @@ use jiff::Timestamp;
 use serde_json::Value;
 
 use super::Grant;
+use crate::descriptor::TokenField;
 use crate::error::ActionError;
 use crate::http::Http;
 
@@ -23,6 +24,18 @@ pub trait LoopbackSignIn: Send + Sync + std::fmt::Debug {
 
     fn callback_port(&self) -> Option<u16> {
         None
+    }
+
+    fn fields(&self) -> Vec<TokenField> {
+        Vec::new()
+    }
+
+    fn for_fields(&self, _fields: &Value) -> Result<Option<Loopback>, String> {
+        Ok(None)
+    }
+
+    async fn without_sign_in(&self, _http: &dyn Http) -> Result<Option<Grant>, ActionError> {
+        Ok(None)
     }
 
     async fn begin(&self, http: &dyn Http, port: u16) -> Result<Authorization, ActionError>;
@@ -44,6 +57,10 @@ pub struct Loopback(pub Arc<dyn LoopbackSignIn>);
 impl Loopback {
     pub fn new(sign_in: impl LoopbackSignIn + 'static) -> Loopback {
         Loopback(Arc::new(sign_in))
+    }
+
+    pub fn entered(&self, fields: &Value) -> Result<Loopback, String> {
+        Ok(self.0.for_fields(fields)?.unwrap_or_else(|| self.clone()))
     }
 
     pub async fn finish(

@@ -39,6 +39,11 @@ impl ServerSpec {
         }
     }
 
+    pub fn connected(remote: &domain::mcp::RemoteMcp) -> Self {
+        let bearer = remote.token.as_ref().map(|token| ("Authorization".to_owned(), format!("Bearer {token}")));
+        Self::Http { name: remote.name.clone(), url: remote.url.clone(), headers: bearer.into_iter().collect() }
+    }
+
     pub fn signed_in(mut self, tokens: Option<&domain::credentials::McpSignIns>) -> Self {
         if let (Self::Http { url, headers, .. } | Self::Sse { url, headers, .. }, Some(tokens)) = (&mut self, tokens)
             && !headers.iter().any(|(key, _)| key.eq_ignore_ascii_case("authorization"))

@@ -9,6 +9,7 @@ mod callback_port;
 mod calls;
 mod chats;
 mod cloud;
+mod connected_mcp;
 mod connections;
 mod error;
 mod folders;
@@ -32,6 +33,7 @@ mod watched;
 
 pub use backend::Backend;
 pub use boot::{Launch, run};
+pub use connected_mcp::for_runs as connected_mcp;
 pub use connections::StoredSettings;
 pub use live::Live;
 pub use orchestrator::CLOUD_CREDENTIALS_COMMAND;

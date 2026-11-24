@@ -5,6 +5,7 @@ pub struct RunCredentials {
     pub model_accounts: Vec<String>,
     pub other_models: Vec<(crate::ModelProvider, crate::provider::ProviderKey)>,
     pub mcp: Vec<crate::mcp::LocalMcp>,
+    pub remote_mcp: Vec<crate::mcp::RemoteMcp>,
     pub client: u64,
     pub mcp_tokens: Option<McpSignIns>,
 }
@@ -37,6 +38,7 @@ impl std::fmt::Debug for RunCredentials {
             .field("model_pool", &self.model_pool.len())
             .field("other_models", &self.other_models.iter().map(|(provider, _)| *provider).collect::<Vec<_>>())
             .field("mcp", &self.mcp)
+            .field("remote_mcp", &self.remote_mcp)
             .field("client", &self.client)
             .field("mcp_tokens", &self.mcp_tokens.is_some())
             .finish()

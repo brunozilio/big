@@ -20,8 +20,6 @@ pub struct Launch {
 
 pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static) -> Result<(), String> {
     let services = app::LocalServices::detect();
-    let client = app::Client::builder().services(services.clone()).build().map_err(|error| error.to_string())?;
-    let engine = Arc::new(app::KeyedEngine::new(services.clone()));
     let every = brand::store::SNAPSHOT_EVERY.trim().parse().unwrap_or(0);
     let store = Arc::new(Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?);
     let http = Arc::new(ReqwestHttp::new().map_err(|error| error.message)?);
@@ -29,6 +27,11 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
     let sink = Arc::new(StoredSettings(Arc::clone(&store)));
     let connectors = Arc::new(Connectors::new(http, keeper).with_sink(sink));
+    let runtime = tokio::runtime::Handle::current();
+    let connected = crate::connected_mcp::for_runs(Arc::clone(&store), Arc::clone(&connectors), runtime);
+    let services = services.with_connected_mcp(connected);
+    let client = app::Client::builder().services(services.clone()).build().map_err(|error| error.to_string())?;
+    let engine = Arc::new(app::KeyedEngine::new(services.clone()));
     let address = launch.listener.local_addr().map_err(|error| error.to_string())?;
     let config = Config::new(Arc::clone(&store), Arc::clone(&connectors), engine.clone(), launch.data.clone())
         .in_repo(launch.repo.clone())

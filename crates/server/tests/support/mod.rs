@@ -263,8 +263,18 @@ fn script() -> Vec<EngineEvent> {
     ]
 }
 
+fn open_mcp(http: FakeHttp) -> FakeHttp {
+    let initialized = r#"{"jsonrpc":"2.0","id":1,"result":{}}"#;
+    let tools = r#"{"jsonrpc":"2.0","id":2,"result":{"tools":[{"name":"search"}]}}"#;
+    let listed = [(200, initialized), (202, ""), (200, tools)];
+    let answers = [(200, initialized), (202, "")].into_iter().chain(listed).chain(listed);
+    answers
+        .into_iter()
+        .fold(http, |http, (status, body)| http.once(connectors::Method::Post, "open.test/mcp", status, body))
+}
+
 fn http() -> FakeHttp {
-    FakeHttp::new()
+    open_mcp(FakeHttp::new())
         .always(connectors::Method::Post, "/device", 200, r#"{"device_code":"dc","user_code":"ABCD-EFGH","verification_uri":"https://login.test/activate","expires_in":900,"interval":1}"#)
         .once(connectors::Method::Post, "/token", 400, r#"{"error":"authorization_pending"}"#)
         .always(connectors::Method::Post, "/token", 200, r#"{"access_token":"novo","expires_in":3600}"#)
@@ -292,8 +302,6 @@ impl World {
             domain::ChoreAnswer::Side("está no passo dois".into()),
         ]);
         let services = app::LocalServices::with_engine(Arc::new(engine.clone())).kept_in(&data);
-        let client = app::Client::builder().services(services.clone()).build().expect("client");
-        let keyed = Arc::new(app::KeyedEngine::new(services.clone()));
         let store = Arc::new(Store::open(&data.join("app.db"), 0).expect("store"));
         store
             .save_connection(&ConnectionRecord {
@@ -314,7 +322,13 @@ impl World {
         let picky: &'static dyn Provider = &Picky;
         let web: &'static dyn Provider = &Web;
         let sink = Arc::new(server::StoredSettings(Arc::clone(&store)));
-        let connectors = Arc::new(Connectors::with_providers(&[fake, picky, web], http, keeper).with_sink(sink));
+        let mcp: &'static dyn Provider = &connectors::providers::mcp_server::McpServers;
+        let connectors = Arc::new(Connectors::with_providers(&[fake, picky, web, mcp], http, keeper).with_sink(sink));
+        let runtime = tokio::runtime::Handle::current();
+        let connected = server::connected_mcp(Arc::clone(&store), Arc::clone(&connectors), runtime);
+        let services = services.with_connected_mcp(connected);
+        let client = app::Client::builder().services(services.clone()).build().expect("client");
+        let keyed = Arc::new(app::KeyedEngine::new(services.clone()));
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();
         let builtin: orchestrator::Builtin = Arc::new(content::builtin_text);
         let resources = Resources::new(Some(repo(dir.path()).join(brand::DIR)), None, builtin).listing(listed);

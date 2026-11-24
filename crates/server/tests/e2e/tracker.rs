@@ -163,6 +163,7 @@ fn answer(state: &mut State, action: &str, args: &Value, key: &str) -> Result<Va
                 .collect::<Vec<_>>()
         )),
         "tracker.projects" => Ok(json!([{ "id": "1", "key": "K", "name": "Kanban" }])),
+        "tracker.fields" => Ok(json!([])),
         "tracker.search" => {
             let issues: Vec<Value> = state.issues.iter().map(|(key, issue)| summary(key, issue)).collect();
             Ok(json!({ "issues": issues, "cursor": null }))

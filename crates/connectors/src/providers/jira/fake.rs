@@ -23,7 +23,13 @@ pub const TOOLS: [&str; 13] = [
     "executeDestructive",
 ];
 const SITELESS: [&str; 3] = ["getAccessibleAtlassianResources", "atlassianUserInfo", "discover"];
-const OPERATIONS: [&str; 2] = ["listJiraIssueTransitions", "listJiraProjects"];
+const OPERATIONS: [&str; 5] = [
+    "listJiraIssueTransitions",
+    "listJiraProjects",
+    "listJiraStatuses",
+    "listJiraProjectIssueTypesMetadata",
+    "getJiraIssueTypeMetaWithFields",
+];
 
 #[derive(Debug)]
 pub struct AtlassianV2 {

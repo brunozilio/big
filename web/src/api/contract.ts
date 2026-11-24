@@ -338,6 +338,11 @@ export type ConnectionCall =
   | { action: 'code.change'; args: { change: string }; result: ChangeData }
   | { action: 'ci.run'; args: { run: string }; result: PipelineRun }
   | { action: 'cloud.accounts_and_roles'; args: Record<string, never>; result: CloudAccount[] }
+  | { action: 'mcp.tools'; args: Record<string, never>; result: McpTool[] }
+
+export interface McpTool {
+  name: string
+}
 
 export type CallAction = ConnectionCall['action']
 export type CallArgs<A extends CallAction> = Extract<ConnectionCall, { action: A }>['args']

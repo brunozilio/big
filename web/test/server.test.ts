@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { isApplication, isBlock, isCloudAccount, isItem, isLiveEvent, isSession, isStepView } from '../src/api/guards'
+import { isApplication, isBlock, isCloudAccount, isItem, isLiveEvent, isMcpTool, isSession, isStepView } from '../src/api/guards'
 import type { Application, Branding, CallResult, Connections, Models } from '../src/api/contract'
 
 const load = (name: string): unknown => JSON.parse(readFileSync(join(import.meta.dir, 'fixtures', 'server', `${name}.json`), 'utf8'))
@@ -67,6 +67,10 @@ describe('respostas reais do servidor', () => {
     expect(accounts.length).toBeGreaterThan(0)
     expect(accounts.every(isCloudAccount)).toBe(true)
     expect(isCloudAccount({ id: '1', name: 'x', email: '', roles: [3] })).toBe(false)
+    const tools = load('call-mcp-tools') as unknown[]
+    expect(tools.length).toBeGreaterThan(0)
+    expect(tools.every(isMcpTool)).toBe(true)
+    expect(isMcpTool({ name: '' })).toBe(false)
   })
 
   test('aplicações', () => {

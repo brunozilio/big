@@ -291,11 +291,19 @@ fn in_process(request: &PromptRequest, stop: &platform::Stop) -> Vec<Arc<McpServ
 
 fn wanted(request: &PromptRequest, sources: &McpSources) -> Vec<ServerSpec> {
     let credentials = &request.host.credentials;
-    servers(request.folder(), sources)
+    let mut specs: Vec<ServerSpec> = servers(request.folder(), sources)
         .into_iter()
         .filter(|spec| !credentials.mcp.iter().any(|local| local.name == spec.name()))
         .map(|spec| spec.signed_in(credentials.mcp_tokens.as_ref()))
-        .collect()
+        .collect();
+    for remote in &credentials.remote_mcp {
+        let taken = specs.iter().any(|spec| spec.name() == remote.name)
+            || credentials.mcp.iter().any(|local| local.name == remote.name);
+        if !taken && domain::mcp_config::is_free_name(&remote.name) {
+            specs.push(ServerSpec::connected(remote));
+        }
+    }
+    specs
 }
 
 pub fn tools_of(servers: &[Arc<McpServer>], stop: &platform::Stop) -> Vec<Box<dyn Tool>> {

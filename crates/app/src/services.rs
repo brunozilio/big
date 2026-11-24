@@ -9,6 +9,27 @@ use crate::extensions::Extensions;
 use crate::providers::ModelProviders;
 use crate::settings::SettingsStore;
 
+type ServersOf = Arc<dyn Fn() -> Vec<domain::mcp::RemoteMcp> + Send + Sync>;
+
+#[derive(Clone, Default)]
+pub struct ConnectedMcp(Option<ServersOf>);
+
+impl ConnectedMcp {
+    pub fn new(servers: impl Fn() -> Vec<domain::mcp::RemoteMcp> + Send + Sync + 'static) -> Self {
+        Self(Some(Arc::new(servers)))
+    }
+
+    pub fn servers(&self) -> Vec<domain::mcp::RemoteMcp> {
+        self.0.as_ref().map(|servers| servers()).unwrap_or_default()
+    }
+}
+
+impl std::fmt::Debug for ConnectedMcp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_tuple("ConnectedMcp").field(&self.0.is_some()).finish()
+    }
+}
+
 #[derive(Clone)]
 pub struct LocalServices {
     pub engine: Arc<dyn AgentEngine>,
@@ -23,6 +44,7 @@ pub struct LocalServices {
     pub homes: Arc<dyn crate::Homes>,
     pub mcp_auth: crate::McpAuth,
     pub secrets: Arc<dyn crate::SecretStore>,
+    pub connected_mcp: ConnectedMcp,
     pub(crate) exporter: Option<crate::features::trace::export::Exporter>,
 }
 
@@ -86,7 +108,13 @@ impl LocalServices {
             homes: Arc::new(crate::OwnerHome::none()),
             mcp_auth: crate::McpAuth::new(Arc::clone(&stores.secrets), http),
             secrets: stores.secrets,
+            connected_mcp: ConnectedMcp::default(),
         }
+    }
+
+    pub fn with_connected_mcp(mut self, connected: ConnectedMcp) -> Self {
+        self.connected_mcp = connected;
+        self
     }
 
     pub fn home(&self) -> Option<PathBuf> {
