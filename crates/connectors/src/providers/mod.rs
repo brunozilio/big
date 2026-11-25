@@ -1,8 +1,6 @@
 pub mod aws;
 pub mod github;
 pub mod jira;
-pub mod mcp_server;
-pub mod mock_changes;
 pub mod veracode;
 pub mod zephyr;
 
@@ -16,8 +14,6 @@ pub static ALL: &[&dyn Provider] = &[
     &aws::Aws,
     &zephyr::Zephyr,
     &veracode::Veracode,
-    &mcp_server::McpServers,
-    &mock_changes::MockChanges,
 ];
 
 pub fn all() -> Vec<Arc<dyn Provider>> {

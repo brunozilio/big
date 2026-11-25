@@ -180,3 +180,12 @@ export function expiresAt(nowSecond: number, seconds: number | undefined): strin
   if (seconds === undefined || seconds === null || !Number.isFinite(seconds)) return null;
   return new Date((nowSecond + seconds) * 1000).toISOString();
 }
+
+export function classOf(error): string {
+  if (error?.class?.kind) return error.class.kind;
+  try {
+    return JSON.parse(String(error?.message ?? error))?.class?.kind ?? "permanent";
+  } catch (_) {
+    return "permanent";
+  }
+}

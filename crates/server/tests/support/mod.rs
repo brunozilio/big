@@ -331,8 +331,13 @@ impl World {
         let picky: &'static dyn Provider = &Picky;
         let web: &'static dyn Provider = &Web;
         let sink = Arc::new(server::StoredSettings(Arc::clone(&store)));
-        let mcp: &'static dyn Provider = &connectors::providers::mcp_server::McpServers;
-        let connectors = Arc::new(Connectors::with_providers(&[fake, picky, web, mcp], http, keeper).with_sink(sink));
+        let mut providers: Vec<Arc<dyn Provider>> = [fake, picky, web]
+            .into_iter()
+            .map(|provider| Arc::new(connectors::providers::Shared(provider)) as Arc<dyn Provider>)
+            .collect();
+        let mcp = connectors::scripted::ScriptedProvider::load_in(None, "connectors/mcp/index.ts").expect("mcp");
+        providers.push(Arc::new(mcp));
+        let connectors = Arc::new(Connectors::from_providers(providers, http, keeper).with_sink(sink));
         let runtime = tokio::runtime::Handle::current();
         let connected = server::connected_mcp(Arc::clone(&store), Arc::clone(&connectors), runtime);
         let services = services.with_connected_mcp(connected);

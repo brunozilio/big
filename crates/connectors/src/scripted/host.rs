@@ -1,3 +1,6 @@
+use std::collections::HashMap;
+use std::sync::{Mutex, OnceLock, PoisonError};
+
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use jiff::Timestamp;
@@ -66,6 +69,22 @@ fn convert(arguments: &Value) -> Result<Value, String> {
     text_of(&bytes, field(arguments, "to")).map(Value::String)
 }
 
+fn memory() -> &'static Mutex<HashMap<String, Value>> {
+    static MEMORY: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new();
+    MEMORY.get_or_init(Mutex::default)
+}
+
+fn remembered(arguments: &Value) -> Value {
+    let held = memory().lock().unwrap_or_else(PoisonError::into_inner);
+    held.get(field(arguments, "name")).cloned().unwrap_or(Value::Null)
+}
+
+fn remember(arguments: &Value) -> Value {
+    let mut held = memory().lock().unwrap_or_else(PoisonError::into_inner);
+    held.insert(field(arguments, "name").to_owned(), arguments["value"].clone());
+    Value::Null
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Local;
 
@@ -81,6 +100,10 @@ impl Answers for Local {
             "crypto.random" => random(arguments),
             "encoding.convert" => convert(arguments),
             "clock.now" => Ok(json!(Timestamp::now().as_second())),
+            "net.site" => Ok(json!(domain::site::site(field(arguments, "url")))),
+            "net.safeEndpoint" => Ok(json!(domain::mcp_oauth::endpoint_ok(field(arguments, "url")))),
+            "memory.get" => Ok(remembered(arguments)),
+            "memory.set" => Ok(remember(arguments)),
             _ => return None,
         })
     }
@@ -167,7 +190,7 @@ impl Online<'_> {
                 let client = McpClient::connect(self.http, field(arguments, "url"), token).await?;
                 client.call(field(arguments, "tool"), arguments["arguments"].clone()).await
             }
-            "mcp.reachable" => Ok(json!(McpClient::connect(self.http, field(arguments, "url"), token).await.is_ok())),
+            "mcp.connect" => McpClient::connect(self.http, field(arguments, "url"), token).await.map(|_| json!(true)),
             "oauth.mcp.begin" => {
                 let port = u16::try_from(arguments["port"].as_u64().unwrap_or_default()).unwrap_or_default();
                 let started = self.sign_in(arguments).begin(self.http, port).await?;

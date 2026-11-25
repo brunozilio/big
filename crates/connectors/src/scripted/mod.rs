@@ -110,12 +110,11 @@ impl ScriptedProvider {
         modules.push((WRAPPER.to_owned(), wrapper(entry)));
         let folder = entry.rsplit_once('/').map_or(String::new(), |(folder, _)| format!("{folder}/"));
         let named = folder.trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_owned();
-        let mut script = Script { modules: Arc::new(modules), data: config_of(&named) };
+        let script = Script { modules: Arc::new(modules), data: config_of(&named) };
         let local: Arc<dyn script::Host> = Arc::new(Local);
         let declared = script.invoke_here("provider", &json!({}), local).map_err(|error| error.message)?;
         let declared: Declared = serde_json::from_value(declared).map_err(|error| format!("{entry}: {error}"))?;
         let key = if declared.key.is_empty() { named } else { declared.key.clone() };
-        script.data = config_of(&key);
         let polls = script.kind("poll") == "function";
         let descriptor = ProviderDescriptor {
             key: ProviderKey::from(key.as_str()),

@@ -1,8 +1,13 @@
-use domain::connection::ConnectionId;
-use serde_json::json;
+use domain::Language;
+use domain::connection::Capability;
+use serde_json::{Value, json};
 
-use super::*;
+use super::{creds, loaded, now};
+use crate::descriptor::AuthSpec;
+use crate::error::ErrorClass;
 use crate::http::{FakeHttp, HttpResponse, Method};
+use crate::oauth::{Grant, Loopback};
+use crate::provider::Provider;
 
 const SERVER: &str = "https://tools.test/mcp";
 const RESOURCE_METADATA: &str =
@@ -19,26 +24,26 @@ fn listing(http: FakeHttp) -> FakeHttp {
     initialized(http).once(Method::Post, "/mcp", 200, tools)
 }
 
-fn creds(token: &str) -> Credentials {
-    Credentials::new(&ConnectionId::from("m1"), token, json!({ "url": SERVER, "label": "Linear" }))
+fn named(token: &str) -> crate::provider::Credentials {
+    creds(token, json!({ "url": SERVER, "label": "Linear" }))
 }
 
-fn now() -> Timestamp {
-    Timestamp::from_second(1_000).unwrap_or(Timestamp::UNIX_EPOCH)
+fn generic() -> Loopback {
+    let AuthSpec::Loopback(generic) = loaded("mcp").descriptor().auth else { panic!("not loopback") };
+    generic
 }
 
 fn entered(fields: Value) -> Result<Loopback, String> {
-    let AuthSpec::Loopback(generic) = McpServers.descriptor().auth else { panic!("not loopback") };
-    generic.entered(&fields, domain::Language::Portuguese)
+    generic().entered(&fields, Language::Portuguese)
 }
 
 #[test]
 fn the_person_enters_the_server_address_and_a_name_and_only_safe_addresses_pass() {
-    let AuthSpec::Loopback(generic) = McpServers.descriptor().auth else { panic!("not loopback") };
-    let names: Vec<String> =
-        generic.0.fields(domain::Language::Portuguese).into_iter().map(|field| field.name).collect();
+    let names: Vec<String> = generic().0.fields(Language::Portuguese).into_iter().map(|field| field.name).collect();
     assert_eq!(names, ["url", "label"]);
-    assert_eq!(McpServers.descriptor().capabilities, vec![Capability::from("mcp")]);
+    assert_eq!(loaded("mcp").descriptor().key.0, "mcp");
+    assert_eq!(loaded("mcp").descriptor().capabilities, vec![Capability::from("mcp")]);
+    assert!(loaded("mcp").presentation(Language::Portuguese).hidden);
     assert!(entered(json!({})).is_err());
     assert!(entered(json!({ "url": "http://tools.test/mcp" })).is_err());
     assert!(entered(json!({ "url": "http://localhost:3000/mcp" })).is_ok());
@@ -73,8 +78,7 @@ async fn a_server_that_refuses_without_a_token_is_signed_into_after_discovery() 
     let grant = chosen.finish(&http, &started, &started.state, "c1", now()).await;
     let Ok(grant) = grant else { panic!("{grant:?}") };
     assert_eq!(grant.extra["resource"], SERVER);
-    let AuthSpec::Loopback(generic) = McpServers.descriptor().auth else { panic!("not loopback") };
-    let fresh = generic.0.refresh(&http, &grant, now()).await;
+    let fresh = generic().0.refresh(&http, &grant, now()).await;
     assert_eq!(fresh.as_ref().map(|g| g.access_token.as_str()), Ok("at2"));
     assert_eq!(fresh.map(|g| g.extra["resource"].clone()), Ok(json!(SERVER)));
     let refreshed = http.sent_to(Method::Post, "/token")[1].body_text();
@@ -83,26 +87,26 @@ async fn a_server_that_refuses_without_a_token_is_signed_into_after_discovery() 
 
 #[tokio::test]
 async fn a_refresh_without_its_server_asks_to_sign_in_again() {
-    let AuthSpec::Loopback(generic) = McpServers.descriptor().auth else { panic!("not loopback") };
     let grant = Grant { refresh_token: Some("rt".into()), ..Grant::bearer("at") };
-    let refused = generic.0.refresh(&FakeHttp::new(), &grant, now()).await;
+    let refused = generic().0.refresh(&FakeHttp::new(), &grant, now()).await;
     assert_eq!(refused.map_err(|error| error.class), Err(ErrorClass::Auth));
 }
 
 #[tokio::test]
 async fn the_account_is_the_named_server_with_its_tool_count_and_its_tools_are_listed() {
+    let provider = loaded("mcp");
     let http = listing(FakeHttp::new());
-    let accounts = McpServers.accounts(&http, &creds("at")).await;
+    let accounts = provider.accounts(&http, &named("at")).await;
     let Ok([account]) = accounts.as_deref() else { panic!("{accounts:?}") };
     assert_eq!(account.label, "Linear");
     assert_eq!(account.settings, json!({ "url": SERVER, "shown": { "tools": 2, "host": "tools.test" } }));
-    let detail = crate::texts::detail(domain::Language::Portuguese, &account.settings);
+    let detail = crate::texts::detail(Language::Portuguese, &account.settings);
     assert_eq!(detail.as_deref(), Some("2 ferramentas · tools.test"));
     assert_eq!(http.sent()[0].header_value("authorization"), Some("Bearer at"));
     let http = listing(FakeHttp::new());
-    let listed = McpServers.call(&http, &creds(""), actions::TOOLS, &json!({}), "k").await;
+    let listed = provider.call(&http, &named(""), "mcp.tools", &json!({}), "k").await;
     assert_eq!(listed, Ok(json!([{ "name": "search" }, { "name": "create_issue" }])));
-    let spec = McpServers.descriptor().action(actions::TOOLS).cloned();
+    let spec = provider.descriptor().action("mcp.tools").cloned();
     let Some(spec) = spec else { panic!("no action") };
     assert!(crate::descriptor::conforms(&spec.output_schema, &json!([])).is_ok());
 }
@@ -110,7 +114,7 @@ async fn the_account_is_the_named_server_with_its_tool_count_and_its_tools_are_l
 #[tokio::test]
 async fn an_unnamed_server_is_named_after_its_host() {
     let http = listing(FakeHttp::new());
-    let unnamed = Credentials::new(&ConnectionId::from("m1"), "", json!({ "url": SERVER }));
-    let accounts = McpServers.accounts(&http, &unnamed).await.unwrap_or_default();
+    let unnamed = creds("", json!({ "url": SERVER }));
+    let accounts = loaded("mcp").accounts(&http, &unnamed).await.unwrap_or_default();
     assert_eq!(accounts.first().map(|account| account.label.as_str()), Some("tools.test"));
 }

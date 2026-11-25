@@ -6,6 +6,8 @@ use super::*;
 use crate::http::{FakeHttp, HttpResponse, Method};
 
 mod datadog;
+mod mcp;
+mod mock_changes;
 
 pub fn loaded(key: &str) -> ScriptedProvider {
     let entry = format!("{FOLDER}{key}/{ENTRY}");
