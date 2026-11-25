@@ -34,13 +34,14 @@ function shown(s) {
   return s.idle ? [markdown(s.idle)] : [];
 }
 
-function request(item, plan, issue, feedback) {
+function request(ctx, plan, issue, feedback) {
+  const item = ctx.item;
   const parts = [`Implement the item: ${plan.title || item.title || ""}`];
   if (issue) parts.push(`Issue: ${issue}`);
   if (plan.text) parts.push(`## Approved plan\n\n${plan.text}`);
   const back = feedbackText(feedback);
   if (back) parts.push(`## What needs fixing\n\n${back}`);
-  return inLanguage(parts.join("\n\n"));
+  return inLanguage(ctx, parts.join("\n\n"));
 }
 
 function uncommitted(result, branch) {
@@ -78,7 +79,9 @@ async function subtasksOf(ctx, opts, issue) {
   if (!issue) return [];
   const found = await attempt(() => ctx.call("tracker", "issue", { issue: String(issue) }, trackerOptions(ctx, opts)));
   const listed = Array.isArray(object(found).subtasks) ? found.subtasks : [];
-  return listed.map(object).filter((task) => task.ref && !task.done).map((task) => ({ issue: task.ref, title: task.title ?? "", details: detailsOf(plan, task.title) }));
+  const provisioned = source(ctx, opts, "provision").manual;
+  const infra = (Array.isArray(provisioned) ? provisioned : []).map((task) => object(task).issue).filter(Boolean);
+  return listed.map(object).filter((task) => task.ref && !task.done && !infra.includes(task.ref)).map((task) => ({ issue: task.ref, title: task.title ?? "", details: detailsOf(plan, task.title) }));
 }
 
 function statusesOf(ctx, opts) {
@@ -105,7 +108,7 @@ async function stepwise(ctx, opts, run, tasks) {
   for (const [index, task] of tasks.entries()) {
     await move(ctx, opts, task.issue, statuses.doing);
     const text = subtaskText(task, index, tasks.length);
-    const input = result ? { prompt: inLanguage(text), session: result.session } : { ...run.input, prompt: `${run.input.prompt}\n\n${lead}\n\n${text}` };
+    const input = result ? { prompt: inLanguage(ctx, text), session: result.session } : { ...run.input, prompt: `${run.input.prompt}\n\n${lead}\n\n${text}` };
     result = await ctx.agent(run.agent, input, run.options);
     await move(ctx, opts, task.issue, statuses.done);
   }
@@ -127,7 +130,7 @@ export default step({
     const previous = object(ctx.output(ctx.step));
     const branch = opts.branch ?? previous.branch ?? branchOf(ctx, opts);
     const input = defined({
-      prompt: opts.prompt ?? request(ctx.item, plan, issue, feedback),
+      prompt: opts.prompt ?? request(ctx, plan, issue, feedback),
       plan: plan.text,
       issue,
       feedback,

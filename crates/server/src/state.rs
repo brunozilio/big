@@ -16,12 +16,19 @@ pub struct Followed {
     pub seen: HashMap<String, String>,
     pub status: String,
     pub suggestion: Option<String>,
+    pub work: String,
     pub wanted: Instant,
 }
 
 impl Default for Followed {
     fn default() -> Self {
-        Followed { seen: HashMap::new(), status: String::new(), suggestion: None, wanted: Instant::now() }
+        Followed {
+            seen: HashMap::new(),
+            status: String::new(),
+            suggestion: None,
+            work: String::new(),
+            wanted: Instant::now(),
+        }
     }
 }
 
@@ -39,6 +46,8 @@ pub struct Shared {
     pub port: u16,
     pub callbacks: Mutex<std::collections::HashSet<u16>>,
     pub bundle: &'static [page::Asset],
+    pub discovery: Mutex<crate::discover::Discovery>,
+    pub usage: Mutex<crate::usage_cache::UsageCache>,
 }
 
 pub type Ctx = Arc<Shared>;
@@ -48,6 +57,10 @@ pub fn held<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 }
 
 impl Shared {
+    pub fn language(&self) -> domain::Language {
+        self.backend.store.language().unwrap_or_default()
+    }
+
     pub fn follow(&self, session: &str) {
         let mut followed = held(&self.followed);
         followed.entry(session.to_owned()).or_default().wanted = Instant::now();

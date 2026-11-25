@@ -2,6 +2,7 @@ mod login;
 mod sts;
 
 use async_trait::async_trait;
+use domain::Language;
 use domain::connection::{Capability, ProviderKey};
 use serde_json::{Value, json};
 
@@ -33,11 +34,17 @@ pub fn portal(region: &str) -> String {
     format!("https://portal.sso.{region}.amazonaws.com")
 }
 
-pub fn access_keys() -> AlternateAuth {
+pub fn access_keys(language: Language) -> AlternateAuth {
     let id = TokenField::new("accessKeyId", "Access key ID", "", false);
-    let help = "No IAM, abra o usuário, Security credentials, e crie uma access key.";
+    let help = language.pick(
+        "In IAM, open the user, Security credentials, and create an access key.",
+        "En IAM, abre el usuario, Security credentials, y crea una access key.",
+        "No IAM, abra o usuário, Security credentials, e crie uma access key.",
+    );
     let secret = TokenField::new("secretAccessKey", "Secret access key", help, true);
-    AlternateAuth::token(ACCESS_KEYS, "Usar access key", "da AWS", vec![id, secret], TokenForm::Json)
+    let way = language.pick("Use an access key", "Usar una access key", "Usar access key");
+    let site = language.pick("AWS", "de AWS", "da AWS");
+    AlternateAuth::token(language, ACCESS_KEYS, way, site, vec![id, secret], TokenForm::Json)
 }
 
 pub fn sso_spec() -> SsoSpec {
@@ -196,30 +203,32 @@ impl Provider for Aws {
             logo: LOGO.to_owned(),
             capabilities: vec![Capability::from(contracts::CLOUD)],
             auth: AuthSpec::Loopback(Loopback::new(ConsoleLogin { region: brand::connectors::AWS_REGION.to_owned() })),
-            actions: contracts::cloud(),
+            actions: contracts::cloud().into_iter().filter(|action| action.name != contracts::cloud::LAST_DEPLOYMENT).collect(),
         }
     }
 
-    fn presentation(&self) -> Presentation {
+    fn presentation(&self, language: Language) -> Presentation {
         Presentation {
-            description: "Sua conta AWS".to_owned(),
-            group: "Nuvem".to_owned(),
-            button: "Entrar com AWS".to_owned(),
-            site: "da AWS".to_owned(),
-            choose_title: "Conta e papel".to_owned(),
+            description: language.pick("Your AWS account", "Tu cuenta de AWS", "Sua conta AWS").to_owned(),
+            group: "cloud".to_owned(),
+            button: language.pick("Sign in with AWS", "Entrar con AWS", "Entrar com AWS").to_owned(),
+            site: language.pick("AWS", "de AWS", "da AWS").to_owned(),
+            choose_title: language.pick("Account and role", "Cuenta y rol", "Conta e papel").to_owned(),
             hidden: false,
         }
     }
 
-    fn alternatives(&self) -> Vec<AlternateAuth> {
+    fn alternatives(&self, language: Language) -> Vec<AlternateAuth> {
         let sso = AlternateAuth {
             key: SSO.to_owned(),
-            label: "Usar SSO da empresa".to_owned(),
-            button: "Continuar".to_owned(),
-            site: "do AWS IAM Identity Center".to_owned(),
+            label: language.pick("Use company SSO", "Usar el SSO de la empresa", "Usar SSO da empresa").to_owned(),
+            button: crate::texts::proceed(language).to_owned(),
+            site: language
+                .pick("AWS IAM Identity Center", "de AWS IAM Identity Center", "do AWS IAM Identity Center")
+                .to_owned(),
             auth: AuthSpec::Sso(sso_spec()),
         };
-        vec![sso, access_keys()]
+        vec![sso, access_keys(language)]
     }
 
     async fn call(

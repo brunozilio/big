@@ -6,7 +6,7 @@ use agent_engine::model::{ModelApi, ModelError};
 use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
 use agent_engine::{ApiSource, Engine};
-use domain::{EngineEvent, PermissionMode, PromptRequest};
+use domain::{EngineEvent, PromptRequest};
 
 use crate::{finish, model, start};
 
@@ -26,7 +26,7 @@ fn a_run_tells_when_another_account_takes_over() {
     let engine = Engine::new(Arc::new(TwoAccounts(Arc::new(pooled))), Arc::new(InMemorySessions::default()));
     let dir = tempfile::tempdir().expect("dir");
     let mut request = PromptRequest::plain(dir.path().into(), "go", model());
-    request.policy.permission = PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     let events = finish(&start(&engine, &request));
     assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");
     let switched = EngineEvent::AccountSwitched { from: "a@x.io".into(), to: "b@x.io".into() };

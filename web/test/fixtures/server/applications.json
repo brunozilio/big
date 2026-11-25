@@ -27,6 +27,7 @@
         "verify": []
       }
     ],
+    "security": null,
     "skipDependabot": true,
     "tests": null,
     "tracker": {

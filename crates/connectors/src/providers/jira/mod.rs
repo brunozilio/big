@@ -1,4 +1,5 @@
 mod adf;
+mod edit;
 mod events;
 #[cfg(test)]
 mod fake;
@@ -7,6 +8,7 @@ mod operations;
 mod tracker;
 
 use async_trait::async_trait;
+use domain::Language;
 use domain::connection::{Capability, ProviderKey};
 use serde_json::{Map, Value, json};
 
@@ -33,18 +35,25 @@ pub const SCOPES: [&str; 6] = [
 const LOGO: &str = include_str!("logo.svg");
 const PAGE: u64 = 50;
 const MOST_PAGES: u64 = 10;
-pub const NO_SITE: &str = "Reconecte o Jira e escolha o site.";
-pub const NO_PROJECT: &str = "Escolha o projeto.";
-pub const NO_SITES: &str = "Nenhum site do Jira foi encontrado nesta conta Atlassian. Confira se a conta tem acesso ao Jira e conecte de novo.";
+pub use crate::texts::{NO_PROJECT, NO_SITE, NO_SITES};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Jira;
 
-pub fn api_token() -> AlternateAuth {
-    let email = TokenField::new("email", "E-mail da conta Atlassian", "", false);
-    let help = "Em id.atlassian.com, abra Segurança e crie um API token. O admin da organização precisa permitir API token no Rovo MCP server.";
-    let token = TokenField::new("token", "API token da Atlassian", help, true);
-    AlternateAuth::token(API_TOKEN, "Usar API token", "da Atlassian", vec![email, token], TokenForm::Basic)
+pub fn api_token(language: Language) -> AlternateAuth {
+    let email_label =
+        language.pick("Atlassian account email", "Correo de la cuenta de Atlassian", "E-mail da conta Atlassian");
+    let email = TokenField::new("email", email_label, "", false);
+    let help = language.pick(
+        "At id.atlassian.com, open Security and create an API token. The organization admin must allow API tokens on the Rovo MCP server.",
+        "En id.atlassian.com, abre Seguridad y crea un API token. El admin de la organización debe permitir API tokens en el Rovo MCP server.",
+        "Em id.atlassian.com, abra Segurança e crie um API token. O admin da organização precisa permitir API token no Rovo MCP server.",
+    );
+    let token_label = language.pick("Atlassian API token", "API token de Atlassian", "API token da Atlassian");
+    let token = TokenField::new("token", token_label, help, true);
+    let site = language.pick("Atlassian", "de Atlassian", "da Atlassian");
+    let label = crate::texts::use_api_token(language);
+    AlternateAuth::token(language, API_TOKEN, label, site, vec![email, token], TokenForm::Basic)
 }
 
 pub fn sign_in() -> McpSignIn {
@@ -166,13 +175,13 @@ pub async fn visible_projects(
 
 fn site_settings(site: &Value, projects: &[Value]) -> Value {
     let keys: Vec<String> = projects.iter().map(|project| text_of(project, "/key")).collect();
-    let detail = match keys.len() {
-        0 => text_of(site, "/name"),
-        1 => format!("Projeto {}", keys[0]),
-        _ => format!("Projetos {}", keys.join(", ")),
-    };
     let url = text_of(site, "/url");
-    let mut settings = json!({ "cloud_id": site_id(site), "site_url": url, "detail": detail });
+    let mut settings = json!({ "cloud_id": site_id(site), "site_url": url });
+    if keys.is_empty() {
+        settings["detail"] = json!(text_of(site, "/name"));
+    } else {
+        settings["shown"] = json!({ "projects": keys });
+    }
     if let [only] = keys.as_slice() {
         settings["project"] = json!(only);
     }
@@ -203,19 +212,23 @@ impl Provider for Jira {
         }
     }
 
-    fn presentation(&self) -> Presentation {
+    fn presentation(&self, language: Language) -> Presentation {
         Presentation {
-            description: "Sua conta Atlassian".to_owned(),
-            group: "Tarefas".to_owned(),
-            button: "Continuar na Atlassian".to_owned(),
-            site: "da Atlassian".to_owned(),
-            choose_title: "Site do Jira".to_owned(),
+            description: language
+                .pick("Your Atlassian account", "Tu cuenta de Atlassian", "Sua conta Atlassian")
+                .to_owned(),
+            group: "tracker".to_owned(),
+            button: language
+                .pick("Continue on Atlassian", "Continuar en Atlassian", "Continuar na Atlassian")
+                .to_owned(),
+            site: language.pick("Atlassian", "de Atlassian", "da Atlassian").to_owned(),
+            choose_title: language.pick("Jira site", "Sitio de Jira", "Site do Jira").to_owned(),
             hidden: false,
         }
     }
 
-    fn alternatives(&self) -> Vec<AlternateAuth> {
-        vec![api_token()]
+    fn alternatives(&self, language: Language) -> Vec<AlternateAuth> {
+        vec![api_token(language)]
     }
 
     async fn call(
@@ -238,6 +251,8 @@ impl Provider for Jira {
             actions::SET_IMPEDIMENT => tracker::set_impediment(&api, args, idempotency_key).await,
             actions::SEARCH => tracker::search(&api, args).await,
             actions::PROJECTS => tracker::projects(&api, args).await,
+            actions::UPDATE_ISSUE => edit::update_issue(&api, args).await,
+            actions::LINK_ISSUES => edit::link_issues(&api, args).await,
             _ => Err(unknown_action(action)),
         }
     }

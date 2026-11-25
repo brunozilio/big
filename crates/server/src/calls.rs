@@ -4,7 +4,7 @@ use serde_json::{Value, json};
 use store::ConnectionRecord;
 
 use crate::attachments::random_id;
-use crate::error::{ApiError, ApiResult};
+use crate::error::{ApiError, ApiResult, said};
 use crate::marks::{iso, now_ms};
 use crate::state::Shared;
 
@@ -49,7 +49,9 @@ fn person(found: &Value) -> Value {
 }
 
 fn arg<'a>(args: &'a Value, name: &str) -> ApiResult<&'a str> {
-    args[name].as_str().filter(|text| !text.is_empty()).ok_or_else(|| ApiError::bad(format!("Falta {name}.")))
+    args[name].as_str().filter(|text| !text.is_empty()).ok_or_else(|| {
+        ApiError::bad(said(format!("{name} is missing."), format!("Falta {name}."), format!("Falta {name}.")))
+    })
 }
 
 async fn repos(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
@@ -78,6 +80,7 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
         "tracker.search" => search(&caller, args).await,
         "tracker.projects" => projects(&caller, tracker::PROJECTS, args).await,
         "tests.projects" => projects(&caller, suite::PROJECTS, args).await,
+        "security.projects" => projects(&caller, connectors::contracts::security::PROJECTS, args).await,
         "tracker.issue" => Ok(issue(&caller.call(tracker::ISSUE, json!({ "issue": arg(args, "key")? })).await?)),
         "tracker.comment" => {
             let body = arg(args, "body")?;
@@ -92,7 +95,12 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
         "ci.run" => pipeline(&caller, arg(args, "run")?).await,
         "cloud.accounts_and_roles" => Ok(accounts(&caller.call(cloud::ACCOUNTS_AND_ROLES, json!({})).await?)),
         "mcp.tools" => caller.call(mcp::TOOLS, json!({})).await,
-        _ => Err(ApiError::bad(format!("A ação {action} não existe para a página."))),
+        "changes.get" => caller.call(connectors::contracts::changes::GET, json!({ "change": arg(args, "change")? })).await,
+        _ => Err(ApiError::bad(said(
+            format!("The action {action} does not exist for the page."),
+            format!("La acción {action} no existe para la página."),
+            format!("A ação {action} não existe para a página."),
+        ))),
     }
 }
 
@@ -174,7 +182,11 @@ fn items(value: &Value) -> &[Value] {
 }
 
 fn comment(raw: &Value, kind: &str) -> Value {
-    json!({ "id": text(&raw["id"]), "author": person(&raw["author"]), "body": text(&raw["body"]), "at": text(&raw["at"]), "kind": kind })
+    let author = match raw["agent"].as_str().filter(|agent| !agent.is_empty()) {
+        Some(agent) => json!({ "id": agent, "name": agent, "avatar": null, "agent": true }),
+        None => person(&raw["author"]),
+    };
+    json!({ "id": text(&raw["id"]), "author": author, "body": text(&raw["body"]), "at": text(&raw["at"]), "kind": kind })
 }
 
 pub fn issue(raw: &Value) -> Value {

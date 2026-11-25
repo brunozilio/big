@@ -1,7 +1,6 @@
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::team::Team;
 use agent_engine::transcript::{Block, Message};
-use domain::PermissionMode;
 use domain::team::{LEAD, Member, Protocol};
 use serde_json::json;
 
@@ -16,7 +15,7 @@ fn only_shipped_content() {
 fn lead_with_a_teammate() -> (Rig, tempfile::TempDir, Team) {
     only_shipped_content();
     let home = tempfile::tempdir().expect("home");
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     rig.workspace.home = Some(home.path().to_path_buf());
     rig.workspace.session_id = "lead-session-1".into();
     let team = Team::of_session(home.path(), "lead-session-1");

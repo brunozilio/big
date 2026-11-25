@@ -44,7 +44,7 @@ fn a_sub_agent_s_events_are_wrapped_between_its_spawn_and_its_report_to_the_pare
         == prompt: conversation ==
         user:
           text "Delegate reading the notes"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use a1 Agent "{\"description\":\"Read the notes\",\"prompt\":\"Read notes.txt and report what it says\"}"
         user:
@@ -128,7 +128,7 @@ fn a_background_sub_agent_is_collected_before_the_run_completes() {
         == prompt: conversation ==
         user:
           text "Delegate reading the notes in the background"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use a1 Agent "{\"description\":\"Read the notes\",\"prompt\":\"Read notes.txt and report what it says\",\"run_in_background\":true}"
         user:

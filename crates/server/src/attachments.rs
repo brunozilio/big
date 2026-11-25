@@ -5,7 +5,7 @@ use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use serde_json::{Value, json};
 
-use crate::error::{ApiError, ApiResult, json as reply};
+use crate::error::{ApiError, ApiResult, json as reply, said};
 use crate::state::Ctx;
 
 pub fn random_id() -> ApiResult<String> {
@@ -50,7 +50,11 @@ pub async fn upload(State(ctx): State<Ctx>, mut form: Multipart) -> ApiResult<Re
         std::fs::write(folder.join(&name), &bytes).map_err(ApiError::failed)?;
         return Ok(reply(json!({ "id": id, "name": name, "size": bytes.len() })));
     }
-    Err(ApiError::bad("Envie o arquivo no campo file."))
+    Err(ApiError::bad(said(
+        "Send the file in the file field.",
+        "Envía el archivo en el campo file.",
+        "Envie o arquivo no campo file.",
+    )))
 }
 
 const KINDS: [(&str, &str); 12] = [
@@ -75,7 +79,9 @@ pub fn kind_of(name: &str) -> &'static str {
 
 pub async fn download(State(ctx): State<Ctx>, Segment(id): Segment<String>) -> ApiResult<Response> {
     let file = paths(&ctx.backend.attachments(), &json!([id])).into_iter().next();
-    let file = file.ok_or_else(|| ApiError::missing("Não há esse anexo."))?;
+    let file = file.ok_or_else(|| {
+        ApiError::missing(said("There is no such attachment.", "No existe ese adjunto.", "Não há esse anexo."))
+    })?;
     let name = file.file_name().map(|found| found.to_string_lossy().into_owned()).unwrap_or_default();
     let bytes = tokio::fs::read(&file).await.map_err(ApiError::failed)?;
     let disposition = format!("inline; filename=\"{}\"", safe_name(&name));

@@ -45,6 +45,9 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
                 merge_patch(&mut entry.progress, data);
             }
         }
+        WorkflowEvent::Signal { kind, branch, step: Some(step), data, .. } if kind == STEP_RESET => {
+            reset(&mut item, step, branch, data);
+        }
         WorkflowEvent::Signal { .. } => {}
         WorkflowEvent::StepFinished { step, branch, state, output } => {
             let run = run_mut(&mut item, step, branch.as_deref());
@@ -81,7 +84,7 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
         WorkflowEvent::TimerFired { id } => {
             item.timers.remove(id);
         }
-        WorkflowEvent::Rewound { to } => rewind(&mut item, to),
+        WorkflowEvent::Rewound { to, .. } => rewind(&mut item, to),
         WorkflowEvent::Cancelled { reason } => item.ending = Some(Ending::Cancelled { reason: reason.clone() }),
         WorkflowEvent::Finished { output } => item.ending = Some(Ending::Finished { output: output.clone() }),
         WorkflowEvent::ExternalObserved(seen) => observe(&mut item, seen),
@@ -94,6 +97,19 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
         WorkflowEvent::HeadsUp { step, note } => {
             item.heads_up.insert(step.clone(), note.clone());
         }
+        WorkflowEvent::Linked { item: member } => {
+            item.released.retain(|known| known != member);
+            if !item.links.contains(member) {
+                item.links.push(member.clone());
+            }
+        }
+        WorkflowEvent::Unlinked { item: member } => {
+            item.links.retain(|known| known != member);
+            if !item.released.contains(member) {
+                item.released.push(member.clone());
+            }
+        }
+        WorkflowEvent::Accepting { on } => item.accepting = *on,
     }
     item
 }
@@ -114,12 +130,29 @@ fn run_mut<'a>(item: &'a mut WorkItem, id: &str, branch: Option<&str>) -> &'a mu
     &mut item.steps[at]
 }
 
-fn start(item: &mut WorkItem, id: &str, branch: Option<&str>) {
-    if let Some(at) = item.steps.iter().position(|run| run.is(id, branch)) {
-        for later in item.steps[at + 1..].iter_mut().filter(|run| run.branch.as_deref() == branch) {
-            later.state = StepState::Pending;
+const STEP_RESET: &str = "step.reset";
+
+fn within(run: &StepRun, step: &str, branch: &str) -> bool {
+    let path = run.id == step || run.id.strip_prefix(step).is_some_and(|rest| rest.starts_with('/'));
+    let lane = run.branch.as_deref().is_none_or(|own| {
+        own == branch || own.strip_prefix(branch).is_some_and(|rest| rest.starts_with('/'))
+    });
+    path && lane
+}
+
+fn reset(item: &mut WorkItem, step: &str, branch: &str, data: &Value) {
+    let state = match data["state"].as_str() {
+        Some("skipped") => StepState::Skipped,
+        _ => StepState::Pending,
+    };
+    for run in item.steps.iter_mut().filter(|run| within(run, step, branch)) {
+        if matches!(run.state, StepState::Running | StepState::WaitingHuman) || state == StepState::Pending {
+            run.state = state;
         }
     }
+}
+
+fn start(item: &mut WorkItem, id: &str, branch: Option<&str>) {
     let run = run_mut(item, id, branch);
     run.state = StepState::Running;
     run.attempt += 1;

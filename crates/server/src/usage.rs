@@ -4,20 +4,23 @@ use std::sync::Arc;
 use app::ProviderSummary;
 use axum::extract::{Query, State};
 use axum::response::Response;
-use domain::EngineEvent;
 use domain::models::usage_report::{Tally, UNKNOWN, UsageReport, UsageTally};
-use domain::trace::Record;
+use domain::{EngineEvent, Language};
 use jiff::civil::Date;
 use jiff::tz::TimeZone;
 use jiff::{Timestamp, ToSpan, Zoned};
 use serde_json::{Value, json};
 
 use crate::error::{ApiError, ApiResult, json as reply};
-use crate::state::{Ctx, Shared};
+use crate::state::{Ctx, Shared, held};
 
 const WINDOWS: [i64; 3] = [7, 30, 90];
 const DEFAULT_DAYS: i64 = 30;
 const UNRECORDED: &str = "Sem registro";
+
+fn unrecorded(language: Language) -> &'static str {
+    language.pick("Not recorded", "Sin registro", UNRECORDED)
+}
 
 pub fn days_of(query: &HashMap<String, String>) -> i64 {
     query
@@ -52,24 +55,23 @@ fn gather(shared: &Shared, days: i64) -> ApiResult<Value> {
     let known: Vec<&str> = providers.iter().map(|summary| summary.provider.id()).collect();
     let mut tally = UsageTally::new(&window, &known);
     let sessions = client.sessions().map_err(ApiError::failed)?;
+    let mut cache = held(&shared.usage);
+    cache.keep_only(&sessions);
     for listed in sessions.iter().filter(|listed| listed.updated == 0 || listed.updated >= start) {
-        let mut records = match client.history(&listed.session, &listed.cwd) {
-            Ok(records) => records,
+        let spent = cache.spent(listed, || match client.history(&listed.session, &listed.cwd) {
+            Ok(records) => Some(records),
             Err(error) => {
                 tracing::warn!(%error, session = %listed.session.0, "the session's history could not be read for usage");
-                continue;
+                None
             }
-        };
-        for record in &mut records {
-            if let Record::Event { at_ms, event } = record
-                && let Some(day) = day_of(*at_ms, &zone)
-            {
-                priced(event);
+        });
+        for (at_ms, event) in spent {
+            if let Some(day) = day_of(*at_ms, &zone) {
                 tally.add(&listed.session.0, &day, event);
             }
         }
     }
-    Ok(listing(days, &window, &tally.report(), &providers))
+    Ok(listing(days, &window, &tally.report(), &providers, shared.language()))
 }
 
 pub fn priced(event: &mut EngineEvent) {
@@ -86,13 +88,13 @@ pub fn priced(event: &mut EngineEvent) {
     }
 }
 
-fn named(id: &str, providers: &[ProviderSummary]) -> (Value, Value) {
+fn named(id: &str, providers: &[ProviderSummary], language: Language) -> (Value, Value) {
     if id == UNKNOWN {
-        return (json!(UNRECORDED), json!(UNKNOWN));
+        return (json!(unrecorded(language)), json!(UNKNOWN));
     }
     match providers.iter().find(|summary| summary.provider.id() == id) {
         Some(summary) => {
-            let described = crate::ai::provider_json(summary);
+            let described = crate::ai::provider_json(summary, language);
             (described["name"].clone(), described["logo"].clone())
         }
         None => (json!(id), json!(id)),
@@ -106,7 +108,13 @@ fn counted(mut fields: Value, tally: &Tally) -> Value {
     fields
 }
 
-pub fn listing(days: i64, window: &[String], report: &UsageReport, providers: &[ProviderSummary]) -> Value {
+pub fn listing(
+    days: i64,
+    window: &[String],
+    report: &UsageReport,
+    providers: &[ProviderSummary],
+    language: Language,
+) -> Value {
     let totals = &report.totals;
     let daily: Vec<Value> = report
         .daily
@@ -119,7 +127,7 @@ pub fn listing(days: i64, window: &[String], report: &UsageReport, providers: &[
         .by_provider
         .iter()
         .map(|ranked| {
-            let (name, logo) = named(&ranked.id, providers);
+            let (name, logo) = named(&ranked.id, providers, language);
             counted(json!({ "id": ranked.id, "name": name, "logo": logo }), &ranked.tally)
         })
         .collect();

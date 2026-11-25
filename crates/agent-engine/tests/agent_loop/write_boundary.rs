@@ -4,7 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::{AskId, AskKind, Decision, EngineEvent, PermissionMode};
+use domain::{AskId, AskKind, Decision, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -62,7 +62,7 @@ fn run_answering(rig: &Rig, model: &ScriptedModel, answers: Vec<Decision>) -> Ve
 
 #[test]
 fn an_edit_outside_the_project_asks_even_when_edits_are_accepted() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let elsewhere = tempfile::tempdir().expect("dir");
     let target = elsewhere.path().join(".zshrc");
     let asked = run_answering(&rig, &writes(&[&target]), vec![Decision::Deny]);
@@ -73,7 +73,7 @@ fn an_edit_outside_the_project_asks_even_when_edits_are_accepted() {
 
 #[test]
 fn an_edit_outside_the_project_happens_once_the_user_allows_it() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let elsewhere = tempfile::tempdir().expect("dir");
     let target = elsewhere.path().join("notes.md");
     let asked = run_answering(&rig, &writes(&[&target]), vec![Decision::Allow]);
@@ -83,7 +83,7 @@ fn an_edit_outside_the_project_happens_once_the_user_allows_it() {
 
 #[test]
 fn an_edit_in_an_added_folder_does_not_ask() {
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     let shared = tempfile::tempdir().expect("dir");
     rig.workspace.added_dirs = vec![shared.path().to_path_buf()];
     let target = shared.path().join("lib.rs");
@@ -94,7 +94,7 @@ fn an_edit_in_an_added_folder_does_not_ask() {
 
 #[test]
 fn an_edit_to_a_git_hook_asks_even_when_edits_are_accepted() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let asked = run_answering(&rig, &writes(&[Path::new(".git/hooks/pre-commit")]), vec![Decision::Deny]);
     assert_eq!(asked.len(), 1, "{asked:?}");
     assert!(asked[0].contains(".git/hooks/pre-commit"), "{asked:?}");
@@ -103,7 +103,7 @@ fn an_edit_to_a_git_hook_asks_even_when_edits_are_accepted() {
 
 #[test]
 fn an_edit_to_the_project_s_own_settings_asks_even_when_edits_are_accepted() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let settings = Path::new(brand::DIR).join("settings.local.json");
     let hook = Path::new(brand::DIR).join("hooks/start.js");
     let asked = run_answering(&rig, &writes(&[&settings, &hook]), vec![Decision::Deny, Decision::Deny]);
@@ -114,7 +114,7 @@ fn an_edit_to_the_project_s_own_settings_asks_even_when_edits_are_accepted() {
 
 #[test]
 fn an_ordinary_edit_inside_the_project_still_does_not_ask() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let asked = run_answering(&rig, &writes(&[Path::new("src/new.rs")]), Vec::new());
     assert!(asked.is_empty(), "{asked:?}");
     assert!(rig.dir.path().join("src/new.rs").exists());
@@ -122,7 +122,7 @@ fn an_ordinary_edit_inside_the_project_still_does_not_ask() {
 
 #[test]
 fn bypassing_writes_protected_and_outside_files_without_asking() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let elsewhere = tempfile::tempdir().expect("dir");
     let outside = elsewhere.path().join("a.txt");
     let asked = run_answering(&rig, &writes(&[&outside, Path::new(".git/hooks/x")]), Vec::new());
@@ -132,7 +132,7 @@ fn bypassing_writes_protected_and_outside_files_without_asking() {
 
 #[test]
 fn planning_refuses_an_edit_outside_the_project_without_asking() {
-    let rig = Rig::new(PermissionMode::Plan);
+    let rig = Rig::planning();
     let elsewhere = tempfile::tempdir().expect("dir");
     let outside = elsewhere.path().join("a.txt");
     let asked = run_answering(&rig, &writes(&[&outside]), Vec::new());
@@ -141,19 +141,19 @@ fn planning_refuses_an_edit_outside_the_project_without_asking() {
 }
 
 #[test]
-fn always_allowing_edits_does_not_cover_a_protected_file() {
-    let rig = Rig::new(PermissionMode::Ask);
+fn ordinary_edits_go_ahead_but_a_protected_file_is_reviewed() {
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = writes(&[Path::new("a.txt"), Path::new("b.txt"), Path::new(".git/hooks/x")]);
-    let asked = run_answering(&rig, &model, vec![Decision::AllowAlways, Decision::Deny]);
-    assert_eq!(asked.len(), 2, "the first edit and the protected one: {asked:?}");
-    assert!(rig.dir.path().join("b.txt").exists(), "always covers ordinary edits");
+    let asked = run_answering(&rig, &model, vec![Decision::Deny]);
+    assert_eq!(asked.len(), 1, "only the protected one: {asked:?}");
+    assert!(rig.dir.path().join("a.txt").exists() && rig.dir.path().join("b.txt").exists());
     assert!(!rig.dir.path().join(".git/hooks/x").exists());
 }
 
 #[cfg(unix)]
 #[test]
 fn an_edit_through_a_link_that_leaves_the_project_asks() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let elsewhere = tempfile::tempdir().expect("dir");
     std::os::unix::fs::symlink(elsewhere.path(), rig.dir.path().join("link")).expect("link");
     let asked = run_answering(&rig, &writes(&[Path::new("link/a.txt")]), vec![Decision::Deny]);

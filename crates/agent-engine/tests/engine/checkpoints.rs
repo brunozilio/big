@@ -44,7 +44,7 @@ fn a_rewind_also_undoes_what_a_shell_command_changed_in_the_repository() {
     let sessions = Arc::new(InMemorySessions::default());
     let engine = Engine::new(Arc::new(Source(Mutex::new(vec![shell]))), sessions);
     let mut request = PromptRequest::plain(dir.path().into(), "change things", model());
-    request.policy.permission = domain::PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     let events = finish(&start(&engine, &request));
     let Some(EngineEvent::SessionStarted(session)) = events.first().cloned() else { panic!("{events:?}") };
     assert_eq!(std::fs::read_to_string(dir.path().join("a.txt")).expect("a"), "two\n");

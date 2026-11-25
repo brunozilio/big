@@ -9,6 +9,7 @@ import { ProviderLogo } from '@/ui/domain'
 import { Checkbox, Textarea } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { motion, tween } from '@/ui/motion'
+import { useT, type MessageKey } from '@/i18n'
 import { useBlockHost } from './context'
 import { Commands, Loading, SendError, useSend } from './shared'
 
@@ -85,6 +86,7 @@ function JobGraph({ jobs, sel, onSel }: { jobs: Job[]; sel: string; onSel: (id: 
 }
 
 function DeployApproval({ job, gate }: { job: Job; gate: { approve: string; reject: string } }) {
+  const t = useT()
   const [note, setNote] = useState('')
   const { busy, error, send } = useSend()
   const env = job.gate ?? ''
@@ -92,34 +94,36 @@ function DeployApproval({ job, gate }: { job: Job; gate: { approve: string; reje
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={tween} className="rounded-card bg-warning-soft p-4">
       <div className="mb-3 flex items-center gap-2 text-base font-medium text-warning-fg">
         <Icon name="hSecurityCheck" size={17} />
-        Revisar deploy pendente em {env}
+        {t('blocks.deployReview', { env })}
       </div>
       <label className="mb-3 flex items-center gap-2.5 rounded-control bg-surface px-3 py-2.5 text-base shadow-card">
         <Checkbox checked onCheckedChange={() => undefined} label={env} />
         <span className="font-medium text-fg">{env}</span>
-        {job.waitingSince && <span className="text-sm text-muted">aguardando {ago(job.waitingSince)}</span>}
+        {job.waitingSince && <span className="text-sm text-muted">{t('blocks.deployWaiting', { time: ago(job.waitingSince) })}</span>}
       </label>
-      <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder="Comentário (opcional)" className="bg-surface" />
+      <Textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('blocks.deployNote')} className="bg-surface" />
       <div className="mt-3 flex justify-end gap-2">
-        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void send(gate.reject, { env, note })}>Rejeitar</Button>
-        <Button size="sm" variant="primary" disabled={busy} icon={<Icon name="hRocket" size={15} />} onClick={() => void send(gate.approve, { env, note })}>Aprovar e implantar</Button>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void send(gate.reject, { env, note })}>{t('blocks.deployReject')}</Button>
+        <Button size="sm" variant="primary" disabled={busy} icon={<Icon name="hRocket" size={15} />} onClick={() => void send(gate.approve, { env, note })}>{t('blocks.deployApprove')}</Button>
       </div>
       <SendError error={error} />
     </motion.div>
   )
 }
 
-const runLabel: Record<JobState, string> = { queued: 'Na fila', running: 'Em andamento', passed: 'Sucesso', failed: 'Falhou', skipped: 'Ignorado', waiting: 'Aguardando aprovação', rejected: 'Rejeitado' }
+const runLabel: Record<JobState, MessageKey> = { queued: 'blocks.runQueued', running: 'blocks.runRunning', passed: 'blocks.runPassed', failed: 'blocks.runFailed', skipped: 'blocks.runSkipped', waiting: 'blocks.runWaiting', rejected: 'blocks.runRejected' }
 
 function JobDetail({ job }: { job: Job }) {
-  if (job.state === 'skipped') return <p className="px-2 py-2 text-sm text-muted">Job ignorado: a condição <span className="font-mono text-xs">if: {job.condition ?? 'needs.*.result'}</span> não foi satisfeita.</p>
-  if (job.state === 'waiting') return <p className="px-2 py-2 text-sm text-muted">Aguardando aprovação para o ambiente <span className="font-medium text-fg">{job.gate}</span>.</p>
-  if (job.state === 'rejected') return <p className="px-2 py-2 text-sm text-danger-fg">Deploy rejeitado. O job não rodou.</p>
-  if (job.state === 'queued') return <p className="px-2 py-2 text-sm text-muted">Na fila.</p>
+  const t = useT()
+  if (job.state === 'skipped') return <p className="px-2 py-2 text-sm text-muted">{t('blocks.jobSkippedBefore')} <span className="font-mono text-xs">if: {job.condition ?? 'needs.*.result'}</span> {t('blocks.jobSkippedAfter')}</p>
+  if (job.state === 'waiting') return <p className="px-2 py-2 text-sm text-muted">{t('blocks.jobWaiting')} <span className="font-medium text-fg">{job.gate}</span>.</p>
+  if (job.state === 'rejected') return <p className="px-2 py-2 text-sm text-danger-fg">{t('blocks.jobRejected')}</p>
+  if (job.state === 'queued') return <p className="px-2 py-2 text-sm text-muted">{t('blocks.jobQueued')}</p>
   return <Commands key={`${job.id}-${job.state}`} commands={job.steps} />
 }
 
 function Run({ run, gate, connection }: { run: PipelineRun; gate: Of<'pipeline'>['gate']; connection: string }) {
+  const t = useT()
   const provider = useProviderOf(connection)
   const firstOpen = run.jobs.find((j) => j.state === 'waiting' || j.state === 'running' || j.state === 'failed')?.id ?? run.jobs[0]?.id ?? ''
   const [sel, setSel] = useState(firstOpen)
@@ -135,13 +139,13 @@ function Run({ run, gate, connection }: { run: PipelineRun; gate: Of<'pipeline'>
         <JobIcon state={run.state} size={20} />
         <span className="text-md font-medium text-fg">{run.title}</span>
         <span className="font-mono text-sm text-muted">{run.file} #{run.number}</span>
-        <span className="text-sm text-muted">{runLabel[run.state]}</span>
+        <span className="text-sm text-muted">{t(runLabel[run.state])}</span>
         <span className="flex items-center gap-1.5 rounded-control-sm bg-inset px-2 py-0.5 font-mono text-xs text-fg2">{run.event} · {run.ref}</span>
         {run.url && (
           <Button asChild size="sm" variant="secondary" className="ml-auto">
             <a href={run.url} target="_blank" rel="noreferrer">
               {provider && <ProviderLogo logo={provider.logo} name={provider.name} size={15} />}
-              {provider ? `Ver no ${provider.name}` : 'Abrir execução'}
+              {provider ? t('blocks.runViewIn', { name: provider.name }) : t('blocks.runOpen')}
               <Icon name="arrowUpRight" size={14} className="text-muted" />
             </a>
           </Button>

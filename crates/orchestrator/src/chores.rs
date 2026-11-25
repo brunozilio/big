@@ -36,6 +36,7 @@ pub async fn answer(shared: &Shared, chore: Chore) -> Option<ChoreAnswer> {
     let mut request = PromptRequest::plain(chore.cwd, chore.text, model(shared, chore.model.as_deref()));
     request.session.command = Some(chore.command);
     request.session.resume = chore.resume.map(SessionId);
+    request.session.language = shared.store.language().ok();
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let sink: Arc<dyn EventSink> = Arc::new(move |_run: RunId, event: EngineEvent| {
         let _ = sender.send(event);
@@ -63,8 +64,9 @@ pub struct Ran {
     pub cwd: PathBuf,
 }
 
-pub fn latest_run(item: &WorkItem) -> Option<Ran> {
-    item.effects
+pub fn runs(item: &WorkItem) -> Vec<Ran> {
+    let mut found: Vec<((u64, u32), Ran)> = item
+        .effects
         .values()
         .filter(|entry| matches!(entry.request.effect, Effect::AgentRun { .. }))
         .filter_map(|entry| {
@@ -79,11 +81,16 @@ pub fn latest_run(item: &WorkItem) -> Option<Ran> {
                 Ran { key: entry.request.key.to_string(), session: field("session")?, cwd: field("worktree")?.into() };
             Some(((entry.request.key.seq, entry.request.key.attempt), ran))
         })
-        .max_by_key(|(order, _)| *order)
-        .map(|(_, ran)| ran)
+        .collect();
+    found.sort_by_key(|(order, _)| *order);
+    found.into_iter().map(|(_, ran)| ran).collect()
 }
 
-fn wanted_model(item: &WorkItem) -> Option<String> {
+pub fn latest_run(item: &WorkItem) -> Option<Ran> {
+    runs(item).pop()
+}
+
+pub(crate) fn wanted_model(item: &WorkItem) -> Option<String> {
     item.input["model"].as_str().filter(|model| !model.is_empty()).map(str::to_owned)
 }
 

@@ -1,6 +1,8 @@
 {
   "item": {
+    "accepting": false,
     "activity": null,
+    "archivedAt": null,
     "attention": null,
     "change": null,
     "createdAt": "2026-01-01T00:00:00Z",
@@ -11,6 +13,8 @@
     "id": "item-1",
     "impediment": null,
     "issue": null,
+    "joinable": false,
+    "links": [],
     "live": false,
     "recap": null,
     "sources": [],
@@ -30,13 +34,15 @@
         "id": "approve",
         "label": "Aprovação",
         "logo": "<svg/>",
-        "needs": "tracker",
         "provider": "Fake",
+        "requires": "tracker",
         "seconds": 0,
         "state": "pending"
       }
     ],
     "title": "ao vivo",
+    "trail": null,
+    "untitled": false,
     "updatedAt": "2026-01-01T00:00:00Z",
     "workflow": "default"
   },

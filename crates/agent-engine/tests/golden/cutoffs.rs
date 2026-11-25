@@ -22,7 +22,7 @@ fn a_refusal_stop_reason_fails_the_run_and_keeps_what_was_said() {
         == prompt: conversation ==
         user:
           text "Do the thing"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "I cannot help with that."
         == prompt: log appended ==
@@ -65,7 +65,7 @@ fn a_reply_cut_at_the_output_limit_is_nudged_to_continue_until_it_ends() {
         == prompt: conversation ==
         user:
           text "Write a lot"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "The answer starts"
         user:
@@ -119,7 +119,7 @@ fn a_reply_cut_four_times_in_a_row_stops_the_run_at_the_cap() {
         == prompt: conversation ==
         user:
           text "Write a lot"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "more "
         user:
@@ -184,7 +184,7 @@ fn a_reply_cut_while_still_thinking_gets_the_briefer_reasoning_nudge() {
         == prompt: conversation ==
         user:
           text "Think hard"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
           text "Your output reached its token limit while you were still thinking, before any answer. Reason much more briefly and get to the answer or the next tool call."
         assistant:
           text "Short answer."
@@ -227,7 +227,7 @@ fn a_reply_that_is_empty_twice_ends_the_run_and_saves_no_assistant_message() {
         == prompt: conversation ==
         user:
           text "Say something"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         == prompt: log appended ==
         prompted "Say something"
         event SessionStarted

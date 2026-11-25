@@ -35,5 +35,5 @@ pub fn name(shared: &Arc<Shared>, item: ItemId, text: String, cwd: PathBuf, want
 pub fn titled(input: &Value) -> bool {
     let issue = input["issue"].as_str().is_some_and(|issue| !issue.is_empty());
     let sources = input["sources"].as_array().map(Vec::as_slice).unwrap_or_default();
-    issue || sources.iter().any(|source| matches!(source["kind"].as_str(), Some("issue" | "pull_request")))
+    issue || sources.iter().any(|source| matches!(source["kind"].as_str(), Some("issue" | "pull_request" | "schedule")))
 }

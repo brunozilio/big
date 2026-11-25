@@ -1,6 +1,6 @@
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message, Role};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -11,7 +11,7 @@ fn text(said: &str) -> Result<agent_engine::model::Reply, agent_engine::model::M
 
 #[test]
 fn a_serious_finding_sends_the_agent_back_once_and_the_review_is_not_repeated() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.policy.auto_review = true;
     let finding = r#"{"findings": [{"severity": "high", "file": "made.txt", "line": 1, "issue": "says hi, the task asked for hello"}]}"#;
     let model = ScriptedModel::new([
@@ -33,7 +33,7 @@ fn a_serious_finding_sends_the_agent_back_once_and_the_review_is_not_repeated() 
 
 #[test]
 fn a_run_that_changed_nothing_is_not_reviewed() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.policy.auto_review = true;
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("r", "Read", json!({ "file_path": "notes.txt" }))]),
@@ -48,7 +48,7 @@ fn a_run_that_changed_nothing_is_not_reviewed() {
 
 #[test]
 fn the_review_of_an_agent_bound_to_a_structured_result_is_not_held_to_that_contract() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.policy.auto_review = true;
     let contract =
         agent_engine::tools::structured::offer(json!({"type": "object"}), &mut rig.workspace).expect("schema");

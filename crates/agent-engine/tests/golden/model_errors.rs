@@ -21,7 +21,7 @@ fn an_overloaded_model_with_no_fallback_fails_the_run_as_unavailable() {
         == prompt: conversation ==
         user:
           text "hi"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         == prompt: log appended ==
         prompted "hi"
         event SessionStarted
@@ -57,7 +57,7 @@ fn an_overloaded_model_falls_back_to_the_next_model_and_answers_once() {
         == prompt: conversation ==
         user:
           text "hi"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "From the fallback."
         == prompt: log appended ==
@@ -101,7 +101,7 @@ fn a_conversation_too_long_for_the_model_is_compacted_and_the_turn_asked_again()
         == first prompt: conversation ==
         user:
           text "hi"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Hello there."
         == first prompt: log appended ==
@@ -129,7 +129,7 @@ fn a_conversation_too_long_for_the_model_is_compacted_and_the_turn_asked_again()
           text "If you need specific details from before compaction (exact code, error messages, or content you wrote), read the full transcript at: <tmp>/<brand>-tool-results/<session-1>/…
         user:
           text "And now?"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Shorter now."
         == second prompt: log appended ==
@@ -170,7 +170,7 @@ fn a_provider_error_that_cannot_be_retried_fails_the_run_and_keeps_the_prompt() 
         == prompt: conversation ==
         user:
           text "hi"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         == prompt: log appended ==
         prompted "hi"
         event SessionStarted

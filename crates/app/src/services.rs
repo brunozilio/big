@@ -44,7 +44,12 @@ impl BrowserMcp {
         Self(Some(Arc::new(server)))
     }
 
-    pub fn for_run(&self, session: &str, roots: Vec<PathBuf>, ask: Option<BrowserAsk>) -> Option<domain::mcp::LocalMcp> {
+    pub fn for_run(
+        &self,
+        session: &str,
+        roots: Vec<PathBuf>,
+        ask: Option<BrowserAsk>,
+    ) -> Option<domain::mcp::LocalMcp> {
         self.0.as_ref().and_then(|server| server(session, roots, ask))
     }
 }
@@ -144,6 +149,11 @@ impl LocalServices {
         self
     }
 
+    pub fn with_applications(mut self, applications: crate::features::memory::ApplicationOf) -> Self {
+        self.memories = self.memories.with_applications(applications);
+        self
+    }
+
     pub fn with_connected_mcp(mut self, connected: ConnectedMcp) -> Self {
         self.connected_mcp = connected;
         self
@@ -199,6 +209,7 @@ mod tests {
             text: "Uses wgpu".into(),
             tags: Vec::new(),
             touches: Vec::new(),
+            scope: Default::default(),
         };
         let by = domain::Provenance { author: domain::Author::User, now: 5, origin: None };
         crate::features::memory::of(&services).edit(Path::new("/work"), &[remember], by).expect("memory");

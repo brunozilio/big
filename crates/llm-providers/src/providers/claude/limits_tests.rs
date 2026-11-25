@@ -10,7 +10,7 @@ fn each_window_with_a_utilization_is_kept_and_nulls_are_skipped() {
         "seven_day_sonnet": {"utilization": null, "resets_at": "2026-11-28T00:00:00+00:00"},
         "extra_usage": {"is_enabled": false}
     });
-    let usage = windows(&value).unwrap_or_else(|e| panic!("{e}"));
+    let usage = windows(&value, domain::Language::Portuguese).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(usage.plan, None);
     let shown: Vec<_> =
         usage.windows.iter().map(|w| (w.id.as_str(), w.label.as_str(), w.used_percent, w.resets_at.clone())).collect();
@@ -25,7 +25,7 @@ fn each_window_with_a_utilization_is_kept_and_nulls_are_skipped() {
 
 #[test]
 fn a_body_that_is_not_an_object_is_refused() {
-    assert!(windows(&json!([])).is_err());
+    assert!(windows(&json!([]), domain::Language::Portuguese).is_err());
 }
 
 #[test]
@@ -44,14 +44,17 @@ fn the_client_asks_the_usage_once_and_a_provider_without_limits_asks_nothing() {
     use crate::providers::testing::{client, header};
     let answer = json!({"five_hour": {"utilization": 7, "resets_at": null}}).to_string();
     let (claude, http) = client(domain::ModelProvider::new("claude-subscription"), [(200, answer)]);
-    let usage = claude.limits().unwrap_or_else(|e| panic!("{e}")).unwrap_or_else(|| panic!("supported"));
+    let usage = claude
+        .limits(domain::Language::Portuguese)
+        .unwrap_or_else(|e| panic!("{e}"))
+        .unwrap_or_else(|| panic!("supported"));
     assert_eq!(usage.windows.len(), 1);
     let sent = http.sent();
     assert_eq!((sent.len(), sent[0].url.as_str()), (1, USAGE));
     assert_eq!(header(&sent[0], "authorization").as_deref(), Some("Bearer access-1"));
     let (grok, http) = client(domain::ModelProvider::new("grok-subscription"), []);
-    assert_eq!(grok.limits().ok(), Some(None));
+    assert_eq!(grok.limits(domain::Language::Portuguese).ok(), Some(None));
     assert!(http.sent().is_empty());
     let (failing, _) = client(domain::ModelProvider::new("claude-subscription"), [(401, "{}".to_owned())]);
-    assert!(failing.limits().is_err());
+    assert!(failing.limits(domain::Language::Portuguese).is_err());
 }

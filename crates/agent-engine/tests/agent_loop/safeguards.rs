@@ -3,7 +3,6 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::tool_search::defer;
 use agent_engine::tools::{Effect, Outcome, Tool, Workspace};
 use agent_engine::transcript::{Block, Message};
-use domain::PermissionMode;
 use serde_json::{Value, json};
 
 use crate::{Rig, tool_use};
@@ -18,7 +17,7 @@ fn first_result(model: &ScriptedModel) -> String {
 
 #[test]
 fn a_long_output_is_saved_to_a_file_the_agent_may_read() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("big", "Bash", json!({"command": "yes line | head -n 20000"}))]),
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
@@ -38,7 +37,7 @@ fn a_long_output_is_saved_to_a_file_the_agent_may_read() {
 
 #[test]
 fn tools_waiting_behind_tool_search_are_named_in_a_reminder() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     let specs = (0..25).map(|n| ToolSpec {
         name: format!("mcp__jira__tool{n}"),
         description: String::new(),
@@ -74,7 +73,7 @@ impl Tool for Waiting {
 }
 
 fn calling_a_waiting_tool(load_on_call: bool) -> (ScriptedModel, String) {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.policy.load_on_call = load_on_call;
     let specs = (0..25).map(|n| ToolSpec {
         name: format!("mcp__jira__tool{n}"),

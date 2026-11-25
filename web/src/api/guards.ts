@@ -22,6 +22,7 @@ export function isItem(v: unknown): v is Item {
     str(v.createdAt) &&
     str(v.updatedAt) &&
     strOrNull(v.doneAt) &&
+    strOrNull(v.archivedAt) &&
     (v.issue === null || isRef(v.issue)) &&
     (v.change === null || (isRef(v.change) && bool((v.change as Shape).merged))) &&
     (v.impediment === null || (obj(v.impediment) && str(v.impediment.reason))) &&
@@ -58,6 +59,10 @@ function isCall(v: unknown): v is Shape {
   return obj(v) && str(v.id) && str(v.title) && str(v.tag) && (v.state === 'running' || v.state === 'ok' || v.state === 'error') && num(v.durationMs)
 }
 
+function isFinding(v: unknown): v is Shape {
+  return obj(v) && str(v.id) && str(v.title) && num(v.severity) && str(v.kind) && str(v.suggested) && bool(v.new) && bool(v.policy) && str(v.description)
+}
+
 const blockChecks: Record<BlockType, (b: Shape) => boolean> = {
   chat: (b) => str(b.session) && bool(b.composer),
   issue: (b) => str(b.connection) && str(b.key) && bool(b.comment),
@@ -71,6 +76,11 @@ const blockChecks: Record<BlockType, (b: Shape) => boolean> = {
   calls: (b) => arr(b.calls, isCall),
   form: (b) => Array.isArray(b.fields) && obj(b.submit) && str(b.submit.action),
   actions: (b) => arr(b.buttons, (x): x is Shape => obj(x) && str(x.action) && str(x.label)),
+  findings: (b) => str(b.connection) && str(b.project) && strOrNull(b.scannedAt) && strOrNull(b.url) && strOrNull(b.triage) && arr(b.findings, isFinding),
+  quality: (b) => str(b.connection) && str(b.project) && str(b.branch) && strOrNull(b.analyzedAt) && strOrNull(b.url) && obj(b.report) && (b.report.gate === 'passed' || b.report.gate === 'failed') && Array.isArray(b.report.conditions) && Array.isArray(b.report.issues),
+  stages: (b) => Array.isArray(b.stages) && bool(b.live),
+  members: (b) => Array.isArray(b.items) && bool(b.removable),
+  tasks: (b) => Array.isArray(b.tasks) && Array.isArray(b.kinds) && bool(b.locked) && strOrNull(b.environment),
 }
 
 export function isBlock(v: unknown): v is Block {
@@ -106,6 +116,8 @@ export function isLiveEvent(v: unknown): v is LiveEvent {
       return str(v.id)
     case 'session':
       return str(v.session) && isSessionEvent(v.event)
+    case 'session.event.removed':
+      return str(v.session) && str(v.id)
     case 'session.status':
       return str(v.session) && str(v.status)
     case 'session.suggestion':
@@ -113,7 +125,7 @@ export function isLiveEvent(v: unknown): v is LiveEvent {
     case 'connections':
       return obj(v.connections) && Array.isArray(v.connections.providers) && Array.isArray(v.connections.connections)
     case 'branding':
-      return obj(v.branding) && str(v.branding.name)
+      return obj(v.branding) && str(v.branding.name) && (v.branding.language === undefined || ['en', 'es', 'pt-BR'].includes(String(v.branding.language)))
     case 'resync':
       return true
     default:

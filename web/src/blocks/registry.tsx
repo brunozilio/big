@@ -3,12 +3,18 @@ import type { Block, BlockType } from '@/api/contract'
 import { ChatView } from '@/chat/ChatView'
 import { PlanSplit } from '@/chat/PlanSplit'
 import { Icon } from '@/ui/icon'
+import { useT } from '@/i18n'
 import { CasesBlock } from './cases'
 import { ChangeBlock, MergeBlock } from './change'
+import { FindingsBlock } from './findings'
 import { IssueBlock } from './issue'
 import { PipelineBlock } from './pipeline'
+import { QualityBlock } from './quality'
 import { ReviewBlock } from './review'
+import { MembersBlock } from './members'
 import { ActionsBlock, CallsBlock, FormBlock, LogsBlock, MarkdownBlock } from './simple'
+import { StagesBlock } from './stages'
+import { TasksBlock } from './tasks'
 
 type Of<T extends BlockType> = Extract<Block, { type: T }>
 
@@ -35,11 +41,17 @@ export const registry: { [K in BlockType]: ComponentType<{ block: Of<K> }> } = {
   calls: CallsBlock,
   form: FormBlock,
   actions: ActionsBlock,
+  findings: FindingsBlock,
+  quality: QualityBlock,
+  stages: StagesBlock,
+  members: MembersBlock,
+  tasks: TasksBlock,
 }
 
 export function BlockView({ block }: { block: Block }) {
+  const t = useT()
   const View = registry[block.type] as ComponentType<{ block: Block }> | undefined
-  if (!View) return <p className="text-base text-muted">Bloco desconhecido: {block.type}</p>
+  if (!View) return <p className="text-base text-muted">{t('blocks.unknown', { type: block.type })}</p>
   return <View block={block} />
 }
 

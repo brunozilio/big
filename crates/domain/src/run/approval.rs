@@ -42,37 +42,38 @@ pub enum Decision {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
 pub enum PermissionMode {
-    Ask,
     #[default]
-    AcceptEdits,
+    Auto,
     Plan,
-    Bypass,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default, Serialize, Deserialize)]
+pub enum Reviewer {
+    #[default]
+    Model,
+    Human,
+    Nobody,
+}
+
+impl Reviewer {
+    pub fn is_model(&self) -> bool {
+        *self == Self::Model
+    }
 }
 
 impl PermissionMode {
-    pub const ALL: [PermissionMode; 4] = [Self::Ask, Self::AcceptEdits, Self::Plan, Self::Bypass];
+    pub const ALL: [PermissionMode; 2] = [Self::Auto, Self::Plan];
 
     pub const fn next(self) -> Self {
         match self {
-            Self::Ask => Self::AcceptEdits,
-            Self::AcceptEdits => Self::Plan,
-            Self::Plan => Self::Bypass,
-            Self::Bypass => Self::Ask,
-        }
-    }
-
-    const fn latitude(self) -> u8 {
-        match self {
-            Self::Plan => 0,
-            Self::Ask => 1,
-            Self::AcceptEdits => 2,
-            Self::Bypass => 3,
+            Self::Auto => Self::Plan,
+            Self::Plan => Self::Auto,
         }
     }
 
     pub fn capped(self, ceiling: Option<PermissionMode>) -> PermissionMode {
         match ceiling {
-            Some(max) if self.latitude() > max.latitude() => max,
+            Some(Self::Plan) => Self::Plan,
             _ => self,
         }
     }
@@ -83,16 +84,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_ceiling_caps_only_modes_that_allow_more() {
+    fn a_plan_ceiling_keeps_the_agent_planning() {
         use PermissionMode::*;
-        assert_eq!(Bypass.capped(Some(AcceptEdits)), AcceptEdits);
-        assert_eq!(Ask.capped(Some(AcceptEdits)), Ask);
-        assert_eq!(AcceptEdits.capped(Some(Plan)), Plan);
-        assert_eq!(Bypass.capped(None), Bypass);
+        assert_eq!(Auto.capped(Some(Plan)), Plan);
+        assert_eq!(Plan.capped(Some(Auto)), Plan);
+        assert_eq!(Auto.capped(None), Auto);
     }
 
     #[test]
-    fn edits_is_the_default_mode() {
-        assert_eq!(PermissionMode::default(), PermissionMode::AcceptEdits);
+    fn auto_is_the_default_mode() {
+        assert_eq!(PermissionMode::default(), PermissionMode::Auto);
     }
 }

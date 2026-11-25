@@ -5,22 +5,27 @@ const VERDICTS = ["approve", "request_changes", "comment"];
 
 export function verdictOf(text) {
   const written = String(text ?? "");
-  const at = written.search(/^#{1,3}\s*(veredito|resumo|verdict|summary)\b/im);
+  const at = written.search(/^#{1,3}\s*(veredito|veredicto|resumo|resumen|verdict|summary)\b/im);
   return at < 0 ? "" : written.slice(at).trim();
 }
 
 async function automatic(ctx, opts, pr) {
   const plan = planOf(ctx, opts);
-  const prompt = inLanguage(`Review pull request ${pr}.\n\n## Plan\n\n${plan.text}`);
+  const prompt = inLanguage(ctx, `Review pull request ${pr}.\n\n## Plan\n\n${plan.text}`);
   const result = await ctx.agent(opts.agent, { prompt, pr }, agentOptions(opts, { mode: opts.mode ?? "plan" }));
   const output = object(result.output);
   const lines = Array.isArray(output.lines) ? output.lines : [];
-  const body = output.body ?? (lines.length > 0 ? undefined : verdictOf(result.text));
+  const body = output.summary ?? output.body ?? (lines.length > 0 ? undefined : verdictOf(result.text));
   if (lines.length > 0 || body) {
-    const args = defined({ pr, verdict: "comment", body, lines: lines.length > 0 ? lines : undefined });
+    const args = defined({ pr, verdict: "comment", body, lines: lines.length > 0 ? lines : undefined, agent: opts.agent });
     await ctx.call("code", "submit_review", args, effects(opts));
   }
-  return result.session;
+  return { session: result.session, verdict: VERDICTS.includes(output.verdict) ? output.verdict : undefined, body };
+}
+
+function sendsBack(ctx, opts, reviewed, target) {
+  const rounds = opts.rounds === undefined ? 3 : opts.rounds;
+  return Boolean(target) && reviewed.verdict === "request_changes" && ctx.attempt <= rounds;
 }
 
 async function changesAsked(ctx, opts, pr, answer) {
@@ -72,23 +77,26 @@ export default step({
   name: "review",
   label: "Review",
   icon: "sReview",
-  needs: "code",
+  requires: "code",
   doing: "Waiting for review",
   view: (s) => (Array.isArray(s.prs) ? s.prs : s.pr ? [s.pr] : []).map((pr) => changes(pr, { session: s.session })),
   async run(ctx, opts) {
     const prs = pullRequestsOf(ctx, opts);
     if (prs.length === 0) return ctx.fail({ error: "there is no pull request to review" });
+    const target = opts.onChanges === undefined ? "develop" : opts.onChanges;
     let session;
     let by;
     const resolved = [];
     for (const entry of prs) {
       const options = codeOptions(opts, entry);
-      if (opts.agent) session = await automatic(ctx, options, entry.pr);
-      const judged = await judge(ctx, options, entry, prs.length > 1, session);
-      if (!judged.approved) {
-        const target = opts.onChanges === undefined ? "develop" : opts.onChanges;
-        return target ? ctx.goto(target, judged.data) : ctx.pass(judged.data);
+      const reviewed = opts.agent ? await automatic(ctx, options, entry.pr) : {};
+      session = reviewed.session;
+      if (sendsBack(ctx, opts, reviewed, target)) {
+        const asked = await changesAsked(ctx, options, entry.pr, { values: { body: reviewed.body }, by: opts.agent });
+        return ctx.goto(target, { ...asked, ...defined({ session }) });
       }
+      const judged = await judge(ctx, options, entry, prs.length > 1, session);
+      if (!judged.approved) return target ? ctx.goto(target, judged.data) : ctx.pass(judged.data);
       by = judged.by;
       if (opts.resolve !== false) resolved.push(...(await resolveAddressed(ctx, options, entry.pr)));
     }

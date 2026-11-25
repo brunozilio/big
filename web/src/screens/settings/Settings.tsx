@@ -10,23 +10,24 @@ import { SegmentedControl, Select, UnderlineTabs } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { stagger, tween, tweenClose } from '@/ui/motion'
 import { LANGUAGES, useLanguage, useT } from '@/i18n'
-import { groupName } from '@/i18n/server'
+import { groupName, styleDescription, styleName } from '@/i18n/server'
 import { BrowserView } from './Browser'
 import { ConnectionCard } from './ConnectionCard'
 import { ApplicationsView } from './Applications'
+import { MemoryView } from './Memory'
 import { PermissionsView } from './Permissions'
 import { UsageView } from './Usage'
 
-export type SettingsTab = 'connections' | 'browser' | 'permissions' | 'applications' | 'usage' | 'appearance'
+export type SettingsTab = 'connections' | 'browser' | 'permissions' | 'memory' | 'applications' | 'usage' | 'appearance'
 
 export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTab: (t: SettingsTab) => void; onConnect: (provider: string) => void }) {
   const t = useT()
   return (
     <>
-      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: t('settings.tab_connections') }, { value: 'browser', label: t('settings.tab_browser') }, { value: 'permissions', label: t('settings.tab_permissions') }, { value: 'applications', label: t('settings.tab_applications') }, { value: 'usage', label: t('settings.tab_usage') }, { value: 'appearance', label: t('settings.tab_appearance') }]} />
+      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: t('settings.tab_connections') }, { value: 'browser', label: t('settings.tab_browser') }, { value: 'permissions', label: t('settings.tab_permissions') }, { value: 'memory', label: t('settings.tab_memory') }, { value: 'applications', label: t('settings.tab_applications') }, { value: 'usage', label: t('settings.tab_usage') }, { value: 'appearance', label: t('settings.tab_appearance') }]} />
       <AnimatePresence mode="wait" initial={false}>
         <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tweenClose}>
-          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : <CustomView />}
+          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'memory' ? <MemoryView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : <CustomView />}
         </motion.div>
       </AnimatePresence>
     </>
@@ -66,7 +67,7 @@ function CustomView() {
         </Card>
         <LanguageCard onChange={(language) => save({ language })} />
       </section>
-      <OutputStyleSection styles={branding?.output_styles ?? []} value={branding?.output_style ?? null} onChange={(output_style) => save({ output_style })} />
+      <OutputStyleSection brand={branding?.name ?? ''} styles={branding?.output_styles ?? []} value={branding?.output_style ?? null} onChange={(output_style) => save({ output_style })} />
       {error && <p role="alert" className="text-sm text-danger-fg">{error}</p>}
     </div>
   )
@@ -88,17 +89,17 @@ function LanguageCard({ onChange }: { onChange: (language: Language) => void }) 
 
 const DEFAULT_STYLE = 'default'
 
-function OutputStyleSection({ styles, value, onChange }: { styles: OutputStyle[]; value: string | null; onChange: (key: string | null) => void }) {
+function OutputStyleSection({ brand, styles, value, onChange }: { brand: string; styles: OutputStyle[]; value: string | null; onChange: (key: string | null) => void }) {
   const t = useT()
   const chosen = styles.find((s) => s.key === value)
-  const options = [{ value: DEFAULT_STYLE, label: t('settings.style_default') }, ...styles.map((s) => ({ value: s.key, label: s.name }))]
+  const options = [{ value: DEFAULT_STYLE, label: t('settings.style_default') }, ...styles.map((s) => ({ value: s.key, label: styleName(t, s) }))]
   return (
     <section>
       <h2 className="mb-2.5 text-base font-medium text-muted">{t('settings.replies')}</h2>
       <Card className="flex items-center gap-4 px-4 py-3.5">
         <div className="min-w-0 flex-1">
           <p className="text-base font-medium text-fg">{t('settings.style')}</p>
-          <p className="text-sm text-muted">{chosen?.description ?? t('settings.styleHint')}</p>
+          <p className="text-sm text-muted">{chosen ? styleDescription(t, chosen, brand) : t('settings.styleHint')}</p>
         </div>
         <Select size="sm" label={t('settings.style')} className="w-44" value={chosen?.key ?? DEFAULT_STYLE} options={options} onValueChange={(v) => onChange(v === DEFAULT_STYLE ? null : v)} />
       </Card>

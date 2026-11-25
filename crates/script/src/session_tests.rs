@@ -394,7 +394,11 @@ fn a_call_left_unawaited_by_an_ended_script_never_lands_in_the_next_one() {
 fn a_name_a_failed_cell_declared_can_be_used_and_declared_again() {
     let session = Session::start();
 
-    let failed = evaluate(&session, "const kept = 1;\nconst later = JSON.parse('Started in the background as bash_1');\nclass Shape {}", nothing);
+    let failed = evaluate(
+        &session,
+        "const kept = 1;\nconst later = JSON.parse('Started in the background as bash_1');\nclass Shape {}",
+        nothing,
+    );
     let used = evaluate(&session, "[kept, typeof later, typeof Shape].join()", nothing);
     let again =
         evaluate(&session, "const later = 2;\nclass Shape { size() { return later } }\nnew Shape().size()", nothing);
@@ -422,7 +426,11 @@ fn set_timeout_and_sleep_wait_and_a_cleared_timer_never_fires() {
 
     assert_eq!(done.outcome, Ok("early,late".to_owned()));
     assert_eq!(failing.outcome, Ok("1".to_owned()));
-    assert!(failing.logs.iter().any(|line| line.contains("setTimeout callback failed: Error: boom")), "{:?}", failing.logs);
+    assert!(
+        failing.logs.iter().any(|line| line.contains("setTimeout callback failed: Error: boom")),
+        "{:?}",
+        failing.logs
+    );
 }
 
 #[test]
@@ -430,7 +438,8 @@ fn a_timer_left_behind_does_not_keep_a_finished_cell_alive() {
     let session = Session::start();
     let started = std::time::Instant::now();
 
-    let done = evaluate(&session, "globalThis.fired = 0;\nsetTimeout(() => { globalThis.fired = 1 }, 300);\n'done'", nothing);
+    let done =
+        evaluate(&session, "globalThis.fired = 0;\nsetTimeout(() => { globalThis.fired = 1 }, 300);\n'done'", nothing);
     let finished_in = started.elapsed();
     std::thread::sleep(Duration::from_millis(400));
     let after = evaluate(&session, "await sleep(10);\nfired", nothing);

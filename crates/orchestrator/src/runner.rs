@@ -189,13 +189,16 @@ impl Runner {
         let activated = match self.activate(&item, &ledger).await {
             Ok(activated) => activated,
             Err(Error::Script(reason)) => {
-                park(&self.shared, &self.id, &ledger, &format!("o workflow não pôde ser carregado: {reason}"))?;
+                let text = crate::texts::not_loaded(crate::texts::of_item(&self.shared, &self.id), &reason);
+                park(&self.shared, &self.id, &ledger, &text)?;
                 return Ok(true);
             }
             Err(other) => return Err(other),
         };
-        self.record(&ledger, &activated.signals)?;
-        self.cancel(&ledger, &activated.cancel)?;
+        if activated.state != "nondeterministic" {
+            self.record(&ledger, &activated.signals)?;
+            self.cancel(&ledger, &activated.cancel)?;
+        }
         match activated.state.as_str() {
             "running" => {
                 self.start(&ledger, activated.pending).await?;
@@ -214,7 +217,8 @@ impl Runner {
             "nondeterministic" => self.realign(&ledger, &activated.error).await,
             _ => {
                 let message = activated.error["message"].as_str().unwrap_or_default();
-                park(&self.shared, &self.id, &ledger, &format!("o workflow falhou: {message}"))?;
+                let text = crate::texts::failed(crate::texts::of_item(&self.shared, &self.id), message);
+                park(&self.shared, &self.id, &ledger, &text)?;
                 Ok(true)
             }
         }
@@ -239,14 +243,17 @@ impl Runner {
 
     async fn realign(&mut self, ledger: &Ledger, error: &Value) -> Result<bool> {
         let diverged = error["seq"].as_u64().and_then(|seq| ledger.requested.get(&seq));
-        let step = diverged.map(|request| request.key.step.clone()).filter(|step| ledger.cut(step).is_some());
-        if let Some(step) = step.filter(|step| self.realigned.insert(step.clone())) {
+        let found = diverged.and_then(|request| {
+            let step = request.key.step.clone();
+            ledger.cut_before(&step, request.key.seq).map(|cut| (step, cut))
+        });
+        if let Some((step, cut)) = found.filter(|(step, _)| self.realigned.insert(step.clone())) {
             tracing::info!(item = %self.id, %step, "the workflow code changed; the step runs again with it");
-            rewind::rewind(&self.shared, &self.id, &step).await?;
+            rewind::rewind_at(&self.shared, &self.id, ledger, &step, cut).await?;
             return Ok(true);
         }
         let message = error["message"].as_str().unwrap_or_default();
-        let reason = format!("o código do workflow mudou e não reproduz o histórico: {message}");
+        let reason = crate::texts::workflow_changed(crate::texts::of_item(&self.shared, &self.id), message);
         park(&self.shared, &self.id, ledger, &reason)?;
         Ok(true)
     }
@@ -283,7 +290,7 @@ impl Runner {
                 crate::api::cancel_item(
                     &self.shared,
                     &children::child_id(&self.id, &request.key),
-                    "o pai não espera mais",
+                    crate::texts::parent_stopped_waiting(crate::texts::of_item(&self.shared, &self.id)),
                 )?;
             }
             self.shared.resolve(&self.id, &request.key, EffectOutcome::Cancelled)?;
@@ -350,7 +357,11 @@ impl Runner {
     fn close(&mut self, item: &WorkItem) -> Result<()> {
         self.abort_all();
         for child in item.children.iter().filter(|child| !child.finished) {
-            crate::api::cancel_item(&self.shared, &child.id, "o pai terminou")?;
+            crate::api::cancel_item(
+                &self.shared,
+                &child.id,
+                crate::texts::parent_finished(crate::texts::of_item(&self.shared, &item.id)),
+            )?;
         }
         crate::release::release(&self.shared, item);
         self.shared.emit(OrchestratorEvent::ItemEnded { item: item.id.clone() });

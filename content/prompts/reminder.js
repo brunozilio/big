@@ -16,8 +16,7 @@ Work toward the plan in four steps.
 When the working directory started empty (Environment says so), there is no code to understand: skip the exploration, the Explore agents and the Plan agent, and write the plan yourself.
 
 Do not ask in text whether the plan is fine nor offer to start: ExitPlanMode asks. When the user approves, planning ends and you implement the plan in the same turn; when they keep planning, stop and wait for what to change. A question or research request with nothing to change needs no plan: answer it as your final message.`,
-  edits: `Edits are allowed; commands and external actions still require approval.`,
-  bypass: `The user enabled autonomous execution. Stay within the authorized task and verify the result.`,
+  auto: `Auto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous. When an action is blocked, do not work around the block: find a safer way or ask the user. Stay within the authorized task and verify the result.`,
 };
 
 const planSubAgent = `Planning mode: only read/search tools are available. Bash is not offered, whatever your instructions say about it: use Glob, Grep and Read. Report what you found; do not edit files, run commands or change external state.`;

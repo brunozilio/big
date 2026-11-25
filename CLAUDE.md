@@ -24,7 +24,7 @@ CARGO_TARGET_DIR="$PWD/target/agents/<tarefa>" cargo run -p xtask -- lint
 
 ```
 cli (launcher) ──► server, app, platform, domain, brand
-server ──► orchestrator, connectors, store, sync, app, page, domain, brand
+server ──► orchestrator, connectors, store, sync, app, page, domain, brand, platform
 orchestrator ──► agent-engine, connectors, sync, script, content, store, domain, platform, brand
 connectors ──► domain, brand, platform
 store ──► domain

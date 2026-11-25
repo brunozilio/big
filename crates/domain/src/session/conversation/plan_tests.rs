@@ -29,10 +29,10 @@ fn a_presented_plan_waits_and_is_not_shown_as_a_tool_call() {
 fn an_approved_plan_remembers_the_mode_it_goes_on_in() {
     let mut transcript = Transcript::default();
     presented(&mut transcript);
-    transcript.apply(&EngineEvent::ModeChanged(PermissionMode::AcceptEdits));
-    assert_eq!(outcome(&transcript), Some(Outcome::Approved(PermissionMode::AcceptEdits)));
+    transcript.apply(&EngineEvent::ModeChanged(PermissionMode::Auto));
+    assert_eq!(outcome(&transcript), Some(Outcome::Approved(PermissionMode::Auto)));
     transcript.apply(&EngineEvent::Completed { duration_ms: 5, cost_usd: None });
-    assert_eq!(outcome(&transcript), Some(Outcome::Approved(PermissionMode::AcceptEdits)), "the end keeps it");
+    assert_eq!(outcome(&transcript), Some(Outcome::Approved(PermissionMode::Auto)), "the end keeps it");
 }
 
 #[test]

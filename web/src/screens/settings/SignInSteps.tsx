@@ -9,6 +9,7 @@ import { Spinner } from '@/ui/display'
 import { LogoTile } from '@/ui/domain'
 import { Field, Input } from '@/ui/form'
 import { Icon } from '@/ui/icon'
+import { type T, useT } from '@/i18n'
 
 export type DeviceStart = Extract<SignInStart, { kind: 'device' }>
 export type RedirectStart = Extract<SignInStart, { kind: 'redirect' }>
@@ -76,33 +77,35 @@ export function ConnectHeader({ logo, name, description }: { logo: string; name:
   )
 }
 
-function toolsText(tools: McpTool[]) {
-  if (tools.length === 0) return 'Nenhuma ferramenta'
+function toolsText(tools: McpTool[], t: T) {
+  if (tools.length === 0) return t('settings.signIn_noTools')
   const names = tools.slice(0, 3).map((t) => t.name).join(', ')
-  return tools.length > 3 ? `${names} e mais ${tools.length - 3}` : names
+  return tools.length > 3 ? t('settings.signIn_moreTools', { names, n: tools.length - 3 }) : names
 }
 
 function McpTools({ connection }: { connection: string }) {
+  const t = useT()
   const [text, setText] = useState<string | null>(null)
   useEffect(() => {
     let live = true
     api()
       .call(connection, 'mcp.tools', {})
-      .then((tools) => live && setText(Array.isArray(tools) && tools.every(isMcpTool) ? toolsText(tools) : null))
+      .then((tools) => live && setText(Array.isArray(tools) && tools.every(isMcpTool) ? toolsText(tools, t) : null))
       .catch(() => live && setText(null))
     return () => {
       live = false
     }
-  }, [connection])
+  }, [connection, t])
   if (!text) return null
   return <span className="ml-2 text-sm text-muted">· {text}</span>
 }
 
 export function ConnectedAccounts({ accounts, onDisconnect }: { accounts: Connection[]; onDisconnect: (id: string) => void }) {
+  const t = useT()
   if (accounts.length === 0) return null
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-fg2">Contas conectadas</p>
+      <p className="text-sm font-medium text-fg2">{t('settings.signIn_accounts')}</p>
       <ul className="overflow-hidden rounded-card bg-surface shadow-card">
         {accounts.map((c) => (
           <li key={c.id} className="flex h-11 items-center gap-3 px-3.5 [&+&]:border-t">
@@ -113,7 +116,7 @@ export function ConnectedAccounts({ accounts, onDisconnect }: { accounts: Connec
               {c.account || c.label}
               {c.capabilities.includes('mcp') && <McpTools connection={c.id} />}
             </span>
-            <Button size="sm" variant="ghost" onClick={() => onDisconnect(c.id)}>Desconectar</Button>
+            <Button size="sm" variant="ghost" onClick={() => onDisconnect(c.id)}>{t('settings.signIn_disconnect')}</Button>
           </li>
         ))}
       </ul>
@@ -135,40 +138,42 @@ export function SignInFields({ fields, values, onChange }: { fields: FormField[]
 }
 
 export function DeviceCode({ site, start }: { site: string; start: DeviceStart }) {
+  const t = useT()
   const [copied, setCopied] = useState(false)
   const copy = () => {
     navigator.clipboard?.writeText(start.code).then(() => setCopied(true), () => undefined)
   }
   return (
     <Panel>
-      <p className="text-sm text-fg2">Abra a página {site}, entre com a sua conta e digite o código:</p>
+      <p className="text-sm text-fg2">{t('settings.signIn_deviceOpen', { site })}</p>
       <div className="flex items-center gap-2">
-        <code className="select-all rounded-md bg-surface px-3 py-1.5 font-mono text-lg font-semibold tracking-widest text-fg" aria-label="Código de verificação">
+        <code className="select-all rounded-md bg-surface px-3 py-1.5 font-mono text-lg font-semibold tracking-widest text-fg" aria-label={t('settings.signIn_code')}>
           {start.code}
         </code>
         <Button size="sm" icon={<Icon name={copied ? 'check' : 'copy'} size={14} />} onClick={copy}>
-          {copied ? 'Copiado' : 'Copiar'}
+          {copied ? t('settings.copied') : t('settings.copy')}
         </Button>
       </div>
       <OpenLink url={start.url} />
-      <Waiting text="Aguardando a autorização…" />
+      <Waiting text={t('settings.signIn_awaiting')} />
     </Panel>
   )
 }
 
 export function BrowserWait({ site, start, pasted, onPasted }: { site: string; start: RedirectStart; pasted: string; onPasted: (value: string) => void }) {
+  const t = useT()
   const inputId = useId()
   return (
     <Panel>
-      <p className="text-sm text-fg2">Autorize o acesso na página {site} que abriu no navegador.</p>
+      <p className="text-sm text-fg2">{t('settings.signIn_authorize', { site })}</p>
       <OpenLink url={start.url} />
       {start.paste ? (
         <div className="space-y-1.5">
-          <label htmlFor={inputId} className="block text-sm font-medium text-fg2">Código ou endereço de retorno</label>
+          <label htmlFor={inputId} className="block text-sm font-medium text-fg2">{t('settings.signIn_paste')}</label>
           <Input id={inputId} data-paste value={pasted} onChange={(e) => onPasted(e.target.value)} placeholder="http://localhost:…/callback?code=…" className="bg-surface font-mono" />
         </div>
       ) : (
-        <Waiting text="Aguardando a autorização…" />
+        <Waiting text={t('settings.signIn_awaiting')} />
       )}
     </Panel>
   )
@@ -192,19 +197,21 @@ export function AccountChoice({ poll, choice, onChoice }: { poll: ChoosePoll; ch
 }
 
 export function Resuming() {
+  const t = useT()
   return (
     <Panel>
-      <Waiting text="Concluindo a conexão…" />
+      <Waiting text={t('settings.signIn_resuming')} />
     </Panel>
   )
 }
 
 export function SignedIn({ connection }: { connection: Connection }) {
+  const t = useT()
   return (
     <Panel>
       <p className="flex items-center gap-2 text-base font-medium text-success-fg">
         <Icon name="checkCircle" size={18} />
-        Conectado
+        {t('settings.connected')}
       </p>
       <p className="truncate text-base text-fg">{connection.account || connection.label}</p>
     </Panel>

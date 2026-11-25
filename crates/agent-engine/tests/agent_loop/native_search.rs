@@ -1,14 +1,13 @@
 use agent_engine::model::Reply;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message, ReasoningOrigin, StopReason, Usage};
-use domain::PermissionMode;
 use serde_json::json;
 
 use crate::Rig;
 
 #[test]
 fn a_paused_search_turn_goes_on_with_its_results_and_no_new_prompt() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let searched = Block::Native {
         origin: ReasoningOrigin::of("messages"),
         item: json!({"type": "web_search_tool_result", "tool_use_id": "s1", "content": []}),

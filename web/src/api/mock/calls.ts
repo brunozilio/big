@@ -2,13 +2,14 @@ import type { ChangeData, Comment, FileDiff, IssueData, IssueSummary, Job, JobSt
 import { agentPerson, PEOPLE } from './fixtures'
 import { ISSUES, IDX, PROJECTS, REPO, STEPS, commentIssue, fileOf, moduleOf, store, type SimItem } from './sim'
 import { commands, iso, issueUrl, prUrl } from './view'
+import { say } from './say'
 
 function prFiles(it: SimItem): FileDiff[] {
   const mod = moduleOf(it)
   const main = fileOf(it)
   const files = [
     { path: main, diff: [` import { handle } from './${mod}'`, ` `, ` export async function ${mod}(input: Input) {`, `-  const result = await handle(input)`, `-  if (result.expired) return result`, `+  const result = await handle(input)`, `+  if (result.expired) {`, `+    return refresh(result, { maxAttempts: 3 })`, `+  }`, `   return result`, ` }`].join('\n') },
-    { path: main.replace(/\.tsx?$/, '.test.ts'), diff: [` describe('${mod}', () => {`, `+  it('renova a sessão expirada', async () => {`, `+    const result = await ${mod}(expiredInput)`, `+    expect(result.state).toBe('Refreshed')`, `+  })`, `+`, `   it('carrega a configuração', async () => {`].join('\n') },
+    { path: main.replace(/\.tsx?$/, '.test.ts'), diff: [` describe('${mod}', () => {`, `+  it('${say('testRenewsExpired')}', async () => {`, `+    const result = await ${mod}(expiredInput)`, `+    expect(result.state).toBe('Refreshed')`, `+  })`, `+`, `   it('${say('loadsConfig')}', async () => {`].join('\n') },
     { path: 'src/lib/retry.ts', diff: [` export function refresh<T>(value: T, opts: RetryOptions) {`, `-  return value`, `+  return withBackoff(() => renew(value), opts)`, ` }`].join('\n') },
   ]
   return files.map((f) => {
@@ -21,34 +22,34 @@ const minutesAgo = (m: number) => iso(store.clock - m)
 
 function prComments(it: SimItem): Comment[] {
   const main = fileOf(it)
-  const out: Comment[] = [{ id: 'c0', author: agentPerson('developer'), body: `Implementa ${it.key}.\n\n- Ajusta \`${main}\`\n- Cobre \`${moduleOf(it)}\` com teste\n\nCriado pelo workflow \`sdlc\`.`, at: minutesAgo(60), kind: 'comment' }]
+  const out: Comment[] = [{ id: 'c0', author: agentPerson('developer'), body: say('prOpening', { key: it.key, file: main, module: moduleOf(it) }), at: minutesAgo(60), kind: 'comment' }]
   if (it.cur > IDX.ci || it.done) {
-    out.push({ id: 'c1', author: PEOPLE['u-maria'], file: main, line: 7, body: 'Três tentativas é suficiente? No checkout a gente usa cinco.', at: minutesAgo(25), kind: 'comment' })
-    out.push({ id: 'c2', author: agentPerson('developer'), file: main, line: 7, body: 'Três segue o padrão de `src/lib/retry.ts`. O backoff total fica abaixo de 2s, dentro do timeout do gateway.', at: minutesAgo(24), kind: 'comment' })
+    out.push({ id: 'c1', author: PEOPLE['u-maria'], file: main, line: 45, body: say('mariaQuestion'), at: minutesAgo(25), kind: 'comment' })
+    out.push({ id: 'c2', author: agentPerson('developer'), file: main, line: 45, body: say('devReply'), at: minutesAgo(24), kind: 'comment' })
   }
-  it.reviewComments.forEach((n, i) => out.push({ id: `n${i}`, author: PEOPLE['u-you'], body: n.body, at: minutesAgo(0), kind: 'comment', ...(n.file ? { file: n.file, line: n.line + 1 } : {}) }))
+  it.reviewComments.forEach((n, i) => out.push({ id: `n${i}`, author: PEOPLE['u-you'], body: n.body, at: minutesAgo(0), kind: 'comment', ...(n.file ? { file: n.file, line: n.line } : {}) }))
   if (it.approvedBy) out.push({ id: 'c3', author: PEOPLE[it.approvedBy] ?? PEOPLE['u-you'], body: 'LGTM', at: iso(it.approvedAt), kind: 'approved' })
   return out
 }
 
 export function changeData(key: string): ChangeData {
   const it = store.items.find((x) => `#${x.pr}` === key)
-  if (!it?.pr) throw new Error(`mudança ${key} não encontrada`)
+  if (!it?.pr) throw new Error(say('changeNotFound', { key }))
   const merged = it.states.merge === 'passed'
-  const body = `## O que muda\n\n${it.title}.\n\n- Ajusta \`${fileOf(it)}\` para renovar a sessão expirada\n- Adiciona teste cobrindo o caso que falhava\n- Usa o backoff de \`src/lib/retry.ts\`\n\n## Como testar\n\n1. \`bun test ${moduleOf(it)}\`\n2. Conferir o fluxo no preview\n\nCloses [${it.key}](${issueUrl(it.key)})`
+  const body = say('prBody', { title: it.title, file: fileOf(it), module: moduleOf(it), key: it.key, url: issueUrl(it.key) })
   return { key, number: it.pr, title: `${it.key}: ${it.title}`, url: prUrl(it.pr), state: merged ? 'merged' : 'open', author: agentPerson('developer'), head: it.branch, base: 'main', body, files: prFiles(it), comments: prComments(it) }
 }
 
 function description(it: SimItem) {
-  return `## Contexto\n\n${it.title}. Relatado pelo suporte depois de reclamações de clientes no checkout.\n\n## Critérios de aceite\n\n- [ ] Ajustar \`${fileOf(it)}\`\n- [ ] Cobrir \`${moduleOf(it)}\` com teste automatizado\n- [ ] Sem regressão na suíte do módulo\n\n## Notas\n\nVer o print e os logs anexados.`
+  return say('issueDescription', { title: it.title, file: fileOf(it), module: moduleOf(it) })
 }
 
 function issueComments(it: SimItem): Comment[] {
-  const out: Comment[] = [{ id: 'j0', author: PEOPLE['u-joao'], body: 'Prioridade alta, cliente reclamou ontem.', at: minutesAgo(140), kind: 'comment' }]
-  if (it.plans.some((p) => p.resolution === 'approved')) out.push({ id: 'j1', author: agentPerson('planner'), body: `Plano:\n1. Ajustar \`${fileOf(it)}\`\n2. Cobrir \`${moduleOf(it)}\` com teste`, at: minutesAgo(80), kind: 'comment' })
-  if (it.pr) out.push({ id: 'j2', author: agentPerson('developer'), body: `PR #${it.pr} aberto em ${REPO}.`, at: minutesAgo(50), kind: 'comment' })
+  const out: Comment[] = [{ id: 'j0', author: PEOPLE['u-joao'], body: say('highPriority'), at: minutesAgo(140), kind: 'comment' }]
+  if (it.plans.some((p) => p.resolution === 'approved')) out.push({ id: 'j1', author: agentPerson('planner'), body: say('planComment', { file: fileOf(it), module: moduleOf(it) }), at: minutesAgo(80), kind: 'comment' })
+  if (it.pr) out.push({ id: 'j2', author: agentPerson('developer'), body: say('prOpened', { pr: it.pr, repo: REPO }), at: minutesAgo(50), kind: 'comment' })
   if (it.cur >= IDX.review || it.done) out.push({ id: 'j3', author: agentPerson('developer'), body: 'Status: In Progress → In Review', at: minutesAgo(30), kind: 'comment' })
-  if (it.done) out.push({ id: 'j4', author: agentPerson('release'), body: 'Em produção. Status: In Review → Done', at: iso(it.doneAt), kind: 'comment' })
+  if (it.done) out.push({ id: 'j4', author: agentPerson('release'), body: say('inProduction'), at: iso(it.doneAt), kind: 'comment' })
   it.issueComments.forEach((c) => out.push({ id: c.id, author: PEOPLE['u-you'], body: c.body, at: iso(c.tick), kind: 'comment' }))
   return out
 }
@@ -57,7 +58,7 @@ export function issueData(key: string): IssueData {
   const it = store.items.find((x) => x.key === key)
   if (!it) {
     const seed = ISSUES.find((i) => i.key === key)
-    if (!seed) throw new Error(`issue ${key} não encontrada`)
+    if (!seed) throw new Error(say('issueNotFound', { key }))
     return { key, url: issueUrl(key), title: seed.title, status: 'To Do', assignee: PEOPLE['u-you'], description: '', attachments: [], subtasks: [], comments: [] }
   }
   const devDone = it.states.develop === 'passed'
@@ -66,7 +67,7 @@ export function issueData(key: string): IssueData {
   return {
     key, url: issueUrl(key), title: it.title, status: it.done ? 'Done' : it.cur >= IDX.review ? 'In Review' : 'In Progress', assignee: PEOPLE['u-you'], description: description(it),
     attachments: [{ name: 'erro-no-checkout.png', size: '184 KB' }, { name: 'logs-producao.txt', size: '12 KB' }],
-    subtasks: [sub(100, `Ajustar ${fileOf(it)}`, devDone, true), sub(101, `Teste para ${moduleOf(it)}`, devDone, true), sub(102, 'Avisar o suporte quando estiver em produção', it.done, false)],
+    subtasks: [sub(100, say('subAdjust', { file: fileOf(it) }), devDone, true), sub(101, say('subTest', { module: moduleOf(it) }), devDone, true), sub(102, say('subNotify'), it.done, false)],
     comments: issueComments(it),
   }
 }
@@ -97,7 +98,7 @@ const CI_JOBS: JobSeed[] = [
   { id: 'preview', name: 'deploy preview', needs: ['test-ubuntu', 'test-macos'], stage: 2, from: 0, to: 0, skip: "github.event_name == 'push'", steps: [] },
 ]
 const RELEASE_JOBS: JobSeed[] = [
-  { id: 'image', name: 'build image', stage: 0, from: 0, to: 0.2, steps: ['build da imagem'] },
+  { id: 'image', name: 'build image', stage: 0, from: 0, to: 0.2, get steps() { return [say('imageBuild')] } },
   { id: 'staging', name: 'deploy staging', needs: ['image'], stage: 1, from: 0.2, to: 0.38, steps: ['deploy canary 5%'] },
   { id: 'smoke-staging', name: 'smoke staging', needs: ['staging'], stage: 2, from: 0.38, to: 0.45, steps: ['bun test'] },
   { id: 'production', name: 'deploy production', needs: ['smoke-staging'], stage: 3, from: 0.5, to: 0.9, gate: 'production', steps: ['rollout 100%'] },
@@ -134,7 +135,7 @@ function jobSeconds(j: JobSeed, st: JobState, it: SimItem) {
 export function pipelineRun(run: string): PipelineRun {
   const [kind, id, n] = run.split(':')
   const it = store.items.find((x) => String(x.id) === id)
-  if (!it || (kind !== 'ci' && kind !== 'release')) throw new Error(`execução ${run} não encontrada`)
+  if (!it || (kind !== 'ci' && kind !== 'release')) throw new Error(say('runNotFound', { run }))
   const ai = Math.max(0, Number(n) - 1)
   const seeds = kind === 'ci' ? CI_JOBS : RELEASE_JOBS
   const jobs: Job[] = seeds.map((j) => {

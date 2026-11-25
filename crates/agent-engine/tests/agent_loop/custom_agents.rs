@@ -3,7 +3,7 @@ use agent_engine::model::TurnRequest;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools;
 use agent_engine::transcript::{Block, Message};
-use domain::{Effort, PermissionMode};
+use domain::Effort;
 use serde_json::json;
 
 use crate::{Rig, request, tool_use};
@@ -15,7 +15,7 @@ fn configured_agent_filters_tools_enforces_runtime_denial_and_selects_model_effo
         subagent::{self, FoundAgent},
         subagent_config::AgentConfig,
     };
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.model = domain::ModelOption::new("family-key:claude-opus-5-5", "Opus")
         .served_by(domain::ModelProvider::new("family-key"));
     let found = FoundAgent {
@@ -67,7 +67,7 @@ fn custom_agent_turn_limit_stops_child_and_parent_can_continue() {
         subagent::{self, FoundAgent},
         subagent_config::AgentConfig,
     };
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let found = FoundAgent {
         name: "limited".into(),
         description: "One model turn".into(),

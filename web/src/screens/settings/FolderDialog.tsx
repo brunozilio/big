@@ -6,8 +6,10 @@ import { Button, IconButton } from '@/ui/button'
 import { Spinner } from '@/ui/display'
 import { Icon } from '@/ui/icon'
 import { Dialog } from '@/ui/overlay'
+import { useT } from '@/i18n'
 
 export function FolderDialog({ open, start, onClose, onChoose }: { open: boolean; start: string | null; onClose: () => void; onChoose: (listing: DirListing) => void }) {
+  const t = useT()
   const [path, setPath] = useState<string | null>(start)
   const [listing, setListing] = useState<DirListing | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -35,19 +37,19 @@ export function FolderDialog({ open, start, onClose, onChoose }: { open: boolean
     <Dialog
       open={open}
       onOpenChange={(o) => !o && onClose()}
-      title="Diretório local"
+      title={t('settings.folder_title')}
       footer={
         <>
-          <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" disabled={!shown} onClick={() => shown && onChoose(shown)}>Escolher</Button>
+          <Button variant="ghost" onClick={onClose}>{t('settings.cancel')}</Button>
+          <Button variant="primary" disabled={!shown} onClick={() => shown && onChoose(shown)}>{t('settings.choose')}</Button>
         </>
       }
     >
       <div className="flex items-center gap-1">
-        <IconButton tooltip="Pasta de cima" size="sm" disabled={!shown?.parent} onClick={() => shown?.parent && setPath(shown.parent)}>
+        <IconButton tooltip={t('settings.folder_up')} size="sm" disabled={!shown?.parent} onClick={() => shown?.parent && setPath(shown.parent)}>
           <Icon name="up" size={16} />
         </IconButton>
-        <IconButton tooltip="Início" size="sm" onClick={() => setPath(listing?.home ?? null)}>
+        <IconButton tooltip={t('settings.folder_home')} size="sm" onClick={() => setPath(listing?.home ?? null)}>
           <Icon name="home" size={16} />
         </IconButton>
         <div className="ml-1 flex h-8 min-w-0 flex-1 items-center gap-2 rounded-control-sm bg-inset px-2.5">
@@ -57,7 +59,7 @@ export function FolderDialog({ open, start, onClose, onChoose }: { open: boolean
           </span>
         </div>
       </div>
-      <ul aria-label="Pastas" className="mt-3 h-[300px] overflow-y-auto rounded-card bg-surface p-1 shadow-card">
+      <ul aria-label={t('settings.folder_list')} className="mt-3 h-[300px] overflow-y-auto rounded-card bg-surface p-1 shadow-card">
         {!shown && !error && (
           <li className="flex h-full items-center justify-center text-muted"><Spinner /></li>
         )}
@@ -70,7 +72,7 @@ export function FolderDialog({ open, start, onClose, onChoose }: { open: boolean
             </button>
           </li>
         ))}
-        {shown && shown.entries.length === 0 && <li className="px-2.5 py-3 text-base text-faint">Pasta vazia</li>}
+        {shown && shown.entries.length === 0 && <li className="px-2.5 py-3 text-base text-faint">{t('settings.folder_empty')}</li>}
       </ul>
       {error && <p role="alert" className="mt-2 text-sm text-danger-fg">{error}</p>}
     </Dialog>

@@ -78,6 +78,8 @@ impl Orchestrator {
         }
         crate::asks::restore(&shared)?;
         crate::factory::watch(&shared);
+        crate::progress::watch(&shared);
+        crate::schedules::watch(&shared);
         for item in shared.store.active_items()? {
             ensure(&shared, &item.id);
         }
@@ -127,6 +129,7 @@ impl Orchestrator {
         if parent.is_none() {
             crate::factory::stamp(&self.shared, &resources, &mut input)?;
         }
+        self.stamp_language(&mut input, parent.as_ref())?;
         let id = ItemId::new();
         let named = parent.is_none() && !crate::naming::titled(&input);
         let text = input["text"].as_str().or(input["title"].as_str()).unwrap_or_default().to_owned();
@@ -139,6 +142,23 @@ impl Orchestrator {
             crate::naming::name(&self.shared, id.clone(), text, home, wanted);
         }
         Ok(id)
+    }
+
+    fn stamp_language(&self, input: &mut Value, parent: Option<&ItemId>) -> Result<()> {
+        let Some(fields) = input.as_object_mut() else { return Ok(()) };
+        if fields.get("language").and_then(Value::as_str).is_some() {
+            return Ok(());
+        }
+        let inherited = match parent {
+            Some(parent) => self.shared.store.item(parent)?.map(|item| item.input["language"].clone()),
+            None => None,
+        };
+        let language = match inherited.filter(Value::is_string) {
+            Some(language) => language,
+            None => json!(self.shared.store.language()?.code()),
+        };
+        fields.insert("language".to_owned(), language);
+        Ok(())
     }
 
     pub fn item(&self, id: &ItemId) -> Result<Option<WorkItem>> {
@@ -174,11 +194,9 @@ impl Orchestrator {
         let chosen = script.target["workflow"].clone();
         let shapes = script.described["workflows"].as_array().cloned().unwrap_or_default();
         let shape = shapes.into_iter().find(|shape| shape["name"] == chosen).unwrap_or(Value::Null);
-        let steps = shape["steps"].as_array().cloned().unwrap_or_default();
-        steps
-            .iter()
-            .filter_map(|call| Some((call["id"].as_str()?.to_owned(), call["step"].as_str().map(str::to_owned))))
-            .collect()
+        let mut found = Vec::new();
+        flatten(&shape["steps"], &mut found);
+        found
     }
 
     pub fn describe(&self, workflow: &str) -> Value {
@@ -242,7 +260,7 @@ impl Orchestrator {
     }
 
     pub fn cancel(&self, id: &ItemId) -> Result<()> {
-        cancel_item(&self.shared, id, "cancelado por quem acompanha o item")
+        cancel_item(&self.shared, id, crate::texts::cancelled_by_watcher(crate::texts::of_item(&self.shared, id)))
     }
 
     pub async fn rerun(&self, id: &ItemId) -> Result<()> {
@@ -262,6 +280,15 @@ impl Orchestrator {
 
     pub async fn rewind(&self, id: &ItemId, step: &str) -> Result<()> {
         rewind::rewind(&self.shared, id, step).await
+    }
+
+    pub fn item_sessions(&self, id: &ItemId) -> Result<Vec<crate::ItemSession>> {
+        Ok(self.shared.store.item(id)?.map(|item| crate::context::sessions(&item)).unwrap_or_default())
+    }
+
+    pub fn context_window(&self, id: &ItemId, model: Option<&str>) -> Result<u64> {
+        let item = self.shared.item(id)?;
+        Ok(crate::context::window(&self.shared, &item, model))
     }
 
     pub fn session_agents(&self, session: &str) -> Result<Vec<AgentCard>> {
@@ -366,7 +393,7 @@ impl Orchestrator {
         Ok(1)
     }
 
-    fn shape(&self, workflow: &str) -> Option<Value> {
+    pub(crate) fn shape(&self, workflow: &str) -> Option<Value> {
         let script = self.shared.script(workflow).ok()?;
         let shapes = script.described["workflows"].as_array().cloned().unwrap_or_default();
         shapes.into_iter().find(|shape| shape["name"] == script.target["workflow"])
@@ -398,6 +425,14 @@ impl Orchestrator {
 }
 
 const ISSUE: &str = "issue";
+
+fn flatten(steps: &Value, found: &mut Vec<(String, Option<String>)>) {
+    for call in steps.as_array().map(Vec::as_slice).unwrap_or_default() {
+        let Some(id) = call["path"].as_str().or_else(|| call["id"].as_str()) else { continue };
+        found.push((id.to_owned(), call["step"].as_str().map(str::to_owned)));
+        flatten(&call["steps"], found);
+    }
+}
 
 fn source_kind(capability: &str) -> &str {
     match capability {

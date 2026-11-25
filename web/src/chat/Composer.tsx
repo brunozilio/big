@@ -8,6 +8,7 @@ import { AttachmentStrip, useAttachments } from './Attachments'
 import type { Effort } from '@/api/contract'
 import { DEFAULT_EFFORT, ModelPicker, useModels } from './ModelPicker'
 import { useRememberedModel, useRememberedTuning } from './remembered'
+import { useT } from '@/i18n'
 
 export interface Tuning {
   effort: Effort
@@ -71,6 +72,7 @@ export function Composer({
   onBtw?: (question: string) => void
   imports?: ComposerImport[]
 }) {
+  const t = useT()
   const [text, setText] = useState('')
   const [refusal, setRefusal] = useState<string | null>(null)
   const attachments = useAttachments(setRefusal)
@@ -104,7 +106,7 @@ export function Composer({
   const askAside = () => {
     if (btw !== null && onBtw) {
       if (!btw || disabled) {
-        setRefusal('Escreva a pergunta: /btw <pergunta>')
+        setRefusal(t('chat.btwUsage'))
         return
       }
       onBtw(btw)
@@ -182,8 +184,8 @@ export function Composer({
               attachments.add(pasted)
             }
           }}
-          placeholder={placeholder ?? 'No que vamos trabalhar?'}
-          aria-label="Mensagem"
+          placeholder={placeholder ?? t('chat.placeholder')}
+          aria-label={t('chat.message')}
           className="relative block max-h-[260px] min-h-[76px] w-full resize-none bg-transparent px-5 pb-3 pt-[18px] text-lg leading-[26px] text-fg caret-fg outline-none [scrollbar-width:none] placeholder:text-muted disabled:cursor-not-allowed"
         />
         <input
@@ -217,14 +219,14 @@ export function Composer({
   )
 }
 
-const MOD = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+'
 
 function AddMenu({ onFiles, imports }: { onFiles: () => void; imports: ComposerImport[] }) {
+  const t = useT()
   const imported = useRef(false)
   return (
     <Menu>
       <MenuTrigger asChild>
-        <button aria-label="Adicionar" className="flex size-8 items-center justify-center rounded-full text-fg2 transition-colors hover:bg-inset hover:text-fg data-[state=open]:bg-inset data-[state=open]:text-fg">
+        <button aria-label={t('chat.add')} className="flex size-8 items-center justify-center rounded-full text-fg2 transition-colors hover:bg-inset hover:text-fg data-[state=open]:bg-inset data-[state=open]:text-fg">
           <Icon name="plus" size={18} />
         </button>
       </MenuTrigger>
@@ -232,7 +234,7 @@ function AddMenu({ onFiles, imports }: { onFiles: () => void; imports: ComposerI
         if (imported.current) e.preventDefault()
         imported.current = false
       }}>
-        <MenuItem icon={<Icon name="attach" size={16} />} onSelect={onFiles} right={<span className="text-sm text-faint">{MOD}U</span>}>Adicionar arquivos ou fotos</MenuItem>
+        <MenuItem icon={<Icon name="attach" size={16} />} onSelect={onFiles}>{t('chat.addFiles')}</MenuItem>
         {imports.map((i) => (
           <MenuItem key={i.key} icon={i.icon} onSelect={() => { imported.current = true; i.onSelect() }}>{i.label}</MenuItem>
         ))}
@@ -242,9 +244,10 @@ function AddMenu({ onFiles, imports }: { onFiles: () => void; imports: ComposerI
 }
 
 function SuggestionChip({ text, onPick }: { text: string; onPick: () => void }) {
+  const t = useT()
   return (
     <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={tween} className="mb-2 flex">
-      <button onClick={onPick} aria-label={`Usar sugestão: ${text}`} className="inline-flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full bg-surface px-3 text-sm text-fg2 shadow-card transition-colors hover:bg-hover hover:text-fg">
+      <button onClick={onPick} aria-label={t('chat.useSuggestion', { text })} className="inline-flex h-8 min-w-0 max-w-full items-center gap-1.5 rounded-full bg-surface px-3 text-sm text-fg2 shadow-card transition-colors hover:bg-hover hover:text-fg">
         <Icon name="sparkles" size={14} className="shrink-0 text-muted" />
         <span className="truncate">{text}</span>
       </button>
@@ -253,20 +256,22 @@ function SuggestionChip({ text, onPick }: { text: string; onPick: () => void }) 
 }
 
 function AsideButton({ onAsk, disabled }: { onAsk: () => void; disabled: boolean }) {
+  const t = useT()
   return (
-    <Tooltip content="Pergunta sem interromper nem criar atividade  ↵">
+    <Tooltip content={t('chat.asideHint')}>
       <Button size="sm" variant="soft" disabled={disabled} onClick={onAsk} icon={<Icon name="help" size={15} />} className="mr-1">
-        Perguntar à parte
+        {t('chat.askAside')}
       </Button>
     </Tooltip>
   )
 }
 
 function SendButton({ running, ready, onSend, onStop }: { running: boolean; ready: boolean; onSend: () => void; onStop?: () => void }) {
+  const t = useT()
   return (
-    <Tooltip content={running ? 'Parar' : 'Enviar  ↵'}>
+    <Tooltip content={running ? t('chat.stop') : t('chat.sendHint')}>
       <motion.button
-        aria-label={running ? 'Parar' : 'Enviar'}
+        aria-label={running ? t('chat.stop') : t('chat.send')}
         disabled={!running && !ready}
         onClick={running ? onStop : onSend}
         whileTap={{ scale: 0.97 }}

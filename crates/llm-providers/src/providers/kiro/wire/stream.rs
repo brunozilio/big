@@ -180,8 +180,8 @@ pub fn error(kind: &str, body: &Value) -> ModelError {
 
 #[cfg(test)]
 mod tests {
-    use crate::model::event_stream::{self as frames, encode};
     use super::*;
+    use crate::model::event_stream::{self as frames, encode};
     use serde_json::json;
 
     fn fold(bytes: &[u8], window: Option<u64>) -> (Result<Reply, ModelError>, Vec<Delta>) {

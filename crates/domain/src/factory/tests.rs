@@ -96,7 +96,7 @@ fn a_human_rewinding_to_the_producer_after_the_gates_is_an_escape_caught_by_a_hu
         finished(1, "develop", 1, "passed", json!({}), None),
         started(2, "ci", "ci", json!({ "onFail": "develop" })),
         finished(3, "ci", 1, "passed", json!({}), None),
-        (9, WorkflowEvent::Rewound { to: "develop".into() }),
+        (9, WorkflowEvent::Rewound { to: "develop".into(), at: None }),
     ];
     let found = scan(&events);
     assert_eq!(found.len(), 1);

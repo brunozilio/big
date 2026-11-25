@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use crate::calls::connection;
 use axum::Json;
 use axum::extract::{Path, Query, State};
+use axum::http::StatusCode;
 use axum::response::Response;
 use connectors::ProviderDescriptor;
 use connectors::contracts::{self, code};
@@ -12,7 +13,7 @@ use serde_json::{Map, Value, json};
 use store::{Application, ConnectionRecord, Repository};
 
 use crate::blocks::{self, Place};
-use crate::error::{ApiError, ApiResult, done, json as reply};
+use crate::error::{ApiError, ApiResult, done, json as reply, said};
 use crate::item_view::{self, Known};
 use crate::marks::{iso, serving};
 use crate::state::{Ctx, Shared};
@@ -28,7 +29,13 @@ struct Context {
     connections: Vec<ConnectionRecord>,
     stale: Vec<String>,
     descriptors: Vec<ProviderDescriptor>,
-    labels: HashMap<String, Value>,
+    described: HashMap<String, Value>,
+    archived: HashMap<String, i64>,
+}
+
+fn with_archive(mut value: Value, archived: &HashMap<String, i64>, id: &ItemId) -> Value {
+    value["archivedAt"] = archived.get(id.as_str()).map_or(Value::Null, |at| json!(iso(*at)));
+    value
 }
 
 impl Context {
@@ -38,25 +45,28 @@ impl Context {
             stale: stale(shared, &connections),
             connections,
             descriptors: shared.backend.connectors.descriptors().into_iter().cloned().collect(),
-            labels: HashMap::new(),
+            described: HashMap::new(),
+            archived: shared.backend.store.archived_items()?,
         })
     }
 
-    fn labels(&mut self, shared: &Shared, workflow: &str) -> Value {
-        let found = self.labels.entry(workflow.to_owned());
-        found.or_insert_with(|| shared.backend.orchestrator.describe(workflow)["labels"].clone()).clone()
+    fn described(&mut self, shared: &Shared, workflow: &str) -> Value {
+        let found = self.described.entry(workflow.to_owned());
+        found.or_insert_with(|| shared.backend.orchestrator.describe(workflow)).clone()
     }
 
     fn item(&mut self, shared: &Shared, summary: &ItemSummary) -> ApiResult<Value> {
-        let labels = self.labels(shared, &summary.workflow);
+        let described = self.described(shared, &summary.workflow);
         let item = shared.backend.orchestrator.item(&summary.id)?;
         let known = Known {
             connections: &self.connections,
             stale: &self.stale,
             descriptors: &self.descriptors,
-            labels: &labels,
+            described: &described,
+            language: shared.language(),
         };
-        let (value, _) = shared.stamps.stamp(item_view::item(&known, summary, item.as_ref()));
+        let value = with_archive(item_view::item(&known, summary, item.as_ref()), &self.archived, &summary.id);
+        let (value, _) = shared.stamps.stamp(value);
         Ok(value)
     }
 }
@@ -86,9 +96,19 @@ fn filled(value: &Value) -> Option<String> {
 fn source(found: &Value) -> ApiResult<Value> {
     let kind = found["kind"].as_str().unwrap_or_default();
     if !KINDS.contains(&kind) {
-        return Err(ApiError::bad(format!("Não conheço a origem {kind}.")));
+        return Err(ApiError::bad(said(
+            format!("Unknown source {kind}."),
+            format!("No conozco el origen {kind}."),
+            format!("Não conheço a origem {kind}."),
+        )));
     }
-    let subject = filled(&found["subject"]).ok_or_else(|| ApiError::bad("Diga a referência de cada origem."))?;
+    let subject = filled(&found["subject"]).ok_or_else(|| {
+        ApiError::bad(said(
+            "Give the reference of each source.",
+            "Indica la referencia de cada origen.",
+            "Diga a referência de cada origem.",
+        ))
+    })?;
     let mut kept = json!({ "kind": kind, "connection": filled(&found["connection"]), "subject": subject });
     if let Some(repository) = filled(&found["repository"]) {
         kept["repository"] = json!(repository);
@@ -117,13 +137,20 @@ fn code_record(shared: &Shared, source: &Value, application: Option<&Application
     let repositories = application.into_iter().flat_map(|application| &application.repositories);
     let linked = repositories.filter_map(|repository| repository.code.as_ref()).next();
     match filled(&source["connection"]).or_else(|| linked.map(|code| code.connection.clone())) {
-        Some(id) => connections
-            .into_iter()
-            .find(|record| record.id == id)
-            .ok_or_else(|| ApiError::bad("A conta do pull request não está mais conectada.")),
-        None => serving(&connections, contracts::CODE)
-            .cloned()
-            .ok_or_else(|| ApiError::bad("Conecte uma conta de código para começar de um pull request.")),
+        Some(id) => connections.into_iter().find(|record| record.id == id).ok_or_else(|| {
+            ApiError::bad(said(
+                "The pull request account is no longer connected.",
+                "La cuenta del pull request ya no está conectada.",
+                "A conta do pull request não está mais conectada.",
+            ))
+        }),
+        None => serving(&connections, contracts::CODE).cloned().ok_or_else(|| {
+            ApiError::bad(said(
+                "Connect a code account to start from a pull request.",
+                "Conecta una cuenta de código para empezar desde un pull request.",
+                "Conecte uma conta de código para começar de um pull request.",
+            ))
+        }),
     }
 }
 
@@ -132,7 +159,13 @@ async fn read_pull(shared: &Shared, record: &ConnectionRecord, subject: &str) ->
     let args = json!({ "pr": subject });
     let hub = &shared.backend.connectors;
     let found = hub.call(&connection(record), &record.settings, code::PULL_REQUEST, &args, &key).await;
-    found.map_err(|error| ApiError::bad(format!("Não consegui ler o pull request {subject}: {}", error.shown())))
+    found.map_err(|error| {
+        ApiError::bad(said(
+            format!("Could not read pull request {subject}: {}", error.shown()),
+            format!("No pude leer el pull request {subject}: {}", error.shown()),
+            format!("Não consegui ler o pull request {subject}: {}", error.shown()),
+        ))
+    })
 }
 
 fn pull_repo(found: &Value) -> Option<String> {
@@ -185,14 +218,24 @@ impl<'a> Origin<'a> {
         let subject = filled(&self.sources[at]["subject"]).unwrap_or_default();
         let record = code_record(shared, &self.sources[at], self.application)?;
         let found = read_pull(shared, &record, &subject).await?;
-        let repo = pull_repo(&found)
-            .ok_or_else(|| ApiError::bad(format!("O pull request {subject} não diz de qual repositório é.")))?;
+        let repo = pull_repo(&found).ok_or_else(|| {
+            ApiError::bad(said(
+                format!("Pull request {subject} does not say which repository it is from."),
+                format!("El pull request {subject} no dice de qué repositorio es."),
+                format!("O pull request {subject} não diz de qual repositório é."),
+            ))
+        })?;
         let among = self.application.map_or(applications, std::slice::from_ref);
         let repository = if among.is_empty() {
             String::new()
         } else {
-            let (application, repository) = matching(among, &repo)
-                .ok_or_else(|| ApiError::bad(format!("Nenhum repositório das aplicações corresponde a {repo}.")))?;
+            let (application, repository) = matching(among, &repo).ok_or_else(|| {
+                ApiError::bad(said(
+                    format!("No application repository matches {repo}."),
+                    format!("Ningún repositorio de las aplicaciones corresponde a {repo}."),
+                    format!("Nenhum repositório das aplicações corresponde a {repo}."),
+                ))
+            })?;
             self.application = Some(application);
             repository.id.clone()
         };
@@ -218,9 +261,13 @@ impl<'a> Origin<'a> {
             Some([only]) => Some(only.id.clone()),
             Some(_) => None,
         };
-        let repository = filled(&self.sources[at]["repository"])
-            .or(only)
-            .ok_or_else(|| ApiError::bad("Diga em qual repositório está o branch."))?;
+        let repository = filled(&self.sources[at]["repository"]).or(only).ok_or_else(|| {
+            ApiError::bad(said(
+                "Say which repository the branch is in.",
+                "Indica en qué repositorio está el branch.",
+                "Diga em qual repositório está o branch.",
+            ))
+        })?;
         let subject = filled(&self.sources[at]["subject"]).unwrap_or_default();
         self.sources[at]["repository"] = json!(repository);
         let entry = self.git.entry(repository).or_insert_with(|| json!({}));
@@ -234,7 +281,11 @@ impl<'a> Origin<'a> {
         let Some(application) = self.application else { return Ok(()) };
         let known = |id: &String| application.repositories.iter().any(|repository| &repository.id == id);
         match self.git.keys().find(|id| !known(id)) {
-            Some(_) => Err(ApiError::bad("Um dos repositórios escolhidos não é dessa aplicação.")),
+            Some(_) => Err(ApiError::bad(said(
+                "One of the chosen repositories is not from that application.",
+                "Uno de los repositorios elegidos no es de esa aplicación.",
+                "Um dos repositórios escolhidos não é dessa aplicação.",
+            ))),
             None => Ok(()),
         }
     }
@@ -255,15 +306,17 @@ pub fn changed(shared: &Shared, id: &ItemId) -> ApiResult<Option<Value>> {
         return Ok(None);
     }
     let mut context = Context::load(shared)?;
-    let labels = context.labels(shared, &summary.workflow);
+    let described = context.described(shared, &summary.workflow);
     let item = shared.backend.orchestrator.item(id)?;
     let known = Known {
         connections: &context.connections,
         stale: &context.stale,
         descriptors: &context.descriptors,
-        labels: &labels,
+        described: &described,
+        language: shared.language(),
     };
-    let (value, moved) = shared.stamps.stamp(item_view::item(&known, &summary, item.as_ref()));
+    let value = with_archive(item_view::item(&known, &summary, item.as_ref()), &context.archived, id);
+    let (value, moved) = shared.stamps.stamp(value);
     Ok(moved.then_some(value))
 }
 
@@ -275,7 +328,13 @@ fn workflow(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<Str
     let names = shared.backend.orchestrator.workflows();
     if let Some(wanted) = filled(&body["workflow"]) {
         let known = names.contains(&wanted);
-        return known.then_some(wanted.clone()).ok_or_else(|| ApiError::bad(format!("Não há o workflow {wanted}.")));
+        return known.then_some(wanted.clone()).ok_or_else(|| {
+            ApiError::bad(said(
+                format!("There is no workflow {wanted}."),
+                format!("No existe el workflow {wanted}."),
+                format!("Não há o workflow {wanted}."),
+            ))
+        });
     }
     let kind = origin.primary();
     let accepting: Vec<&String> = names
@@ -284,7 +343,13 @@ fn workflow(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<Str
         .collect();
     let preferred = accepting.iter().find(|name| name.as_str() == DEFAULT_WORKFLOW).or(accepting.first()).copied();
     let fallback = || names.iter().find(|name| *name == DEFAULT_WORKFLOW).or(names.first());
-    preferred.or_else(fallback).cloned().ok_or_else(|| ApiError::failed("Nenhum workflow encontrado."))
+    preferred.or_else(fallback).cloned().ok_or_else(|| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed",
+            said("No workflow found.", "Ningún workflow encontrado.", "Nenhum workflow encontrado."),
+        )
+    })
 }
 
 fn title(text: &str, origin: &Origin<'_>) -> String {
@@ -299,7 +364,11 @@ fn title(text: &str, origin: &Origin<'_>) -> String {
 fn input(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<Value> {
     let text = body["text"].as_str().map(str::trim).unwrap_or_default();
     if text.is_empty() && origin.sources.is_empty() {
-        return Err(ApiError::bad("Descreva o item ou escolha uma origem: issue, pull request ou branch."));
+        return Err(ApiError::bad(said(
+            "Describe the item or choose a source: issue, pull request or branch.",
+            "Describe el ítem o elige un origen: issue, pull request o branch.",
+            "Descreva o item ou escolha uma origem: issue, pull request ou branch.",
+        )));
     }
     let files = crate::attachments::paths(&shared.backend.attachments(), &body["attachments"]);
     let files: Vec<String> = files.iter().map(|file| file.display().to_string()).collect();
@@ -334,7 +403,13 @@ fn input(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<Value>
 fn chosen<'a>(applications: &'a [Application], body: &Value) -> ApiResult<Option<&'a Application>> {
     let Some(id) = body["application"].as_str().filter(|id| !id.is_empty()) else { return Ok(None) };
     let found = applications.iter().find(|application| application.id == id);
-    found.map(Some).ok_or_else(|| ApiError::bad("Essa aplicação não existe mais."))
+    found.map(Some).ok_or_else(|| {
+        ApiError::bad(said(
+            "That application no longer exists.",
+            "Esa aplicación ya no existe.",
+            "Essa aplicação não existe mais.",
+        ))
+    })
 }
 
 pub async fn create(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {
@@ -347,10 +422,16 @@ pub async fn create(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResul
     let models =
         tokio::task::spawn_blocking(move || crate::models::known(&shared)).await.map_err(ApiError::failed)??;
     if models.is_empty() {
-        return Err(ApiError::bad(crate::models::NONE));
+        return Err(ApiError::bad(crate::models::none()));
     }
     let id = ctx.backend.orchestrator.create_item(&workflow, input)?;
-    let summary = ctx.backend.orchestrator.summary(&id)?.ok_or_else(|| ApiError::failed("O item sumiu."))?;
+    let summary = ctx.backend.orchestrator.summary(&id)?.ok_or_else(|| {
+        ApiError::new(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "failed",
+            said("The item is gone.", "El ítem desapareció.", "O item sumiu."),
+        )
+    })?;
     let item = Context::load(&ctx)?.item(&ctx, &summary)?;
     ctx.live.item(item.clone());
     Ok(reply(item))
@@ -363,7 +444,7 @@ fn item_id(id: &str) -> ItemId {
 fn known(shared: &Shared, id: &ItemId) -> ApiResult<()> {
     match shared.backend.orchestrator.item(id)? {
         Some(_) => Ok(()),
-        None => Err(ApiError::missing("Não há esse item.")),
+        None => Err(ApiError::missing(said("There is no such item.", "No existe ese ítem.", "Não há esse item."))),
     }
 }
 
@@ -391,14 +472,18 @@ pub async fn step(
     Query(query): Query<HashMap<String, String>>,
 ) -> ApiResult<Response> {
     let id = item_id(&id);
-    let item = ctx.backend.orchestrator.item(&id)?.ok_or_else(|| ApiError::missing("Não há esse item."))?;
+    let item =
+        ctx.backend.orchestrator.item(&id)?.ok_or_else(|| {
+            ApiError::missing(said("There is no such item.", "No existe ese ítem.", "Não há esse item."))
+        })?;
     let attempt = query.get("attempt").and_then(|text| text.parse::<u32>().ok());
     let view = ctx.backend.orchestrator.step_view(&id, &step, attempt).await?;
     let latest = view.attempts.last().map_or(0, |last| last.n);
     let run = item.steps.iter().rev().find(|run| run.id == step);
     let waiting = view.attempt == latest && run.is_some_and(|run| run.state == StepState::WaitingHuman);
     let connections = ctx.backend.store.connections()?;
-    let place = Place { connections: &connections, waiting };
+    let language = item.input["language"].as_str().and_then(domain::Language::named).unwrap_or(ctx.language());
+    let place = Place { connections: &connections, waiting, language };
     let attempts: Vec<Value> = view
         .attempts
         .iter()
@@ -413,7 +498,7 @@ pub async fn step(
     let stuck = item.steps.iter().any(|run| run.id.is_empty() && run.state == StepState::WaitingHuman);
     if stuck && run.is_some_and(|run| run.state == StepState::Failed) {
         let decided = ctx.backend.orchestrator.step_view(&id, "", None).await?;
-        let place = Place { connections: &connections, waiting: true };
+        let place = Place { connections: &connections, waiting: true, language };
         blocks.extend(blocks::normalized(&place, &decided.blocks));
     }
     Ok(reply(json!({
@@ -429,7 +514,7 @@ pub async fn human(
 ) -> ApiResult<Response> {
     let id = item_id(&id);
     let action = body["action"].as_str().filter(|action| !action.is_empty());
-    let action = action.ok_or_else(|| ApiError::bad("Diga a ação."))?;
+    let action = action.ok_or_else(|| ApiError::bad(said("Say the action.", "Indica la acción.", "Diga a ação.")))?;
     let (action, payload) = blocks::input(action, body["payload"].clone());
     ctx.backend.orchestrator.human_input(&id, &step, &action, payload)?;
     Ok(done())

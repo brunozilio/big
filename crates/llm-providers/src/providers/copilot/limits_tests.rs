@@ -12,7 +12,7 @@ fn limited_quotas_are_used_percent_and_unlimited_ones_are_skipped() {
             "completions": {"percent_remaining": 100.0, "unlimited": false}
         }
     });
-    let usage = windows(&value).unwrap_or_else(|e| panic!("{e}"));
+    let usage = windows(&value, domain::Language::Portuguese).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(usage.plan.as_deref(), Some("Individual pro"));
     let shown: Vec<_> =
         usage.windows.iter().map(|w| (w.id.as_str(), w.label.as_str(), w.used_percent, w.resets_at.clone())).collect();
@@ -29,9 +29,9 @@ fn limited_quotas_are_used_percent_and_unlimited_ones_are_skipped() {
 #[test]
 fn the_utc_reset_wins_and_a_user_without_quotas_has_no_windows() {
     let value = json!({"quota_reset_date_utc": "2026-12-01T00:00:00.000Z", "quota_reset_date": "2026-11-30"});
-    let usage = windows(&value).unwrap_or_else(|e| panic!("{e}"));
+    let usage = windows(&value, domain::Language::Portuguese).unwrap_or_else(|e| panic!("{e}"));
     assert!(usage.windows.is_empty() && usage.plan.is_none());
-    assert!(windows(&json!("x")).is_err());
+    assert!(windows(&json!("x"), domain::Language::Portuguese).is_err());
 }
 
 #[test]

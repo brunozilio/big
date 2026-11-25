@@ -16,9 +16,10 @@ describe('merge', () => {
     const block = { type: 'merge' as const, connection: 'c1', change: 'o/r#3', ready: true, methods: ['squash' as const, 'merge' as const], action: 'merge', checks: [], result: null }
     const view = render(<BlockView block={block} />)
     expect(view.getByText('Fazer merge com squash')).toBeTruthy()
-    await waitFor(() => expect(view.getByText('quer fazer merge de')).toBeTruthy())
-    expect(view.getByText('Loja virtual')).toBeTruthy()
-    expect(view.getByText('+4')).toBeTruthy()
+    await waitFor(() => expect(view.getByText('Loja virtual')).toBeTruthy())
+    expect(view.queryByText('quer fazer merge de')).toBeNull()
+    expect(view.queryByText('Dev')).toBeNull()
+    expect(view.queryByText('+4')).toBeNull()
     expect(view.queryByText(/and merge/)).toBeNull()
   })
 })

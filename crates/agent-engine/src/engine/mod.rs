@@ -90,7 +90,9 @@ impl AgentEngine for Engine {
     ) -> Result<Box<dyn RunHandle>, EngineError> {
         let mut workspace = Workspace::for_request(request);
         workspace.services.launch = self.launch.clone();
-        let control = Arc::new(Control::new(request.policy.permission, workspace.stop.clone()));
+        let control = Arc::new(
+            Control::new(request.policy.permission, workspace.stop.clone()).reviewed_by(request.policy.reviewer),
+        );
         let detach = Arc::clone(&workspace.detach);
         let gate = RunGate::new(run, sink);
         let job = Job {

@@ -8,6 +8,7 @@ pub const MCP_PREFIX: &str = "mcp__";
 pub enum ToolName {
     AddRepository,
     Agent,
+    Artifact,
     AskUserQuestion,
     Bash,
     BashOutput,
@@ -44,9 +45,10 @@ pub enum ToolName {
 }
 
 impl ToolName {
-    pub const BUILTIN: [Self; 33] = [
+    pub const BUILTIN: [Self; 34] = [
         Self::AddRepository,
         Self::Agent,
+        Self::Artifact,
         Self::AskUserQuestion,
         Self::Bash,
         Self::BashOutput,
@@ -91,6 +93,7 @@ impl ToolName {
         match self {
             Self::AddRepository => "AddRepository",
             Self::Agent => "Agent",
+            Self::Artifact => "Artifact",
             Self::AskUserQuestion => "AskUserQuestion",
             Self::Bash => "Bash",
             Self::BashOutput => "BashOutput",

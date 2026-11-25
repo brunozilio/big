@@ -58,11 +58,10 @@ fn lines(input: &Value, name: &str) -> Option<Vec<String>> {
 }
 
 fn wanted(input: &Value, workspace: &Workspace) -> Result<Wanted, String> {
-    let directory =
-        text(input, "directory").filter(|dir| !dir.is_empty()).ok_or("Diga o `directory` do repositório.")?;
+    let directory = text(input, "directory").filter(|dir| !dir.is_empty()).ok_or("Give the repository `directory`.")?;
     let directory = workspace.resolve(&directory);
     if !directory.is_dir() {
-        return Err(format!("{} não é uma pasta.", directory.display()));
+        return Err(format!("{} is not a folder.", directory.display()));
     }
     Ok(Wanted {
         directory: directory.to_string_lossy().into_owned(),
@@ -113,19 +112,19 @@ fn apply(application: &mut Application, mut wanted: Wanted) -> bool {
 }
 
 fn described(application: &Application, directory: &str, added: bool) -> String {
-    let verb = if added { "Adicionei" } else { "Atualizei" };
-    let mut text = format!("{verb} {directory} na aplicação {}.", application.name);
+    let verb = if added { "Added" } else { "Updated" };
+    let mut text = format!("{verb} {directory} in the application {}.", application.name);
     let found = application.repositories.iter().find(|repository| repository.directory == directory);
     if let Some(repository) = found {
         if !repository.run.is_empty() {
-            let _ = write!(text, "\nPara rodar: {}", repository.run.join(", "));
+            let _ = write!(text, "\nTo run: {}", repository.run.join(", "));
         }
         if !repository.verify.is_empty() {
-            let _ = write!(text, "\nPara verificar: {}", repository.verify.join(", "));
+            let _ = write!(text, "\nTo verify: {}", repository.verify.join(", "));
         }
     }
     text.push_str(
-        "\nOs próximos passos desta tarefa já recebem uma worktree dele; neste passo, trabalhe na própria pasta.",
+        "\nThe next steps of this task already get a worktree of it; in this step, work in the folder itself.",
     );
     text
 }
@@ -133,7 +132,7 @@ fn described(application: &Application, directory: &str, added: bool) -> String 
 fn save(store: &Store, application: &str, input: &Value, workspace: &Workspace) -> Result<String, String> {
     let wanted = wanted(input, workspace)?;
     let found = store.application(application).map_err(|error| error.to_string())?;
-    let mut application = found.ok_or("A aplicação desta tarefa não existe mais.")?;
+    let mut application = found.ok_or("The application of this task no longer exists.")?;
     let directory = original(&application, &wanted.directory).unwrap_or_else(|| wanted.directory.clone());
     let added = apply(&mut application, wanted);
     store.save_application(&application).map_err(|error| error.to_string())?;

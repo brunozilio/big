@@ -1,13 +1,17 @@
 import { setClock } from '../clock'
+import { BTW_WORKFLOW } from '../contract'
+import { currentLanguage } from '@/i18n'
 import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
 import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, codeBranches, openPulls, initialApplications, listDirs } from './applications'
-import { INITIAL_CONNECTIONS, MCP_TOOLS, MODELS, PROVIDERS, usageFixture, usageLimitsFixture } from './fixtures'
-import { chatFree, itemOfSession, openFree, sessionById } from './sessions'
+import { initialConnections, MCP_TOOLS, MODELS, providers as allProviders, usageFixture, usageLimitsFixture } from './fixtures'
+import { say } from './say'
+import { mockUsage } from './usage'
+import { itemOfSession, sessionById } from './sessions'
 import {
-  approveDeploy, approvePlan, cancelItem, chat, connect, createItem, disconnect, isStepId, mergePr, onChange, rejectDeploy, rerunFrom, reset, resolvePause, revisePlan, store, submitReview, tick,
-  type Note, type SimItem,
-} from './sim'
+  approveDeploy, approvePlan, archiveItem, cancelItem, chat, connect, createItem, disconnect, isStepId, mergePr, onChange, rejectDeploy, rerunFrom, reset, resolvePause, revisePlan, store, submitReview, tick,
+  type Note, type SimItem, triageFindings } from './sim'
+import type { Triage } from './security'
 import { EPOCH, TICK_MS, originOf, stepView, toItem } from './view'
 
 export interface MockOptions {
@@ -16,7 +20,7 @@ export interface MockOptions {
 }
 
 function wireConnections(): Connections {
-  const providers = PROVIDERS.filter((p) => !p.hidden).map(({ capabilities, accounts: _a, choose: _h, paste: _p, hidden: _x, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
+  const providers = allProviders().filter((p) => !p.hidden).map(({ capabilities, accounts: _a, choose: _h, paste: _p, hidden: _x, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
   return { providers, connections: store.connections.map((c) => ({ ...c, status: c.status ?? 'ok' })) }
 }
 
@@ -31,19 +35,19 @@ interface Flow { provider: string; polls: number; chosen: string | null; started
 
 function mcpServer(fields: Record<string, string>) {
   const url = (fields.url ?? '').trim()
-  if (!url) throw new Error('Informe o endereço do servidor MCP.')
+  if (!url) throw new Error(say('mcpUrlRequired'))
   const local = /^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)
-  if (!local && !url.startsWith('https://')) throw new Error('Use um endereço https, ou http só em localhost.')
+  if (!local && !url.startsWith('https://')) throw new Error(say('httpsOnly'))
   return { open: local, host: url.replace(/^\w+:\/\//, '').split(/[/:?#]/)[0] ?? url }
 }
 
 export function mockApi(options: MockOptions = {}): Api {
   const tickMs = options.tickMs ?? 700
   const delay = options.delayMs ?? 250
-  reset(INITIAL_CONNECTIONS)
+  reset(initialConnections())
   let lastTick = Date.now()
   setClock(() => EPOCH + store.clock * TICK_MS + Math.min(TICK_MS, ((Date.now() - lastTick) / tickMs) * TICK_MS))
-  let branding: Branding = { name: 'Entregas', logo: '/api/branding/logo', theme: 'system', language: 'pt-BR', output_style: null, output_styles: [{ key: 'concise', name: 'Concise', description: 'Respostas curtas' }] }
+  let branding: Branding = { name: 'Entregas', logo: '/api/branding/logo', editor: 'VS Code', theme: 'system', language: currentLanguage(), output_style: null, output_styles: [{ key: 'concise', name: 'Concise', description: say('shortReplies') }] }
   let applications: Application[] = initialApplications()
   const flows = new Map<string, Flow>()
   const listeners = new Set<(e: LiveEvent) => void>()
@@ -118,7 +122,7 @@ export function mockApi(options: MockOptions = {}): Api {
 
   const findItem = (id: string) => {
     const it = store.items.find((x) => String(x.id) === id)
-    if (!it) throw new Error(`item ${id} não encontrado`)
+    if (!it) throw new Error(say('itemNotFound', { id }))
     return it
   }
 
@@ -150,13 +154,13 @@ export function mockApi(options: MockOptions = {}): Api {
         case 'mcp.tools':
           return MCP_TOOLS as CallResult<A>
       }
-      throw new Error(`ação ${action} desconhecida`)
+      throw new Error(say('unknownAction', { action }))
     }, 120)
 
   const startSignIn = (provider: string, fields: Record<string, string>, method?: string): Promise<SignInStart> =>
     wait(() => {
-      const p = PROVIDERS.find((x) => x.key === provider)
-      if (!p) throw new Error(`provedor ${provider} desconhecido`)
+      const p = allProviders().find((x) => x.key === provider)
+      if (!p) throw new Error(say('unknownProvider', { provider }))
       const server = provider === 'mcp' ? mcpServer(fields) : null
       const flow = `f-${provider}-${Date.now()}`
       flows.set(flow, { provider, polls: 0, chosen: null, started: Date.now(), fields })
@@ -169,7 +173,7 @@ export function mockApi(options: MockOptions = {}): Api {
     }, 500)
 
   const finish = (f: Flow, choice: string | null): Connection => {
-    const p = PROVIDERS.find((x) => x.key === f.provider)
+    const p = allProviders().find((x) => x.key === f.provider)
     const option = p?.choose?.options.find((o) => o.id === choice)
     const n = store.connections.filter((c) => c.provider === f.provider).length
     const named = f.fields.label?.trim() || (f.provider === 'mcp' ? mcpServer(f.fields).host : '')
@@ -191,14 +195,14 @@ export function mockApi(options: MockOptions = {}): Api {
   const pollSignIn = (req: { flow: string; code?: string; choice?: string }): Promise<SignInPoll> =>
     wait(() => {
       const f = flows.get(req.flow)
-      if (!f) return { state: 'failed', message: 'Entrada expirou. Comece de novo.' }
-      const p = PROVIDERS.find((x) => x.key === f.provider)
+      if (!f) return { state: 'failed', message: say('signInExpired') }
+      const p = allProviders().find((x) => x.key === f.provider)
       f.polls++
       const ready = req.code !== undefined || f.polls >= 3
       if (!ready && req.choice === undefined) return { state: 'pending' }
       if (failing()) {
         flows.delete(req.flow)
-        return { state: 'failed', message: `A entrada no ${p?.name ?? f.provider} foi recusada.` }
+        return { state: 'failed', message: say('signInRefused', { name: p?.name ?? f.provider }) }
       }
       if (p?.choose && req.choice === undefined) return { state: 'choose', title: p.choose.title, choices: p.choose.options }
       flows.delete(req.flow)
@@ -213,7 +217,8 @@ export function mockApi(options: MockOptions = {}): Api {
       else if (payload.action === 'merge') mergePr(it.id)
       else if (payload.action === 'deploy.approve') approveDeploy(it.id)
       else if (payload.action === 'deploy.reject') rejectDeploy(it.id)
-      else throw new Error(`ação ${payload.action} não existe na etapa ${step}`)
+      else if (payload.action === 'findings.triage') triageFindings(it.id, (payload.payload as { decisions: Triage }).decisions)
+      else throw new Error(say('noActionAtStep', { action: payload.action, step }))
     })
 
   return {
@@ -223,7 +228,7 @@ export function mockApi(options: MockOptions = {}): Api {
     }),
     createItem: (input) => wait(() => {
       const app = applications.find((x) => x.id === input.application)
-      if (input.application && !app) throw new Error('Essa aplicação não existe mais.')
+      if (input.application && !app) throw new Error(say('appGone'))
       const space = app?.tracker?.project ?? null
       const issueKey = input.issue?.key ?? input.sources?.find((s) => s.kind === 'issue')?.subject ?? null
       const pull = input.sources?.find((s) => s.kind === 'pull_request')
@@ -238,38 +243,40 @@ export function mockApi(options: MockOptions = {}): Api {
       rerunFrom(it.id, target)
     }),
     cancel: (id) => wait(() => cancelItem(findItem(id).id)),
+    archive: (id) => wait(() => archiveItem(findItem(id).id, true)),
+    unarchive: (id) => wait(() => archiveItem(findItem(id).id, false)),
     step: (id, step, attempt) => wait(() => {
-      if (!isStepId(step)) throw new Error(`etapa ${step} não existe`)
+      if (!isStepId(step)) throw new Error(say('stepMissing', { step }))
       return stepView(findItem(id), step, attempt)
     }, 80),
     input,
+    itemUsage: (id) => wait(() => mockUsage(findItem(id)), 120),
     call,
     session: (id) => wait(() => {
       const s = sessionById(id)
-      if (!s) throw new Error(`sessão ${id} não encontrada`)
+      if (!s) throw new Error(say('sessionNotFound', { id }))
       sessionSigs.set(id, new Map(s.events.map((e) => [e.id, JSON.stringify(e)])))
       sessionStatus.set(id, s.status)
       return s
     }, 80),
     send: (id, message) => wait(() => {
-      if (chatFree(id, message.text)) return
       const found = itemOfSession(id)
       if (found) chat(found.it.id, found.kind, message.text)
     }, 80),
     side: (id, question) => wait(() => {
       const found = itemOfSession(id)
-      if (!found) throw new Error(`sessão ${id} não encontrada`)
-      if (!question.text.trim()) throw new Error('Escreva a pergunta.')
-      return { answer: `Sobre ${found.it.key}: o agente segue no passo atual e nada muda no trabalho dele. Sua pergunta foi “${question.text.trim()}”.` }
+      if (!found) throw new Error(say('sessionNotFound', { id }))
+      if (!question.text.trim()) throw new Error(say('writeQuestion'))
+      return { answer: say('sideAnswer', { key: found.it.key, question: question.text.trim() }) }
     }, 600),
     btw: (question) => wait(() => {
-      if (!question.text.trim()) throw new Error('Escreva a pergunta.')
-      if (!question.application) throw new Error('Escolha uma aplicação para perguntar.')
-      return { session: openFree(question.text.trim()) }
+      if (!question.text.trim()) throw new Error(say('writeQuestion'))
+      if (!question.application) throw new Error(say('chooseApp'))
+      return item(createItem(question.text.trim(), null, question.model ?? 'auto', null, BTW_WORKFLOW))
     }, 200),
     respond: (id, event, response) => wait(() => {
       const found = itemOfSession(id)
-      if (!found) throw new Error(`sessão ${id} não encontrada`)
+      if (!found) throw new Error(say('sessionNotFound', { id }))
       if (response.kind === 'plan') {
         if (response.decision === 'approve') approvePlan(found.it.id)
         else revisePlan(found.it.id, response.feedback ?? '')
@@ -278,6 +285,9 @@ export function mockApi(options: MockOptions = {}): Api {
       return event
     }, 120).then(() => undefined),
     stop: () => wait(() => undefined),
+    stopJob: () => wait(() => undefined),
+    openFile: () => wait(() => undefined),
+    openFolders: () => wait(() => undefined),
     connections: () => wait(wireConnections),
     startSignIn: (provider, fields, method) => startSignIn(provider, fields, method),
     pollSignIn,
@@ -301,7 +311,7 @@ export function mockApi(options: MockOptions = {}): Api {
       return made
     }),
     saveApplication: (application) => wait(() => {
-      if (!applications.some((x) => x.id === application.id)) throw new Error('Não há essa aplicação.')
+      if (!applications.some((x) => x.id === application.id)) throw new Error(say('noSuchApp'))
       const saved = checkedApplication(application, application.id)
       applications = applications.map((x) => (x.id === saved.id ? saved : x))
       return saved

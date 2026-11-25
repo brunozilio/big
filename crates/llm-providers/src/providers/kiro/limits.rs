@@ -16,12 +16,12 @@ pub fn call(config: &Config) -> Call {
     }
 }
 
-pub fn windows(value: &Value) -> Result<PlanUsage, ProviderError> {
+pub fn windows(value: &Value, language: domain::Language) -> Result<PlanUsage, ProviderError> {
     let list = value["usageBreakdownList"]
         .as_array()
         .ok_or_else(|| ProviderError::Invalid("Kiro usage has no usageBreakdownList".into()))?;
     let reset = moment(&value["nextDateReset"]);
-    let windows = list.iter().flat_map(|entry| breakdown(entry, reset.as_ref())).collect();
+    let windows = list.iter().flat_map(|entry| breakdown(entry, reset.as_ref(), language)).collect();
     Ok(PlanUsage { plan: plan(&value["subscriptionInfo"]), windows })
 }
 
@@ -30,33 +30,51 @@ fn plan(info: &Value) -> Option<String> {
     title.map(str::to_owned).or_else(|| info["type"].as_str().and_then(titled))
 }
 
-fn breakdown(entry: &Value, reset: Option<&String>) -> Vec<PlanWindow> {
+fn breakdown(entry: &Value, reset: Option<&String>, language: domain::Language) -> Vec<PlanWindow> {
     let kind = entry["resourceType"].as_str().unwrap_or("usage").to_ascii_lowercase();
-    let name = entry["displayNamePlural"].as_str().or_else(|| entry["displayName"].as_str()).unwrap_or("Créditos");
+    let credits = language.pick("Credits", "Créditos", "Créditos");
+    let name = entry["displayNamePlural"].as_str().or_else(|| entry["displayName"].as_str()).unwrap_or(credits);
     let resets = moment(&entry["nextDateReset"]).or_else(|| reset.cloned());
-    let mut out: Vec<PlanWindow> = metered(&kind, name.to_owned(), entry, resets).map(monthly).into_iter().collect();
+    let mut out: Vec<PlanWindow> =
+        metered(&kind, name.to_owned(), entry, resets, language).map(monthly).into_iter().collect();
     let trial = &entry["freeTrialInfo"];
     if trial["freeTrialStatus"].as_str() == Some("ACTIVE") {
-        let label = format!("{name} (teste gratuito)");
-        out.extend(metered(&format!("{kind}_trial"), label, trial, moment(&trial["freeTrialExpiry"])));
+        let label = language.pick(
+            format!("{name} (free trial)"),
+            format!("{name} (prueba gratuita)"),
+            format!("{name} (teste gratuito)"),
+        );
+        out.extend(metered(&format!("{kind}_trial"), label, trial, moment(&trial["freeTrialExpiry"]), language));
     }
     let bonuses = entry["bonuses"].as_array().map(Vec::as_slice).unwrap_or_default();
-    out.extend(bonuses.iter().enumerate().filter_map(|(at, bonus)| extra(&kind, name, at, bonus)));
+    out.extend(bonuses.iter().enumerate().filter_map(|(at, bonus)| extra(&kind, name, at, bonus, language)));
     out
 }
 
-fn extra(kind: &str, name: &str, at: usize, bonus: &Value) -> Option<PlanWindow> {
+fn extra(kind: &str, name: &str, at: usize, bonus: &Value, language: domain::Language) -> Option<PlanWindow> {
     if bonus["status"].as_str().is_some_and(|status| status != "ACTIVE") {
         return None;
     }
-    let title = bonus["displayName"].as_str().map_or_else(|| format!("{name} bônus"), str::to_owned);
-    metered(&format!("{kind}_bonus_{at}"), title, bonus, moment(&bonus["expiresAt"]))
+    let fallback = || language.pick(format!("{name} bonus"), format!("{name} bono"), format!("{name} bônus"));
+    let title = bonus["displayName"].as_str().map_or_else(fallback, str::to_owned);
+    metered(&format!("{kind}_bonus_{at}"), title, bonus, moment(&bonus["expiresAt"]), language)
 }
 
-fn metered(id: &str, name: String, entry: &Value, resets: Option<String>) -> Option<PlanWindow> {
+fn metered(
+    id: &str,
+    name: String,
+    entry: &Value,
+    resets: Option<String>,
+    language: domain::Language,
+) -> Option<PlanWindow> {
     let used = amount(entry, "currentUsage")?;
     let limit = amount(entry, "usageLimit").filter(|limit| *limit > 0.0)?;
-    let label = format!("{name} · {} de {}", shown(used), shown(limit));
+    let (spent, most) = (shown(used), shown(limit));
+    let label = language.pick(
+        format!("{name} · {spent} of {most}"),
+        format!("{name} · {spent} de {most}"),
+        format!("{name} · {spent} de {most}"),
+    );
     Some(window(id, label, used / limit * 100.0, resets))
 }
 

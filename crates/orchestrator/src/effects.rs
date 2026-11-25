@@ -121,6 +121,7 @@ fn perform(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> AbortHandle {
             Ok(value) => EffectOutcome::Ok { value },
             Err(Failure::Class(class, message)) => EffectOutcome::Failed { class, message },
             Err(Failure::Blocked(reason)) => {
+                let reason = connectors::texts::blocker(crate::texts::of_item(&shared, &item), &reason);
                 if let Err(error) = crate::runner::block(&shared, &item, &launch.key, &reason) {
                     tracing::warn!(%error, "a blocked effect could not be recorded");
                 }
@@ -135,7 +136,7 @@ fn perform(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> AbortHandle {
 }
 
 pub const NEEDS_CONNECTION: &str = "connect an account for ";
-pub const NEEDS_RECONNECT: &str = "reconecte a conta: ";
+pub const NEEDS_RECONNECT: &str = "reconnect the account: ";
 
 fn roll() -> f64 {
     let bytes = uuid::Uuid::new_v4().into_bytes();
@@ -183,6 +184,9 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
             effect.run().await
         }
         EXEC => exec(shared, &state, &launch.command).await,
+        CALL if launch.command.call().capability == crate::links::CAPABILITY => {
+            crate::links::call(shared, item, &launch.command.call())
+        }
         CALL => call(shared, &launch.command, &key).await,
         WAIT_POLL => poll(shared, &launch.command, &key).await,
         STATUS | IMPEDIMENT => push(shared, &state, &launch.command, &launch.key).await,

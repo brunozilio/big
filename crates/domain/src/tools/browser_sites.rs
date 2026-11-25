@@ -49,7 +49,9 @@ pub fn sites(tool: &str, input: &Value) -> Vec<Option<String>> {
         let empty = Value::Null;
         return actions
             .iter()
-            .flat_map(|action| sites(action["name"].as_str().unwrap_or_default(), action.get("input").unwrap_or(&empty)))
+            .flat_map(|action| {
+                sites(action["name"].as_str().unwrap_or_default(), action.get("input").unwrap_or(&empty))
+            })
             .collect();
     }
     if !ON_A_PAGE.contains(&tool) {
@@ -76,7 +78,8 @@ pub fn effects(server: &str, tool: &str, input: &Value) -> Vec<Effect> {
 }
 
 pub fn subject(tool: &str, input: &Value) -> Option<String> {
-    let sites: Vec<String> = sites(tool, input).into_iter().map(|host| host.unwrap_or_else(|| "?".to_owned())).collect();
+    let sites: Vec<String> =
+        sites(tool, input).into_iter().map(|host| host.unwrap_or_else(|| "?".to_owned())).collect();
     (!sites.is_empty()).then(|| sites.join(", "))
 }
 

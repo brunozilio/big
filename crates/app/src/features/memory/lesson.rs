@@ -89,7 +89,7 @@ pub(crate) fn edit_of(proposal: &Proposal) -> MemoryEdit {
         Lesson::Instruction => (MemoryKind::Procedural, proposal.text.clone()),
         Lesson::Skill => (MemoryKind::Procedural, format!("{}: {}", proposal.name, proposal.text)),
     };
-    MemoryEdit::Remember { kind, text, tags: vec![ORIGIN.to_owned()], touches: Vec::new() }
+    MemoryEdit::Remember { kind, text, tags: vec![ORIGIN.to_owned()], touches: Vec::new(), scope: Default::default() }
 }
 
 fn keep(services: &LocalServices, cwd: PathBuf, proposal: &Proposal) {

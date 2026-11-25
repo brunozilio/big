@@ -27,9 +27,7 @@ fn at_of(record: &Record) -> Option<i64> {
 pub fn mode_named(permission: &str) -> &'static str {
     match permission.to_ascii_lowercase().as_str() {
         "plan" => "plan",
-        "bypass" => "bypass",
-        "ask" => "ask",
-        _ => "accept_edits",
+        _ => "auto",
     }
 }
 
@@ -120,16 +118,73 @@ fn running(entry: &Entry) -> bool {
 
 fn call(entry: &Entry, took: i64) -> Option<Value> {
     match entry {
-        Entry::Tool { id, name, summary, state, output, input } => Some(json!({
-            "id": id, "kind": tool_kind(name), "title": if summary.is_empty() { name } else { summary },
-            "tag": name, "state": tool_state(state), "output": output, "input": input, "durationMs": took,
-        })),
+        Entry::Tool { id, name, summary, state, output, input } => {
+            let mut shown = json!({
+                "id": id, "kind": tool_kind(name), "title": if summary.is_empty() { name } else { summary },
+                "tag": name, "state": tool_state(state), "output": output, "input": input, "durationMs": took,
+            });
+            if let Some(job) = job_of(name, output.as_deref()) {
+                shown["job"] = json!(job);
+            }
+            Some(shown)
+        }
         Entry::Agent { index, kind, summary, done, steps } => Some(json!({
             "id": format!("agent-{index}"), "kind": "subagent", "title": summary, "tag": kind,
             "state": match done { None => "running", Some(true) => "ok", Some(false) => "error" }, "durationMs": took,
             "steps": steps,
         })),
         _ => None,
+    }
+}
+
+const STARTED: [&str; 2] =
+    ["Started in the background as ", "The user moved this command to the background, where it goes on as "];
+
+fn job_of(name: &str, output: Option<&str>) -> Option<String> {
+    if name != ToolName::Bash.as_str() {
+        return None;
+    }
+    let output = output?;
+    let rest = STARTED.iter().find_map(|start| output.strip_prefix(start))?;
+    let id = rest.split(['.', ' ', '\n']).next().unwrap_or_default();
+    id.strip_prefix("bash_").is_some_and(|number| number.parse::<u64>().is_ok()).then(|| id.to_owned())
+}
+
+pub struct Jobs {
+    pub running: Vec<(String, String)>,
+    pub stoppable: bool,
+}
+
+impl Jobs {
+    pub fn of(transcript: &Transcript, live: Option<Vec<app::BackgroundJob>>) -> Jobs {
+        let Some(live) = live else {
+            let running = transcript.background.iter().map(|id| (id.clone(), String::new())).collect();
+            return Jobs { running, stoppable: false };
+        };
+        let running = transcript
+            .background
+            .iter()
+            .filter_map(|id| live.iter().find(|job| job.id == *id && job.running))
+            .map(|job| (job.id.clone(), job.command.clone()))
+            .collect();
+        Jobs { running, stoppable: true }
+    }
+
+    fn runs(&self, id: &str) -> bool {
+        self.running.iter().any(|(running, _)| running == id)
+    }
+
+    pub fn mark(&self, events: &mut [Value]) {
+        let calls = events
+            .iter_mut()
+            .filter(|event| event["type"] == "tools")
+            .filter_map(|event| event["calls"].as_array_mut());
+        for call in calls.flatten() {
+            let Some(job) = call["job"].as_str().map(str::to_owned) else { continue };
+            let running = self.runs(&job);
+            call["jobRunning"] = json!(running);
+            call["jobStoppable"] = json!(running && self.stoppable);
+        }
     }
 }
 
@@ -185,6 +240,25 @@ fn answered(entry: &Entry) -> Option<Value> {
     Some(json!({ "type": "ask", "questions": questions, "answers": answers }))
 }
 
+fn published(entry: &Entry) -> Option<Value> {
+    let Entry::Tool { name, state, output, input, .. } = entry else { return None };
+    if name != ToolName::Artifact.as_str() || *state != ToolState::Done {
+        return None;
+    }
+    let id = domain::tools::artifact::id_in(output.as_deref()?)?;
+    let path = input.as_ref().and_then(|given| given["file_path"].as_str()).unwrap_or_default();
+    let name =
+        std::path::Path::new(path).file_name().map(|file| file.to_string_lossy().into_owned()).unwrap_or_default();
+    let kind = domain::tools::artifact::kind_of(&name);
+    let title = output
+        .as_deref()
+        .and_then(|said| said.split_once("Published \""))
+        .and_then(|(_, rest)| rest.split_once("\" ("));
+    Some(json!({
+        "type": "artifact", "artifactId": id, "title": title.map_or(name.as_str(), |(title, _)| title), "name": name, "kind": kind,
+    }))
+}
+
 fn plan(text: &str, resolution: &str) -> Value {
     json!({ "type": "plan", "text": text, "resolution": resolution })
 }
@@ -194,6 +268,10 @@ fn single(entry: &Entry, attached: usize) -> Option<Value> {
         Entry::User(text) => json!({
             "type": "user", "author": { "id": "you", "name": "Você", "avatar": null, "you": true },
             "text": text, "attachments": attached,
+        }),
+        Entry::Sent { from, text } => json!({
+            "type": "user", "author": { "id": format!("agent:{from}"), "name": from, "avatar": null, "agent": true },
+            "agent": from, "text": text, "attachments": attached,
         }),
         Entry::Thinking { text, done } => json!({
             "type": "thinking", "seconds": 0, "steps": [{ "text": text, "done": done }], "live": !done,
@@ -271,6 +349,11 @@ pub fn events(shown: &Shown, pending: &[AgentAsk]) -> Vec<Value> {
             }
             continue;
         }
+        if let Some(event) = published(entry) {
+            close(&mut tools, &mut listed);
+            listed.push(stamped(event, format!("e{at}"), time(at)));
+            continue;
+        }
         if let Some(found) = call(entry, shown.took(at)) {
             let (_, calls) = tools.get_or_insert_with(|| (at, Vec::new()));
             if !into_script(calls, entry) {
@@ -306,7 +389,13 @@ fn asked(event: &Value) -> Option<Vec<&str>> {
     if event["type"] != "ask" {
         return None;
     }
-    Some(event["questions"].as_array()?.iter().map(|question| question["question"].as_str().unwrap_or_default()).collect())
+    Some(
+        event["questions"]
+            .as_array()?
+            .iter()
+            .map(|question| question["question"].as_str().unwrap_or_default())
+            .collect(),
+    )
 }
 
 fn from_transcript(event: &Value) -> bool {
@@ -329,13 +418,15 @@ pub fn merge_answered(events: &mut Vec<Value>, answered: Vec<Value>) {
     events.sort_by(|left, right| left["at"].as_str().cmp(&right["at"].as_str()));
 }
 
-pub fn work(transcript: &Transcript) -> Value {
+pub fn work(transcript: &Transcript, jobs: &Jobs) -> Value {
     let tasks: Vec<Value> = transcript
         .tasks
         .iter()
         .map(|task| json!({ "id": task.id, "subject": task.subject, "status": task.status }))
         .collect();
-    json!({ "background": transcript.background, "tasks": tasks })
+    let background: Vec<Value> =
+        jobs.running.iter().map(|(id, command)| json!({ "id": id, "command": command })).collect();
+    json!({ "background": background, "stoppable": jobs.stoppable, "tasks": tasks })
 }
 
 pub fn status(transcript: &Transcript, pending: bool) -> &'static str {
@@ -393,7 +484,7 @@ pub fn decision(kind: &AskKind, response: &Value) -> Option<Decision> {
             _ => None,
         },
         ("plan", _) => match response["decision"].as_str()? {
-            "approve" => Some(Decision::Approve(PermissionMode::AcceptEdits)),
+            "approve" => Some(Decision::Approve(PermissionMode::Auto)),
             "revise" => Some(match response["feedback"].as_str().filter(|text| !text.trim().is_empty()) {
                 Some(feedback) => Decision::DenyWith(feedback.to_owned()),
                 None => Decision::Deny,

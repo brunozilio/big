@@ -24,7 +24,7 @@ impl Agent<'_> {
             (None, Some(script)) => self.script_call(calling, script, &summary, input),
             (None, None) => {
                 let shown = tool.shown(input, self.workspace);
-                self.permitted_as(calling.id, tool, &summary, shown.as_deref(), input, calling.permission)
+                self.permitted(&calling.permitting(&summary, shown.as_deref()), tool, input)
             }
         }
     }

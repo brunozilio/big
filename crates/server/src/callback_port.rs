@@ -9,7 +9,7 @@ use axum::response::Response;
 use axum::routing::get;
 use tokio::sync::Notify;
 
-use crate::error::{ApiError, ApiResult};
+use crate::error::{ApiError, ApiResult, said};
 use crate::state::{Ctx, held};
 
 const WAITS: Duration = Duration::from_secs(1800);
@@ -28,7 +28,11 @@ pub async fn open(ctx: &Ctx, port: u16) -> ApiResult<()> {
         return Ok(());
     }
     let listener = tokio::net::TcpListener::bind((Ipv4Addr::LOCALHOST, port)).await.map_err(|error| {
-        ApiError::bad(format!("A porta {port}, por onde a entrada volta, está ocupada: {error}. Feche o que usa essa porta e tente de novo."))
+        ApiError::bad(said(
+            format!("Port {port}, where the sign-in comes back, is taken: {error}. Close whatever uses that port and try again."),
+            format!("El puerto {port}, por donde vuelve el inicio de sesión, está ocupado: {error}. Cierra lo que usa ese puerto e inténtalo de nuevo."),
+            format!("A porta {port}, por onde a entrada volta, está ocupada: {error}. Feche o que usa essa porta e tente de novo."),
+        ))
     })?;
     held(&ctx.callbacks).insert(port);
     let done = Arc::new(Notify::new());

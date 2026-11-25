@@ -45,7 +45,7 @@ fn a_run_searches_the_web_through_its_account() {
     ]));
     let engine = Engine::new(Arc::new(Searching(agent.clone())), Arc::new(InMemorySessions::default()));
     let mut request = PromptRequest::plain(dir.path().into(), "search the web for kiro mcp", model());
-    request.policy.permission = domain::PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
 
     let events = finish(&start(&engine, &request));
 

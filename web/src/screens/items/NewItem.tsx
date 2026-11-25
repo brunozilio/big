@@ -5,14 +5,16 @@ import type { Application, CodeBranch, Connection, IssueSummary, Item, NewGit, N
 import { errorText, setItems, useStore } from '@/api/store'
 import { Composer, type ComposerImport } from '@/chat/Composer'
 import { useRememberedModel, useRememberedTuning } from '@/chat/remembered'
-import { BtwChat, useBtw } from '@/chat/BtwChat'
+import { currentLanguage, translate, useT } from '@/i18n'
 import { Button, IconButton } from '@/ui/button'
 import { ApplicationDialog } from '../settings/Applications'
 import { StatusIcon, ProviderLogo } from '@/ui/domain'
 import { Input, SearchInput } from '@/ui/form'
+import { CHIP, ChipPicker } from '@/ui/chipPicker'
+import { cn } from '@/ui/cn'
 import { Icon } from '@/ui/icon'
 import { tween } from '@/ui/motion'
-import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger, Popover } from '@/ui/overlay'
+import { Popover } from '@/ui/overlay'
 import { configuredSpaces, rememberApplication, rememberedApplication, searchTargets, type Space } from './projects'
 
 interface Source {
@@ -36,32 +38,27 @@ export function useTrackers(): Source[] {
   )
 }
 
-const CHIP = 'flex h-8 min-w-0 max-w-[200px] items-center gap-1.5 rounded-full px-2.5 text-base text-fg2 transition-colors hover:bg-inset hover:text-fg data-[state=open]:bg-inset data-[state=open]:text-fg'
-
 function ApplicationMenu({ applications, chosen, onChoose, onAdd }: { applications: Application[]; chosen: Application | null; onChoose: (application: Application) => void; onAdd: () => void }) {
+  const t = useT()
+  const options = applications.map((a) => ({ value: a.id, label: a.name, icon: <Icon name="apps" size={14} className="text-muted" /> }))
+  const add = { key: 'add', label: t('items.addApplication'), icon: <Icon name="plus" size={15} />, shortcut: 'N', onSelect: onAdd }
   return (
-    <Menu>
-      <MenuTrigger asChild>
-        <button aria-label={chosen ? `Aplicação: ${chosen.name}` : 'Aplicação'} className={CHIP}>
-          <Icon name="apps" size={15} className="shrink-0 text-muted" />
-          <span className="truncate">{chosen?.name ?? 'Aplicação'}</span>
-          <Icon name="down" size={13} className="shrink-0 text-muted" />
-        </button>
-      </MenuTrigger>
-      <MenuContent align="start" className="max-h-[320px] overflow-y-auto">
-        {applications.length > 0 && <MenuLabel>Aplicação</MenuLabel>}
-        {applications.map((a) => (
-          <MenuItem key={a.id} icon={<Icon name="apps" size={15} />} onSelect={() => onChoose(a)} right={a.id === chosen?.id ? <Icon name="check" size={15} /> : undefined}>
-            {a.name}
-          </MenuItem>
-        ))}
-        {applications.length > 0 && <MenuSeparator />}
-        <MenuItem icon={<Icon name="plus" size={15} />} onSelect={onAdd}>Adicionar aplicação</MenuItem>
-      </MenuContent>
-    </Menu>
+    <ChipPicker
+      label={chosen ? t('items.applicationNamed', { name: chosen.name }) : t('items.application')}
+      placeholder={`${t('items.application')}…`}
+      empty={t('items.application')}
+      leading={<Icon name="apps" size={14} className="text-muted" />}
+      className="max-w-[200px]"
+      value={chosen?.id ?? ''}
+      options={options}
+      actions={[add]}
+      onChange={(id) => {
+        const picked = applications.find((a) => a.id === id)
+        if (picked) onChoose(picked)
+      }}
+    />
   )
 }
-
 function PickerCard({ label, children }: { label: string; children: ReactNode }) {
   return (
     <motion.div role="dialog" aria-label={label} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} transition={tween} className="rounded-card bg-surface p-1.5 shadow-pop">
@@ -71,12 +68,13 @@ function PickerCard({ label, children }: { label: string; children: ReactNode })
 }
 
 function PickerSearch({ value, onChange, placeholder, onClose }: { value: string; onChange: (q: string) => void; placeholder: string; onClose: () => void }) {
+  const t = useT()
   return (
     <div className="flex items-center gap-1 p-1">
       <div className="min-w-0 flex-1">
         <SearchInput autoFocus value={value} onChange={(e) => onChange(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && onClose()} placeholder={placeholder} />
       </div>
-      <IconButton tooltip="Fechar" size="sm" onClick={onClose}><Icon name="close" size={15} /></IconButton>
+      <IconButton tooltip={t('items.close')} size="sm" onClick={onClose}><Icon name="close" size={15} /></IconButton>
     </div>
   )
 }
@@ -85,6 +83,7 @@ function IssuePanel({ sources, spaces, onPick, onClose }: { sources: Source[]; s
   const [q, setQ] = useState('')
   const [found, setFound] = useState<Picked[]>([])
   const [error, setError] = useState<string | null>(null)
+  const tr = useT()
   useEffect(() => {
     let alive = true
     const t = setTimeout(() => {
@@ -106,8 +105,8 @@ function IssuePanel({ sources, spaces, onPick, onClose }: { sources: Source[]; s
   const first = sources[0]
   if (!first) return null
   return (
-    <PickerCard label={`Importar issue do ${first.provider.name}`}>
-      <PickerSearch value={q} onChange={setQ} onClose={onClose} placeholder={`Buscar issue do ${first.provider.name}`} />
+    <PickerCard label={tr('items.importIssue', { provider: first.provider.name })}>
+      <PickerSearch value={q} onChange={setQ} onClose={onClose} placeholder={tr('items.searchIssue', { provider: first.provider.name })} />
       <ul className="mt-1 max-h-[280px] overflow-y-auto">
         {found.map((i) => (
           <li key={`${i.source.connection.id}:${i.key}`}>
@@ -118,7 +117,7 @@ function IssuePanel({ sources, spaces, onPick, onClose }: { sources: Source[]; s
             </button>
           </li>
         ))}
-        {found.length === 0 && <li className="px-2.5 py-3 text-base text-faint">{error ?? 'Nenhuma issue encontrada.'}</li>}
+        {found.length === 0 && <li className="px-2.5 py-3 text-base text-faint">{error ?? tr('items.noIssues')}</li>}
       </ul>
     </PickerCard>
   )
@@ -186,16 +185,17 @@ function useOpenPulls(linked: Linked[]): { listed: Listed[]; error: string | nul
 
 function PullPanel({ application, onPick, onClose }: { application: Application | null; onPick: (pull: PickedPull) => void; onClose: () => void }) {
   const [q, setQ] = useState('')
+  const t = useT()
   const code = useCodeConnections()
   const linked = useMemo(() => linkedRepos(application), [application])
   const { listed, error, loading } = useOpenPulls(linked)
   const shown = listed.filter((l) => matchesPull(l.pull, q))
   const typed = pullSubject(q, application)
   const manual = typed && typed.includes('#') && !shown.some((l) => l.pull.key === typed) ? typed : null
-  const empty = error ?? (loading ? 'Carregando pull requests…' : linked.length === 0 ? 'A aplicação não tem repositório conectado. Cole o link do pull request.' : 'Nenhum pull request aberto.')
+  const empty = error ?? (loading ? t('items.loadingPulls') : linked.length === 0 ? t('items.noLinkedRepository') : t('items.noPulls'))
   return (
-    <PickerCard label="Importar pull request">
-      <PickerSearch value={q} onChange={setQ} onClose={onClose} placeholder="Buscar pull request aberto ou colar o link" />
+    <PickerCard label={t('items.importPull')}>
+      <PickerSearch value={q} onChange={setQ} onClose={onClose} placeholder={t('items.searchPull')} />
       <ul className="mt-1 max-h-[280px] overflow-y-auto">
         {shown.map((l) => (
           <li key={l.pull.key}>
@@ -211,7 +211,7 @@ function PullPanel({ application, onPick, onClose }: { application: Application 
           <li>
             <button onClick={() => onPick({ subject: manual, connection: linked[0]?.connection ?? (code.length === 1 ? code[0].id : null) })} className="flex h-10 w-full items-center gap-3 rounded-control px-2.5 text-left transition-colors hover:bg-hover">
               <Icon name="link" size={15} className="text-muted" />
-              <span className="min-w-0 flex-1 truncate text-base text-fg">Usar {manual}</span>
+              <span className="min-w-0 flex-1 truncate text-base text-fg">{t('items.useSubject', { subject: manual })}</span>
             </button>
           </li>
         )}
@@ -227,7 +227,7 @@ interface Place {
 }
 
 export function placesOf(application: Application | null): Place[] {
-  if (!application) return [{ id: '', name: 'Repositório' }]
+  if (!application) return [{ id: '', name: translate(currentLanguage(), 'items.repository') }]
   return application.repositories.map((r) => ({ id: r.id, name: r.code?.repo ?? r.directory.split('/').filter(Boolean).pop() ?? r.directory }))
 }
 
@@ -267,9 +267,10 @@ function useBranches(linked: Linked[]): Record<string, CodeBranch[]> {
 }
 
 function BranchList({ place, list, q, value, onChoose }: { place: Place; list: CodeBranch[]; q: string; value: string; onChoose: (name: string) => void }) {
+  const t = useT()
   const shown = list.filter((b) => b.name.toLowerCase().includes(q.trim().toLowerCase()))
   return (
-    <ul className="max-h-[240px] overflow-y-auto" aria-label={`Branches de ${place.name}`}>
+    <ul className="max-h-[240px] overflow-y-auto" aria-label={t('items.branchesOf', { name: place.name })}>
       {shown.map((b) => (
         <li key={b.name}>
           <button onClick={() => onChoose(b.name)} className="flex h-9 w-full items-center gap-2.5 rounded-control-sm px-2.5 text-left text-base text-fg2 transition-colors hover:bg-hover hover:text-fg">
@@ -279,7 +280,7 @@ function BranchList({ place, list, q, value, onChoose }: { place: Place; list: C
           </button>
         </li>
       ))}
-      {shown.length === 0 && <li className="px-2.5 py-2 text-sm text-faint">Nenhum branch encontrado.</li>}
+      {shown.length === 0 && <li className="px-2.5 py-2 text-sm text-faint">{t('items.noBranches')}</li>}
     </ul>
   )
 }
@@ -287,11 +288,32 @@ function BranchList({ place, list, q, value, onChoose }: { place: Place; list: C
 function BasePicker({ places, branches, bases, effective, onChange }: { places: Place[]; branches: Record<string, CodeBranch[]>; bases: Record<string, string>; effective: Record<string, string>; onChange: (next: Record<string, string>) => void }) {
   const [open, setOpen] = useState(false)
   const [q, setQ] = useState('')
-  const label = places.map((p) => effective[p.id]).find(Boolean) ?? 'padrão'
+  const t = useT()
+  const names = [...new Set(places.map((p) => effective[p.id]).filter(Boolean))]
+  const label = names.length > 1 ? t('items.source_branch') : names[0] ?? t('items.defaultBase')
+  const described = places.length > 1 ? places.map((p) => `${p.name} ${effective[p.id] || t('items.defaultBase')}`).join(', ') : label
   const listed = places.some((p) => branches[p.id])
   const choose = (place: string, name: string) => {
     onChange({ ...bases, [place]: name })
     if (places.length === 1) setOpen(false)
+  }
+  const only = places.length === 1 ? places[0] : null
+  const onlyList = only ? branches[only.id] : undefined
+  if (only && onlyList) {
+    const options = onlyList.map((b) => ({ value: b.name, label: b.name, icon: <Icon name="branch" size={14} className="text-muted" /> }))
+    return (
+      <ChipPicker
+        label={t('items.baseBranch', { name: label })}
+        placeholder={t('items.searchBranch')}
+        empty={t('items.defaultBase')}
+        leading={<Icon name="branch" size={14} className="text-muted" />}
+        className="max-w-[200px]"
+        side="top"
+        value={effective[only.id] ?? ''}
+        options={options}
+        onChange={(name) => onChange({ ...bases, [only.id]: name })}
+      />
+    )
   }
   return (
     <Popover
@@ -301,20 +323,20 @@ function BasePicker({ places, branches, bases, effective, onChange }: { places: 
       align="start"
       className="w-[320px] max-w-[calc(100vw-24px)] space-y-1 p-1.5"
       trigger={
-        <button aria-label={`Branch base: ${label}`} className={CHIP}>
-          <Icon name="branch" size={15} className="shrink-0 text-muted" />
+        <button aria-label={t('items.baseBranch', { name: described })} title={described} className={cn(CHIP, 'max-w-[200px]')}>
+          <Icon name="branch" size={14} className="shrink-0 text-muted" />
           <span className="truncate">{label}</span>
         </button>
       }
     >
-      {listed && <div className="p-1"><SearchInput autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar branch" /></div>}
+      {listed && <div className="p-1"><SearchInput autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('items.searchBranch')} /></div>}
       {places.map((p) => (
         <div key={p.id} className="space-y-1">
           {places.length > 1 && <p className="truncate px-2.5 pt-1.5 text-xs text-muted">{p.name}</p>}
           {branches[p.id] ? (
             <BranchList place={p} list={branches[p.id]} q={q} value={effective[p.id] ?? ''} onChoose={(name) => choose(p.id, name)} />
           ) : (
-            <div className="p-1"><Input aria-label={`Branch base de ${p.name}`} value={bases[p.id] ?? ''} onChange={(e) => onChange({ ...bases, [p.id]: e.target.value })} placeholder="padrão do repositório" /></div>
+            <div className="p-1"><Input aria-label={t('items.baseBranchOf', { name: p.name })} value={bases[p.id] ?? ''} onChange={(e) => onChange({ ...bases, [p.id]: e.target.value })} placeholder={t('items.repositoryDefault')} /></div>
           )}
         </div>
       ))}
@@ -330,6 +352,7 @@ export function sourcesOf(issue: { connection: string; key: string } | null, pul
 }
 
 function PickedCards({ issue, pull, busy, onStart, onIssue, onPull }: { issue: Picked | null; pull: PickedPull | null; busy: boolean; onStart: () => void; onIssue: () => void; onPull: () => void }) {
+  const t = useT()
   return (
     <AnimatePresence initial={false}>
       {issue && (
@@ -337,8 +360,8 @@ function PickedCards({ issue, pull, busy, onStart, onIssue, onPull }: { issue: P
           <ProviderLogo logo={issue.source.provider.logo} name={issue.source.provider.name} size={15} />
           <span className="shrink-0 whitespace-nowrap text-base text-fg2">{issue.key}</span>
           <span className="min-w-0 flex-1 truncate text-base text-fg">{issue.title}</span>
-          <Button size="sm" variant="primary" loading={busy} icon={<Icon name="sPlan" size={15} />} onClick={onStart}>Planejar</Button>
-          <IconButton tooltip="Remover issue" size="sm" onClick={onIssue}><Icon name="close" size={15} /></IconButton>
+          <Button size="sm" variant="primary" loading={busy} icon={<Icon name="sPlan" size={15} />} onClick={onStart}>{t('items.plan')}</Button>
+          <IconButton tooltip={t('items.removeIssue')} size="sm" onClick={onIssue}><Icon name="close" size={15} /></IconButton>
         </motion.div>
       )}
       {pull && (
@@ -347,8 +370,8 @@ function PickedCards({ issue, pull, busy, onStart, onIssue, onPull }: { issue: P
           <span className="shrink-0 text-base text-fg2">{pull.subject}</span>
           {pull.title && <span className="min-w-0 flex-1 truncate text-base text-fg">{pull.title}</span>}
           {!pull.title && <span className="flex-1" />}
-          <Button size="sm" variant="primary" loading={busy} icon={<Icon name="sCode" size={15} />} onClick={onStart}>Começar</Button>
-          <IconButton tooltip="Remover pull request" size="sm" onClick={onPull}><Icon name="close" size={15} /></IconButton>
+          <Button size="sm" variant="primary" loading={busy} icon={<Icon name="sCode" size={15} />} onClick={onStart}>{t('items.start')}</Button>
+          <IconButton tooltip={t('items.removePull')} size="sm" onClick={onPull}><Icon name="close" size={15} /></IconButton>
         </motion.div>
       )}
     </AnimatePresence>
@@ -357,14 +380,15 @@ function PickedCards({ issue, pull, busy, onStart, onIssue, onPull }: { issue: P
 
 function useImports(sources: Source[], onPick: (what: 'issue' | 'pull') => void): ComposerImport[] {
   const code = useCodeConnections()
+  const t = useT()
   const first = sources[0]
   const found: ComposerImport[] = []
-  if (first) found.push({ key: 'issue', label: `Importar issue do ${first.provider.name}`, icon: <ProviderLogo logo={first.provider.logo} name={first.provider.name} size={16} />, onSelect: () => onPick('issue') })
-  if (code.length > 0) found.push({ key: 'pull', label: 'Importar pull request', icon: <Icon name="hGitPullRequest" size={16} />, onSelect: () => onPick('pull') })
+  if (first) found.push({ key: 'issue', label: t('items.importIssue', { provider: first.provider.name }), icon: <ProviderLogo logo={first.provider.logo} name={first.provider.name} size={16} />, onSelect: () => onPick('issue') })
+  if (code.length > 0) found.push({ key: 'pull', label: t('items.importPull'), icon: <Icon name="hGitPullRequest" size={16} />, onSelect: () => onPick('pull') })
   return found
 }
 
-export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
+export function NewItem({ onCreated, onAsked }: { onCreated: (it: Item) => void; onAsked?: (it: Item) => void }) {
   const [busy, setBusy] = useState(false)
   const [issue, setIssue] = useState<Picked | null>(null)
   const [pull, setPull] = useState<PickedPull | null>(null)
@@ -372,6 +396,7 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
   const [adding, setAdding] = useState(false)
   const [bases, setBases] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
+  const t = useT()
   const [remembered, setModel] = useRememberedModel()
   const sources = useTrackers()
   const imports = useImports(sources, setPicking)
@@ -396,7 +421,6 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
   const defaultModel = models?.default ?? null
   const model = remembered && models?.models.some((m) => m.id === remembered) ? remembered : null
   const [tuning, setTuning] = useRememberedTuning({ effort: 'medium', fast: false })
-  const btw = useBtw(chosen?.id ?? null, model ?? defaultModel)
   const start = (text: string, attachments: string[]) => {
     if (!issue && !pull && !text) return
     const chosenModel = model ?? defaultModel
@@ -417,6 +441,19 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
       .catch((e: unknown) => setError(errorText(e)))
       .finally(() => setBusy(false))
   }
+  const ask = (text: string) => {
+    setBusy(true)
+    setError(null)
+    api()
+      .btw({ text, application: chosen?.id ?? null, model: model ?? defaultModel })
+      .then((it) => {
+        setItems((items) => (items.some((x) => x.id === it.id) ? items : [it, ...items]))
+        onCreated(it)
+        onAsked?.(it)
+      })
+      .catch((e: unknown) => setError(errorText(e)))
+      .finally(() => setBusy(false))
+  }
   return (
     <div className="mb-8 space-y-2">
       <PickedCards issue={issue} pull={pull} busy={busy} onStart={() => start('', [])} onIssue={() => setIssue(null)} onPull={() => setPull(null)} />
@@ -426,7 +463,7 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
       </AnimatePresence>
       <Composer
         autoFocus
-        placeholder={issue ? `Instruções para planejar ${issue.key} (opcional)` : pull ? `Instruções para ${pull.subject} (opcional)` : 'O que precisa ser feito?'}
+        placeholder={issue ? t('items.instructionsIssue', { key: issue.key }) : pull ? t('items.instructionsPull', { subject: pull.subject }) : t('items.whatToDo')}
         disabled={busy}
         allowEmpty={!!issue || !!pull}
         model={model}
@@ -441,10 +478,9 @@ export function NewItem({ onCreated }: { onCreated: (it: Item) => void }) {
           </>
         }
         onSubmit={(input) => start(input.text, input.attachments)}
-        onBtw={btw.ask}
+        onBtw={ask}
       />
       {error && <p role="alert" className="px-2 text-sm text-danger-fg">{error}</p>}
-      {btw.state && <div className="pt-4"><BtwChat state={btw.state} onClose={btw.close} /></div>}
       {adding && <ApplicationDialog open application={null} onClose={() => setAdding(false)} />}
     </div>
   )

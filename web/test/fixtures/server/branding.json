@@ -1,5 +1,30 @@
 {
+  "editor": "VS Code",
+  "language": "pt-BR",
   "logo": "/api/branding/logo",
   "name": "Big",
+  "output_style": null,
+  "output_styles": [
+    {
+      "description": "Big responds tersely, leading with results and skipping preamble and narration",
+      "key": "concise",
+      "name": "Concise"
+    },
+    {
+      "description": "Big explains its implementation choices and codebase patterns",
+      "key": "explanatory",
+      "name": "Explanatory"
+    },
+    {
+      "description": "Big pauses and asks you to write small pieces of code for hands-on practice",
+      "key": "learning",
+      "name": "Learning"
+    },
+    {
+      "description": "Big executes immediately, minimizes interruptions, and prefers action over planning",
+      "key": "proactive",
+      "name": "Proactive"
+    }
+  ],
   "theme": "dark"
 }

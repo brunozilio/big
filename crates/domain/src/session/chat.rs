@@ -12,7 +12,7 @@ pub fn decision(named: &str) -> Option<Decision> {
         "allow" => Some(Decision::Allow),
         "always" => Some(Decision::AllowAlways),
         "deny" => Some(Decision::Deny),
-        "approve" => Some(Decision::Approve(PermissionMode::AcceptEdits)),
+        "approve" => Some(Decision::Approve(PermissionMode::Auto)),
         _ => None,
     }
 }
@@ -73,7 +73,7 @@ mod tests {
         assert_eq!(decision("allow"), Some(Decision::Allow));
         assert_eq!(decision("always"), Some(Decision::AllowAlways));
         assert_eq!(decision("deny"), Some(Decision::Deny));
-        assert_eq!(decision("approve"), Some(Decision::Approve(PermissionMode::AcceptEdits)));
+        assert_eq!(decision("approve"), Some(Decision::Approve(PermissionMode::Auto)));
         assert_eq!(decision("sure"), None);
     }
 

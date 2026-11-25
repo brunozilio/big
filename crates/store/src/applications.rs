@@ -60,6 +60,8 @@ pub struct Application {
     #[serde(default)]
     pub tests: Option<TrackerChoice>,
     #[serde(default)]
+    pub security: Option<TrackerChoice>,
+    #[serde(default)]
     pub cloud: Option<CloudChoice>,
     #[serde(default)]
     pub repositories: Vec<Repository>,

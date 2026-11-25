@@ -57,7 +57,7 @@ fn a_pending_question_is_shown_last_and_its_answer_becomes_indices() {
 fn plans_and_permissions_take_the_page_s_decisions() {
     let plan = AskKind::Plan { plan: "p".into() };
     let approve = json!({ "kind": "plan", "decision": "approve" });
-    assert_eq!(decision(&plan, &approve), Some(Decision::Approve(PermissionMode::AcceptEdits)));
+    assert_eq!(decision(&plan, &approve), Some(Decision::Approve(PermissionMode::Auto)));
     let revise = json!({ "kind": "plan", "decision": "revise", "feedback": "menor" });
     assert_eq!(decision(&plan, &revise), Some(Decision::DenyWith("menor".into())));
     let permission = AskKind::Permission { tool: "Bash".into(), subject: "ls".into(), rememberable: true };
@@ -76,7 +76,7 @@ fn plans_and_permissions_take_the_page_s_decisions() {
 
 #[test]
 fn a_workflow_plan_approved_hands_off_instead_of_implementing() {
-    assert_eq!(handed_off(Decision::Approve(PermissionMode::AcceptEdits)), Decision::Approve(PermissionMode::Plan));
+    assert_eq!(handed_off(Decision::Approve(PermissionMode::Auto)), Decision::Approve(PermissionMode::Plan));
     assert_eq!(handed_off(Decision::DenyWith("menor".into())), Decision::DenyWith("menor".into()));
 }
 
@@ -118,8 +118,9 @@ fn a_subagent_shows_its_steps_and_the_session_lists_its_tasks_and_background_wor
     let agent = &listed[1]["calls"][0];
     assert_eq!((agent["kind"].as_str(), agent["tag"].as_str()), (Some("subagent"), Some("explore")));
     assert_eq!(agent["steps"].as_array().map(Vec::len), Some(1));
-    let work = work(&shown.transcript);
-    assert_eq!(work["background"], serde_json::json!(["bash_1"]));
+    let work = work(&shown.transcript, &Jobs::of(&shown.transcript, None));
+    assert_eq!(work["background"], serde_json::json!([{ "id": "bash_1", "command": "" }]));
+    assert_eq!(work["stoppable"], false);
     assert_eq!(work["tasks"][0]["subject"], "rodar os testes");
 }
 
@@ -243,11 +244,21 @@ fn a_plan_asked_beside_a_question_keeps_its_own_ask_id() {
 
 #[test]
 fn a_tool_call_shows_how_long_it_took() {
-    let call = ToolCall { id: "t1".into(), name: "Bash".into(), summary: "sleep".into(), output: None, failed: false, input: None };
+    let call = ToolCall {
+        id: "t1".into(),
+        name: "Bash".into(),
+        summary: "sleep".into(),
+        output: None,
+        failed: false,
+        input: None,
+    };
     let records = vec![
         Record::Prompted { at_ms: 1_000, prompt: "faça".into() },
         Record::Event { at_ms: 1_200, event: EngineEvent::ToolStarted(call) },
-        Record::Event { at_ms: 4_600, event: EngineEvent::ToolResult { id: "t1".into(), output: "ok".into(), failed: false } },
+        Record::Event {
+            at_ms: 4_600,
+            event: EngineEvent::ToolResult { id: "t1".into(), output: "ok".into(), failed: false },
+        },
         Record::Event { at_ms: 4_700, event: EngineEvent::ToolFinished { id: "t1".into() } },
     ];
     let shown = Shown::of(&records);
@@ -271,4 +282,93 @@ fn an_answered_question_already_in_the_transcript_is_shown_once_under_the_ask_id
     let other = json!({ "id": "call_10", "type": "ask", "questions": questions, "answers": ["azul"], "at": "1970-01-01T00:00:06Z" });
     merge_answered(&mut listed, vec![other]);
     assert_eq!(listed.iter().filter(|event| event["type"] == "ask").count(), 2);
+}
+
+#[test]
+fn a_prompt_another_agent_sent_shows_that_agent_as_its_author() {
+    let records = vec![
+        Record::Shown { text: "planeje".into(), attached: Vec::new(), from: Some("planner".into()) },
+        Record::Prompted { at_ms: 1_000, prompt: "planeje".into() },
+    ];
+    let events = events(&Shown::of(&records), &[]);
+    assert_eq!(events[0]["type"], "user");
+    assert_eq!(events[0]["author"]["name"], "planner");
+    assert_eq!(events[0]["author"]["you"], Value::Null);
+    assert_eq!(events[0]["agent"], "planner");
+}
+
+#[test]
+fn a_published_artifact_leaves_the_tool_rows_and_becomes_its_own_card() {
+    let published = ToolCall {
+        id: "a1".into(),
+        name: "Artifact".into(),
+        summary: "Vendas Q3".into(),
+        output: None,
+        failed: false,
+        input: Some(json!({ "file_path": "/tmp/out/q3.html" })),
+    };
+    let mut records = records();
+    records.push(Record::Event { at_ms: 4_000, event: EngineEvent::ToolStarted(published) });
+    let running = events(&Shown::of(&records), &[]);
+    assert!(running.iter().all(|event| event["type"] != "artifact"));
+    let output =
+        "Published \"Vendas Q3\" (page). The person sees it in the chat and opens it from there.\nArtifact id: 0a1b";
+    records.push(Record::Event {
+        at_ms: 5_000,
+        event: EngineEvent::ToolResult { id: "a1".into(), output: output.into(), failed: false },
+    });
+    records.push(Record::Event { at_ms: 5_000, event: EngineEvent::ToolFinished { id: "a1".into() } });
+    let done = events(&Shown::of(&records), &[]);
+    let card = done.iter().find(|event| event["type"] == "artifact").cloned().unwrap_or_default();
+    assert_eq!(
+        (card["artifactId"].clone(), card["title"].clone(), card["kind"].clone(), card["name"].clone()),
+        (json!("0a1b"), json!("Vendas Q3"), json!("page"), json!("q3.html"))
+    );
+    assert!(
+        done.iter().all(|event| {
+            event["calls"].as_array().is_none_or(|calls| calls.iter().all(|c| c["tag"] != "Artifact"))
+        })
+    );
+}
+
+fn job(id: &str, running: bool) -> app::BackgroundJob {
+    app::BackgroundJob { id: id.into(), command: "npm start".into(), running }
+}
+
+#[test]
+fn a_command_sent_to_the_background_shows_whether_it_still_runs_and_can_be_stopped() {
+    let started = "Started in the background as bash_7. Read its output with BashOutput and stop it with KillShell.";
+    let records: Vec<Record> = [
+        EngineEvent::ToolStarted(ToolCall::new("b1", "Bash", "npm start")),
+        EngineEvent::ToolResult { id: "b1".into(), output: started.into(), failed: false },
+        EngineEvent::BackgroundStarted { id: "bash_7".into() },
+        EngineEvent::ToolStarted(ToolCall::new("b2", "Bash", "ls")),
+        EngineEvent::ToolResult {
+            id: "b2".into(),
+            output: "Started in the background as nothing".into(),
+            failed: false,
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    .map(|(at, event)| Record::Event { at_ms: 1_000 + at as u64, event })
+    .collect();
+    let shown = Shown::of(&records);
+    let mut listed = events(&shown, &[]);
+    let live = Jobs::of(&shown.transcript, Some(vec![job("bash_7", true)]));
+    live.mark(&mut listed);
+    let calls = &listed[0]["calls"];
+    assert_eq!(
+        (calls[0]["job"].as_str(), &calls[0]["jobRunning"], &calls[0]["jobStoppable"]),
+        (Some("bash_7"), &json!(true), &json!(true))
+    );
+    assert!(calls[1].get("job").is_none(), "a foreground command is no job");
+    let work = work(&shown.transcript, &live);
+    assert_eq!(work["background"], json!([{ "id": "bash_7", "command": "npm start" }]));
+    let mut listed = events(&shown, &[]);
+    Jobs::of(&shown.transcript, Some(vec![job("bash_7", false)])).mark(&mut listed);
+    assert_eq!(
+        (&listed[0]["calls"][0]["jobRunning"], &listed[0]["calls"][0]["jobStoppable"]),
+        (&json!(false), &json!(false))
+    );
 }

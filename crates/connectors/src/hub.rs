@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
+use domain::Language;
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use serde_json::{Map, Value};
 
@@ -16,7 +17,6 @@ use crate::providers;
 struct Entry {
     provider: &'static dyn Provider,
     descriptor: ProviderDescriptor,
-    presentation: Presentation,
     alternatives: Vec<AlternateAuth>,
 }
 
@@ -63,8 +63,7 @@ impl Connectors {
             .map(|provider| Entry {
                 provider: *provider,
                 descriptor: provider.descriptor(),
-                presentation: provider.presentation(),
-                alternatives: provider.alternatives(),
+                alternatives: provider.alternatives(Language::default()),
             })
             .collect();
         Connectors { entries, http, keeper, limiter: RateLimiter::new(), learned: Mutex::default(), sink: None }
@@ -87,12 +86,12 @@ impl Connectors {
         self.entry(key).map(|entry| &entry.descriptor)
     }
 
-    pub fn presentation(&self, key: &ProviderKey) -> Result<&Presentation, ActionError> {
-        self.entry(key).map(|entry| &entry.presentation)
+    pub fn presentation(&self, key: &ProviderKey, language: Language) -> Result<Presentation, ActionError> {
+        self.entry(key).map(|entry| entry.provider.presentation(language))
     }
 
-    pub fn alternatives(&self, key: &ProviderKey) -> Result<&[AlternateAuth], ActionError> {
-        self.entry(key).map(|entry| entry.alternatives.as_slice())
+    pub fn alternatives(&self, key: &ProviderKey, language: Language) -> Result<Vec<AlternateAuth>, ActionError> {
+        self.entry(key).map(|entry| entry.provider.alternatives(language))
     }
 
     pub fn http(&self) -> &dyn Http {

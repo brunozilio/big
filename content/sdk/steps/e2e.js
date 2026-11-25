@@ -1,4 +1,4 @@
-import { agentOptions, branchOf, defined, eachOf, inLanguage, object, planOf, repositoriesOf, source, tail } from "./context.js";
+import { agentOptions, branchOf, defined, eachOf, inLanguage, languageOf, object, planOf, repositoriesOf, source, tail } from "./context.js";
 import { listing } from "./cases.js";
 
 const STATES = ["passed", "failed", "blocked", "not_run"];
@@ -20,12 +20,12 @@ function commandLines(groups) {
 function asked(ctx, opts, cases, groups) {
   const plan = planOf(ctx, opts);
   const keys = cases.map((entry) => `\`${entry.ref}\``).join(", ");
-  const parts = [`Automate and run the E2E tests for the item: ${plan.title}`, `## Test cases\n\n${listing(cases)}`];
+  const parts = [`Automate and run the E2E tests for the item: ${plan.title}`, `## Test cases\n\n${listing(cases, languageOf(ctx))}`];
   if (keys) parts.push(`In \`results\`, each result's \`case\` field is only the case key, without the title: ${keys}.`);
   if (groups.length > 0) parts.push(`## Repository E2E commands\n\n${commandLines(groups)}`);
   const before = object(ctx.output(ctx.step));
   if (before.error) parts.push(`## What failed last time\n\n${before.error}`);
-  return inLanguage(parts.join("\n\n"));
+  return inLanguage(ctx, parts.join("\n\n"));
 }
 
 function fenced(text) {
@@ -118,7 +118,8 @@ export function proof(verdict) {
 
 async function tested(ctx, opts, cases, groups) {
   if (cases.length === 0 || opts.tester === false) return { session: undefined, verdicts: [] };
-  const previous = object(object(ctx.output(ctx.step)).e2e).session;
+  const before = object(ctx.output(ctx.step));
+  const previous = (before.e2e ? object(before.e2e) : before).session;
   const worktree = opts.worktree ?? branchOf(ctx, opts) ?? ctx.item.id;
   const input = defined({ prompt: asked(ctx, opts, cases, groups), session: previous });
   const result = await ctx.agent(opts.tester ?? "tester", input, agentOptions(opts, { worktree, mode: opts.testerMode }));

@@ -1,7 +1,9 @@
 pub(crate) mod lesson;
 pub mod mcp;
+mod recalled;
 pub mod run;
 mod score;
+mod shelf;
 pub(crate) mod store;
 mod team;
 
@@ -12,23 +14,25 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::api::memory::{MemoryApplied, MemoryListing};
 use domain::memory::scorecard::RunOutcome;
-use domain::memory::{MemorySearches, SearchAnswer, recall, search};
 use domain::{
-    Author, Memory, MemoryBook, MemoryBrief, MemoryEdit, MemoryId, PromptRequest, Provenance, RecallBudget, RunId,
+    Author, Forgotten, Memory, MemoryBook, MemoryBrief, MemoryEdit, MemoryId, MemoryScope, PromptRequest, Provenance,
+    RunId,
 };
 use platform::sync::Locked;
 use store::{InMemoryStore, MemoryStore, Revised, SqliteMemoryStore};
 
 use crate::services::LocalServices;
+use shelf::Shelves;
+pub use shelf::{ApplicationOf, ApplicationRef, MemoryShelf};
 
-type BookKey = PathBuf;
-type Books = HashMap<BookKey, Revised>;
+type Books = HashMap<String, Revised>;
 
 #[derive(Clone)]
 pub struct Memories {
     store: Arc<dyn MemoryStore>,
     books: Arc<Mutex<Books>>,
     homes: Arc<dyn crate::Homes>,
+    applications: Option<ApplicationOf>,
 }
 
 impl std::fmt::Debug for Memories {
@@ -41,15 +45,13 @@ pub fn of(services: &LocalServices) -> Memories {
     services.memories.clone().with_homes(Arc::clone(&services.homes))
 }
 
-fn keep<'a>(books: &'a mut MutexGuard<Books>, project: &Path, changed: Revised) -> &'a mut MemoryBook {
-    let kept = books.entry(project.to_path_buf()).or_default();
-    *kept = changed;
-    &mut kept.book
+fn shown(scope: MemoryScope, memory: &Memory) -> Memory {
+    Memory { id: scope.shown(memory.id), ..memory.clone() }
 }
 
 impl Memories {
     pub fn new(store: Arc<dyn MemoryStore>) -> Self {
-        Self { store, books: Arc::default(), homes: Arc::new(crate::OwnerHome::none()) }
+        Self { store, books: Arc::default(), homes: Arc::new(crate::OwnerHome::none()), applications: None }
     }
 
     fn gate(&self, project: &Path) -> agent_engine::scope::Scope {
@@ -69,138 +71,151 @@ impl Memories {
         self
     }
 
+    pub fn with_applications(mut self, applications: ApplicationOf) -> Self {
+        self.applications = Some(applications);
+        self
+    }
+
     fn home(&self) -> Option<PathBuf> {
         self.homes.home()
     }
 
-    fn kept<'a>(&self, books: &'a mut MutexGuard<Books>, project: &Path) -> &'a mut Revised {
-        let stored = self.store.revision(project);
-        let kept = books.entry(project.to_path_buf()).or_insert_with(|| self.store.read(project));
-        if kept.revision != stored {
-            *kept = self.store.read(project);
-        }
-        kept
+    fn shelves(&self, project: &Path) -> Shelves {
+        let checkout = crate::dirs::main_checkout(project);
+        let application = self.applications.as_ref().and_then(|of| of(&checkout));
+        Shelves { repository: project.to_path_buf(), application }
     }
 
-    fn book<'a>(&self, books: &'a mut MutexGuard<Books>, project: &Path) -> &'a mut MemoryBook {
-        &mut self.kept(books, project).book
+    fn kept<'a>(&self, books: &'a mut MutexGuard<Books>, shelf: &MemoryShelf) -> &'a mut Revised {
+        let key = shelf.key();
+        let stored = self.store.revision(&key);
+        let kept = books.entry(key.clone()).or_insert_with(|| self.store.read(&key));
+        if kept.revision != stored {
+            *kept = self.store.read(&key);
+        }
+        kept
     }
 
     fn lock(&self) -> MutexGuard<'_, Books> {
         self.books.locked()
     }
 
-    pub fn load(&self, project: &Path) -> MemoryListing {
+    fn update(&self, shelf: &MemoryShelf, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<()> {
         let mut books = self.lock();
-        listing(project, self.book(&mut books, project))
+        let changed = self.store.update(&shelf.key(), change)?;
+        books.insert(shelf.key(), changed);
+        Ok(())
+    }
+
+    fn known(&self, shelves: &Shelves) -> (Vec<Memory>, Vec<Forgotten>) {
+        let mut books = self.lock();
+        let (mut memories, mut forgotten) = (Vec::new(), Vec::new());
+        for shelf in shelves.all() {
+            let scope = shelf.scope();
+            let book = &self.kept(&mut books, &shelf).book;
+            memories.extend(book.memories.iter().map(|memory| shown(scope, memory)));
+            forgotten.extend(book.forgotten.iter().map(|f| Forgotten { memory: shown(scope, &f.memory), at: f.at }));
+        }
+        (memories, forgotten)
+    }
+
+    pub fn load(&self, project: &Path) -> MemoryListing {
+        let (memories, forgotten) = self.known(&self.shelves(project));
+        MemoryListing { path: project.to_path_buf(), memories, forgotten }
+    }
+
+    pub fn shelf(&self, shelf: &MemoryShelf) -> MemoryListing {
+        let mut books = self.lock();
+        let book = &self.kept(&mut books, shelf).book;
+        let path = match shelf {
+            MemoryShelf::Repository(project) => project.clone(),
+            _ => PathBuf::new(),
+        };
+        MemoryListing { path, memories: book.memories.clone(), forgotten: book.forgotten.clone() }
+    }
+
+    pub fn shared(&self, project: &Path) -> Vec<Memory> {
+        team::load_in(project)
+    }
+
+    pub fn application_of(&self, project: &Path) -> Option<ApplicationRef> {
+        self.shelves(project).application
     }
 
     pub fn edit(&self, project: &Path, edits: &[MemoryEdit], by: Provenance) -> Result<MemoryListing, String> {
+        let shelves = self.shelves(project);
         self.set_undo_point(project, None);
-        self.apply(project, edits, by)
-    }
-
-    fn apply(&self, project: &Path, edits: &[MemoryEdit], by: Provenance) -> Result<MemoryListing, String> {
-        let mut books = self.lock();
-        let changed = self.store.update(project, &mut |book| {
-            book.apply(edits, &by);
-        });
-        let changed = match changed {
-            Ok(changed) => changed,
-            Err(error) => {
-                tracing::warn!(%error, "could not save memory");
-                return Err(format!("could not save memory: {error}"));
+        let mut grouped: Vec<(MemoryShelf, Vec<MemoryEdit>)> = Vec::new();
+        for edit in edits {
+            let (scope, edit) = edit.clone().routed();
+            let remembers = matches!(edit, MemoryEdit::Remember { .. });
+            let fallback = || remembers.then(|| MemoryShelf::Repository(project.to_path_buf()));
+            let Some(shelf) = shelves.of(scope).or_else(fallback) else { continue };
+            match grouped.iter_mut().find(|(kept, _)| *kept == shelf) {
+                Some((_, kept)) => kept.push(edit),
+                None => grouped.push((shelf, vec![edit])),
             }
-        };
-        Ok(listing(project, keep(&mut books, project, changed)))
+        }
+        for (shelf, edits) in &grouped {
+            self.apply(shelf, edits, &by)?;
+        }
+        Ok(self.load(project))
     }
 
-    pub fn find(&self, project: &Path, query: &str, limit: usize, searches: &mut MemorySearches) -> SearchAnswer {
-        let shared = team::load(&self.gate(project));
-        let mut books = self.lock();
-        let kept = self.kept(&mut books, project);
-        let known: Vec<Memory> = kept.book.memories.iter().cloned().chain(shared).collect();
-        let scores = search(query, &known);
-        let mut order: Vec<usize> = (0..known.len()).filter(|&i| scores[i] > 0.0).collect();
-        order.sort_by(|&a, &b| scores[b].total_cmp(&scores[a]).then(a.cmp(&b)));
-        let ranked: Vec<Memory> = order.into_iter().map(|i| known[i].clone()).collect();
-        let answer = searches.answer(ranked, limit);
-        if let SearchAnswer::Found(found) = &answer {
-            let personal: Vec<Memory> =
-                found.iter().filter(|memory| !domain::memory::team::is_team(memory.id)).cloned().collect();
-            self.mark_used(project, kept, &personal);
+    pub fn edit_shelf(
+        &self,
+        shelf: &MemoryShelf,
+        edits: &[MemoryEdit],
+        by: Provenance,
+    ) -> Result<MemoryListing, String> {
+        self.apply(shelf, edits, &by)?;
+        Ok(self.shelf(shelf))
+    }
+
+    fn apply(&self, shelf: &MemoryShelf, edits: &[MemoryEdit], by: &Provenance) -> Result<(), String> {
+        self.update(shelf, &mut |book| drop(book.apply(edits, by))).map_err(|error| {
+            tracing::warn!(%error, "could not save memory");
+            format!("could not save memory: {error}")
+        })
+    }
+
+    pub fn move_memory(&self, from: &MemoryShelf, id: MemoryId, to: &MemoryShelf) -> Result<(), String> {
+        if from == to {
+            return Ok(());
         }
-        answer
+        let found = self.shelf(from).memories.into_iter().find(|memory| memory.id == id);
+        let Some(memory) = found else { return Err(format!("there is no memory {}", id.0)) };
+        let failed = |error: std::io::Error| format!("could not move the memory: {error}");
+        self.update(to, &mut |book| {
+            book.adopt(memory.clone());
+        })
+        .map_err(failed)?;
+        self.update(from, &mut |book| drop(book.take(id))).map_err(failed)
     }
 
     fn set_undo_point(&self, project: &Path, book: Option<MemoryBook>) {
-        if let Err(error) = self.store.set_undo_point(project, book.as_ref()) {
+        let key = MemoryShelf::Repository(project.to_path_buf()).key();
+        if let Err(error) = self.store.set_undo_point(&key, book.as_ref()) {
             tracing::warn!(%error, "could not keep the point the memory can be undone to");
         }
     }
 
-    fn mark_used(&self, project: &Path, kept: &mut Revised, given: &[Memory]) {
-        if given.is_empty() {
-            return;
-        }
-        let ids: Vec<MemoryId> = given.iter().map(|m| m.id).collect();
+    fn mark_used(&self, shelves: &Shelves, given: &[Memory]) {
         let at = now();
-        match self.store.update(project, &mut |stored| stored.mark_used(&ids, at)) {
-            Ok(stored) => *kept = stored,
-            Err(error) => {
-                kept.book.mark_used(&ids, at);
+        for shelf in shelves.all() {
+            let ids: Vec<MemoryId> = given
+                .iter()
+                .map(|memory| MemoryScope::of(memory.id))
+                .filter(|(scope, _)| *scope == shelf.scope())
+                .map(|(_, id)| id)
+                .collect();
+            if ids.is_empty() {
+                continue;
+            }
+            if let Err(error) = self.update(&shelf, &mut |stored| stored.mark_used(&ids, at)) {
                 tracing::warn!(%error, "could not save memory use");
             }
         }
-    }
-
-    pub fn brief(&self, run: RunId, request: &PromptRequest, tool: bool) -> PromptRequest {
-        let Some(brief) = &request.host.memory else { return request.clone() };
-        let budget = if tool { RecallBudget::WITH_TOOL } else { RecallBudget::default() };
-        let anchors = domain::features::on(brand::features::MEMORY_ANCHORS);
-        let shared = team::load_in(&request.session.cwd);
-        let structured = domain::features::on(brand::features::STRUCTURED_LEARNINGS);
-        if domain::features::on(brand::features::MEMORY_SCORECARD) && self.holds_out(&request.session.cwd) {
-            let brief = MemoryBrief {
-                output: edits_file(run),
-                origin: brief.origin.clone(),
-                anchors,
-                structured,
-                held_out: true,
-                ..MemoryBrief::default()
-            };
-            return with_memory(request, brief);
-        }
-        let (recalled, tool, anchored) = {
-            let mut books = self.lock();
-            let kept = self.kept(&mut books, &request.session.cwd);
-            let known: Vec<Memory> = kept.book.memories.iter().cloned().chain(shared).collect();
-            let recalled = recall(&request.prompt.text, &known, budget, now());
-            let personal: Vec<Memory> =
-                recalled.iter().filter(|memory| !domain::memory::team::is_team(memory.id)).cloned().collect();
-            self.mark_used(&request.session.cwd, kept, &personal);
-            let tool = tool && kept.book.holds_more_than(&recalled);
-            let anchored: Vec<Memory> = if anchors {
-                let unseen: Vec<Memory> =
-                    known.into_iter().filter(|memory| !recalled.iter().any(|r| r.id == memory.id)).collect();
-                domain::memory::anchors::anchored(&unseen)
-            } else {
-                Vec::new()
-            };
-            (recalled, tool, anchored)
-        };
-        let brief = MemoryBrief {
-            recalled,
-            output: edits_file(run),
-            origin: brief.origin.clone(),
-            tool,
-            optimizing: false,
-            anchored,
-            anchors,
-            structured,
-            held_out: false,
-        };
-        with_memory(request, brief)
     }
 
     pub fn finish(&self, request: &PromptRequest, outcome: &RunOutcome) -> Option<Result<MemoryApplied, String>> {
@@ -234,10 +249,6 @@ fn applied_since(before: &[Memory], listing: MemoryListing) -> MemoryApplied {
         forgotten: before.iter().filter(|old| !listing.memories.iter().any(|memory| memory.id == old.id)).count(),
         listing,
     }
-}
-
-fn listing(project: &Path, book: &MemoryBook) -> MemoryListing {
-    MemoryListing { path: project.to_path_buf(), memories: book.memories.clone(), forgotten: book.forgotten.clone() }
 }
 
 fn edits_file(run: RunId) -> PathBuf {

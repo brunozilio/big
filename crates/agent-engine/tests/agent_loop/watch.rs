@@ -6,7 +6,7 @@ use agent_engine::model::ToolSpec;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::{Declared, Effect, Outcome, Tool, Workspace, inbox};
 use agent_engine::transcript::{Block, Message};
-use domain::{AskKind, Decision, EngineEvent, PermissionMode};
+use domain::{AskKind, Decision, EngineEvent};
 use serde_json::{Value, json};
 
 use crate::{Rig, tool_use};
@@ -65,7 +65,7 @@ fn results(rig: &Rig) -> Vec<(bool, String)> {
 
 #[test]
 fn a_read_only_tool_is_checked_once_now_and_then_watched_without_the_model() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.credentials.client = 9401;
     let calls = Arc::new(AtomicUsize::new(0));
     let issue = Issue { calls: Arc::clone(&calls), statuses: &["Em análise"] };
@@ -94,7 +94,7 @@ fn a_read_only_tool_is_checked_once_now_and_then_watched_without_the_model() {
 
 #[test]
 fn without_a_rule_a_tool_that_may_change_things_is_asked_about_every_time_and_a_met_condition_starts_nothing() {
-    let mut rig = Rig::new(PermissionMode::Ask);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     rig.workspace.credentials.client = 9402;
     let calls = Arc::new(AtomicUsize::new(0));
     let issue = Issue { calls: Arc::clone(&calls), statuses: &["Concluído"] };
@@ -152,8 +152,8 @@ fn asked(rig: &Rig) -> bool {
     rig.events().iter().any(|event| matches!(event, EngineEvent::Asked(_)))
 }
 
-fn watch_once(mode: PermissionMode, client: u64) -> (Rig, Arc<AtomicUsize>) {
-    let mut rig = Rig::new(mode);
+fn watch_once(reviewer: domain::Reviewer, client: u64) -> (Rig, Arc<AtomicUsize>) {
+    let mut rig = Rig::new(reviewer);
     rig.workspace.credentials.client = client;
     let calls = Arc::new(AtomicUsize::new(0));
     let issue = Issue { calls: Arc::clone(&calls), statuses: &["Em análise"] };
@@ -194,7 +194,7 @@ fn deny_every_ask_after(rig: &Rig, skipped: usize) -> Arc<std::sync::atomic::Ato
 
 #[test]
 fn in_bypass_the_watch_starts_without_asking() {
-    let (rig, calls) = watch_once(PermissionMode::Bypass, 9405);
+    let (rig, calls) = watch_once(domain::Reviewer::Nobody, 9405);
 
     let results = results(&rig);
     assert!(!results[0].0 && results[0].1.starts_with("Watching as watch_"), "{results:?}");
@@ -205,7 +205,7 @@ fn in_bypass_the_watch_starts_without_asking() {
 
 #[test]
 fn allowing_a_tool_always_also_lets_a_watch_of_it_start_without_asking_again() {
-    let mut rig = Rig::new(PermissionMode::Ask);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     rig.workspace.credentials.client = 9406;
     let calls = Arc::new(AtomicUsize::new(0));
     let issue = Issue { calls: Arc::clone(&calls), statuses: &["Em análise"] };
@@ -244,7 +244,7 @@ fn allowing_a_tool_always_also_lets_a_watch_of_it_start_without_asking_again() {
 
 #[test]
 fn after_starting_a_watch_the_run_cannot_schedule_wakeups_or_watch_the_same_call_again() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.credentials.client = 9403;
     let calls = Arc::new(AtomicUsize::new(0));
     let issue = Issue { calls: Arc::clone(&calls), statuses: &["Em análise"] };

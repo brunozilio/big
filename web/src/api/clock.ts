@@ -1,3 +1,5 @@
+import { currentLanguage, translate } from '@/i18n'
+
 let source: () => number = () => Date.now()
 
 export function now(): number {
@@ -17,5 +19,5 @@ export function mins(t: number): string {
 }
 
 export function ago(iso: string): string {
-  return `há ${mins(Math.max(1, minutesSince(iso)))}`
+  return translate(currentLanguage(), 'app.ago', { time: mins(Math.max(1, minutesSince(iso))) })
 }

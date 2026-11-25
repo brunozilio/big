@@ -1,12 +1,14 @@
 import { motion } from 'framer-motion'
 import { useState, type HTMLAttributes, type ReactNode } from 'react'
 import { cn } from './cn'
+import { useT } from '@/i18n'
 import { AvatarImg, Icon } from "./icon"
 import { AnimatePresence, IconSwap, springSnap, stagger, tween, tweenClose } from './motion'
 
 export function Spinner({ className, size = 16 }: { className?: string; size?: number }) {
+  const t = useT()
   return (
-    <svg viewBox="0 0 16 16" width={size} height={size} className={cn('shrink-0 animate-spin text-muted', className)} aria-label="carregando">
+    <svg viewBox="0 0 16 16" width={size} height={size} className={cn('shrink-0 animate-spin text-muted', className)} aria-label={t('editor.loading')}>
       <circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" strokeOpacity="0.2" strokeWidth="1.8" />
       <path d="M14 8a6 6 0 0 0-6-6" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
@@ -73,11 +75,11 @@ export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('skeleton h-3', className)} />
 }
 
-export function ProgressBar({ value, tone }: { value: number; tone?: 'auto' | 'info' }) {
+export function ProgressBar({ value, tone, onInset }: { value: number; tone?: 'auto' | 'info'; onInset?: boolean }) {
   const pct = Math.min(100, Math.max(0, value))
   const color = tone === 'info' ? 'bg-info' : pct >= 100 ? 'bg-danger' : pct >= 80 ? 'bg-warning' : 'bg-fg'
   return (
-    <div className="h-[5px] w-full overflow-hidden rounded-full bg-inset">
+    <div className={cn('h-[5px] w-full overflow-hidden rounded-full', onInset ? 'bg-line' : 'bg-inset')}>
       <motion.div className={cn('h-full w-full origin-left rounded-full', color)} initial={false} animate={{ scaleX: pct / 100 }} transition={tween} />
     </div>
   )
@@ -107,10 +109,11 @@ export function EmptyState({ icon, title, text, action, size = 'page', align = '
 }
 
 export function CopyButton({ text, className }: { text: string; className?: string }) {
+  const t = useT()
   const [done, setDone] = useState(false)
   return (
     <button
-      aria-label="copiar"
+      aria-label={t('editor.copy')}
       className={cn('relative inline-flex size-7 items-center justify-center rounded-control-sm text-muted transition-colors hover:bg-hover hover:text-fg', className)}
       onClick={() => {
         navigator.clipboard?.writeText(text).catch(() => undefined)
@@ -124,7 +127,7 @@ export function CopyButton({ text, className }: { text: string; className?: stri
       <AnimatePresence>
         {done && (
           <motion.span initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: -2 }} exit={{ opacity: 0, transition: tweenClose }} transition={tween} className="pointer-events-none absolute -top-8 whitespace-nowrap rounded-control-sm bg-primary px-2 py-1 text-xs text-primary-fg shadow-pop">
-            Copiado
+            {t('editor.copied')}
           </motion.span>
         )}
       </AnimatePresence>

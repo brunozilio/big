@@ -1,6 +1,6 @@
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -15,7 +15,7 @@ fn failing(times: usize) -> ScriptedModel {
 
 #[test]
 fn the_same_command_failing_three_times_moves_the_next_turns_to_the_escalation_model() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.policy.escalation = true;
     rig.workspace.models.escalation = Some("big-model".into());
     let model = failing(3);
@@ -34,7 +34,7 @@ fn the_same_command_failing_three_times_moves_the_next_turns_to_the_escalation_m
 
 #[test]
 fn without_the_flag_the_model_stays() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.escalation = Some("big-model".into());
     let model = failing(3);
 

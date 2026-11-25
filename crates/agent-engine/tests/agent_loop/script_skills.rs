@@ -6,7 +6,7 @@ use agent_engine::tools::script_tool::ScriptAccess;
 use agent_engine::tools::skill::{FoundSkill, discover, expand_command, expand_initial};
 use agent_engine::tools::{Tool, Workspace};
 use agent_engine::transcript::{Block, Message};
-use domain::{AskKind, Decision, EngineEvent, ModelOption, PermissionMode, PromptRequest};
+use domain::{AskKind, Decision, EngineEvent, ModelOption, PromptRequest};
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -58,7 +58,7 @@ fn load_mark(rig: &Rig, skills: Vec<FoundSkill>) {
 
 #[test]
 fn the_owner_s_script_skill_runs_without_asking() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let home = tempfile::tempdir().expect("home");
     skill(home.path(), SKILL);
     load_mark(&rig, found(rig.dir.path(), home.path()));
@@ -136,7 +136,7 @@ fn a_project_s_script_skill_gets_no_files_until_the_owner_s_settings_grant_them(
 
 #[test]
 fn a_project_s_script_skill_the_agent_loads_still_gets_no_files_by_default() {
-    let rig = Rig::new(PermissionMode::Ask);
+    let rig = Rig::new(domain::Reviewer::Human);
     let home = tempfile::tempdir().expect("home");
     skill(rig.dir.path(), SKILL);
     let control = Arc::clone(&rig.control);

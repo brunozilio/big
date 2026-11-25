@@ -2,11 +2,11 @@ import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { act, cleanup, fireEvent, render, renderHook, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { setApi } from '../src/api'
+import { BTW_WORKFLOW } from '../src/api/contract'
 import { isItem, isLiveEvent, isSession, isStepView } from '../src/api/guards'
 import { mockApi } from '../src/api/mock'
 import { applyLive, boot, getState, stop, useSession } from '../src/api/store'
 import { btwOf, Composer } from '../src/chat/Composer'
-import { BtwChat, useBtw } from '../src/chat/BtwChat'
 import { SideAnswers, useSideQuestions } from '../src/chat/SideQuestions'
 import { HeadsUpNote } from '../src/screens/items/ItemModal'
 import { ItemsView } from '../src/screens/items/ItemsView'
@@ -126,7 +126,7 @@ describe('pergunta à parte', () => {
     }
     const view = render(<Harness />)
     fireEvent.click(view.getByText('perguntar'))
-    await waitFor(() => expect(view.getByText('Está rodando os testes.')).toBeTruthy())
+    await waitFor(() => expect(view.getByText((_, el) => el?.tagName === 'P' && el.textContent === 'Está rodando os testes.')).toBeTruthy())
     expect(side).toHaveBeenCalledWith('s1', { text: 'O que falta?', model: 'opus' })
     const bubble = view.getByTestId('side-question')
     expect(bubble.textContent).toContain('Pergunta à parte')
@@ -167,38 +167,14 @@ describe('pergunta à parte', () => {
     expect(btwOf('faça /btw depois')).toBeNull()
   })
 
-  test('o /btw abre uma conversa livre que responde e continua', async () => {
-    await started()
-    function Harness() {
-      const btw = useBtw('a1', null)
-      return (
-        <MemoryRouter>
-          <TooltipProvider>
-            <button onClick={() => btw.ask('o swagger está atualizado?')}>perguntar</button>
-            {btw.state && <BtwChat state={btw.state} onClose={btw.close} />}
-          </TooltipProvider>
-        </MemoryRouter>
-      )
-    }
-    const view = render(<Harness />)
-    fireEvent.click(view.getByText('perguntar'))
-    await waitFor(() => expect(view.getByText(/está tudo em dia/)).toBeTruthy(), { timeout: 3000 })
-    expect(view.getByTestId('btw-chat').textContent).toContain('Pergunta à parte')
-    expect(view.getByTestId('btw-chat').textContent).not.toContain('não cria atividade')
-    const box = view.getByLabelText('Mensagem') as HTMLTextAreaElement
-    fireEvent.change(box, { target: { value: 'e o readme?' } })
-    fireEvent.keyDown(box, { key: 'Enter' })
-    await waitFor(() => expect(view.getAllByText(/está tudo em dia/)).toHaveLength(2), { timeout: 3000 })
-    fireEvent.click(view.getByLabelText('Fechar pergunta à parte'))
-    await waitFor(() => expect(view.queryByTestId('btw-chat')).toBeNull())
-  })
-
-  test('o mock abre o /btw da aplicação e recusa sem pergunta ou aplicação', async () => {
+  test('o mock faz do /btw uma atividade de pergunta que pode ser arquivada depois de entregue', async () => {
     const api = await started()
     const before = (await api.items()).length
-    const { session } = await api.btw({ text: 'o swagger está atualizado?', application: 'a1' })
-    expect((await api.session(session)).mode).toBe('plan')
-    expect(await api.items()).toHaveLength(before)
+    const made = await api.btw({ text: 'o swagger está atualizado?', application: 'a1' })
+    expect(made.workflow).toBe(BTW_WORKFLOW)
+    expect(made.archivedAt).toBeNull()
+    expect(await api.items()).toHaveLength(before + 1)
+    await expect(api.archive(made.id)).rejects.toThrow('já foi entregue')
     await expect(api.btw({ text: ' ', application: 'a1' })).rejects.toThrow('Escreva a pergunta.')
     await expect(api.btw({ text: 'oi', application: null })).rejects.toThrow('Escolha uma aplicação')
   })

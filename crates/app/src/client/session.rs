@@ -30,6 +30,7 @@ pub struct Headless {
     pub fallback_model: Option<String>,
     pub teammate: Option<domain::team::TeammateOf>,
     pub output_style: Option<String>,
+    pub language: Option<domain::Language>,
 }
 
 impl Session {
@@ -73,7 +74,16 @@ impl Session {
     }
 
     pub fn send(&self, prompt: &str) -> Result<Run, Error> {
+        self.send_from(prompt, None)
+    }
+
+    pub fn send_from(&self, prompt: &str, from: Option<&str>) -> Result<Run, Error> {
         let mut request = PromptRequest::plain(self.cwd.clone(), prompt, self.model.clone());
+        request.prompt.shown = from.map(|from| domain::request::Shown {
+            text: prompt.to_owned(),
+            attached: Vec::new(),
+            from: Some(from.to_owned()),
+        });
         request.session.effort = self.effort;
         request.host.memory = Some(MemoryBrief::new(None));
         request.session.agent.clone_from(&self.agent);
@@ -104,6 +114,7 @@ impl Session {
         request.session.fallback_model.clone_from(&self.headless.fallback_model);
         request.session.teammate.clone_from(&self.headless.teammate);
         request.session.output_style.clone_from(&self.headless.output_style);
+        request.session.language = self.headless.language;
         let watch = RunWatch::of(request.session.command);
         let run = Run::start(&self.dispatcher, |run| ClientCommand::SubmitPrompt { run, request })?;
         Ok(run.of_session(Arc::clone(&self.carried), watch))

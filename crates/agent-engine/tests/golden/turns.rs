@@ -23,7 +23,7 @@ fn a_plain_answer_starts_a_session_and_a_second_prompt_resumes_it() {
         == first prompt: conversation ==
         user:
           text "Say hello"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Hello."
         == first prompt: log appended ==
@@ -46,12 +46,12 @@ fn a_plain_answer_starts_a_session_and_a_second_prompt_resumes_it() {
         == second prompt: conversation ==
         user:
           text "Say hello"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Hello."
         user:
           text "Are you there?"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Still here."
         == second prompt: log appended ==
@@ -92,7 +92,7 @@ fn a_tool_turn_starts_finishes_and_reports_the_tool_before_the_answer() {
         == prompt: conversation ==
         user:
           text "Read the notes"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use r1 Read "{\"file_path\":\"notes.txt\"}"
         user:
@@ -185,7 +185,7 @@ fn two_read_only_calls_in_one_reply_run_as_a_batch_and_answer_in_call_order() {
         == prompt: conversation ==
         user:
           text "Read both files"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use r1 Read "{\"file_path\":\"a.txt\"}"
           tool_use r2 Read "{\"file_path\":\"b.txt\"}"

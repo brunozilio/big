@@ -6,6 +6,7 @@ import { ProviderLogo } from '@/ui/domain'
 import { Textarea } from '@/ui/form'
 import { Icon, type IconName } from '@/ui/icon'
 import { Collapse, motion, tween } from '@/ui/motion'
+import { useT, type T } from '@/i18n'
 import { ResolvedCheck, useSend, type Respond } from './actionBlocks'
 import { AgentMark, type Ev } from './events'
 import { fileEntry, parsePlan, storied, stressed, structured, subtasksOf, type PlanSection } from './planDoc'
@@ -27,11 +28,16 @@ function Md({ text, className }: { text: string; className?: string }) {
 
 const sectionIcon: Record<PlanSection['kind'], IconName> = { story: 'user', criteria: 'checkCircle', subtasks: 'list', context: 'info', steps: 'list', files: 'file', risks: 'alert', checks: 'checkCircle', other: 'document' }
 
+function headingOf(section: PlanSection, t: T): string {
+  return section.kind === 'other' ? section.heading : t(`plan.kind_${section.kind}`)
+}
+
 function Heading({ section }: { section: PlanSection }) {
+  const t = useT()
   return (
     <p className="mb-2.5 flex items-center gap-2 text-base font-semibold text-fg">
       <Icon name={sectionIcon[section.kind]} size={16} className="text-muted" />
-      {section.heading}
+      {headingOf(section, t)}
     </p>
   )
 }
@@ -123,17 +129,19 @@ function PlanBody({ text }: { text: string }) {
   )
 }
 
-const titleOf = (text: string) => parsePlan(text).title ?? 'Plano de entrega'
+const titleOf = (text: string, t: T) => parsePlan(text).title ?? t('plan.defaultTitle')
 
-const statusOf = { pending: ['Aguardando você', 'bg-info-soft text-info-fg'], approved: ['Aprovado', 'bg-success-soft text-success-fg'], revised: ['Refeito', 'bg-subtle text-muted'] } as const
+const statusTone = { pending: 'bg-info-soft text-info-fg', approved: 'bg-success-soft text-success-fg', revised: 'bg-subtle text-muted' } as const
 
 function Header({ event }: { event: Ev<'plan'> }) {
-  const [label, tone] = statusOf[event.resolution]
+  const t = useT()
+  const label = t(`plan.status_${event.resolution}`)
+  const tone = statusTone[event.resolution]
   return (
     <div className="flex items-center gap-3 border-b px-5 py-4">
       <AgentMark size={20} agent={event.agent} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-lg font-medium tracking-tightish text-fg">{titleOf(event.text)}</p>
+        <p className="truncate text-lg font-medium tracking-tightish text-fg">{titleOf(event.text, t)}</p>
       </div>
       <span className={cn('shrink-0 rounded-full px-2.5 py-1 text-sm font-medium', tone)}>{label}</span>
     </div>
@@ -141,6 +149,7 @@ function Header({ event }: { event: Ev<'plan'> }) {
 }
 
 function Decide({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: boolean; respond: Respond }) {
+  const t = useT()
   const target = useContext(PlanTarget)
   const { busy, error, send } = useSend(respond)
   const [revising, setRevising] = useState(false)
@@ -151,12 +160,12 @@ function Decide({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: bo
     const timer = setTimeout(() => box.current?.scrollIntoView({ behavior: 'smooth', block: 'end' }), 250)
     return () => clearTimeout(timer)
   }, [revising])
-  const approve: ReactNode = target ? <>Criar no {target.name}</> : 'Aprovar plano'
+  const approve: ReactNode = target ? t('plan.createIn', { name: target.name }) : t('plan.approve')
   const icon = target?.logo ? <ProviderLogo logo={target.logo} name={target.name} size={15} /> : <Icon name="check" size={15} />
   return (
     <div ref={box} className="border-t bg-subtle px-5 py-4">
       <Collapse open={revising}>
-        <Textarea rows={3} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder="O que precisa mudar no plano?" className="mb-3 bg-surface" />
+        <Textarea rows={3} value={feedback} onChange={(e) => setFeedback(e.target.value)} placeholder={t('plan.feedbackPlaceholder')} className="mb-3 bg-surface" />
       </Collapse>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
         {error ? (
@@ -166,18 +175,18 @@ function Decide({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: bo
           </p>
         ) : (
           <p className="min-w-0 flex-1 text-md text-muted">
-            {revising ? 'O planejador refaz o plano com o que você pedir.' : target ? null : 'O desenvolvimento só começa depois que você aprovar.'}
+            {revising ? t('plan.revisingHint') : target ? null : t('plan.approveHint')}
           </p>
         )}
         <div className="flex shrink-0 gap-2">
           {revising ? (
             <>
-              <Button size="sm" variant="ghost" onClick={() => setRevising(false)}>Cancelar</Button>
-              <Button size="sm" variant="primary" disabled={readOnly || busy || !feedback.trim()} onClick={() => send(event.id, { kind: 'plan', decision: 'revise', feedback: feedback.trim() })}>Enviar ajustes</Button>
+              <Button size="sm" variant="ghost" onClick={() => setRevising(false)}>{t('plan.cancel')}</Button>
+              <Button size="sm" variant="primary" disabled={readOnly || busy || !feedback.trim()} onClick={() => send(event.id, { kind: 'plan', decision: 'revise', feedback: feedback.trim() })}>{t('plan.sendChanges')}</Button>
             </>
           ) : (
             <>
-              <Button size="sm" disabled={readOnly || busy} onClick={() => setRevising(true)}>Pedir mudanças</Button>
+              <Button size="sm" disabled={readOnly || busy} onClick={() => setRevising(true)}>{t('plan.requestChanges')}</Button>
               <Button size="sm" variant="primary" icon={icon} loading={busy} disabled={readOnly} onClick={() => send(event.id, { kind: 'plan', decision: 'approve' })}>{approve}</Button>
             </>
           )}
@@ -188,6 +197,7 @@ function Decide({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: bo
 }
 
 export function PlanBlock({ event, readOnly, respond }: { event: Ev<'plan'>; readOnly?: boolean; respond: Respond }) {
+  const t = useT()
   return (
     <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={tween} className={cn('overflow-hidden rounded-card bg-surface shadow-card', event.resolution === 'revised' && 'opacity-60')}>
       <Header event={event} />
@@ -197,7 +207,7 @@ export function PlanBlock({ event, readOnly, respond }: { event: Ev<'plan'>; rea
       ) : (
         <p className="flex items-center gap-2 border-t px-5 py-3 text-md text-muted">
           <ResolvedCheck tone={event.resolution === 'approved' ? 'success' : 'danger'} />
-          {event.resolution === 'approved' ? 'Plano aprovado' : `Mudanças pedidas${event.feedback ? `: ${event.feedback}` : ''}`}
+          {event.resolution === 'approved' ? t('plan.approved') : event.feedback ? t('plan.changesRequestedWith', { feedback: event.feedback }) : t('plan.changesRequested')}
         </p>
       )}
     </motion.div>

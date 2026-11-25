@@ -1,4 +1,4 @@
-use domain::{Decision, PermissionMode};
+use domain::Decision;
 use serde_json::json;
 
 use crate::models::{Held, call, no_findings, says};
@@ -9,11 +9,11 @@ fn a_message_steered_during_a_tool_call_is_delivered_with_its_results_and_cannot
     let stage = Stage::new();
     let (model, gate) = Held::before_turn(
         1,
-        [call("w1", "Write", json!({"file_path": "out.txt", "content": "written\n"})), says("Written."), no_findings()],
+        [call("w1", "Bash", json!({"command": "printf 'written\\n' > out.txt"})), says("Written."), no_findings()],
     );
     stage.model(model);
     let mut request = stage.request("Write the file");
-    request.policy.permission = PermissionMode::Ask;
+    request.policy.reviewer = domain::Reviewer::Human;
 
     let mut run = stage.start(&request);
     let ask = run.asked();
@@ -30,30 +30,24 @@ fn a_message_steered_during_a_tool_call_is_delivered_with_its_results_and_cannot
         SessionStarted <session-1>
         Checkpoint(0)
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
-        ToolStarted w1 Write "out.txt" input="{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
-        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true }
+        ToolStarted w1 Bash "printf 'written\\n' > out.txt" input="{\"command\":\"printf 'written\\\\n' > out.txt\"}"
+        Asked ask-<uuid>-w1 Permission { tool: "Bash", subject: "printf 'written\\n' > out.txt", rememberable: true }
         Answered ask-<uuid>-w1 Allow
-        Edited(Edited { path: "<project>/out.txt", line: 1, removed: 0, added: 1 })
         ToolFinished w1
-        ToolResult w1 ok "Created out.txt · Wrote 1 lines\n    1 + written"
+        ToolResult w1 ok "(no output)"
         Steered("Also add tests")
         Unsteered([])
         Text "Written."
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
-        AgentSpawned #0 kind=review summary="Reviewing the changes" prompt="# Task\nWrite the file\n\n# Changed files\n- out.txt"
-        AgentUpdate #0 Running(0) summary=None
-        Agent #0 | Usage model=claude-opus-5-5 input=10 output=5 cost=none
-        AgentUpdate #0 Done(<seconds>) summary=Some("0 findings")
-        Reviewed([])
         Completed duration=<ms> cost=none
         == prompt: conversation ==
         user:
           text "Write the file"
-          reminder "# Runtime reminder\nCollect background agent reports before completing. Use TaskStop to cancel an unnecessary task."
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
-          tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
+          tool_use w1 Bash "{\"command\":\"printf 'written\\\\n' > out.txt\"}"
         user:
-          tool_result w1 ok "Created out.txt (1 lines)."
+          tool_result w1 ok "(no output)"
           text "The user sent this message while you were working:\nAlso add tests"
         assistant:
           text "Written."
@@ -69,7 +63,6 @@ fn a_message_steered_during_a_tool_call_is_delivered_with_its_results_and_cannot
         event ToolStarted w1
         event Asked
         event Answered
-        event Edited
         event ToolFinished w1
         event ToolResult w1
         event Steered
@@ -79,12 +72,6 @@ fn a_message_steered_during_a_tool_call_is_delivered_with_its_results_and_cannot
         called model=claude-opus-5-5 stop=EndTurn messages=3
         event Usage
         message assistant
-        event AgentSpawned
-        event AgentUpdate
-        called model=claude-opus-5-5 stop=EndTurn messages=1 agent=#0
-        event Agent #0 | Usage
-        event AgentUpdate
-        event Reviewed
         event Completed
         "##,
     );
@@ -116,7 +103,7 @@ fn a_message_steered_while_the_model_answers_without_tools_is_delivered_before_t
         == prompt: conversation ==
         user:
           text "Write the file"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Done."
         user:

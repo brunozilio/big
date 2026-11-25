@@ -26,7 +26,7 @@ fn cancelling_while_the_model_streams_ends_in_cancelled_and_keeps_what_was_said_
         == prompt: conversation ==
         user:
           text "Tell me a story"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Partial ans"
           text "\n\n[interrupted by the user]"
@@ -44,11 +44,11 @@ fn cancelling_while_the_model_streams_ends_in_cancelled_and_keeps_what_was_said_
 }
 
 #[test]
-fn cancelling_while_an_edit_waits_for_permission_ends_in_cancelled_and_saves_the_unrun_call() {
+fn cancelling_while_a_command_waits_for_permission_ends_in_cancelled_and_saves_the_unrun_call() {
     let stage = Stage::new();
-    stage.script([call("w1", "Write", json!({"file_path": "out.txt", "content": "written\n"})), says("never asked")]);
+    stage.script([call("w1", "Bash", json!({"command": "printf 'written\\n' > out.txt"})), says("never asked")]);
     let mut request = stage.request("Write the file");
-    request.policy.permission = domain::PermissionMode::Ask;
+    request.policy.reviewer = domain::Reviewer::Human;
 
     let mut run = stage.start(&request);
     run.asked();
@@ -62,19 +62,19 @@ fn cancelling_while_an_edit_waits_for_permission_ends_in_cancelled_and_saves_the
         SessionStarted <session-1>
         Checkpoint(0)
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
-        ToolStarted w1 Write "out.txt" input="{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
-        Asked ask-<uuid>-w1 Permission { tool: "Write", subject: "out.txt", rememberable: true }
+        ToolStarted w1 Bash "printf 'written\\n' > out.txt" input="{\"command\":\"printf 'written\\\\n' > out.txt\"}"
+        Asked ask-<uuid>-w1 Permission { tool: "Bash", subject: "printf 'written\\n' > out.txt", rememberable: true }
         ToolFinished w1
-        ToolResult w1 failed "Not run: the run was stopped while waiting for the user's answer, so Write did not run and nothing was changed."
+        ToolResult w1 failed "Not run: the run was stopped while waiting for the user's answer, so Bash did not run and nothing was changed."
         Cancelled
         == prompt: conversation ==
         user:
           text "Write the file"
-          reminder "# Runtime reminder\nCollect background agent reports before completing. Use TaskStop to cancel an unnecessary task."
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
-          tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"out.txt\"}"
+          tool_use w1 Bash "{\"command\":\"printf 'written\\\\n' > out.txt\"}"
         user:
-          tool_result w1 failed "Not run: the run was stopped while waiting for the user's answer, so Write did not run and nothing was changed."
+          tool_result w1 failed "Not run: the run was stopped while waiting for the user's answer, so Bash did not run and nothing was changed."
         == prompt: log appended ==
         prompted "Write the file"
         event SessionStarted
@@ -102,7 +102,7 @@ fn cancelling_while_a_shell_command_runs_ends_in_cancelled_and_saves_the_stopped
     let stage = Stage::new();
     stage.script([call("b1", "Bash", json!({"command": "echo started; sleep 600"})), says("never asked")]);
     let mut request = stage.request("Wait a while");
-    request.policy.permission = domain::PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
 
     let mut run = stage.start(&request);
     run.until(|event| matches!(event, EngineEvent::ToolProgress { line, .. } if line.contains("started")));
@@ -123,7 +123,7 @@ fn cancelling_while_a_shell_command_runs_ends_in_cancelled_and_saves_the_stopped
         == prompt: conversation ==
         user:
           text "Wait a while"
-          reminder "# Runtime reminder\nThe user enabled autonomous execution. Stay within the authorized task and verify the result.\nCollect background agent reports before completing. U…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use b1 Bash "{\"command\":\"echo started; sleep 600\"}"
         user:

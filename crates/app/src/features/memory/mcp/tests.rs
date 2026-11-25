@@ -68,6 +68,7 @@ fn remembered(texts: &[&str]) -> Memories {
             text: (*text).into(),
             tags: vec![],
             touches: vec![],
+            scope: Default::default(),
         })
         .collect();
     memories.edit(std::path::Path::new("/repo"), &edits, by).expect("edit");
@@ -99,6 +100,7 @@ fn a_run_searches_only_its_own_project_s_memory() {
         text: "Run clippy before committing".into(),
         tags: vec![],
         touches: vec![],
+        scope: Default::default(),
     };
     memories.edit(std::path::Path::new("/repo"), &[edit], by).expect("edit");
     let call = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": MEMORY_SEARCH_TOOL, "arguments": { "query": "clippy" } } });

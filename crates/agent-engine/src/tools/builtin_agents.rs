@@ -97,7 +97,7 @@ mod tests {
         let named = |name: &str| shipped().into_iter().find(|agent| agent.name == name).expect(name);
         for (name, label, shape, color, mode) in [
             ("planner", "Planner", "triangle", "#e94b9b", PermissionMode::Plan),
-            ("developer", "Developer", "squircle", "#3b82f6", PermissionMode::Bypass),
+            ("developer", "Developer", "squircle", "#3b82f6", PermissionMode::Auto),
             ("reviewer", "Reviewer", "circle", "#4fb39c", PermissionMode::Plan),
             ("release", "Release", "cloud", "#f0a235", PermissionMode::Plan),
         ] {

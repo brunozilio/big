@@ -72,7 +72,7 @@ function DeliveryPage() {
   const [fresh, setFresh] = useState<string | null>(null)
   const t = useT()
   const settings = location.pathname.startsWith('/settings')
-  const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'browser' || params.tab === 'permissions' || params.tab === 'applications' || params.tab === 'usage' ? params.tab : 'connections'
+  const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'browser' || params.tab === 'permissions' || params.tab === 'memory' || params.tab === 'applications' || params.tab === 'usage' ? params.tab : 'connections'
   const connecting = search.get('connect')
   const items = useStore((s) => s.items)
   const openId = params.id ?? null
@@ -112,7 +112,7 @@ function DeliveryPage() {
               <NewItem onCreated={(it) => {
                 setFresh(it.id)
                 setTimeout(() => setFresh(null), 1600)
-              }} />
+              }} onAsked={(it) => openItem(it.id, it.current ?? undefined)} />
               <ItemsView fresh={fresh} onOpen={(it, step) => openItem(it.id, step)} onConnect={goConnect} />
             </>
           )}

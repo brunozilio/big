@@ -21,7 +21,7 @@ fn each_role_has_a_name_it_is_typed_and_saved_under() {
 fn planning_turns_use_the_plan_model_and_the_rest_use_the_session_model() {
     let set = roles(&[(ModelRole::Plan, "claude:opus")]);
     assert_eq!(set.for_turn("grok:grok-4", PermissionMode::Plan), "claude:opus");
-    assert_eq!(set.for_turn("grok:grok-4", PermissionMode::AcceptEdits), "grok:grok-4");
+    assert_eq!(set.for_turn("grok:grok-4", PermissionMode::Auto), "grok:grok-4");
     assert_eq!(ModelRoles::default().for_turn("grok:grok-4", PermissionMode::Plan), "grok:grok-4");
 }
 

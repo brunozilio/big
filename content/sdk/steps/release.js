@@ -97,7 +97,7 @@ async function narrate(ctx, opts, runs, failed) {
     merged.sha ? `Published commit: ${merged.sha}` : null,
     `Pipelines:\n${described(runs)}`,
   ].filter(Boolean).join("\n\n");
-  const input = defined({ prompt: inLanguage(prompt), prs, runs: runs.map((run) => run.run), failed: Boolean(failed) });
+  const input = defined({ prompt: inLanguage(ctx, prompt), prs, runs: runs.map((run) => run.run), failed: Boolean(failed) });
   const result = await ctx.agent(opts.agent, input, agentOptions(opts, { mode: opts.mode ?? "plan" }));
   const output = object(result.output);
   return defined({ session: result.session, notes: output.notes ?? output.summary ?? result.text ?? null });
@@ -119,7 +119,7 @@ export default step({
   name: "release",
   label: "Release",
   icon: "sRelease",
-  needs: "pipelines",
+  requires: "pipelines",
   doing: "Deploy",
   view: shown,
   async run(ctx, opts) {

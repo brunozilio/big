@@ -3,12 +3,21 @@
     "since": "2026-01-01T00:00:00Z",
     "text": "Aprovação"
   },
+  "archivedAt": null,
   "attention": {
     "action": {
       "label": "Abrir",
+      "said": {
+        "key": "open",
+        "vars": {}
+      },
       "step": "approve"
     },
     "badge": {
+      "said": {
+        "key": "waiting_you",
+        "vars": {}
+      },
       "text": "Esperando você",
       "tone": "info"
     },
@@ -49,6 +58,7 @@
     }
   ],
   "title": "Corrigir o login",
+  "untitled": false,
   "updatedAt": "2026-01-01T00:00:00Z",
   "workflow": "default"
 }

@@ -10,6 +10,7 @@ pub(super) fn remember(kind: MemoryKind, text: &str, tags: &[&str]) -> MemoryEdi
         text: text.into(),
         tags: tags.iter().map(|t| (*t).to_owned()).collect(),
         touches: Vec::new(),
+        scope: Default::default(),
     }
 }
 

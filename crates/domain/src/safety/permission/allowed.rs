@@ -26,7 +26,9 @@ impl Grant {
 }
 
 fn tool_named(tool: &str) -> bool {
-    let word = |part: &str| !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'));
+    let word = |part: &str| {
+        !part.is_empty() && part.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+    };
     match tool.strip_prefix("mcp__").map(|rest| rest.split_once("__")) {
         Some(Some((server, name))) => word(server) && (name == "*" || word(name.strip_suffix('*').unwrap_or(name))),
         Some(None) => false,
@@ -128,7 +130,11 @@ impl Allowed {
             return changed;
         }
         let rule = Rule { grant, behavior: rule.behavior };
-        if first { self.rules.insert(0, rule) } else { self.rules.push(rule) }
+        if first {
+            self.rules.insert(0, rule)
+        } else {
+            self.rules.push(rule)
+        }
         true
     }
 
@@ -272,11 +278,46 @@ fn writes_a_file(redirection: &crate::shell::Redirection) -> bool {
 }
 
 const DEFAULT_COMMANDS: &[&str] = &[
-    "ls", "pwd", "cat", "head", "tail", "wc", "grep", "rg", "tree", "which", "file", "stat", "du", "df", "sort",
-    "uniq", "diff", "echo", "date", "uname", "whoami", "git status", "git diff", "git log", "git show",
-    "git rev-parse", "git blame", "git ls-files", "cargo check", "cargo build",
-    "cargo test", "cargo nextest", "cargo clippy", "cargo fmt", "cargo tree", "cargo metadata", "bun test",
-    "npm test", "node --version", "python3 --version",
+    "ls",
+    "pwd",
+    "cat",
+    "head",
+    "tail",
+    "wc",
+    "grep",
+    "rg",
+    "tree",
+    "which",
+    "file",
+    "stat",
+    "du",
+    "df",
+    "sort",
+    "uniq",
+    "diff",
+    "echo",
+    "date",
+    "uname",
+    "whoami",
+    "git status",
+    "git diff",
+    "git log",
+    "git show",
+    "git rev-parse",
+    "git blame",
+    "git ls-files",
+    "cargo check",
+    "cargo build",
+    "cargo test",
+    "cargo nextest",
+    "cargo clippy",
+    "cargo fmt",
+    "cargo tree",
+    "cargo metadata",
+    "bun test",
+    "npm test",
+    "node --version",
+    "python3 --version",
 ];
 
 pub fn defaults() -> Vec<Grant> {

@@ -16,7 +16,7 @@ use agent_engine::model::{BoxFuture, CancellationToken, ModelApi, ModelError, On
 use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
 use agent_engine::{AgentEngine, ApiSource, Engine, RunHandle};
-use domain::{EngineEvent, ModelOption, PermissionMode, PromptRequest, RunId};
+use domain::{EngineEvent, ModelOption, PromptRequest, RunId};
 use serde_json::json;
 
 const PATIENCE: Duration = Duration::from_secs(20);
@@ -57,7 +57,7 @@ impl Project {
 
     fn request(&self) -> PromptRequest {
         let mut request = PromptRequest::plain(self.repo.path().into(), "go", ModelOption::new("m", "M"));
-        request.policy.permission = PermissionMode::Bypass;
+        request.policy.reviewer = domain::Reviewer::Nobody;
         request.host.extensions =
             Some(domain::Extensions { home: Some(self.home.path().into()), ..Default::default() });
         request
@@ -414,10 +414,10 @@ fn threads_during_a_run_with_three_mcp_servers_and_a_background_agent() {
 fn cancelling_a_run_waiting_for_the_user_s_answer_ends_it_at_once() {
     let project = Project::new();
     let mut request = project.request();
-    request.policy.permission = PermissionMode::Ask;
-    let input = json!({"file_path": project.repo.path().join("asked.txt"), "content": "x"});
+    request.policy.reviewer = domain::Reviewer::Human;
+    let input = json!({"command": format!("touch {}", project.repo.path().join("asked.txt").display())});
     let model: Arc<dyn ModelApi> = Arc::new(ScriptedModel::new([
-        ScriptedModel::reply(vec![Block::ToolUse { id: "w1".into(), name: "Write".into(), input }]),
+        ScriptedModel::reply(vec![Block::ToolUse { id: "w1".into(), name: "Bash".into(), input }]),
         ScriptedModel::reply(vec![Block::Text("done".into())]),
     ]));
     let engine = Engine::new(Arc::new(One(model)), Arc::new(InMemorySessions::default()));

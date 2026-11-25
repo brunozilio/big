@@ -1,4 +1,5 @@
-use domain::{Forgotten, MemoryKind, ModelOption};
+use domain::memory::{MemorySearches, SearchAnswer};
+use domain::{Forgotten, MemoryKind, ModelOption, RecallBudget};
 
 use super::*;
 use crate::dirs::project_key;
@@ -21,7 +22,13 @@ fn request(cwd: &Path) -> PromptRequest {
 }
 
 fn remember(text: &str) -> MemoryEdit {
-    MemoryEdit::Remember { kind: MemoryKind::Semantic, text: text.into(), tags: vec!["render".into()], touches: vec![] }
+    MemoryEdit::Remember {
+        kind: MemoryKind::Semantic,
+        text: text.into(),
+        tags: vec!["render".into()],
+        touches: vec![],
+        scope: Default::default(),
+    }
 }
 
 fn by_user() -> Provenance {
@@ -52,7 +59,7 @@ fn every_twentieth_request_goes_without_memory_and_the_score_compares_both() {
         memories.finish(&briefed, &outcome);
     }
     assert_eq!(held, [20]);
-    let report = memories.store.load(dir.path()).scorecard.report();
+    let report = memories.store.load(&crate::dirs::memory_key(dir.path())).scorecard.report();
     assert!(report.contains("With memory: 19 runs, 0.0 corrections"), "{report}");
     assert!(report.contains("Without memory: 1 runs, 100.0 corrections"), "{report}");
 }
@@ -126,6 +133,7 @@ fn what_an_agent_is_given_counts_as_used() {
         text: "Inter is the font".into(),
         tags: vec![],
         touches: vec![],
+        scope: Default::default(),
     };
     memories.edit(dir.path(), &[remember("The renderer uses wgpu"), font], by_user()).expect("edit");
     let uses = || listed(&memories.load(dir.path())).iter().map(|m| m.uses).collect::<Vec<_>>();

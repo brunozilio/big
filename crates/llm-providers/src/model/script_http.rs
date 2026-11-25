@@ -45,10 +45,9 @@ impl Asked {
 
 pub fn pairs(value: Option<&Value>) -> Vec<(String, String)> {
     match value {
-        Some(Value::Object(fields)) => fields
-            .iter()
-            .filter_map(|(name, value)| Some((name.clone(), value.as_str()?.to_owned())))
-            .collect(),
+        Some(Value::Object(fields)) => {
+            fields.iter().filter_map(|(name, value)| Some((name.clone(), value.as_str()?.to_owned()))).collect()
+        }
         Some(Value::Array(pairs)) => pairs
             .iter()
             .filter_map(|pair| Some((pair.get(0)?.as_str()?.to_owned(), pair.get(1)?.as_str()?.to_owned())))

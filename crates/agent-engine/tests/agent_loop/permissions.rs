@@ -2,14 +2,14 @@ use std::sync::Arc;
 
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::{AskKind, Decision, EngineEvent, PermissionMode};
+use domain::{AskKind, Decision, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, tool_use};
 
 #[test]
 fn asks_before_commands_and_honours_the_answer() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("b1", "Bash", json!({"command": "echo hi > out.txt"}))]),
         ScriptedModel::reply(vec![Block::Text("Ok.".into())]),
@@ -55,7 +55,7 @@ fn asks_before_commands_and_honours_the_answer() {
 
 #[test]
 fn reading_outside_the_project_is_asked_for_by_path_and_a_denial_keeps_it_unread() {
-    let rig = Rig::new(PermissionMode::Plan);
+    let rig = Rig::planning();
     let elsewhere = tempfile::tempdir().expect("dir");
     let secret = elsewhere.path().join("id_ed25519");
     std::fs::write(&secret, "PRIVATE KEY").expect("write");
@@ -111,7 +111,7 @@ fn reading_outside_the_project_is_asked_for_by_path_and_a_denial_keeps_it_unread
 
 #[test]
 fn plan_mode_refuses_edits_without_asking() {
-    let rig = Rig::new(PermissionMode::Plan);
+    let rig = Rig::planning();
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("w", "Write", json!({"file_path": "new.txt", "content": "x"}))]),
         ScriptedModel::reply(vec![Block::Text("Plan: …".into())]),
@@ -123,7 +123,7 @@ fn plan_mode_refuses_edits_without_asking() {
 
 #[test]
 fn asks_the_user_questions_on_the_card_even_while_planning() {
-    let rig = Rig::new(PermissionMode::Plan);
+    let rig = Rig::planning();
     let question = json!({ "questions": [{
         "question": "Which database?", "header": "Database", "multiSelect": false,
         "options": [{ "label": "SQLite", "description": "One file." }, { "label": "Postgres", "description": "A server." }],

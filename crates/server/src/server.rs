@@ -40,6 +40,8 @@ pub fn app(backend: Backend, bundle: &'static [page::Asset], port: u16) -> (Rout
         port,
         callbacks: Mutex::new(std::collections::HashSet::new()),
         bundle,
+        discovery: Mutex::default(),
+        usage: Mutex::default(),
     });
     let weak = Arc::downgrade(&ctx);
     ctx.backend.orchestrator.watch(Arc::new(move |session, event| {

@@ -24,11 +24,6 @@ type Answer =
   | { kept: true; note?: string }
   | { stopped: true };
 
-const ALLOWED: Record<string, string> = {
-  acceptedits: "edits run freely, commands ask first",
-  bypass: "nothing asks first",
-};
-
 export function effects(_input: Input | null) {
   return [];
 }
@@ -82,6 +77,5 @@ export function execute(input: Input, ctx) {
   if ("kept" in answer) {
     return kept(answer.note);
   }
-  const allowed = ALLOWED[answer.approved] ?? "edits and commands ask the user first";
-  return `The user approved your plan and planning is over (${allowed}). Start implementing it now, following the plan. Track the steps with the task tools if there are several.`;
+  return `The user approved your plan and planning is over. Start implementing it now, following the plan. Track the steps with the task tools if there are several.`;
 }

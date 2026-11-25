@@ -91,7 +91,7 @@ fn replay_with_snapshots_equals_replay_without() {
 #[test]
 fn a_rewind_is_replayed_the_same_from_a_snapshot() {
     let mut events = story("a", 4);
-    events.push(WorkflowEvent::Rewound { to: "step-1".into() });
+    events.push(WorkflowEvent::Rewound { to: "step-1".into(), at: None });
     events.push(WorkflowEvent::StepStarted { step: "step-1".into(), branch: None });
     let with = Store::in_memory(3).expect("the store answers");
     let id = ItemId::from("a");

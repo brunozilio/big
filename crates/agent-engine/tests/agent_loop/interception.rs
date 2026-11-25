@@ -4,7 +4,7 @@ use agent_engine::model::ModelError;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message, Role};
 use domain::interception::MAX_REJECTIONS;
-use domain::{Effort, EngineEvent, PermissionMode};
+use domain::{Effort, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -39,7 +39,7 @@ fn shown_text(rig: &Rig) -> String {
 #[cfg(unix)]
 #[test]
 fn a_model_request_hook_adds_to_the_system_prompt_and_sets_the_effort() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     let output = json!({"hookSpecificOutput": {"additionalContext": "Answer in Portuguese.", "effort": "low"}});
     rig.workspace.hooks = answering("ModelRequest", output);
     let model = ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Feito.".into())])]);
@@ -54,7 +54,7 @@ fn a_model_request_hook_adds_to_the_system_prompt_and_sets_the_effort() {
 #[cfg(unix)]
 #[test]
 fn a_model_request_hook_may_block_the_call() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.hooks = answering("ModelRequest", json!({"decision": "block", "reason": "no calls after 6pm"}));
     let model = ScriptedModel::new([]);
     let ending = rig.run(&model, &mut vec![Message::user("hi")]);
@@ -68,7 +68,7 @@ fn a_model_request_hook_may_block_the_call() {
 #[cfg(unix)]
 #[test]
 fn a_model_response_hook_sees_the_reply_and_rewrites_its_text_before_it_is_shown() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.hooks = answering("ModelResponse", json!({"hookSpecificOutput": {"text": "The key is [redacted]."}}));
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![
@@ -92,7 +92,7 @@ fn a_model_response_hook_sees_the_reply_and_rewrites_its_text_before_it_is_shown
 
 #[test]
 fn a_model_response_hook_may_reject_a_reply_so_the_model_answers_again() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.hooks = script(
         &rig,
         r#"export const event = "ModelResponse";
@@ -116,7 +116,7 @@ export default (input) => input.rejections === 0 ? { decision: "block", reason: 
 
 #[test]
 fn a_reply_rejected_too_often_ends_the_run() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.hooks = script(
         &rig,
         r#"export const event = "ModelResponse";
@@ -134,7 +134,7 @@ export default () => ({ decision: "block", reason: "never good" });"#,
 
 #[test]
 fn without_a_response_hook_text_streams_as_it_comes() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Hello.".into())])]);
     rig.run(&model, &mut vec![Message::user("hi")]).expect("run");
     assert_eq!(shown_text(&rig), "Hello.");

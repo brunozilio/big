@@ -90,6 +90,8 @@ pub enum MemoryEdit {
         tags: Vec<String>,
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         touches: Vec<String>,
+        #[serde(default, skip_serializing_if = "MemoryScope::is_repository")]
+        scope: MemoryScope,
     },
     Forget {
         id: MemoryId,
@@ -137,7 +139,7 @@ impl MemoryBook {
         let mut touched = Vec::new();
         for edit in edits {
             match edit {
-                MemoryEdit::Remember { kind, text, tags, touches } => {
+                MemoryEdit::Remember { kind, text, tags, touches, .. } => {
                     let Some(text) = clean_text(text) else { continue };
                     let touches = anchors::clean(touches);
                     if let Some(same) = self.memories.iter_mut().find(|m| m.kind == *kind && same_text(&m.text, &text))
@@ -201,6 +203,18 @@ impl MemoryBook {
         touched
     }
 
+    pub fn take(&mut self, id: MemoryId) -> Option<Memory> {
+        let at = self.memories.iter().position(|m| m.id == id)?;
+        Some(self.memories.remove(at))
+    }
+
+    pub fn adopt(&mut self, memory: Memory) -> MemoryId {
+        let id = MemoryId(self.next.max(self.after_highest()));
+        self.next = id.0 + 1;
+        self.memories.push(Memory { id, ..memory });
+        id
+    }
+
     pub fn mark_used(&mut self, ids: &[MemoryId], now: i64) {
         for memory in self.memories.iter_mut().filter(|m| ids.contains(&m.id)) {
             memory.uses = memory.uses.saturating_add(1);
@@ -247,6 +261,7 @@ pub mod decision_note;
 mod optimize;
 mod recall;
 mod sanitize;
+mod scope;
 pub mod scorecard;
 pub mod search;
 mod searches;
@@ -257,6 +272,7 @@ pub use brief::{MEMORY_SEARCH_TOOL, MEMORY_SERVER, MemoryBrief, parse_memory_edi
 pub use optimize::optimize_prompt;
 pub use recall::{RecallBudget, links, recall};
 pub use sanitize::{REDACTED, Sanitized, sanitize};
+pub use scope::MemoryScope;
 pub use search::search;
 pub use searches::{MemorySearches, SearchAnswer};
 

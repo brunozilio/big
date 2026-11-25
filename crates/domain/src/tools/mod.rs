@@ -1,4 +1,5 @@
 pub mod agents;
+pub mod artifact;
 pub mod brief_edits;
 pub mod browser_sites;
 pub mod channel_relay;

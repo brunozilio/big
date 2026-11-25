@@ -1,6 +1,7 @@
 mod ask;
 pub(in crate::agent) mod plan_mode;
 mod policy;
+mod review;
 
 use domain::EngineEvent;
 use domain::permission::{Effect, Judgement, Reason, RuleKind, Verdict};
@@ -8,6 +9,7 @@ use serde_json::{Value, json};
 
 use super::Agent;
 use crate::tools::{Outcome, Tool};
+use crate::transcript::Message;
 
 pub(in crate::agent) use policy::Called;
 
@@ -17,43 +19,38 @@ pub(in crate::agent) struct Asking<'r> {
     pub(in crate::agent) called: &'r Called<'r>,
     pub(in crate::agent) judgement: &'r Judgement,
     shown: Option<&'r str>,
+    parent: &'r [Message],
 }
 
 impl Asking<'_> {
-    fn shown(&self) -> String {
-        match &self.judgement.guarded {
+    fn shown(&self, reason: &Reason) -> String {
+        let subject = match &self.judgement.guarded {
             Some((path, guard)) => format!("{}\n{}", guard.why(), path.display()),
             None => self.shown.unwrap_or(&self.judgement.subject).to_owned(),
+        };
+        match reason {
+            Reason::Flagged(why) => format!("{why}\n{subject}"),
+            _ => subject,
         }
     }
 }
 
-impl Agent<'_> {
-    pub(in crate::agent) fn permitted(
-        &self,
-        id: &str,
-        tool: &dyn Tool,
-        subject: &str,
-        input: &Value,
-        hook_permission: Option<RuleKind>,
-    ) -> Outcome {
-        self.permitted_as(id, tool, subject, None, input, hook_permission)
-    }
+pub(in crate::agent) struct Permitting<'r> {
+    pub(in crate::agent) id: &'r str,
+    pub(in crate::agent) subject: &'r str,
+    pub(in crate::agent) shown: Option<&'r str>,
+    pub(in crate::agent) parent: &'r [Message],
+    pub(in crate::agent) hook_permission: Option<RuleKind>,
+}
 
-    pub(in crate::agent) fn permitted_as(
-        &self,
-        id: &str,
-        tool: &dyn Tool,
-        subject: &str,
-        shown: Option<&str>,
-        input: &Value,
-        hook_permission: Option<RuleKind>,
-    ) -> Outcome {
+impl Agent<'_> {
+    pub(in crate::agent) fn permitted(&self, permitting: &Permitting<'_>, tool: &dyn Tool, input: &Value) -> Outcome {
+        let Permitting { id, subject, shown, parent, hook_permission } = *permitting;
         let name = tool.spec().name;
         let effects = tool.effects(input, self.workspace);
         let called = Called { name: &name, subject, input, effects: &effects };
         let judgement = self.judged(&called);
-        let asking = Asking { id, tool, called: &called, judgement: &judgement, shown };
+        let asking = Asking { id, tool, called: &called, judgement: &judgement, shown, parent };
         self.decided(&asking, hook_permission)
     }
 
@@ -100,11 +97,12 @@ impl Agent<'_> {
     fn carried_out(&self, asking: &Asking<'_>, verdict: Verdict) -> Outcome {
         let Asking { id, tool, called, .. } = *asking;
         let Called { name, input, .. } = *called;
+        let verdict = self.screened(asking, verdict);
         let verdict = if self.control.no_prompts() { verdict.without_the_user(name) } else { verdict };
         match verdict {
             Verdict::Allow => self.went_ahead(id, tool, input),
             Verdict::Deny(reason) => self.refused(name, reason),
-            Verdict::Ask { rememberable, .. } => self.ask_permission(asking, &asking.shown(), rememberable),
+            Verdict::Ask { rememberable, reason } => self.ask_permission(asking, &asking.shown(&reason), rememberable),
         }
     }
 

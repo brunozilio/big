@@ -1,6 +1,6 @@
 use jiff::Timestamp;
-use serde::{Deserialize, Serialize};
 use platform::crypto::sigv4;
+use serde::{Deserialize, Serialize};
 
 use crate::error::ActionError;
 use crate::http::{Http, HttpRequest, fetch};
@@ -53,9 +53,9 @@ pub fn signed_identity_request(keys: &Keys, region: &str, now: Timestamp) -> Htt
         session_token: keys.session_token.clone(),
     };
     let added = sigv4::sign(&signing, &signer).unwrap_or_default();
-    added
-        .into_iter()
-        .fold(HttpRequest::post(url).body(FORM, BODY.as_bytes().to_vec()), |request, (name, value)| request.header(&name, value))
+    added.into_iter().fold(HttpRequest::post(url).body(FORM, BODY.as_bytes().to_vec()), |request, (name, value)| {
+        request.header(&name, value)
+    })
 }
 
 fn element(xml: &str, name: &str) -> String {

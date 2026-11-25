@@ -3,14 +3,14 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::model::{ModelError, TurnRequest};
 use agent_engine::tools::Workspace;
 use agent_engine::transcript::{Block, Message};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::json;
 
 use crate::{Rig, request, tool_use};
 
 #[test]
 fn an_empty_reply_is_asked_for_once_more() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model =
         ScriptedModel::new([ScriptedModel::reply(vec![]), ScriptedModel::reply(vec![Block::Text("Done.".into())])]);
     let mut history = vec![Message::user("Say done")];
@@ -22,7 +22,7 @@ fn an_empty_reply_is_asked_for_once_more() {
 
 #[test]
 fn a_reply_that_stays_empty_ends_the_turn_after_one_retry() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([ScriptedModel::reply(vec![]), ScriptedModel::reply(vec![])]);
     rig.run(&model, &mut vec![Message::user("Say done")]).expect("run");
     assert_eq!(model.asked().len(), 2);
@@ -30,7 +30,7 @@ fn a_reply_that_stays_empty_ends_the_turn_after_one_retry() {
 
 #[test]
 fn reads_edits_and_answers() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![
             Block::Text("Reading.".into()),
@@ -67,7 +67,7 @@ fn reads_edits_and_answers() {
 
 #[test]
 fn mixed_calls_run_reads_together_and_keep_their_order() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![
             tool_use("r1", "Read", json!({"file_path": "notes.txt"})),
@@ -97,7 +97,7 @@ fn mixed_calls_run_reads_together_and_keep_their_order() {
 
 #[test]
 fn an_overloaded_model_falls_back_once_for_the_rest_of_the_run() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.fallbacks = vec!["backup".into()];
     let model = ScriptedModel::new([
         Err(ModelError::Overloaded("529".into())),
@@ -112,7 +112,7 @@ fn an_overloaded_model_falls_back_once_for_the_rest_of_the_run() {
 
 #[test]
 fn an_overloaded_model_goes_down_the_fallback_chain() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.fallbacks = vec!["first".into(), "second".into()];
     let model = ScriptedModel::new([
         Err(ModelError::Overloaded("529".into())),
@@ -126,7 +126,7 @@ fn an_overloaded_model_goes_down_the_fallback_chain() {
 
 #[test]
 fn the_model_s_own_failures_end_the_run_without_a_hook() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.fallbacks = vec!["backup".into()];
     let model = ScriptedModel::new([Err(ModelError::Provider("bad request".into()))]);
     let ending = rig.run(&model, &mut vec![Message::user("go")]);
@@ -135,7 +135,7 @@ fn the_model_s_own_failures_end_the_run_without_a_hook() {
 
 #[test]
 fn an_unreachable_or_signed_out_model_falls_back_down_the_chain() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.fallbacks = vec!["backup".into(), "last".into()];
     let model = ScriptedModel::new([
         Err(ModelError::Network("down".into())),
@@ -149,7 +149,7 @@ fn an_unreachable_or_signed_out_model_falls_back_down_the_chain() {
 
 #[test]
 fn unknown_tools_and_provider_errors() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("x", "Teleport", json!({}))]),
         Err(ModelError::Unauthorized("bad key".into())),
@@ -165,7 +165,7 @@ fn unknown_tools_and_provider_errors() {
 
 #[test]
 fn a_cancelled_run_stops_before_calling_the_model() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     rig.control.cancel();
     let model = ScriptedModel::new([]);
     assert_eq!(rig.run(&model, &mut vec![Message::user("go")]), Err(Ending::Cancelled));
@@ -184,7 +184,7 @@ fn cut(blocks: Vec<Block>) -> Result<agent_engine::model::Reply, ModelError> {
 
 #[test]
 fn a_reply_cut_while_thinking_is_told_to_think_less() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let thinking = Block::Thinking { text: "long".into(), signature: None, origin: None };
     let model = ScriptedModel::new([cut(vec![thinking]), ScriptedModel::reply(vec![Block::Text("Done.".into())])]);
     rig.run(&model, &mut vec![Message::user("finish")]).expect("continued");
@@ -193,7 +193,7 @@ fn a_reply_cut_while_thinking_is_told_to_think_less() {
 
 #[test]
 fn continuations_after_the_output_limit_are_capped() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let part = || cut(vec![Block::Text("part ".into())]);
     let model = ScriptedModel::new([part(), part(), part(), part(), part()]);
     let ending = rig.run(&model, &mut vec![Message::user("finish")]).expect_err("gave up");
@@ -205,7 +205,7 @@ fn continuations_after_the_output_limit_are_capped() {
 fn output_token_limit_continues_without_reporting_a_truncated_success() {
     use agent_engine::model::Reply;
     use agent_engine::transcript::{StopReason, Usage};
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([
         Ok(Reply {
             message: Message::assistant(vec![Block::Text("First part. ".into())]),
@@ -257,7 +257,7 @@ fn independent_reads_overlap_and_results_keep_the_model_call_order() {
             Outcome::ok(input["file_path"].as_str().expect("path"))
         }
     }
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![
             tool_use("r1", "Read", json!({"file_path":"first"})),
@@ -287,7 +287,7 @@ fn independent_reads_overlap_and_results_keep_the_model_call_order() {
 
 #[test]
 fn a_rule_file_with_broken_frontmatter_is_skipped_and_the_turn_goes_on() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     let rules = rig.dir.path().join(concat!(brand::dir!(), "/rules"));
     std::fs::create_dir_all(&rules).expect("rules");
     std::fs::write(rules.join("broken.md"), "---\npaths: [unterminated\n---\nNever applied.").expect("rule");
@@ -310,7 +310,7 @@ fn done_many(times: usize) -> ScriptedModel {
 
 #[test]
 fn a_model_that_never_gives_the_structured_result_is_asked_three_times_then_the_run_fails() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     let model = done_many(10);
     let contract =
         agent_engine::tools::structured::offer(json!({"type": "object"}), &mut rig.workspace).expect("schema");
@@ -323,7 +323,7 @@ fn a_model_that_never_gives_the_structured_result_is_asked_three_times_then_the_
 
 #[test]
 fn a_stop_hook_that_keeps_blocking_ends_the_turn_after_three_blocks_with_a_notice() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.hooks = agent_engine::hooks::Hooks::parse(&json!({"Stop": [{"hooks": [
         {"type": "command", "command": "echo '{\"decision\":\"block\",\"reason\":\"not yet\"}'"}
     ]}]}))

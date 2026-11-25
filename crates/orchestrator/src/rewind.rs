@@ -16,6 +16,21 @@ use crate::shared::Shared;
 pub async fn rewind(shared: &Arc<Shared>, id: &ItemId, step: &str) -> Result<()> {
     let ledger = Ledger::load(&shared.store, id)?;
     let cut = ledger.cut(step).ok_or_else(|| Error::UnknownStep(step.to_owned()))?;
+    rewind_to(shared, id, &ledger, step, cut, None).await
+}
+
+pub async fn rewind_at(shared: &Arc<Shared>, id: &ItemId, ledger: &Ledger, step: &str, cut: u64) -> Result<()> {
+    rewind_to(shared, id, ledger, step, cut, Some(cut)).await
+}
+
+async fn rewind_to(
+    shared: &Arc<Shared>,
+    id: &ItemId,
+    ledger: &Ledger,
+    step: &str,
+    cut: u64,
+    at: Option<u64>,
+) -> Result<()> {
     let first = ledger
         .requested
         .range(cut..)
@@ -27,7 +42,7 @@ pub async fn rewind(shared: &Arc<Shared>, id: &ItemId, step: &str) -> Result<()>
         }
         restore(shared, &agent).await;
     }
-    shared.append(id, &[WorkflowEvent::Rewound { to: step.to_owned() }])?;
+    shared.append(id, &[WorkflowEvent::Rewound { to: step.to_owned(), at }])?;
     ensure(shared, id);
     shared.wake(id, Wake::Rerun);
     Ok(())

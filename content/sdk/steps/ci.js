@@ -35,7 +35,7 @@ export default step({
   name: "ci",
   label: "CI",
   icon: "sCi",
-  needs: "pipelines",
+  requires: "pipelines",
   doing: "Waiting for CI",
   view: (s) => (Array.isArray(s.runs) && s.runs.length > 0 ? s.runs : [s]).filter((run) => run.run || run.state === NONE).map(shown),
   async run(ctx, opts) {

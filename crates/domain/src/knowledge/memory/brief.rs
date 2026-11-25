@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 
 use super::decision_note::DecisionNote;
-use super::{Memory, MemoryEdit, MemoryId, MemoryKind};
+use super::{Memory, MemoryEdit, MemoryId, MemoryKind, MemoryScope};
 
 pub const MEMORY_SERVER: &str = concat!(brand::command!(), "_memory");
 pub const MEMORY_SEARCH_TOOL: &str = "memory_search";
@@ -28,6 +28,8 @@ pub struct MemoryBrief {
     pub structured: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub held_out: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub application: Option<String>,
 }
 
 impl MemoryBrief {
@@ -50,7 +52,8 @@ impl MemoryBrief {
                 }
                 listing.push_str(&format!("\n{title}:"));
                 for memory in group {
-                    listing.push_str(&format!("\n- {}", super::anchors::line(memory)));
+                    let scope = MemoryScope::label(memory.id).map(|label| format!(" ({label})")).unwrap_or_default();
+                    listing.push_str(&format!("\n- {}{scope}", super::anchors::line(memory)));
                 }
             }
             out.push(listing);
@@ -87,6 +90,7 @@ impl MemoryBrief {
              answer."
                 .to_owned(),
         ];
+        out.push(self.scopes());
         if self.anchors {
             out.push(
                 "A remember entry may add \"touches\": [\"<file or folder, relative to the project>\"]: the \
@@ -105,6 +109,21 @@ impl MemoryBrief {
             );
         }
         Some(out.join("\n\n"))
+    }
+
+    fn scopes(&self) -> String {
+        let application = self.application.as_ref().map(|name| {
+            format!(
+                " \"application\": true for every repository of the application {name}, such as its business \
+                 rules, environments or release process."
+            )
+        });
+        format!(
+            "A remember entry may add \"scope\": \"repository\" (the default): about this repository's code \
+             and tooling.{} \"global\": about the user or how they like to work, true in every project. Memories \
+             shown marked (application) or (global) belong to those wider scopes.",
+            application.unwrap_or_default()
+        )
     }
 
     pub fn edits_reminder(&self) -> Option<String> {
@@ -152,6 +171,8 @@ struct RememberEntry {
     ruled_out: Vec<String>,
     #[serde(default)]
     watch_out: Vec<String>,
+    #[serde(default)]
+    scope: Option<MemoryScope>,
 }
 
 impl RememberEntry {
@@ -163,7 +184,13 @@ impl RememberEntry {
             (None, None) => return None,
         };
         let text = decision.map_or(self.text, |decision| decision.text());
-        (!text.trim().is_empty()).then_some(MemoryEdit::Remember { kind, text, tags: self.tags, touches: self.touches })
+        (!text.trim().is_empty()).then_some(MemoryEdit::Remember {
+            kind,
+            text,
+            tags: self.tags,
+            touches: self.touches,
+            scope: self.scope.unwrap_or_default(),
+        })
     }
 }
 

@@ -22,7 +22,7 @@ fn credits_trial_and_bonus_each_become_a_window_with_their_own_reset() {
             ]
         }]
     });
-    let usage = windows(&value).unwrap_or_else(|e| panic!("{e}"));
+    let usage = windows(&value, domain::Language::Portuguese).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(usage.plan.as_deref(), Some("KIRO PRO+"));
     let shown: Vec<_> =
         usage.windows.iter().map(|w| (w.id.as_str(), w.label.as_str(), w.used_percent, w.resets_at.clone())).collect();
@@ -45,7 +45,7 @@ fn a_breakdown_without_a_limit_is_skipped_and_the_plan_falls_back_to_the_type() 
             {"resourceType": "AGENTIC_REQUEST", "displayNamePlural": "Requests", "currentUsage": 30, "usageLimit": 50, "nextDateReset": "2026-12-01T00:00:00Z"}
         ]
     });
-    let usage = windows(&value).unwrap_or_else(|e| panic!("{e}"));
+    let usage = windows(&value, domain::Language::Portuguese).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(usage.plan.as_deref(), Some("Q DEVELOPER STANDALONE FREE"));
     assert_eq!(usage.windows.len(), 1);
     assert_eq!(usage.windows[0].label, "Requests · 30 de 50");
@@ -54,7 +54,7 @@ fn a_breakdown_without_a_limit_is_skipped_and_the_plan_falls_back_to_the_type() 
 
 #[test]
 fn an_answer_without_a_breakdown_is_an_error() {
-    assert!(windows(&json!({"message": "nope"})).is_err());
+    assert!(windows(&json!({"message": "nope"}), domain::Language::Portuguese).is_err());
 }
 
 #[test]

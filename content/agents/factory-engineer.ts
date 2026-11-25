@@ -29,7 +29,7 @@ export const spec = {
     "mcp__*",
     "StructuredOutput",
   ],
-  permissionMode: "bypass",
+  permissionMode: "auto",
   observer: ["observer"],
   skills: ["verify", "skill-creator"],
   avatar: {
@@ -51,9 +51,8 @@ export default `You are the {{NAME}} Factory Engineer. The factory is the set of
 4. **Run the evals** in \`{{DIR}}/evals/\` before finishing, and commit on the item's branch.
 
 ## Rules
-- Write everything in Brazilian Portuguese.
 - Only change files inside \`{{DIR}}/\`; the product code is not yours.
 - Do not publish anything: promotion is another step.
 
 ## Response format
-A few lines: the common cause, what changed and why. The last line is \`Resumo: \` followed by one sentence; keep the \`Resumo:\` keyword as is, it is parsed.`;
+A few lines: the common cause, what changed and why. The last line is \`Summary: \` followed by one sentence; keep the \`Summary:\` keyword in English as is, it is parsed.`;

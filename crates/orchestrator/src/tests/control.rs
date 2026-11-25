@@ -56,7 +56,7 @@ async fn an_auth_error_waits_for_a_human_to_reconnect_and_a_rerun_tries_again() 
     let id = kernel.create_item("try", json!({})).expect("item");
     let blocked = until(&kernel, &id, |item| item.impediment.is_some()).await;
     let reason = blocked.impediment.and_then(|found| found.reason).unwrap_or_default();
-    assert!(reason.starts_with("reconecte"), "{reason}");
+    assert!(reason.starts_with(crate::NEEDS_RECONNECT), "{reason}");
     assert_eq!(kernel.items().expect("items")[0].group, domain::board::Group::WithYou);
     kernel.rerun(&id).await.expect("rerun");
     let item = ended(&kernel, &id).await;
@@ -183,6 +183,20 @@ async fn cancelling_a_parent_cancels_its_waiting_child() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_cancelled_item_goes_straight_to_the_archive_and_leaves_it_when_run_again() {
+    let world = World::new();
+    world.workflow("wait", "import { workflow } from \"sdk\";\nexport default workflow({ name: \"wait\", async run(ctx) { return await ctx.waitHuman([]); } });");
+    let kernel = world.start().await;
+    let id = kernel.create_item("wait", json!({})).expect("item");
+    until(&kernel, &id, |item| item.pending_effects().count() == 1).await;
+    kernel.cancel(&id).expect("cancel");
+    ended(&kernel, &id).await;
+    assert!(world.store().archived_items().expect("archived").contains_key(id.as_str()));
+    kernel.shared.append(&id, &[domain::workflow::WorkflowEvent::Rewound { to: String::new(), at: None }]).expect("rewound");
+    assert!(world.store().archived_items().expect("archived").is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn an_agent_question_reaches_the_human_and_the_answer_reaches_the_agent() {
     let world = World::new();
     world.engine.state.ask.store(true, Ordering::SeqCst);
@@ -202,7 +216,7 @@ async fn an_agent_question_reaches_the_human_and_the_answer_reaches_the_agent() 
     assert_eq!(asked.item, id);
     assert_eq!(asked.session.as_deref(), Some("s1"));
     assert_eq!(kernel.items().expect("items")[0].group, domain::board::Group::WithYou);
-    kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::Bypass)).expect("answer");
+    kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::Auto)).expect("answer");
     assert_eq!(output(&ended(&kernel, &id).await), json!("feito 1"));
     assert!(kernel.asks().is_empty());
     assert_eq!(world.engine.state.answers.lock().expect("lock").len(), 1);
@@ -239,7 +253,7 @@ async fn a_step_whose_agent_waits_for_the_human_is_not_shown_as_running() {
     assert_eq!(shown, vec![StepState::WaitingHuman]);
     let view = kernel.step_view(&id, "only", None).await.expect("view");
     assert_eq!(view.attempts.last().map(|attempt| attempt.state), Some(StepState::WaitingHuman));
-    kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::Bypass)).expect("answer");
+    kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::Auto)).expect("answer");
     ended(&kernel, &id).await;
     let after = kernel.summary(&id).expect("summary").expect("item");
     assert!(after.steps.iter().all(|step| step.state != StepState::WaitingHuman));
@@ -262,7 +276,7 @@ async fn an_approved_plan_ends_a_planning_agent_even_if_it_would_keep_going() {
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
     let asked = asked.expect("the plan reached the human");
-    kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::AcceptEdits)).expect("answer");
+    kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::Auto)).expect("answer");
     assert_eq!(output(&ended(&kernel, &id).await), json!("o plano"));
 }
 

@@ -56,14 +56,17 @@ pub fn titled(text: &str) -> Option<String> {
     Some(first.to_uppercase().chain(chars).collect())
 }
 
-pub fn span(seconds: i64) -> String {
+pub fn span(seconds: i64, language: domain::Language) -> String {
     const HOUR: i64 = 3600;
     const DAY: i64 = 24 * HOUR;
     match seconds {
-        18_000 => "Sessão (5 h)".to_owned(),
-        604_800 => "Semana".to_owned(),
-        DAY => "1 dia".to_owned(),
-        s if s > DAY && s % DAY == 0 => format!("{} dias", s / DAY),
+        18_000 => language.pick("Session (5 h)", "Sesión (5 h)", "Sessão (5 h)").to_owned(),
+        604_800 => language.pick("Week", "Semana", "Semana").to_owned(),
+        DAY => language.pick("1 day", "1 día", "1 dia").to_owned(),
+        s if s > DAY && s % DAY == 0 => {
+            let days = s / DAY;
+            language.pick(format!("{days} days"), format!("{days} días"), format!("{days} dias"))
+        }
         s if s >= HOUR => format!("{} h", s / HOUR),
         s => format!("{} min", (s / 60).max(1)),
     }
@@ -91,10 +94,13 @@ mod tests {
 
     #[test]
     fn spans_are_named_by_their_length() {
-        assert_eq!(span(18_000), "Sessão (5 h)");
-        assert_eq!(span(604_800), "Semana");
-        assert_eq!(span(86_400 * 30), "30 dias");
-        assert_eq!(span(7200), "2 h");
+        let pt = domain::Language::Portuguese;
+        assert_eq!(span(18_000, pt), "Sessão (5 h)");
+        assert_eq!(span(604_800, pt), "Semana");
+        assert_eq!(span(86_400 * 30, pt), "30 dias");
+        assert_eq!(span(7200, pt), "2 h");
+        assert_eq!(span(18_000, domain::Language::English), "Session (5 h)");
+        assert_eq!(span(86_400 * 30, domain::Language::Spanish), "30 días");
     }
 
     #[test]

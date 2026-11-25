@@ -25,19 +25,19 @@ pub use run::{
 pub use safety::{permission, redact, shell};
 pub use session::{catalog, chat, conversation, repeats, usage};
 pub use tools::{
-    agents, brief_edits, browser_sites, channel_relay, code_mode, executable, extensions, hooks, inbox, lsp, mcp, mcp_config,
-    mcp_oauth, output, schedule, site, skill, tool_name, watch, web_reading,
+    agents, brief_edits, browser_sites, channel_relay, code_mode, executable, extensions, hooks, inbox, lsp, mcp,
+    mcp_config, mcp_oauth, output, schedule, site, skill, tool_name, watch, web_reading,
 };
 
 pub use command::Command;
 pub use identity::ids::{Id, SecretId, SessionId};
-pub use language::Language;
 pub use knowledge::memory::{
-    Author, Forgotten, Memory, MemoryBook, MemoryBrief, MemoryEdit, MemoryId, MemoryKind, Provenance, RecallBudget,
-    Revision,
+    Author, Forgotten, Memory, MemoryBook, MemoryBrief, MemoryEdit, MemoryId, MemoryKind, MemoryScope, Provenance,
+    RecallBudget, Revision,
 };
+pub use language::Language;
 pub use models::model::{Access, Effort, ModelOption, ModelProvider};
-pub use run::approval::{AgentAsk, AskId, AskKind, Choice, Decision, PermissionMode, Question};
+pub use run::approval::{AgentAsk, AskId, AskKind, Choice, Decision, PermissionMode, Question, Reviewer};
 pub use run::engines::EngineProblem;
 pub use run::events::{EngineEvent, LeftAlone, Rewound, RunId, Skipped, ToolCall};
 pub use run::failure::FailureKind;

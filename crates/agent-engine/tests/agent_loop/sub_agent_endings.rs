@@ -7,7 +7,7 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::model::{BoxFuture, CancellationToken, Delta, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
 use agent_engine::tools;
 use agent_engine::transcript::{Block, Message};
-use domain::{AgentStatus, EngineEvent, PermissionMode};
+use domain::{AgentStatus, EngineEvent};
 use serde_json::{Value, json};
 
 use crate::{Rig, tool_use};
@@ -61,7 +61,7 @@ impl ModelApi for StoppedMidAnswer {
 
 #[test]
 fn a_sub_agent_cancelled_mid_answer_is_cancelled_not_failed_and_hands_back_what_it_was_saying() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = StoppedMidAnswer { control: Arc::clone(&rig.control), parent: AtomicUsize::new(0) };
     let mut tools = tools::standard();
     tools.extend(agent_tool());
@@ -102,25 +102,25 @@ fn a_sub_agent_cancelled_mid_answer_is_cancelled_not_failed_and_hands_back_what_
 
 #[test]
 fn a_sub_agent_started_while_planning_is_offered_only_the_tools_planning_allows() {
-    let offered = |mode: PermissionMode| {
-        let (model, _) = delegated(&Rig::new(mode), json!({"description": "Look", "prompt": "Look around"}));
+    let offered = |rig: Rig| {
+        let (model, _) = delegated(&rig, json!({"description": "Look", "prompt": "Look around"}));
         model.asked()[1].tools.iter().map(|spec| spec.name.clone()).collect::<Vec<_>>()
     };
     let has = |names: &[String], name: &str| names.iter().any(|offered| offered == name);
 
-    let planning = offered(PermissionMode::Plan);
+    let planning = offered(Rig::planning());
     assert!(has(&planning, "Read") && has(&planning, "Grep") && has(&planning, "Glob"), "{planning:?}");
     assert!(!has(&planning, "Bash") && !has(&planning, "Write"), "{planning:?}");
     assert!(has(&planning, "WebFetch") && has(&planning, "WebSearch"), "reading the web is a read: {planning:?}");
 
-    let editing = offered(PermissionMode::AcceptEdits);
+    let editing = offered(Rig::new(domain::Reviewer::Human));
     assert!(has(&editing, "Bash") && has(&editing, "Write"), "{editing:?}");
 }
 
 #[test]
 fn the_report_says_when_the_model_asked_for_was_not_used() {
     agent_engine::providers::install_testing();
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let input = json!({"description": "Look", "prompt": "Say hi", "model": "some-other-vendor-model"});
     let (_, result) = delegated(&rig, input);
     assert!(result.starts_with("report"), "{result}");

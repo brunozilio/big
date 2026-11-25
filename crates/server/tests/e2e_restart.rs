@@ -92,7 +92,7 @@ async fn a_restart_in_the_middle_of_develop_resumes_the_session_without_repeatin
     let runs = hub.agents.runs_of("developer");
     assert_eq!(runs.len(), 2, "{runs:?}");
     assert_eq!(runs[0].0, runs[1].0, "the same session was resumed");
-    assert!(runs[1].1.contains("interrompida"), "{runs:?}");
+    assert!(runs[1].1.contains("interrupted"), "{runs:?}");
     assert_eq!(hub.agents.runs_of("planner").len(), 1, "the plan is not redone");
     assert_eq!(hub.tracker.state().created, 1);
     assert_eq!(hub.github.pulls_created(), 1);

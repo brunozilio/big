@@ -1,4 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useT, type T } from '@/i18n'
 import { cn } from './cn'
 import { SegmentedControl } from './form'
 import { Icon, type IconName } from './icon'
@@ -38,27 +39,27 @@ function codeBlock(text: string, start: number, end: number): TextEdit {
   return { text: r.text, start: caret, end: caret + body.length }
 }
 
-const tools: (SourceTool | 'sep')[] = [
-  { key: 'bold', label: 'Negrito', icon: 'bold', shortcut: '⌘B', run: (t, s, e) => toggleWrap(t, s, e, '**', 'negrito') },
-  { key: 'italic', label: 'Itálico', icon: 'italic', shortcut: '⌘I', run: (t, s, e) => toggleWrap(t, s, e, '_', 'itálico') },
-  { key: 'heading', label: 'Título (H1–H3)', icon: 'heading', run: cycleHeading },
-  { key: 'strike', label: 'Tachado', icon: 'strike', run: (t, s, e) => toggleWrap(t, s, e, '~~', 'tachado') },
+const sourceTools = (tr: T): (SourceTool | 'sep')[] => [
+  { key: 'bold', label: tr('editor.bold'), icon: 'bold', shortcut: '⌘B', run: (t, s, e) => toggleWrap(t, s, e, '**', tr('editor.sampleBold')) },
+  { key: 'italic', label: tr('editor.italic'), icon: 'italic', shortcut: '⌘I', run: (t, s, e) => toggleWrap(t, s, e, '_', tr('editor.sampleItalic')) },
+  { key: 'heading', label: tr('editor.headingCycle'), icon: 'heading', run: cycleHeading },
+  { key: 'strike', label: tr('editor.strike'), icon: 'strike', run: (t, s, e) => toggleWrap(t, s, e, '~~', tr('editor.sampleStrike')) },
   'sep',
-  { key: 'ul', label: 'Lista com marcadores', icon: 'list', shortcut: '⌘⇧8', run: (t, s, e) => toggleLinePrefix(t, s, e, 'ul') },
-  { key: 'ol', label: 'Lista numerada', icon: 'listOrdered', shortcut: '⌘⇧7', run: (t, s, e) => toggleLinePrefix(t, s, e, 'ol') },
-  { key: 'task', label: 'Checklist', icon: 'checklist', run: (t, s, e) => toggleLinePrefix(t, s, e, 'task') },
+  { key: 'ul', label: tr('editor.bulletList'), icon: 'list', shortcut: '⌘⇧8', run: (t, s, e) => toggleLinePrefix(t, s, e, 'ul') },
+  { key: 'ol', label: tr('editor.orderedList'), icon: 'listOrdered', shortcut: '⌘⇧7', run: (t, s, e) => toggleLinePrefix(t, s, e, 'ol') },
+  { key: 'task', label: tr('editor.checklist'), icon: 'checklist', run: (t, s, e) => toggleLinePrefix(t, s, e, 'task') },
   'sep',
-  { key: 'quote', label: 'Citação', icon: 'quote', run: (t, s, e) => toggleLinePrefix(t, s, e, 'quote') },
-  { key: 'code', label: 'Código', icon: 'code', shortcut: '⌘E', run: (t, s, e) => toggleWrap(t, s, e, '`', 'código') },
-  { key: 'codeBlock', label: 'Bloco de código', icon: 'codeBlock', run: codeBlock },
-  { key: 'table', label: 'Tabela', icon: 'table', run: (t, s) => insertTable(t, s) },
-  { key: 'hr', label: 'Divisor', icon: 'rule', run: (t, s) => insertBlock(t, s, '---') },
+  { key: 'quote', label: tr('editor.quote'), icon: 'quote', run: (t, s, e) => toggleLinePrefix(t, s, e, 'quote') },
+  { key: 'code', label: tr('editor.code'), icon: 'code', shortcut: '⌘E', run: (t, s, e) => toggleWrap(t, s, e, '`', tr('editor.sampleCode')) },
+  { key: 'codeBlock', label: tr('editor.codeBlock'), icon: 'codeBlock', run: codeBlock },
+  { key: 'table', label: tr('editor.table'), icon: 'table', run: (t, s) => insertTable(t, s) },
+  { key: 'hr', label: tr('editor.divider'), icon: 'rule', run: (t, s) => insertBlock(t, s, '---') },
   'sep',
-  { key: 'link', label: 'Link', icon: 'link', shortcut: '⌘K', run: (t, s, e) => insertLink(t, s, e) },
-  { key: 'image', label: 'Imagem', icon: 'image', run: (t, s, e) => insertLink(t, s, e, true) },
+  { key: 'link', label: tr('editor.link'), icon: 'link', shortcut: '⌘K', run: (t, s, e) => insertLink(t, s, e) },
+  { key: 'image', label: tr('editor.image'), icon: 'image', run: (t, s, e) => insertLink(t, s, e, true) },
 ]
 
-const byKey = (key: string) => tools.find((t): t is SourceTool => t !== 'sep' && t.key === key)
+const byKey = (tools: (SourceTool | 'sep')[], key: string) => tools.find((t): t is SourceTool => t !== 'sep' && t.key === key)
 
 const shortcutKeys: Record<string, string> = { b: 'bold', i: 'italic', k: 'link', e: 'code' }
 
@@ -103,6 +104,8 @@ export function SourceEditor({
   trailing?: ReactNode
   onSubmit?: () => void
 }) {
+  const tr = useT()
+  const tools = useMemo(() => sourceTools(tr), [tr])
   const narrow = useNarrow()
   const [view, setView] = useState<SourceView>(defaultView)
   const shown: SourceView = narrow && view === 'split' ? 'write' : view
@@ -174,7 +177,7 @@ export function SourceEditor({
       return
     }
     if (mod && !e.shiftKey && shortcutKeys[key]) {
-      const tool = byKey(shortcutKeys[key])
+      const tool = byKey(tools, shortcutKeys[key])
       if (tool) {
         e.preventDefault()
         apply(tool.run)
@@ -206,15 +209,15 @@ export function SourceEditor({
   const pane = cn('overflow-auto', fill && 'min-h-0')
 
   const views = [
-    { value: 'write' as const, label: 'Editar' },
-    ...(narrow ? [] : [{ value: 'split' as const, label: 'Dividir' }]),
-    { value: 'preview' as const, label: 'Visualizar' },
+    { value: 'write' as const, label: tr('editor.viewWrite') },
+    ...(narrow ? [] : [{ value: 'split' as const, label: tr('editor.viewSplit') }]),
+    { value: 'preview' as const, label: tr('editor.viewPreview') },
   ]
 
   return (
     <div className={cn('flex flex-col', fill && 'min-h-0 flex-1')}>
       <Toolbar
-        label="Formatação em Markdown"
+        label={tr('editor.markdownFormatting')}
         end={
           <>
             <SegmentedControl size="sm" value={shown} onChange={setView} options={views} />
@@ -232,10 +235,10 @@ export function SourceEditor({
           ),
         )}
         <ToolSep />
-        <Tool label="Desfazer" shortcut="⌘Z" disabled={shown === 'preview'} onClick={() => travel(true)}>
+        <Tool label={tr('editor.undo')} shortcut="⌘Z" disabled={shown === 'preview'} onClick={() => travel(true)}>
           <Icon name="undo" size={17} />
         </Tool>
-        <Tool label="Refazer" shortcut="⌘⇧Z" disabled={shown === 'preview'} onClick={() => travel(false)}>
+        <Tool label={tr('editor.redo')} shortcut="⌘⇧Z" disabled={shown === 'preview'} onClick={() => travel(false)}>
           <Icon name="redo" size={17} />
         </Tool>
       </Toolbar>

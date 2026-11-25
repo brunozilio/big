@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use domain::Language;
 use jiff::Timestamp;
 use serde_json::Value;
 
@@ -26,11 +27,11 @@ pub trait LoopbackSignIn: Send + Sync + std::fmt::Debug {
         None
     }
 
-    fn fields(&self) -> Vec<TokenField> {
+    fn fields(&self, _language: Language) -> Vec<TokenField> {
         Vec::new()
     }
 
-    fn for_fields(&self, _fields: &Value) -> Result<Option<Loopback>, String> {
+    fn for_fields(&self, _fields: &Value, _language: Language) -> Result<Option<Loopback>, String> {
         Ok(None)
     }
 
@@ -59,8 +60,8 @@ impl Loopback {
         Loopback(Arc::new(sign_in))
     }
 
-    pub fn entered(&self, fields: &Value) -> Result<Loopback, String> {
-        Ok(self.0.for_fields(fields)?.unwrap_or_else(|| self.clone()))
+    pub fn entered(&self, fields: &Value, language: Language) -> Result<Loopback, String> {
+        Ok(self.0.for_fields(fields, language)?.unwrap_or_else(|| self.clone()))
     }
 
     pub async fn finish(

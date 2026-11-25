@@ -61,8 +61,8 @@ impl ProviderClient {
         self.ready()?.transport.models()
     }
 
-    pub fn limits(&self) -> Result<Option<domain::billing::PlanUsage>, ModelError> {
-        self.ready()?.transport.limits()
+    pub fn limits(&self, language: domain::Language) -> Result<Option<domain::billing::PlanUsage>, ModelError> {
+        self.ready()?.transport.limits(language)
     }
 
     pub async fn search(

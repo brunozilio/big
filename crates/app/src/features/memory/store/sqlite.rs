@@ -1,5 +1,4 @@
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
 
 use domain::memory::scorecard::{Scorecard, Tally};
 use domain::{Forgotten, Memory, MemoryBook, MemoryId};
@@ -41,38 +40,34 @@ impl SqliteMemoryStore {
 }
 
 impl MemoryStore for SqliteMemoryStore {
-    fn revision(&self, project: &Path) -> u64 {
-        let key = crate::dirs::memory_key(project);
-        self.db.read(|connection| revision(connection, &key)).unwrap_or_else(|error| {
+    fn revision(&self, key: &str) -> u64 {
+        self.db.read(|connection| revision(connection, key)).unwrap_or_else(|error| {
             tracing::warn!(%error, "the memory's revision could not be read");
             0
         })
     }
 
-    fn read(&self, project: &Path) -> Revised {
-        let key = crate::dirs::memory_key(project);
-        self.db.read(|connection| book(connection, &key)).unwrap_or_else(|error| {
+    fn read(&self, key: &str) -> Revised {
+        self.db.read(|connection| book(connection, key)).unwrap_or_else(|error| {
             tracing::warn!(%error, "the memory could not be read; going on from nothing");
             Revised::default()
         })
     }
 
-    fn update(&self, project: &Path, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised> {
-        let key = crate::dirs::memory_key(project);
+    fn update(&self, key: &str, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised> {
         let changed = self.db.write(|transaction| {
-            let before = stored_book(transaction, &key)?;
+            let before = stored_book(transaction, key)?;
             let mut after = before.kept.book.clone();
             change(&mut after);
-            let revision = keep(transaction, &key, &before, &after)?;
+            let revision = keep(transaction, key, &before, &after)?;
             Ok(Revised { revision, book: after })
         });
         Ok(changed?)
     }
 
-    fn undo_point(&self, project: &Path) -> Option<MemoryBook> {
-        let key = crate::dirs::memory_key(project);
+    fn undo_point(&self, key: &str) -> Option<MemoryBook> {
         let point = self.db.read(|connection| {
-            let kept = connection.query_row("SELECT book FROM memory_undo_points WHERE project = ?1", [&key], |row| {
+            let kept = connection.query_row("SELECT book FROM memory_undo_points WHERE project = ?1", [key], |row| {
                 from_json(0, &row.get::<_, String>(0)?)
             });
             kept.optional()
@@ -83,18 +78,17 @@ impl MemoryStore for SqliteMemoryStore {
         })
     }
 
-    fn set_undo_point(&self, project: &Path, book: Option<&MemoryBook>) -> std::io::Result<()> {
-        if book.is_none() && self.undo_point(project).is_none() {
+    fn set_undo_point(&self, key: &str, book: Option<&MemoryBook>) -> std::io::Result<()> {
+        if book.is_none() && self.undo_point(key).is_none() {
             return Ok(());
         }
-        let key = crate::dirs::memory_key(project);
         let set = self.db.write(|transaction| match book {
             Some(book) => transaction.execute(
                 "INSERT INTO memory_undo_points (project, book) VALUES (?1, ?2) \
                  ON CONFLICT (project) DO UPDATE SET book = excluded.book",
                 params![key, json(book)?],
             ),
-            None => transaction.execute("DELETE FROM memory_undo_points WHERE project = ?1", [&key]),
+            None => transaction.execute("DELETE FROM memory_undo_points WHERE project = ?1", [key]),
         });
         Ok(set.map(drop)?)
     }

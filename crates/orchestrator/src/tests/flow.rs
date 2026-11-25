@@ -28,7 +28,9 @@ async fn a_typescript_workflow_runs_each_effect_once_and_replays_without_repeati
     assert_eq!(output(&item), json!({ "out": "oi", "call": 1, "agent": "feito 1", "session": "s1" }));
     let request = &world.engine.requests()[0];
     assert_eq!(request.prompt.text, "faça x");
-    assert_eq!(request.policy.permission, domain::PermissionMode::Bypass);
+    let shown = request.prompt.shown.clone().expect("the workflow's prompt is not shown as the user's");
+    assert_eq!((shown.text.as_str(), shown.from.as_deref()), ("faça x", Some("plain")));
+    assert_eq!(request.policy.permission, domain::PermissionMode::Auto);
     assert_eq!(request.session.append_system, None);
     let agent = request.session.agent.clone().expect("the step's agent runs as the main agent");
     assert_eq!(agent.name, "worker");
@@ -61,6 +63,23 @@ async fn the_effort_chosen_for_the_item_reaches_each_agent_request() {
     let other = kernel.create_item("plain", json!({ "title": "y" })).expect("item");
     ended(&kernel, &other).await;
     assert_eq!(world.engine.requests()[1].session.effort, domain::Effort::default());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_language_chosen_when_the_item_is_created_reaches_each_agent_request() {
+    let world = World::new();
+    world.workflow("plain", PLAIN);
+    world.store().set_branding("language", &json!("es")).expect("language");
+    let kernel = world.start().await;
+    let id = kernel.create_item("plain", json!({ "title": "x" })).expect("item");
+    ended(&kernel, &id).await;
+    let item = kernel.item(&id).expect("store").expect("item");
+    assert_eq!(item.input["language"], "es", "the item keeps the language it was created in");
+    assert_eq!(world.engine.requests()[0].session.language, Some(domain::Language::Spanish));
+    world.store().set_branding("language", &json!("en")).expect("language");
+    let other = kernel.create_item("plain", json!({ "title": "y", "language": "pt-BR" })).expect("item");
+    ended(&kernel, &other).await;
+    assert_eq!(world.engine.requests()[1].session.language, Some(domain::Language::Portuguese));
 }
 
 const PARALLEL: &str = r#"
@@ -203,7 +222,7 @@ async fn the_built_in_delivery_workflow_loads_and_describes_its_steps() {
     let script = shared.script("default").expect("the default workflow compiles");
     assert_eq!(script.target, json!({ "workflow": "entrega" }));
     let steps = script.described["workflows"][0]["steps"].as_array().map(Vec::len);
-    assert_eq!(steps, Some(10));
+    assert_eq!(steps, Some(11));
 }
 
 const TEAM: &str = r#"
@@ -233,7 +252,7 @@ async fn a_teammate_message_after_the_turn_wakes_the_agent_in_the_same_session_b
     let client = requests[0].host.credentials.client;
     assert_eq!(requests[1].host.credentials.client, client);
     assert_eq!(
-        agent_engine::tools::clients::waiting(client, domain::PermissionMode::Ask, 0),
+        agent_engine::tools::clients::waiting(client, 0),
         agent_engine::tools::clients::Waiting::Idle,
         "the client is released when the step ends"
     );

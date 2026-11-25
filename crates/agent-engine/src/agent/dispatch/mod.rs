@@ -26,6 +26,22 @@ pub(in crate::agent) struct Calling<'c, 'env> {
     pub(in crate::agent) permission: Option<PermissionDecision>,
 }
 
+impl Calling<'_, '_> {
+    pub(in crate::agent) fn permitting<'s>(
+        &'s self,
+        subject: &'s str,
+        shown: Option<&'s str>,
+    ) -> crate::agent::permission::Permitting<'s> {
+        crate::agent::permission::Permitting {
+            id: self.id,
+            subject,
+            shown,
+            parent: self.parent,
+            hook_permission: self.permission,
+        }
+    }
+}
+
 impl Agent<'_> {
     pub(in crate::agent) fn call<'env>(
         &'env self,

@@ -31,7 +31,7 @@ fn story(id: &str, steps: usize) -> Vec<WorkflowEvent> {
 
 fn rewound(id: &str) -> Vec<WorkflowEvent> {
     let mut events = story(id, 3);
-    events.push(WorkflowEvent::Rewound { to: "step-1".into() });
+    events.push(WorkflowEvent::Rewound { to: "step-1".into(), at: None });
     events.push(WorkflowEvent::StepStarted { step: "step-1".into(), branch: None });
     events
 }

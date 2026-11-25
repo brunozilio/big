@@ -7,9 +7,9 @@ mod custom_agents;
 mod escalation;
 mod follow_through;
 mod input_validation;
-mod interception;
 mod intercepted_model;
 mod intercepted_tools;
+mod interception;
 mod lsp_install;
 mod model_hooks;
 mod native_search;
@@ -67,11 +67,19 @@ struct Rig {
 }
 
 impl Rig {
-    fn new(mode: PermissionMode) -> Self {
+    fn new(reviewer: domain::Reviewer) -> Self {
+        Self::with(PermissionMode::Auto, reviewer)
+    }
+
+    fn planning() -> Self {
+        Self::with(PermissionMode::Plan, domain::Reviewer::Human)
+    }
+
+    fn with(mode: PermissionMode, reviewer: domain::Reviewer) -> Self {
         let dir = tempfile::tempdir().expect("dir");
         std::fs::write(dir.path().join("notes.txt"), "alpha\nbeta\n").expect("write");
         let workspace = Workspace::new(dir.path());
-        let control = Arc::new(Control::new(mode, Arc::default()));
+        let control = Arc::new(Control::new(mode, Arc::default()).reviewed_by(reviewer));
         Self { dir, workspace, control, events: Arc::default() }
     }
 

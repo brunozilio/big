@@ -75,7 +75,10 @@ mod tests {
 
     #[test]
     fn a_class_becomes_a_variable_holding_it() {
-        assert_eq!(persistent("class Point { x = 1 }\nnew Point().x"), "var Point = class Point { x = 1 };\nnew Point().x");
+        assert_eq!(
+            persistent("class Point { x = 1 }\nnew Point().x"),
+            "var Point = class Point { x = 1 };\nnew Point().x"
+        );
         assert_eq!(persistent("const a = 1; class B {}"), "var a = 1; var B = class B {};");
     }
 

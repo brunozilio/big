@@ -10,6 +10,7 @@ pub struct Services {
     pub launch: super::Launch,
     pub mcp: Vec<Arc<crate::mcp::McpServer>>,
     pub output_schema: Option<serde_json::Value>,
+    pub artifacts: Option<std::path::PathBuf>,
 }
 
 #[derive(Clone)]

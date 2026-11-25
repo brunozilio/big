@@ -1,0 +1,146 @@
+use serde_json::json;
+use store::{Application, CodeChoice, Repository};
+
+use super::*;
+
+const STORY: &str = r#"import { workflow, step } from "sdk";
+const merge = step({ name: "merge", async run(ctx) { await ctx.waitHuman([]); return ctx.pass({ sha: "s1" }); } });
+export default workflow({ name: "default", steps: [merge({})] });
+"#;
+
+fn world() -> World {
+    let world = World::new();
+    let application = Application {
+        id: "app".into(),
+        name: "Checkout".into(),
+        repositories: vec![Repository {
+            id: "web".into(),
+            code: Some(CodeChoice { connection: "c1".into(), repo: "o/web".into() }),
+            directory: world.repo().to_string_lossy().into_owned(),
+            ..Repository::default()
+        }],
+        ..Application::default()
+    };
+    world.store().save_application(&application).expect("app");
+    world.workflow("default", STORY);
+    let fake = world.provider;
+    fake.always("code.open_pull_request", json!({ "ref": "o/web#5" }));
+    fake.always("code.merge", json!({ "merged": true, "sha": "abc1234ff" }));
+    fake.always("pipelines.runs", json!([{ "ref": "o/web/runs/9", "state": "passed", "head": "old9999" }]));
+    fake.always("tracker.create_issue", json!({ "ref": "BIG-50", "status": "Aberto" }));
+    fake.always("changes.create", json!({ "ref": "mock-1", "key": "GMUD-1", "status": "awaiting_approval" }));
+    fake.always("changes.update", json!({ "ref": "mock-1", "key": "GMUD-1", "status": "awaiting_approval" }));
+    fake.always("changes.get", json!({ "ref": "mock-1", "key": "GMUD-1", "status": "done" }));
+    world
+}
+
+async fn merged(kernel: &Handle, title: &str) -> ItemId {
+    let input = json!({ "title": title, "issue": title, "application": { "id": "app", "repositories": [{ "id": "web", "code": { "connection": "c1", "repo": "o/web" } }] }, "git": { "web": { "head": "feat/x", "base": "develop" } } });
+    let story = kernel.create_item("default", input).expect("story");
+    until(kernel, &story, WorkItem::waiting_human).await;
+    kernel.human_input(&story, "merge", "ok", json!({})).expect("merge");
+    until(kernel, &story, |item| item.is_finished()).await;
+    story
+}
+
+async fn packages(kernel: &Handle, count: usize) -> Vec<ItemId> {
+    for _ in 0..300 {
+        let found: Vec<ItemId> =
+            kernel.items().expect("items").into_iter().filter(|item| item.workflow == "package").map(|item| item.id).collect();
+        if found.len() >= count {
+            return found;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    panic!("there were never {count} packages")
+}
+
+fn stage(item: &WorkItem, env: &str) -> Value {
+    let Some(stages) = block(item, "stages") else { return Value::Null };
+    stages["stages"].as_array().and_then(|all| all.iter().find(|one| one["id"] == env)).cloned().unwrap_or(Value::Null)
+}
+
+fn block(item: &WorkItem, kind: &str) -> Option<Value> {
+    item.steps
+        .iter()
+        .filter(|run| run.id == "promotion" && run.state == domain::workflow::StepState::WaitingHuman)
+        .filter_map(|run| run.view.as_array().and_then(|blocks| blocks.iter().find(|block| block["type"] == kind)).cloned())
+        .next_back()
+}
+
+async fn answer(kernel: &Handle, id: &ItemId, action: &str, values: Value) -> WorkItem {
+    let before = kernel.item(id).expect("store").expect("item").version;
+    until(kernel, id, |item| item.waiting_human() && item.version >= before).await;
+    kernel.human_input(id, "promotion", action, values).expect("input");
+    until(kernel, id, |item| item.waiting_human() && !item.inputs.is_empty() && item.version > before + 2).await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_change_for_each_outside_environment() {
+    let world = world();
+    let fake = world.provider;
+    let kernel = world.start().await;
+    let first = merged(&kernel, "APP-1").await;
+    let package = packages(&kernel, 1).await.remove(0);
+    let item = until(&kernel, &package, |item| item.is_ended() || (item.links == vec![first.clone()] && item.waiting_human())).await;
+    assert!(!item.is_ended(), "{:?} {:?}", item.ending, item.steps);
+    assert_eq!(stage(&item, "hi")["state"], "passed");
+    assert_eq!(stage(&item, "hext")["picker"], true);
+    assert!(stage(&item, "prd")["window"].is_null() && stage(&item, "prd")["picker"] == false);
+    assert_eq!(fake.count("code.merge"), 1);
+    assert_eq!(fake.count("tracker.create_issue"), 1);
+    let item = answer(&kernel, &package, "window", json!({ "env": "hext", "at": "2026-11-26T22:00" })).await;
+    assert_eq!(stage(&item, "hext")["actions"][0]["id"], "create_change");
+    answer(&kernel, &package, "create_change", json!({ "env": "hext" })).await;
+    let item = until(&kernel, &package, |item| !item.accepting).await;
+    assert_eq!(fake.count("changes.create"), 1);
+    assert!(fake.count("pipelines.runs") >= 1);
+    let created = fake.calls.lock().expect("lock").iter().find(|(name, _, _)| name == "changes.create").cloned().expect("create");
+    assert_eq!(created.1["environment"], "hext");
+    assert_eq!(created.1["tasks"][0]["start"], "22:00");
+    assert!(item.links.contains(&first));
+    let second = merged(&kernel, "APP-2").await;
+    let all = packages(&kernel, 2).await;
+    let other = all.into_iter().find(|id| id != &package).expect("a second package");
+    until(&kernel, &other, |item| item.links == vec![second.clone()]).await;
+    let updates = fake.count("tracker.update_issue");
+    kernel.deliver_event(&connectors::ExternalEvent {
+        id: "mock-1:done".into(),
+        connection: ConnectionId::from("c1"),
+        capability: Capability::from("changes"),
+        kind: "changes.status.changed".into(),
+        subject: "mock-1".into(),
+        data: json!({ "ref": "mock-1", "status": "done" }),
+        at: jiff::Timestamp::UNIX_EPOCH,
+    }).expect("deliver");
+    let item = until(&kernel, &package, |item| item.waiting_human() && stage(item, "hext")["state"] == "passed").await;
+    assert_eq!(stage(&item, "prd")["picker"], true);
+    assert!(fake.count("tracker.update_issue") > updates);
+    answer(&kernel, &package, "window", json!({ "env": "prd", "at": "2026-11-27T23:00" })).await;
+    answer(&kernel, &package, "create_change", json!({ "env": "prd" })).await;
+    let last = fake.calls.lock().expect("lock").iter().rfind(|(name, _, _)| name == "changes.create").cloned().expect("create");
+    assert_eq!((last.1["environment"].clone(), last.1["tasks"][0]["start"].clone()), (json!("prd"), json!("23:00")));
+    let item = until(&kernel, &package, WorkItem::waiting_human).await;
+    let tasks = block(&item, "tasks").expect("tasks");
+    assert_eq!(tasks["locked"], true);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_package_built_by_hand_starts_empty_and_takes_only_what_is_moved_into_it() {
+    let world = world();
+    let kernel = world.start().await;
+    let first = merged(&kernel, "APP-1").await;
+    let automatic = packages(&kernel, 1).await.remove(0);
+    until(&kernel, &automatic, |item| item.links == vec![first.clone()] && item.waiting_human()).await;
+    let manual = kernel.create_item("package", json!({ "title": "Pacote" })).expect("manual");
+    until(&kernel, &manual, WorkItem::waiting_human).await;
+    let second = merged(&kernel, "APP-2").await;
+    until(&kernel, &automatic, |item| item.links.contains(&second)).await;
+    assert!(kernel.item(&manual).expect("store").expect("item").links.is_empty());
+    answer(&kernel, &automatic, "unlink", json!({ "item": second.to_string() })).await;
+    let moved = answer(&kernel, &manual, "link", json!({ "items": [second.to_string()] })).await;
+    assert_eq!(moved.links, vec![second.clone()]);
+    let left = kernel.item(&automatic).expect("store").expect("item");
+    assert_eq!((left.links.clone(), left.released.clone()), (vec![first], vec![second]));
+    assert!(!moved.accepting);
+}

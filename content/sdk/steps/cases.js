@@ -1,5 +1,5 @@
 import { step, markdown, testCases } from "sdk";
-import { agentOptions, attempt, defined, effects, inLanguage, issueOf, missingConnection, object, planOf, waitOptions } from "./context.js";
+import { agentOptions, attempt, defined, effects, inLanguage, issueOf, languageOf, missingConnection, object, planOf, waitOptions } from "./context.js";
 
 const KINDS = { api: "API", ui: "UI" };
 
@@ -7,7 +7,17 @@ const APPROVE = "approve_cases";
 
 const CHANGES = "change_cases";
 
-const KEYWORDS = /^(dado|quando|então|entao|e|mas|given|when|then|and|but)\s+/i;
+const KEYWORDS = /^(dado|quando|então|entao|e|mas|cuando|entonces|y|pero|given|when|then|and|but)\s+/i;
+
+const GHERKIN = {
+  en: { given: "Given", when: "When", then: "Then", and: "And", scenario: "Scenario" },
+  es: { given: "Dado", when: "Cuando", then: "Entonces", and: "Y", scenario: "Escenario" },
+  "pt-BR": { given: "Dado", when: "Quando", then: "Então", and: "E", scenario: "Cenário" },
+};
+
+function wordsOf(language) {
+  return GHERKIN[language] ?? GHERKIN["pt-BR"];
+}
 
 function clauses(found) {
   const list = Array.isArray(found) ? found : found ? [found] : [];
@@ -49,8 +59,8 @@ function written(found) {
     .map(bdd);
 }
 
-function gherkin(keyword, lines) {
-  return lines.map((line, index) => `${index === 0 ? keyword : "E"} ${line}`).join("\n");
+function gherkin(words, kind, lines) {
+  return lines.map((line, index) => `${index === 0 ? words[kind] : words.and} ${line}`).join("\n");
 }
 
 function fenced(text) {
@@ -70,19 +80,20 @@ export function casesOf(result) {
   return written(Array.isArray(parsed) ? parsed : object(parsed).cases);
 }
 
-function described(entry) {
+function described(entry, language) {
   const one = bdd(entry);
+  const words = wordsOf(language);
   const head = `### ${one.ref ? `${one.ref} · ` : ""}${one.title} (${KINDS[one.kind] ?? one.kind})`;
   const parts = [head];
   if (one.objective) parts.push(one.objective);
-  const lines = [gherkin("Dado", one.given), gherkin("Quando", one.when), gherkin("Então", one.then)].filter((text) => text.length > 0);
-  parts.push(["```gherkin", `Cenário: ${one.title}`, ...lines.join("\n").split("\n").map((line) => `  ${line}`), "```"].join("\n"));
+  const lines = [gherkin(words, "given", one.given), gherkin(words, "when", one.when), gherkin(words, "then", one.then)].filter((text) => text.length > 0);
+  parts.push(["```gherkin", `${words.scenario}: ${one.title}`, ...lines.join("\n").split("\n").map((line) => `  ${line}`), "```"].join("\n"));
   return parts.join("\n\n");
 }
 
-export function listing(cases) {
+export function listing(cases, language) {
   if (!Array.isArray(cases) || cases.length === 0) return "No test cases.";
-  return cases.map(described).join("\n\n");
+  return cases.map((entry) => described(entry, language)).join("\n\n");
 }
 
 const REUSE = "These cases already exist and are linked to the issue. Do not repeat them: write only the cases still missing to cover the acceptance criteria. If none are missing, return an empty list of cases.";
@@ -94,9 +105,9 @@ function asked(ctx, opts, issue, feedback, existing) {
   if (issue) parts.push(`Issue: ${issue}`);
   if (plan.story) parts.push(plan.story);
   if (plan.text && plan.text !== plan.story) parts.push(`## Plan\n\n${plan.text}`);
-  if (existing.length > 0) parts.push(`## Existing cases\n\n${listing(existing)}\n\n${REUSE}`);
+  if (existing.length > 0) parts.push(`## Existing cases\n\n${listing(existing, languageOf(ctx))}\n\n${REUSE}`);
   if (feedback) parts.push(`## Requested changes\n\n${feedback}`);
-  return inLanguage(parts.join("\n\n"));
+  return inLanguage(ctx, parts.join("\n\n"));
 }
 
 const sameTitle = (a, b) => String(a ?? "").trim().toLowerCase() === String(b ?? "").trim().toLowerCase();
@@ -164,15 +175,16 @@ async function created(ctx, given, cases, issue, existing) {
   const opts = testsOptions(ctx, given);
   const issueId = await trackerId(ctx, opts, issue);
   const labels = Array.isArray(opts.labels) ? opts.labels : ["e2e"];
+  const words = wordsOf(languageOf(ctx));
   const one = async (entry) => {
-    const precondition = gherkin("Dado", entry.given);
+    const precondition = gherkin(words, "given", entry.given);
     const args = defined({
       project: opts.project,
       title: entry.title,
       objective: entry.objective,
       precondition: precondition || undefined,
       labels: [...labels, entry.kind === "ui" ? "tela" : "api"],
-      steps: [{ action: gherkin("Quando", entry.when), expected: gherkin("Então", entry.then) }],
+      steps: [{ action: gherkin(words, "when", entry.when), expected: gherkin(words, "then", entry.then) }],
       folder: opts.folder ?? issue ?? undefined,
       issue: issue ?? undefined,
       issue_id: issueId,
@@ -193,7 +205,7 @@ export default step({
   name: "cases",
   label: "Test cases",
   icon: "hNoteEdit",
-  needs: "tests",
+  requires: "tests",
   doing: "Writing test cases",
   view: (s) => (Array.isArray(s.cases) ? [testCases(s.cases.map(bdd), defined({ session: s.session }))] : s.reason ? [markdown(s.reason)] : []),
   async run(ctx, opts) {

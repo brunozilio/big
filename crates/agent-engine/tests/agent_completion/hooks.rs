@@ -1,8 +1,8 @@
 use agent_engine::{model::scripted::ScriptedModel, tools::Workspace};
-use domain::PermissionMode;
+use domain::Reviewer;
 use serde_json::json;
 
-use crate::{call, delegated, done, run};
+use crate::{auto, call, delegated, done, run};
 
 #[cfg(unix)]
 #[test]
@@ -19,7 +19,7 @@ fn pre_hook_blocks_mutations_and_post_hook_receives_actual_result() {
         json!({"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"cat > hook-input.json; echo blocked >&2; exit 2"}]}]}}),
         &model,
         &workspace,
-        PermissionMode::Bypass,
+        auto(Reviewer::Nobody),
     );
     assert!(!dir.path().join("forbidden").exists());
     let input: serde_json::Value =
@@ -70,7 +70,7 @@ fn scoped_stop_hook_can_require_one_more_turn_without_affecting_the_parent() {
         json!({"hooks":{"Stop":[{"hooks":[{"type":"command","command":"input=$(cat); case \"$input\" in *'\"stop_hook_active\":false'*) echo '{\"decision\":\"block\",\"reason\":\"Verify once before finishing\"}';; *) echo '{}';; esac"}]}]}}),
         &model,
         &workspace,
-        PermissionMode::Bypass,
+        auto(Reviewer::Nobody),
     );
     assert_eq!(model.asked().len(), 4);
     assert!(model.asked()[2].messages.last().expect("hook feedback").text().contains("Verify once"));
@@ -91,7 +91,7 @@ fn prompt_hook_uses_the_model_to_reject_an_action_before_execution() {
         json!({"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"prompt","prompt":"Approve only read operations: $ARGUMENTS"}]}]}}),
         &model,
         &workspace,
-        PermissionMode::Bypass,
+        auto(Reviewer::Nobody),
     );
     assert!(!dir.path().join("forbidden").exists());
     let asked = model.asked();
@@ -116,7 +116,7 @@ fn agent_hook_can_inspect_files_with_read_only_tools_before_allowing_the_action(
         json!({"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"agent","prompt":"Check policy.txt before approving $ARGUMENTS"}]}]}}),
         &model,
         &workspace,
-        PermissionMode::Bypass,
+        auto(Reviewer::Nobody),
     );
     let asked = model.asked();
     assert!(asked[2].tools.iter().all(|tool| matches!(tool.name.as_str(), "Read" | "Glob" | "Grep")));
@@ -180,7 +180,7 @@ fn hook_allow_respects_parent_plan_mode() {
         json!({"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"printf '%s' '{\"hookSpecificOutput\":{\"permissionDecision\":\"allow\"}}'"}]}]}}),
         &model,
         &workspace,
-        PermissionMode::Plan,
+        agent_engine::control::Control::new(domain::PermissionMode::Plan, std::sync::Arc::default()),
     );
     assert!(!dir.path().join("forbidden").exists());
     assert!(format!("{:?}", model.asked()[2].messages).contains("Tool Bash is not available to this agent"));
@@ -199,7 +199,7 @@ fn pre_hook_replaces_the_actual_tool_arguments() {
         json!({"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"printf '%s' '{\"hookSpecificOutput\":{\"updatedInput\":{\"command\":\"printf safe\"}}}'"}]}]}}),
         &model,
         &workspace,
-        PermissionMode::Bypass,
+        auto(Reviewer::Nobody),
     );
     assert!(!dir.path().join("forbidden").exists());
     assert!(format!("{:?}", model.asked()[2].messages).contains("safe"));

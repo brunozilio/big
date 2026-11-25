@@ -228,28 +228,3 @@ mod channel_tests {
 pub fn from_outside(notice: &Notice) -> bool {
     notice.source.starts_with("session ")
 }
-
-pub fn admitted(notices: Vec<Notice>, mode: crate::PermissionMode) -> (Vec<Notice>, Vec<Notice>) {
-    if mode != crate::PermissionMode::Bypass {
-        return (notices, Vec::new());
-    }
-    notices.into_iter().partition(|notice| !from_outside(notice))
-}
-
-#[cfg(test)]
-mod bypass_tests {
-    use super::*;
-
-    #[test]
-    fn in_bypass_channels_and_the_computer_s_own_events_reach_the_agent_but_other_sessions_wait() {
-        let all = vec![
-            Notice::new("monitor bash_1", "up"),
-            Notice::new("channel tg", "rm -rf"),
-            Notice::new("session web-2", "hi"),
-        ];
-        let (passed, held) = admitted(all.clone(), crate::PermissionMode::Bypass);
-        assert_eq!(passed, [Notice::new("monitor bash_1", "up"), Notice::new("channel tg", "rm -rf")]);
-        assert_eq!(held, [Notice::new("session web-2", "hi")]);
-        assert_eq!(admitted(all, crate::PermissionMode::Ask).0.len(), 3);
-    }
-}

@@ -16,6 +16,10 @@ describe('aviso de tarefa em segundo plano', () => {
     expect(backgroundNotice('[background bash_7] `go test .` finished (exit code 1).')).toEqual({ command: 'go test .', ok: false, code: 1 })
   })
 
+  test('um processo que o usuário parou aparece como interrompido', () => {
+    expect(backgroundNotice('[background bash_3] `npm start` was stopped by the user.')).toEqual({ command: 'npm start', ok: false, code: null })
+  })
+
   test('outro aviso continua como texto', () => {
     expect(backgroundNotice('Contexto resumido para continuar')).toBeNull()
   })

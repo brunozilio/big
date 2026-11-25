@@ -1,3 +1,4 @@
+mod artifacts;
 mod crypto;
 mod fence;
 mod files;
@@ -46,6 +47,7 @@ const SPACES: &[(&str, Space)] = &[
     (tasks::SPACE, tasks::call),
     (observer::SPACE, observer::call),
     (hosted::SPACE, hosted::call),
+    (artifacts::SPACE, artifacts::call),
 ];
 
 fn space(function: &str) -> Option<(Space, &str)> {

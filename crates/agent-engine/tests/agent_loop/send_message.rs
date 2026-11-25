@@ -5,7 +5,7 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::model::{BoxFuture, CancellationToken, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
 use agent_engine::tools;
 use agent_engine::transcript::{Block, Message};
-use domain::{AgentStatus, EngineEvent, PermissionMode};
+use domain::{AgentStatus, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, request, tool_use};
@@ -43,7 +43,7 @@ fn result(history: &[Message], wanted: &str) -> (String, bool) {
 
 #[test]
 fn a_message_continues_the_sub_agent_in_its_own_conversation() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("a1", "Agent", json!({"description": "Notes", "prompt": "Read notes"}))]),
         ScriptedModel::reply(vec![Block::Text("They list alpha and beta.".into())]),
@@ -79,7 +79,7 @@ fn a_message_continues_the_sub_agent_in_its_own_conversation() {
 
 #[test]
 fn an_unknown_agent_is_an_error_and_sub_agents_are_not_offered_the_tool() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("m1", "SendMessage", json!({"to": "agent-9", "message": "Hi"}))]),
         ScriptedModel::reply(vec![tool_use("a1", "Agent", json!({"description": "Notes", "prompt": "Read notes"}))]),
@@ -115,7 +115,7 @@ impl ModelApi for Split {
 
 #[test]
 fn a_background_agent_takes_messages_once_collected() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = Split {
         parent: ScriptedModel::new([
             ScriptedModel::reply(vec![tool_use(

@@ -28,6 +28,10 @@ fn a_change_and_a_pipeline_take_the_page_s_shape() {
     assert_eq!(data["comments"][0]["kind"], "approved");
     assert_eq!(data["comments"][1]["line"], 4);
     assert_eq!(data["author"]["name"], "bia");
+    let by_agent =
+        json!([{ "id": "d", "path": "a.rs", "line": 4, "author": "bia", "agent": "reviewer", "body": "!", "at": "x" }]);
+    let author = &change_data("o/r#3", &pull, &files, &by_agent)["comments"][1]["author"];
+    assert_eq!((author["name"].as_str(), author["agent"].as_bool()), (Some("reviewer"), Some(true)));
     let run = json!({ "ref": "o/r/runs/9", "pipeline": "CI", "state": "failed", "head": "h", "jobs": [
         { "id": "1", "key": "build", "name": "build", "state": "passed", "needs": [], "steps": [] },
         { "id": "2", "key": "test", "name": "test", "state": "cancelled", "needs": ["build"],

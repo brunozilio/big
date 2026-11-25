@@ -54,6 +54,7 @@ describe('respostas reais do servidor', () => {
     expect(models.models.every((m) => Array.isArray(m.efforts) && typeof m.fast === 'boolean')).toBe(true)
     const branding = load('branding') as Branding
     expect(['system', 'light', 'dark']).toContain(branding.theme)
+    expect(['en', 'es', 'pt-BR']).toContain(branding.language)
   })
 
   test('leituras dos blocos', () => {

@@ -158,7 +158,10 @@ mod tests {
         assert!(!workspace.may_read(&own.join("mcp.json")), "settings may hold secrets");
         assert!(!workspace.may_read(&own.join("teams/team-1/config.json")), "other sessions' teams stay outside");
         let agents = own.join("agents");
-        assert!(workspace.stays_inside(&[domain::permission::Effect::ReadTree(workspace.place(&agents.display().to_string()))]));
+        assert!(
+            workspace
+                .stays_inside(&[domain::permission::Effect::ReadTree(workspace.place(&agents.display().to_string()))])
+        );
         assert!(workspace.bounds().guard(&workspace.place(&instructions.display().to_string()).real).is_some());
         assert!(!workspace.may_read(&home.path().join(".ssh/id_ed25519")), "the rest of home stays outside");
     }

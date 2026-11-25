@@ -1,7 +1,7 @@
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::model::{ModelError, Reply};
 use agent_engine::transcript::{Block, Message, StopReason, Usage};
-use domain::{ModelOption, PermissionMode};
+use domain::ModelOption;
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -23,7 +23,7 @@ fn measured(blocks: Vec<Block>, prompt: u64) -> Result<Reply, ModelError> {
 
 #[test]
 fn clearing_old_tool_results_comes_before_summarising() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.model = ModelOption::new("m", "M").with_window(100_000);
     let mut history = vec![Message::user("look around")];
     for i in 0..8 {
@@ -46,7 +46,7 @@ fn clearing_old_tool_results_comes_before_summarising() {
 
 #[test]
 fn the_provider_s_own_token_count_decides_when_to_compact() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.model = ModelOption::new("m", "M").with_window(100_000);
     let model = ScriptedModel::new([
         measured(vec![tool_use("r", "Read", json!({"file_path": "notes.txt"}))], 95_000),
@@ -62,7 +62,7 @@ fn the_provider_s_own_token_count_decides_when_to_compact() {
 
 #[test]
 fn a_long_resumed_conversation_that_compacts_mid_turn_still_finishes() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.model = ModelOption::new("m", "M").with_window(100_000);
     let mut history = Vec::new();
     for i in 0..20 {
@@ -83,7 +83,7 @@ fn a_long_resumed_conversation_that_compacts_mid_turn_still_finishes() {
 
 #[test]
 fn a_failed_automatic_summary_leaves_the_conversation_whole_and_the_turn_goes_on() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.model = ModelOption::new("m", "M").with_window(100_000);
     let model = ScriptedModel::new([
         measured(vec![tool_use("r", "Read", json!({"file_path": "notes.txt"}))], 95_000),

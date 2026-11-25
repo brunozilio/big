@@ -14,14 +14,14 @@ export interface PlanDoc {
 }
 
 const kinds: [PlanKind, RegExp][] = [
-  ['story', /^(descri[çc][ãa]o|hist[óo]ria|user story)/i],
-  ['criteria', /^(crit[ée]rios de aceite|acceptance criteria)/i],
-  ['subtasks', /^(subtarefas|subtasks)/i],
-  ['context', /^(contexto|context|problema|objetivo|resumo|summary)/i],
-  ['steps', /^(abordagem|approach|passos|steps|implementa|plano de implementa)/i],
-  ['files', /^(arquivos|critical files|files)/i],
-  ['risks', /^(riscos|risks)/i],
-  ['checks', /^(verifica|verification|testes|como verificar)/i],
+  ['story', /^(descri[çc][ãa]o|descripci[óo]n|description|hist[óo]ria|user story)/i],
+  ['criteria', /^(crit[ée]rios de aceite|criterios de aceptaci[óo]n|acceptance criteria)/i],
+  ['subtasks', /^(subtarefas|subtareas|subtasks)/i],
+  ['context', /^(contexto|context|problema|problem|objetivo|goal|resumo|resumen|summary)/i],
+  ['steps', /^(abordagem|enfoque|approach|passos|pasos|steps|implementa|plano de implementa|plan de implementa)/i],
+  ['files', /^(arquivos|archivos|archivos cr[íi]ticos|critical files|files)/i],
+  ['risks', /^(riscos|riesgos|risks)/i],
+  ['checks', /^(verifica|verification|testes|pruebas|tests|como verificar|c[óo]mo verificar|how to verify)/i],
 ]
 
 const kindOf = (heading: string): PlanKind => kinds.find(([, re]) => re.test(heading))?.[0] ?? 'other'
@@ -102,18 +102,18 @@ export function subtasksOf(body: string): Subtask[] {
 }
 
 export function stressed(criterion: string): string {
-  return criterion.replace(/(^|[,;.]\s*)(dado que|dado|quando|então|e)(?=\s)/gi, (_, lead: string, word: string) => `${lead}**${word.charAt(0).toUpperCase()}${word.slice(1)}**`)
+  return criterion.replace(/(^|[,;.]\s*)(dado que|dado|quando|então|e|given|when|then|and|cuando|entonces|y)(?=\s)/gi, (_, lead: string, word: string) => `${lead}**${word.charAt(0).toUpperCase()}${word.slice(1)}**`)
 }
 
 const capital = (word: string) => `**${word.charAt(0).toUpperCase()}${word.slice(1)}**`
 
 export function storied(story: string): string {
-  const lead = story.replace(/^(\s*)(como)(?=\s)/i, (_, space: string, word: string) => `${space}${capital(word)}`)
-  const want = /(,?\s*)(eu quero)(?=\s)/i.exec(lead)
+  const lead = story.replace(/^(\s*)(como|as an|as a)(?=\s)/i, (_, space: string, word: string) => `${space}${capital(word)}`)
+  const want = /(,?\s*)(eu quero|i want|quiero)(?=\s)/i.exec(lead)
   if (!want) return lead
   const cut = want.index + want[0].length
   const head = `${lead.slice(0, want.index)}${want[1]}${capital(want[2])}`
-  const tail = lead.slice(cut).replace(/(\s)(para que|para)(?=\s)/i, (_, space: string, word: string) => `${space}${capital(word)}`)
+  const tail = lead.slice(cut).replace(/(\s)(para que|para|so that)(?=\s)/i, (_, space: string, word: string) => `${space}${capital(word)}`)
   return `${head}${tail}`
 }
 

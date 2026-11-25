@@ -25,7 +25,7 @@ impl PolicyEngine {
         }
         let planned = cx.mode() == PermissionMode::Plan && (only_commands(call) || super::only_fetch(call.effects));
         let browses = cx.mode() == PermissionMode::Plan && super::only_browser(call.effects);
-        let mode = if browses { PermissionMode::Ask } else { cx.mode() };
+        let mode = if browses { PermissionMode::Auto } else { cx.mode() };
         let decided = by_mode(mode, stood.standing, call.tool, &stood.subject, cx.remembered);
         let verdict = match if planned { Verdict::Allow } else { decided } {
             Verdict::Ask { .. } => {
@@ -47,7 +47,7 @@ fn by_the_list(call: &Call<'_>, cx: &PolicyContext<'_>, standing: Standing) -> O
     let listed = allowed.verdict(call);
     match listed {
         Some(Behavior::Deny) => return Some(Verdict::Deny(format!("{} is denied by the permission list.", call.tool))),
-        Some(Behavior::Ask) => return Some(Verdict::Ask { reason: Reason::Mode, rememberable: false }),
+        Some(Behavior::Ask) => return Some(Verdict::Ask { reason: Reason::Listed, rememberable: false }),
         _ => {}
     }
     if standing != Standing::Acts {
@@ -57,7 +57,11 @@ fn by_the_list(call: &Call<'_>, cx: &PolicyContext<'_>, standing: Standing) -> O
     if cx.mode() == PermissionMode::Plan && !plannable {
         return None;
     }
-    Some(if listed == Some(Behavior::Allow) { Verdict::Allow } else { Verdict::Ask { reason: Reason::Mode, rememberable: true } })
+    Some(if listed == Some(Behavior::Allow) {
+        Verdict::Allow
+    } else {
+        Verdict::Ask { reason: Reason::Mode, rememberable: true }
+    })
 }
 
 fn only_commands(call: &Call<'_>) -> bool {
@@ -99,13 +103,13 @@ fn standing(call: &Call<'_>, cx: &PolicyContext<'_>) -> Stood {
 fn by_mode(mode: PermissionMode, standing: Standing, tool: &str, subject: &str, remembered: &Remembered) -> Verdict {
     let ask = || Verdict::Ask { reason: Reason::Mode, rememberable: true };
     match (mode, standing) {
-        (_, Standing::Reads) | (PermissionMode::Bypass, _) => Verdict::Allow,
+        (_, Standing::Reads) => Verdict::Allow,
         (_, Standing::ReadsOutside) if remembered.allows(tool, standing, subject) => Verdict::Allow,
         (_, Standing::ReadsOutside) => ask(),
         (PermissionMode::Plan, _) => Verdict::Deny(format!(
             "{tool} is not available while planning: only read and search now, then present the plan."
         )),
-        (PermissionMode::AcceptEdits, Standing::Edits) => Verdict::Allow,
+        (PermissionMode::Auto, Standing::Edits) => Verdict::Allow,
         _ if remembered.allows(tool, standing, subject) => Verdict::Allow,
         _ => ask(),
     }

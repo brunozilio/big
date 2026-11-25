@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api } from '.'
+import { currentLanguage, translate } from '@/i18n'
 import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connections, Item, LiveEvent, Models, Session, SessionEvent, StepView } from './contract'
 
 export interface State {
@@ -41,7 +42,7 @@ export function useStore<T>(select: (s: State) => T): T {
 }
 
 export function errorText(e: unknown): string {
-  return e instanceof Error ? e.message : 'Algo deu errado'
+  return e instanceof Error ? e.message : translate(currentLanguage(), 'app.somethingWrong')
 }
 
 function upsertItem(items: Item[], item: Item): Item[] {
@@ -70,6 +71,12 @@ export function applyLive(e: LiveEvent) {
       return
     case 'session':
       set((s) => (s.sessions[e.session] ? { sessions: { ...s.sessions, [e.session]: upsertEvent(s.sessions[e.session], e.event) } } : {}))
+      return
+    case 'session.event.removed':
+      set((s) => (s.sessions[e.session] ? { sessions: { ...s.sessions, [e.session]: { ...s.sessions[e.session], events: s.sessions[e.session].events.filter((x) => x.id !== e.id) } } } : {}))
+      return
+    case 'session.work':
+      set((s) => (s.sessions[e.session] ? { sessions: { ...s.sessions, [e.session]: { ...s.sessions[e.session], work: e.work } } } : {}))
       return
     case 'session.status':
       applyStatus(e.session, e.status)

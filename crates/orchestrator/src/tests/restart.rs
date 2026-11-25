@@ -202,7 +202,7 @@ async fn a_pending_ask_survives_a_restart_and_its_answer_is_kept_in_the_log() {
     let current = kernel.asks();
     assert_eq!(current.len(), 1, "the question asked again replaces the restored one: {current:?}");
     let note = json!({ "id": current[0].ask.id.0, "at": "2026-01-01T00:00:00Z", "resolution": "approved" });
-    let decision = domain::Decision::Approve(domain::PermissionMode::Bypass);
+    let decision = domain::Decision::Approve(domain::PermissionMode::Auto);
     kernel.answer_ask_with(&current[0].ask.id, &decision, note.clone()).expect("answer");
     ended(&kernel, &id).await;
     crash(kernel).await;
@@ -232,7 +232,7 @@ async fn a_restored_question_the_resumed_agent_does_not_ask_again_is_cleared_whe
     assert!(item.impediment.is_none(), "{:?}", item.impediment);
     let requests = world.engine.requests();
     let resumed = requests.iter().rfind(|request| request.session.command.is_none()).expect("resumed");
-    assert!(resumed.prompt.text.contains("pergunte de novo"), "{}", resumed.prompt.text);
+    assert!(resumed.prompt.text.contains("ask again"), "{}", resumed.prompt.text);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -271,7 +271,7 @@ async fn an_answer_given_before_the_resumed_agent_asks_again_is_applied_to_the_n
     let kernel = world.start().await;
     let restored = kernel.asks();
     assert_eq!(restored.len(), 1);
-    let decision = domain::Decision::Approve(domain::PermissionMode::Bypass);
+    let decision = domain::Decision::Approve(domain::PermissionMode::Auto);
     kernel.answer_ask(&restored[0].ask.id, &decision).expect("answer");
     assert!(kernel.asks().is_empty());
     ended(&kernel, &id).await;
@@ -345,4 +345,32 @@ async fn a_changed_workflow_that_no_longer_matches_the_history_runs_the_step_aga
     let item = ended(&kernel, &id).await;
     assert!(item.impediment.is_none(), "{:?}", item.impediment);
     assert_eq!(output(&item)["data"]["by"], "novo");
+}
+
+fn back_and_forth(make: &str, look: &str) -> String {
+    format!(
+        "import {{ workflow, step }} from \"sdk\";\nconst make = step({{ name: \"make\", async run(ctx) {{ {make} }} }});\nconst look = step({{ name: \"look\", async run(ctx) {{ {look} }} }});\nexport default workflow({{ name: \"loop\", steps: [make(), look()] }});\n"
+    )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_changed_workflow_diverging_in_an_earlier_run_of_a_step_that_ran_again_goes_back_to_that_run() {
+    let world = World::new();
+    let make = "await ctx.sleep(1); if (ctx.from) await ctx.waitHuman([]); return ctx.pass(1);";
+    let look = "return ctx.goto(\"make\", { body: \"refaça\" });";
+    world.workflow("loop", &back_and_forth(make, look));
+    let kernel = world.start().await;
+    let id = kernel.create_item("loop", json!({ "title": "t" })).expect("item");
+    until(&kernel, &id, |item| requested(item, |effect| matches!(effect, Effect::WaitHuman { .. })) == 1).await;
+    crash(kernel).await;
+    world.workflow("loop", &back_and_forth("await ctx.waitHuman([]); return ctx.pass(2);", "return ctx.pass(0);"));
+    let kernel = world.start().await;
+    let rerun = |item: &WorkItem| {
+        item.effects.values().any(|entry| entry.request.key.seq == 1 && matches!(entry.request.effect, Effect::WaitHuman { .. }))
+    };
+    let waiting = until(&kernel, &id, |item| item.impediment.is_some() || rerun(item)).await;
+    assert!(waiting.impediment.is_none(), "{:?}", waiting.impediment);
+    kernel.human_input(&id, "make", "ok", json!({})).expect("answer");
+    let item = ended(&kernel, &id).await;
+    assert!(item.impediment.is_none(), "{:?}", item.impediment);
 }

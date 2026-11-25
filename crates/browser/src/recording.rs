@@ -117,7 +117,9 @@ pub fn decode_png(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), String> {
     buffer.truncate(info.buffer_size());
     let rgba = match info.color_type {
         png::ColorType::Rgba => buffer,
-        png::ColorType::Rgb => buffer.as_chunks::<3>().0.iter().flat_map(|[red, green, blue]| [*red, *green, *blue, 255]).collect(),
+        png::ColorType::Rgb => {
+            buffer.as_chunks::<3>().0.iter().flat_map(|[red, green, blue]| [*red, *green, *blue, 255]).collect()
+        }
         png::ColorType::GrayscaleAlpha => {
             buffer.as_chunks::<2>().0.iter().flat_map(|[gray, alpha]| [*gray, *gray, *gray, *alpha]).collect()
         }

@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -12,7 +12,7 @@ const DATABASE: &str = "postgres://app:hunter2hunter@db/main";
 
 #[test]
 fn secrets_in_a_command_s_output_reach_neither_the_model_nor_the_events() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     std::fs::write(rig.dir.path().join(".env"), format!("DATABASE_URL={DATABASE}\n")).expect("env");
     rig.workspace.policy.redact = Some(Arc::new(agent_engine::tools::env_secrets(rig.dir.path())));
     let command = format!("echo token {TOKEN}; echo url {DATABASE}; echo plain");
@@ -47,7 +47,7 @@ fn secrets_in_a_command_s_output_reach_neither_the_model_nor_the_events() {
 
 #[test]
 fn without_the_flag_output_is_left_as_it_is() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("b", "Bash", json!({ "command": format!("echo {TOKEN}") }))]),
         ScriptedModel::reply(vec![Block::Text("Done".into())]),
@@ -60,7 +60,7 @@ fn without_the_flag_output_is_left_as_it_is() {
 
 #[test]
 fn a_command_s_lines_show_while_it_runs_and_keep_secrets_out() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     std::fs::write(rig.dir.path().join(".env"), format!("DATABASE_URL={DATABASE}\n")).expect("env");
     rig.workspace.policy.redact = Some(Arc::new(agent_engine::tools::env_secrets(rig.dir.path())));
     let command = format!("echo compiling one; sleep 0.5; echo url {DATABASE}; sleep 0.5; echo finished");

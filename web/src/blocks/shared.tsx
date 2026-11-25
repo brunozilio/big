@@ -9,6 +9,8 @@ import { Icon } from '@/ui/icon'
 import { MarkdownPreview } from '@/ui/markdownProse'
 import { Collapse, motion, tween } from '@/ui/motion'
 import { ChatView } from '@/chat/ChatView'
+import { AgentMark } from '@/chat/events'
+import { useT } from '@/i18n'
 import { useBlockHost } from './context'
 
 export function RichText({ text }: { text: string }) {
@@ -16,16 +18,18 @@ export function RichText({ text }: { text: string }) {
 }
 
 export function Author({ person, size = 22 }: { person: Person; size?: number }) {
+  if (person.agent) return <span className="flex shrink-0"><AgentMark agent={person.id} size={size - 2} /></span>
   return <PersonAvatar person={person} size={size} />
 }
 
 export function CommentItem({ c, compact }: { c: Comment; compact?: boolean }) {
+  const t = useT()
   if (c.kind === 'approved') {
     return (
       <div className="flex items-center gap-2.5 py-1 text-base">
         <span className="flex size-[22px] items-center justify-center rounded-full bg-success text-white"><Icon name="check" size={13} strokeWidth={2.4} /></span>
         <span className="font-medium text-fg">{personName(c.author)}</span>
-        <span className="text-muted">aprovou estas mudanças</span>
+        <span className="text-muted">{t('blocks.approvedChanges')}</span>
         <span className="ml-auto text-xs tabular-nums text-faint">{ago(c.at)}</span>
       </div>
     )

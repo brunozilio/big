@@ -6,6 +6,7 @@ import { Kbd } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { AnimatePresence, motion, springPop, springSnap, tween, tweenClose } from '@/ui/motion'
+import { useT } from '@/i18n'
 import type { Ev } from './events'
 
 export type Respond = (event: string, response: AskResponse) => Promise<void>
@@ -42,6 +43,7 @@ export function ResolvedCheck({ tone = 'success' }: { tone?: 'success' | 'danger
 }
 
 export function AskUserCard({ questions, onSubmit, disabled }: { questions: AskQuestion[]; onSubmit: (answers: string[]) => void; disabled?: boolean }) {
+  const t = useT()
   const [page, setPage] = useState(0)
   const [answers, setAnswers] = useState<(string[] | null)[]>(() => questions.map(() => null))
   const [cursor, setCursor] = useState(0)
@@ -156,14 +158,14 @@ export function AskUserCard({ questions, onSubmit, disabled }: { questions: AskQ
                     choose(other.trim())
                   }
                 }}
-                placeholder="Digite sua própria resposta"
+                placeholder={t('plan.ownAnswer')}
                 className="h-8 flex-1 bg-transparent text-md text-fg outline-none placeholder:text-muted"
               />
               <AnimatePresence>
                 {other.trim() && (
                   <motion.span initial={{ opacity: 0, scale: 0.96, filter: 'blur(2px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 0.96, filter: 'blur(0px)', transition: tweenClose }} transition={tween}>
                     <Button size="sm" variant="primary" onClick={() => choose(other.trim())} kbd="↵">
-                      Usar
+                      {t('plan.use')}
                     </Button>
                   </motion.span>
                 )}
@@ -182,15 +184,15 @@ export function AskUserCard({ questions, onSubmit, disabled }: { questions: AskQ
           </span>
           <span className="hidden items-center gap-1.5 text-sm text-muted md:flex">
             <Kbd>↑</Kbd>
-            <Kbd>↓</Kbd> para navegar
+            <Kbd>↓</Kbd> {t('plan.toNavigate')}
           </span>
           <span className="ml-auto flex items-center gap-3">
             <button disabled={disabled} className="inline-flex items-center gap-1.5 transition-colors hover:text-fg" onClick={skip}>
-              Pular pergunta <Kbd>Esc</Kbd>
+              {t('plan.skipQuestion')} <Kbd>Esc</Kbd>
             </button>
             {q.multiSelect && (
               <Button size="sm" variant="primary" disabled={disabled} onClick={() => advance(answers)} kbd="↵">
-                Enviar
+                {t('plan.send')}
               </Button>
             )}
           </span>
@@ -202,13 +204,14 @@ export function AskUserCard({ questions, onSubmit, disabled }: { questions: AskQ
 
 
 export function useSend(respond: Respond) {
+  const t = useT()
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const send = (event: string, response: AskResponse) => {
     setBusy(true)
     setError(null)
     respond(event, response)
-      .catch((e: unknown) => setError(e instanceof Error ? e.message : 'Não foi possível responder'))
+      .catch((e: unknown) => setError(e instanceof Error ? e.message : t('plan.respondFailed')))
       .finally(() => setBusy(false))
   }
   return { busy, error, send }
@@ -225,6 +228,7 @@ export function Failure({ text }: { text: string | null }) {
 }
 
 export function AskBlock({ event, readOnly, respond }: { event: Ev<'ask'>; readOnly?: boolean; respond: Respond }) {
+  const t = useT()
   const { busy, error, send } = useSend(respond)
   if (event.answers) {
     return (
@@ -237,7 +241,7 @@ export function AskBlock({ event, readOnly, respond }: { event: Ev<'ask'>; readO
               {event.questions.map((q, i) => (
                 <div key={q.question}>
                   <p className="text-base text-muted">{q.question}</p>
-                  <p className="mt-0.5 text-md text-fg">{event.answers?.[i] || 'Pulada'}</p>
+                  <p className="mt-0.5 text-md text-fg">{event.answers?.[i] || t('plan.skipped')}</p>
                 </div>
               ))}
             </div>
@@ -257,31 +261,32 @@ export function AskBlock({ event, readOnly, respond }: { event: Ev<'ask'>; readO
 }
 
 export function PermissionBlock({ event, readOnly, respond }: { event: Ev<'permission'>; readOnly?: boolean; respond: Respond }) {
+  const t = useT()
   const { busy, error, send } = useSend(respond)
   if (event.resolution !== 'pending') return null
   const decide = (decision: 'allowed' | 'always' | 'denied') => send(event.id, { kind: 'permission', decision })
   return (
-    <ActionBlock tone="warning" title="Aguardando sua aprovação" icon={<Icon name="hourglass" size={17} strokeWidth={2} />}>
+    <ActionBlock tone="warning" title={t('plan.awaitingApproval')} icon={<Icon name="hourglass" size={17} strokeWidth={2} />}>
       <div className="flex items-start gap-3">
         {event.logo ? <ProviderLogo logo={event.logo} size={34} tile /> : <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[28%] bg-surface text-fg2 shadow-card"><Icon name="terminal" size={18} /></span>}
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1">
           <p className="text-base text-muted">
-            O agente quer usar <code className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-xs text-fg shadow-card">{event.tool}</code>
+            {t('plan.wantsToUse')} <code className="rounded-sm bg-surface px-1.5 py-0.5 font-mono text-xs text-fg shadow-card">{event.tool}</code>
           </p>
-          <p className="mt-1.5 text-md text-fg">{event.detail}</p>
+          <p className="mt-1.5 max-h-64 overflow-y-auto whitespace-pre-wrap text-md text-fg [overflow-wrap:anywhere]">{event.detail}</p>
         </div>
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
         <Button size="sm" variant="primary" disabled={readOnly || busy} onClick={() => decide('allowed')} kbd="↵">
-          Permitir uma vez
+          {t('plan.allowOnce')}
         </Button>
         {event.rememberable !== false && (
           <Button size="sm" disabled={readOnly || busy} onClick={() => decide('always')}>
-            Sempre permitir
+            {t('plan.alwaysAllow')}
           </Button>
         )}
         <Button size="sm" variant="ghost" className="text-danger-fg hover:text-danger-fg" disabled={readOnly || busy} onClick={() => decide('denied')}>
-          Negar
+          {t('plan.deny')}
         </Button>
       </div>
       <Failure text={error} />

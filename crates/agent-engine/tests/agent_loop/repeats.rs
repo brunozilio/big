@@ -1,6 +1,5 @@
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::PermissionMode;
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -11,7 +10,7 @@ fn read(id: &str) -> Result<agent_engine::model::Reply, agent_engine::model::Mod
 
 #[test]
 fn a_third_identical_call_is_not_run_and_says_how_to_get_another_tool() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([
         read("r1"),
         read("r2"),
@@ -38,7 +37,7 @@ fn a_third_identical_call_is_not_run_and_says_how_to_get_another_tool() {
 
 #[test]
 fn an_edit_says_which_lines_it_changed() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     std::fs::write(rig.dir.path().join("list.txt"), "one\ntwo\nthree\n").expect("write");
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("r", "Read", json!({"file_path": "list.txt"}))]),

@@ -12,6 +12,7 @@ import { SectionTitle } from '@/ui/layout'
 import { stagger, tween } from '@/ui/motion'
 import { paceOf } from './pace'
 import { accountLabel } from './usageTidy'
+import { useT } from '@/i18n'
 
 export function limitTone(pct: number): 'critical' | 'warning' | 'normal' {
   return pct >= 95 ? 'critical' : pct >= 80 ? 'warning' : 'normal'
@@ -21,6 +22,7 @@ const barClass = { critical: 'bg-danger', warning: 'bg-warning', normal: 'bg-fg/
 const textClass = { critical: 'text-danger-fg', warning: 'text-warning-fg', normal: 'text-fg2' }
 
 function LimitBar({ window: w }: { window: UsageWindow }) {
+  const t = useT()
   const pct = Math.min(100, Math.max(0, w.usedPercent))
   const tone = limitTone(pct)
   const pace = paceOf(w, Date.now())
@@ -34,24 +36,25 @@ function LimitBar({ window: w }: { window: UsageWindow }) {
         <div role="meter" aria-label={w.label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(pct)} className="h-[5px] w-full overflow-hidden rounded-full bg-inset">
           <motion.div className={cn('h-full w-full origin-left rounded-full', barClass[tone])} initial={{ scaleX: 0 }} animate={{ scaleX: pct / 100 }} transition={tween} />
         </div>
-        {pace && <span data-testid="elapsed-tick" title="Tempo decorrido da janela" className="absolute -top-[3px] h-[11px] w-[2px] -translate-x-1/2 rounded-full bg-fg/50" style={{ left: `${pace.elapsed * 100}%` }} />}
+        {pace && <span data-testid="elapsed-tick" title={t('settings.limits_elapsed')} className="absolute -top-[3px] h-[11px] w-[2px] -translate-x-1/2 rounded-full bg-fg/50" style={{ left: `${pace.elapsed * 100}%` }} />}
       </div>
-      {w.resetsAt && <p className="text-xs text-faint">reinicia {relTime(w.resetsAt)}</p>}
+      {w.resetsAt && <p className="text-xs text-faint">{t('settings.limits_resets', { when: relTime(w.resetsAt) })}</p>}
     </li>
   )
 }
 
 function AccountBody({ account }: { account: UsageLimitAccount }) {
-  if (account.status === 'unsupported') return <p className="text-sm text-faint">Este provedor não informa limites</p>
+  const t = useT()
+  if (account.status === 'unsupported') return <p className="text-sm text-faint">{t('settings.limits_unsupported')}</p>
   if (account.status === 'error') {
     return (
       <p className="flex items-start gap-1.5 text-sm text-danger-fg">
         <Icon name="alert" size={14} className="mt-0.5 shrink-0" />
-        <span>{account.error ?? 'Não foi possível consultar os limites'}</span>
+        <span>{account.error ?? t('settings.limits_failed')}</span>
       </p>
     )
   }
-  if (!account.windows.length) return <p className="text-sm text-faint">Nenhum limite ativo</p>
+  if (!account.windows.length) return <p className="text-sm text-faint">{t('settings.limits_none')}</p>
   return (
     <ul className="space-y-3.5">
       {account.windows.map((w) => <LimitBar key={w.id} window={w} />)}
@@ -100,10 +103,11 @@ function LimitsSkeleton() {
 }
 
 export function LimitsSection() {
+  const t = useT()
   const [nonce, setNonce] = useState(0)
   const limits = useLoad(() => api().usageLimits(), [nonce])
   const refresh = (
-    <IconButton tooltip="Atualizar limites" size="sm" onClick={() => setNonce((n) => n + 1)} disabled={limits.loading}>
+    <IconButton tooltip={t('settings.limits_refresh')} size="sm" onClick={() => setNonce((n) => n + 1)} disabled={limits.loading}>
       <motion.span className="flex" animate={limits.loading ? { rotate: 360 } : { rotate: 0 }} transition={limits.loading ? { repeat: Infinity, duration: 0.9, ease: 'linear' } : { duration: 0 }}>
         <Icon name="refresh" size={15} />
       </motion.span>
@@ -111,12 +115,12 @@ export function LimitsSection() {
   )
   return (
     <section className="mb-10">
-      <SectionTitle className="mb-3" actions={refresh}>Limites do plano</SectionTitle>
+      <SectionTitle className="mb-3" actions={refresh}>{t('settings.limits_title')}</SectionTitle>
       {limits.error && <p role="alert" className="mb-3 text-sm text-danger-fg">{limits.error}</p>}
       {!limits.data ? (
         limits.loading ? <LimitsSkeleton /> : null
       ) : limits.data.accounts.length === 0 ? (
-        <EmptyState size="inline" align="start" title="Nenhuma conta de assinatura conectada" />
+        <EmptyState size="inline" align="start" title={t('settings.limits_noAccounts')} />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {limits.data.accounts.map((a, i) => <AccountCard key={`${a.provider}:${a.account}`} account={a} index={i} />)}

@@ -19,4 +19,4 @@ export default `You are the {{NAME}} Observer. Another agent is working on a wor
 - It is repeating the same attempt that already failed.
 
 ## How to warn
-A short warning, in Brazilian Portuguese, with the problem and what to do. Do not repeat a warning already given, do not praise, do not narrate. On most turns there is nothing to say.`;
+A short warning, in the session language, with the problem and what to do. Do not repeat a warning already given, do not praise, do not narrate. On most turns there is nothing to say.`;

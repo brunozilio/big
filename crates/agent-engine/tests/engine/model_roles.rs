@@ -17,7 +17,7 @@ fn engine(model: &Arc<ScriptedModel>) -> Engine {
 
 fn request(dir: &tempfile::TempDir, role: ModelRole, chosen: &str) -> PromptRequest {
     let mut request = PromptRequest::plain(dir.path().into(), "Look around", model());
-    request.policy.permission = PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     request.session.roles.set(role, Some(chosen.into()));
     request
 }
@@ -85,7 +85,7 @@ fn the_session_s_fallbacks_take_over_when_the_model_is_busy() {
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
     ]));
     let mut request = PromptRequest::plain(dir.path().into(), "go", model());
-    request.policy.permission = PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     request.session.fallbacks = vec![GROK.into()];
     finish(&start(&engine(&scripted), &request));
     assert_eq!(scripted.asked()[1].model, GROK, "the session's chain wins over the settings file");

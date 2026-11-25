@@ -8,10 +8,14 @@ mod embedded {
 mod bundle;
 #[cfg(test)]
 mod factory_tests;
+#[cfg(test)]
+mod graph_tests;
 mod install;
 mod render;
 #[cfg(test)]
 mod sdk_tests;
+#[cfg(test)]
+mod security_tests;
 #[cfg(test)]
 mod stdlib_tests;
 

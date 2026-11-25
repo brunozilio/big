@@ -8,8 +8,28 @@ use crate::session::Ask;
 pub(crate) const MOST: usize = 20;
 
 const STOP_WORDS: [&str; 22] = [
-    "the", "a", "an", "of", "on", "in", "to", "for", "with", "and", "or", "that", "this", "is", "at", "by", "from",
-    "element", "elements", "containing", "contains", "named",
+    "the",
+    "a",
+    "an",
+    "of",
+    "on",
+    "in",
+    "to",
+    "for",
+    "with",
+    "and",
+    "or",
+    "that",
+    "this",
+    "is",
+    "at",
+    "by",
+    "from",
+    "element",
+    "elements",
+    "containing",
+    "contains",
+    "named",
 ];
 
 const ROLE_WORDS: [(&str, &[&str]); 21] = [
@@ -77,7 +97,8 @@ fn listing(query: &str, picked: &[&Value], more: Option<Option<usize>>) -> Value
         Some(Some(total)) => text.push_str(&format!(
             "\n\nMore than {MOST} elements match ({total} in all); use a more specific query to narrow them down."
         )),
-        Some(None) => text.push_str(&format!("\n\nMore than {MOST} elements match; use a more specific query to narrow them down.")),
+        Some(None) => text
+            .push_str(&format!("\n\nMore than {MOST} elements match; use a more specific query to narrow them down.")),
         None => {}
     }
     text_result(text, false)
@@ -88,8 +109,11 @@ fn rank<'a>(query: &str, candidates: &'a [Value]) -> Vec<Scored<'a>> {
     let words = words(&lowered);
     let (roles, terms): (Vec<&str>, Vec<&str>) =
         words.iter().map(String::as_str).partition(|word| ROLE_WORDS.iter().any(|(role_word, _)| role_word == word));
-    let wanted_roles: Vec<&str> =
-        roles.iter().flat_map(|word| ROLE_WORDS.iter().filter(move |(role_word, _)| role_word == word)).flat_map(|(_, roles)| roles.iter().copied()).collect();
+    let wanted_roles: Vec<&str> = roles
+        .iter()
+        .flat_map(|word| ROLE_WORDS.iter().filter(move |(role_word, _)| role_word == word))
+        .flat_map(|(_, roles)| roles.iter().copied())
+        .collect();
     let mut scored: Vec<Scored<'a>> = candidates
         .iter()
         .map(|candidate| Scored { score: score(candidate, &lowered, &terms, &roles, &wanted_roles), candidate })
@@ -182,7 +206,9 @@ fn attributes(candidate: &Value) -> String {
         .map(|attrs| {
             attrs
                 .iter()
-                .map(|(key, value)| format!("{key}={}", value.as_str().map_or_else(|| value.to_string(), str::to_owned)))
+                .map(|(key, value)| {
+                    format!("{key}={}", value.as_str().map_or_else(|| value.to_string(), str::to_owned))
+                })
                 .collect::<Vec<_>>()
                 .join(" ")
                 .to_lowercase()
@@ -198,12 +224,16 @@ fn words(text: &str) -> Vec<String> {
 }
 
 fn has_word(haystack: &str, word: &str) -> bool {
-    haystack.split(|c: char| !c.is_alphanumeric()).any(|part| part == word || part.strip_suffix('s') == Some(word) || word.strip_suffix('s') == Some(part))
+    haystack
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|part| part == word || part.strip_suffix('s') == Some(word) || word.strip_suffix('s') == Some(part))
 }
 
 fn near(haystack: &str, term: &str) -> bool {
     let stem = &term[..term.char_indices().nth(term.chars().count() * 3 / 4).map_or(term.len(), |(at, _)| at)];
-    haystack.split(|c: char| !c.is_alphanumeric()).any(|part| part.len() >= 4 && (part.starts_with(stem) || term.starts_with(part)))
+    haystack
+        .split(|c: char| !c.is_alphanumeric())
+        .any(|part| part.len() >= 4 && (part.starts_with(stem) || term.starts_with(part)))
 }
 
 pub(crate) fn line(candidate: &Value) -> String {
@@ -213,7 +243,9 @@ pub(crate) fn line(candidate: &Value) -> String {
         line.push_str(&format!(" \"{}\"", clip(field("name"), 100)));
     }
     if let Some(attrs) = candidate["attrs"].as_object() {
-        for (key, value) in attrs.iter().filter(|(key, _)| ["type", "placeholder", "href", "value"].contains(&key.as_str())) {
+        for (key, value) in
+            attrs.iter().filter(|(key, _)| ["type", "placeholder", "href", "value"].contains(&key.as_str()))
+        {
             let value = value.as_str().map_or_else(|| value.to_string(), str::to_owned);
             line.push_str(&format!(" {key}=\"{}\"", clip(&value, 80)));
         }

@@ -6,14 +6,14 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::model::{ModelError, TurnRequest};
 use agent_engine::tools;
 use agent_engine::transcript::{Block, Message};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::json;
 
 use crate::{Rig, request, tool_use};
 
 #[test]
 fn a_sub_agent_works_in_its_own_conversation_and_reports_back() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use(
             "a1",
@@ -68,7 +68,7 @@ fn a_sub_agent_works_in_its_own_conversation_and_reports_back() {
 #[test]
 fn a_call_can_pick_the_sub_agent_s_model() {
     agent_engine::providers::install_testing();
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     rig.workspace.models.model.provider = domain::provider::ModelProvider::new("family-key");
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use(
@@ -153,7 +153,7 @@ fn background_agent_runs_concurrently_and_output_is_collected() {
             }
         }
     }
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = Concurrent {
         parent: AtomicUsize::new(0),
         started: AtomicBool::new(false),
@@ -227,7 +227,7 @@ fn stopping_background_task_joins_its_shell_without_stopping_parent() {
             }
         }
     }
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = StopModel { parent: AtomicUsize::new(0), child: AtomicUsize::new(0), dir: rig.dir.path().into() };
     let tools = tools::standard();
     let events = rig.events.clone();

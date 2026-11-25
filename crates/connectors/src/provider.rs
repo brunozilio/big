@@ -1,4 +1,5 @@
 use async_trait::async_trait;
+use domain::Language;
 use domain::connection::{Capability, ConnectionId};
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
@@ -82,11 +83,11 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
         None
     }
 
-    fn presentation(&self) -> Presentation {
+    fn presentation(&self, _language: Language) -> Presentation {
         Presentation::default()
     }
 
-    fn alternatives(&self) -> Vec<AlternateAuth> {
+    fn alternatives(&self, _language: Language) -> Vec<AlternateAuth> {
         Vec::new()
     }
 

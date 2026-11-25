@@ -128,7 +128,7 @@ impl AgentConfig {
             config.permission = Some(match mode.as_str() {
                 Some(name) if name.eq_ignore_ascii_case("dontAsk") => {
                     config.dont_ask = true;
-                    PermissionMode::Ask
+                    PermissionMode::Auto
                 }
                 Some(name) => domain::command::mode_named(name).ok_or("unsupported custom-agent permissionMode")?,
                 None => return Err("unsupported custom-agent permissionMode".into()),
@@ -292,17 +292,13 @@ mod tests {
             let config = AgentConfig::parse(&json!({ "permissionMode": name })).expect(name);
             (config.permission, config.dont_ask)
         };
-        for (names, expected) in [
-            (["default", "ask"], PermissionMode::Ask),
-            (["acceptEdits", "edits"], PermissionMode::AcceptEdits),
-            (["plan", "Plan"], PermissionMode::Plan),
-            (["bypassPermissions", "bypass"], PermissionMode::Bypass),
-        ] {
+        for (names, expected) in [(["auto", "Auto"], PermissionMode::Auto), (["plan", "Plan"], PermissionMode::Plan)] {
             for name in names {
                 assert_eq!(mode(name), (Some(expected), false), "{name}");
             }
         }
-        assert_eq!(mode("dontAsk"), (Some(PermissionMode::Ask), true));
+        assert_eq!(mode("dontAsk"), (Some(PermissionMode::Auto), true));
+        assert!(AgentConfig::parse(&json!({ "permissionMode": "bypass" })).is_err());
         assert!(AgentConfig::parse(&json!({ "permissionMode": 3 })).is_err());
     }
 

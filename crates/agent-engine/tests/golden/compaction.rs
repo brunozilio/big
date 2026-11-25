@@ -56,7 +56,7 @@ fn a_nearly_full_context_window_is_compacted_mid_run_in_a_new_session_keeping_th
           tool_use r1 Read "{\"file_path\":\"notes.txt\"}"
         user:
           tool_result r1 ok "     1\talpha\n     2\tbeta\n"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Done."
         == prompt: log appended ==
@@ -115,7 +115,7 @@ fn a_nearly_full_context_window_is_compacted_mid_run_and_a_resumed_session_s_log
         == first prompt: conversation ==
         user:
           text "hi"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Hello there."
         == first prompt: log appended ==
@@ -149,7 +149,7 @@ fn a_nearly_full_context_window_is_compacted_mid_run_and_a_resumed_session_s_log
           tool_use r1 Read "{\"file_path\":\"notes.txt\"}"
         user:
           tool_result r1 ok "     1\talpha\n     2\tbeta\n"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Done."
         == second prompt: log appended ==
@@ -205,7 +205,7 @@ fn the_compact_command_summarises_a_kept_session_and_the_log_restarts() {
         == first prompt: conversation ==
         user:
           text "hi"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Hello there."
         == first prompt: log appended ==
@@ -249,7 +249,7 @@ fn the_compact_command_summarises_a_kept_session_and_the_log_restarts() {
           text "If you need specific details from before compaction (exact code, error messages, or content you wrote), read the full transcript at: <tmp>/<brand>-tool-results/<session-1>/…
         user:
           text "Still there?"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Yes."
         == prompt after compaction: log appended ==

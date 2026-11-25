@@ -7,6 +7,7 @@ use crate::asks::SharedRun;
 #[derive(Default)]
 pub struct Steering {
     runs: Mutex<HashMap<String, SharedRun>>,
+    clients: Mutex<HashMap<String, u64>>,
 }
 
 impl fmt::Debug for Steering {
@@ -26,6 +27,22 @@ impl Steering {
 
     pub fn release(&self, run: &SharedRun) {
         self.held().retain(|_, known| !Arc::ptr_eq(known, run));
+    }
+
+    fn owners(&self) -> MutexGuard<'_, HashMap<String, u64>> {
+        self.clients.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn own(&self, session: &str, client: u64) {
+        self.owners().insert(session.to_owned(), client);
+    }
+
+    pub fn disown(&self, client: u64) {
+        self.owners().retain(|_, known| *known != client);
+    }
+
+    pub fn client(&self, session: &str) -> Option<u64> {
+        self.owners().get(session).copied()
     }
 
     pub fn steer(&self, session: &str, text: &str) -> bool {
@@ -70,5 +87,16 @@ mod tests {
         steering.release(&run);
         assert!(!steering.steer("s1", "after"));
         assert_eq!(*heard.lock().expect("heard"), ["also the tests"]);
+    }
+
+    #[test]
+    fn a_step_s_session_knows_its_client_until_the_step_lets_it_go() {
+        let steering = Steering::default();
+        assert_eq!(steering.client("s1"), None);
+        steering.own("s1", 7);
+        steering.own("s2", 8);
+        assert_eq!(steering.client("s1"), Some(7));
+        steering.disown(7);
+        assert_eq!((steering.client("s1"), steering.client("s2")), (None, Some(8)));
     }
 }

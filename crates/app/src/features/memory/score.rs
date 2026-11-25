@@ -3,17 +3,14 @@ use std::path::Path;
 use domain::PromptRequest;
 use domain::memory::scorecard::RunOutcome;
 
-use super::{Memories, keep};
+use super::{Memories, MemoryShelf};
 
 impl Memories {
     pub(super) fn holds_out(&self, project: &Path) -> bool {
         let mut held = false;
-        let mut books = self.lock();
-        match self.store.update(project, &mut |book| held = book.scorecard.next_held_out()) {
-            Ok(changed) => {
-                keep(&mut books, project, changed);
-            }
-            Err(error) => tracing::warn!(%error, "could not count the request for the memory scorecard"),
+        let shelf = MemoryShelf::Repository(project.to_path_buf());
+        if let Err(error) = self.update(&shelf, &mut |book| held = book.scorecard.next_held_out()) {
+            tracing::warn!(%error, "could not count the request for the memory scorecard");
         }
         held
     }
@@ -22,12 +19,9 @@ impl Memories {
         if !domain::features::on(brand::features::MEMORY_SCORECARD) {
             return;
         }
-        let mut books = self.lock();
-        match self.store.update(&request.session.cwd, &mut |book| book.scorecard.record(held, outcome)) {
-            Ok(changed) => {
-                keep(&mut books, &request.session.cwd, changed);
-            }
-            Err(error) => tracing::warn!(%error, "could not save the memory scorecard"),
+        let shelf = MemoryShelf::Repository(request.session.cwd.clone());
+        if let Err(error) = self.update(&shelf, &mut |book| book.scorecard.record(held, outcome)) {
+            tracing::warn!(%error, "could not save the memory scorecard");
         }
     }
 }

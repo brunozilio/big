@@ -6,7 +6,7 @@ use agent_engine::model::ToolSpec;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::{Declared, Effect, Outcome, Tool, Workspace};
 use agent_engine::transcript::{Block, Message};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::{Value, json};
 
 use crate::{Rig, tool_use};
@@ -51,7 +51,7 @@ fn hooks(event: &str, command: &str) -> Hooks {
 }
 
 fn watched(client: u64, hooks: Hooks) -> (Vec<(bool, String)>, usize) {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.credentials.client = client;
     rig.workspace.hooks = hooks;
     let calls = Arc::new(AtomicUsize::new(0));

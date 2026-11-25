@@ -21,7 +21,11 @@ pub enum WorkflowEvent {
     ChildFinished { child: ItemId, output: Value },
     TimerSet { id: String, at: u64 },
     TimerFired { id: String },
-    Rewound { to: String },
+    Rewound {
+        to: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        at: Option<u64>,
+    },
     Cancelled { reason: String },
     Finished { output: Value },
     ExternalObserved(Observed),
@@ -30,4 +34,7 @@ pub enum WorkflowEvent {
     Branched { name: String },
     Recapped { recap: ItemRecap },
     HeadsUp { step: String, note: HeadsUpNote },
+    Linked { item: ItemId },
+    Unlinked { item: ItemId },
+    Accepting { on: bool },
 }

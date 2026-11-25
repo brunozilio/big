@@ -82,7 +82,7 @@ pub fn findings(origin: &Origin<'_>, gates: &[&str], events: &[(i64, WorkflowEve
             WorkflowEvent::Signal { kind, step: Some(step), attempt, data, .. } if kind == STEP_FINISHED => {
                 scan.finished(origin, gates, step, *attempt, data, *at);
             }
-            WorkflowEvent::Rewound { to } => {
+            WorkflowEvent::Rewound { to, .. } => {
                 let caught = Caught { by: HUMAN, attempt: 0, data: &Value::Null, at: *at };
                 scan.escapes(origin, gates, to, &caught);
             }
@@ -112,7 +112,7 @@ impl Scan {
             return;
         }
         let back = match outcome {
-            "failed" => self.started.get(step).and_then(|run| run.options["onFail"].as_str()).map(str::to_owned),
+            "failed" => self.started.get(step).and_then(|run| goto_of(&run.options["onFail"])),
             "goto" => data["to"].as_str().map(str::to_owned),
             _ => return,
         };
@@ -177,6 +177,12 @@ fn finding(
         detail,
         at,
     }
+}
+
+fn goto_of(policy: &Value) -> Option<String> {
+    const KEPT: [&str; 4] = ["ask", "fail", "continue", "skip"];
+    let target = policy.as_str().filter(|name| !KEPT.contains(name)).or_else(|| policy["goto"].as_str())?;
+    Some(target.to_owned())
 }
 
 pub fn environmental(result: &Value) -> bool {

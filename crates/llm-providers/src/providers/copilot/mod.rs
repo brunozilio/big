@@ -85,8 +85,8 @@ impl Shape for Provider {
     fn limits(&self, config: &Config) -> Option<Call> {
         Some(limits::call(config))
     }
-    fn windows(&self, value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
-        limits::windows(value)
+    fn windows(&self, value: &Value, language: domain::Language) -> Result<domain::billing::PlanUsage, ProviderError> {
+        limits::windows(value, language)
     }
     fn sign_in(&self, host: &dyn Host) -> Result<Config, ProviderError> {
         sign_in::sign_in(host)

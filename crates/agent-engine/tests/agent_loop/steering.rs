@@ -1,6 +1,6 @@
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message, Role};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -18,7 +18,7 @@ fn texts(message: &Message) -> Vec<String> {
 
 #[test]
 fn a_message_sent_while_a_tool_runs_reaches_the_model_with_its_results() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("t1", "Read", json!({"file_path": "notes.txt"}))]),
         ScriptedModel::reply(vec![Block::Text("Ok, in Portuguese.".into())]),
@@ -37,7 +37,7 @@ fn a_message_sent_while_a_tool_runs_reaches_the_model_with_its_results() {
 
 #[test]
 fn a_message_that_arrives_as_the_model_finishes_starts_another_turn() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![Block::Text("Done.".into())]),
         ScriptedModel::reply(vec![Block::Text("Also done.".into())]),
@@ -54,7 +54,7 @@ fn a_message_that_arrives_as_the_model_finishes_starts_another_turn() {
 
 #[test]
 fn nothing_steered_ends_the_run_as_before() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Done.".into())])]);
     rig.run(&model, &mut vec![Message::user("fix it")]).expect("run");
     assert_eq!(model.asked().len(), 1);

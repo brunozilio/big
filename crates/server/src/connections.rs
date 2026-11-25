@@ -6,23 +6,26 @@ use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, header};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use connectors::{AuthSpec, ProviderDescriptor, SettingsSink, TokenField};
+use domain::Language;
 use domain::connection::ConnectionId;
 use serde_json::{Value, json};
 use store::{ConnectionRecord, Store};
 use sync::ConnectionState;
 
-use crate::error::{ApiError, ApiResult, done, json as reply};
+use crate::error::{ApiError, ApiResult, done, json as reply, said};
 use crate::marks::logo;
 use crate::state::{Ctx, Shared};
 
 fn group(descriptor: &ProviderDescriptor) -> &'static str {
     let first = descriptor.capabilities.first().map(|capability| capability.as_str()).unwrap_or_default();
     match first {
-        "tracker" => "Tarefas",
-        "cloud" => "Nuvem",
-        "mcp" => "Ferramentas",
-        "tests" => "Testes",
-        _ => "Código",
+        "tracker" => "tracker",
+        "cloud" => "cloud",
+        "mcp" => "mcp",
+        "tests" => "tests",
+        "security" => "security",
+        "changes" => "changes",
+        _ => "code",
     }
 }
 
@@ -31,30 +34,39 @@ fn fields_of(fields: &[TokenField]) -> Value {
         .iter()
         .map(|field| {
             let help = (!field.help.is_empty()).then_some(&field.help);
+            let value = (!field.value.is_empty()).then_some(&field.value);
             json!({
                 "name": field.name, "label": field.label, "kind": "text", "mono": true,
-                "secret": field.secret, "help": help,
+                "secret": field.secret, "help": help, "value": value,
             })
         })
         .collect();
     Value::Array(fields)
 }
 
-fn sign_in_of(auth: &AuthSpec) -> (&'static str, Value) {
+fn sign_in_of(auth: &AuthSpec, language: Language) -> (&'static str, Value) {
     match auth {
-        AuthSpec::Loopback(sign_in) => ("oauth", fields_of(&sign_in.0.fields())),
+        AuthSpec::Loopback(sign_in) => ("oauth", fields_of(&sign_in.0.fields(language))),
         AuthSpec::Device(_) => ("device", json!([])),
         AuthSpec::Sso(spec) => {
             let start = json!({
-                "name": spec.start_field, "label": "Start URL do IAM Identity Center", "kind": "text", "mono": true,
-                "placeholder": "https://empresa.awsapps.com/start",
+                "name": spec.start_field,
+                "label": language.pick("IAM Identity Center Start URL", "Start URL de IAM Identity Center", "Start URL do IAM Identity Center"),
+                "kind": "text", "mono": true,
+                "placeholder": language.pick("https://company.awsapps.com/start", "https://empresa.awsapps.com/start", "https://empresa.awsapps.com/start"),
             });
-            let region =
-                json!({ "name": "region", "label": "Região", "kind": "text", "mono": true, "value": spec.region });
+            let region = json!({
+                "name": "region", "label": language.pick("Region", "Región", "Região"), "kind": "text", "mono": true,
+                "value": spec.region,
+            });
             ("sso", json!([start, region]))
         }
         AuthSpec::Token(spec) => ("token", fields_of(&spec.fields)),
     }
+}
+
+fn said_with(shared: &Shared, english: &str, spanish: &str, portuguese: &str, name: &str) -> String {
+    shared.language().pick(english, spanish, portuguese).replace("{}", name)
 }
 
 fn or(text: &str, fallback: String) -> String {
@@ -63,14 +75,14 @@ fn or(text: &str, fallback: String) -> String {
 
 fn provider_json(shared: &Shared, descriptor: &ProviderDescriptor) -> Value {
     let connectors = &shared.backend.connectors;
-    let look = connectors.presentation(&descriptor.key).cloned().unwrap_or_default();
-    let (sign_in, fields) = sign_in_of(&descriptor.auth);
+    let look = connectors.presentation(&descriptor.key, shared.language()).unwrap_or_default();
+    let (sign_in, fields) = sign_in_of(&descriptor.auth, shared.language());
     let alternatives: Vec<Value> = connectors
-        .alternatives(&descriptor.key)
+        .alternatives(&descriptor.key, shared.language())
         .unwrap_or_default()
         .iter()
         .map(|alternative| {
-            let (sign_in, fields) = sign_in_of(&alternative.auth);
+            let (sign_in, fields) = sign_in_of(&alternative.auth, shared.language());
             json!({
                 "key": alternative.key, "label": alternative.label, "button": alternative.button,
                 "site": alternative.site, "signIn": sign_in, "fields": fields,
@@ -80,9 +92,9 @@ fn provider_json(shared: &Shared, descriptor: &ProviderDescriptor) -> Value {
     json!({
         "key": descriptor.key.as_str(), "name": descriptor.name,
         "group": or(&look.group, group(descriptor).to_owned()),
-        "description": or(&look.description, format!("Sua conta {}", descriptor.name)),
-        "button": or(&look.button, format!("Entrar com {}", descriptor.name)),
-        "site": or(&look.site, format!("do {}", descriptor.name)),
+        "description": or(&look.description, said_with(shared, "Your {} account", "Tu cuenta de {}", "Sua conta {}", &descriptor.name)),
+        "button": or(&look.button, said_with(shared, "Sign in with {}", "Iniciar sesión con {}", "Entrar com {}", &descriptor.name)),
+        "site": or(&look.site, said_with(shared, "from {}", "de {}", "do {}", &descriptor.name)),
         "logo": logo(&descriptor.logo), "signIn": sign_in, "fields": fields, "multiple": true,
         "alternatives": alternatives,
     })
@@ -110,10 +122,10 @@ pub fn listing(shared: &Shared) -> ApiResult<Value> {
     let connectors = &shared.backend.connectors;
     let mut providers: Vec<Value> = descriptors
         .iter()
-        .filter(|descriptor| !connectors.presentation(&descriptor.key).is_ok_and(|look| look.hidden))
+        .filter(|descriptor| !connectors.presentation(&descriptor.key, shared.language()).is_ok_and(|look| look.hidden))
         .map(|descriptor| provider_json(shared, descriptor))
         .collect();
-    providers.extend(ai.iter().map(crate::ai::provider_json));
+    providers.extend(ai.iter().map(|summary| crate::ai::provider_json(summary, shared.language())));
     let records = shared.backend.store.connections()?;
     let mut connections: Vec<Value> =
         records.iter().map(|record| record_json(record, status(shared, record))).collect();
@@ -157,7 +169,9 @@ pub async fn start(
 }
 
 pub async fn poll(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {
-    let flow = body["flow"].as_str().ok_or_else(|| ApiError::bad("Diga qual entrada."))?;
+    let flow = body["flow"].as_str().ok_or_else(|| {
+        ApiError::bad(said("Say which sign-in.", "Indica qué inicio de sesión.", "Diga qual entrada."))
+    })?;
     Ok(reply(crate::sign_in::poll(&ctx, flow, body["choice"].as_str()).await?))
 }
 
@@ -168,7 +182,8 @@ pub async fn callback(State(ctx): State<Ctx>, Query(query): Query<HashMap<String
 pub async fn answered(ctx: &Shared, query: &HashMap<String, String>, base: &str) -> Response {
     let told = query.get("error_description").or(query.get("error")).cloned().unwrap_or_default();
     let Some(state) = query.get("state") else {
-        return Html(format!("<!doctype html><meta charset=\"utf-8\"><p>A entrada falhou. {told}</p>")).into_response();
+        let failed = ctx.language().pick("The sign-in failed.", "El inicio de sesión falló.", "A entrada falhou.");
+        return Html(format!("<!doctype html><meta charset=\"utf-8\"><p>{failed} {told}</p>")).into_response();
     };
     let back = match query.get("code") {
         Some(code) => crate::sign_in::callback(ctx, state, code).await,
@@ -186,7 +201,11 @@ pub async fn remove(State(ctx): State<Ctx>, Path(id): Path<String>) -> ApiResult
         blocking(move || crate::ai::disconnect(&shared, &id)).await?;
     } else {
         if !ctx.backend.store.delete_connection(&id)? {
-            return Err(ApiError::missing("Não há essa conexão."));
+            return Err(ApiError::missing(said(
+                "There is no such connection.",
+                "No existe esa conexión.",
+                "Não há essa conexão.",
+            )));
         }
         let _ = ctx.backend.connectors.keeper().store().remove(&ConnectionId::from(id.as_str())).await;
     }
@@ -196,8 +215,12 @@ pub async fn remove(State(ctx): State<Ctx>, Path(id): Path<String>) -> ApiResult
 }
 
 pub async fn call(State(ctx): State<Ctx>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
-    let record = ctx.backend.store.connection(&id)?.ok_or_else(|| ApiError::missing("Não há essa conexão."))?;
-    let action = body["action"].as_str().ok_or_else(|| ApiError::bad("Diga a ação."))?;
+    let record = ctx.backend.store.connection(&id)?.ok_or_else(|| {
+        ApiError::missing(said("There is no such connection.", "No existe esa conexión.", "Não há essa conexão."))
+    })?;
+    let action = body["action"]
+        .as_str()
+        .ok_or_else(|| ApiError::bad(said("Say the action.", "Indica la acción.", "Diga a ação.")))?;
     let result = crate::calls::run(&ctx, &record, action, &body["args"]).await;
     if let Err(error) = &result
         && error.status == axum::http::StatusCode::BAD_GATEWAY

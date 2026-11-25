@@ -3,6 +3,7 @@ mod cases;
 mod fake;
 
 use async_trait::async_trait;
+use domain::Language;
 use domain::connection::{Capability, ProviderKey};
 use serde_json::{Value, json};
 
@@ -19,17 +20,29 @@ pub const SCOPES: [&str; 1] = ["api"];
 const LOGO: &str = include_str!("logo.svg");
 const PAGE: u64 = 50;
 const MOST_PAGES: u64 = 10;
-pub const NO_PROJECT: &str = "Escolha o projeto.";
+pub use crate::texts::NO_PROJECT;
 pub const API_TOKEN: &str = "api_token";
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Zephyr;
 
-pub fn api_token() -> AlternateAuth {
-    let help =
-        "No Jira, abra ⚙ → Configurações gerais → Apps → Zephyr API Access Tokens e clique em Gerar token de acesso.";
-    let token = TokenField::new("token", "API token do Zephyr", help, true);
-    AlternateAuth::token(API_TOKEN, "Usar API token", "do Zephyr", vec![token], TokenForm::Bearer)
+pub fn api_token(language: Language) -> AlternateAuth {
+    let help = language.pick(
+        "In Jira, open ⚙ → System settings → Apps → Zephyr API Access Tokens and click Generate access token.",
+        "En Jira, abre ⚙ → Configuración del sistema → Apps → Zephyr API Access Tokens y haz clic en Generar token de acceso.",
+        "No Jira, abra ⚙ → Configurações gerais → Apps → Zephyr API Access Tokens e clique em Gerar token de acesso.",
+    );
+    let label = language.pick("Zephyr API token", "API token de Zephyr", "API token do Zephyr");
+    let token = TokenField::new("token", label, help, true);
+    let site = language.pick("Zephyr", "de Zephyr", "do Zephyr");
+    AlternateAuth::token(
+        language,
+        API_TOKEN,
+        crate::texts::use_api_token(language),
+        site,
+        vec![token],
+        TokenForm::Bearer,
+    )
 }
 
 pub fn sign_in() -> McpSignIn {
@@ -112,12 +125,7 @@ async fn projects(api: &Api<'_>, args: Args<'_>) -> Result<Value, ActionError> {
 
 fn account_settings(projects: &[Value]) -> Value {
     let keys: Vec<String> = projects.iter().map(|project| text_of(project, "/key")).collect();
-    let detail = match keys.len() {
-        0 => "Nenhum projeto".to_owned(),
-        1 => format!("Projeto {}", keys[0]),
-        _ => format!("Projetos {}", keys.join(", ")),
-    };
-    let mut settings = json!({ "detail": detail });
+    let mut settings = json!({ "shown": { "projects": keys } });
     if let [only] = keys.as_slice() {
         settings["project"] = json!(only);
     }
@@ -137,19 +145,23 @@ impl Provider for Zephyr {
         }
     }
 
-    fn presentation(&self) -> Presentation {
+    fn presentation(&self, language: Language) -> Presentation {
         Presentation {
-            description: "Sua conta Zephyr Scale".to_owned(),
-            group: "Testes".to_owned(),
-            button: "Continuar na SmartBear".to_owned(),
-            site: "da SmartBear".to_owned(),
-            choose_title: "Conta do Zephyr".to_owned(),
+            description: language
+                .pick("Your Zephyr Scale account", "Tu cuenta de Zephyr Scale", "Sua conta Zephyr Scale")
+                .to_owned(),
+            group: "tests".to_owned(),
+            button: language
+                .pick("Continue on SmartBear", "Continuar en SmartBear", "Continuar na SmartBear")
+                .to_owned(),
+            site: language.pick("SmartBear", "de SmartBear", "da SmartBear").to_owned(),
+            choose_title: language.pick("Zephyr account", "Cuenta de Zephyr", "Conta do Zephyr").to_owned(),
             hidden: false,
         }
     }
 
-    fn alternatives(&self) -> Vec<AlternateAuth> {
-        vec![api_token()]
+    fn alternatives(&self, language: Language) -> Vec<AlternateAuth> {
+        vec![api_token(language)]
     }
 
     async fn call(

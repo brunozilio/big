@@ -50,7 +50,8 @@ fn the_sign_in_is_the_configured_mcp_server_with_dynamic_registration() {
     assert_eq!(flow.redirect, brand::connectors::OAUTH_REDIRECT);
     assert!(flow.scopes.contains(&"offline_access".to_owned()));
     assert_eq!(Jira.descriptor().name, "Jira");
-    assert_eq!(Jira.presentation().description, "Sua conta Atlassian");
+    assert_eq!(Jira.presentation(domain::Language::Portuguese).description, "Sua conta Atlassian");
+    assert_eq!(Jira.presentation(domain::Language::English).description, "Your Atlassian account");
 }
 
 #[tokio::test]
@@ -64,7 +65,10 @@ async fn the_sites_come_from_the_accessible_resources_with_their_projects() {
     assert_eq!(options[0].id, "c1");
     assert_eq!(options[0].label, "acme.atlassian.net");
     assert_eq!(options[0].settings["cloud_id"], "c1");
-    assert_eq!(options[0].settings["detail"], "Projetos APP, OPS");
+    let detail = crate::texts::detail(domain::Language::Portuguese, &options[0].settings);
+    assert_eq!(detail.as_deref(), Some("Projetos APP, OPS"));
+    let detail = crate::texts::detail(domain::Language::English, &options[0].settings);
+    assert_eq!(detail.as_deref(), Some("Projects APP, OPS"));
     assert_eq!(http.sent()[0].header_value("authorization"), Some("Bearer at"));
     let (name, sent) = tool_calls(&http)[1].clone();
     assert_eq!(
@@ -183,6 +187,36 @@ async fn set_impediment_flags_the_issue_and_explains_why() {
     let off = call(&http, actions::SET_IMPEDIMENT, json!({"issue": "BIG-1", "on": false}), "k6").await;
     assert_eq!(off, Ok(json!({"on": false, "reason": null})));
     assert_eq!(tool_calls(&http)[0].1["fields"], json!({DEFAULT_FLAG_FIELD: null}));
+}
+
+#[tokio::test]
+async fn update_issue_edits_the_title_and_description_as_markdown() {
+    let http = session(&[json!({"key": "BIG-9", "fields": {"summary": "Pacote 2", "status": {"name": "Aberto"}}})]);
+    let answer =
+        call(&http, actions::UPDATE_ISSUE, json!({"issue": "BIG-9", "title": "Pacote 2", "description": "notas"}), "u1")
+            .await;
+    assert_eq!(answer.map(|value| value["ref"].clone()), Ok(json!("BIG-9")));
+    let (name, arguments) = tool_calls(&http).remove(0);
+    assert_eq!(name, "editJiraIssue");
+    assert_eq!(arguments["fields"], json!({"summary": "Pacote 2", "description": "notas"}));
+    assert_eq!(arguments["contentFormat"], "markdown");
+    let empty = call(&session(&[]), actions::UPDATE_ISSUE, json!({"issue": "BIG-9"}), "u2").await;
+    assert!(empty.is_err());
+}
+
+#[tokio::test]
+async fn a_link_already_there_is_not_created_again() {
+    let links = json!({"fields": {"issuelinks": [{"inwardIssue": {"key": "APP-1"}}]}});
+    let http = session(&[links]);
+    let answer = call(&http, actions::LINK_ISSUES, json!({"issue": "BIG-9", "to": "APP-1"}), "l1").await;
+    assert_eq!(answer, Ok(json!({"issue": "BIG-9", "to": "APP-1", "already": true})));
+    assert_eq!(tool_calls(&http).len(), 1);
+    let http = session(&[json!({"fields": {"issuelinks": []}}), json!({})]);
+    let answer = call(&http, actions::LINK_ISSUES, json!({"issue": "BIG-9", "to": "APP-2"}), "l2").await;
+    assert_eq!(answer, Ok(json!({"issue": "BIG-9", "to": "APP-2", "already": false})));
+    let (name, arguments) = tool_calls(&http).remove(1);
+    assert_eq!(name, "createIssueLink");
+    assert_eq!((arguments["inwardIssue"].clone(), arguments["outwardIssue"].clone()), (json!("APP-2"), json!("BIG-9")));
 }
 
 fn status(id: &str, name: &str, category: &str) -> Value {
@@ -557,9 +591,12 @@ fn an_operation_is_picked_from_what_discover_lists() {
 
 #[tokio::test]
 async fn an_api_token_reaches_the_mcp_server_as_basic_auth() {
-    let [alternative] = Jira.alternatives().try_into().unwrap_or_else(|_| panic!("not one alternative"));
+    let [alternative] =
+        Jira.alternatives(domain::Language::Portuguese).try_into().unwrap_or_else(|_| panic!("not one alternative"));
     let AuthSpec::Token(spec) = alternative.auth else { panic!("not a token") };
-    let token = spec.access_token(&json!({ "email": "ana@acme.com", "token": "t1" })).unwrap_or_default();
+    let token = spec
+        .access_token(&json!({ "email": "ana@acme.com", "token": "t1" }), domain::Language::Portuguese)
+        .unwrap_or_default();
     let http =
         session(&[json!([{"id": "c1", "url": "https://acme.atlassian.net", "name": "acme"}]), json!({"values": []})]);
     let creds = Credentials::new(&ConnectionId::from("jira2"), &token, json!({}));

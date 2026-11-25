@@ -1,4 +1,5 @@
 import { isLiveEvent } from './guards'
+import { currentLanguage, translate } from '@/i18n'
 import { ROUTES, type Api, type CallAction, type CallArgs, type CallResult, type LiveEvent } from './contract'
 
 export class ApiError extends Error {
@@ -18,13 +19,13 @@ export async function request<T>(method: string, path: string, body?: unknown, f
       body: body === undefined ? undefined : JSON.stringify(body),
     })
   } catch {
-    throw new ApiError(0, 'offline', 'Sem conexão com o servidor')
+    throw new ApiError(0, 'offline', translate(currentLanguage(), 'app.offline'))
   }
   const text = await res.text()
   const data: unknown = text ? safeJson(text) : null
   if (!res.ok) {
     const error = (data as { error?: { code?: string; message?: string } } | null)?.error
-    throw new ApiError(res.status, error?.code ?? 'http', error?.message ?? `Erro ${res.status}`)
+    throw new ApiError(res.status, error?.code ?? 'http', error?.message ?? translate(currentLanguage(), 'app.httpError', { status: res.status }))
   }
   return data as T
 }
@@ -85,8 +86,12 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
     createItem: (input) => call('POST', ROUTES.items, input),
     rerun: (item, step) => call('POST', ROUTES.rerun(item), { step }),
     cancel: (item) => call('POST', ROUTES.cancel(item), {}),
+    openFolders: (item) => call('POST', ROUTES.openFolders(item), {}),
+    archive: (item) => call('POST', ROUTES.archive(item), {}),
+    unarchive: (item) => call('DELETE', ROUTES.archive(item)),
     step: (item, step, attempt) => call('GET', attempt === null ? ROUTES.step(item, step) : `${ROUTES.step(item, step)}?attempt=${attempt}`),
     input: (item, step, input) => call('POST', ROUTES.input(item, step), input),
+    itemUsage: (item) => call('GET', ROUTES.itemUsage(item)),
     call: <A extends CallAction>(connection: string, action: A, args: CallArgs<A>) => call<CallResult<A>>('POST', ROUTES.call(connection), { action, args }),
     session: (id) => call('GET', ROUTES.session(id)),
     send: (session, message) => call('POST', ROUTES.messages(session), message),
@@ -94,6 +99,8 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
     btw: (question) => call('POST', ROUTES.btw, question),
     respond: (session, event, response) => call('POST', ROUTES.respond(session), { event, response }),
     stop: (session) => call('POST', ROUTES.stop(session), {}),
+    stopJob: (session, job) => call('POST', ROUTES.stopJob(session, job), {}),
+    openFile: (session, file) => call('POST', ROUTES.openFile(session), file),
     connections: () => call('GET', ROUTES.connections),
     startSignIn: (provider, fields, method) => call('POST', ROUTES.start(provider), { fields, method }),
     pollSignIn: (req) => call('POST', ROUTES.poll, req),
@@ -112,7 +119,7 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
       const form = new FormData()
       form.append('file', file)
       const res = await fetcher(ROUTES.attachments, { method: 'POST', body: form })
-      if (!res.ok) throw new ApiError(res.status, 'upload', 'Não foi possível enviar o anexo')
+      if (!res.ok) throw new ApiError(res.status, 'upload', translate(currentLanguage(), 'app.uploadFailed'))
       return (await res.json()) as { id: string; name: string; size: number }
     },
     live: (onEvent, onState) => followLive(open, onEvent, onState),

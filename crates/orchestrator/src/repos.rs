@@ -82,21 +82,21 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
     if worktrees.iter().all(|worktree| worktree.checkout.id.is_empty()) {
         return None;
     }
-    let mut text = String::from("## Repositórios desta tarefa\n");
+    let mut text = String::from("## Repositories of this task\n");
     for worktree in worktrees {
         let checkout = &worktree.checkout;
         let _ = write!(text, "\n- {}: {}", checkout.name, worktree.path.display());
         if !checkout.run.is_empty() {
-            let _ = write!(text, "\n  - Para rodar: {}", quoted(&checkout.run));
+            let _ = write!(text, "\n  - To run: {}", quoted(&checkout.run));
         }
         if !checkout.verify.is_empty() {
-            let _ = write!(text, "\n  - Para verificar: {}", quoted(&checkout.verify));
+            let _ = write!(text, "\n  - To verify: {}", quoted(&checkout.verify));
         }
     }
     let _ = write!(
         text,
-        "\n\nSe criar um repositório ou serviço que não está nesta lista, ou descobrir como um deles roda ou é \
-         verificado, registre com `{}` antes de terminar.",
+        "\n\nIf you create a repository or service that is not in this list, or find out how one of them runs or \
+         is verified, record it with `{}` before you finish.",
         crate::application::ADD_REPOSITORY
     );
     Some(text)
@@ -144,7 +144,7 @@ mod tests {
             .collect();
         let text = described(&worktrees).expect("described");
         assert!(text.contains("acme/web: /w/web") && text.contains("`bun dev`") && text.contains("`bun test`"));
-        assert!(text.contains("  - Para rodar: `bun api`, `bun web`"));
+        assert!(text.contains("  - To run: `bun api`, `bun web`"));
         assert!(text.contains("`AddRepository`"));
     }
 }

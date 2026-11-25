@@ -14,6 +14,7 @@ fn stored(web: &str) -> Arc<Store> {
         name: "Loja".into(),
         tracker: None,
         tests: None,
+        security: None,
         cloud: None,
         repositories: vec![Repository {
             id: "r1".into(),
@@ -50,7 +51,7 @@ fn an_agent_adds_a_new_repository_to_its_application_with_the_application_s_code
     let input = json!({ "directory": "api", "repo": "acme/api", "run": "cargo run", "verify": ["cargo test", " "] });
     let outcome = call(&store, dir.path(), &input);
     assert!(!outcome.is_error, "{}", outcome.content);
-    assert!(outcome.content.contains("Adicionei"));
+    assert!(outcome.content.contains("Added"));
     let application = store.application("app").expect("read").expect("there");
     let added = application.repositories.last().expect("added");
     assert_eq!(application.repositories.len(), 2);
@@ -69,7 +70,7 @@ fn a_known_directory_is_updated_in_place_and_keeps_what_was_left_out() {
     let store = stored(&dir.path().to_string_lossy());
     let input = json!({ "directory": dir.path().to_string_lossy(), "verify": ["bun test", "bun run lint"] });
     let outcome = call(&store, dir.path(), &input);
-    assert!(outcome.content.contains("Atualizei"), "{}", outcome.content);
+    assert!(outcome.content.contains("Updated"), "{}", outcome.content);
     let application = store.application("app").expect("read").expect("there");
     let [only] = application.repositories.as_slice() else { panic!("one repository") };
     assert_eq!((only.id.as_str(), only.run.as_slice()), ("r1", ["bun dev".to_owned()].as_slice()));

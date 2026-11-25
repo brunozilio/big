@@ -98,7 +98,7 @@ mod tests {
     use super::*;
 
     const DEVELOPER: &str = "---\nname: dev\ntools: [Read, Agent, \"mcp__*\"]\ndisallowedTools: [Write]\n\
-permissionMode: bypass\nmodel: opus\nskills: [verify]\n---\nVocê trabalha no {{NAME}}.";
+permissionMode: auto\nmodel: opus\nskills: [verify]\n---\nVocê trabalha no {{NAME}}.";
 
     #[test]
     fn a_requested_agent_brings_its_tools_and_skills_but_the_requester_keeps_the_mode_and_the_model() {

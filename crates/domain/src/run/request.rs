@@ -58,6 +58,8 @@ pub struct SessionConfig {
     pub agent: Option<MainAgentSpec>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub output_style: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub language: Option<crate::Language>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -71,6 +73,8 @@ pub struct MainAgentSpec {
 pub struct Policy {
     #[serde(default)]
     pub permission: PermissionMode,
+    #[serde(default, skip_serializing_if = "crate::Reviewer::is_model")]
+    pub reviewer: crate::Reviewer,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_turns: Option<u32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -112,6 +116,8 @@ pub struct Shown {
     pub text: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub attached: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
 }
 
 impl Prompt {
@@ -137,6 +143,7 @@ impl SessionConfig {
             teammate: None,
             agent: None,
             output_style: None,
+            language: None,
         }
     }
 }

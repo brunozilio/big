@@ -1,3 +1,5 @@
+import { currentLanguage, translate, type MessageKey, type T } from '@/i18n'
+
 export type NoticeKind = 'teammate' | 'observer' | 'monitor' | 'session' | 'channel' | 'event'
 
 export type Notice = {
@@ -13,16 +15,16 @@ const TAG = /<(teammate-message|event|channel)((?:\s+[\w-]+="[^"]*")*)\s*>\n?([\
 const ATTRIBUTE = /([\w-]+)="([^"]*)"/g
 const PREFIXED: NoticeKind[] = ['observer', 'monitor', 'session']
 
-const PROTOCOL: Record<string, string> = {
-  idle_notification: 'ficou disponível',
-  shutdown_request: 'pediu para encerrar',
-  shutdown_approved: 'encerrou',
-  shutdown_rejected: 'recusou encerrar',
-  task_assignment: 'recebeu uma tarefa',
-  permission_request: 'pediu permissão',
-  permission_response: 'respondeu ao pedido de permissão',
-  plan_approval_request: 'pediu aprovação do plano',
-  plan_approval_response: 'respondeu ao plano',
+const PROTOCOL: Record<string, MessageKey> = {
+  idle_notification: 'plan.protocol_idle_notification',
+  shutdown_request: 'plan.protocol_shutdown_request',
+  shutdown_approved: 'plan.protocol_shutdown_approved',
+  shutdown_rejected: 'plan.protocol_shutdown_rejected',
+  task_assignment: 'plan.protocol_task_assignment',
+  permission_request: 'plan.protocol_permission_request',
+  permission_response: 'plan.protocol_permission_response',
+  plan_approval_request: 'plan.protocol_plan_approval_request',
+  plan_approval_response: 'plan.protocol_plan_approval_response',
 }
 
 function unescape(text: string): string {
@@ -58,8 +60,9 @@ function noticeOf(tag: string, raw: string, body: string): Notice {
   const attrs = attributes(raw)
   const text = unescape(body).trim()
   const protocol = protocolOf(text)
-  if (tag === 'teammate-message') return { kind: 'teammate', from: attrs.teammate_id ?? 'auxiliar', summary: attrs.summary ?? null, text, protocol }
-  if (tag === 'channel') return { kind: 'channel', from: attrs.source ?? 'canal', summary: attrs.user ?? null, text, protocol }
+  const fallback = (key: MessageKey) => translate(currentLanguage(), key)
+  if (tag === 'teammate-message') return { kind: 'teammate', from: attrs.teammate_id ?? fallback('plan.fallback_teammate'), summary: attrs.summary ?? null, text, protocol }
+  if (tag === 'channel') return { kind: 'channel', from: attrs.source ?? fallback('plan.fallback_channel'), summary: attrs.user ?? null, text, protocol }
   return { ...sourced(attrs.source ?? ''), summary: null, text, protocol }
 }
 
@@ -74,8 +77,9 @@ export function parseNotices(message: string): Notice[] | null {
   return found.length > 0 && rest.trim() === '' ? found : null
 }
 
-export function protocolLabel(protocol: string): string {
-  return PROTOCOL[protocol] ?? protocol.replace(/_/g, ' ')
+export function protocolLabel(protocol: string, t: T): string {
+  const key = PROTOCOL[protocol]
+  return key ? t(key) : protocol.replace(/_/g, ' ')
 }
 
 const STATUS = /^\[(teammate|observer|monitor|session|channel) ([^\]]+)\] ([\s\S]+)$/

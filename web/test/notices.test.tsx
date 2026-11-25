@@ -57,4 +57,11 @@ describe('mensagens de auxiliares, observadores e eventos', () => {
     const view = render(<TooltipProvider><StatusLine event={{ type: 'status', id: 's1', at: '2026-11-24T13:46:53Z', status: 'info', text: '[teammate tester] Terminei os testes.' } as never} /></TooltipProvider>)
     expect(view.container.querySelector('[data-notice="teammate"]')?.textContent).toContain('Terminei os testes.')
   })
+
+  test('mensagem que outro agente mandou mostra o agente, não você', () => {
+    const sent = { ...user('planeje a calculadora'), author: { id: 'agent:planner', name: 'planner', avatar: null, agent: true }, agent: 'planner' }
+    const view = render(<TooltipProvider><UserMessage event={sent} /></TooltipProvider>)
+    expect(view.getByText('planner')).toBeTruthy()
+    expect(view.queryByText('Você')).toBeNull()
+  })
 })

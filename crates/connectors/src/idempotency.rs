@@ -26,6 +26,20 @@ pub fn strip(body: &str) -> String {
     kept.trim().to_owned()
 }
 
+pub fn authored(body: &str, agent: Option<&str>) -> String {
+    match agent.filter(|agent| !agent.is_empty()) {
+        Some(agent) => format!("{body}\n\n<!-- {}:agent={agent} -->", brand::COMMAND),
+        None => body.to_owned(),
+    }
+}
+
+pub fn author(body: &str) -> Option<String> {
+    let open = format!("<!-- {}:agent=", brand::COMMAND);
+    let start = body.find(&open)? + open.len();
+    let end = body[start..].find("-->")?;
+    Some(body[start..start + end].trim().to_owned()).filter(|agent| !agent.is_empty())
+}
+
 pub fn carries(body: &str, key: &str) -> bool {
     !key.is_empty() && body.contains(&marker(key))
 }
@@ -60,6 +74,15 @@ mod tests {
         assert!(!carries(&body, "item/step/0/2"));
         assert!(!carries(&body, ""));
         assert_eq!(marked("plain", ""), "plain");
+    }
+
+    #[test]
+    fn an_agent_s_comment_names_the_agent_invisibly() {
+        let body = authored("olhe aqui", Some("reviewer"));
+        assert_eq!(author(&body).as_deref(), Some("reviewer"));
+        assert_eq!(strip(&marked(&body, "k")), "olhe aqui");
+        assert_eq!(author("olhe aqui"), None);
+        assert_eq!(authored("olhe aqui", None), "olhe aqui");
     }
 
     #[test]

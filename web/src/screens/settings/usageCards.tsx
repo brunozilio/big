@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import type { ReactNode } from 'react'
 import type { TooltipProps } from 'recharts'
 import type { UsageDay } from '@/api/contract'
-import { currentLocale } from '@/i18n'
+import { currentLanguage, currentLocale, translate, useT } from '@/i18n'
 import { money } from '@/ui/cn'
 import { Card, EmptyState } from '@/ui/display'
 import { Icon, type IconName } from '@/ui/icon'
@@ -31,7 +31,7 @@ export function seriesOf(rows: { id: string; name: string }[], daily: UsageDay[]
   const top = rows.slice(0, rows.length > max + 1 ? max : max + 1)
   const rest = rows.length > top.length
   const series: Series[] = top.map((r, i) => ({ key: `s${i}`, name: r.name, color: palette[i % palette.length] }))
-  if (rest) series.push({ key: 'rest', name: 'Outros', color: 'rgb(var(--text-faint))' })
+  if (rest) series.push({ key: 'rest', name: translate(currentLanguage(), 'settings.usage_others'), color: 'rgb(var(--text-faint))' })
   const fmt = (d: string) => new Date(`${d}T12:00:00`).toLocaleDateString(currentLocale(), { day: '2-digit', month: 'short' })
   const data = daily.map((d) => {
     const values = pick(d)
@@ -46,6 +46,7 @@ export function seriesOf(rows: { id: string; name: string }[], daily: UsageDay[]
 }
 
 export function ChartTooltip({ active, payload, label }: TooltipProps<number, string>) {
+  const t = useT()
   if (!active || !payload?.length) return null
   const total = payload.reduce((n, p) => n + Number(p.value ?? 0), 0)
   return (
@@ -59,7 +60,7 @@ export function ChartTooltip({ active, payload, label }: TooltipProps<number, st
         </div>
       ))}
       <div className="mt-2 flex justify-between border-t pt-2 font-medium">
-        <span>Total</span>
+        <span>{t('settings.usage_total')}</span>
         <span className="tabular-nums">{usd(total)}</span>
       </div>
     </div>
@@ -117,6 +118,7 @@ export interface RankRow {
 }
 
 export function RankCard({ title, rows, index }: { title: string; rows: RankRow[]; index: number }) {
+  const t = useT()
   const max = Math.max(...rows.map((r) => r.cost), 0.01)
   return (
     <Rise index={index}>
@@ -140,7 +142,7 @@ export function RankCard({ title, rows, index }: { title: string; rows: RankRow[
           ))}
           {rows.length === 0 && (
             <li>
-              <EmptyState size="inline" align="start" title="Sem uso no período" />
+              <EmptyState size="inline" align="start" title={t('settings.usage_noneInPeriod')} />
             </li>
           )}
         </ul>

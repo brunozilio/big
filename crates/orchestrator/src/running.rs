@@ -1,4 +1,3 @@
-use crate::agent::WAITING_ANSWER;
 use crate::api::Orchestrator;
 use crate::error::Result;
 use crate::ledger::Ledger;
@@ -9,9 +8,19 @@ impl Orchestrator {
         self.shared.steering.steer(session, text)
     }
 
+    pub fn background_jobs(&self, session: &str) -> Option<Vec<(String, String, bool)>> {
+        self.shared.steering.client(session).map(agent_engine::tools::clients::background)
+    }
+
+    pub fn stop_background(&self, session: &str, job: &str) -> Option<bool> {
+        let client = self.shared.steering.client(session)?;
+        Some(agent_engine::tools::clients::stop_background(client, job))
+    }
+
     pub fn runs_session(&self, session: &str) -> Result<bool> {
         for item in self.shared.store.active_items()? {
-            let stopped = item.impediment.as_ref().is_some_and(|found| found.reason.as_deref() != Some(WAITING_ANSWER));
+            let stopped =
+                item.impediment.as_ref().is_some_and(|found| !crate::texts::is_waiting_answer(found.reason.as_deref()));
             if stopped {
                 continue;
             }

@@ -48,7 +48,10 @@ export function currentLanguage(): Language {
 
 export function translate(language: Language, key: MessageKey, vars?: Vars): string {
   const text = MESSAGES[language][key] ?? MESSAGES[DEFAULT_LANGUAGE][key] ?? key
-  if (!vars) return text
+  return vars ? interpolate(text, vars) : text
+}
+
+export function interpolate(text: string, vars: Vars): string {
   return text.replace(/\{(\w+)\}/g, (whole, name: string) => (name in vars ? String(vars[name]) : whole))
 }
 

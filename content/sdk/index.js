@@ -64,6 +64,18 @@ export const form = (fields, options) => {
   if (chosen.submit) extra.submit = String(chosen.submit);
   return block("form", { fields: fields || [], ...extra });
 };
+export const stages = (list) => block("stages", { stages: Array.isArray(list) ? list : [] });
+export const members = (list, options) =>
+  block("members", { items: Array.isArray(list) ? list : [], removable: Boolean(options && options.removable) });
+export const tasks = (list, options) => {
+  const chosen = options || {};
+  return block("tasks", {
+    tasks: Array.isArray(list) ? list : [],
+    kinds: chosen.kinds || [],
+    locked: Boolean(chosen.locked),
+    environment: chosen.environment || null,
+  });
+};
 export const actions = (buttons) =>
   block("actions", {
     buttons: (buttons || []).map((button) => (typeof button === "string" ? { id: button, label: button } : button)),
@@ -71,7 +83,8 @@ export const actions = (buttons) =>
 
 const blocks = (view) => (view === undefined || view === null ? [] : Array.isArray(view) ? view : [view]);
 
-export const on = (kind, filter) => Object.freeze({ type: "trigger", kind, filter: filter || {} });
+export const on = (kind, filter, options) =>
+  Object.freeze({ ...(options || {}), type: "trigger", kind, filter: filter || {} });
 
 const outcome = (kind, fields) => Object.freeze({ type: "outcome", outcome: kind, ...fields });
 const isOutcome = (value) => value !== null && typeof value === "object" && value.type === "outcome";
@@ -121,6 +134,9 @@ class Runtime {
     this.dropped = new Set();
     this.attempts = new Map();
     this.outputs = new Map();
+    this.gotos = new Map();
+    this.tries = new Map();
+    this.groups = new Map();
     this.item = Object.freeze({ ...(activation.item || {}) });
     this.clock = Number(activation.start || 0);
     this.random = generator(String(activation.seed === undefined ? "" : activation.seed));
@@ -182,6 +198,17 @@ class Runtime {
     this.activity += 1;
   }
 
+  halt(branch, path) {
+    this.activity += 1;
+    for (const known of this.commands.values()) {
+      const command = known.command;
+      if (known.resolved || typeof command.step !== "string") continue;
+      const inBranch = command.branch === branch || command.branch.startsWith(`${branch}/`);
+      const inPath = command.step === path || command.step.startsWith(`${path}/`);
+      if (inBranch && inPath) this.dropped.add(command.seq);
+    }
+  }
+
   gone(command) {
     if (this.dropped.has(command.seq)) return true;
     return [...this.cancelled].some((branch) => command.branch === branch || command.branch.startsWith(`${branch}/`));
@@ -223,16 +250,21 @@ class Ctx {
     this.step = step === undefined ? null : step;
     this.attempt = attempt === undefined ? 0 : attempt;
     this.from = from === undefined ? null : from;
+    this.each = null;
+    this.needs = {};
   }
 
   scoped(branch, step, attempt, from) {
-    return new Ctx(
+    const next = new Ctx(
       this.runtime,
       branch,
       step === undefined ? this.step : step,
       attempt === undefined ? this.attempt : attempt,
       from === undefined ? this.from : from,
     );
+    next.each = this.each;
+    next.needs = this.needs;
+    return next;
   }
 
   get item() {
@@ -244,8 +276,20 @@ class Ctx {
   }
 
   output(step) {
-    const found = this.runtime.outputs.get(step);
-    return found === undefined ? null : found;
+    const outputs = this.runtime.outputs;
+    const base = typeof this.step === "string" ? this.step.split("/") : [];
+    const keys = base.map((_, depth) => [...base.slice(0, base.length - 1 - depth), step].join("/"));
+    for (const key of keys.length > 0 ? keys : [step]) {
+      if (outputs.has(`${this.branch}|${key}`)) return outputs.get(`${this.branch}|${key}`);
+      if (outputs.has(key)) return outputs.get(key);
+    }
+    return null;
+  }
+
+  flow(steps, options) {
+    const chosen = options || {};
+    const path = typeof this.step === "string" ? this.step : "";
+    return graph(this, plan(steps, path), { root: false, failFast: chosen.failFast });
   }
 
   agent(name, input, options) {
@@ -295,6 +339,27 @@ class Ctx {
     return this.runtime.issue(this, "status.set", { name }, options);
   }
 
+  link(item) {
+    return this.call("items", "link", { item });
+  }
+
+  unlink(item) {
+    return this.call("items", "unlink", { item });
+  }
+
+  accept(on) {
+    return this.call("items", "accept", { on: on !== false });
+  }
+
+  items(ids) {
+    return this.call("items", "get", { items: ids });
+  }
+
+  unclaimed(step, state, options) {
+    const base = options && options.base ? { base: options.base } : {};
+    return this.call("items", "unclaimed", { step, state: state || "passed", ...base });
+  }
+
   impediment(on, reason, options) {
     return this.runtime.issue(this, "impediment.set", { on: Boolean(on), reason: reason || null }, options);
   }
@@ -321,6 +386,10 @@ class Ctx {
 
   skip(data) {
     return outcome("skipped", { data: data === undefined ? null : data });
+  }
+
+  done(data) {
+    return outcome("done", { data: data === undefined ? null : data });
   }
 
   goto(step, data) {
@@ -403,47 +472,465 @@ function normalized(value) {
   return outcome("passed", { data: value === undefined ? null : value });
 }
 
-async function runStep(ctx, type, call, from) {
-  const id = call.id || type.name;
-  const attempt = ctx.runtime.attempt(ctx.branch, id);
-  const scope = ctx.scoped(ctx.branch, id, attempt, from || null);
-  ctx.runtime.signal(scope, "step.started", { type: type.name, options: call.options });
-  if (call.options && typeof call.options.status === "string") await scope.status(call.options.status);
-  let result;
+const SETTLED = ["passed", "skipped", "continued"];
+const POLICIES = ["ask", "fail", "continue", "skip"];
+
+const objectOf = (value) => (value !== null && typeof value === "object" && !Array.isArray(value) ? value : {});
+const callOf = (call) => (typeof call === "function" ? call() : call);
+const dataOf = (result) => (result && result.data !== undefined ? result.data : null);
+
+function plain(value) {
+  if (value === undefined) return null;
   try {
-    result = normalized(await type.run(scope, call.options || {}));
+    return JSON.parse(JSON.stringify(value, (_, inner) => (typeof inner === "function" ? undefined : inner)));
+  } catch (error) {
+    return null;
+  }
+}
+
+function opened(ctx, call, kind, from) {
+  const attempt = ctx.runtime.attempt(ctx.branch, call.id);
+  const scope = ctx.scoped(ctx.branch, call.id, attempt, from || null);
+  const extra = call.type === "group" ? { group: true } : {};
+  ctx.runtime.signal(scope, "step.started", { type: kind, options: plain(call.options), ...extra });
+  return scope;
+}
+
+async function guarded(work) {
+  try {
+    return normalized(await work());
   } catch (error) {
     if (error instanceof Cancelled || error instanceof Nondeterminism) throw error;
     const data = error instanceof EffectError ? { error: error.message, kind: error.kind } : { error: String(error && error.message ? error.message : error) };
-    result = outcome("failed", { data });
+    return outcome("failed", { data });
   }
-  if (result.outcome !== "cancelled") ctx.runtime.outputs.set(id, result.data === undefined ? null : result.data);
+}
+
+async function closed(ctx, scope, call, result) {
+  const data = dataOf(result);
+  if (result.outcome !== "cancelled") {
+    ctx.runtime.outputs.set(scope.step, data);
+    ctx.runtime.outputs.set(`${ctx.branch}|${scope.step}`, data);
+  }
   const finished = result.outcome === "passed" || result.outcome === "skipped";
   if (finished && call.options && typeof call.options.doneStatus === "string") {
     await scope.status(call.options.doneStatus);
   }
-  ctx.runtime.signal(scope, "step.finished", { outcome: result.outcome, data: result.data === undefined ? null : result.data, to: result.to || null });
+  ctx.runtime.signal(scope, "step.finished", { outcome: result.outcome, data, to: result.to || null });
   return result;
 }
 
+async function runStep(ctx, type, call, from) {
+  const named = { ...call, id: call.id || type.name };
+  const scope = opened(ctx, named, type.name, from);
+  if (call.options && typeof call.options.status === "string") await scope.status(call.options.status);
+  const result = await guarded(() => type.run(scope, call.options || {}));
+  return closed(ctx, scope, named, result);
+}
+
+function childrenOf(call) {
+  if (call.type === "group") {
+    if (Array.isArray(call.steps)) return call.steps;
+    const found = registry.workflows.get(call.use);
+    if (!found) throw new TypeError(`unknown workflow: ${call.use}`);
+    return found.steps;
+  }
+  const type = registry.steps.get(call.step);
+  if (!type) throw new TypeError(`unknown step: ${call.step}`);
+  if (!type.steps) return null;
+  return typeof type.steps === "function" ? type.steps(call.options || {}) : type.steps;
+}
+
+async function runGroup(ctx, node, children, entry, from) {
+  const call = { ...node.call, id: node.path };
+  const options = call.options || {};
+  const scope = opened(ctx, call, node.kind, from);
+  if (typeof options.status === "string") await scope.status(options.status);
+  const settings = { root: false, entry, from, failFast: options.failFast };
+  const result = await guarded(() => graph(scope, plan(children, node.path), settings));
+  return closed(ctx, scope, call, collected(node, result));
+}
+
+function collected(node, result) {
+  const type = node.call.type === "group" ? null : registry.steps.get(node.call.step);
+  if (!type || !type.collect || !["passed", "failed"].includes(result.outcome)) return result;
+  const data = objectOf(dataOf(result));
+  const steps = result.outcome === "passed" ? data : objectOf(data.steps);
+  return outcome(result.outcome, { data: type.collect(steps, result, node.call.options || {}) });
+}
+
+function runOnce(ctx, node, entry, from) {
+  const children = childrenOf(node.call);
+  if (children) return runGroup(ctx, node, children, entry, from);
+  return runStep(ctx, registry.steps.get(node.call.step), { ...node.call, id: node.path }, from);
+}
+
+function runNode(ctx, node, entry, from) {
+  const options = node.call.options || {};
+  if (options.forEach === undefined) return runOnce(ctx, node, entry, from);
+  return runEach(ctx, node, from);
+}
+
+function gathered(results, failed) {
+  const data = results.map(dataOf);
+  if (!failed) return outcome("passed", { data });
+  return outcome("failed", { data: { ...objectOf(dataOf(failed.result)), index: failed.index, results: data } });
+}
+
+async function runEach(ctx, node, from) {
+  const options = node.call.options || {};
+  const given = typeof options.forEach === "function" ? await options.forEach(ctx) : options.forEach;
+  const list = Array.isArray(given) ? given : [];
+  if (list.length === 0) return outcome("skipped", { data: [] });
+  const lanes = Math.max(1, Math.min(list.length, Number(options.concurrency) || list.length));
+  const branches = list.length === 1 ? [ctx.branch] : list.map((_, index) => `${ctx.branch}/${node.path}.${index}`);
+  const results = new Array(list.length).fill(null);
+  const done = deferred();
+  const state = { next: 0, left: list.length, over: false, failed: null };
+  const stop = (result) => {
+    if (state.over) return;
+    state.over = true;
+    branches.forEach((branch) => ctx.runtime.halt(branch, node.path));
+    if (result.outcome !== "cancelled") ctx.runtime.outputs.set(node.path, dataOf(result));
+    done.resolve(result);
+  };
+  const launch = () => {
+    if (state.over || state.next >= list.length) return;
+    const index = state.next;
+    state.next += 1;
+    const lane = ctx.scoped(branches[index]);
+    lane.each = { value: list[index], index };
+    runOnce(lane, node, null, from).then((result) => {
+      results[index] = result;
+      state.left -= 1;
+      if (["cancelled", "done", "goto"].includes(result.outcome)) return stop(result);
+      if (result.outcome === "failed") state.failed = state.failed || { index, result };
+      if (state.failed && options.failFast !== false) return stop(gathered(results, state.failed));
+      if (state.left === 0) return stop(gathered(results, state.failed));
+      return launch();
+    }, (error) => {
+      state.over = true;
+      done.reject(error);
+    });
+  };
+  for (let lane = 0; lane < lanes; lane += 1) launch();
+  return done.promise;
+}
+
+function needsOf(call, index, siblings) {
+  const given = call.options ? call.options.needs : undefined;
+  if (given === undefined || given === null) return index === 0 ? [] : [siblings[index - 1].id];
+  return Array.isArray(given) ? given.map(String) : [String(given)];
+}
+
+function checked(nodes, path) {
+  const where = path ? ` in ${path}` : "";
+  const ids = new Set();
+  for (const node of nodes) {
+    if (ids.has(node.id)) throw new TypeError(`two steps share the id ${node.id}${where}`);
+    ids.add(node.id);
+  }
+  for (const node of nodes) {
+    const unknown = node.needs.find((need) => !ids.has(need));
+    if (unknown !== undefined) throw new TypeError(`step ${node.path} needs ${unknown}, which is not beside it`);
+  }
+  const placed = new Set();
+  while (placed.size < nodes.length) {
+    const next = nodes.find((node) => !placed.has(node.id) && node.needs.every((need) => placed.has(need)));
+    if (!next) throw new TypeError(`the steps${where} need each other in a cycle`);
+    placed.add(next.id);
+  }
+}
+
+function plan(calls, path) {
+  const list = (calls || []).map(callOf);
+  const nodes = list.map((call, index) => {
+    if (!call || typeof call !== "object" || typeof call.id !== "string" || !call.id) throw new TypeError("every step needs an id");
+    if (call.id.includes("/")) throw new TypeError(`a step id cannot have a slash: ${call.id}`);
+    const kind = call.type === "group" ? "group" : call.step;
+    return { id: call.id, call, kind, needs: needsOf(call, index, list), path: path ? `${path}/${call.id}` : call.id };
+  });
+  checked(nodes, path);
+  return nodes;
+}
+
+const fresh = () => ({ status: "pending", result: null, from: null, entry: null });
+
+function kept(slot) {
+  if (!slot || !SETTLED.includes(slot.status)) return fresh();
+  return { ...slot, from: null, entry: null };
+}
+
+class Graph {
+  constructor(ctx, nodes, options) {
+    this.ctx = ctx;
+    this.nodes = nodes;
+    this.root = Boolean(options.root);
+    this.failFast = options.failFast !== false;
+    this.byId = new Map(nodes.map((node) => [node.id, node]));
+    const key = `${ctx.branch}|${typeof ctx.step === "string" ? ctx.step : ""}`;
+    const memory = options.entry ? ctx.runtime.groups.get(key) : null;
+    this.state = new Map(nodes.map((node) => [node.id, memory ? kept(memory.get(node.id)) : fresh()]));
+    ctx.runtime.groups.set(key, this.state);
+    this.running = new Map();
+    this.failure = null;
+    this.last = null;
+  }
+
+  tag(node) {
+    return `${this.ctx.branch}|${node.path}`;
+  }
+
+  fromOf(node, result) {
+    return { step: node.path, outcome: result.outcome, data: dataOf(result) };
+  }
+
+  scopeFor(node) {
+    const scope = this.ctx.scoped(this.ctx.branch);
+    const seen = node.needs.map((id) => {
+      const slot = this.state.get(id);
+      return [id, { outcome: slot.status, data: dataOf(slot.result) }];
+    });
+    scope.needs = Object.fromEntries(seen);
+    return scope;
+  }
+
+  signal(node, kind, data) {
+    const attempt = this.ctx.runtime.attempts.get(`${this.ctx.branch}|${node.path}`) || 1;
+    this.ctx.runtime.signal(this.ctx.scoped(this.ctx.branch, node.path, attempt, null), kind, data);
+  }
+
+  halt(node, state) {
+    this.running.delete(node.id);
+    this.ctx.runtime.halt(this.ctx.branch, node.path);
+    this.signal(node, "step.reset", { state });
+  }
+
+  stopAll() {
+    for (const id of [...this.running.keys()]) {
+      this.halt(this.byId.get(id), "skipped");
+      this.state.get(id).status = "cancelled";
+    }
+  }
+
+  dependents(id) {
+    const hit = new Set([id]);
+    let grew = true;
+    while (grew) {
+      grew = false;
+      for (const node of this.nodes.filter((node) => !hit.has(node.id))) {
+        if (node.needs.some((need) => hit.has(need))) {
+          hit.add(node.id);
+          grew = true;
+        }
+      }
+    }
+    return hit;
+  }
+
+  route(target, from, source) {
+    const [head, ...rest] = String(target).split("/");
+    if (!this.byId.has(head)) return false;
+    const hit = this.dependents(head);
+    if (source) hit.add(source);
+    for (const id of hit) {
+      const slot = this.state.get(id);
+      const node = this.byId.get(id);
+      if (slot.status === "running") this.halt(node, "pending");
+      else if (slot.status !== "pending") this.signal(node, "step.reset", { state: "pending" });
+      Object.assign(slot, fresh());
+    }
+    if (this.failure && hit.has(this.failure.node.id)) this.failure = null;
+    Object.assign(this.state.get(head), { entry: rest.length > 0 ? rest.join("/") : null, from });
+    return true;
+  }
+
+  jump(node, to, from, result) {
+    if (this.route(to, from, node.id)) return null;
+    if (this.root) throw new TypeError(`there is no step ${to} in this workflow`);
+    return outcome("goto", { to, from, data: dataOf(result) });
+  }
+
+  async decide(node) {
+    const states = node.needs.map((id) => this.state.get(id).status);
+    if (states.some((status) => status === "pending" || status === "running")) return "wait";
+    const options = node.call.options || {};
+    const broken = states.some((status) => !SETTLED.includes(status));
+    const when = options.when || "success";
+    if (when === "success" && (broken || (this.failure && this.failFast))) return "skip";
+    if (when === "failure" && !broken && !this.failure) return "skip";
+    if (typeof options.if === "function") return (await options.if(this.scopeFor(node))) ? "run" : "skip";
+    return options.if === false ? "skip" : "run";
+  }
+
+  start(node) {
+    const slot = this.state.get(node.id);
+    const { entry, from } = slot;
+    Object.assign(slot, { status: "running", entry: null, from: null });
+    const scope = this.scopeFor(node);
+    const id = node.id;
+    const promise = Promise.resolve()
+      .then(() => runNode(scope, node, entry, from))
+      .then((result) => ({ id, result }), (error) => ({ id, error }));
+    this.running.set(id, promise);
+  }
+
+  async skipped(node) {
+    const call = { ...node.call, id: node.path, options: {} };
+    const result = outcome("skipped", { data: null });
+    Object.assign(this.state.get(node.id), { status: "skipped", result });
+    const scope = opened(this.ctx, { ...call, options: node.call.options }, node.kind, null);
+    await closed(this.ctx, scope, call, result);
+  }
+
+  async schedule() {
+    let moved = true;
+    while (moved) {
+      moved = false;
+      for (const node of this.nodes.filter((node) => this.state.get(node.id).status === "pending")) {
+        const verdict = await this.decide(node);
+        if (verdict === "wait") continue;
+        moved = true;
+        if (verdict === "run") this.start(node);
+        else await this.skipped(node);
+      }
+    }
+  }
+
+  async settle(id, result) {
+    const node = this.byId.get(id);
+    const slot = this.state.get(id);
+    this.last = result;
+    if (result.outcome === "passed" || result.outcome === "skipped") {
+      Object.assign(slot, { status: result.outcome, result });
+      this.ctx.runtime.tries.delete(this.tag(node));
+      return null;
+    }
+    if (result.outcome === "cancelled" || result.outcome === "done") return result;
+    if (result.outcome === "goto") return this.jump(node, result.to, result.from || this.fromOf(node, result), result);
+    return this.failed(node, result);
+  }
+
+  async policy(node, result) {
+    const options = node.call.options || {};
+    let chosen = options.onFail;
+    if (typeof chosen === "function") chosen = await chosen(this.scopeFor(node), result);
+    const retries = (given) => Number(given === undefined ? options.retries || 0 : given);
+    if (chosen && typeof chosen === "object" && chosen.goto !== undefined) return { goto: String(chosen.goto), retries: retries(chosen.retries) };
+    if (typeof chosen === "string" && !POLICIES.includes(chosen)) return { goto: chosen, retries: retries() };
+    return { name: typeof chosen === "string" ? chosen : this.root ? "ask" : "fail" };
+  }
+
+  async failed(node, result) {
+    const runtime = this.ctx.runtime;
+    const tag = this.tag(node);
+    const slot = this.state.get(node.id);
+    const tries = runtime.tries.get(tag) || 0;
+    if (tries < Number((node.call.options || {}).rerun || 0)) {
+      runtime.tries.set(tag, tries + 1);
+      Object.assign(slot, { status: "pending", from: this.fromOf(node, result) });
+      return null;
+    }
+    runtime.tries.delete(tag);
+    const chosen = await this.policy(node, result);
+    if (chosen.goto === undefined) return this.apply(node, result, chosen.name);
+    const used = runtime.gotos.get(tag) || 0;
+    if (used >= chosen.retries) return this.apply(node, result, "ask");
+    runtime.gotos.set(tag, used + 1);
+    return this.jump(node, chosen.goto, this.fromOf(node, result), result);
+  }
+
+  async apply(node, result, name) {
+    const slot = this.state.get(node.id);
+    slot.result = result;
+    if (name === "continue") slot.status = "continued";
+    else if (name === "skip") this.pass(node);
+    else if (name === "ask") return this.ask(node, result);
+    else {
+      slot.status = "failed";
+      if (!this.failure) this.failure = { node, result };
+      if (this.failFast) this.stopAll();
+    }
+    return null;
+  }
+
+  pass(node) {
+    Object.assign(this.state.get(node.id), { status: "skipped", result: outcome("skipped", { data: null }) });
+    this.signal(node, "step.finished", { outcome: "skipped", data: null, to: null });
+  }
+
+  async ask(node, result) {
+    const decision = await exhausted(this.ctx, node.call, result);
+    if (decision.cancel) return decision.cancel;
+    this.ctx.runtime.gotos.delete(this.tag(node));
+    if (decision.skip) this.pass(node);
+    else Object.assign(this.state.get(node.id), { status: "pending", from: this.fromOf(node, result) });
+    return null;
+  }
+
+  result() {
+    if (this.failure) {
+      const { node, result } = this.failure;
+      return outcome("failed", { data: { ...objectOf(dataOf(result)), failed: node.path, steps: this.outputs() } });
+    }
+    if (this.root) return this.last;
+    return outcome("passed", { data: this.outputs() });
+  }
+
+  outputs() {
+    return Object.fromEntries(this.nodes.map((node) => [node.id, dataOf(this.state.get(node.id).result)]));
+  }
+}
+
+async function graph(ctx, nodes, options) {
+  const run = new Graph(ctx, nodes, options);
+  if (options.entry && !run.route(options.entry, options.from || null, null)) {
+    throw new TypeError(`there is no step ${options.entry} in ${ctx.step}`);
+  }
+  for (;;) {
+    await run.schedule();
+    if (run.running.size === 0) return run.result();
+    const settled = await Promise.race([...run.running.values()]);
+    run.running.delete(settled.id);
+    if (settled.error) {
+      run.stopAll();
+      throw settled.error;
+    }
+    const stop = await run.settle(settled.id, settled.result);
+    if (stop) {
+      run.stopAll();
+      return stop;
+    }
+  }
+}
+
+function nested(ctx, call) {
+  const path = typeof ctx.step === "string" && ctx.step ? `${ctx.step}/${call.id}` : call.id;
+  return { id: call.id, call, kind: call.step, needs: [], path };
+}
+
 export function step(definition) {
-  if (!definition || typeof definition.name !== "string" || typeof definition.run !== "function") {
-    throw new TypeError("step({ name, run }) needs name and run");
+  const runs = definition && (typeof definition.run === "function" || definition.steps !== undefined);
+  if (!definition || typeof definition.name !== "string" || !runs) {
+    throw new TypeError("step({ name, run }) needs name and run or steps");
   }
   const type = Object.freeze({
     name: definition.name,
     view: definition.view || (() => []),
-    run: definition.run,
+    run: definition.run || null,
+    steps: definition.steps === undefined ? null : definition.steps,
+    collect: typeof definition.collect === "function" ? definition.collect : null,
     label: definition.label || definition.name,
     icon: definition.icon || null,
-    needs: definition.needs || null,
+    requires: definition.requires || (typeof definition.needs === "string" ? definition.needs : null),
     doing: definition.doing || null,
   });
   registry.steps.set(type.name, type);
   const use = (first, second) => {
     if (isCtx(first)) {
       const options = second || {};
-      return runStep(first, type, { id: options.id, options }).then((result) => {
+      const call = { type: "step-call", step: type.name, id: options.id || type.name, options };
+      return runNode(first, nested(first, call), null, null).then((result) => {
         if (result.outcome === "cancelled") throw new Cancelled(result.reason);
         if (result.outcome === "failed") throw new StepFailed(options.id || type.name, result);
         if (result.outcome === "goto") throw new TypeError("goto only works inside workflow({ steps })");
@@ -458,10 +945,20 @@ export function step(definition) {
   return use;
 }
 
-function indexOf(steps, id) {
-  const index = steps.findIndex((call) => call.id === id);
-  if (index < 0) throw new TypeError(`there is no step ${id} in this workflow`);
-  return index;
+export function group(definition) {
+  if (!definition || typeof definition.id !== "string" || !Array.isArray(definition.steps)) {
+    throw new TypeError("group({ id, steps }) needs id and steps");
+  }
+  const { id, steps, ...options } = definition;
+  return Object.freeze({ type: "group", id, steps: steps.map(callOf), options });
+}
+
+export function use(target, options) {
+  const { id, ...rest } = options || {};
+  const name = typeof target === "string" ? target : target && target.name;
+  if (typeof name !== "string" || !name) throw new TypeError("use() needs a workflow or its name");
+  const steps = target && typeof target === "object" && Array.isArray(target.steps) ? target.steps : null;
+  return Object.freeze({ type: "group", id: id || name, use: name, steps, options: rest });
 }
 
 const decisions = [
@@ -471,7 +968,8 @@ const decisions = [
 ];
 
 function failure(type, call, result) {
-  const label = type && type.label ? type.label : call.id;
+  const named = call.options && typeof call.options.label === "string" ? call.options.label : call.id;
+  const label = type && type.label ? type.label : named;
   const data = result && result.data && typeof result.data === "object" ? result.data : {};
   const cause = typeof data.error === "string" && data.error.trim() ? data.error.trim() : null;
   return { reason: cause ? `${label} failed: ${cause}` : `${label} failed`, label, cause };
@@ -488,48 +986,17 @@ async function exhausted(ctx, call, result) {
   return { skip: chosen === "skip", result };
 }
 
-async function sequence(ctx, steps) {
-  const retries = new Map();
-  let at = 0;
-  let last = null;
-  let from = null;
-  while (at < steps.length) {
-    const call = steps[at];
-    const type = registry.steps.get(call.step);
-    if (!type) throw new TypeError(`unknown step: ${call.step}`);
-    const result = await runStep(ctx, type, call, from);
-    last = result;
-    const moved = result.outcome === "passed" || result.outcome === "skipped";
-    from = moved ? null : { step: call.id, outcome: result.outcome, data: result.data === undefined ? null : result.data };
-    if (result.outcome === "cancelled") return result;
-    if (moved) at += 1;
-    else if (result.outcome === "goto") at = indexOf(steps, result.to);
-    else {
-      const used = retries.get(call.id) || 0;
-      const allowed = call.options.retries === undefined ? 0 : call.options.retries;
-      if (call.options.onFail && used < allowed) {
-        retries.set(call.id, used + 1);
-        at = indexOf(steps, call.options.onFail);
-        continue;
-      }
-      const decision = await exhausted(ctx, call, result);
-      if (decision.cancel) return decision.cancel;
-      retries.set(call.id, 0);
-      if (decision.skip) {
-        const attempt = ctx.runtime.attempts.get(`${ctx.branch}|${call.id}`) || 1;
-        ctx.runtime.signal(ctx.scoped(ctx.branch, call.id, attempt, null), "step.finished", { outcome: "skipped", data: null, to: null });
-        at += 1;
-        from = null;
-      }
-    }
-  }
-  return last;
+async function rooted(ctx, steps) {
+  const result = await graph(ctx, plan(steps, ""), { root: true });
+  if (result && result.outcome === "failed") throw new StepFailed(objectOf(result.data).failed || "workflow", result);
+  return result;
 }
 
 export function workflow(definition) {
   if (!definition || typeof definition.name !== "string") throw new TypeError("workflow({ name }) needs name");
-  const steps = (definition.steps || []).map((call) => (typeof call === "function" ? call() : call));
-  const run = definition.run || ((ctx) => sequence(ctx, steps));
+  const steps = (definition.steps || []).map(callOf);
+  plan(steps, "");
+  const run = definition.run || ((ctx) => rooted(ctx, steps));
   const shape = Object.freeze({
     type: "workflow",
     name: definition.name,
@@ -545,14 +1012,48 @@ export function workflow(definition) {
   return shape;
 }
 
-function declared(found) {
-  const named = [...found.statuses];
-  for (const call of found.steps) {
+function childrenQuietly(call) {
+  try {
+    return childrenOf(call);
+  } catch (error) {
+    return null;
+  }
+}
+
+const DEEPEST = 16;
+
+function tree(calls, path, nodes, depth) {
+  if (depth > DEEPEST) return [];
+  const list = (calls || []).map(callOf);
+  return list.map((call, index) => {
+    const at = path ? `${path}/${call.id}` : call.id;
+    const options = objectOf(call.options);
+    const shaped = { id: call.id, path: at, step: call.type === "group" ? "group" : call.step, needs: needsOf(call, index, list), options: plain(options) };
+    if (call.type === "group" || options.label || options.icon || options.doing) {
+      const label = options.label || (call.type === "group" ? call.id : null);
+      nodes[at] = { label, icon: options.icon || null, doing: options.doing || null };
+    }
+    const children = childrenQuietly(call);
+    if (children) shaped.steps = tree(children, at, nodes, depth + 1);
+    return shaped;
+  });
+}
+
+function statusesOf(calls, named, depth) {
+  if (depth > DEEPEST) return named;
+  for (const call of (calls || []).map(callOf)) {
     const options = call && call.options ? call.options : {};
     for (const name of [options.status, options.doneStatus]) {
       if (typeof name === "string" && name && !named.includes(name)) named.push(name);
     }
+    const children = call ? childrenQuietly(call) : null;
+    if (children) statusesOf(children, named, depth + 1);
   }
+  return named;
+}
+
+function declared(found) {
+  const named = statusesOf(found.steps, [...found.statuses], 0);
   return Object.freeze({ name: found.name, statuses: Object.freeze(named) });
 }
 
@@ -574,6 +1075,8 @@ function ended(runtime, value) {
   runtime.activity += 1;
   if (isOutcome(value) && value.outcome === "cancelled") {
     runtime.finished = { state: "cancelled", reason: value.reason };
+  } else if (isOutcome(value) && value.outcome === "done") {
+    runtime.finished = { state: "completed", result: value.data === undefined ? null : value.data };
   } else {
     runtime.finished = { state: "completed", result: value === undefined ? null : value };
   }
@@ -628,21 +1131,20 @@ function view(request) {
 }
 
 function describe() {
-  return {
-    workflows: [...registry.workflows.values()].map((found) => ({
-      name: found.name,
-      statuses: found.statuses,
-      triggers: found.triggers,
-      reconcile: found.reconcile,
-      accepts: found.accepts,
-      steps: found.steps,
-      code: found.code,
-    })),
-    steps: [...registry.steps.keys()],
-    labels: Object.fromEntries(
-      [...registry.steps.values()].map((type) => [type.name, { label: type.label, icon: type.icon, needs: type.needs, doing: type.doing }]),
-    ),
-  };
+  const labels = Object.fromEntries(
+    [...registry.steps.values()].map((type) => [type.name, { label: type.label, icon: type.icon, requires: type.requires, doing: type.doing }]),
+  );
+  const nodes = {};
+  const workflows = [...registry.workflows.values()].map((found) => ({
+    name: found.name,
+    statuses: found.statuses,
+    triggers: found.triggers,
+    reconcile: found.reconcile,
+    accepts: found.accepts,
+    steps: tree(found.steps, "", nodes, 0),
+    code: found.code,
+  }));
+  return { workflows, steps: [...registry.steps.keys()], labels, nodes };
 }
 
 export const PROTOCOL = 1;

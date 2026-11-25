@@ -11,7 +11,7 @@ fn both_windows_are_named_by_their_length_and_reset_at_their_epoch() {
             "secondary_window": {"used_percent": 10.5, "limit_window_seconds": 604_800, "reset_at": 1_795_888_800}
         }
     });
-    let usage = windows(&value).unwrap_or_else(|e| panic!("{e}"));
+    let usage = windows(&value, domain::Language::Portuguese).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(usage.plan.as_deref(), Some("Pro"));
     let shown: Vec<_> =
         usage.windows.iter().map(|w| (w.id.as_str(), w.label.as_str(), w.used_percent, w.resets_at.clone())).collect();
@@ -30,7 +30,7 @@ fn a_missing_window_is_skipped_and_a_relative_reset_still_gives_an_instant() {
         "primary_window": {"used_percent": 5, "limit_window_seconds": 10_800, "reset_after_seconds": 30},
         "secondary_window": null
     }});
-    let usage = windows(&value).unwrap_or_else(|e| panic!("{e}"));
+    let usage = windows(&value, domain::Language::Portuguese).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(usage.plan, None);
     assert_eq!(usage.windows.len(), 1);
     assert_eq!(usage.windows[0].label, "3 h");

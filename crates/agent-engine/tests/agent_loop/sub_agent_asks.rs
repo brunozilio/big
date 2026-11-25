@@ -5,14 +5,14 @@ use agent_engine::model::TurnRequest;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools;
 use agent_engine::transcript::{Block, Message};
-use domain::{Decision, EngineEvent, PermissionMode};
+use domain::{Decision, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, request, tool_use};
 
 #[test]
 fn an_ask_from_a_sub_agent_is_told_first_as_that_agent_s() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use(
             "a1",

@@ -1,11 +1,13 @@
 mod code;
 mod events;
+mod merges;
 mod pipelines;
 mod refs;
 mod states;
 mod workflow;
 
 use async_trait::async_trait;
+use domain::Language;
 use domain::connection::{Capability, ProviderKey};
 use serde_json::{Value, json};
 
@@ -26,10 +28,22 @@ const LOGO: &str = include_str!("logo.svg");
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Github;
 
-pub fn personal_token() -> AlternateAuth {
-    let help = "No GitHub, abra Settings, Developer settings, Personal access tokens e gere um token com acesso aos repositórios, à organização e aos workflows.";
-    let token = TokenField::new("token", "Personal access token do GitHub", help, true);
-    AlternateAuth::token(API_TOKEN, "Usar personal access token", "do GitHub", vec![token], TokenForm::Bearer)
+pub fn personal_token(language: Language) -> AlternateAuth {
+    let help = language.pick(
+        "On GitHub, open Settings, Developer settings, Personal access tokens and create a token with access to the repositories, the organization and the workflows.",
+        "En GitHub, abre Settings, Developer settings, Personal access tokens y genera un token con acceso a los repositorios, a la organización y a los workflows.",
+        "No GitHub, abra Settings, Developer settings, Personal access tokens e gere um token com acesso aos repositórios, à organização e aos workflows.",
+    );
+    let label = language.pick(
+        "GitHub personal access token",
+        "Personal access token de GitHub",
+        "Personal access token do GitHub",
+    );
+    let token = TokenField::new("token", label, help, true);
+    let way =
+        language.pick("Use a personal access token", "Usar un personal access token", "Usar personal access token");
+    let site = language.pick("GitHub", "de GitHub", "do GitHub");
+    AlternateAuth::token(language, API_TOKEN, way, site, vec![token], TokenForm::Bearer)
 }
 
 pub fn device_app() -> DeviceApp {
@@ -116,19 +130,19 @@ impl Provider for Github {
         }
     }
 
-    fn presentation(&self) -> Presentation {
+    fn presentation(&self, language: Language) -> Presentation {
         Presentation {
-            description: "Sua conta GitHub".to_owned(),
-            group: "Código".to_owned(),
-            button: "Entrar com GitHub".to_owned(),
-            site: "do GitHub".to_owned(),
-            choose_title: "Organização".to_owned(),
+            description: language.pick("Your GitHub account", "Tu cuenta de GitHub", "Sua conta GitHub").to_owned(),
+            group: "code".to_owned(),
+            button: language.pick("Sign in with GitHub", "Entrar con GitHub", "Entrar com GitHub").to_owned(),
+            site: language.pick("GitHub", "de GitHub", "do GitHub").to_owned(),
+            choose_title: language.pick("Organization", "Organización", "Organização").to_owned(),
             hidden: false,
         }
     }
 
-    fn alternatives(&self) -> Vec<AlternateAuth> {
-        vec![personal_token()]
+    fn alternatives(&self, language: Language) -> Vec<AlternateAuth> {
+        vec![personal_token(language)]
     }
 
     async fn call(
@@ -152,6 +166,7 @@ impl Provider for Github {
             code_actions::REPOS => code::repos(&api, args).await,
             code_actions::PULL_REQUESTS => code::pull_requests(&api, args).await,
             code_actions::BRANCHES => code::branches(&api, args).await,
+            code_actions::MERGE_BRANCHES => merges::merge_branches(&api, args).await,
             pipeline_actions::RUNS => pipelines::runs(&api, args).await,
             pipeline_actions::RUN => pipelines::run(&api, args).await,
             pipeline_actions::JOB_LOG => pipelines::job_log(&api, args).await,

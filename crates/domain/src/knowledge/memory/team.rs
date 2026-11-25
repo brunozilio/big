@@ -5,7 +5,7 @@ pub const FIRST_ID: u32 = 1_000_000;
 const MOST_CHARS: usize = 2_000;
 
 pub fn is_team(id: MemoryId) -> bool {
-    id.0 >= FIRST_ID
+    id.0 >= FIRST_ID && super::MemoryScope::of(id).0.is_repository()
 }
 
 pub fn parse(at: usize, name: &str, text: &str) -> Option<Memory> {

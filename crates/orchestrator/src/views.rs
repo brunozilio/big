@@ -8,7 +8,7 @@ use sync::ReconcilePolicy;
 use crate::calls::calls_block;
 use crate::git;
 use crate::ledger::Ledger;
-use crate::protocol::{AGENT, WAIT_HUMAN, kind_of};
+use crate::protocol::{AGENT, CALL, EXEC, WAIT_HUMAN, kind_of};
 use crate::repos;
 
 fn repositories(item: &WorkItem) -> Vec<String> {
@@ -93,10 +93,70 @@ pub struct ItemSummary {
     pub ended_at: Option<i64>,
 }
 
+fn merged(mut spans: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+    spans.sort_unstable();
+    let mut joined: Vec<(i64, i64)> = Vec::new();
+    for (start, end) in spans.into_iter().filter(|(start, end)| end > start) {
+        match joined.last_mut() {
+            Some(last) if start <= last.1 => last.1 = last.1.max(end),
+            _ => joined.push((start, end)),
+        }
+    }
+    joined
+}
+
+fn length(spans: &[(i64, i64)]) -> i64 {
+    spans.iter().map(|(start, end)| end - start).sum()
+}
+
+fn overlap(left: &[(i64, i64)], right: &[(i64, i64)]) -> i64 {
+    let pairs = left.iter().flat_map(|a| right.iter().map(move |b| (a.0.max(b.0), a.1.min(b.1))));
+    pairs.map(|(start, end)| (end - start).max(0)).sum()
+}
+
+fn working(ledger: &Ledger, step: &str, now: i64) -> i64 {
+    let ended = |seq: &u64| ledger.resolved.get(seq).map_or(now, |resolution| resolution.at);
+    let ours = |seq: &u64, kinds: &[&str]| {
+        ledger
+            .requested
+            .get(seq)
+            .is_some_and(|request| request.key.step == step && kinds.contains(&kind_of(&request.effect)))
+    };
+    let busy = merged(
+        ledger
+            .requested_at
+            .iter()
+            .filter(|(seq, _)| ours(seq, &[AGENT, EXEC, CALL]))
+            .map(|(seq, start)| (*start, ended(seq)))
+            .collect(),
+    );
+    let paused = merged(
+        ledger
+            .pauses
+            .iter()
+            .filter(|pause| ours(&pause.seq, &[AGENT]))
+            .map(|pause| (pause.from, pause.to.unwrap_or_else(|| ended(&pause.seq))))
+            .collect(),
+    );
+    length(&busy) - overlap(&busy, &paused)
+}
+
 fn timing(ledger: &Ledger, step: &str, now: i64) -> (u64, Option<i64>) {
-    let tried = attempts(ledger, step);
-    let spent: i64 = tried.iter().map(|attempt| attempt.ended_at.unwrap_or(now) - attempt.started_at).sum();
-    (u64::try_from(spent / 1000).unwrap_or(0), tried.last().map(|attempt| attempt.started_at))
+    let since = attempts(ledger, step).last().map(|attempt| attempt.started_at);
+    (u64::try_from(working(ledger, step, now) / 1000).unwrap_or(0), since)
+}
+
+fn place(declared: &[(String, Option<String>)], id: &str) -> usize {
+    let mut path = id;
+    loop {
+        if let Some(at) = declared.iter().position(|(known, _)| known == path) {
+            return at;
+        }
+        match path.rsplit_once('/') {
+            Some((parent, _)) => path = parent,
+            None => return declared.len(),
+        }
+    }
 }
 
 pub fn summary(
@@ -135,10 +195,11 @@ pub fn summary(
         };
         steps.push(pending);
     }
+    steps.sort_by_key(|step| place(declared, &step.id));
     let active = |state: StepState| matches!(state, StepState::Running | StepState::WaitingHuman);
     let current = item.steps.iter().rev().find(|run| !run.id.is_empty() && active(run.state)).map(|run| run.id.clone());
     let stopped =
-        item.impediment.as_ref().is_some_and(|found| found.reason.as_deref() != Some(crate::agent::WAITING_ANSWER));
+        item.impediment.as_ref().is_some_and(|found| !crate::texts::is_waiting_answer(found.reason.as_deref()));
     let live = !stopped && !item.is_ended() && ledger.open().any(|request| kind_of(&request.effect) == AGENT);
     ItemSummary {
         id: item.id.clone(),
@@ -302,6 +363,39 @@ mod tests {
                 "web": { "base": null, "head": git::branch_name("i1") },
             })
         );
+    }
+
+    fn effect(ledger: &mut Ledger, seq: u64, effect: Effect, span: (i64, Option<i64>)) {
+        let key = domain::effect::IdempotencyKey::new("i1", "build", None, seq, 1);
+        ledger.requested.insert(seq, domain::effect::EffectRequest::new(key, effect));
+        ledger.requested_at.insert(seq, span.0);
+        if let Some(at) = span.1 {
+            let outcome = domain::effect::EffectOutcome::Ok { value: Value::Null };
+            ledger.resolved.insert(seq, crate::ledger::Resolution { outcome, at });
+        }
+    }
+
+    #[test]
+    fn a_step_counts_only_the_time_spent_working_not_waiting() {
+        let mut ledger = Ledger::default();
+        let agent = || Effect::AgentRun { agent: "dev".into(), input: Value::Null };
+        effect(&mut ledger, 1, agent(), (0, Some(60_000)));
+        effect(&mut ledger, 2, Effect::WaitHuman { view: Value::Null }, (60_000, Some(3_600_000)));
+        effect(&mut ledger, 3, Effect::Exec { command: "make".into(), cwd: None }, (3_600_000, Some(3_630_000)));
+        effect(&mut ledger, 4, agent(), (3_610_000, Some(3_640_000)));
+        effect(&mut ledger, 5, agent(), (4_000_000, None));
+        assert_eq!(timing(&ledger, "build", 4_020_000).0, 120);
+    }
+
+    #[test]
+    fn a_chat_waiting_for_an_approval_does_not_count_as_working() {
+        let mut ledger = Ledger::default();
+        let agent = || Effect::AgentRun { agent: "dev".into(), input: Value::Null };
+        effect(&mut ledger, 1, agent(), (0, Some(4_000_000)));
+        ledger.pauses.push(crate::ledger::Pause { seq: 1, ask: "a".into(), from: 60_000, to: Some(3_660_000) });
+        effect(&mut ledger, 2, agent(), (5_000_000, None));
+        ledger.pauses.push(crate::ledger::Pause { seq: 2, ask: "b".into(), from: 5_030_000, to: None });
+        assert_eq!(timing(&ledger, "build", 9_000_000).0, 400 + 30);
     }
 
     #[test]

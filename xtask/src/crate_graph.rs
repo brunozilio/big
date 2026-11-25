@@ -16,7 +16,10 @@ const ALLOWED: [(&str, &[&str]); 18] = [
     ("store", &["domain"]),
     ("language-servers", &["brand", "domain", "platform"]),
     ("content", &["brand", "script"]),
-    ("server", &["app", "brand", "domain", "orchestrator", "connectors", "store", "sync", "page", "browser"]),
+    (
+        "server",
+        &["app", "brand", "domain", "orchestrator", "connectors", "store", "sync", "page", "browser", "platform"],
+    ),
     ("browser", &["brand", "domain"]),
     ("page", &[]),
     ("code-map", &[]),

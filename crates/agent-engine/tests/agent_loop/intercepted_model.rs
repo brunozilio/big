@@ -3,7 +3,7 @@ use agent_engine::intercept::{Interceptor, Interceptors, Level};
 use agent_engine::model::ModelError;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message, Role};
-use domain::{Effort, EngineEvent, PermissionMode};
+use domain::{Effort, EngineEvent};
 
 use crate::Rig;
 
@@ -34,7 +34,7 @@ fn shown_text(rig: &Rig) -> String {
 
 #[test]
 fn an_interceptor_picks_the_model_and_effort_the_call_goes_out_with() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.interceptors = intercepting(
         &rig,
         r#"export default (request, ctx, next) => next({ ...request, model: "other", effort: "low" });"#,
@@ -49,7 +49,7 @@ fn an_interceptor_picks_the_model_and_effort_the_call_goes_out_with() {
 
 #[test]
 fn an_interceptor_asks_again_and_only_the_answer_it_keeps_is_shown() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.interceptors = intercepting(
         &rig,
         r#"export default (request, ctx, next) => {
@@ -69,7 +69,7 @@ fn an_interceptor_asks_again_and_only_the_answer_it_keeps_is_shown() {
 
 #[test]
 fn an_interceptor_rewrites_the_reply_or_answers_without_the_model() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.interceptors = intercepting(
         &rig,
         r#"export default (request, ctx, next) => ({ ...next(), text: "The key is [redacted]." });"#,
@@ -80,7 +80,7 @@ fn an_interceptor_rewrites_the_reply_or_answers_without_the_model() {
     assert_eq!(answer(&history), "The key is [redacted].");
     assert!(!shown_text(&rig).contains("sk-123"));
 
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.interceptors = intercepting(&rig, r#"export default () => ({ text: "From the cache." });"#);
     let model = ScriptedModel::new([]);
     let mut history = vec![Message::user("hi")];
@@ -91,7 +91,7 @@ fn an_interceptor_rewrites_the_reply_or_answers_without_the_model() {
 
 #[test]
 fn a_broken_request_from_an_interceptor_fails_the_call_naming_why() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.interceptors =
         intercepting(&rig, r#"export default (request, ctx, next) => next({ ...request, history: [] });"#);
     let model = ScriptedModel::new([said("Never.")]);

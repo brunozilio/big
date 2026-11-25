@@ -36,7 +36,7 @@ fn a_structured_result_is_emitted_when_the_model_calls_the_output_tool() {
         == prompt: conversation ==
         user:
           text "What is the answer?"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use s1 StructuredOutput "{\"result\":{\"answer\":\"42\"}}"
         user:
@@ -96,7 +96,7 @@ fn a_model_that_forgets_the_structured_result_is_nudged_until_it_calls_the_tool(
         == prompt: conversation ==
         user:
           text "What is the answer?"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "The answer is 42."
         user:
@@ -167,7 +167,7 @@ fn a_structured_result_that_breaks_the_schema_is_refused_and_not_emitted() {
         == prompt: conversation ==
         user:
           text "What is the answer?"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use s1 StructuredOutput "{\"result\":{\"answer\":42}}"
         user:
@@ -235,7 +235,7 @@ fn a_model_that_never_gives_the_structured_result_fails_the_run_after_three_nudg
         == prompt: conversation ==
         user:
           text "What is the answer?"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "One."
         user:

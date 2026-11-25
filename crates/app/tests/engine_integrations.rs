@@ -10,9 +10,7 @@ use agent_engine::{
 };
 use app::api::{ClientCommand, Envelope, RequestId, ServerEvent, Unsolicited};
 use app::{Backend, LocalBackend, LocalServices};
-use domain::{
-    EngineEvent, MemoryBrief, MemoryEdit, MemoryKind, ModelOption, ModelProvider, PermissionMode, PromptRequest, RunId,
-};
+use domain::{EngineEvent, MemoryBrief, MemoryEdit, MemoryKind, ModelOption, ModelProvider, PromptRequest, RunId};
 use serde_json::json;
 use std::{
     sync::{
@@ -95,6 +93,7 @@ fn native_backend_searches_memory_and_learns() {
         text: "The release codename is PERSIMMON.".into(),
         tags: vec!["release".into()],
         touches: vec![],
+        scope: Default::default(),
     };
     let mut edits = vec![fact];
     edits.extend((0..20).map(|n| MemoryEdit::Remember {
@@ -102,13 +101,14 @@ fn native_backend_searches_memory_and_learns() {
         text: format!("Service s{n} listens on port {}.", 9000 + n),
         tags: vec![],
         touches: vec![],
+        scope: Default::default(),
     }));
     let by = domain::Provenance { author: domain::Author::User, now: 0, origin: None };
     services.memories.edit(dir.path(), &edits, by).expect("valid test fixture");
     let backend = LocalBackend::new(services, Arc::new(|| {})).expect("valid test fixture");
     let model = ModelOption::new("fixture", "Fixture inference").served_by(ModelProvider::new("keyed"));
     let mut request = PromptRequest::plain(dir.path().into(), "Look it up and remember the tabs preference.", model);
-    request.policy.permission = PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     request.host.memory = Some(MemoryBrief::new(Some("Native integration".into())));
     let run = RunId::new();
     backend

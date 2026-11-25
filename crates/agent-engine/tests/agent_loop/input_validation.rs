@@ -5,7 +5,7 @@ use agent_engine::model::ToolSpec;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::{Declared, Effect, Outcome, Tool, Workspace};
 use agent_engine::transcript::{Block, Message};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::{Value, json};
 
 use crate::{Rig, tool_use};
@@ -63,7 +63,7 @@ fn results(history: &[Message]) -> Vec<(String, bool)> {
 }
 
 fn refused(input: Value) -> (String, Arc<Counted>, Vec<EngineEvent>) {
-    let rig = Rig::new(PermissionMode::Ask);
+    let rig = Rig::new(domain::Reviewer::Human);
     let counted = Arc::new(Counted::default());
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("s", "Strict", input)]),
@@ -114,7 +114,7 @@ fn a_value_outside_its_enum_or_range_is_refused() {
 
 #[test]
 fn a_built_in_tool_is_checked_against_its_declared_schema() {
-    let rig = Rig::new(PermissionMode::Ask);
+    let rig = Rig::new(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("b", "Bash", json!({ "command": "echo hi > out.txt", "as_root": true }))]),
         ScriptedModel::reply(vec![Block::Text("Done".into())]),
@@ -129,7 +129,7 @@ fn a_built_in_tool_is_checked_against_its_declared_schema() {
 
 #[test]
 fn a_valid_input_still_runs() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let counted = Arc::new(Counted::default());
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("s", "Strict", json!({ "path": "a", "count": 2, "mode": "fast" }))]),
@@ -142,7 +142,7 @@ fn a_valid_input_still_runs() {
 
 #[test]
 fn an_empty_placeholder_in_an_optional_field_is_left_out_and_an_empty_required_one_is_kept() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let counted = Arc::new(Counted::default());
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("s", "Strict", json!({ "path": "a", "mode": "" }))]),

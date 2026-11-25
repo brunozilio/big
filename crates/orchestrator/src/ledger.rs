@@ -23,6 +23,14 @@ pub struct Resolution {
     pub at: i64,
 }
 
+#[derive(Debug, Clone, PartialEq)]
+pub struct Pause {
+    pub seq: u64,
+    pub ask: String,
+    pub from: i64,
+    pub to: Option<i64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Ledger {
     pub start: i64,
@@ -32,6 +40,7 @@ pub struct Ledger {
     pub progress: BTreeMap<u64, Value>,
     pub signals: BTreeMap<u64, SignalRecord>,
     pub requested_at: BTreeMap<u64, i64>,
+    pub pauses: Vec<Pause>,
     pub rewinds: u32,
 }
 
@@ -64,15 +73,34 @@ impl Ledger {
             }
             WorkflowEvent::EffectResolved { key, outcome } => self.resolve(key, outcome, at),
             WorkflowEvent::EffectProgress { key, data } if self.current(key) => {
+                self.pause(key.seq, &data["asks"], at);
                 domain::workflow::merge_patch(self.progress.entry(key.seq).or_insert(Value::Null), data);
             }
-            WorkflowEvent::Rewound { to } => self.rewind(to),
+            WorkflowEvent::Rewound { to, at } => self.rewind(to, *at),
             _ => {}
         }
     }
 
     fn current(&self, key: &IdempotencyKey) -> bool {
         self.requested.get(&key.seq).is_some_and(|request| &request.key == key)
+    }
+
+    fn pause(&mut self, seq: u64, asks: &Value, at: i64) {
+        let open = |pause: &&mut Pause| pause.seq == seq && pause.to.is_none();
+        match asks {
+            Value::Null => self.pauses.iter_mut().filter(open).for_each(|pause| pause.to = Some(at)),
+            Value::Object(changed) => {
+                for (ask, value) in changed {
+                    let known = self.pauses.iter_mut().filter(open).find(|pause| &pause.ask == ask);
+                    match (known, value.is_null()) {
+                        (Some(pause), true) => pause.to = Some(at),
+                        (None, false) => self.pauses.push(Pause { seq, ask: ask.clone(), from: at, to: None }),
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
     }
 
     fn resolve(&mut self, key: &IdempotencyKey, outcome: &EffectOutcome, at: i64) {
@@ -91,11 +119,20 @@ impl Ledger {
             .map(|(seq, _)| *seq)
     }
 
-    fn rewind(&mut self, to: &str) {
-        let Some(cut) = self.cut(to) else { return };
+    pub fn cut_before(&self, step: &str, seq: u64) -> Option<u64> {
+        self.signals
+            .range(..=seq)
+            .rev()
+            .find(|(_, signal)| signal.kind == "step.started" && signal.step.as_deref() == Some(step))
+            .map(|(seq, _)| *seq)
+    }
+
+    fn rewind(&mut self, to: &str, at: Option<u64>) {
+        let Some(cut) = at.or_else(|| self.cut(to)) else { return };
         self.signals.retain(|seq, _| *seq < cut);
         self.requested.retain(|seq, _| *seq < cut);
         self.requested_at.retain(|seq, _| *seq < cut);
+        self.pauses.retain(|pause| pause.seq < cut);
         self.resolved.retain(|seq, _| *seq < cut);
         self.progress.retain(|seq, _| *seq < cut);
         self.order.retain(|seq| *seq < cut);
@@ -138,5 +175,29 @@ impl Ledger {
             .rev()
             .find(|signal| signal.kind == "step.started" && signal.step.as_deref() == Some(step))
             .and_then(|signal| signal.data.get("type").and_then(Value::as_str).map(str::to_owned))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use domain::effect::{Effect, EffectRequest};
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn an_ask_pauses_its_run_from_when_it_opens_until_it_is_answered_or_the_run_closes_them() {
+        let key = IdempotencyKey::new("i1", "plan", None, 1, 1);
+        let agent = Effect::AgentRun { agent: "planner".into(), input: Value::Null };
+        let progress = |data: Value| WorkflowEvent::EffectProgress { key: key.clone(), data };
+        let mut ledger = Ledger::default();
+        ledger.apply(&WorkflowEvent::EffectRequested(EffectRequest::new(key.clone(), agent)), 0);
+        ledger.apply(&progress(json!({ "asks": { "a": { "since": 1 } } })), 10);
+        ledger.apply(&progress(json!({ "asks": { "a": { "since": 1 } } })), 15);
+        ledger.apply(&progress(json!({ "asks": { "a": null } })), 20);
+        ledger.apply(&progress(json!({ "asks": { "b": { "since": 2 } } })), 30);
+        ledger.apply(&progress(json!({ "asks": null })), 40);
+        let spans: Vec<_> = ledger.pauses.iter().map(|pause| (pause.ask.as_str(), pause.from, pause.to)).collect();
+        assert_eq!(spans, [("a", 10, Some(20)), ("b", 30, Some(40))]);
     }
 }

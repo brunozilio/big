@@ -1,7 +1,7 @@
 pub mod current;
 mod dispatch;
 mod observers;
-mod permission;
+pub(crate) mod permission;
 mod repl;
 mod run;
 mod scripts;

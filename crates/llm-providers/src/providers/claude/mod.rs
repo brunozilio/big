@@ -108,8 +108,8 @@ impl Shape for Provider {
     fn limits(&self, config: &Config) -> Option<Call> {
         Some(limits::call(self, config))
     }
-    fn windows(&self, value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
-        limits::windows(value)
+    fn windows(&self, value: &Value, language: domain::Language) -> Result<domain::billing::PlanUsage, ProviderError> {
+        limits::windows(value, language)
     }
     fn refresh(&self, previous: &Tokens) -> Option<TokenRequest> {
         Some(request(&[("grant_type", "refresh_token"), ("refresh_token", &previous.refresh_token)]))

@@ -96,7 +96,11 @@ impl Drop for Workers {
 fn is_query(command: &ClientCommand) -> bool {
     matches!(
         command,
-        ClientCommand::ListSessions | ClientCommand::SessionHistory { .. } | ClientCommand::CancelRequest { .. }
+        ClientCommand::ListSessions
+            | ClientCommand::SessionHistory { .. }
+            | ClientCommand::CancelRequest { .. }
+            | ClientCommand::BackgroundJobs
+            | ClientCommand::StopBackground { .. }
     )
 }
 

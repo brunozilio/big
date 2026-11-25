@@ -1,71 +1,92 @@
 import type { Agent, Model, Person, Provider, Usage, UsageDays, UsageLimits } from '../contract'
+import { say } from './say'
+import { SONAR_LOGO, VERACODE_LOGO } from './security'
 import type { ConnectionState, Need } from './sim'
 
 const MCP_LOGO = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor"><g fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2v5M15 2v5"/><path d="M6 7h12v4a6 6 0 0 1-12 0z"/><path d="M12 17v5"/></g></svg>'
 
 export const MCP_TOOLS = [{ name: 'search' }, { name: 'fetch' }]
 
-export const PROVIDERS: (Provider & { capabilities: string[]; accounts: string[]; paste?: boolean; hidden?: boolean; choose?: { title: string; options: { id: string; label: string; detail: string }[] } })[] = [
-  { key: 'github', name: 'GitHub', group: 'Código', description: 'Sua conta GitHub', logo: 'github', button: 'Entrar com GitHub', site: 'do GitHub', signIn: 'device', fields: [], multiple: true, capabilities: ['code'],
+export type MockProvider = Provider & { capabilities: string[]; accounts: string[]; paste?: boolean; hidden?: boolean; choose?: { title: string; options: { id: string; label: string; detail: string }[] } }
+
+export const providers = (): MockProvider[] => [
+  { key: 'github', name: 'GitHub', group: 'code', description: say('yourAccount', { name: 'GitHub' }), logo: 'github', button: say('signInWith', { name: 'GitHub' }), site: say('siteGithub'), signIn: 'device', fields: [], multiple: true, capabilities: ['code'],
     alternatives: [{
-      key: 'api_token', label: 'Usar personal access token', button: 'Conectar', site: 'do GitHub', signIn: 'token',
-      fields: [{ name: 'token', label: 'Personal access token do GitHub', kind: 'text', mono: true, secret: true, help: 'No GitHub, abra Settings, Developer settings, Personal access tokens e gere um token com acesso aos repositórios, à organização e aos workflows.' }],
-    }], accounts: ['acme · 1 repositório'], choose: { title: 'Organização', options: [{ id: 'acme', label: 'acme', detail: 'acme/checkout, acme/web, acme/infra' }] } },
-  { key: 'jira', name: 'Jira', group: 'Tarefas', description: 'Sua conta Atlassian', logo: 'jira', button: 'Continuar na Atlassian', site: 'da Atlassian', signIn: 'oauth', fields: [], multiple: true, capabilities: ['tracker'],
+      key: 'api_token', label: say('usePat'), button: say('connect'), site: say('siteGithub'), signIn: 'token',
+      fields: [{ name: 'token', label: say('ghTokenLabel'), kind: 'text', mono: true, secret: true, help: say('ghTokenHelp') }],
+    }], accounts: [say('ghAccount')], choose: { title: say('organization'), options: [{ id: 'acme', label: 'acme', detail: 'acme/checkout, acme/web, acme/infra' }] } },
+  { key: 'jira', name: 'Jira', group: 'tracker', description: say('yourAccount', { name: 'Atlassian' }), logo: 'jira', button: say('continueAt', { name: 'Atlassian' }), site: say('siteAtlassian'), signIn: 'oauth', fields: [], multiple: true, capabilities: ['tracker'],
     alternatives: [{
-      key: 'api_token', label: 'Usar API token', button: 'Conectar', site: 'da Atlassian', signIn: 'token',
+      key: 'api_token', label: say('useApiToken'), button: say('connect'), site: say('siteAtlassian'), signIn: 'token',
       fields: [
-        { name: 'email', label: 'E-mail da conta Atlassian', kind: 'text', mono: true },
-        { name: 'token', label: 'API token da Atlassian', kind: 'text', mono: true, secret: true, help: 'Em id.atlassian.com, abra Segurança e crie um API token. O admin da organização precisa permitir API token no Rovo MCP server.' },
+        { name: 'email', label: say('atlassianEmail'), kind: 'text', mono: true },
+        { name: 'token', label: say('atlassianToken'), kind: 'text', mono: true, secret: true, help: say('atlassianTokenHelp') },
       ],
-    }], accounts: ['acme.atlassian.net'], choose: { title: 'Site do Jira', options: [{ id: 'acme', label: 'acme.atlassian.net', detail: 'Projetos APP, OPS' }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: 'Projeto LAB' }] } },
+    }], accounts: ['acme.atlassian.net'], choose: { title: say('jiraSite'), options: [{ id: 'acme', label: 'acme.atlassian.net', detail: say('projectsAppOps') }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: say('projectLab') }] } },
   {
-    key: 'aws', name: 'AWS', group: 'Nuvem', description: 'Sua conta AWS', logo: 'aws', button: 'Entrar com AWS', site: 'da AWS', signIn: 'oauth', fields: [], multiple: true, capabilities: ['cloud'], accounts: ['papel deploy · us-east-1'],
+    key: 'aws', name: 'AWS', group: 'cloud', description: say('yourAccount', { name: 'AWS' }), logo: 'aws', button: say('signInWith', { name: 'AWS' }), site: say('siteAws'), signIn: 'oauth', fields: [], multiple: true, capabilities: ['cloud'], accounts: [say('awsAccount')],
     alternatives: [{
-      key: 'sso', label: 'Usar SSO da empresa', button: 'Continuar', site: 'do AWS IAM Identity Center', signIn: 'sso',
+      key: 'sso', label: say('useCompanySso'), button: say('continue'), site: say('siteIdentityCenter'), signIn: 'sso',
       fields: [
-        { name: 'start_url', label: 'Start URL do IAM Identity Center', kind: 'text', value: 'https://acme.awsapps.com/start', mono: true },
-        { name: 'region', label: 'Região', kind: 'text', value: 'us-east-1', mono: true },
+        { name: 'start_url', label: say('startUrl'), kind: 'text', value: 'https://acme.awsapps.com/start', mono: true },
+        { name: 'region', label: say('region'), kind: 'text', value: 'us-east-1', mono: true },
       ],
     }, {
-      key: 'access_keys', label: 'Usar access key', button: 'Conectar', site: 'da AWS', signIn: 'token',
+      key: 'access_keys', label: say('useAccessKey'), button: say('connect'), site: say('siteAws'), signIn: 'token',
       fields: [
         { name: 'accessKeyId', label: 'Access key ID', kind: 'text', mono: true },
-        { name: 'secretAccessKey', label: 'Secret access key', kind: 'text', mono: true, secret: true, help: 'No IAM, abra o usuário, Security credentials, e crie uma access key.' },
+        { name: 'secretAccessKey', label: 'Secret access key', kind: 'text', mono: true, secret: true, help: say('accessKeyHelp') },
       ],
     }],
-    choose: { title: 'Conta e papel', options: [{ id: 'prod', label: 'acme-prod · 1234-5678-9012', detail: 'DeployRole' }, { id: 'stg', label: 'acme-staging · 2109-8765-4321', detail: 'DeployRole' }] },
+    choose: { title: say('accountAndRole'), options: [{ id: 'prod', label: 'acme-prod · 1234-5678-9012', detail: 'DeployRole' }, { id: 'stg', label: 'acme-staging · 2109-8765-4321', detail: 'DeployRole' }] },
   },
   {
-    key: 'zephyr', name: 'Zephyr', group: 'Testes', description: 'Sua conta Zephyr Scale', logo: 'jira', button: 'Continuar na SmartBear', site: 'da SmartBear', signIn: 'oauth', fields: [], multiple: true, capabilities: ['tests'], accounts: ['Zephyr Scale'],
+    key: 'zephyr', name: 'Zephyr', group: 'tests', description: say('yourAccount', { name: 'Zephyr Scale' }), logo: 'jira', button: say('continueAt', { name: 'SmartBear' }), site: say('siteSmartBear'), signIn: 'oauth', fields: [], multiple: true, capabilities: ['tests'], accounts: ['Zephyr Scale'],
     alternatives: [{
-      key: 'api_token', label: 'Usar API token', button: 'Conectar', site: 'do Zephyr', signIn: 'token',
-      fields: [{ name: 'token', label: 'API token do Zephyr', kind: 'text', mono: true, secret: true, help: 'No Jira, abra ⚙ → Configurações gerais → Apps → Zephyr API Access Tokens e clique em Gerar token de acesso.' }],
+      key: 'api_token', label: say('useApiToken'), button: say('connect'), site: say('siteZephyr'), signIn: 'token',
+      fields: [{ name: 'token', label: say('zephyrToken'), kind: 'text', mono: true, secret: true, help: say('zephyrTokenHelp') }],
     }],
   },
   {
-    key: 'mcp', name: 'Servidor MCP', group: 'Ferramentas', hidden: true, description: 'Ferramentas de um servidor MCP remoto para os agentes', logo: MCP_LOGO, button: 'Conectar', site: 'do servidor MCP', signIn: 'oauth', multiple: true, capabilities: ['mcp'], accounts: [],
+    key: 'veracode', name: 'Veracode', group: 'security', description: say('yourAccount', { name: 'Veracode' }), logo: VERACODE_LOGO, button: say('connect'), site: 'Veracode', signIn: 'token', multiple: true, capabilities: ['security'], accounts: ['API · acme'],
     fields: [
-      { name: 'url', label: 'Endereço do servidor MCP', kind: 'text', mono: true, help: 'Por exemplo, https://mcp.exemplo.com/mcp.' },
-      { name: 'label', label: 'Nome', kind: 'text', mono: true, help: 'Os agentes veem as ferramentas como mcp__nome__ferramenta.' },
+      { name: 'region', label: say('region'), kind: 'text', value: 'com', mono: true },
+      { name: 'apiId', label: 'API ID', kind: 'text', mono: true },
+      { name: 'apiKey', label: 'API key', kind: 'text', mono: true, secret: true },
     ],
   },
-  { key: 'claude', name: 'Claude', group: 'Provedores de IA', description: 'Sua conta Claude', logo: 'claude', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Claude Team · ti@acme.com.br'] },
-  { key: 'chatgpt', name: 'ChatGPT', group: 'Provedores de IA', description: 'Sua conta ChatGPT', logo: 'chatgpt', signIn: 'browser', paste: true, fields: [], multiple: false, capabilities: ['ai'], accounts: ['ChatGPT Business · ti@acme.com.br'] },
-  { key: 'copilot', name: 'GitHub Copilot', group: 'Provedores de IA', description: 'Sua conta GitHub Copilot', logo: 'copilot', signIn: 'device', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Copilot Business · acme'] },
-  { key: 'grok', name: 'Grok', group: 'Provedores de IA', description: 'Sua conta Grok', logo: 'grok', signIn: 'device', fields: [], multiple: false, capabilities: ['ai'], accounts: ['SuperGrok · bruno@acme.com.br'] },
-  { key: 'kiro', name: 'Kiro', group: 'Provedores de IA', description: 'Sua conta Kiro', logo: 'kiro', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Kiro Pro · AWS IAM Identity Center'] },
-  { key: 'antigravity', name: 'Antigravity', group: 'Provedores de IA', description: 'Sua conta Antigravity', logo: 'antigravity', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Google One AI Pro · ti@acme.com.br'] },
+  {
+    key: 'sonar', name: 'SonarQube', group: 'quality', description: say('yourAccount', { name: 'SonarQube' }), logo: SONAR_LOGO, button: say('connect'), site: 'SonarQube', signIn: 'token', multiple: true, capabilities: ['quality'], accounts: ['acme'],
+    fields: [
+      { name: 'url', label: 'URL', kind: 'text', value: 'https://sonarcloud.io', mono: true },
+      { name: 'token', label: 'Token', kind: 'text', mono: true, secret: true },
+    ],
+  },
+  {
+    key: 'mcp', name: say('mcpName'), group: 'mcp', hidden: true, description: say('mcpDescription'), logo: MCP_LOGO, button: say('connect'), site: say('siteMcp'), signIn: 'oauth', multiple: true, capabilities: ['mcp'], accounts: [],
+    fields: [
+      { name: 'url', label: say('mcpUrl'), kind: 'text', mono: true, help: say('mcpUrlHelp') },
+      { name: 'label', label: say('name'), kind: 'text', mono: true, help: say('mcpNameHelp') },
+    ],
+  },
+  { key: 'claude', name: 'Claude', group: 'ai', description: say('yourAccount', { name: 'Claude' }), logo: 'claude', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Claude Team · ti@acme.com.br'] },
+  { key: 'chatgpt', name: 'ChatGPT', group: 'ai', description: say('yourAccount', { name: 'ChatGPT' }), logo: 'chatgpt', signIn: 'browser', paste: true, fields: [], multiple: false, capabilities: ['ai'], accounts: ['ChatGPT Business · ti@acme.com.br'] },
+  { key: 'copilot', name: 'GitHub Copilot', group: 'ai', description: say('yourAccount', { name: 'GitHub Copilot' }), logo: 'copilot', signIn: 'device', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Copilot Business · acme'] },
+  { key: 'grok', name: 'Grok', group: 'ai', description: say('yourAccount', { name: 'Grok' }), logo: 'grok', signIn: 'device', fields: [], multiple: false, capabilities: ['ai'], accounts: ['SuperGrok · bruno@acme.com.br'] },
+  { key: 'kiro', name: 'Kiro', group: 'ai', description: say('yourAccount', { name: 'Kiro' }), logo: 'kiro', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Kiro Pro · AWS IAM Identity Center'] },
+  { key: 'antigravity', name: 'Antigravity', group: 'ai', description: say('yourAccount', { name: 'Antigravity' }), logo: 'antigravity', signIn: 'browser', fields: [], multiple: false, capabilities: ['ai'], accounts: ['Google One AI Pro · ti@acme.com.br'] },
 ]
 
-export const INITIAL_CONNECTIONS: ConnectionState[] = [
-  { id: 'c-github', provider: 'github', label: 'acme', account: 'acme · 3 repositórios', capabilities: ['code'] },
-  { id: 'c-jira', provider: 'jira', label: 'acme.atlassian.net', account: 'acme.atlassian.net · projeto APP', capabilities: ['tracker'] },
+export const initialConnections = (): ConnectionState[] => [
+  { id: 'c-github', provider: 'github', label: 'acme', account: say('ghConnection'), capabilities: ['code'] },
+  { id: 'c-jira', provider: 'jira', label: 'acme.atlassian.net', account: say('jiraConnection'), capabilities: ['tracker'] },
+  { id: 'c-sonar', provider: 'sonar', label: 'SonarQube Cloud', account: 'acme', capabilities: ['quality'] },
+  { id: 'c-veracode', provider: 'veracode', label: 'Veracode', account: 'API · acme', capabilities: ['security'] },
   { id: 'c-claude', provider: 'claude', label: 'Claude Team', account: 'Claude Team · ti@acme.com.br', capabilities: ['ai'] },
   { id: 'c-copilot', provider: 'copilot', label: 'Copilot Business', account: 'Copilot Business · acme', capabilities: ['ai'], status: 'error' },
 ]
 
-export const NEED_PROVIDER: Record<Need, string> = { ai: 'claude', tracker: 'jira', code: 'github', cloud: 'aws' }
+export const NEED_PROVIDER: Record<Need, string> = { ai: 'claude', tracker: 'jira', code: 'github', cloud: 'aws', security: 'veracode', quality: 'sonar' }
 
 export const AGENTS: Agent[] = [
   { id: 'planner', name: 'Planner', avatar: { kind: 'agent', shape: 'triangle', color: '#e94b9b' } },
@@ -187,27 +208,27 @@ export function usageLimitsFixture(now: number): UsageLimits {
   return {
     accounts: [
       { provider: 'claude', name: 'Claude', logo: 'claude', account: 'bruno@acme.com.br', status: 'ok', error: null, plan: 'Max', windows: [
-        span('five_hour', 'Sessão (5 h)', 42, 2.2, 5),
-        span('seven_day', 'Semana', 67, 76, week),
-        span('seven_day_opus', 'Semana (Opus)', 84, 76, week),
+        span('five_hour', say('limitSession'), 42, 2.2, 5),
+        span('seven_day', say('limitWeek'), 67, 76, week),
+        span('seven_day_opus', say('limitWeekOpus'), 84, 76, week),
       ] },
       { provider: 'claude', name: 'Claude', logo: 'claude', account: 'ti@acme.com.br', status: 'ok', error: null, plan: 'Max', windows: [
-        span('five_hour', 'Sessão (5 h)', 97, 0.6, 5),
-        span('seven_day', 'Semana', 81, 30, week),
+        span('five_hour', say('limitSession'), 97, 0.6, 5),
+        span('seven_day', say('limitWeek'), 81, 30, week),
       ] },
       { provider: 'chatgpt', name: 'ChatGPT', logo: 'chatgpt', account: 'bruno@acme.com.br', status: 'ok', error: null, plan: 'Plus', windows: [
-        span('five_hour', 'Sessão (5 h)', 18, 3.5, 5),
-        span('seven_day', 'Semana', 34, 120, week),
+        span('five_hour', say('limitSession'), 18, 3.5, 5),
+        span('seven_day', say('limitWeek'), 34, 120, week),
       ] },
       { provider: 'copilot', name: 'GitHub Copilot', logo: 'copilot', account: 'acme', status: 'ok', error: null, plan: 'Pro', windows: [
-        span('premium_interactions', 'Requisições premium', 56, 190, month),
+        span('premium_interactions', say('limitPremium'), 56, 190, month),
       ] },
       { provider: 'grok', name: 'Grok', logo: 'grok', account: 'bruno@acme.com.br', status: 'unsupported', error: null, plan: null, windows: [] },
       { provider: 'kiro', name: 'Kiro', logo: 'kiro', account: 'bruno@acme.com.br', status: 'ok', error: null, plan: 'KIRO PRO+', windows: [
-        span('credit', 'Credits · 1240 de 2000', 62, 400, month),
-        { id: 'credit_bonus_0', label: 'Welcome bonus · 120 de 500', usedPercent: 24, resetsAt: at(240), startsAt: null },
+        span('credit', say('limitCredits', { used: 1240, total: 2000 }), 62, 400, month),
+        { id: 'credit_bonus_0', label: say('limitBonus', { used: 120, total: 500 }), usedPercent: 24, resetsAt: at(240), startsAt: null },
       ] },
-      { provider: 'kiro', name: 'Kiro', logo: 'kiro', account: 'AWS IAM Identity Center', status: 'error', error: 'A sessão expirou. Entre de novo em Conexões.', plan: null, windows: [] },
+      { provider: 'kiro', name: 'Kiro', logo: 'kiro', account: 'AWS IAM Identity Center', status: 'error', error: say('sessionExpired'), plan: null, windows: [] },
     ],
   }
 }

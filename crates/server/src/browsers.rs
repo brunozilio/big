@@ -10,7 +10,7 @@ use axum::response::Response;
 use serde_json::{Value, json};
 use store::Store;
 
-use crate::error::{ApiError, ApiResult, json as reply};
+use crate::error::{ApiError, ApiResult, json as reply, said};
 use crate::state::Ctx;
 
 const ENABLED: &str = "browser.enabled";
@@ -66,7 +66,13 @@ pub async fn status(State(ctx): State<Ctx>) -> Json<Value> {
 }
 
 pub async fn set(State(ctx): State<Ctx>, Json(patch): Json<Value>) -> ApiResult<Response> {
-    let on = patch.get("enabled").and_then(Value::as_bool).ok_or_else(|| ApiError::bad("Informe enabled como true ou false."))?;
+    let on = patch.get("enabled").and_then(Value::as_bool).ok_or_else(|| {
+        ApiError::bad(said(
+            "Send enabled as true or false.",
+            "Envía enabled como true o false.",
+            "Informe enabled como true ou false.",
+        ))
+    })?;
     ctx.backend.store.set_preference(ENABLED, &json!(on))?;
     Ok(reply(status_of(&ctx)))
 }

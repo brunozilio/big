@@ -4,6 +4,7 @@ import { Button } from '@/ui/button'
 import { Card } from '@/ui/display'
 import { Switch } from '@/ui/form'
 import { Icon } from '@/ui/icon'
+import { useT } from '@/i18n'
 
 export interface ConnectedBrowser {
   deviceId: string
@@ -21,12 +22,6 @@ export interface BrowserStatus {
 }
 
 type Loaded = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; status: BrowserStatus }
-
-const PLATFORMS: Record<string, string> = { mac: 'macOS', win: 'Windows', linux: 'Linux', cros: 'ChromeOS' }
-
-export function platformName(platform: string) {
-  return PLATFORMS[platform] ?? platform
-}
 
 function useBrowserStatus() {
   const [loaded, setLoaded] = useState<Loaded>({ state: 'loading' })
@@ -53,6 +48,7 @@ function useBrowserStatus() {
 }
 
 function CopyPath({ path }: { path: string }) {
+  const t = useT()
   const [copied, setCopied] = useState(false)
   const copy = () => {
     void navigator.clipboard?.writeText(path).then(() => {
@@ -63,7 +59,7 @@ function CopyPath({ path }: { path: string }) {
   return (
     <span className="mt-2 flex items-center gap-2">
       <code className="min-w-0 flex-1 truncate rounded-md bg-secondary px-2.5 py-1.5 text-sm text-fg" title={path}>{path}</code>
-      <Button size="sm" variant="secondary" icon={<Icon name={copied ? 'check' : 'copy'} size={14} />} onClick={copy}>{copied ? 'Copiado' : 'Copiar'}</Button>
+      <Button size="sm" variant="secondary" icon={<Icon name={copied ? 'check' : 'copy'} size={14} />} onClick={copy}>{copied ? t('settings.copied') : t('settings.copy')}</Button>
     </span>
   )
 }
@@ -78,54 +74,43 @@ function Step({ n, children }: { n: number; children: ReactNode }) {
 }
 
 function Setup({ folder }: { folder: string }) {
+  const t = useT()
   return (
     <Card className="px-4 py-4">
-      <h3 className="mb-4 text-sm font-medium text-fg">Como configurar</h3>
+      <h3 className="mb-4 text-sm font-medium text-fg">{t('settings.browser_setup')}</h3>
       <ol className="space-y-4">
         <Step n={1}>
-          Abra{' '}
+          {t('settings.browser_step1_open')}{' '}
           <a href="chrome://extensions" target="_blank" rel="noreferrer" className="font-mono text-info underline-offset-2 hover:underline">chrome://extensions</a>{' '}
-          e ative o Modo do desenvolvedor.
+          {t('settings.browser_step1_rest')}
         </Step>
         <Step n={2}>
-          Clique em Carregar sem compactação e selecione esta pasta:
+          {t('settings.browser_step2')}
           <CopyPath path={folder} />
         </Step>
-        <Step n={3}>Pronto. Esta página atualiza quando o Chrome conectar.</Step>
+        <Step n={3}>{t('settings.browser_step3')}</Step>
       </ol>
     </Card>
   )
 }
 
-function Connected({ browsers }: { browsers: ConnectedBrowser[] }) {
-  return (
-    <Card className="divide-y">
-      {browsers.map((b) => (
-        <div key={b.deviceId} className="flex items-center gap-3 px-4 py-3">
-          <Icon name="globe" size={16} className="text-muted" />
-          <span className="text-sm font-medium text-fg">{b.name}</span>
-          <span className="text-sm text-muted">{platformName(b.platform)}</span>
-        </div>
-      ))}
-    </Card>
-  )
-}
-
 function StatusBadge({ connected }: { connected: boolean }) {
+  const t = useT()
   return connected ? (
     <span className="inline-flex items-center gap-1.5 rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">
       <Icon name="check" size={12} />
-      Conectado
+      {t('settings.connected')}
     </span>
   ) : (
-    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted">Não conectado</span>
+    <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted">{t('settings.browser_notConnected')}</span>
   )
 }
 
 export function BrowserView() {
+  const t = useT()
   const { loaded, setEnabled } = useBrowserStatus()
   if (loaded.state === 'loading') return null
-  if (loaded.state === 'failed') return <p role="alert" className="text-sm text-danger-fg">Não foi possível verificar o navegador.</p>
+  if (loaded.state === 'failed') return <p role="alert" className="text-sm text-danger-fg">{t('settings.browser_failed')}</p>
   const { enabled, browsers, extensionFolder } = loaded.status
   const connected = browsers.length > 0
   return (
@@ -135,10 +120,10 @@ export function BrowserView() {
           <p className="text-base font-medium text-fg">Chrome</p>
           <StatusBadge connected={connected} />
         </div>
-        <span className="text-sm text-muted">{enabled ? 'Ativado' : 'Desativado'}</span>
-        <Switch label="Usar o navegador" checked={enabled} onCheckedChange={setEnabled} />
+        <span className="text-sm text-muted">{enabled ? t('settings.browser_on') : t('settings.browser_off')}</span>
+        <Switch label={t('settings.browser_use')} checked={enabled} onCheckedChange={setEnabled} />
       </Card>
-      {connected ? <Connected browsers={browsers} /> : <Setup folder={extensionFolder} />}
+      {!connected && <Setup folder={extensionFolder} />}
     </section>
   )
 }

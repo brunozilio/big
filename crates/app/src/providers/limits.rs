@@ -23,19 +23,19 @@ impl ModelProviders {
         self.key(provider).map(|key| vec![(agent_engine::providers::name(provider), key)]).unwrap_or_default()
     }
 
-    pub fn plan_limits(&self) -> Vec<AccountLimits> {
+    pub fn plan_limits(&self, language: domain::Language) -> Vec<AccountLimits> {
         let accounts = agent_engine::providers::all()
             .into_iter()
             .filter(|known| known.access().subscription())
             .map(llm_providers::id)
             .flat_map(|provider| self.accounts_of(provider).into_iter().map(move |(label, key)| (provider, label, key)))
             .collect();
-        gather(accounts, &ask)
+        gather(accounts, &move |provider, key| ask(provider, key, language))
     }
 }
 
-fn ask(provider: ModelProvider, key: ProviderKey) -> Result<Option<PlanUsage>, String> {
-    ProviderClient::new(provider, Arc::new(NetHttp), Arc::new(key)).limits().map_err(|error| error.to_string())
+fn ask(provider: ModelProvider, key: ProviderKey, language: domain::Language) -> Result<Option<PlanUsage>, String> {
+    ProviderClient::new(provider, Arc::new(NetHttp), Arc::new(key)).limits(language).map_err(|error| error.to_string())
 }
 
 pub fn gather(accounts: Vec<(ModelProvider, String, ProviderKey)>, ask: &Ask) -> Vec<AccountLimits> {

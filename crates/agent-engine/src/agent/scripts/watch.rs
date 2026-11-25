@@ -55,7 +55,14 @@ impl Agent<'_> {
         }
         let summary = target.summary(&plan.input);
         let shown = format!("{}: {summary}", plan.explained());
-        let first = self.permitted_as(id, target, &summary, Some(&shown), &plan.input, hook.permission);
+        let permitting = crate::agent::permission::Permitting {
+            id,
+            subject: &summary,
+            shown: Some(&shown),
+            parent: &[],
+            hook_permission: hook.permission,
+        };
+        let first = self.permitted(&permitting, target, &plan.input);
         let first = crate::tools::watch::after(&name, &plan.input, first, self.workspace, model);
         if first.is_error {
             return status("failed", first.content);

@@ -169,7 +169,7 @@ mod tests {
     use super::*;
 
     fn control() -> Arc<Control> {
-        Arc::new(Control::new(domain::PermissionMode::Ask, Arc::default()))
+        Arc::new(Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human))
     }
 
     #[test]

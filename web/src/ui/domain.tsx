@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import { useStore } from '@/api/store'
+import { currentLanguage, translate } from '@/i18n'
 import type { Person } from '@/api/contract'
 import { AgentAvatar } from './agentAvatar'
 import { cn } from './cn'
@@ -59,7 +60,7 @@ export function PersonAvatar({ person, size = 22 }: { person: Person; size?: num
 }
 
 export function personName(person: Person): string {
-  return person.you ? 'Você' : person.name
+  return person.you ? translate(currentLanguage(), 'editor.you') : person.name
 }
 
 export function isImageSource(logo: string): boolean {

@@ -50,6 +50,8 @@ pub struct Shared {
     appending: Mutex<()>,
     pub observed: Mutex<Vec<ItemId>>,
     pub observing: tokio::sync::Notify,
+    pub progress: Mutex<Vec<crate::progress::Progress>>,
+    pub progressing: tokio::sync::Notify,
 }
 
 pub fn now_ms() -> i64 {
@@ -82,6 +84,8 @@ impl Shared {
             appending: Mutex::default(),
             observed: Mutex::default(),
             observing: tokio::sync::Notify::new(),
+            progress: Mutex::default(),
+            progressing: tokio::sync::Notify::new(),
         }
     }
 
@@ -96,6 +100,7 @@ impl Shared {
 
     fn append_locked(&self, item: &ItemId, events: &[WorkflowEvent]) -> Result<WorkItem> {
         let state = self.store.append(item, events)?;
+        self.shelve(item, events)?;
         if !events.is_empty() {
             self.emit(OrchestratorEvent::ItemChanged { item: item.clone(), version: state.version });
         }
@@ -106,7 +111,23 @@ impl Shared {
             }
             self.observing.notify_one();
         }
+        let finished = crate::progress::finished(item, state.version, events);
+        if !finished.is_empty() {
+            self.progress.lock().unwrap_or_else(PoisonError::into_inner).extend(finished);
+            self.progressing.notify_one();
+        }
         Ok(state)
+    }
+
+    fn shelve(&self, item: &ItemId, events: &[WorkflowEvent]) -> Result<()> {
+        for event in events {
+            match event {
+                WorkflowEvent::Cancelled { .. } => self.store.archive_item(item.as_str(), now_ms())?,
+                WorkflowEvent::Rewound { .. } => self.store.unarchive_item(item.as_str())?,
+                _ => {}
+            }
+        }
+        Ok(())
     }
 
     pub fn item(&self, item: &ItemId) -> Result<WorkItem> {

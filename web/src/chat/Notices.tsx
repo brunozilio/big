@@ -1,43 +1,46 @@
-import { useState } from 'react'
 import { ChatMarkdown } from '@/ui/chatMarkdown'
-import { cn } from '@/ui/cn'
 import { Icon, type IconName } from '@/ui/icon'
 import { Tooltip } from '@/ui/overlay'
+import { useT } from '@/i18n'
 import { type Notice, type NoticeKind, protocolLabel } from './noticeText'
 
-const LOOK: Record<NoticeKind, { icon: IconName; label: string }> = {
-  teammate: { icon: 'users', label: 'Auxiliar' },
-  observer: { icon: 'eye', label: 'Observer' },
-  monitor: { icon: 'terminal', label: 'Monitor' },
-  session: { icon: 'link', label: 'Outra sessão' },
-  channel: { icon: 'chat', label: 'Canal' },
-  event: { icon: 'bell', label: 'Evento' },
+const rail = 'flex h-6 w-[22px] shrink-0 items-center justify-center'
+
+const ICON: Record<NoticeKind, IconName> = {
+  teammate: 'users',
+  observer: 'eye',
+  monitor: 'terminal',
+  session: 'link',
+  channel: 'chat',
+  event: 'bell',
 }
 
-const LONG = 280
+function useLook(kind: NoticeKind): { icon: IconName; label: string } {
+  const t = useT()
+  return { icon: ICON[kind], label: t(`plan.notice_${kind}`) }
+}
 
 function ProtocolLine({ notice }: { notice: Notice }) {
-  const look = LOOK[notice.kind]
+  const t = useT()
+  const look = useLook(notice.kind)
   return (
-    <p data-notice={notice.kind} className="flex min-w-0 items-center gap-2 text-sm text-muted">
+    <p data-notice={notice.kind} className="flex min-w-0 items-center gap-3.5 text-sm text-muted">
       <Tooltip content={look.label}>
-        <span className="flex shrink-0"><Icon name={look.icon} size={14} /></span>
+        <span className={rail}><Icon name={look.icon} size={16} /></span>
       </Tooltip>
       <span className="min-w-0 truncate">
-        <span className="font-medium text-fg2">{notice.from}</span> {protocolLabel(notice.protocol ?? '')}
+        <span className="font-medium text-fg2">{notice.from}</span> {protocolLabel(notice.protocol ?? '', t)}
       </span>
     </p>
   )
 }
 
 function NoticeBody({ notice }: { notice: Notice }) {
-  const [open, setOpen] = useState(false)
-  const look = LOOK[notice.kind]
-  const long = notice.text.length > LONG || notice.text.split('\n').length > 3
+  const look = useLook(notice.kind)
   return (
-    <div data-notice={notice.kind} className="flex gap-2.5">
+    <div data-notice={notice.kind} className="flex gap-3.5">
       <Tooltip content={`${look.label}: ${notice.from}`}>
-        <span className="mt-[3px] flex shrink-0 text-muted"><Icon name={look.icon} size={16} /></span>
+        <span className={`${rail} text-muted`}><Icon name={look.icon} size={16} /></span>
       </Tooltip>
       <div className="min-w-0 flex-1 text-md leading-6 text-muted">
         <p className="truncate text-sm">
@@ -45,14 +48,9 @@ function NoticeBody({ notice }: { notice: Notice }) {
           <span className="text-faint"> · {look.label}</span>
           {notice.summary && <span> · {notice.summary}</span>}
         </p>
-        <div className={cn('prose-chat prose-thought break-words', !open && 'line-clamp-3')}>
+        <div className="prose-chat prose-thought break-words">
           <ChatMarkdown text={notice.text} />
         </div>
-        {long && (
-          <button onClick={() => setOpen(!open)} className="mt-1 text-sm text-faint transition-colors hover:text-fg">
-            {open ? 'Mostrar menos' : 'Mostrar tudo'}
-          </button>
-        )}
       </div>
     </div>
   )

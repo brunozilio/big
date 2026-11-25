@@ -55,7 +55,7 @@ fn a_pre_tool_use_hook_that_exits_2_blocks_the_call_and_the_model_reads_why() {
         == prompt: conversation ==
         user:
           text "Read the notes"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use r1 Read "{\"file_path\":\"notes.txt\"}"
         user:
@@ -106,7 +106,7 @@ fn a_user_prompt_submit_hook_adds_its_output_to_the_prompt_as_context() {
         user:
           text "Format the file"
           text "Team convention: tabs."
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Noted."
         == prompt: log appended ==
@@ -154,7 +154,7 @@ fn session_start_fires_once_per_session_and_run_start_and_run_end_once_per_run_a
         == first prompt: conversation ==
         user:
           text "Read the notes"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use r1 Read "{\"file_path\":\"notes.txt\"}"
         user:
@@ -188,7 +188,7 @@ fn session_start_fires_once_per_session_and_run_start_and_run_end_once_per_run_a
         == second prompt: conversation ==
         user:
           text "Read the notes"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use r1 Read "{\"file_path\":\"notes.txt\"}"
         user:
@@ -197,7 +197,7 @@ fn session_start_fires_once_per_session_and_run_start_and_run_end_once_per_run_a
           text "Read."
         user:
           text "And again"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Again."
         == second prompt: log appended ==

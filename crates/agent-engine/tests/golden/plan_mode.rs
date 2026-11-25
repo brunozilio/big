@@ -20,7 +20,7 @@ fn plan_mode_refuses_an_edit_then_an_approved_plan_changes_mode_and_the_edit_run
 
     let mut run = stage.start(&request);
     let ask = run.asked();
-    run.answer(&ask, Decision::Approve(PermissionMode::AcceptEdits));
+    run.answer(&ask, Decision::Approve(PermissionMode::Auto));
     stage.end("prompt", run);
 
     stage.disk("out.txt", &stage.project.join("out.txt"));
@@ -37,10 +37,10 @@ fn plan_mode_refuses_an_edit_then_an_approved_plan_changes_mode_and_the_edit_run
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
         ToolStarted p1 ExitPlanMode "" input="{\"plan\":\"1. Write out.txt\"}"
         Asked ask-<uuid>-p1 Plan { plan: "1. Write out.txt" }
-        Answered ask-<uuid>-p1 Approve(AcceptEdits)
-        ModeChanged(AcceptEdits)
+        Answered ask-<uuid>-p1 Approve(Auto)
+        ModeChanged(Auto)
         ToolFinished p1
-        ToolResult p1 ok "The user approved your plan and planning is over (edits run freely, commands ask first). Start implementing it now, following the plan. Track the steps with the t…
+        ToolResult p1 ok "The user approved your plan and planning is over. Start implementing it now, following the plan. Track the steps with the task tools if there are several."
         Usage model=claude-opus-5-5 input=10 output=5 cost=none
         ToolStarted w2 Write "out.txt" input="{\"content\":\"planned\\n\",\"file_path\":\"out.txt\"}"
         Edited(Edited { path: "<project>/out.txt", line: 1, removed: 0, added: 1 })
@@ -65,8 +65,8 @@ fn plan_mode_refuses_an_edit_then_an_approved_plan_changes_mode_and_the_edit_run
         assistant:
           tool_use p1 ExitPlanMode "{\"plan\":\"1. Write out.txt\"}"
         user:
-          tool_result p1 ok "The user approved your plan and planning is over (edits run freely, commands ask first). Start implementing it now, following the plan. Track the steps with th…
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          tool_result p1 ok "The user approved your plan and planning is over. Start implementing it now, following the plan. Track the steps with the task tools if there are several."
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use w2 Write "{\"content\":\"planned\\n\",\"file_path\":\"out.txt\"}"
         user:

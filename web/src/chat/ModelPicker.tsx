@@ -4,19 +4,23 @@ import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent, ty
 import { useNavigate } from 'react-router-dom'
 import { EFFORTS, type Effort, type Model } from '@/api/contract'
 import { useStore } from '@/api/store'
+import { CHIP } from '@/ui/chipPicker'
 import { cn } from '@/ui/cn'
 import { ProviderLogo } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { dur, easeOut, IconSwap, springSnap, tween, tweenClose } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
+import { useT, type T } from '@/i18n'
 
 const swap = { duration: dur.quick, ease: easeOut }
 
-export const effortLabel: Record<Effort, string> = { low: 'Baixo', medium: 'Médio', high: 'Alto', xhigh: 'Muito alto', max: 'Máximo' }
+export function effortLabel(t: T, effort: Effort): string {
+  return t(`chat.effort_${effort}`)
+}
 
 export const DEFAULT_EFFORT: Effort = 'medium'
 
-export const AI_PROVIDERS = '/settings/connections?group=Provedores%20de%20IA'
+export const AI_PROVIDERS = '/settings/connections?group=ai'
 
 type View = 'effort' | 'model'
 
@@ -78,6 +82,7 @@ export function ModelPicker({
   fast: boolean
   onFast: (v: boolean) => void
 }) {
+  const t = useT()
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<View>('effort')
   const navigate = useNavigate()
@@ -87,17 +92,17 @@ export function ModelPicker({
 
   useEffect(() => {
     if (!open) {
-      const t = setTimeout(() => setView('effort'), 180)
-      return () => clearTimeout(t)
+      const timer = setTimeout(() => setView('effort'), 180)
+      return () => clearTimeout(timer)
     }
   }, [open])
 
   if (!loaded) return null
   if (!current) {
     return (
-      <Tooltip content="Nenhum modelo disponível">
+      <Tooltip content={t('chat.noModel')}>
         <button onClick={() => navigate(AI_PROVIDERS)} className="inline-flex h-8 items-center gap-1.5 rounded-full bg-danger-soft px-3 text-sm text-danger-fg transition-opacity hover:opacity-80">
-          Conecte um provedor de IA
+          {t('chat.connectAi')}
           <Icon name="right" size={12} />
         </button>
       </Tooltip>
@@ -121,19 +126,19 @@ export function ModelPicker({
         <motion.button
           layout
           transition={springSnap}
-          aria-label={`Modelo: ${current.name}`}
-          className={cn('relative inline-flex h-8 items-center gap-1.5 overflow-hidden rounded-full px-3 text-base transition-colors', open ? 'bg-inset text-muted' : 'text-fg2 hover:bg-inset')}
+          aria-label={t('chat.model', { name: current.name })}
+          className={cn(CHIP, 'relative overflow-hidden', open && 'text-muted')}
         >
           <AnimatePresence mode="popLayout" initial={false}>
             {open ? (
               <motion.span key={`ph-${view}`} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={swap} className="min-w-[96px] text-center">
-                {view === 'effort' ? 'Selecionar esforço' : 'Selecionar modelo'}
+                {view === 'effort' ? t('chat.pickEffort') : t('chat.pickModel')}
               </motion.span>
             ) : (
               <motion.span key="value" initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 6 }} transition={swap} className="flex items-center gap-1.5">
                 {fast ? <Bolt filled size={13} className="text-fg" /> : <ModelGlyph model={current} />}
                 <span className="text-fg2">{shortName(current.name)}</span>
-                {dialed && <span className="text-muted">{effortLabel[effort]}</span>}
+                {dialed && <span className="text-muted">{effortLabel(t, effort)}</span>}
               </motion.span>
             )}
           </AnimatePresence>
@@ -160,7 +165,7 @@ export function ModelPicker({
                         <div className="min-w-0 flex-1 pt-0.5 text-center">
                           <AnimatePresence mode="popLayout" initial={false}>
                             <motion.p key={dialed ? effort : 'none'} initial={{ opacity: 0, y: 5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }} transition={swap} className={cn('text-md font-medium leading-5', dialed ? 'text-fg' : 'text-muted')}>
-                              {dialed ? effortLabel[effort] : 'Sem ajuste de esforço'}
+                              {dialed ? effortLabel(t, effort) : t('chat.noEffort')}
                             </motion.p>
                           </AnimatePresence>
                           <button onClick={() => setView('model')} className="inline-flex max-w-full items-center gap-0.5 rounded-sm px-1 text-xs text-muted transition-colors hover:text-fg">
@@ -168,10 +173,10 @@ export function ModelPicker({
                             <Icon name="right" size={12} className="shrink-0" />
                           </button>
                         </div>
-                        <Tooltip content="Restaurar padrão">
+                        <Tooltip content={t('chat.restoreDefault')}>
                           <motion.button
                             whileTap={{ rotate: -180 }}
-                            aria-label="Restaurar padrão"
+                            aria-label={t('chat.restoreDefault')}
                             disabled={isDefault}
                             onClick={() => {
                               onChange(null)
@@ -216,13 +221,14 @@ export function ModelPicker({
 }
 
 function FastToggle({ fast, available, onFast }: { fast: boolean; available: boolean; onFast: (v: boolean) => void }) {
+  const t = useT()
   return (
-    <Tooltip content={!available ? 'Modo rápido indisponível para este modelo' : fast ? 'Modo rápido ligado' : 'Modo rápido'}>
+    <Tooltip content={!available ? t('chat.fastUnavailable') : fast ? t('chat.fastOn') : t('chat.fast')}>
       <motion.button
         whileTap={available ? { scale: 0.97 } : undefined}
         aria-pressed={fast}
         aria-disabled={!available}
-        aria-label="Modo rápido"
+        aria-label={t('chat.fast')}
         onClick={() => available && onFast(!fast)}
         className={cn('flex size-7 shrink-0 items-center justify-center rounded-full transition-colors', available ? 'hover:bg-hover' : 'cursor-default opacity-40', fast ? 'text-fg' : 'text-faint')}
       >
@@ -247,6 +253,7 @@ const THUMB = 22
 const PAD = 2
 
 export function EffortSlider({ value, levels, disabled, onChange }: { value: Effort; levels: readonly Effort[]; disabled?: boolean; onChange: (e: Effort) => void }) {
+  const t = useT()
   const track = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(0)
   const [dragging, setDragging] = useState(false)
@@ -292,12 +299,12 @@ export function EffortSlider({ value, levels, disabled, onChange }: { value: Eff
       ref={track}
       role="slider"
       tabIndex={disabled ? -1 : 0}
-      aria-label="Esforço de raciocínio"
+      aria-label={t('chat.effortSlider')}
       aria-disabled={disabled}
       aria-valuemin={0}
       aria-valuemax={steps}
       aria-valuenow={index}
-      aria-valuetext={effortLabel[levels[index] ?? value]}
+      aria-valuetext={effortLabel(t, levels[index] ?? value)}
       onPointerDown={onPointerDown}
       onPointerMove={(e) => dragging && pick(e.clientX)}
       onPointerUp={() => setDragging(false)}
@@ -306,7 +313,7 @@ export function EffortSlider({ value, levels, disabled, onChange }: { value: Eff
         if (e.key === 'ArrowRight' || e.key === 'ArrowUp') onChange(levels[Math.min(steps, index + 1)] ?? value)
         if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') onChange(levels[Math.max(0, index - 1)] ?? value)
       }}
-      className={cn('relative mt-2.5 h-[26px] cursor-pointer touch-none select-none rounded-full bg-inset outline-none focus-visible:shadow-[0_0_0_2px_rgb(var(--focus))]', disabled && 'pointer-events-none opacity-40')}
+      className={cn('relative mt-2.5 h-[26px] cursor-pointer touch-none select-none rounded-full bg-inset outline-none focus-visible:bg-hover', disabled && 'pointer-events-none opacity-40')}
     >
       <motion.span style={{ width: fill }} className="absolute inset-y-0 left-0 rounded-full bg-primary" />
       {levels.map((e, i) => (

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { request } from '@/api/http'
 import { Button } from '@/ui/button'
 import { Card } from '@/ui/display'
@@ -13,6 +13,15 @@ export interface Suggested {
 }
 
 type Found = { state: 'idle' } | { state: 'running' } | { state: 'failed' } | { state: 'ready'; suggestions: Suggested[]; picked: boolean[] }
+
+type Discovery = { state: 'idle' } | { state: 'running' } | { state: 'failed' } | { state: 'ready'; suggestions: Suggested[] }
+
+const PATH = '/api/permissions/discover'
+const POLL_MS = 2000
+
+function asFound(discovery: Discovery): Found {
+  return discovery.state === 'ready' ? { state: 'ready', suggestions: discovery.suggestions, picked: discovery.suggestions.map(() => true) } : discovery
+}
 
 export function picked(suggestions: Suggested[], marks: boolean[]): Grant[] {
   return suggestions.filter((_, at) => marks[at]).map((suggested) => suggested.grant)
@@ -40,13 +49,38 @@ function Choices({ suggestions, marks, onMark }: { suggestions: Suggested[]; mar
 export function PermissionsDiscovery({ onAdd }: { onAdd: (grants: Grant[]) => void }) {
   const t = useT()
   const [found, setFound] = useState<Found>({ state: 'idle' })
+  const running = found.state === 'running'
+  const check = (live: { on: boolean }) => {
+    request<Discovery>('GET', PATH)
+      .then((discovery) => live.on && setFound((now) => (discovery.state === 'ready' && now.state === 'ready' ? now : asFound(discovery))))
+      .catch(() => undefined)
+  }
+  useEffect(() => {
+    const live = { on: true }
+    check(live)
+    return () => {
+      live.on = false
+    }
+  }, [])
+  useEffect(() => {
+    if (!running) return
+    const live = { on: true }
+    const timer = setInterval(() => check(live), POLL_MS)
+    return () => {
+      live.on = false
+      clearInterval(timer)
+    }
+  }, [running])
   const discover = () => {
     setFound({ state: 'running' })
-    request<{ suggestions: Suggested[] }>('POST', '/api/permissions/discover', {})
-      .then((answer) => setFound({ state: 'ready', suggestions: answer.suggestions, picked: answer.suggestions.map(() => true) }))
+    request<Discovery>('POST', PATH, {})
+      .then((discovery) => setFound(asFound(discovery)))
       .catch(() => setFound({ state: 'failed' }))
   }
-  const running = found.state === 'running'
+  const close = () => {
+    setFound({ state: 'idle' })
+    request('DELETE', PATH).catch(() => undefined)
+  }
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-3">
@@ -61,7 +95,7 @@ export function PermissionsDiscovery({ onAdd }: { onAdd: (grants: Grant[]) => vo
         <Card>
           <Choices suggestions={found.suggestions} marks={found.picked} onMark={(at, on) => setFound({ ...found, picked: found.picked.map((mark, i) => (i === at ? on : mark)) })} />
           <div className="flex justify-end gap-2 border-t px-4 py-2">
-            <Button size="sm" variant="ghost" onClick={() => setFound({ state: 'idle' })}>
+            <Button size="sm" variant="ghost" onClick={close}>
               {t('settings.perm_discard')}
             </Button>
             <Button
@@ -70,7 +104,7 @@ export function PermissionsDiscovery({ onAdd }: { onAdd: (grants: Grant[]) => vo
               disabled={!found.picked.some(Boolean)}
               onClick={() => {
                 onAdd(picked(found.suggestions, found.picked))
-                setFound({ state: 'idle' })
+                close()
               }}
             >
               {t('settings.perm_addPicked', { count: found.picked.filter(Boolean).length })}

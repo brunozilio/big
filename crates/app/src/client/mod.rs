@@ -1,8 +1,10 @@
 mod account;
+mod background;
 mod catalog;
 mod chores;
 mod dispatch;
 mod limits;
+mod memory;
 mod run;
 mod session;
 #[cfg(test)]

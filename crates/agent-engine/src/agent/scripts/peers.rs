@@ -25,7 +25,7 @@ pub(super) fn call<'env>(
                 return Ok(Value::Null);
             }
             let subject = arguments["to"].as_str().unwrap_or_default();
-            let sent = agent.permitted(within.id, &SessionMessage, subject, arguments, within.permission);
+            let sent = agent.permitted(&within.permitting(subject, None), &SessionMessage, arguments);
             Ok(answer(&sent))
         }
         other => Err(format!("ctx.{SPACE}.{other} is not a function")),

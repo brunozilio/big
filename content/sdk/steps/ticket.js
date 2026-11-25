@@ -163,7 +163,7 @@ export default step({
   name: "ticket",
   label: "Issue",
   icon: "sTicket",
-  needs: "tracker",
+  requires: "tracker",
   doing: "Creating issue",
   view: shown,
   async run(ctx, opts) {

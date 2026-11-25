@@ -7,7 +7,7 @@ use app::{Client, EngineEvent, Headless, PermissionMode, RunControl, SessionId};
 use domain::conversation::Entry;
 use serde_json::Value;
 
-use crate::error::{ApiError, ApiResult};
+use crate::error::{ApiError, ApiResult, said};
 use crate::marks::now_ms;
 use crate::session_view::{self, Shown};
 
@@ -34,6 +34,7 @@ struct Resumed {
     session: String,
     mode: Option<PermissionMode>,
     style: Option<String>,
+    language: Option<domain::Language>,
 }
 
 impl Resumed {
@@ -44,19 +45,13 @@ impl Resumed {
         if let Some(mode) = self.mode {
             session.set_permission(mode);
         }
-        session.set_headless(Headless { output_style: self.style.clone(), ..Headless::default() });
+        session.set_headless(Headless {
+            output_style: self.style.clone(),
+            language: self.language,
+            ..Headless::default()
+        });
         session
     }
-}
-
-#[derive(Debug)]
-pub struct Opening<'a> {
-    pub folder: PathBuf,
-    pub text: &'a str,
-    pub model: app::Model,
-    pub brief: String,
-    pub most_turns: u32,
-    pub style: Option<String>,
 }
 
 struct Started<'a> {
@@ -64,19 +59,6 @@ struct Started<'a> {
     early: Vec<EngineEvent>,
     text: &'a str,
     shown: Shown,
-}
-
-fn started_session(run: &mut app::Run) -> ApiResult<(String, Vec<EngineEvent>)> {
-    let mut early = Vec::new();
-    while let Some(event) = run.next_event() {
-        match event {
-            EngineEvent::SessionStarted(id) => return Ok((id.0, early)),
-            EngineEvent::Failed(message) => return Err(ApiError::failed(message)),
-            EngineEvent::Cancelled => return Err(ApiError::failed("A conversa foi cancelada.")),
-            other => early.push(other),
-        }
-    }
-    Err(ApiError::failed("O agente não começou a conversa."))
 }
 
 impl std::fmt::Debug for Chats {
@@ -95,6 +77,7 @@ pub struct Message<'a> {
     pub agent: Option<domain::MainAgentSpec>,
     pub mode: Option<PermissionMode>,
     pub style: Option<String>,
+    pub language: Option<domain::Language>,
     pub shown: Shown,
 }
 
@@ -129,6 +112,7 @@ impl Chats {
             session: message.session.to_owned(),
             mode: message.mode,
             style: message.style.clone(),
+            language: message.language,
         };
         resumed.session().side(message.text).and_then(app::Run::side_answer).map_err(ApiError::failed)
     }
@@ -139,7 +123,11 @@ impl Chats {
 
     pub fn send(&self, client: &Client, message: Message<'_>, notify: Notify) -> ApiResult<()> {
         if self.running(message.session) {
-            return Err(ApiError::busy("Esta conversa ainda está respondendo."));
+            return Err(ApiError::busy(said(
+                "This conversation is still answering.",
+                "Esta conversación todavía está respondiendo.",
+                "Esta conversa ainda está respondendo.",
+            )));
         }
         self.suggestions.lock().unwrap_or_else(PoisonError::into_inner).remove(message.session);
         let resumed = Resumed {
@@ -150,6 +138,7 @@ impl Chats {
             session: message.session.to_owned(),
             mode: message.mode,
             style: message.style.clone(),
+            language: message.language,
         };
         let mut session = resumed.session();
         if let Some(effort) = message.effort {
@@ -158,31 +147,6 @@ impl Chats {
         let run = session.send(message.text).map_err(ApiError::failed)?;
         let started = Started { run, early: Vec::new(), text: message.text, shown: message.shown };
         self.track(started, resumed, notify)
-    }
-
-    pub fn open(&self, client: &Client, opening: Opening<'_>, notify: Notify) -> ApiResult<String> {
-        let mut session = client.session(opening.folder.clone(), opening.model.clone());
-        session.set_permission(PermissionMode::Plan);
-        session.set_headless(Headless {
-            max_turns: Some(opening.most_turns),
-            append_system: Some(opening.brief),
-            output_style: opening.style.clone(),
-            ..Headless::default()
-        });
-        let mut run = session.send(opening.text).map_err(ApiError::failed)?;
-        let (id, early) = started_session(&mut run)?;
-        let resumed = Resumed {
-            client: client.clone(),
-            folder: opening.folder,
-            model: opening.model,
-            agent: None,
-            session: id.clone(),
-            mode: Some(PermissionMode::Plan),
-            style: opening.style,
-        };
-        let shown = Shown { mode: "plan".to_owned(), ..Shown::default() };
-        self.track(Started { run, early, text: opening.text, shown }, resumed, notify)?;
-        Ok(id)
     }
 
     fn track(&self, started: Started<'_>, resumed: Resumed, notify: Notify) -> ApiResult<()> {
@@ -242,7 +206,13 @@ impl Chats {
 
     pub fn answer(&self, session: &str, ask: &str, decision: domain::Decision) -> ApiResult<()> {
         let runs = self.locked();
-        let going = runs.get(session).ok_or_else(|| ApiError::missing("Nada nesta conversa espera resposta."))?;
+        let going = runs.get(session).ok_or_else(|| {
+            ApiError::missing(said(
+                "Nothing in this conversation is waiting for an answer.",
+                "Nada en esta conversación espera respuesta.",
+                "Nada nesta conversa espera resposta.",
+            ))
+        })?;
         going.control.answer(app::AskId(ask.to_owned()), decision).map_err(ApiError::failed)
     }
 

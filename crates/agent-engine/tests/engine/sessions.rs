@@ -163,7 +163,7 @@ fn a_main_worktree_and_its_uncommitted_files_survive_resume_after_engine_restart
         Arc::new(agent_engine::sessions::FileSessions::new(&store)),
     );
     let mut request = PromptRequest::plain(dir.path().into(), "Create work", model());
-    request.policy.permission = domain::PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     let events = finish(&start(&engine, &request));
     assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");
     let session = events

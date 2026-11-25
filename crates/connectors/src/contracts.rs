@@ -8,6 +8,8 @@ pub const PIPELINES: &str = "pipelines";
 pub const CLOUD: &str = "cloud";
 pub const TESTS: &str = "tests";
 pub const MCP: &str = "mcp";
+pub const SECURITY: &str = "security";
+pub const CHANGES: &str = "changes";
 
 pub mod tracker {
     pub const CREATE_ISSUE: &str = "tracker.create_issue";
@@ -19,6 +21,8 @@ pub mod tracker {
     pub const SEARCH: &str = "tracker.search";
     pub const PROJECTS: &str = "tracker.projects";
     pub const FIELDS: &str = "tracker.fields";
+    pub const UPDATE_ISSUE: &str = "tracker.update_issue";
+    pub const LINK_ISSUES: &str = "tracker.link_issues";
 }
 
 pub mod code {
@@ -32,6 +36,7 @@ pub mod code {
     pub const REPOS: &str = "code.repos";
     pub const PULL_REQUESTS: &str = "code.pull_requests";
     pub const BRANCHES: &str = "code.branches";
+    pub const MERGE_BRANCHES: &str = "code.merge_branches";
 }
 
 pub mod pipelines {
@@ -45,6 +50,15 @@ pub mod pipelines {
 pub mod cloud {
     pub const IDENTITY: &str = "cloud.identity";
     pub const ACCOUNTS_AND_ROLES: &str = "cloud.accounts_and_roles";
+    pub const LAST_DEPLOYMENT: &str = "cloud.last_deployment";
+}
+
+pub mod changes {
+    pub const CREATE: &str = "changes.create";
+    pub const UPDATE: &str = "changes.update";
+    pub const GET: &str = "changes.get";
+    pub const CANCEL: &str = "changes.cancel";
+    pub const STATUS_CHANGED: &str = "changes.status.changed";
 }
 
 pub mod tests {
@@ -53,6 +67,11 @@ pub mod tests {
     pub const CREATE_CYCLE: &str = "tests.create_cycle";
     pub const RECORD: &str = "tests.record";
     pub const PROJECTS: &str = "tests.projects";
+}
+
+pub mod security {
+    pub const PROJECTS: &str = "security.projects";
+    pub const FINDINGS: &str = "security.findings";
 }
 
 pub mod mcp {
@@ -149,6 +168,18 @@ pub fn tracker() -> Vec<ActionSpec> {
         ),
         ActionSpec::read(tracker::PROJECTS, object(&[], &[("query", "string")]), project_list()),
         ActionSpec::read(tracker::FIELDS, object(&[], &[("project", "string"), ("type", "string")]), field_list()),
+        ActionSpec::write(
+            tracker::UPDATE_ISSUE,
+            object(&[("issue", "string")], &[("title", "string"), ("description", "string"), ("fields", "object")]),
+            issue_summary(),
+            Idempotency::Native,
+        ),
+        ActionSpec::write(
+            tracker::LINK_ISSUES,
+            object(&[("issue", "string"), ("to", "string")], &[("kind", "string")]),
+            object(&[("issue", "string"), ("to", "string")], &[("already", "boolean")]),
+            Idempotency::Lookup,
+        ),
     ]
 }
 
@@ -190,7 +221,10 @@ pub fn code() -> Vec<ActionSpec> {
         &[("head", "string"), ("title", "string")],
         &[("repo", "string"), ("base", "string"), ("body", "string"), ("draft", "boolean")],
     );
-    let review = object(&[("pr", "string"), ("verdict", "string")], &[("body", "string"), ("lines", "array")]);
+    let review = object(
+        &[("pr", "string"), ("verdict", "string")],
+        &[("body", "string"), ("lines", "array"), ("agent", "string")],
+    );
     let merge = object(&[("pr", "string")], &[("method", "string"), ("delete_branch", "boolean")]);
     vec![
         ActionSpec::write(code::OPEN_PULL_REQUEST, open, pull_output(), Idempotency::Lookup),
@@ -218,6 +252,12 @@ pub fn code() -> Vec<ActionSpec> {
         ActionSpec::read(code::REPOS, object(&[], &[("query", "string")]), repo_list()),
         ActionSpec::read(code::PULL_REQUESTS, object(&[], &[("repo", "string")]), list()),
         ActionSpec::read(code::BRANCHES, object(&[], &[("repo", "string")]), branch_list()),
+        ActionSpec::write(
+            code::MERGE_BRANCHES,
+            object(&[("base", "string"), ("head", "string")], &[("repo", "string"), ("message", "string")]),
+            object(&[("merged", "boolean")], &[("sha", "string"), ("already", "boolean")]),
+            Idempotency::Lookup,
+        ),
     ]
 }
 
@@ -235,7 +275,16 @@ pub fn pipelines() -> Vec<ActionSpec> {
     vec![
         ActionSpec::read(
             pipelines::RUNS,
-            object(&[], &[("ref", "string"), ("repo", "string"), ("pipeline", "string"), ("limit", "integer")]),
+            object(
+                &[],
+                &[
+                    ("ref", "string"),
+                    ("repo", "string"),
+                    ("pipeline", "string"),
+                    ("limit", "integer"),
+                    ("status", "string"),
+                ],
+            ),
             list(),
         ),
         ActionSpec::read(pipelines::RUN, run_ref.clone(), run_output()),
@@ -272,6 +321,52 @@ pub fn cloud() -> Vec<ActionSpec> {
             json!({ "type": "object", "properties": {} }),
             object(&[("accounts", "array")], &[]),
         ),
+        ActionSpec::read(
+            cloud::LAST_DEPLOYMENT,
+            object(&[("service", "string"), ("environment", "string")], &[("account", "string")]),
+            object(&[("version", "string")], &[("at", "string"), ("source", "string")]),
+        ),
+    ]
+}
+
+fn change_output() -> Value {
+    object(
+        &[("ref", "string"), ("key", "string"), ("status", "string")],
+        &[
+            ("title", "string"),
+            ("environment", "string"),
+            ("window", "string"),
+            ("url", "string"),
+            ("revision", "integer"),
+            ("created", "boolean"),
+        ],
+    )
+}
+
+pub fn changes() -> Vec<ActionSpec> {
+    let fields = [
+        ("title", "string"),
+        ("environment", "string"),
+        ("window", "string"),
+        ("tasks", "array"),
+        ("notes", "array"),
+        ("attachments", "array"),
+        ("versions", "array"),
+        ("description", "string"),
+    ];
+    let mut update_fields = vec![("change", "string")];
+    update_fields.extend(fields.iter().filter(|(name, _)| *name != "environment"));
+    let change_ref = object(&[("change", "string")], &[]);
+    vec![
+        ActionSpec::write(
+            changes::CREATE,
+            object(&[("title", "string"), ("environment", "string"), ("window", "string")], &fields[3..]),
+            change_output(),
+            Idempotency::Lookup,
+        ),
+        ActionSpec::write(changes::UPDATE, object(&update_fields[..1], &update_fields[1..]), change_output(), Idempotency::Native),
+        ActionSpec::read(changes::GET, change_ref.clone(), change_output()),
+        ActionSpec::write(changes::CANCEL, change_ref, change_output(), Idempotency::Native),
     ]
 }
 
@@ -322,6 +417,51 @@ pub fn tests() -> Vec<ActionSpec> {
     ]
 }
 
+fn finding_list() -> Value {
+    let finding = object(
+        &[
+            ("id", "string"),
+            ("title", "string"),
+            ("severity", "integer"),
+            ("kind", "string"),
+            ("status", "string"),
+            ("new", "boolean"),
+            ("policy", "boolean"),
+            ("description", "string"),
+        ],
+        &[
+            ("cwe", "object"),
+            ("cve", "object"),
+            ("file", "string"),
+            ("line", "integer"),
+            ("module", "string"),
+            ("component", "string"),
+            ("version", "string"),
+            ("found", "string"),
+            ("url", "string"),
+        ],
+    );
+    json!({ "type": "array", "items": finding })
+}
+
+pub fn security() -> Vec<ActionSpec> {
+    let wanted = object(
+        &[],
+        &[
+            ("project", "string"),
+            ("kinds", "array"),
+            ("minSeverity", "integer"),
+            ("policy", "boolean"),
+            ("open", "boolean"),
+            ("limit", "integer"),
+        ],
+    );
+    vec![
+        ActionSpec::read(security::PROJECTS, object(&[], &[("query", "string")]), project_list()),
+        ActionSpec::read(security::FINDINGS, wanted, finding_list()),
+    ]
+}
+
 pub fn mcp() -> Vec<ActionSpec> {
     vec![ActionSpec::read(mcp::TOOLS, object(&[], &[]), list())]
 }
@@ -338,7 +478,9 @@ mod checks {
             (PIPELINES, pipelines()),
             (CLOUD, cloud()),
             (TESTS, tests()),
+            (SECURITY, security()),
             (MCP, mcp()),
+            (CHANGES, changes()),
         ];
         for (capability, actions) in all {
             assert!(!actions.is_empty());
@@ -351,12 +493,14 @@ mod checks {
 
     #[test]
     fn writes_declare_how_they_stay_idempotent() {
-        let all: Vec<ActionSpec> = [tracker(), code(), pipelines(), cloud(), tests(), mcp()].concat();
+        let all: Vec<ActionSpec> = [tracker(), code(), pipelines(), cloud(), tests(), security(), mcp(), changes()].concat();
         let lookups: Vec<&str> =
             all.iter().filter(|a| a.idempotent == Idempotency::Lookup).map(|a| a.name.as_str()).collect();
         assert!(lookups.contains(&tracker::CREATE_ISSUE));
         assert!(lookups.contains(&code::MERGE));
         assert!(lookups.contains(&tests::CREATE_CASE));
+        assert!(lookups.contains(&changes::CREATE));
+        assert!(lookups.contains(&code::MERGE_BRANCHES));
         assert!(all.iter().filter(|a| !a.writes).all(|a| a.idempotent == Idempotency::Native));
     }
 }

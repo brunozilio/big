@@ -17,7 +17,7 @@ use crate::{AgentAsk, AgentStatus, EngineEvent, ToolCall};
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Record {
     Prompted { at_ms: u64, prompt: String },
-    Shown { text: String, attached: Vec<String> },
+    Shown { text: String, attached: Vec<String>, from: Option<String> },
     Event { at_ms: u64, event: EngineEvent },
     Restarted,
     Truncated { keep: usize },

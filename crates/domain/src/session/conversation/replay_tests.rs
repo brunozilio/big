@@ -31,7 +31,7 @@ fn a_prompt_that_only_looks_like_one_sent_with_files_is_shown_whole() {
 #[test]
 fn what_the_user_saw_they_sent_is_what_the_history_shows_not_what_the_agent_was_told() {
     let records = [
-        Record::Shown { text: "read @notes.txt".into(), attached: vec!["chart.png".into()] },
+        Record::Shown { text: "read @notes.txt".into(), attached: vec!["chart.png".into()], from: None },
         Record::Prompted { at_ms: 1, prompt: "read @notes.txt\n\n<file path=\"notes.txt\">\nalpha\n</file>".into() },
         Record::Event { at_ms: 2, event: EngineEvent::Completed { duration_ms: 1, cost_usd: None } },
         Record::Prompted { at_ms: 3, prompt: "thanks".into() },
@@ -135,7 +135,7 @@ fn a_turn_still_going_elsewhere_stays_open_while_followed() {
 
 #[test]
 fn what_the_user_saw_waits_for_its_prompt_before_it_is_followed() {
-    let shown = Record::Shown { text: "read @notes.txt".into(), attached: Vec::new() };
+    let shown = Record::Shown { text: "read @notes.txt".into(), attached: Vec::new(), from: None };
     let prompted =
         Record::Prompted { at_ms: 1, prompt: "read @notes.txt\n\n<file path=\"notes.txt\">\nalpha\n</file>".into() };
     let mut transcript = Transcript::default();
@@ -143,4 +143,15 @@ fn what_the_user_saw_waits_for_its_prompt_before_it_is_followed() {
     assert_eq!(transcript.follow(std::slice::from_ref(&shown)), 0, "kept for the next look");
     assert_eq!(transcript.follow(&[shown, prompted]), 2);
     assert_eq!(transcript.entries.last(), Some(&Entry::User("read @notes.txt".into())));
+}
+
+#[test]
+fn a_prompt_another_agent_sent_keeps_who_sent_it() {
+    let shown = Record::Shown { text: "planeje".into(), attached: Vec::new(), from: Some("planner".into()) };
+    let prompted = Record::Prompted { at_ms: 1, prompt: "planeje".into() };
+    let mut transcript = Transcript::default();
+    transcript.replay(&[shown, prompted]);
+
+    assert_eq!(transcript.entries[0], Entry::Sent { from: "planner".into(), text: "planeje".into() });
+    assert_eq!(transcript.first_prompt().as_deref(), Some("planeje"));
 }

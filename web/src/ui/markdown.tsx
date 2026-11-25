@@ -2,7 +2,8 @@ import * as RDialog from '@radix-ui/react-dialog'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from './button'
-import { cn, plural } from './cn'
+import { plural, useT } from '@/i18n'
+import { cn } from './cn'
 import { Icon } from './icon'
 import { markdownStats } from './markdownOps'
 import { SourceEditor, type SourceView } from './markdownSource'
@@ -35,17 +36,18 @@ export interface MarkdownEditorProps {
 }
 
 function StatusBar({ value }: { value: string }) {
+  const t = useT()
   const s = markdownStats(value)
   return (
     <span className="flex min-w-0 items-center gap-3 truncate text-xs tabular-nums text-muted">
       <span>
-        {s.words} {plural(s.words, 'palavra', 'palavras')}
+        {t(`editor.words_${plural(s.words)}`, { n: s.words })}
       </span>
       <span>
-        {s.chars} {plural(s.chars, 'caractere', 'caracteres')}
+        {t(`editor.chars_${plural(s.chars)}`, { n: s.chars })}
       </span>
       <span>
-        {s.lines} {plural(s.lines, 'linha', 'linhas')}
+        {t(`editor.lines_${plural(s.lines)}`, { n: s.lines })}
       </span>
       <span className="font-medium text-faint">Markdown</span>
     </span>
@@ -57,7 +59,7 @@ export function MarkdownEditor({
   onChange,
   placeholder,
   autoFocus,
-  label = 'Conteúdo em Markdown',
+  label,
   compact,
   minHeight,
   maxHeight,
@@ -67,10 +69,11 @@ export function MarkdownEditor({
   assist,
   onSave,
   onCancel,
-  saveLabel = 'Salvar',
+  saveLabel,
   saveDisabled,
   className,
 }: MarkdownEditorProps) {
+  const t = useT()
   const [mode] = useState<MarkdownEditorMode>(defaultMode)
   const [full, setFull] = useState(false)
   const root = useRef<HTMLDivElement>(null)
@@ -88,13 +91,13 @@ export function MarkdownEditor({
     <div className="ml-auto flex shrink-0 gap-2">
       {onCancel && (
         <Button size="sm" variant="ghost" onClick={onCancel}>
-          Cancelar
+          {t('editor.cancel')}
         </Button>
       )}
       {onSave && (
         <Tooltip content="⌘↵">
           <Button size="sm" variant="primary" disabled={saveDisabled} onClick={onSave}>
-            {saveLabel}
+            {saveLabel ?? t('editor.save')}
           </Button>
         </Tooltip>
       )}
@@ -102,7 +105,7 @@ export function MarkdownEditor({
   )
 
   const frame = (fill: boolean): ReactNode => {
-    const shared = { value, onChange, placeholder, label, compact: compact && !fill, minHeight: min, maxHeight: fill ? undefined : max, fill, trailing: readOnly ? undefined : more, onSubmit: onSave, autoFocus: fill || autoFocus }
+    const shared = { value, onChange, placeholder, label: label ?? t('editor.contentLabel'), compact: compact && !fill, minHeight: min, maxHeight: fill ? undefined : max, fill, trailing: readOnly ? undefined : more, onSubmit: onSave, autoFocus: fill || autoFocus }
     return (
       <div ref={fill ? undefined : root} className={cn('ring-field-within flex flex-col overflow-hidden border bg-surface transition-shadow', fill ? 'h-full rounded-overlay' : compact ? 'rounded-control' : 'rounded-card', !fill && className)}>
         {mode === 'rich' || readOnly ? <RichEditor {...shared} readOnly={readOnly} assist={assist} /> : <SourceEditor {...shared} defaultView={defaultSourceView ?? (compact ? 'write' : 'split')} />}
@@ -120,7 +123,7 @@ export function MarkdownEditor({
     <>
       {full ? (
         <div className={cn('flex items-center justify-center gap-2 rounded-card border border-dashed text-sm text-muted', className)} style={{ minHeight: Math.min(min, 160) }}>
-          <Icon name="fullscreen" size={15} /> Editando em tela cheia
+          <Icon name="fullscreen" size={15} /> {t('editor.fullscreen')}
         </div>
       ) : (
         frame(false)

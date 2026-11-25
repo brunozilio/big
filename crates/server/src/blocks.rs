@@ -1,3 +1,4 @@
+use domain::Language;
 use serde_json::{Value, json};
 use store::ConnectionRecord;
 
@@ -10,6 +11,7 @@ pub const SUBMIT: &str = "submit";
 pub struct Place<'a> {
     pub connections: &'a [ConnectionRecord],
     pub waiting: bool,
+    pub language: Language,
 }
 
 impl Place<'_> {
@@ -39,10 +41,13 @@ fn field(raw: &Value) -> Value {
     value
 }
 
-fn form(raw: &Value) -> Value {
+fn form(raw: &Value, language: Language) -> Value {
     let fields =
         raw["fields"].as_array().map(|fields| fields.iter().map(field).collect::<Vec<_>>()).unwrap_or_default();
-    let label = raw["submit"].as_str().filter(|label| !label.trim().is_empty()).unwrap_or("Enviar");
+    let label = raw["submit"]
+        .as_str()
+        .filter(|label| !label.trim().is_empty())
+        .unwrap_or(language.pick("Send", "Enviar", "Enviar"));
     let mut value = json!({ "type": "form", "fields": fields, "submit": { "action": SUBMIT, "label": label } });
     if let Some(title) = raw["title"].as_str().filter(|title| !title.trim().is_empty()) {
         value["title"] = json!(title);
@@ -83,9 +88,26 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
         }),
         "markdown" => json!({ "type": "markdown", "text": text(&raw["text"]), "muted": raw["muted"] == true }),
         "cases" => cases(place, raw),
-        "logs" => logs(raw),
+        "logs" => logs(raw, place.language),
         "calls" => json!({ "type": "calls", "calls": raw["calls"].as_array().cloned().unwrap_or_default() }),
-        "form" => form(raw),
+        "stages" => json!({
+            "type": "stages",
+            "stages": raw["stages"].as_array().cloned().unwrap_or_default(),
+            "live": place.waiting,
+        }),
+        "members" => json!({
+            "type": "members",
+            "items": raw["items"].as_array().cloned().unwrap_or_default(),
+            "removable": place.waiting && raw["removable"] == true,
+        }),
+        "tasks" => json!({
+            "type": "tasks",
+            "tasks": raw["tasks"].as_array().cloned().unwrap_or_default(),
+            "kinds": raw["kinds"].as_array().cloned().unwrap_or_default(),
+            "locked": !place.waiting || raw["locked"] == true,
+            "environment": raw["environment"].as_str(),
+        }),
+        "form" => form(raw, place.language),
         "actions" => json!({
             "type": "actions",
             "buttons": raw["buttons"].as_array().map(|all| all.iter().map(button).collect::<Vec<_>>()).unwrap_or_default(),
@@ -133,11 +155,11 @@ fn cases(place: &Place<'_>, raw: &Value) -> Value {
     })
 }
 
-fn logs(raw: &Value) -> Value {
+fn logs(raw: &Value, language: Language) -> Value {
     if let Some(commands) = raw["commands"].as_array() {
         return json!({ "type": "logs", "commands": commands });
     }
-    let command = json!({ "name": "Saída", "state": "done", "seconds": null, "log": text(&raw["text"]) });
+    let command = json!({ "name": language.pick("Output", "Salida", "Saída"), "state": "done", "seconds": null, "log": text(&raw["text"]) });
     json!({ "type": "logs", "commands": [command] })
 }
 
@@ -189,7 +211,7 @@ mod tests {
     #[test]
     fn the_script_s_blocks_take_the_contract_s_shape() {
         let connections = [record("t", "tracker"), record("c", "code")];
-        let place = Place { connections: &connections, waiting: true };
+        let place = Place { connections: &connections, waiting: true, language: Language::default() };
         let raw = json!([
             { "type": "chat", "session": "s1" },
             { "type": "issue", "ref": "K-1" },
@@ -209,7 +231,7 @@ mod tests {
 
     #[test]
     fn test_cases_keep_their_structure_for_the_page() {
-        let place = Place { connections: &[], waiting: false };
+        let place = Place { connections: &[], waiting: false, language: Language::default() };
         let raw = json!({ "type": "cases", "cases": [{
             "title": "Criar", "kind": "ui", "objective": " ", "ref": "T-1",
             "given": ["um cliente"], "when": ["envio", ""], "then": ["201", "o corpo traz o id"],
@@ -226,7 +248,7 @@ mod tests {
 
     #[test]
     fn a_form_keeps_its_title_and_submit_label_and_its_answer_reaches_the_step_as_is() {
-        let place = Place { connections: &[], waiting: true };
+        let place = Place { connections: &[], waiting: true, language: Language::default() };
         let raw = json!({ "type": "form", "title": "Onde criar a issue", "submit": "Criar issue", "fields": [
             { "name": "project", "label": "Projeto", "kind": "select", "options": [{ "value": "OPS", "label": "OPS" }] },
             { "name": "type", "label": "Tipo de issue", "kind": "date" },

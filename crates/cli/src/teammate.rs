@@ -24,7 +24,7 @@ pub struct Args {
 }
 
 fn parse_mode(text: &str) -> Result<PermissionMode, String> {
-    domain::command::mode_named(text).ok_or_else(|| format!("`{text}` is not ask, edits, plan or bypass"))
+    domain::command::mode_named(text).ok_or_else(|| format!("`{text}` is not auto or plan"))
 }
 
 pub fn spec_of(args: &mut Args) -> Result<Option<domain::team::TeammateSpec>, String> {
@@ -44,7 +44,7 @@ pub fn run(mut args: Args) -> Result<ExitCode, String> {
     let home = std::env::home_dir().ok_or("a teammate needs a home folder")?;
     let spec = spec.ok_or("a teammate is started by its lead, with a --spec file naming its team and name")?;
     let me = Me { team: app::team::Team::named(&home, &spec.team), name: spec.name.clone() };
-    let lead = spec.lead_pid;
+    let (lead, leader) = (spec.lead_pid, spec.lead.clone().unwrap_or_else(|| LEAD.to_owned()));
     let teammate = domain::team::TeammateOf { team: spec.team, name: spec.name };
     let cwd = match args.cwd.take() {
         Some(dir) => dir,
@@ -63,7 +63,7 @@ pub fn run(mut args: Args) -> Result<ExitCode, String> {
     session.set_headless(headless);
     let (team, name) = (me.team.clone(), me.name.clone());
     let asker = Mailbox::new(me.clone()).led_by(lead);
-    let ended = work(&session, &asker, Mailbox::new(me).led_by(lead));
+    let ended = work(&session, &asker, Mailbox::new(me).led_by(lead).named(leader));
     team.departed(&name);
     ended.map(|()| ExitCode::SUCCESS)
 }
@@ -71,7 +71,8 @@ pub fn run(mut args: Args) -> Result<ExitCode, String> {
 fn work(session: &app::Session, asker: &Mailbox, prompts: Mailbox) -> Result<(), String> {
     let mut out = std::io::stdout().lock();
     for prompt in prompts {
-        let mut run = session.send(&prompt?).map_err(|error| error.to_string())?;
+        let Work { text, from } = prompt?;
+        let mut run = session.send_from(&text, from.as_deref()).map_err(|error| error.to_string())?;
         while let Some(event) = run.next_event() {
             match event {
                 EngineEvent::TextDelta(text) => {
@@ -95,11 +96,23 @@ pub struct Mailbox {
     answered_once: bool,
     poll: Duration,
     lead: Option<u32>,
+    leader: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Work {
+    pub text: String,
+    pub from: Option<String>,
 }
 
 impl Mailbox {
     pub fn new(me: Me) -> Self {
-        Self { me, answered_once: false, poll: POLL, lead: None }
+        Self { me, answered_once: false, poll: POLL, lead: None, leader: LEAD.to_owned() }
+    }
+
+    pub fn named(mut self, leader: String) -> Self {
+        self.leader = leader;
+        self
     }
 
     pub fn led_by(mut self, lead: Option<u32>) -> Self {
@@ -160,7 +173,7 @@ impl Mailbox {
 }
 
 impl Iterator for Mailbox {
-    type Item = Result<String, String>;
+    type Item = Result<Work, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.answered_once {
@@ -171,20 +184,21 @@ impl Iterator for Mailbox {
             if !self.me.team.exists() || self.orphaned() {
                 return None;
             }
-            let mut work = Vec::new();
+            let (mut work, mut from) = (Vec::new(), None);
             for mail in self.me.team.unread(&self.me.name) {
                 if let Some(Protocol::ShutdownRequest { request_id, .. }) = Protocol::of(&mail.text) {
                     self.shut_down(request_id);
                     return None;
                 }
                 work.push(if mail.from == LEAD && Protocol::of(&mail.text).is_none() {
+                    from = Some(self.leader.clone());
                     mail.text.clone()
                 } else {
                     shown(&mail)
                 });
             }
             if !work.is_empty() {
-                return Some(Ok(work.join("\n\n")));
+                return Some(Ok(Work { text: work.join("\n\n"), from }));
             }
             std::thread::sleep(self.poll);
         }
@@ -210,11 +224,14 @@ mod tests {
     fn a_teammate_takes_the_lead_s_task_then_goes_idle_and_takes_the_next_message() {
         let (_home, team, mut mailbox) = rig();
         team.send("tester", LEAD, "fix the tests", None).expect("send");
-        assert_eq!(mailbox.next(), Some(Ok("fix the tests".into())));
+        let task = Work { text: "fix the tests".into(), from: Some(LEAD.into()) };
+        assert_eq!(mailbox.next(), Some(Ok(task)));
         assert!(team.unread(LEAD).is_empty(), "not idle before its first answer");
 
         team.send("tester", "reviewer", "look at x", Some("x")).expect("send");
         let next = mailbox.next().expect("more work").expect("text");
+        assert_eq!(next.from, None, "a teammate's mail is shown as its own note");
+        let next = next.text;
         assert!(next.starts_with("<teammate-message teammate_id=\"reviewer\""), "{next}");
         let told = team.unread(LEAD);
         assert_eq!(told.len(), 1);
@@ -253,7 +270,7 @@ mod tests {
         assert_eq!(mailbox.forward(&ask), Some(app::Decision::AllowAlways), "always reaches the teammate");
         assert!(matches!(lead.join().expect("lead").asked, domain::team::Asked::Permission { rememberable: true, .. }));
 
-        let approved = app::Decision::Approve(app::PermissionMode::AcceptEdits);
+        let approved = app::Decision::Approve(app::PermissionMode::Auto);
         let lead = answered(approved.clone());
         let plan = app::AgentAsk { kind: app::AskKind::Plan { plan: "1. edit".into() }, ..ask.clone() };
         assert_eq!(mailbox.forward(&plan), Some(approved), "a plan is approved by the lead's user");
@@ -300,9 +317,10 @@ mod tests {
             name: "tester".into(),
             cwd: "/work".into(),
             model: "m1".into(),
-            mode: "edits".into(),
+            mode: "auto".into(),
             instructions: "# Team coordination".into(),
             lead_pid: None,
+            lead: Some("planner".into()),
         };
         std::fs::write(&path, serde_json::to_string(&spec).expect("json")).expect("write");
         let cli = crate::Cli::parse_from([brand::COMMAND, "teammate", "--spec", &path.display().to_string()]);
@@ -311,7 +329,7 @@ mod tests {
         assert_eq!(spec_of(&mut args), Ok(Some(spec)));
 
         assert_eq!(args.cwd, Some("/work".into()));
-        assert_eq!((args.model.as_deref(), args.mode), (Some("m1"), Some(app::PermissionMode::AcceptEdits)));
+        assert_eq!((args.model.as_deref(), args.mode), (Some("m1"), Some(app::PermissionMode::Auto)));
         assert_eq!(args.instructions.as_deref(), Some("# Team coordination"));
         assert_eq!(spec_of(&mut Args::default()), Ok(None));
     }
@@ -319,12 +337,12 @@ mod tests {
     #[test]
     fn the_lead_starts_a_teammate_with_its_folder_model_mode_and_instructions() {
         use clap::Parser;
-        let mode = domain::command::mode_label(app::PermissionMode::AcceptEdits);
+        let mode = domain::command::mode_label(app::PermissionMode::Auto);
         let started = [brand::COMMAND, "teammate", "-C", "/work", "--model", "m1", "--mode", mode];
         let cli = crate::Cli::parse_from(started.into_iter().chain(["--append-system-prompt", "# Team"]));
         let Some(crate::Internal::Teammate(args)) = cli.command else { panic!("a teammate") };
         assert_eq!(args.cwd, Some("/work".into()));
-        assert_eq!((args.model.as_deref(), args.mode), (Some("m1"), Some(app::PermissionMode::AcceptEdits)));
+        assert_eq!((args.model.as_deref(), args.mode), (Some("m1"), Some(app::PermissionMode::Auto)));
         assert_eq!(args.instructions.as_deref(), Some("# Team"));
     }
 

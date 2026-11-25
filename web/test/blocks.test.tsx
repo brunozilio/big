@@ -7,7 +7,7 @@ import { BlockView, registry } from '../src/blocks/registry'
 
 afterEach(cleanup)
 
-const TYPES: BlockType[] = ['chat', 'issue', 'change', 'review', 'pipeline', 'merge', 'markdown', 'cases', 'logs', 'calls', 'form', 'actions']
+const TYPES: BlockType[] = ['chat', 'issue', 'change', 'review', 'pipeline', 'merge', 'markdown', 'cases', 'logs', 'calls', 'form', 'actions', 'findings', 'quality', 'stages', 'members', 'tasks']
 
 function files(dir: string): string[] {
   return readdirSync(dir).flatMap((f) => {

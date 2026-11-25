@@ -589,3 +589,25 @@ fn the_file_tools_declare_what_they_touch() {
     assert!(shipped("Read").spec.description.contains("Returns up to 2000 lines"));
     assert!(shipped("Grep").spec.description.contains("first 25 matches"));
 }
+
+#[test]
+fn artifact_publishes_the_written_file_and_names_it_for_the_chat() {
+    let dir = tempfile::tempdir().expect("dir");
+    let shelf = tempfile::tempdir().expect("shelf");
+    std::fs::write(dir.path().join("q3.html"), "<title>Vendas Q3</title><p>ok</p>").expect("page");
+    let mut workspace = Workspace::new(dir.path());
+    workspace.session_id = "s-9".into();
+    workspace.services.artifacts = Some(shelf.path().to_path_buf());
+    let artifact = shipped("Artifact");
+    assert!(artifact.spec.description.contains("artifact-design"), "{}", artifact.spec.description);
+    assert_eq!(artifact.summary(&json!({ "file_path": "q3.html", "title": " Q3 " })), "Q3");
+
+    let outcome = artifact.run(&json!({ "file_path": "q3.html" }), &workspace);
+
+    assert!(!outcome.is_error, "{}", outcome.content);
+    assert!(outcome.content.starts_with("Published \"Vendas Q3\" (page)."), "{}", outcome.content);
+    let id = domain::tools::artifact::id_in(&outcome.content).expect("an id");
+    assert!(shelf.path().join(id).join("q3.html").is_file());
+    let refused = artifact.run(&json!({ "file_path": "missing.html" }), &workspace);
+    assert!(refused.is_error, "{}", refused.content);
+}

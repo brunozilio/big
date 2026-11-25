@@ -18,19 +18,23 @@ use agent_engine::{
     },
     transcript::{Block, Message},
 };
-use domain::{Effort, EngineEvent, PermissionMode};
+use domain::{Effort, EngineEvent, PermissionMode, Reviewer};
+
 fn call(id: &str, name: &str, input: serde_json::Value) -> Block {
     Block::ToolUse { id: id.into(), name: name.into(), input }
 }
-fn run(config: serde_json::Value, model: &ScriptedModel, workspace: &Workspace, mode: PermissionMode) -> Vec<Message> {
-    run_named("reviewer", config, model, workspace, mode)
+fn auto(reviewer: Reviewer) -> Control {
+    Control::new(PermissionMode::Auto, Arc::default()).reviewed_by(reviewer)
+}
+fn run(config: serde_json::Value, model: &ScriptedModel, workspace: &Workspace, control: Control) -> Vec<Message> {
+    run_named("reviewer", config, model, workspace, control)
 }
 fn run_named(
     name: &str,
     config: serde_json::Value,
     model: &ScriptedModel,
     workspace: &Workspace,
-    mode: PermissionMode,
+    control: Control,
 ) -> Vec<Message> {
     let found = FoundAgent {
         name: name.into(),
@@ -40,7 +44,6 @@ fn run_named(
     };
     let mut tools = tools::standard();
     subagent::offer(&mut tools, std::slice::from_ref(&found));
-    let control = Control::new(mode, Arc::default());
     let emit = |event| assert!(!matches!(event, EngineEvent::Asked(_)), "unexpected interactive ask");
     let agent = Agent {
         api: model,

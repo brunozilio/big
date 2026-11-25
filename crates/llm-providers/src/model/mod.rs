@@ -8,11 +8,11 @@ pub mod http;
 pub mod pooled;
 pub(crate) mod retry;
 pub mod routed;
+pub mod script_http;
 #[cfg(any(test, feature = "test-support"))]
 pub mod scripted;
 #[cfg(any(test, feature = "test-support"))]
 mod scripted_http;
-pub mod script_http;
 pub mod sse;
 pub(crate) mod sse_read;
 pub mod web_client;

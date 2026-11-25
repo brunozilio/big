@@ -4,7 +4,7 @@ use agent_engine::Engine;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
-use domain::{EngineEvent, PermissionMode, PromptRequest};
+use domain::{EngineEvent, PromptRequest};
 use serde_json::json;
 
 use crate::{Source, finish, model, start};
@@ -44,7 +44,7 @@ fn a_javascript_tool_reads_through_another_tool_and_asks_the_model() {
     let engine =
         Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&model_api)]))), Arc::new(InMemorySessions::default()));
     let mut request = PromptRequest::plain(dir.path().into(), "Summarize the notes.", model());
-    request.policy.permission = PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     request.host.extensions.get_or_insert_with(Default::default).home = Some(home.path().to_path_buf());
     let events = finish(&start(&engine, &request));
     assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");

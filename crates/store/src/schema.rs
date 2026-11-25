@@ -80,6 +80,12 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE event_cursors ADD COLUMN moved INTEGER NOT NULL DEFAULT 0;
     CREATE INDEX seen_events_by_at ON seen_events (at);
 ",
+    "
+    CREATE TABLE archived_items (
+        item TEXT PRIMARY KEY,
+        at INTEGER NOT NULL
+    );
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

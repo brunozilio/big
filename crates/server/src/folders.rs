@@ -5,7 +5,7 @@ use axum::extract::Query;
 use axum::response::Response;
 use serde_json::{Value, json};
 
-use crate::error::{ApiError, ApiResult, json as reply};
+use crate::error::{ApiError, ApiResult, json as reply, said};
 
 pub fn repo_ref(url: &str) -> Option<String> {
     let url = url.trim().trim_end_matches('/');
@@ -29,8 +29,13 @@ fn is_repo(dir: &Path) -> bool {
 }
 
 fn entries(dir: &Path) -> ApiResult<Vec<Value>> {
-    let listed =
-        std::fs::read_dir(dir).map_err(|error| ApiError::bad(format!("Não foi possível abrir a pasta: {error}")))?;
+    let listed = std::fs::read_dir(dir).map_err(|error| {
+        ApiError::bad(said(
+            format!("The folder could not be opened: {error}"),
+            format!("No se pudo abrir la carpeta: {error}"),
+            format!("Não foi possível abrir a pasta: {error}"),
+        ))
+    })?;
     let mut found: Vec<(String, PathBuf)> = listed
         .flatten()
         .filter(|entry| entry.path().is_dir())
@@ -48,11 +53,17 @@ pub fn listing(path: Option<&str>) -> ApiResult<Value> {
     let home = std::env::home_dir().unwrap_or_else(|| PathBuf::from("/"));
     let wanted = path.map(str::trim).filter(|path| !path.is_empty()).map_or_else(|| home.clone(), PathBuf::from);
     if !wanted.is_absolute() {
-        return Err(ApiError::bad("O caminho precisa ser absoluto."));
+        return Err(ApiError::bad(said(
+            "The path must be absolute.",
+            "La ruta debe ser absoluta.",
+            "O caminho precisa ser absoluto.",
+        )));
     }
-    let dir = std::fs::canonicalize(&wanted).map_err(|_| ApiError::missing("Essa pasta não existe."))?;
+    let dir = std::fs::canonicalize(&wanted).map_err(|_| {
+        ApiError::missing(said("That folder does not exist.", "Esa carpeta no existe.", "Essa pasta não existe."))
+    })?;
     if !dir.is_dir() {
-        return Err(ApiError::bad("Isso não é uma pasta."));
+        return Err(ApiError::bad(said("That is not a folder.", "Eso no es una carpeta.", "Isso não é uma pasta.")));
     }
     let repo = is_repo(&dir);
     Ok(json!({

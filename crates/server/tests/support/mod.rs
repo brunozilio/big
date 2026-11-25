@@ -45,7 +45,7 @@ const approve = step({
   name: "approve",
   label: "Aprovação",
   icon: "check",
-  needs: "tracker",
+  requires: "tracker",
   view: () => [markdown("aprovado")],
   async run(ctx) {
     const answer = await ctx.waitHuman([markdown("Aprovar?"), actions(["approve"])]);
@@ -57,7 +57,7 @@ const approve = step({
 export default workflow({ name: "default", steps: [work(), approve()] });
 "#;
 
-const WORKER: &str = "---\nname: worker\npermissionMode: bypass\nmodel: auto\n---\nVocê trabalha.";
+const WORKER: &str = "---\nname: worker\npermissionMode: auto\nmodel: auto\n---\nVocê trabalha.";
 
 #[derive(Debug, Default)]
 pub struct FakeProvider {
@@ -227,9 +227,17 @@ impl Provider for Web {
         descriptor
     }
 
-    fn alternatives(&self) -> Vec<AlternateAuth> {
+    fn alternatives(&self, language: domain::Language) -> Vec<AlternateAuth> {
         let token = TokenField::new("token", "API token", "Gere o token.", true);
-        vec![AlternateAuth::token("api_token", "Usar API token", "da Web", vec![token], TokenForm::Bearer)]
+        let site = TokenField::setting("site", "Site", "").filled("web.test");
+        vec![AlternateAuth::token(
+            language,
+            "api_token",
+            "Usar API token",
+            "da Web",
+            vec![token, site],
+            TokenForm::Bearer,
+        )]
     }
 
     async fn call(&self, _: &dyn Http, _: &Credentials, _: &str, _: &Value, _: &str) -> Result<Value, ActionError> {
@@ -240,7 +248,8 @@ impl Provider for Web {
         if creds.access_token == "recusado" {
             return Err(ActionError::auth("the token was refused"));
         }
-        Ok(Vec::new())
+        let site = creds.setting("site").map(str::to_owned);
+        Ok(site.map(|site| AccountOption { id: site.clone(), label: site, settings: json!({}) }).into_iter().collect())
     }
 }
 

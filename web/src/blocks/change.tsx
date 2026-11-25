@@ -7,12 +7,14 @@ import { PersonAvatar, personName } from '@/ui/domain'
 import { SegmentedControl } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { MarkdownPreview } from '@/ui/markdownProse'
+import { useT, type MessageKey } from '@/i18n'
 import { useBlockHost } from './context'
 import { Loading, Muted, SendError, useSend } from './shared'
 
 type Of<T extends Block['type']> = Extract<Block, { type: T }>
 
 export function ChangeBlock({ block }: { block: Of<'change'> }) {
+  const t = useT()
   const { version } = useBlockHost()
   const { data: change, error } = useCall(block.connection, 'code.change', { change: block.change }, version)
   if (!change) return <Loading error={error} />
@@ -22,12 +24,12 @@ export function ChangeBlock({ block }: { block: Of<'change'> }) {
       <div>
         <h2 className="text-2xl font-medium tracking-tighter2 text-fg">{change.title} <span className="font-normal text-faint">#{change.number}</span></h2>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-muted">
-          <Badge tone={merged ? 'accent' : change.state === 'closed' ? 'danger' : 'success'} icon={<Icon name={merged ? 'sMerge' : 'sPr'} size={13} />}>{merged ? 'Merged' : change.state === 'closed' ? 'Closed' : 'Open'}</Badge>
+          <Badge tone={merged ? 'accent' : change.state === 'closed' ? 'danger' : 'success'} icon={<Icon name={merged ? 'sMerge' : 'sPr'} size={13} />}>{t(merged ? 'blocks.changeMerged' : change.state === 'closed' ? 'blocks.changeClosed' : 'blocks.changeOpen')}</Badge>
           <PersonAvatar person={change.author} size={18} />
           <span className="text-fg2">{personName(change.author)}</span>
-          <span>quer fazer merge de</span>
+          <span>{t('blocks.changeWantsMerge')}</span>
           <span className="rounded-[5px] bg-info-soft px-1.5 py-0.5 font-mono text-xs text-info-fg">{change.head}</span>
-          <span>em</span>
+          <span>{t('blocks.changeInto')}</span>
           <span className="rounded-[5px] bg-info-soft px-1.5 py-0.5 font-mono text-xs text-info-fg">{change.base}</span>
         </div>
       </div>
@@ -35,7 +37,7 @@ export function ChangeBlock({ block }: { block: Of<'change'> }) {
         <div className="flex h-10 items-center gap-2 border-b bg-subtle px-4 text-sm">
           <PersonAvatar person={change.author} size={16} />
           <span className="font-medium text-fg">{personName(change.author)}</span>
-          <span className="text-muted">abriu esta mudança</span>
+          <span className="text-muted">{t('blocks.changeOpened')}</span>
         </div>
         <div className="px-4 py-3">
           <MarkdownPreview text={change.body} className="text-base" />
@@ -45,10 +47,10 @@ export function ChangeBlock({ block }: { block: Of<'change'> }) {
   )
 }
 
-const methodLabel: Record<MergeMethod, { short: string; action: string }> = {
-  squash: { short: 'Squash', action: 'Fazer merge com squash' },
-  merge: { short: 'Merge commit', action: 'Fazer merge' },
-  rebase: { short: 'Rebase', action: 'Fazer merge com rebase' },
+const methodLabel: Record<MergeMethod, { short: MessageKey; action: MessageKey }> = {
+  squash: { short: 'blocks.mergeSquashShort', action: 'blocks.mergeSquash' },
+  merge: { short: 'blocks.mergeMergeShort', action: 'blocks.mergeMerge' },
+  rebase: { short: 'blocks.mergeRebaseShort', action: 'blocks.mergeRebase' },
 }
 
 function DetailValue({ row }: { row: Of<'merge'>['checks'][number] }) {
@@ -63,30 +65,25 @@ function DetailValue({ row }: { row: Of<'merge'>['checks'][number] }) {
 }
 
 function MergeSummary({ block }: { block: Of<'merge'> }) {
+  const t = useT()
   const { version } = useBlockHost()
   const { data: change, error } = useCall(block.connection, 'code.change', { change: block.change }, version)
   if (!change) return <Loading error={error} />
-  const additions = change.files.reduce((n, f) => n + f.additions, 0)
-  const deletions = change.files.reduce((n, f) => n + f.deletions, 0)
   return (
     <div className="space-y-2">
       <p className="text-lg font-medium text-fg">{change.title} <span className="font-normal text-faint">#{change.number}</span></p>
       <div className="flex flex-wrap items-center gap-2 text-sm text-muted">
         <PersonAvatar person={change.author} size={16} />
-        <span className="text-fg2">{personName(change.author)}</span>
-        <span>quer fazer merge de</span>
         <span className="rounded-[5px] bg-info-soft px-1.5 py-0.5 font-mono text-xs text-info-fg">{change.head}</span>
-        <span>em</span>
+        <span>{t('blocks.changeInto')}</span>
         <span className="rounded-[5px] bg-info-soft px-1.5 py-0.5 font-mono text-xs text-info-fg">{change.base}</span>
-        <span className="tabular-nums">· {change.files.length} {change.files.length === 1 ? 'arquivo' : 'arquivos'}</span>
-        <span className="tabular-nums text-success-fg">+{additions}</span>
-        <span className="tabular-nums text-danger-fg">-{deletions}</span>
       </div>
     </div>
   )
 }
 
 export function MergeBlock({ block }: { block: Of<'merge'> }) {
+  const t = useT()
   const [method, setMethod] = useState<MergeMethod>(block.methods[0] ?? 'squash')
   const { busy, error, send } = useSend()
   if (block.result) {
@@ -98,7 +95,7 @@ export function MergeBlock({ block }: { block: Of<'merge'> }) {
     )
     return <div>{block.result.map((r) => row(r.label, <DetailValue row={r} />))}</div>
   }
-  if (!block.ready) return <Muted>Ainda não começou.</Muted>
+  if (!block.ready) return <Muted>{t('blocks.mergeNotStarted')}</Muted>
   return (
     <div className="space-y-4">
       <MergeSummary block={block} />
@@ -115,9 +112,9 @@ export function MergeBlock({ block }: { block: Of<'merge'> }) {
         ))}
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        {block.methods.length > 1 && <SegmentedControl<MergeMethod> size="sm" value={method} onChange={setMethod} options={block.methods.map((m) => ({ value: m, label: methodLabel[m].short }))} />}
+        {block.methods.length > 1 && <SegmentedControl<MergeMethod> size="sm" value={method} onChange={setMethod} options={block.methods.map((m) => ({ value: m, label: t(methodLabel[m].short) }))} />}
         <Button variant="primary" className="ml-auto" loading={busy} icon={<Icon name="sMerge" size={16} />} onClick={() => void send(block.action, { method })}>
-          {methodLabel[method].action}
+          {t(methodLabel[method].action)}
         </Button>
       </div>
       <SendError error={error} />

@@ -1,7 +1,9 @@
 import type { Application, Attempt as WireAttempt, Attention, Block, ChangeRef, Command, ExternalRef, HeadsUp, Item, ItemGit, ItemSource, ItemStep, NewItem, ProviderMark, StepState, StepView } from '../contract'
-import { NEED_PROVIDER, PEOPLE, PROVIDERS } from './fixtures'
+import { NEED_PROVIDER, PEOPLE, providers } from './fixtures'
+import { say } from './say'
+import { autoTriage, findingsFor, qualityFor } from './security'
 import {
-  IDX, REPO, STEPS, diffOf, fileOf, isBlocked, isGate, isMergeReady, isPaused, isPlanWaiting, isReviewWaiting, store, testName, withYou,
+  IDX, REPO, STEPS, diffOf, fileOf, isBlocked, isGate, isMergeReady, isPaused, isTriageWaiting, isPlanWaiting, isReviewWaiting, store, testName, withYou,
   type SimItem, type SimState, type Step, type StepId,
 } from './sim'
 
@@ -19,7 +21,7 @@ export function wireState(s: SimState): StepState {
 }
 
 export function mark(provider: string): ProviderMark {
-  const p = PROVIDERS.find((x) => x.key === provider)
+  const p = providers().find((x) => x.key === provider)
   return { provider, name: p?.name ?? provider, logo: p?.logo ?? provider }
 }
 
@@ -57,7 +59,7 @@ function sourcesOf(it: SimItem): ItemSource[] {
 }
 
 function steps(it: SimItem): ItemStep[] {
-  return STEPS.map((s) => ({ id: s.id, label: s.label, icon: s.icon, logo: s.logo, needs: s.needs, provider: s.logo ? mark(s.logo).name : undefined, state: wireState(it.states[s.id]), attempts: it.attempts[s.id].length, seconds: it.attempts[s.id].reduce((n, a) => n + a.ticks, 0) * 60 }))
+  return STEPS.map((s) => ({ id: s.id, label: s.label, icon: s.icon, logo: s.logo, requires: s.needs, provider: s.logo ? mark(s.logo).name : undefined, state: wireState(it.states[s.id]), attempts: it.attempts[s.id].length, seconds: it.attempts[s.id].reduce((n, a) => n + a.ticks, 0) * 60 }))
 }
 
 function needMark(s: Step): ProviderMark | null {
@@ -66,28 +68,30 @@ function needMark(s: Step): ProviderMark | null {
 }
 
 function attention(it: SimItem): Attention | null {
-  if (isPlanWaiting(it)) return { badge: { text: 'Plano pronto', tone: 'info', icon: 'sPlan' }, diff: null, action: { label: 'Revisar plano', icon: 'sPlan', step: 'plan' } }
+  if (isPlanWaiting(it)) return { badge: { text: say('planReady'), tone: 'info', icon: 'sPlan', said: { key: 'plan_ready', vars: {} } }, diff: null, action: { label: say('reviewPlan'), icon: 'sPlan', step: 'plan', said: { key: 'review_plan', vars: {} } } }
   if (isPaused(it)) {
     const ask = it.pause?.kind === 'ask'
-    return { badge: { text: ask ? 'Pergunta do agente' : 'Pede permissão', tone: 'warning', icon: ask ? 'help' : 'lock' }, diff: null, action: { label: ask ? 'Responder' : 'Ver pedido', icon: 'chat', step: 'develop' } }
+    return { badge: { text: ask ? say('agentQuestion') : say('asksPermission'), tone: 'warning', icon: ask ? 'help' : 'lock', said: ask ? { key: 'agent_question', vars: {} } : null }, diff: null, action: { label: ask ? say('answer') : say('seeRequest'), icon: 'chat', step: 'develop', said: ask ? { key: 'answer', vars: {} } : null } }
   }
-  if (isMergeReady(it)) return { badge: { text: 'Aprovado', tone: 'success', icon: 'check' }, diff: null, action: { label: 'Fazer merge', icon: 'sMerge', step: 'merge' } }
-  if (isGate(it)) return { badge: it.rejected ? { text: 'Deploy rejeitado', tone: 'danger' } : { text: 'production aguardando', tone: 'warning', icon: 'clock' }, diff: null, action: { label: it.rejected ? 'Ver deploy' : 'Revisar deploy', icon: 'hRocket', step: 'release' } }
+  if (isMergeReady(it)) return { badge: { text: say('approved'), tone: 'success', icon: 'check', said: null }, diff: null, action: { label: say('doMerge'), icon: 'sMerge', step: 'merge', said: null } }
+  if (isGate(it)) return { badge: it.rejected ? { text: say('deployRejected'), tone: 'danger', said: null } : { text: say('productionWaiting'), tone: 'warning', icon: 'clock', said: null }, diff: null, action: { label: it.rejected ? say('seeDeploy') : say('reviewDeploy'), icon: 'hRocket', step: 'release', said: null } }
+  if (isTriageWaiting(it)) return { badge: { text: say('findingsReady', { n: findingsFor(it, null).filter((f) => !f.held).length }), tone: 'danger', icon: 'shield', said: null }, diff: null, action: { label: say('triage'), icon: 'hSecurityCheck', step: 'security', said: null } }
   if (isReviewWaiting(it)) {
     const d = diffOf(it)
-    return { badge: null, diff: { ...d, url: it.pr ? `${prUrl(it.pr)}/files` : null }, action: { label: 'Revisar', icon: 'hGitCompare', step: 'review' } }
+    return { badge: null, diff: { ...d, url: it.pr ? `${prUrl(it.pr)}/files` : null }, action: { label: say('review'), icon: 'hGitCompare', step: 'review', said: null } }
   }
   return null
 }
 
 function recap(it: SimItem): string | null {
-  if (isPlanWaiting(it)) return `O plano de ${it.key} está pronto e espera sua aprovação para o agente começar a implementar.`
+  if (isPlanWaiting(it)) return say('recapPlan', { key: it.key })
   if (isPaused(it)) return it.pause?.kind === 'ask'
-    ? 'O agente parou no meio da implementação e quer saber quantas tentativas o retry da cobrança deve usar.'
-    : 'O agente quer rodar a migração no banco de staging e precisa da sua permissão para seguir.'
-  if (isReviewWaiting(it)) return `O PR #${it.pr} passou nos checks e no CI; falta a sua revisão.`
-  if (isMergeReady(it)) return `O PR #${it.pr} foi aprovado e está pronto para o merge.`
-  if (isGate(it)) return it.rejected ? 'O deploy em production foi rejeitado; o item espera uma decisão.' : 'O canary está saudável e o deploy em production espera sua aprovação.'
+    ? say('recapAsk')
+    : say('recapPermission')
+  if (isReviewWaiting(it)) return say('recapReview', { pr: it.pr ?? '' })
+  if (isMergeReady(it)) return say('recapMerge', { pr: it.pr ?? '' })
+  if (isGate(it)) return it.rejected ? say('recapRejected') : say('recapGate')
+  if (isTriageWaiting(it)) return say('recapTriage')
   return null
 }
 
@@ -98,7 +102,7 @@ export function toItem(it: SimItem): Omit<Item, 'updatedAt'> {
   return {
     id: String(it.id),
     title: it.title,
-    workflow: 'sdlc',
+    workflow: it.workflow ?? 'sdlc',
     group: it.done ? 'delivered' : withYou(it) ? 'you' : 'running',
     status: it.done ? 'Done' : it.cur >= IDX.review ? 'In Review' : 'In Progress',
     issue: it.linked || it.states.ticket === 'passed' ? issueRef(it) : null,
@@ -108,12 +112,13 @@ export function toItem(it: SimItem): Omit<Item, 'updatedAt'> {
     steps: steps(it),
     current: cur?.id ?? null,
     live: !it.done && !it.bounce && !!cur && (cur.id === 'plan' || cur.id === 'develop') && it.states[cur.id] === 'running',
-    activity: it.done ? null : it.bounce ? { text: 'Voltando ao develop', since: iso(store.clock), tone: 'danger' } : { text: cur.doing, since: iso(store.clock - it.elapsed) },
-    impediment: blocked ? { reason: `Falta conectar ${need?.name ?? 'um provedor'}`, connect: need } : null,
+    activity: it.done ? null : it.bounce ? { text: say('backToDevelop'), since: iso(store.clock), tone: 'danger' } : { text: cur.doing, since: iso(store.clock - it.elapsed) },
+    impediment: blocked ? { reason: say('missingConnection', { name: need?.name ?? say('aProvider') }), connect: need, said: need ? { key: 'connect_named', vars: { name: need.name } } : { key: 'connect_account', vars: {} } } : null,
     attention: attention(it),
     recap: withYou(it) ? recap(it) : null,
     createdAt: iso(it.createdAt),
     doneAt: it.done ? iso(it.doneAt) : null,
+    archivedAt: it.archivedAt == null ? null : iso(it.archivedAt),
   }
 }
 
@@ -129,10 +134,10 @@ export function logFor(it: SimItem, cmd: string, bad: boolean, running: boolean)
   if (cmd.includes('lint')) return `$ ${cmd}\n\n  Checked 214 files in 1.8s\n  No issues found${tail}`
   if (cmd.includes('typecheck')) return `$ ${cmd}\n\n  tsc -b\n  Found 0 errors${tail}`
   if (cmd === 'bun test') return bad
-    ? `$ bun test\n\n  ${mod}.test.ts:\n  ✓ ${mod} › carrega a configuração [3ms]\n  ✗ ${testName(it)} [12ms]\n\n  error: expect(received).toBe(expected)\n    Expected: "Refreshed"\n    Received: "Expired"\n\n      at ${fileOf(it)}:88:9\n\n  212 pass\n  1 fail`
-    : `$ bun test\n\n  ${mod}.test.ts:\n  ✓ ${mod} › carrega a configuração [3ms]\n  ✓ ${testName(it)} [12ms]\n\n  213 pass\n  0 fail${tail}`
+    ? `$ bun test\n\n  ${mod}.test.ts:\n  ✓ ${mod} › ${say('loadsConfig')} [3ms]\n  ✗ ${testName(it)} [12ms]\n\n  error: expect(received).toBe(expected)\n    Expected: "Refreshed"\n    Received: "Expired"\n\n      at ${fileOf(it)}:88:9\n\n  212 pass\n  1 fail`
+    : `$ bun test\n\n  ${mod}.test.ts:\n  ✓ ${mod} › ${say('loadsConfig')} [3ms]\n  ✓ ${testName(it)} [12ms]\n\n  213 pass\n  0 fail${tail}`
   if (cmd === 'build') return `$ bun run build\n\n  vite v6.0.5 building for production...\n  ✓ 950 modules transformed.\n  ✓ built in 2.56s${tail}`
-  if (cmd.includes('canary') || cmd.includes('rollout') || cmd.includes('imagem')) return `$ ${cmd}\n\n  deployment.apps/checkout configured\n  Waiting for rollout to finish: 3 of 3 updated replicas are available...\n  deployment "checkout" successfully rolled out${tail}`
+  if (cmd.includes('canary') || cmd.includes('rollout') || cmd === say('imageBuild')) return `$ ${cmd}\n\n  deployment.apps/checkout configured\n  Waiting for rollout to finish: 3 of 3 updated replicas are available...\n  deployment "checkout" successfully rolled out${tail}`
   return `$ ${cmd}\n\n  ok${tail}`
 }
 
@@ -152,10 +157,10 @@ function pickAttempt(it: SimItem, id: StepId, attempt: number | null) {
 function blocksFor(it: SimItem, s: Step, attempt: number): Block[] {
   const st = it.states[s.id]
   const github = connectionOf('github')
-  if (st === 'pending') return [muted('Ainda não começou.')]
+  if (st === 'pending') return [muted(say('notStarted'))]
   if (s.id === 'ticket') return [{ type: 'issue', connection: connectionOf('jira'), key: it.key, comment: true }]
-  if (st === 'skipped') return [muted('Pulado. O item veio de uma issue.')]
-  if (st === 'blocked') return [muted('Parado até a conexão existir.')]
+  if (st === 'skipped') return [muted(say('skippedFromIssue'))]
+  if (st === 'blocked') return [muted(say('waitingConnection'))]
   if (s.id === 'plan' || s.id === 'develop') return [{ type: 'chat', session: `s-${it.id}`, composer: s.id === 'plan' && (st === 'running' || st === 'waiting') }]
   if (s.id === 'checks') {
     const a = it.attempts.checks[attempt - 1]
@@ -164,19 +169,32 @@ function blocksFor(it: SimItem, s: Step, attempt: number): Block[] {
   if (s.id === 'pr') return [{ type: 'change', connection: github, change: `#${it.pr}` }]
   if (s.id === 'ci') return [{ type: 'pipeline', connection: github, run: `ci:${it.id}:${attempt}`, gate: null }]
   if (s.id === 'release') return [{ type: 'pipeline', connection: github, run: `release:${it.id}:${attempt}`, gate: { approve: 'deploy.approve', reject: 'deploy.reject' } }]
+  if (s.id === 'security') {
+    if (st === 'running') return [muted(say('doingSecurity'))]
+    const at = it.done ? it.doneAt - 2 : store.clock - 1
+    const waiting = isTriageWaiting(it)
+    const triage = waiting ? null : it.triage ?? autoTriage(it)
+    return [{ type: 'findings', connection: connectionOf('veracode'), project: 'checkout', scannedAt: iso(at), url: 'https://analysiscenter.veracode.com/', triage: waiting ? 'findings.triage' : null, findings: findingsFor(it, triage) }]
+  }
+  if (s.id === 'quality') {
+    if (st === 'running') return [muted(say('doingQuality'))]
+    const a = it.attempts.quality[attempt - 1]
+    const done = a ? a.start + a.ticks : store.clock
+    return [{ type: 'quality', connection: connectionOf('sonar'), project: 'acme_checkout', branch: 'main', analyzedAt: iso(done), url: 'https://sonarcloud.io/summary/new_code?id=acme_checkout', report: qualityFor(it, a?.state === 'failed') }]
+  }
   if (s.id === 'review') return [{ type: 'review', connection: github, change: `#${it.pr}`, editable: st === 'waiting', session: `r-${it.id}`, submit: 'review' }]
   const approver = it.approvedBy ? PEOPLE[it.approvedBy] : undefined
   const checks = [
-    { label: 'Aprovado', text: approver?.name ?? '—', person: approver },
-    { label: 'Checks', text: 'CI passou' },
-    { label: 'Conflitos', text: 'Nenhum conflito com main' },
+    { label: say('approved'), text: approver?.name ?? '—', person: approver },
+    { label: 'Checks', text: say('ciPassed') },
+    { label: say('conflicts'), text: say('noConflicts') },
   ]
   const result = st === 'passed' ? [
-    { label: 'Aprovado por', text: approver?.name ?? '—', person: approver, note: `há ${Math.max(1, store.clock - it.approvedAt)}m` },
-    { label: 'Mergeado por', text: PEOPLE['u-you'].name, person: PEOPLE['u-you'] },
-    { label: 'Método', text: 'Squash and merge' },
+    { label: say('approvedBy'), text: approver?.name ?? '—', person: approver, note: say('minutesAgo', { n: Math.max(1, store.clock - it.approvedAt) }) },
+    { label: say('mergedBy'), text: PEOPLE['u-you'].name, person: PEOPLE['u-you'] },
+    { label: say('method'), text: 'Squash and merge' },
     { label: 'Commit', text: it.h.toString(16).slice(0, 7), mono: true, url: it.pr ? prUrl(it.pr) : undefined },
-    { label: 'Branch', text: it.branch, mono: true, note: 'removida' },
+    { label: 'Branch', text: it.branch, mono: true, note: say('removed') },
   ] : null
   return [{ type: 'merge', connection: github, change: `#${it.pr}`, ready: st === 'waiting', methods: ['squash', 'merge', 'rebase'], action: 'merge', checks, result }]
 }
@@ -188,8 +206,8 @@ export function stepView(it: SimItem, step: StepId, attempt: number | null): Ste
 }
 
 function headsUpFor(it: SimItem, step: StepId): HeadsUp | null {
-  if (step === 'develop' && it.pause?.kind === 'permission' && isPaused(it)) return { title: 'Migração em staging', explain: 'O agente quer rodar bun run db:migrate --env staging. A migração altera tabelas compartilhadas com outros times.', urgent: true }
-  if (step === 'develop' && it.attempts.develop.length > 1) return { title: 'O teste falhou antes', explain: `Na primeira execução, ${testName(it)} falhou e o agente mudou a lógica de renovação de sessão para corrigir.`, urgent: false }
+  if (step === 'develop' && it.pause?.kind === 'permission' && isPaused(it)) return { title: say('stagingMigration'), explain: say('stagingMigrationExplain'), urgent: true }
+  if (step === 'develop' && it.attempts.develop.length > 1) return { title: say('testFailedBefore'), explain: say('testFailedExplain', { test: testName(it) }), urgent: false }
   return null
 }
 

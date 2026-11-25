@@ -11,6 +11,7 @@ fn remember(text: &str, touches: &[&str]) -> MemoryEdit {
         text: text.into(),
         tags: Vec::new(),
         touches: touches.iter().map(|touch| (*touch).to_owned()).collect(),
+        scope: Default::default(),
     }
 }
 

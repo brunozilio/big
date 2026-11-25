@@ -7,7 +7,7 @@ use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{any, delete, get, post, put};
 use tower_http::services::{ServeDir, ServeFile};
 
-use crate::error::ApiError;
+use crate::error::{ApiError, said};
 use crate::state::Ctx;
 use crate::{applications, attachments, branding, cloud, connections, folders, items, models, sessions, usage};
 
@@ -18,13 +18,18 @@ fn api() -> Router<Ctx> {
         .route("/api/items", get(items::list).post(items::create))
         .route("/api/items/{id}/rerun", post(items::rerun))
         .route("/api/items/{id}/cancel", post(items::cancel))
+        .route("/api/items/{id}/open", post(crate::editor::open_folders))
+        .route("/api/items/{id}/usage", get(crate::item_usage::usage))
+        .route("/api/items/{id}/archive", post(crate::archive::archive).delete(crate::archive::unarchive))
         .route("/api/items/{id}/steps/{step}", get(items::step))
         .route("/api/items/{id}/steps/{step}/input", post(items::human))
         .route("/api/sessions/{id}", get(sessions::open))
         .route("/api/sessions/{id}/messages", post(sessions::send))
         .route("/api/sessions/{id}/respond", post(sessions::respond))
         .route("/api/sessions/{id}/stop", post(sessions::stop))
+        .route("/api/sessions/{id}/jobs/{job}/stop", post(sessions::stop_job))
         .route("/api/sessions/{id}/side", post(sessions::side))
+        .route("/api/sessions/{id}/open", post(crate::editor::open))
         .route("/api/btw", post(crate::btw::ask))
         .route("/api/connections", get(connections::list))
         .route("/api/connections/oauth/callback", get(connections::callback))
@@ -44,12 +49,28 @@ fn api() -> Router<Ctx> {
         .route("/api/fs/dirs", get(folders::dirs))
         .route("/api/attachments", post(attachments::upload))
         .route("/api/attachments/{id}", get(attachments::download))
+        .route("/api/artifacts/{id}", get(crate::artifacts::meta))
+        .route("/api/artifacts/{id}/content", get(crate::artifacts::content))
         .route("/api/permissions", get(crate::permissions::get).put(crate::permissions::put))
-        .route("/api/permissions/discover", post(crate::discover::discover))
+        .route(
+            "/api/permissions/discover",
+            get(crate::discover::status).post(crate::discover::discover).delete(crate::discover::dismiss),
+        )
+        .route("/api/memories", get(crate::memories::list).post(crate::memories::edit))
+        .route("/api/memories/move", post(crate::memories::moved))
         .route("/api/browser", get(crate::browsers::status).put(crate::browsers::set))
         .route(browser::ROUTE, get(crate::browsers::connect))
         .route("/api/live", get(live))
-        .route("/api/{*rest}", any(|| async { ApiError::missing("Não há esse endereço.") }))
+        .route(
+            "/api/{*rest}",
+            any(|| async {
+                ApiError::missing(said(
+                    "There is no such address.",
+                    "No existe esa dirección.",
+                    "Não há esse endereço.",
+                ))
+            }),
+        )
 }
 
 async fn live(State(ctx): State<Ctx>) -> Response {
@@ -72,5 +93,7 @@ pub fn router(ctx: Ctx) -> Router {
         None if page::has_index(bundle) => api.fallback(move |uri: Uri| async move { page::serve(bundle, &uri) }),
         None => api.fallback(|| async { (StatusCode::SERVICE_UNAVAILABLE, Html(page::MISSING)).into_response() }),
     };
-    app.layer(DefaultBodyLimit::max(MOST_BODY_BYTES)).with_state(ctx)
+    app.layer(axum::middleware::from_fn_with_state(ctx.clone(), crate::error::localized))
+        .layer(DefaultBodyLimit::max(MOST_BODY_BYTES))
+        .with_state(ctx)
 }

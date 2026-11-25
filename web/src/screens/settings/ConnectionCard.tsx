@@ -4,15 +4,17 @@ import { Button } from '@/ui/button'
 import { LogoTile } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { Tooltip } from '@/ui/overlay'
+import { useT } from '@/i18n'
 
 function CardStatus({ accounts, onConnect }: { accounts: Connection[]; onConnect: () => void }) {
+  const t = useT()
   const press = (e: MouseEvent) => {
     e.stopPropagation()
     onConnect()
   }
-  if (accounts.some((c) => c.status === 'error')) return <Button size="sm" variant="secondary" icon={<Icon name="alert" size={14} className="text-danger-fg" />} onClick={press}>Reconectar</Button>
-  if (accounts.length === 0) return <Button size="sm" variant="secondary" onClick={press}>Conectar</Button>
-  const label = accounts.length === 1 ? 'Conectado' : `${accounts.length} contas conectadas`
+  if (accounts.some((c) => c.status === 'error')) return <Button size="sm" variant="secondary" icon={<Icon name="alert" size={14} className="text-danger-fg" />} onClick={press}>{t('settings.reconnect')}</Button>
+  if (accounts.length === 0) return <Button size="sm" variant="secondary" onClick={press}>{t('settings.connect')}</Button>
+  const label = accounts.length === 1 ? t('settings.connected') : t('settings.connectedCount', { n: accounts.length })
   return (
     <Tooltip content={label}>
       <span aria-label={label} className="flex size-6 items-center justify-center rounded-full bg-success-soft text-success-fg"><Icon name="check" size={13} strokeWidth={2.2} /></span>

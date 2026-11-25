@@ -71,7 +71,7 @@ async fn a_refused_sso_token_is_an_auth_error() {
 #[test]
 fn the_console_sign_in_is_the_default_and_the_company_sso_the_alternative() {
     let AuthSpec::Loopback(_) = Aws.descriptor().auth else { panic!("not loopback") };
-    let alternatives = Aws.alternatives();
+    let alternatives = Aws.alternatives(domain::Language::Portuguese);
     let Some(alternative) = alternatives.first().cloned() else { panic!("no alternative") };
     let AuthSpec::Sso(spec) = alternative.auth else { panic!("not sso") };
     assert_eq!(alternative.label, "Usar SSO da empresa");

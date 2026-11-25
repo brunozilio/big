@@ -260,7 +260,10 @@ fn the_cases_already_linked_to_the_issue_are_reused_and_only_the_missing_ones_ar
     let testers: Vec<&Value> =
         of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "tester").collect();
     let draft = testers[0]["args"]["input"]["prompt"].as_str().expect("prompt");
-    assert!(draft.contains("Z-T7") && draft.contains("Login pela tela") && draft.contains("Do not repeat them"), "{draft}");
+    assert!(
+        draft.contains("Z-T7") && draft.contains("Login pela tela") && draft.contains("Do not repeat them"),
+        "{draft}"
+    );
     let created: Vec<&Value> =
         calls(&asked, "create_case").iter().map(|command| &command["args"]["args"]["title"]).collect();
     assert_eq!(created, [&json!("Cadastrar cliente pela API")], "the linked case is not created again");

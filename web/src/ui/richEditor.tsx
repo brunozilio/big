@@ -13,6 +13,7 @@ import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Markdown } from 'tiptap-markdown'
 import { Button } from './button'
+import { useT, type T } from '@/i18n'
 import { cn } from './cn'
 import { Input } from './form'
 import { Icon } from './icon'
@@ -29,9 +30,14 @@ export function editorMarkdown(editor: Editor): string {
 
 const emojis = ['👍', '👎', '✅', '❌', '⚠️', '🚀', '🐛', '🔥', '💡', '📌', '📝', '🎯', '⏳', '🔒', '🙏', '👀', '🎉', '🤔', '💬', '📈', '🧪', '🛠️', '📦', '⭐']
 
+function styleName(t: T, level: 1 | 2 | 3 | undefined): string {
+  return level === undefined ? t('editor.paragraph') : t('editor.heading', { level })
+}
+
 const check = <Icon name="check" size={15} className="text-fg" />
 
 function UrlForm({ initial, label, submit, onDone, withText }: { initial: string; label: string; submit: (url: string, text: string) => void; onDone: () => void; withText?: string }) {
+  const t = useT()
   const [url, setUrl] = useState(initial)
   const [text, setText] = useState(withText ?? '')
   return (
@@ -44,13 +50,13 @@ function UrlForm({ initial, label, submit, onDone, withText }: { initial: string
       }}
     >
       <Input autoFocus value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" aria-label={label} />
-      {withText !== undefined && <Input value={text} onChange={(e) => setText(e.target.value)} placeholder="Texto (opcional)" aria-label="Texto" />}
+      {withText !== undefined && <Input value={text} onChange={(e) => setText(e.target.value)} placeholder={t('editor.textOptional')} aria-label={t('editor.text')} />}
       <div className="flex justify-end gap-1.5">
         <Button type="button" size="sm" variant="ghost" onClick={onDone}>
-          Cancelar
+          {t('editor.cancel')}
         </Button>
         <Button type="submit" size="sm" variant="primary">
-          Aplicar
+          {t('editor.apply')}
         </Button>
       </div>
     </form>
@@ -125,6 +131,7 @@ export function RichEditor({
   changeRef.current = onChange
   const submitRef = useRef(onSubmit)
   submitRef.current = onSubmit
+  const t = useT()
   const [linkOpen, setLinkOpen] = useState(false)
   const [imageOpen, setImageOpen] = useState(false)
   const [emojiOpen, setEmojiOpen] = useState(false)
@@ -134,7 +141,7 @@ export function RichEditor({
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
-      Placeholder.configure({ placeholder: placeholder ?? 'Comece a escrever…' }),
+      Placeholder.configure({ placeholder: placeholder ?? t('editor.startWriting') }),
       Link.configure({ openOnClick: false, autolink: true }),
       Image,
       Table.configure({ resizable: false }),
@@ -196,7 +203,8 @@ export function RichEditor({
     }, 900)
   }
 
-  const styleLabel = is('heading', { level: 1 }) ? 'Título 1' : is('heading', { level: 2 }) ? 'Título 2' : is('heading', { level: 3 }) ? 'Título 3' : 'Parágrafo'
+  const activeLevel = ([1, 2, 3] as const).find((l) => is('heading', { level: l }))
+  const styleLabel = styleName(t, activeLevel)
 
   const area = (
     <div
@@ -212,7 +220,7 @@ export function RichEditor({
 
   return (
     <div className={cn('flex flex-col', fill && 'min-h-0 flex-1')}>
-      <Toolbar label="Formatação" end={trailing}>
+      <Toolbar label={t('editor.formatting')} end={trailing}>
         {assist && (
           <>
             <Tool label={assist} onClick={improve} disabled={thinking} className="text-accent hover:text-accent">
@@ -221,60 +229,60 @@ export function RichEditor({
             <ToolSep />
           </>
         )}
-        <MenuTool label={`Estilo do texto: ${styleLabel}`} icon={<Icon name="textStyle" size={17} />}>
-          <MenuLabel>Estilo do texto</MenuLabel>
-          <MenuItem onSelect={() => chain()?.setParagraph().run()} right={styleLabel === 'Parágrafo' ? check : undefined}>
-            Parágrafo
+        <MenuTool label={t('editor.textStyleOf', { style: styleLabel })} icon={<Icon name="textStyle" size={17} />}>
+          <MenuLabel>{t('editor.textStyle')}</MenuLabel>
+          <MenuItem onSelect={() => chain()?.setParagraph().run()} right={activeLevel === undefined ? check : undefined}>
+            {t('editor.paragraph')}
           </MenuItem>
           {([1, 2, 3] as const).map((level) => (
             <MenuItem key={level} onSelect={() => chain()?.setHeading({ level }).run()} right={is('heading', { level }) ? check : <span className="text-xs text-muted">⌘⌥{level}</span>}>
-              <span className={cn('text-fg', level === 1 && 'text-lg font-medium', level === 2 && 'text-md font-medium', level === 3 && 'font-semibold')}>Título {level}</span>
+              <span className={cn('text-fg', level === 1 && 'text-lg font-medium', level === 2 && 'text-md font-medium', level === 3 && 'font-semibold')}>{t('editor.heading', { level })}</span>
             </MenuItem>
           ))}
         </MenuTool>
-        <Tool label="Negrito" shortcut="⌘B" active={is('bold')} aria-pressed={is('bold')} onClick={() => chain()?.toggleBold().run()}>
+        <Tool label={t('editor.bold')} shortcut="⌘B" active={is('bold')} aria-pressed={is('bold')} onClick={() => chain()?.toggleBold().run()}>
           <Icon name="bold" size={17} />
         </Tool>
-        <MenuTool label="Mais formatação" caretOnly>
+        <MenuTool label={t('editor.moreFormatting')} caretOnly>
           <MenuItem icon={<Icon name="italic" size={16} />} onSelect={() => chain()?.toggleItalic().run()} right={is('italic') ? check : <span className="text-xs text-muted">⌘I</span>}>
-            Itálico
+            {t('editor.italic')}
           </MenuItem>
           <MenuItem icon={<Icon name="strike" size={16} />} onSelect={() => chain()?.toggleStrike().run()} right={is('strike') ? check : <span className="text-xs text-muted">⌘⇧S</span>}>
-            Tachado
+            {t('editor.strike')}
           </MenuItem>
           <MenuItem icon={<Icon name="code" size={16} />} onSelect={() => chain()?.toggleCode().run()} right={is('code') ? check : <span className="text-xs text-muted">⌘E</span>}>
-            Código inline
+            {t('editor.inlineCode')}
           </MenuItem>
           <MenuSeparator />
           <MenuItem icon={<Icon name="close" size={16} />} onSelect={() => chain()?.unsetAllMarks().clearNodes().run()}>
-            Limpar formatação
+            {t('editor.clearFormatting')}
           </MenuItem>
         </MenuTool>
-        <MenuTool label="Listas" icon={<Icon name={is('orderedList') ? 'listOrdered' : is('taskList') ? 'checklist' : 'list'} size={17} />}>
+        <MenuTool label={t('editor.lists')} icon={<Icon name={is('orderedList') ? 'listOrdered' : is('taskList') ? 'checklist' : 'list'} size={17} />}>
           <MenuItem icon={<Icon name="list" size={16} />} onSelect={() => chain()?.toggleBulletList().run()} right={is('bulletList') ? check : <span className="text-xs text-muted">⌘⇧8</span>}>
-            Lista com marcadores
+            {t('editor.bulletList')}
           </MenuItem>
           <MenuItem icon={<Icon name="listOrdered" size={16} />} onSelect={() => chain()?.toggleOrderedList().run()} right={is('orderedList') ? check : <span className="text-xs text-muted">⌘⇧7</span>}>
-            Lista numerada
+            {t('editor.orderedList')}
           </MenuItem>
           <MenuItem icon={<Icon name="checklist" size={16} />} onSelect={() => chain()?.toggleTaskList().run()} right={is('taskList') ? check : <span className="text-xs text-muted">⌘⇧9</span>}>
-            Checklist
+            {t('editor.checklist')}
           </MenuItem>
         </MenuTool>
         <ToolSep />
-        <PopoverTool label="Imagem" icon={<Icon name="image" size={17} />} open={imageOpen} onOpenChange={setImageOpen}>
-          <UrlForm initial="" label="Endereço da imagem" withText="" submit={(src, alt) => src && chain()?.setImage({ src, alt: alt || undefined }).run()} onDone={() => setImageOpen(false)} />
+        <PopoverTool label={t('editor.image')} icon={<Icon name="image" size={17} />} open={imageOpen} onOpenChange={setImageOpen}>
+          <UrlForm initial="" label={t('editor.imageUrl')} withText="" submit={(src, alt) => src && chain()?.setImage({ src, alt: alt || undefined }).run()} onDone={() => setImageOpen(false)} />
         </PopoverTool>
-        <Tool label="Bloco de código" shortcut="⌘⌥C" active={is('codeBlock')} aria-pressed={is('codeBlock')} onClick={() => chain()?.toggleCodeBlock().run()}>
+        <Tool label={t('editor.codeBlock')} shortcut="⌘⌥C" active={is('codeBlock')} aria-pressed={is('codeBlock')} onClick={() => chain()?.toggleCodeBlock().run()}>
           <Icon name="codeBlock" size={17} />
         </Tool>
-        <PopoverTool label="Emoji" icon={<Icon name="emoji" size={17} />} open={emojiOpen} onOpenChange={setEmojiOpen}>
-          <div className="grid grid-cols-8 gap-0.5" role="group" aria-label="Emojis">
+        <PopoverTool label={t('editor.emoji')} icon={<Icon name="emoji" size={17} />} open={emojiOpen} onOpenChange={setEmojiOpen}>
+          <div className="grid grid-cols-8 gap-0.5" role="group" aria-label={t('editor.emojis')}>
             {emojis.map((em) => (
               <button
                 key={em}
                 type="button"
-                aria-label={`Inserir ${em}`}
+                aria-label={t('editor.insertEmoji', { emoji: em })}
                 onClick={() => {
                   chain()?.insertContent(em).run()
                   setEmojiOpen(false)
@@ -286,32 +294,32 @@ export function RichEditor({
             ))}
           </div>
         </PopoverTool>
-        <MenuTool label="Inserir" icon={<Icon name="plus" size={17} />}>
+        <MenuTool label={t('editor.insert')} icon={<Icon name="plus" size={17} />}>
           <MenuItem icon={<Icon name="table" size={16} />} onSelect={() => chain()?.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
-            Tabela
+            {t('editor.table')}
           </MenuItem>
           <MenuItem icon={<Icon name="rule" size={16} />} onSelect={() => chain()?.setHorizontalRule().run()}>
-            Divisor
+            {t('editor.divider')}
           </MenuItem>
           <MenuItem icon={<Icon name="quote" size={16} />} onSelect={() => chain()?.toggleBlockquote().run()} right={is('blockquote') ? check : <span className="text-xs text-muted">⌘⇧B</span>}>
-            Citação
+            {t('editor.quote')}
           </MenuItem>
           {is('table') && (
             <>
               <MenuSeparator />
-              <MenuItem onSelect={() => chain()?.addRowAfter().run()}>Adicionar linha</MenuItem>
-              <MenuItem onSelect={() => chain()?.addColumnAfter().run()}>Adicionar coluna</MenuItem>
+              <MenuItem onSelect={() => chain()?.addRowAfter().run()}>{t('editor.addRow')}</MenuItem>
+              <MenuItem onSelect={() => chain()?.addColumnAfter().run()}>{t('editor.addColumn')}</MenuItem>
               <MenuItem danger onSelect={() => chain()?.deleteTable().run()}>
-                Remover tabela
+                {t('editor.removeTable')}
               </MenuItem>
             </>
           )}
         </MenuTool>
-        <PopoverTool label="Link" shortcut="⌘K" icon={<Icon name="link" size={17} />} open={linkOpen} onOpenChange={setLinkOpen}>
+        <PopoverTool label={t('editor.link')} shortcut="⌘K" icon={<Icon name="link" size={17} />} open={linkOpen} onOpenChange={setLinkOpen}>
           <UrlForm
             key={linkOpen ? 'open' : 'closed'}
             initial={(editor?.getAttributes('link').href as string | undefined) ?? ''}
-            label="Endereço do link"
+            label={t('editor.linkUrl')}
             submit={(href) => {
               if (!editor) return
               if (!href) {
@@ -328,10 +336,10 @@ export function RichEditor({
           />
         </PopoverTool>
         <ToolSep />
-        <Tool label="Desfazer" shortcut="⌘Z" disabled={!editor?.can().undo()} onClick={() => chain()?.undo().run()}>
+        <Tool label={t('editor.undo')} shortcut="⌘Z" disabled={!editor?.can().undo()} onClick={() => chain()?.undo().run()}>
           <Icon name="undo" size={17} />
         </Tool>
-        <Tool label="Refazer" shortcut="⌘⇧Z" disabled={!editor?.can().redo()} onClick={() => chain()?.redo().run()}>
+        <Tool label={t('editor.redo')} shortcut="⌘⇧Z" disabled={!editor?.can().redo()} onClick={() => chain()?.redo().run()}>
           <Icon name="redo" size={17} />
         </Tool>
       </Toolbar>

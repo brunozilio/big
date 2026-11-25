@@ -224,7 +224,7 @@ fn the_turn_reminder_guides_planning() {
     assert!(planning.contains("started empty") && planning.contains("write the plan yourself"), "{planning}");
     let sub_agent = reminder(PermissionMode::Plan, 1, false);
     assert!(sub_agent.contains("Bash is not offered") && !sub_agent.contains("Planning mode is on."));
-    let asking = reminder(PermissionMode::Ask, 0, false);
+    let asking = reminder(PermissionMode::Auto, 0, false);
     assert!(!asking.contains("Planning") && !asking.contains("undefined"), "{asking}");
 }
 
@@ -235,8 +235,8 @@ fn a_teammate_is_not_given_the_lead_planner_s_instructions() {
     assert!(!teammate.contains("Planning mode is on."), "{teammate}");
     assert!(teammate.contains("do not call ExitPlanMode") && teammate.contains("not the lead"), "{teammate}");
     assert!(!teammate.contains("Collect background agent reports"), "{teammate}");
-    let working = reminder(PermissionMode::Bypass, 0, true);
-    assert!(working.contains("You are a teammate") && working.contains("autonomous execution"), "{working}");
+    let working = reminder(PermissionMode::Auto, 0, true);
+    assert!(working.contains("You are a teammate") && working.contains("Auto mode is on"), "{working}");
 }
 
 #[test]
@@ -268,4 +268,14 @@ fn passes_on_what_connected_servers_say_about_their_tools() {
     assert!(section.contains("## chat\nEvents arrive as <channel>. Reply with the reply tool."), "{section}");
     assert!(section.contains("## docs\n"), "{section}");
     assert!(!section.contains("END"), "long instructions are cut");
+}
+
+#[test]
+fn names_the_session_language_only_when_one_is_set() {
+    assert!(!system(&environment()).contains("# Language"));
+    let mut spoken = environment();
+    spoken.language = Some("Spanish".into());
+    let prompt = system(&spoken);
+    assert!(prompt.contains("# Language\nReply and write everything"), "{prompt}");
+    assert!(prompt.contains("in Spanish."));
 }

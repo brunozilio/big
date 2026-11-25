@@ -1,13 +1,17 @@
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { api } from '@/api'
-import type { SessionEvent } from '@/api/contract'
+import type { FileRef, SessionEvent } from '@/api/contract'
 import { useSession } from '@/api/store'
-import { cn, plural } from '@/ui/cn'
+import { OpenFileContext } from '@/ui/chatMarkdown'
+import { cn } from '@/ui/cn'
+import { plural, useT, type T } from '@/i18n'
 import { EmptyState, Spinner } from '@/ui/display'
 import { Icon } from '@/ui/icon'
 import { AnimatePresence, Collapse, motion, tween, tweenClose } from '@/ui/motion'
 import { AskBlock, PermissionBlock, type Respond } from './actionBlocks'
+import { ArtifactCard } from './ArtifactCard'
 import { BackgroundWork, hasWork } from './BackgroundWork'
+import { JobsContext } from './jobs'
 import { Composer } from './Composer'
 import { useRememberedModel } from './remembered'
 import { PlanBlock } from './PlanCard'
@@ -29,7 +33,7 @@ export function toTurns(events: SessionEvent[]): Turn[] {
   return turns
 }
 
-const human = (e: SessionEvent) => e.type === 'assistant' || e.type === 'ask' || e.type === 'permission' || e.type === 'plan'
+const human = (e: SessionEvent) => e.type === 'assistant' || e.type === 'ask' || e.type === 'permission' || e.type === 'plan' || e.type === 'artifact'
 
 const enter = { initial: { opacity: 0, y: 8, filter: 'blur(2px)' }, animate: { opacity: 1, y: 0, filter: 'blur(0px)' }, transition: tween }
 const settled = { initial: false as const, animate: enter.animate }
@@ -42,6 +46,7 @@ function useHistoricalIds(sessionId: string, events: SessionEvent[] | undefined)
 }
 
 export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: string; composer: boolean; dock?: ReactNode; hidePlans?: boolean }) {
+  const t = useT()
   const { session, error } = useSession(sessionId)
   const enterFor = useHistoricalIds(sessionId, session?.events)
   const scroller = useRef<HTMLDivElement>(null)
@@ -70,21 +75,25 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
     if (el && atBottom && placed.current === sessionId) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [eventCount, lastSignature, atBottom, sessionId, side.asked])
 
-  if (error && !session) return <EmptyState title="Sessão não encontrada" text={error} />
+  if (error && !session) return <EmptyState title={t('plan.sessionNotFound')} text={error} />
   if (!session) return <div className="flex h-full items-center justify-center"><Spinner /></div>
 
   const running = session.status === 'running'
   const turns = toTurns(hidePlans ? session.events.filter((e) => e.type !== 'plan') : withoutRepeatedPlans(session.events))
   const respond: Respond = (event, response) => api().respond(session.id, event, response)
+  const openFile = (file: FileRef) => void api().openFile(session.id, file).catch(() => undefined)
+  const stopJob = (job: string) => api().stopJob(session.id, job)
 
   return (
     <AgentsContext.Provider value={session.agents}>
+    <JobsContext.Provider value={stopJob}>
+    <OpenFileContext.Provider value={openFile}>
       <div className="flex h-full min-h-0 flex-col">
         <div ref={scroller} onScroll={(e) => {
           const el = e.currentTarget
           setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight < 120)
         }} className="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto">
-          <div role="log" aria-live="polite" aria-label="Mensagens" className="mx-auto w-full max-w-[760px] px-5 pb-10 pt-8 sm:px-8">
+          <div role="log" aria-live="polite" aria-label={t('plan.messages')} className="mx-auto w-full max-w-[760px] px-5 pb-10 pt-8 sm:px-8">
             {turns.map((turn, ti) => {
               const last = ti === turns.length - 1
               const live = last && running
@@ -109,7 +118,7 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
           </div>
           <AnimatePresence>
             {!atBottom && (
-              <motion.button initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96, transition: tweenClose }} transition={tween} onClick={() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' })} className="sticky bottom-4 mx-auto flex size-9 items-center justify-center rounded-full bg-surface text-fg2 shadow-pop" aria-label="Ir para o fim">
+              <motion.button initial={{ opacity: 0, y: 8, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 8, scale: 0.96, transition: tweenClose }} transition={tween} onClick={() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: 'smooth' })} className="sticky bottom-4 mx-auto flex size-9 items-center justify-center rounded-full bg-surface text-fg2 shadow-pop" aria-label={t('plan.jumpToEnd')}>
                 <Icon name="down" size={17} />
               </motion.button>
             )}
@@ -123,7 +132,7 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
               {composer && <Composer
                 running={running}
                 onStop={() => void api().stop(session.id)}
-                placeholder={running ? 'Mandar mensagem ao agente, sem interrompê-lo…' : 'Responder ou pedir o próximo passo…'}
+                placeholder={running ? t('plan.composerRunning') : t('plan.composerIdle')}
                 suggestion={session.suggestion}
                 onAside={(text) => {
                   setAtBottom(true)
@@ -138,7 +147,7 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
                 onSubmit={(input) => {
                   setAtBottom(true)
                   setSendError(null)
-                  api().send(session.id, { text: input.text, model: input.model, effort: input.effort, fast: input.fast, attachments: input.attachments }).catch((e: unknown) => setSendError(e instanceof Error ? e.message : 'Não foi possível enviar'))
+                  api().send(session.id, { text: input.text, model: input.model, effort: input.effort, fast: input.fast, attachments: input.attachments }).catch((e: unknown) => setSendError(e instanceof Error ? e.message : t('plan.sendFailed')))
                 }}
               />}
               {sendError && <p role="alert" className="mt-2 px-2 text-sm text-danger-fg">{sendError}</p>}
@@ -146,6 +155,8 @@ export function ChatView({ sessionId, composer, dock, hidePlans }: { sessionId: 
           </div>
         )}
       </div>
+    </OpenFileContext.Provider>
+    </JobsContext.Provider>
     </AgentsContext.Provider>
   )
 }
@@ -168,6 +179,8 @@ export function EventView({ event, running = true, respond }: { event: SessionEv
       return <PermissionBlock event={event} respond={respond} />
     case 'plan':
       return <PlanBlock event={event} respond={respond} />
+    case 'artifact':
+      return <ArtifactCard event={event} />
   }
 }
 
@@ -193,21 +206,22 @@ export function withoutRepeatedPlans(events: SessionEvent[]): SessionEvent[] {
   return events.filter((e, i) => e.type !== 'plan' || !events.slice(i + 1).some((later) => later.type === 'plan' && later.text === e.text))
 }
 
-function workLabel(events: SessionEvent[]): string {
+function workLabel(events: SessionEvent[], t: T): string {
   const tools = events.reduce((n, e) => n + (e.type === 'tools' ? e.calls.length : 0), 0)
   const thought = events.some((e) => e.type === 'thinking')
   const only = tools === 1 ? events.flatMap((e) => (e.type === 'tools' ? e.calls : []))[0]?.title : undefined
-  const parts = [thought ? 'Pensou' : '', only ?? (tools ? `${tools} ${plural(tools, 'ferramenta', 'ferramentas')}` : '')].filter(Boolean)
-  return parts.length > 0 ? parts.join(' · ') : `${events.length} ${plural(events.length, 'passo', 'passos')}`
+  const parts = [thought ? t('plan.thought') : '', only ?? (tools ? t(`plan.tools_${plural(tools)}`, { n: tools }) : '')].filter(Boolean)
+  return parts.length > 0 ? parts.join(' · ') : t(`plan.steps_${plural(events.length)}`, { n: events.length })
 }
 
 function WorkGroup({ events, live, render }: { events: SessionEvent[]; live: boolean; render: (e: SessionEvent) => ReactNode }) {
+  const t = useT()
   const [open, setOpen] = useState(live)
   useEffect(() => setOpen(live), [live])
   return (
     <div>
       <button onClick={() => setOpen(!open)} className="group flex max-w-full items-center gap-1.5 text-md text-muted transition-colors hover:text-fg">
-        <span className="min-w-0 truncate">{workLabel(events)}</span>
+        <span className="min-w-0 truncate">{workLabel(events, t)}</span>
         <motion.span initial={false} animate={{ rotate: open ? 90 : 0 }} transition={tween} className="flex text-faint group-hover:text-fg"><Icon name="right" size={14} /></motion.span>
       </button>
       <Collapse open={open}>
@@ -220,6 +234,7 @@ function WorkGroup({ events, live, render }: { events: SessionEvent[]; live: boo
 }
 
 function TurnWork({ live, started, ended, events, render }: { live: boolean; started?: string; ended: string | undefined; events: SessionEvent[]; render: (e: SessionEvent) => ReactNode }) {
+  const t = useT()
   const segments = segmentsOf(events, live)
   const working = segments.some((segment) => segment.kind === 'work')
   return (
@@ -239,7 +254,7 @@ function TurnWork({ live, started, ended, events, render }: { live: boolean; sta
       {live && segments[segments.length - 1]?.kind !== 'work' && (
         <div className="flex items-center gap-3 text-md">
           <AgentMark size={18} spinning />
-          <span className="text-shimmer">Trabalhando…</span>
+          <span className="text-shimmer">{t('plan.working')}</span>
         </div>
       )}
     </div>

@@ -5,7 +5,7 @@ use agent_engine::Engine;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
-use domain::{Decision, EngineEvent, PermissionMode, PromptRequest};
+use domain::{Decision, EngineEvent, PromptRequest};
 use serde_json::json;
 
 use crate::{Source, finish, model, start_with_handle};
@@ -59,7 +59,7 @@ fn messages_taken_back_before_the_next_turn_never_reach_the_model() {
     let engine =
         Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&scripted)]))), Arc::new(InMemorySessions::default()));
     let mut request = PromptRequest::plain(dir.path().into(), "say hi", model());
-    request.policy.permission = PermissionMode::Ask;
+    request.policy.reviewer = domain::Reviewer::Human;
     let (events, mut handle) = start_with_handle(&engine, &request);
     let ask = loop {
         match events.recv_timeout(Duration::from_secs(10)).expect("an ask") {

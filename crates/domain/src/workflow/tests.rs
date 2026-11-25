@@ -64,11 +64,69 @@ fn going_back_to_a_step_makes_the_steps_after_it_pending_again() {
         finished("develop", StepState::Passed),
         started("checks"),
         finished("checks", StepState::Failed),
+        reset("develop", "main", "pending"),
+        reset("checks", "main", "pending"),
         started("develop"),
     ]);
     let states: Vec<(&str, StepState, u32)> =
         item.steps.iter().map(|run| (run.id.as_str(), run.state, run.attempt)).collect();
     assert_eq!(states, [("develop", StepState::Running, 2), ("checks", StepState::Pending, 1)]);
+}
+
+fn reset(step: &str, branch: &str, state: &str) -> WorkflowEvent {
+    WorkflowEvent::Signal {
+        seq: 0,
+        kind: "step.reset".into(),
+        branch: branch.into(),
+        step: Some(step.into()),
+        attempt: 1,
+        data: json!({ "state": state }),
+    }
+}
+
+fn lane(step: &str, branch: &str) -> WorkflowEvent {
+    WorkflowEvent::StepStarted { step: step.into(), branch: Some(branch.into()) }
+}
+
+#[test]
+fn a_reset_reaches_the_steps_inside_a_group_and_its_lanes_but_not_its_neighbours() {
+    let item = replay(&[
+        created(),
+        lane("checks", "main"),
+        lane("checks/lint", "main"),
+        lane("checks/test", "main/checks/test.0"),
+        lane("checks-extra", "main"),
+        lane("checks/lint", "other"),
+        reset("checks", "main", "skipped"),
+    ]);
+    let states: Vec<(&str, Option<&str>, StepState)> =
+        item.steps.iter().map(|run| (run.id.as_str(), run.branch.as_deref(), run.state)).collect();
+    assert_eq!(
+        states,
+        [
+            ("checks", Some("main"), StepState::Skipped),
+            ("checks/lint", Some("main"), StepState::Skipped),
+            ("checks/test", Some("main/checks/test.0"), StepState::Skipped),
+            ("checks-extra", Some("main"), StepState::Running),
+            ("checks/lint", Some("other"), StepState::Running),
+        ]
+    );
+}
+
+#[test]
+fn a_cancelling_reset_keeps_what_already_finished() {
+    let item = replay(&[
+        created(),
+        lane("lint", "main"),
+        WorkflowEvent::StepFinished {
+            step: "lint".into(),
+            branch: Some("main".into()),
+            state: StepState::Passed,
+            output: json!(1),
+        },
+        reset("lint", "main", "skipped"),
+    ]);
+    assert_eq!(item.step("lint", Some("main")).map(|run| run.state), Some(StepState::Passed));
 }
 
 #[test]
@@ -190,7 +248,7 @@ fn rewinding_drops_what_came_after_the_step_and_resets_it() {
         started("c"),
         requested("c", 3, exec()),
         WorkflowEvent::Finished { output: json!(null) },
-        WorkflowEvent::Rewound { to: "b".into() },
+        WorkflowEvent::Rewound { to: "b".into(), at: None },
     ]);
     let ids: Vec<_> = item.steps.iter().map(|s| (s.id.as_str(), s.state)).collect();
     assert_eq!(ids, [("a", StepState::Passed), ("b", StepState::Pending)]);
@@ -216,7 +274,7 @@ fn rewinding_clears_the_impediment_of_the_run_it_replaces() {
         started("a"),
         finished("a", StepState::Failed),
         WorkflowEvent::ImpedimentSet { on: true, reason: Some("a falhou".into()) },
-        WorkflowEvent::Rewound { to: "a".into() },
+        WorkflowEvent::Rewound { to: "a".into(), at: None },
     ]);
     assert!(item.impediment.is_none());
 }
@@ -224,7 +282,7 @@ fn rewinding_clears_the_impediment_of_the_run_it_replaces() {
 #[test]
 fn rewinding_to_an_unknown_step_changes_nothing_but_the_version() {
     let item = replay(&[created(), started("a")]);
-    let rewound = reduce(item.clone(), &WorkflowEvent::Rewound { to: "zzz".into() });
+    let rewound = reduce(item.clone(), &WorkflowEvent::Rewound { to: "zzz".into(), at: None });
     assert_eq!(rewound.steps, item.steps);
     assert_eq!(rewound.version, item.version + 1);
 }
@@ -369,4 +427,24 @@ fn the_first_branch_sticks_and_the_latest_recap_and_heads_up_per_step_win() {
     assert_eq!(item.recap.as_ref().map(|recap| recap.text.as_str()), Some("agora"));
     assert_eq!(item.heads_up.get("develop").map(|note| note.title.as_str()), Some("novo"));
     assert_eq!(item.heads_up.len(), 2);
+}
+
+#[test]
+fn a_linked_item_stays_linked_until_released_and_a_new_link_takes_it_back() {
+    let member = ItemId::from("story-1");
+    let item = replay(&[
+        created(),
+        WorkflowEvent::Accepting { on: true },
+        WorkflowEvent::Linked { item: member.clone() },
+        WorkflowEvent::Linked { item: member.clone() },
+    ]);
+    assert_eq!(item.links, vec![member.clone()]);
+    assert!(item.accepting);
+    let released = reduce(item, &WorkflowEvent::Unlinked { item: member.clone() });
+    assert!(released.links.is_empty());
+    assert_eq!(released.released, vec![member.clone()]);
+    let back = reduce(released, &WorkflowEvent::Linked { item: member.clone() });
+    assert_eq!((back.links.clone(), back.released.is_empty()), (vec![member], true));
+    let closed = reduce(back, &WorkflowEvent::Accepting { on: false });
+    assert!(!closed.accepting);
 }

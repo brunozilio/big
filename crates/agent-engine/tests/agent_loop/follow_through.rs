@@ -1,6 +1,5 @@
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::PermissionMode;
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -16,7 +15,7 @@ fn promised_then_finished() -> ScriptedModel {
 
 #[test]
 fn an_answer_that_promises_more_work_is_sent_back_to_do_it() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.policy.follow_through = true;
     let model = promised_then_finished();
     let mut history = vec![Message::user("list and test")];
@@ -31,7 +30,7 @@ fn an_answer_that_promises_more_work_is_sent_back_to_do_it() {
 
 #[test]
 fn without_the_flag_the_answer_ends_the_run() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("b1", "Bash", json!({"command": "ls"}))]),
         ScriptedModel::reply(vec![Block::Text("Now I'll run the tests.".into())]),

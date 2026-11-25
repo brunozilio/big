@@ -4,9 +4,9 @@ mod stream;
 use std::sync::Arc;
 use std::time::Duration;
 
-pub use body::body;
 #[doc(hidden)]
 pub use crate::model::event_stream::{Frame, next as next_frame};
+pub use body::body;
 pub use stream::Folder;
 
 use crate::model::http::Http;

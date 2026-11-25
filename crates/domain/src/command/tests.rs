@@ -77,32 +77,18 @@ fn anything_else_is_left_to_the_engine() {
 }
 
 #[test]
-fn every_spelling_of_a_mode_reads_as_that_mode_and_shows_as_its_one_label() {
-    let spelled = [
-        ("ask", PermissionMode::Ask),
-        ("default", PermissionMode::Ask),
-        ("edits", PermissionMode::AcceptEdits),
-        ("acceptEdits", PermissionMode::AcceptEdits),
-        ("acceptedits", PermissionMode::AcceptEdits),
-        ("accept-edits", PermissionMode::AcceptEdits),
-        ("plan", PermissionMode::Plan),
-        ("bypass", PermissionMode::Bypass),
-        ("bypassPermissions", PermissionMode::Bypass),
-        ("bypass-permissions", PermissionMode::Bypass),
-        ("yolo", PermissionMode::Bypass),
-        (" EDITS ", PermissionMode::AcceptEdits),
-    ];
-    for (name, mode) in spelled {
+fn a_mode_reads_back_from_its_one_label() {
+    for (name, mode) in
+        [("auto", PermissionMode::Auto), ("plan", PermissionMode::Plan), (" PLAN ", PermissionMode::Plan)]
+    {
         assert_eq!(mode_named(name), Some(mode), "{name}");
         assert_eq!(Command::parse(&format!("/mode {}", name.trim())), Some(Command::Mode(Some(mode))), "{name}");
     }
     let labels: Vec<&str> = PermissionMode::ALL.into_iter().map(mode_label).collect();
-    assert_eq!(labels, ["ask", "edits", "plan", "bypass"]);
-    for (alias, _) in MODE_ALIASES {
-        assert!(!labels.contains(&alias), "{alias} is an alias, not a label");
+    assert_eq!(labels, ["auto", "plan"]);
+    for gone in ["ask", "edits", "bypass", "acceptEdits", "dontAsk"] {
+        assert_eq!(mode_named(gone), None, "{gone}");
     }
-    assert_eq!(mode_named("dontAsk"), None);
-    assert_eq!(mode_named("auto"), None);
 }
 
 #[test]
@@ -113,8 +99,8 @@ fn modes_and_levels_read_back_from_their_names() {
     for level in Effort::ALL {
         assert_eq!(level_named(level.cli_value()), Some(level));
     }
-    let mut mode = PermissionMode::Ask;
-    for expected in [PermissionMode::AcceptEdits, PermissionMode::Plan, PermissionMode::Bypass, PermissionMode::Ask] {
+    let mut mode = PermissionMode::Auto;
+    for expected in [PermissionMode::Plan, PermissionMode::Auto] {
         mode = mode.next();
         assert_eq!(mode, expected);
     }

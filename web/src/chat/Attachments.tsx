@@ -6,6 +6,7 @@ import { cn } from '@/ui/cn'
 import { Icon, type IconName } from '@/ui/icon'
 import { dur, tween, tweenClose } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
+import { currentLanguage, translate, useT } from '@/i18n'
 
 export type AttachmentKind = 'image' | 'pdf' | 'sheet' | 'slides' | 'code' | 'video' | 'audio' | 'archive' | 'file'
 
@@ -60,12 +61,12 @@ export const uploadAttachment: Uploader = (file) => api().upload(file)
 
 export function acceptedFiles(files: File[], already: number, refuse: (message: string) => void): File[] {
   const fits = files.filter((file) => {
-    const refusal = file.size > MAX_BYTES ? `${file.name} passa de 25 MB` : null
+    const refusal = file.size > MAX_BYTES ? translate(currentLanguage(), 'chat.tooLarge', { name: file.name }) : null
     if (refusal) refuse(refusal)
     return !refusal
   })
   const room = Math.max(0, ATTACHMENTS_PER_MESSAGE - already)
-  if (fits.length > room) refuse(`Envie até ${ATTACHMENTS_PER_MESSAGE} anexos por mensagem.`)
+  if (fits.length > room) refuse(translate(currentLanguage(), 'chat.tooMany', { n: ATTACHMENTS_PER_MESSAGE }))
   return fits.slice(0, room)
 }
 
@@ -165,6 +166,7 @@ export function AttachmentStrip({ items, onRemove }: { items: Attachment[]; onRe
 }
 
 function AttachmentTile({ item, onRemove }: { item: Attachment; onRemove: () => void }) {
+  const t = useT()
   const done = item.progress === 100
   const queued = item.progress === null
   const meta = kindMeta[item.kind]
@@ -226,7 +228,7 @@ function AttachmentTile({ item, onRemove }: { item: Attachment; onRemove: () => 
           {done ? (
             <motion.button
               key="x"
-              aria-label={`remover ${item.name}`}
+              aria-label={t('chat.remove', { name: item.name })}
               onClick={onRemove}
               initial={{ opacity: 0, filter: 'blur(2px)', scale: 0.96 }}
               animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}

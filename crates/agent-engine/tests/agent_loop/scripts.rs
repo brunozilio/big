@@ -4,7 +4,7 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::Tool;
 use agent_engine::tools::script_tool::load;
 use agent_engine::transcript::{Block, Message};
-use domain::{Decision, EngineEvent, PermissionMode};
+use domain::{Decision, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, tool_use};
@@ -75,7 +75,7 @@ fn project_tool_run_asked(rig: &Rig, asks: usize) -> String {
 
 #[test]
 fn a_project_s_tool_the_user_allowed_still_gets_no_files_by_default() {
-    let rig = Rig::new(PermissionMode::Ask);
+    let rig = Rig::new(domain::Reviewer::Human);
     let said = project_tool_run(&rig);
     assert!(!rig.dir.path().join("mark.txt").exists(), "allowed to run, not to write");
     assert!(said.contains("scripts.files"), "the script is told which setting grants it: {said}");
@@ -83,17 +83,17 @@ fn a_project_s_tool_the_user_allowed_still_gets_no_files_by_default() {
 
 #[test]
 fn a_project_s_tool_writes_once_the_owner_s_settings_grant_files() {
-    let mut rig = Rig::new(PermissionMode::Ask);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     rig.workspace.policy.scripts.project.files = true;
-    project_tool_run_asked(&rig, 2);
+    project_tool_run_asked(&rig, 1);
     let asked: Vec<String> = asked_for(&rig).into_iter().map(|(tool, _)| tool).collect();
-    assert_eq!(asked, ["Mark", "Write"], "the tool, then its write, each asked in the ask mode");
+    assert_eq!(asked, ["Mark"], "the tool is reviewed; its write inside the project goes ahead");
     assert_eq!(std::fs::read_to_string(rig.dir.path().join("mark.txt")).expect("mark"), "marked");
 }
 
 #[test]
 fn the_user_s_own_tool_runs_without_asking_and_its_log_reaches_the_screen() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let home = tempfile::tempdir().expect("home");
     let folder = home.path().join(brand::DIR).join("tools");
     std::fs::create_dir_all(&folder).expect("tools");
@@ -107,7 +107,7 @@ fn the_user_s_own_tool_runs_without_asking_and_its_log_reaches_the_screen() {
 
 #[test]
 fn a_tool_that_exports_execute_runs_it_and_no_rust_tool_is_left_to_call() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let home = tempfile::tempdir().expect("home");
     let folder = home.path().join(brand::DIR).join("tools");
     std::fs::create_dir_all(&folder).expect("tools");
@@ -147,7 +147,7 @@ fn results(history: &[Message]) -> Vec<&str> {
 
 #[test]
 fn a_tool_a_script_calls_again_and_again_is_held_back_like_the_model_s_own_calls() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let home = tempfile::tempdir().expect("home");
     let tool = r#"
 export const spec = { name: "Thrice", description: "Reads one file three times.", access: "read" };
@@ -173,7 +173,7 @@ export function run(input, ctx) {
 
 #[test]
 fn a_background_agent_a_script_starts_is_one_the_run_can_collect() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let home = tempfile::tempdir().expect("home");
     let tool = r#"
 export const spec = { name: "Delegate", description: "Starts a reviewer in the background.", access: "read" };
@@ -235,7 +235,7 @@ fn asked_for(rig: &Rig) -> Vec<(String, String)> {
 
 #[test]
 fn a_script_that_did_not_declare_exec_cannot_run_a_command() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let said = run_runner(&rig, "");
     assert!(
         said[0].starts_with("refused: ") && said[0].contains("capabilities") && said[0].contains("exec"),
@@ -247,7 +247,7 @@ fn a_script_that_did_not_declare_exec_cannot_run_a_command() {
 
 #[test]
 fn a_declared_exec_is_judged_like_a_bash_command_and_a_refusal_stops_it() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let answerer = answer_every_ask(&rig, Decision::Deny);
     let said = run_runner(&rig, r#", capabilities: ["exec"]"#);
     answerer.join().expect("answerer");
@@ -261,7 +261,7 @@ fn a_declared_exec_is_judged_like_a_bash_command_and_a_refusal_stops_it() {
 
 #[test]
 fn a_declared_exec_the_user_allows_runs() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let answerer = answer_every_ask(&rig, Decision::Allow);
     let said = run_runner(&rig, r#", capabilities: ["exec"]"#);
     assert_eq!(answerer.join().expect("answerer"), 1);

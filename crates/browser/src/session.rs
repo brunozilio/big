@@ -20,7 +20,10 @@ pub struct Session {
 
 impl std::fmt::Debug for Session {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Session").field("key", &self.key).field("asks_a_model", &self.ask.is_some()).finish_non_exhaustive()
+        f.debug_struct("Session")
+            .field("key", &self.key)
+            .field("asks_a_model", &self.ask.is_some())
+            .finish_non_exhaustive()
     }
 }
 
@@ -135,11 +138,14 @@ impl Session {
         }
         if !self.hub.choose(&self.key, device) {
             return text_result(
-                format!("No connected browser has deviceId \"{device}\". Call list_connected_browsers for the current list."),
+                format!(
+                    "No connected browser has deviceId \"{device}\". Call list_connected_browsers for the current list."
+                ),
                 true,
             );
         }
-        let name = self.hub.browsers().into_iter().find(|browser| browser.device_id == device).map(|browser| browser.name);
+        let name =
+            self.hub.browsers().into_iter().find(|browser| browser.device_id == device).map(|browser| browser.name);
         text_result(
             format!(
                 "Selected browser \"{}\" ({device}). Browser tools in this session now act in it; call tabs_context_mcp to see its tabs.",
@@ -165,8 +171,12 @@ impl Session {
 
 impl McpEndpoint for Session {
     fn handle(&self, message: &Value) -> Option<Value> {
-        let mut reply =
-            domain::mcp::respond(message, &spec::server_name(), || spec::tools().to_vec(), |name, input| self.call(name, input))?;
+        let mut reply = domain::mcp::respond(
+            message,
+            &spec::server_name(),
+            || spec::tools().to_vec(),
+            |name, input| self.call(name, input),
+        )?;
         if message["method"] == "initialize" {
             reply["result"]["instructions"] = json!(spec::instructions());
         }
@@ -175,7 +185,8 @@ impl McpEndpoint for Session {
 }
 
 fn approved_sites(tool: &str, input: &Value) -> Vec<String> {
-    let mut sites = domain::permission::allowed::global().map(|allowed| allowed.sites()).unwrap_or_else(|| vec!["*".to_owned()]);
+    let mut sites =
+        domain::permission::allowed::global().map(|allowed| allowed.sites()).unwrap_or_else(|| vec!["*".to_owned()]);
     sites.extend(domain::browser_sites::sites(tool, input).into_iter().flatten());
     sites
 }
@@ -197,8 +208,10 @@ fn well_formed(answer: Value) -> Value {
 }
 
 fn several(browsers: &[BrowserInfo]) -> String {
-    let listed: Vec<String> =
-        browsers.iter().map(|browser| format!("- {} ({}, {})", browser.name, browser.device_id, browser.platform)).collect();
+    let listed: Vec<String> = browsers
+        .iter()
+        .map(|browser| format!("- {} ({}, {})", browser.name, browser.device_id, browser.platform))
+        .collect();
     format!(
         "Several browsers are connected and none is selected for this session:\n{}\nAsk the user which one to use with AskUserQuestion (call list_connected_browsers for the details), then call select_browser with the chosen deviceId, or switch_browser to let the user pick inside Chrome.",
         listed.join("\n")

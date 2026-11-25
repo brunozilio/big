@@ -2,14 +2,16 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use app::{ModelProvider, ProviderSummary, SignedIn};
+use axum::http::StatusCode;
+use domain::Language;
 use serde_json::{Value, json};
 
-use crate::error::{ApiError, ApiResult};
+use crate::error::{ApiError, ApiResult, said};
 use crate::sign_in::{Stage, Waiting};
 use crate::state::{Shared, held};
 
 pub const PREFIX: &str = "ai:";
-pub const GROUP: &str = "Provedores de IA";
+pub const GROUP: &str = "ai";
 const FIRST_STEP: Duration = Duration::from_secs(20);
 
 #[derive(Debug, Default)]
@@ -28,7 +30,7 @@ pub fn subscriptions(shared: &Shared) -> Vec<ProviderSummary> {
     listed.into_iter().filter(|summary| summary.access.subscription()).collect()
 }
 
-pub fn provider_json(summary: &ProviderSummary) -> Value {
+pub fn provider_json(summary: &ProviderSummary, language: Language) -> Value {
     let sign_in = match summary.access {
         domain::provider::Access::Code => "device",
         _ => "browser",
@@ -37,8 +39,11 @@ pub fn provider_json(summary: &ProviderSummary) -> Value {
     let logo = if summary.logo.is_empty() { summary.provider.id() } else { summary.logo.trim() };
     json!({
         "key": summary.provider.id(), "name": name, "group": GROUP,
-        "description": format!("Sua conta {name}"), "logo": logo, "button": format!("Entrar com {name}"),
-        "site": format!("do {name}"), "signIn": sign_in, "fields": [], "multiple": true, "alternatives": [], "ai": true,
+        "description": language.pick(format!("Your {name} account"), format!("Tu cuenta de {name}"), format!("Sua conta {name}")),
+        "logo": logo,
+        "button": language.pick(format!("Sign in with {name}"), format!("Iniciar sesión con {name}"), format!("Entrar com {name}")),
+        "site": language.pick(format!("from {name}"), format!("de {name}"), format!("do {name}")),
+        "signIn": sign_in, "fields": [], "multiple": true, "alternatives": [], "ai": true,
     })
 }
 
@@ -63,23 +68,37 @@ pub fn connections_of(summary: &ProviderSummary) -> Vec<Value> {
 
 fn known(shared: &Shared, provider: &str) -> ApiResult<ProviderSummary> {
     let found = subscriptions(shared).into_iter().find(|summary| summary.provider.id() == provider);
-    found.ok_or_else(|| ApiError::missing("Não há esse provedor."))
+    found.ok_or_else(|| {
+        ApiError::missing(said("There is no such provider.", "No existe ese proveedor.", "Não há esse provedor."))
+    })
 }
 
-fn connected(provider: &str, listed: &[ProviderSummary]) -> Result<Value, String> {
-    let summary = listed.iter().find(|summary| summary.provider.id() == provider);
-    let summary = summary.ok_or_else(|| "O provedor não ficou conectado.".to_owned())?;
-    connections_of(summary).into_iter().last().ok_or_else(|| "O provedor não ficou conectado.".to_owned())
+fn connected(provider: &str, listed: &[ProviderSummary], language: Language) -> Result<Value, String> {
+    let lost = || {
+        language
+            .pick(
+                "The provider did not stay connected.",
+                "El proveedor no quedó conectado.",
+                "O provedor não ficou conectado.",
+            )
+            .to_owned()
+    };
+    let summary = listed.iter().find(|summary| summary.provider.id() == provider).ok_or_else(lost)?;
+    connections_of(summary).into_iter().last().ok_or_else(lost)
 }
 
-fn run(client: &app::Client, provider: ModelProvider, back: &str, flow: &AiFlow) {
+fn run(client: &app::Client, provider: ModelProvider, back: &str, flow: &AiFlow, language: Language) {
     let progress = Arc::clone(&flow.progress);
     let signed = client.sign_in_returning(provider, back, |url, code| {
         held(&progress).authorize = Some((url.to_owned(), code.map(str::to_owned)));
     });
     let ended = match signed {
-        Ok(SignedIn::Connected(listed)) => connected(provider.id(), &listed),
-        Ok(SignedIn::PortBusy { port, .. }) => Err(format!("A porta {port} do login está ocupada por outro programa.")),
+        Ok(SignedIn::Connected(listed)) => connected(provider.id(), &listed, language),
+        Ok(SignedIn::PortBusy { port, .. }) => Err(language.pick(
+            format!("The sign-in port {port} is taken by another program."),
+            format!("El puerto {port} del inicio de sesión está ocupado por otro programa."),
+            format!("A porta {port} do login está ocupada por outro programa."),
+        )),
         Err(error) => Err(error.to_string()),
     };
     held(&flow.progress).ended = Some(ended);
@@ -105,9 +124,10 @@ pub fn start(shared: &Shared, provider: &str, host: Option<&str>) -> ApiResult<V
     let back = format!("{}{}", origin(shared, host), crate::sign_in::back_to(provider, &id));
     let running = flow.clone();
     let chosen = summary.provider;
+    let language = shared.language();
     std::thread::Builder::new()
         .name("ai-sign-in".into())
-        .spawn(move || run(&client, chosen, &back, &running))
+        .spawn(move || run(&client, chosen, &back, &running, language))
         .map_err(ApiError::failed)?;
     let began = Instant::now();
     while began.elapsed() < FIRST_STEP {
@@ -128,7 +148,15 @@ pub fn start(shared: &Shared, provider: &str, host: Option<&str>) -> ApiResult<V
         }
         std::thread::sleep(Duration::from_millis(50));
     }
-    Err(ApiError::upstream("O provedor não respondeu a tempo."))
+    Err(ApiError::new(
+        StatusCode::BAD_GATEWAY,
+        "upstream",
+        said(
+            "The provider did not answer in time.",
+            "El proveedor no respondió a tiempo.",
+            "O provedor não respondeu a tempo.",
+        ),
+    ))
 }
 
 pub fn poll(shared: &Shared, flow: &AiFlow) -> Stage {
@@ -144,7 +172,9 @@ pub fn poll(shared: &Shared, flow: &AiFlow) -> Stage {
 }
 
 pub fn disconnect(shared: &Shared, id: &str) -> ApiResult<()> {
-    let rest = id.strip_prefix(PREFIX).ok_or_else(|| ApiError::missing("Não há essa conexão."))?;
+    let rest = id.strip_prefix(PREFIX).ok_or_else(|| {
+        ApiError::missing(said("There is no such connection.", "No existe esa conexión.", "Não há essa conexão."))
+    })?;
     let (provider, account) = rest.split_once(':').unwrap_or((rest, ""));
     let summary = known(shared, provider)?;
     let client = &shared.backend.client;

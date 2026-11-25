@@ -4,13 +4,14 @@ use std::sync::Arc;
 
 use axum::extract::State;
 use axum::response::Response;
-use domain::permission::{Allowed, Call, Effect, Grant, Suggested, allowed};
 use domain::conversation::Entry;
+use domain::permission::{Allowed, Call, Effect, Grant, Suggested, allowed};
+use serde::Serialize;
 use serde_json::{Value, json};
 
 use crate::error::{ApiError, ApiResult, json as reply};
 use crate::session_view::Shown;
-use crate::state::{Ctx, Shared};
+use crate::state::{Ctx, Shared, held};
 
 const SESSIONS: usize = 25;
 const FOLDERS: usize = 4;
@@ -161,10 +162,53 @@ fn discovered(shared: &Shared) -> ApiResult<Vec<Suggested>> {
     Ok(fresh(found, &current))
 }
 
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(tag = "state", rename_all = "lowercase")]
+pub enum Discovery {
+    #[default]
+    Idle,
+    Running,
+    Failed,
+    Ready {
+        suggestions: Vec<Suggested>,
+    },
+}
+
+fn shown(ctx: &Ctx) -> Response {
+    reply(json!(held(&ctx.discovery).clone()))
+}
+
+pub async fn status(State(ctx): State<Ctx>) -> ApiResult<Response> {
+    Ok(shown(&ctx))
+}
+
 pub async fn discover(State(ctx): State<Ctx>) -> ApiResult<Response> {
+    let mut discovery = held(&ctx.discovery);
+    if matches!(*discovery, Discovery::Running) {
+        drop(discovery);
+        return Ok(shown(&ctx));
+    }
+    *discovery = Discovery::Running;
+    drop(discovery);
     let shared = Arc::clone(&ctx);
-    let found = crate::sessions::blocking(move || discovered(&shared)).await?;
-    Ok(reply(json!({ "suggestions": found })))
+    tokio::spawn(async move {
+        let work = Arc::clone(&shared);
+        let ended = match crate::sessions::blocking(move || discovered(&work)).await {
+            Ok(suggestions) => Discovery::Ready { suggestions },
+            Err(_) => Discovery::Failed,
+        };
+        *held(&shared.discovery) = ended;
+    });
+    Ok(shown(&ctx))
+}
+
+pub async fn dismiss(State(ctx): State<Ctx>) -> ApiResult<Response> {
+    let mut discovery = held(&ctx.discovery);
+    if !matches!(*discovery, Discovery::Running) {
+        *discovery = Discovery::Idle;
+    }
+    drop(discovery);
+    Ok(shown(&ctx))
 }
 
 #[cfg(test)]

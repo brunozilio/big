@@ -4,7 +4,7 @@ use agent_engine::Engine;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
-use domain::{EngineEvent, PermissionMode, PromptRequest};
+use domain::{EngineEvent, PromptRequest};
 use serde_json::json;
 
 use crate::{Source, finish, model, start};
@@ -25,7 +25,7 @@ fn in_bypass_a_command_runs_and_the_turn_limit_and_appended_prompt_apply() {
         ScriptedModel::reply(vec![Block::Text("never asked".into())]),
     ]));
     let mut request = PromptRequest::plain(dir.path().into(), "make it", model());
-    request.policy.permission = PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     request.session.append_system = Some("Answer in French.".into());
     request.policy.max_turns = Some(1);
     let events = finish(&start(&engine(&scripted), &request));

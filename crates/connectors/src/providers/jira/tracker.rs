@@ -51,7 +51,7 @@ pub fn status_name(issue: &Value) -> String {
     if name.is_empty() { text_of(issue, "/fields/status") } else { name }
 }
 
-fn summary(api: &Api<'_>, issue: &Value) -> Value {
+pub(super) fn summary(api: &Api<'_>, issue: &Value) -> Value {
     let key = text_of(issue, "/key");
     json!({
         "ref": key,
@@ -127,7 +127,7 @@ fn comments(issue: &Value) -> Vec<Value> {
     found.iter().map(comment_of).collect()
 }
 
-async fn read(api: &Api<'_>, issue: &str, fields: &[&str]) -> Result<Value, ActionError> {
+pub(super) async fn read(api: &Api<'_>, issue: &str, fields: &[&str]) -> Result<Value, ActionError> {
     let arguments = json!({
         "issueIdOrKey": jql_key(issue)?, "fields": fields, "view": "full", "responseContentFormat": "markdown",
     });

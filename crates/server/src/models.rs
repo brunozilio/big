@@ -4,10 +4,16 @@ use axum::extract::State;
 use axum::response::Response;
 use serde_json::{Value, json};
 
-use crate::error::{ApiError, ApiResult, json as reply};
+use crate::error::{ApiError, ApiResult, Spoken, json as reply, said};
 use crate::state::{Ctx, Shared};
 
-pub const NONE: &str = "Nenhum modelo disponível: conecte um provedor de IA.";
+pub fn none() -> Spoken {
+    said(
+        "No model available: connect an AI provider.",
+        "Ningún modelo disponible: conecta un proveedor de IA.",
+        "Nenhum modelo disponível: conecte um provedor de IA.",
+    )
+}
 
 pub fn listing(models: &[app::Model]) -> Value {
     if models.is_empty() {
@@ -42,14 +48,22 @@ pub fn logo_of(model: &str, provider: &str) -> String {
         .map_or_else(|| provider.trim_end_matches("-subscription").to_owned(), |(_, logo)| (*logo).to_owned())
 }
 
+fn unknown_effort() -> Spoken {
+    said("Unknown effort.", "Esfuerzo desconocido.", "Esforço desconhecido.")
+}
+
 pub fn tuning(body: &Value) -> ApiResult<Option<app::Effort>> {
     if body["fast"] == Value::Bool(true) {
-        return Err(ApiError::bad("O modo rápido não está disponível para este modelo."));
+        return Err(ApiError::bad(said(
+            "Fast mode is not available for this model.",
+            "El modo rápido no está disponible para este modelo.",
+            "O modo rápido não está disponível para este modelo.",
+        )));
     }
     match &body["effort"] {
         Value::Null => Ok(None),
-        Value::String(name) => app::Effort::named(name).map(Some).ok_or_else(|| ApiError::bad("Esforço desconhecido.")),
-        _ => Err(ApiError::bad("Esforço desconhecido.")),
+        Value::String(name) => app::Effort::named(name).map(Some).ok_or_else(|| ApiError::bad(unknown_effort())),
+        _ => Err(ApiError::bad(unknown_effort())),
     }
 }
 

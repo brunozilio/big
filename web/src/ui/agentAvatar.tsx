@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion'
 import type { AgentShape } from '@/api/contract'
+import { useT } from '@/i18n'
 import { cn } from './cn'
 
 type Shape = AgentShape
@@ -40,6 +41,7 @@ export function agentLook(seed: string): { shape: Shape; color: string } {
 }
 
 export function AgentAvatar({ look, seed = 'agente', name, size = 22, working, className }: { look?: { shape: Shape; color: string } | null; seed?: string; name?: string; size?: number; working?: boolean; className?: string }) {
+  const t = useT()
   const { shape, color } = look ?? agentLook(seed)
   const e = EYES[shape]
   const w = 2.6
@@ -50,7 +52,7 @@ export function AgentAvatar({ look, seed = 'agente', name, size = 22, working, c
       viewBox="0 0 24 24"
       width={size}
       height={size}
-      aria-label={name ?? 'Agente'}
+      aria-label={name ?? t('editor.agent')}
       className={cn('shrink-0', className)}
       animate={working ? { y: [0, -1.5, 0] } : { y: 0 }}
       transition={working ? { repeat: Infinity, duration: 1.2, ease: 'easeInOut' } : { duration: 0.2 }}

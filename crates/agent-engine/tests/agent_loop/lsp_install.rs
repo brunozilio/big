@@ -5,15 +5,14 @@ use agent_engine::lsp::fake::ScriptedServer;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::Tool;
 use agent_engine::transcript::{Block, Message};
-use domain::{AskKind, Decision, EngineEvent, PermissionMode};
+use domain::{AskKind, Decision, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, answering, tool_use};
 
 const PENDING: &str = "install the rust-analyzer language server: download https://example.invalid/ra.gz";
 
-fn rig(mode: PermissionMode, missing: bool) -> (Rig, Arc<ScriptedServer>) {
-    let mut rig = Rig::new(mode);
+fn rig(mut rig: Rig, missing: bool) -> (Rig, Arc<ScriptedServer>) {
     std::fs::write(rig.dir.path().join("main.rs"), "fn main() {}\n").expect("source");
     let server = ScriptedServer::answering([Ok(json!(null))]);
     if missing {
@@ -60,7 +59,7 @@ fn asked(rig: &Rig) -> Vec<String> {
 
 #[test]
 fn installing_a_missing_language_server_is_asked_first_and_a_refusal_installs_nothing() {
-    let (rig, server) = rig(PermissionMode::AcceptEdits, true);
+    let (rig, server) = rig(Rig::new(domain::Reviewer::Human), true);
     let answerer = answering(&rig, Decision::Deny);
     let (content, is_error) = hover(&rig);
     answerer.join().expect("answerer");
@@ -73,7 +72,7 @@ fn installing_a_missing_language_server_is_asked_first_and_a_refusal_installs_no
 
 #[test]
 fn an_install_the_user_allows_runs_and_the_answer_follows() {
-    let (rig, server) = rig(PermissionMode::AcceptEdits, true);
+    let (rig, server) = rig(Rig::new(domain::Reviewer::Human), true);
     let answerer = answering(&rig, Decision::Allow);
     let (content, is_error) = hover(&rig);
     answerer.join().expect("answerer");
@@ -84,7 +83,7 @@ fn an_install_the_user_allows_runs_and_the_answer_follows() {
 
 #[test]
 fn installing_runs_without_asking_when_bypassing_permissions() {
-    let (rig, server) = rig(PermissionMode::Bypass, true);
+    let (rig, server) = rig(Rig::new(domain::Reviewer::Nobody), true);
     let (content, is_error) = hover(&rig);
     assert!(!is_error, "{content}");
     assert!(asked(&rig).is_empty());
@@ -93,7 +92,7 @@ fn installing_runs_without_asking_when_bypassing_permissions() {
 
 #[test]
 fn installing_while_planning_is_refused_without_asking() {
-    let (rig, server) = rig(PermissionMode::Plan, true);
+    let (rig, server) = rig(Rig::planning(), true);
     let (content, is_error) = hover(&rig);
     assert!(is_error && content.contains("planning"), "{content}");
     assert!(asked(&rig).is_empty());
@@ -102,7 +101,7 @@ fn installing_while_planning_is_refused_without_asking() {
 
 #[test]
 fn an_install_nobody_can_be_asked_about_is_refused() {
-    let (mut rig, server) = rig(PermissionMode::Ask, true);
+    let (mut rig, server) = rig(Rig::new(domain::Reviewer::Human), true);
     rig.control = rig.control.child_configured(None, true);
     let (content, is_error) = hover(&rig);
     assert!(is_error && content.contains("requires permission"), "{content}");
@@ -112,7 +111,7 @@ fn an_install_nobody_can_be_asked_about_is_refused() {
 
 #[test]
 fn a_server_already_there_is_used_without_asking() {
-    let (rig, server) = rig(PermissionMode::AcceptEdits, false);
+    let (rig, server) = rig(Rig::new(domain::Reviewer::Human), false);
     let (content, is_error) = hover(&rig);
     assert!(!is_error, "{content}");
     assert!(asked(&rig).is_empty());

@@ -21,9 +21,7 @@ use crate::protocol::Command;
 use crate::repos::{self, Checkout, Worktree};
 use crate::shared::{Shared, now_ms};
 
-pub const RESUME: &str = "A execução anterior foi interrompida. Continue de onde parou e termine a tarefa. Se uma pergunta ou um plano ficou sem resposta por causa da interrupção, pergunte de novo, chamando a mesma ferramenta com as mesmas perguntas ou o mesmo plano, e espere a resposta. Nunca decida no lugar do usuário.";
-
-pub const WAITING_ANSWER: &str = "o agente espera uma resposta";
+pub const RESUME: &str = "The previous run was interrupted. Continue where it stopped and finish the task. If a question or a plan went unanswered because of the interruption, ask again, calling the same tool with the same questions or the same plan, and wait for the answer. Never decide in the user's place.";
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Failure {
@@ -31,11 +29,9 @@ pub enum Failure {
     Blocked(String),
 }
 
-pub const USAGE_LIMIT: &str = "o provedor de IA atingiu o limite de uso: ";
-
-fn failed(kind: Option<FailureKind>, message: String) -> Failure {
+fn failed(language: domain::Language, kind: Option<FailureKind>, message: String) -> Failure {
     match kind {
-        Some(FailureKind::UsageLimit { .. }) => Failure::Blocked(format!("{USAGE_LIMIT}{message}")),
+        Some(FailureKind::UsageLimit { .. }) => Failure::Blocked(crate::texts::usage_limit(language, &message)),
         Some(FailureKind::Unavailable) => Failure::Class(ErrorClass::Transient, message),
         _ => Failure::permanent(message),
     }
@@ -114,6 +110,19 @@ async fn heads(worktrees: &[Worktree]) -> Result<Vec<Option<String>>, Failure> {
     blocking(move || places.iter().map(|place| git::head(place)).collect()).await
 }
 
+pub fn in_place(command: &Command) -> bool {
+    command.args["inPlace"].as_bool() == Some(true)
+}
+
+fn folders(shared: &Shared, item: &ItemId) -> Result<Vec<Worktree>, Failure> {
+    let state = shared.item(item).map_err(|error| Failure::permanent(error.to_string()))?;
+    let found = shared.checkouts(&state).into_iter().filter_map(|checkout| {
+        let path = checkout.directory.clone().filter(|folder| folder.is_dir())?;
+        Some(Worktree { checkout, path, branch: String::new() })
+    });
+    Ok(found.collect())
+}
+
 pub fn branch_of(command: &Command) -> Option<&str> {
     command.args["worktree"].as_str().filter(|name| !name.is_empty())
 }
@@ -125,6 +134,14 @@ fn model(shared: &Shared, wanted: Option<&str>) -> ModelOption {
         .cloned()
         .or_else(|| models.first().cloned())
         .unwrap_or_else(|| ModelOption::unlisted(wanted.unwrap_or("unknown")))
+}
+
+pub(crate) fn language_of(shared: &Shared, input: &Value) -> domain::Language {
+    input["language"]
+        .as_str()
+        .and_then(domain::Language::named)
+        .or_else(|| shared.store.language().ok())
+        .unwrap_or_default()
 }
 
 fn prompt_of(input: &Value) -> String {
@@ -188,10 +205,11 @@ impl Collected {
     }
 }
 
-struct Client(u64);
+struct Client(u64, Arc<Shared>);
 
 impl Drop for Client {
     fn drop(&mut self) {
+        self.1.steering.disown(self.0);
         clients::release(self.0);
     }
 }
@@ -224,19 +242,30 @@ impl AgentEffect<'_> {
     pub async fn run(self) -> Result<Value, Failure> {
         let name = self.command.text("name");
         let state = self.shared.item(self.item).map_err(|error| Failure::permanent(error.to_string()))?;
-        let state = crate::chores::ensure_branch(self.shared, &state, &self.key.to_string());
+        let here = in_place(self.command);
+        let state = if here { state } else { crate::chores::ensure_branch(self.shared, &state, &self.key.to_string()) };
         let resources = self.shared.resources_in(self.shared.home(&state.input).as_deref());
         let definition =
             resources.agent(&name).ok_or_else(|| Failure::permanent(format!("there is no agent named {name}")))?;
         let profile = Profile::parse(&definition.text);
-        let trees = worktrees(self.shared, self.item, branch_of(self.command)).await?;
+        let trees = if here {
+            folders(self.shared, self.item)?
+        } else {
+            worktrees(self.shared, self.item, branch_of(self.command)).await?
+        };
         let first = trees.first().ok_or_else(|| Failure::permanent("the item has no repository"))?;
         let cwd = first.path.clone();
         let bases = heads(&trees).await?;
         let cloud = crate::cloud::lease(self.shared, self.command, &state.input).await?;
         let mut request = request(self.shared, &profile, self.command, &cwd, self.resume.as_deref());
+        request.session.language = Some(language_of(self.shared, &state.input));
+        request.prompt.shown = Some(domain::request::Shown {
+            text: request.prompt.text.clone(),
+            attached: Vec::new(),
+            from: Some(if self.key.step.is_empty() { state.workflow.clone() } else { self.key.step.clone() }),
+        });
         request.session.agent = Some(MainAgentSpec { name: name.clone(), definition: Some(definition.text.clone()) });
-        let client = Client(clients::fresh());
+        let client = Client(clients::fresh(), Arc::clone(self.shared));
         request.host.credentials.client = client.0;
         if let Some(application) = crate::application::id_of(&state.input) {
             crate::application::offer(client.0, &self.shared.store, application);
@@ -253,13 +282,19 @@ impl AgentEffect<'_> {
             crate::chores::heads_up(self.shared, self.item, &self.key.step, session, cwd.clone());
         }
         let pushed: Vec<(PathBuf, String)> =
-            trees.iter().map(|tree| (tree.path.clone(), tree.branch.clone())).collect();
+            trees.iter().filter(|_| !here).map(|tree| (tree.path.clone(), tree.branch.clone())).collect();
         blocking(move || {
             for (place, branch) in &pushed {
                 git::push(place, branch);
             }
         })
         .await?;
+        if here {
+            return Ok(json!({
+                "text": collected.text, "session": collected.session, "output": collected.output, "plan": collected.plan,
+                "checkpoint": collected.checkpoint, "agent": name, "inPlace": true, "folder": cwd.to_string_lossy(),
+            }));
+        }
         let commits = heads(&trees).await?;
         let summaries: Vec<Value> = trees
             .iter()
@@ -278,8 +313,7 @@ impl AgentEffect<'_> {
         let mut collected = self.turn(request).await?;
         let mut next = request.clone();
         while !collected.approved
-            && let Some(prompt) =
-                self.woken(request.host.credentials.client, request.policy.permission, &collected).await
+            && let Some(prompt) = self.woken(request.host.credentials.client, &collected).await
         {
             next.prompt = Prompt::typed(prompt);
             next.session.resume = collected.session.clone().map(SessionId).or(next.session.resume);
@@ -338,6 +372,9 @@ impl AgentEffect<'_> {
             let Some(event) = event else {
                 return Err(Failure::Class(ErrorClass::Transient, "the agent run ended without finishing".into()));
             };
+            if let EngineEvent::SessionStarted(session) = &event {
+                self.shared.steering.own(&session.0, client);
+            }
             if let Some(ended) = self.take(event, &mut collected, run) {
                 if impeded {
                     self.impede(false);
@@ -362,9 +399,10 @@ impl AgentEffect<'_> {
     }
 
     fn impede(&self, on: bool) {
-        let reason = on.then(|| WAITING_ANSWER.to_owned());
+        let language = crate::texts::of_item(self.shared, self.item);
+        let reason = on.then(|| crate::texts::waiting_answer(language).to_owned());
         let current = self.shared.item(self.item).ok().and_then(|item| item.impediment);
-        let ours = current.as_ref().is_some_and(|found| found.reason.as_deref() == Some(WAITING_ANSWER));
+        let ours = current.as_ref().is_some_and(|found| crate::texts::is_waiting_answer(found.reason.as_deref()));
         if on == ours || (!on && current.is_none()) {
             return;
         }
@@ -403,7 +441,9 @@ impl AgentEffect<'_> {
                 }
             }
             EngineEvent::Completed { .. } => return Some(Ok(())),
-            EngineEvent::Failed(message) => return Some(Err(failed(collected.failure, message))),
+            EngineEvent::Failed(message) => {
+                return Some(Err(failed(crate::texts::of_item(self.shared, self.item), collected.failure, message)));
+            }
             EngineEvent::Failure(kind) => collected.failure = Some(kind),
             EngineEvent::Cancelled => return Some(Err(Failure::permanent("the agent run was cancelled"))),
             _ => {}
@@ -456,10 +496,10 @@ impl AgentEffect<'_> {
         }
     }
 
-    async fn woken(&self, client: u64, mode: PermissionMode, collected: &Collected) -> Option<String> {
+    async fn woken(&self, client: u64, collected: &Collected) -> Option<String> {
         loop {
             self.teammates_asked(client, collected);
-            match clients::waiting(client, mode, schedules::now()) {
+            match clients::waiting(client, schedules::now()) {
                 Waiting::Idle => return None,
                 Waiting::Due(prompt) => return Some(prompt),
                 Waiting::Later(_) => tokio::time::sleep(WAKE_POLL).await,

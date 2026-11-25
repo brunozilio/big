@@ -25,6 +25,10 @@ pub enum ToolState {
 #[serde(tag = "kind", content = "data", rename_all = "snake_case")]
 pub enum Entry {
     User(String),
+    Sent {
+        from: String,
+        text: String,
+    },
     Attached {
         names: Vec<String>,
     },
@@ -121,7 +125,7 @@ pub struct Transcript {
 
 fn user_text(entry: &Entry) -> Option<String> {
     match entry {
-        Entry::User(text) => Some(text.clone()),
+        Entry::User(text) | Entry::Sent { text, .. } => Some(text.clone()),
         _ => None,
     }
 }

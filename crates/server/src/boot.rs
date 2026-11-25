@@ -32,7 +32,10 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let connected = crate::connected_mcp::for_runs(Arc::clone(&store), Arc::clone(&connectors), runtime);
     let address = launch.listener.local_addr().map_err(|error| error.to_string())?;
     let hub = browser::Hub::new();
-    let services = services.with_connected_mcp(connected).with_browser_mcp(crate::browsers::for_runs(&hub, &launch.data, Arc::clone(&store)));
+    let services = services
+        .with_applications(crate::memories::applications(Arc::clone(&store)))
+        .with_connected_mcp(connected)
+        .with_browser_mcp(crate::browsers::for_runs(&hub, &launch.data, Arc::clone(&store)));
     crate::browsers::install(&launch.data, address.port());
     let client = app::Client::builder().services(services.clone()).build().map_err(|error| error.to_string())?;
     let engine = Arc::new(app::KeyedEngine::new(services.clone()));
@@ -46,8 +49,15 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
             remembered.1.remember(models);
         }
     });
-    let backend =
-        Backend { orchestrator: (*handle).clone(), store, connectors, client, engine: Some(engine), data: launch.data, browser: hub };
+    let backend = Backend {
+        orchestrator: (*handle).clone(),
+        store,
+        connectors,
+        client,
+        engine: Some(engine),
+        data: launch.data,
+        browser: hub,
+    };
     let served = crate::server::serve(launch.listener, backend, page::embedded(), stop).await;
     drop(handle);
     served.map_err(|error| error.to_string())

@@ -27,7 +27,7 @@ fn a_stop_hook_that_blocks_once_sends_the_model_back_to_work_then_lets_it_finish
         == prompt: conversation ==
         user:
           text "Do the work"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Finished."
         user:
@@ -81,7 +81,7 @@ fn a_stop_hook_that_always_blocks_is_overruled_after_three_blocks_with_a_notice(
         == prompt: conversation ==
         user:
           text "Do the work"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "One."
         user:

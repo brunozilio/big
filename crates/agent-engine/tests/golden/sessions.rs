@@ -44,7 +44,7 @@ fn a_session_cut_between_a_call_and_its_result_resumes_with_the_call_closed_as_i
         user:
           tool_result t1 failed "This tool call was interrupted before it ran."
           text "Go on"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Picking up where we stopped."
         == resumed prompt: log appended ==
@@ -103,7 +103,7 @@ fn a_rewind_restores_the_files_cuts_the_conversation_and_drops_later_checkpoints
         == rewind to the second prompt: conversation ==
         user:
           text "Write the notes"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"notes.txt\"}"
         user:
@@ -147,7 +147,7 @@ fn a_branch_starts_a_new_session_cut_before_the_prompt_and_leaves_the_original_a
         == branch at the second prompt: conversation ==
         user:
           text "Write the notes"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"notes.txt\"}"
         user:
@@ -168,7 +168,7 @@ fn a_branch_starts_a_new_session_cut_before_the_prompt_and_leaves_the_original_a
         == the original: conversation ==
         user:
           text "Write the notes"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"notes.txt\"}"
         user:
@@ -177,7 +177,7 @@ fn a_branch_starts_a_new_session_cut_before_the_prompt_and_leaves_the_original_a
           text "Written."
         user:
           text "Add more"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use w1 Write "{\"content\":\"written\\n\",\"file_path\":\"more.txt\"}"
         user:
@@ -220,7 +220,7 @@ fn a_title_chore_runs_while_the_session_is_held_and_leaves_the_conversation_as_i
         == title chore: conversation ==
         user:
           text "Say hello"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Hello."
         == title chore: log appended ==
@@ -248,7 +248,7 @@ fn a_prompt_for_a_session_that_is_answering_elsewhere_is_turned_away_and_writes_
         == second prompt: conversation ==
         user:
           text "Say hello"
-          reminder "# Runtime reminder\nEdits are allowed; commands and external actions still require approval.\nCollect background agent reports before completing. Use TaskStop to cancel…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           text "Hello."
         == second prompt: log appended ==

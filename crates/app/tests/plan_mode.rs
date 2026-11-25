@@ -38,8 +38,7 @@ fn modes(engine: &FakeEngine) -> Vec<PermissionMode> {
 #[test]
 fn an_approved_plan_leaves_the_session_in_the_mode_chosen() {
     let data = tempfile::tempdir().expect("data");
-    let engine =
-        FakeEngine::new(vec![model()], run(vec![presented(), EngineEvent::ModeChanged(PermissionMode::AcceptEdits)]));
+    let engine = FakeEngine::new(vec![model()], run(vec![presented(), EngineEvent::ModeChanged(PermissionMode::Auto)]));
     let client = client(&engine, data.path());
     let mut session = client.session(data.path(), model());
     session.set_permission(PermissionMode::Plan);
@@ -47,7 +46,7 @@ fn an_approved_plan_leaves_the_session_in_the_mode_chosen() {
     assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })));
 
     let _: Vec<EngineEvent> = session.send("more").expect("run").collect();
-    assert_eq!(modes(&engine), [PermissionMode::Plan, PermissionMode::AcceptEdits]);
+    assert_eq!(modes(&engine), [PermissionMode::Plan, PermissionMode::Auto]);
 }
 
 #[test]

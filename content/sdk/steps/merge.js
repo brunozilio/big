@@ -22,7 +22,7 @@ export default step({
   name: "merge",
   label: "Merge",
   icon: "sMerge",
-  needs: "code",
+  requires: "code",
   doing: "Merging",
   view: shown,
   async run(ctx, opts) {

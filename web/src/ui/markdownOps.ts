@@ -1,3 +1,9 @@
+import { currentLanguage, translate, type MessageKey } from '@/i18n'
+
+function word(key: MessageKey, vars?: Record<string, string | number>): string {
+  return translate(currentLanguage(), key, vars)
+}
+
 export interface TextEdit {
   text: string
   start: number
@@ -132,7 +138,7 @@ export function indentLines(text: string, start: number, end: number, outdent: b
 }
 
 export function tableMarkdown(cols: number, rows: number) {
-  const header = `| ${Array.from({ length: cols }, (_, i) => `Coluna ${i + 1}`).join(' | ')} |`
+  const header = `| ${Array.from({ length: cols }, (_, i) => word('editor.column', { n: i + 1 })).join(' | ')} |`
   const rule = `| ${Array.from({ length: cols }, () => '---').join(' | ')} |`
   const body = Array.from({ length: rows }, () => `| ${Array.from({ length: cols }, () => '   ').join(' | ')} |`)
   return [header, rule, ...body].join('\n')
@@ -152,12 +158,12 @@ export function insertTable(text: string, start: number, cols = 2, rows = 2): Te
   const block = tableMarkdown(cols, rows)
   const r = insertBlock(text, start, block)
   const headerAt = r.text.indexOf(block, start) + 2
-  return { text: r.text, start: headerAt, end: headerAt + 'Coluna 1'.length }
+  return { text: r.text, start: headerAt, end: headerAt + word('editor.column', { n: 1 }).length }
 }
 
 export function insertLink(text: string, start: number, end: number, image = false): TextEdit {
   const selected = text.slice(start, end)
-  const label = selected || (image ? 'descrição' : 'texto')
+  const label = selected || (image ? word('editor.sampleImage') : word('editor.sampleLink'))
   const open = image ? '![' : '['
   const snippet = `${open}${label}](https://)`
   const next = text.slice(0, start) + snippet + text.slice(end)
@@ -229,9 +235,14 @@ function sentences(paragraph: string) {
   return paragraph.split(/(?<=[.!?])\s+/).map((s) => s.trim()).filter(Boolean)
 }
 
-export function improveMarkdown(text: string): string {
-  const src = text.trim()
-  if (/^#{1,3} Objetivo/m.test(src) && /^#{1,3} Critérios de aceite/m.test(src)) return src
+const GOAL_HEADINGS = ['Objetivo', 'Goal']
+const CRITERIA_HEADINGS = ['Critérios de aceite', 'Acceptance criteria', 'Criterios de aceptación', 'Criterios de aceptacion']
+
+function hasHeading(src: string, names: string[]): boolean {
+  return names.some((name) => new RegExp(`^#{1,3} ${name}`, 'mi').test(src))
+}
+
+function improveParts(src: string) {
   const prose: string[] = []
   const items: string[] = []
   const checks: string[] = []
@@ -250,19 +261,26 @@ export function improveMarkdown(text: string): string {
     }
     prose.push(...sentences(line.replace(/^> ?/, '')))
   }
-  const goal = prose[0] ?? 'Descreva o resultado esperado.'
+  return { prose, items, checks }
+}
+
+export function improveMarkdown(text: string): string {
+  const src = text.trim()
+  if (hasHeading(src, GOAL_HEADINGS) && hasHeading(src, CRITERIA_HEADINGS)) return src
+  const { prose, items, checks } = improveParts(src)
+  const goal = prose[0] ?? word('editor.goalPlaceholder')
   const scope = [...prose.slice(1), ...items]
   const criteria = checks.length ? checks : (items.length ? items : [goal.replace(/[.!?]$/, '')]).map((i) => `- [ ] ${i}`)
   return [
-    '## Objetivo',
+    `## ${word('editor.goalHeading')}`,
     '',
     goal,
     '',
-    '## Escopo',
+    `## ${word('editor.scopeHeading')}`,
     '',
-    ...(scope.length ? scope.map((s) => `- ${s}`) : ['- A definir']),
+    ...(scope.length ? scope.map((s) => `- ${s}`) : [`- ${word('editor.toDefine')}`]),
     '',
-    '## Critérios de aceite',
+    `## ${word('editor.criteriaHeading')}`,
     '',
     ...criteria,
   ].join('\n')

@@ -1,4 +1,5 @@
 mod applications;
+mod archive;
 mod branding;
 mod connections;
 mod error;

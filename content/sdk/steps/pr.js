@@ -1,9 +1,10 @@
 import { step, change, markdown } from "sdk";
 import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, gitOf, issueOf, object, planOf, repoOf, source, sourcePullRequestOf, summaryLine, targetFields } from "./context.js";
 
-function describe(summary, plan, issue) {
+function describe(summary, plan, issue, extra) {
   const parts = [summary || summaryLine(plan.story) || plan.title];
   if (issue) parts.push(`Issue: ${issue}`);
+  if (extra) parts.push(extra);
   return parts.filter(Boolean).join("\n\n");
 }
 
@@ -76,7 +77,7 @@ export default step({
   name: "pr",
   label: "Pull request",
   icon: "sPr",
-  needs: "code",
+  requires: "code",
   doing: "Opening PR",
   view: (s) => opened(Array.isArray(s.prs) && s.prs.length > 0 ? s.prs : [s]),
   async run(ctx, opts) {
@@ -90,7 +91,7 @@ export default step({
     const plan = planOf(ctx, opts);
     const issue = issueOf(ctx, opts);
     const summary = summaryLine(source(ctx, opts, "develop").summary);
-    const body = opts.body ?? describe(summary, plan, issue);
+    const body = opts.body ?? describe(summary, plan, issue, source(ctx, opts, "plan").pullRequestBody);
     const wanted = { head, title: opts.title ?? titled(plan, issue), body };
     const prs = await eachOf(ctx, targets, (branch, target) => deliver(branch, opts, target, wanted));
     const { repository: _repository, name: _name, code: _code, ...data } = prs[0];

@@ -34,12 +34,12 @@ enum Outcome {
 
 fn expected(mode: PermissionMode, access: Access) -> Outcome {
     match (mode, access) {
-        (_, Access::Reads) | (PermissionMode::Bypass, _) => Outcome::Allow,
+        (_, Access::Reads) => Outcome::Allow,
         (_, Access::ReadsOutside) => Outcome::Ask,
         (PermissionMode::Plan, Access::Commands | Access::Fetches) => Outcome::Allow,
         (PermissionMode::Plan, Access::Browses) => Outcome::Ask,
         (PermissionMode::Plan, _) => Outcome::Deny,
-        (PermissionMode::AcceptEdits, Access::Edits) => Outcome::Allow,
+        (PermissionMode::Auto, Access::Edits) => Outcome::Allow,
         (_, Access::Commands | Access::Fetches | Access::Browses) => expected(mode, Access::Executes),
         _ => Outcome::Ask,
     }
@@ -74,12 +74,27 @@ fn cases() -> Vec<(&'static str, &'static str, Vec<Effect>, Access)> {
         ("WebSearch", "rust", vec![Effect::Fetch { host: None }], Access::Fetches),
         ("Upload", "https://x.dev", vec![Effect::Net { host: Some("x.dev".into()) }], Access::Executes),
         ("Fetch", "and run", vec![Effect::Fetch { host: None }, Effect::exec("sh")], Access::Executes),
-        ("Fetch", "and write", vec![Effect::Fetch { host: None }, Effect::WritePath(place("/work/rocket/a"))], Access::Executes),
+        (
+            "Fetch",
+            "and write",
+            vec![Effect::Fetch { host: None }, Effect::WritePath(place("/work/rocket/a"))],
+            Access::Executes,
+        ),
         ("Agent", "explore", vec![Effect::Spawn(SpawnKind::Agent)], Access::Reads),
         ("ScheduleWakeup", "later", vec![Effect::Spawn(SpawnKind::Schedule)], Access::Executes),
         ("mcp__jira__search", "bug", vec![Effect::Remote { server: "jira".into() }], Access::Executes),
-        ("mcp__browser__navigate", "site", vec![Effect::Remote { server: crate::mcp::browser_server() }], Access::Browses),
-        ("mcp__browser__mixed", "site", vec![Effect::Remote { server: crate::mcp::browser_server() }, Effect::exec("sh")], Access::Executes),
+        (
+            "mcp__browser__navigate",
+            "site",
+            vec![Effect::Remote { server: crate::mcp::browser_server() }],
+            Access::Browses,
+        ),
+        (
+            "mcp__browser__mixed",
+            "site",
+            vec![Effect::Remote { server: crate::mcp::browser_server() }, Effect::exec("sh")],
+            Access::Executes,
+        ),
         ("Deploy", "prod", vec![Effect::Declared(Declared::Executes)], Access::Executes),
         ("Format", "a.rs", vec![Effect::Declared(Declared::Edits)], Access::Edits),
         ("TaskList", "", vec![], Access::Reads),
@@ -100,16 +115,15 @@ fn every_tool_in_every_mode_gets_the_mode_table_s_verdict() {
 }
 
 #[test]
-fn a_command_runs_without_asking_in_bypass_and_asks_once_remembered_otherwise() {
+fn a_command_goes_to_review_until_it_is_remembered() {
     let bounds = bounds();
     let effects = [Effect::exec("cargo test")];
     let call = Call { tool: "Bash", subject: "cargo test", effects: &effects };
     let mut remembered = Remembered::default();
-    assert_eq!(PolicyEngine::decide(&call, &context(PermissionMode::Bypass, &remembered, &bounds)), Verdict::Allow);
-    let judged = PolicyEngine::judge(&call, &context(PermissionMode::Ask, &remembered, &bounds));
+    let judged = PolicyEngine::judge(&call, &context(PermissionMode::Auto, &remembered, &bounds));
     assert_eq!(judged.verdict, Verdict::Ask { reason: Reason::Mode, rememberable: true });
     remembered.remember("Bash", judged.standing, &judged.subject);
-    assert_eq!(PolicyEngine::decide(&call, &context(PermissionMode::Ask, &remembered, &bounds)), Verdict::Allow);
+    assert_eq!(PolicyEngine::decide(&call, &context(PermissionMode::Auto, &remembered, &bounds)), Verdict::Allow);
 }
 
 #[test]
@@ -118,9 +132,9 @@ fn a_guarded_write_names_its_guard_and_unattended_asks_are_denied() {
     let none = Remembered::default();
     let effects = [Effect::WritePath(place("/work/rocket/.git/hooks/pre-commit"))];
     let call = Call { tool: "Edit", subject: "pre-commit", effects: &effects };
-    let judged = PolicyEngine::judge(&call, &context(PermissionMode::AcceptEdits, &none, &bounds));
+    let judged = PolicyEngine::judge(&call, &context(PermissionMode::Auto, &none, &bounds));
     assert!(matches!(judged.verdict, Verdict::Ask { reason: Reason::Guarded { guard: Guard::GitFolder, .. }, .. }));
-    let unattended = PolicyContext { no_prompts: true, ..context(PermissionMode::Ask, &none, &bounds) };
+    let unattended = PolicyContext { no_prompts: true, ..context(PermissionMode::Auto, &none, &bounds) };
     assert!(unattended.settled(judged.verdict, "Edit").denies());
 }
 
@@ -130,8 +144,7 @@ fn the_ceiling_caps_the_mode() {
     let none = Remembered::default();
     let effects = [Effect::WritePath(place("/work/rocket/src/a.rs"))];
     let call = Call { tool: "Write", subject: "src/a.rs", effects: &effects };
-    let capped =
-        PolicyContext { ceiling: Some(PermissionMode::Plan), ..context(PermissionMode::Bypass, &none, &bounds) };
+    let capped = PolicyContext { ceiling: Some(PermissionMode::Plan), ..context(PermissionMode::Auto, &none, &bounds) };
     assert!(PolicyEngine::decide(&call, &capped).denies());
 }
 
@@ -139,30 +152,45 @@ fn the_ceiling_caps_the_mode() {
 fn with_the_list_every_mode_asks_for_what_is_not_on_it_and_lets_through_what_is() {
     let bounds = bounds();
     let none = Remembered::default();
-    let list = Allowed::of([Grant::Command("cargo test".into()), Grant::Site("*.gov.br".into()), Grant::Tool("mcp__jira__*".into())]);
+    let list = Allowed::of([
+        Grant::Command("cargo test".into()),
+        Grant::Site("*.gov.br".into()),
+        Grant::Tool("mcp__jira__*".into()),
+    ]);
     let browser = crate::mcp::browser_server();
     let judged = |tool: &str, effects: Vec<Effect>, mode| {
         let call = Call { tool, subject: "", effects: &effects };
         let cx = PolicyContext { allowed: Some(&list), ..context(mode, &none, &bounds) };
         outcome(&PolicyEngine::decide(&call, &cx))
     };
-    for mode in [PermissionMode::Ask, PermissionMode::AcceptEdits, PermissionMode::Bypass, PermissionMode::Plan] {
-        assert_eq!(judged("Bash", vec![Effect::exec("cargo test -p x && cargo test")], mode), Outcome::Allow, "{mode:?}");
+    for mode in PermissionMode::ALL {
+        assert_eq!(
+            judged("Bash", vec![Effect::exec("cargo test -p x && cargo test")], mode),
+            Outcome::Allow,
+            "{mode:?}"
+        );
         assert_eq!(judged("Bash", vec![Effect::exec("cargo test; rm -rf /")], mode), Outcome::Ask, "{mode:?}");
         assert_eq!(judged("Bash", vec![Effect::exec("cargo build")], mode), Outcome::Ask, "{mode:?}");
-        let page = |host: &str| vec![Effect::Remote { server: browser.clone() }, Effect::Fetch { host: Some(host.into()) }];
+        let page =
+            |host: &str| vec![Effect::Remote { server: browser.clone() }, Effect::Fetch { host: Some(host.into()) }];
         assert_eq!(judged("mcp__b__read_page", page("www.gov.br"), mode), Outcome::Allow, "{mode:?}");
         assert_eq!(judged("mcp__b__read_page", page("evil.dev"), mode), Outcome::Ask, "{mode:?}");
         let unknown = vec![Effect::Remote { server: browser.clone() }, Effect::Fetch { host: None }];
         assert_eq!(judged("mcp__b__computer", unknown, mode), Outcome::Ask, "{mode:?}");
-        assert_eq!(judged("mcp__b__tabs_context_mcp", vec![Effect::Remote { server: browser.clone() }], mode), Outcome::Allow);
+        assert_eq!(
+            judged("mcp__b__tabs_context_mcp", vec![Effect::Remote { server: browser.clone() }], mode),
+            Outcome::Allow
+        );
     }
     let jira = || vec![Effect::Remote { server: "jira".into() }];
-    assert_eq!(judged("mcp__jira__search", jira(), PermissionMode::Bypass), Outcome::Allow);
-    assert_eq!(judged("mcp__github__merge", vec![Effect::Remote { server: "github".into() }], PermissionMode::Bypass), Outcome::Ask);
+    assert_eq!(judged("mcp__jira__search", jira(), PermissionMode::Auto), Outcome::Allow);
+    assert_eq!(
+        judged("mcp__github__merge", vec![Effect::Remote { server: "github".into() }], PermissionMode::Auto),
+        Outcome::Ask
+    );
     assert_eq!(judged("mcp__jira__search", jira(), PermissionMode::Plan), Outcome::Deny);
     let edit = vec![Effect::WritePath(place("/work/rocket/src/a.rs"))];
-    assert_eq!(judged("Write", edit, PermissionMode::Bypass), Outcome::Allow);
+    assert_eq!(judged("Write", edit, PermissionMode::Auto), Outcome::Allow);
 }
 
 #[test]
@@ -176,7 +204,10 @@ fn always_allowing_learns_the_command_prefix_the_site_or_the_tool() {
     let browser = crate::mcp::browser_server();
     let page = vec![Effect::Remote { server: browser }, Effect::Fetch { host: Some("www.gov.br".into()) }];
     assert_eq!(learned("mcp__b__navigate", page), [Grant::Site("www.gov.br".into())]);
-    assert_eq!(learned("mcp__jira__search", vec![Effect::Remote { server: "jira".into() }]), [Grant::Tool("mcp__jira__search".into())]);
+    assert_eq!(
+        learned("mcp__jira__search", vec![Effect::Remote { server: "jira".into() }]),
+        [Grant::Tool("mcp__jira__search".into())]
+    );
     let mut list = Allowed::default();
     assert!(list.add(Grant::Site("https://Docs.rs/serde".into())));
     assert!(!list.add(Grant::Site("docs.rs".into())));
@@ -196,7 +227,7 @@ fn the_defaults_read_and_build_but_never_write_through_a_redirection() {
     let judged = |command: &str| {
         let effects = vec![Effect::exec(command)];
         let call = Call { tool: "Bash", subject: "", effects: &effects };
-        let cx = PolicyContext { allowed: Some(&list), ..context(PermissionMode::Bypass, &none, &bounds) };
+        let cx = PolicyContext { allowed: Some(&list), ..context(PermissionMode::Auto, &none, &bounds) };
         outcome(&PolicyEngine::decide(&call, &cx))
     };
     for command in ["git status -s", "ls -la | grep x", "cargo test 2>&1 | tail -5", "cat a.rs > /dev/null"] {
@@ -257,18 +288,18 @@ fn deny_beats_ask_beats_allow_and_an_ask_rule_cannot_be_remembered() {
     ]);
     let judged = |tool: &str, effects: Vec<Effect>| {
         let call = Call { tool, subject: "", effects: &effects };
-        let cx = PolicyContext { allowed: Some(&list), ..context(PermissionMode::Bypass, &none, &bounds) };
+        let cx = PolicyContext { allowed: Some(&list), ..context(PermissionMode::Auto, &none, &bounds) };
         PolicyEngine::decide(&call, &cx)
     };
     assert_eq!(judged("Bash", vec![Effect::exec("git status")]), Verdict::Allow);
     assert_eq!(
         judged("Bash", vec![Effect::exec("git status && git push origin main")]),
-        Verdict::Ask { reason: Reason::Mode, rememberable: false }
+        Verdict::Ask { reason: Reason::Listed, rememberable: false }
     );
     assert!(matches!(judged("Bash", vec![Effect::exec("git push --force")]), Verdict::Deny(_)));
     assert!(matches!(judged("WebFetch", vec![Effect::Fetch { host: Some("evil.dev".into()) }]), Verdict::Deny(_)));
     let edit = vec![Effect::WritePath(place("/work/rocket/src/a.rs"))];
-    assert_eq!(judged("Write", edit), Verdict::Ask { reason: Reason::Mode, rememberable: false });
+    assert_eq!(judged("Write", edit), Verdict::Ask { reason: Reason::Listed, rememberable: false });
     assert_eq!(judged("Bash", vec![Effect::exec("ls")]), Verdict::Ask { reason: Reason::Mode, rememberable: true });
     let mut changed = list.clone();
     assert!(changed.add(Rule::new(Grant::Command("git push".into()), Behavior::Allow)));

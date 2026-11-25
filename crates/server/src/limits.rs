@@ -49,7 +49,7 @@ fn shown(shared: &Shared) -> HashMap<String, (Value, Value)> {
     crate::ai::subscriptions(shared)
         .iter()
         .map(|summary| {
-            let described = crate::ai::provider_json(summary);
+            let described = crate::ai::provider_json(summary, shared.language());
             (summary.provider.id().to_owned(), (described["name"].clone(), described["logo"].clone()))
         })
         .collect()
@@ -57,9 +57,11 @@ fn shown(shared: &Shared) -> HashMap<String, (Value, Value)> {
 
 pub async fn list(State(ctx): State<Ctx>) -> ApiResult<Response> {
     let shared = Arc::clone(&ctx);
-    let listed = tokio::task::spawn_blocking(move || listing(&shared.backend.client.plan_limits(), &shown(&shared)))
-        .await
-        .map_err(ApiError::failed)?;
+    let listed = tokio::task::spawn_blocking(move || {
+        listing(&shared.backend.client.plan_limits(shared.language()), &shown(&shared))
+    })
+    .await
+    .map_err(ApiError::failed)?;
     Ok(reply(listed))
 }
 

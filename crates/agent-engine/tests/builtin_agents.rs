@@ -8,7 +8,7 @@ use agent_engine::model::TurnRequest;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::{self, Workspace, builtin_agents};
 use agent_engine::transcript::{Block, Message, Role};
-use domain::{Effort, EngineEvent, PermissionMode};
+use domain::{Effort, EngineEvent};
 use serde_json::json;
 
 fn tool_use(id: &str, name: &str, input: serde_json::Value) -> Block {
@@ -22,7 +22,8 @@ fn says(text: &str) -> Result<agent_engine::model::Reply, agent_engine::model::M
 fn run(model: &ScriptedModel, history: &mut Vec<Message>) -> Vec<TurnRequest> {
     let dir = tempfile::tempdir().expect("dir");
     let workspace = Workspace::new(dir.path());
-    let control = Arc::new(Control::new(PermissionMode::AcceptEdits, Arc::default()));
+    let control =
+        Arc::new(Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human));
     let events: Arc<Mutex<Vec<EngineEvent>>> = Arc::default();
     let sink = Arc::clone(&events);
     let emit = move |event: EngineEvent| sink.lock().expect("events").push(event);

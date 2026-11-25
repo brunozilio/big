@@ -88,7 +88,7 @@ impl Transport {
         })
     }
 
-    pub(super) fn limits(&self) -> Result<Option<domain::billing::PlanUsage>, ModelError> {
+    pub(super) fn limits(&self, language: domain::Language) -> Result<Option<domain::billing::PlanUsage>, ModelError> {
         if self.provider.limits(&Config::default()).is_none() {
             return Ok(None);
         }
@@ -101,7 +101,7 @@ impl Transport {
         status(response.status)?;
         let value: Value = serde_json::from_str(&read(response, llm_providers::limits::LIMIT)?)
             .map_err(|_| ModelError::Provider("the plan limits answered with something other than JSON".into()))?;
-        Ok(Some(self.provider.windows(&value)?))
+        Ok(Some(self.provider.windows(&value, language)?))
     }
 
     fn limits_once(&self, force: bool) -> Result<Response, ModelError> {

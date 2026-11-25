@@ -1,5 +1,5 @@
 import { workflow, on } from "sdk";
-import { plan, ticket, cases, develop, checks, pr, ci, review, merge, release } from "sdk/steps";
+import { plan, ticket, cases, develop, checks, pr, ci, review, provision, merge, release } from "sdk/steps";
 
 export default workflow({
   name: "entrega",
@@ -15,6 +15,7 @@ export default workflow({
     pr(),
     ci({ onFail: "develop", retries: 3 }),
     review({ agent: "reviewer", status: "Fazendo", onChanges: "develop" }),
+    provision({ cloud: true }),
     merge({ method: "squash" }),
     release({ agent: "release", cloud: true, doneStatus: "Feito" }),
   ],

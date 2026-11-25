@@ -4,10 +4,10 @@ use agent_engine::{
     tools::Workspace,
     transcript::Usage,
 };
-use domain::PermissionMode;
+use domain::Reviewer;
 use serde_json::json;
 
-use crate::{call, delegated, done, run, run_named};
+use crate::{auto, call, delegated, done, run, run_named};
 
 #[test]
 fn dont_ask_denies_unapproved_commands_without_a_prompt() {
@@ -19,7 +19,7 @@ fn dont_ask_denies_unapproved_commands_without_a_prompt() {
         done("Denied"),
         done("Reviewed"),
     ]);
-    run(json!({"permissionMode":"dontAsk"}), &model, &workspace, PermissionMode::Ask);
+    run(json!({"permissionMode":"dontAsk"}), &model, &workspace, auto(Reviewer::Human));
     assert!(!dir.path().join("forbidden").exists());
     assert!(format!("{:?}", model.asked()[2].messages).contains("dontAsk denies"));
 }
@@ -40,7 +40,7 @@ fn explore_runs_on_the_small_model_unless_it_names_its_own() {
     };
     let model =
         ScriptedModel::new([explore(json!(null)), done("Found"), explore(json!("opus")), done("Found"), done("Done")]);
-    run_named("Explore", json!({}), &model, &workspace, PermissionMode::Bypass);
+    run_named("Explore", json!({}), &model, &workspace, auto(Reviewer::Nobody));
     let asked = model.asked();
     assert_eq!(asked[1].model, "claude-haiku-5-5");
     assert_eq!(asked[3].model, "claude-opus-5-5", "an explicit model wins");
@@ -60,7 +60,7 @@ fn child_omits_initial_instruction_files() {
         ..Default::default()
     });
     let model = ScriptedModel::new([delegated(), done("Reviewed"), done("Done")]);
-    run(json!({"omitClaudeMd":true}), &model, &workspace, PermissionMode::Bypass);
+    run(json!({"omitClaudeMd":true}), &model, &workspace, auto(Reviewer::Nobody));
     assert!(model.asked()[0].system.contains("PARENT_FILE_SENTINEL"));
     let child = &model.asked()[1].system;
     assert!(!child.contains("PARENT_FILE_SENTINEL"));
@@ -87,7 +87,7 @@ fn configured_auto_compact_window_triggers_child_compaction_before_the_model_win
         ]
         .map(uncounted),
     );
-    run(json!({"autoCompactWindow":100_000}), &model, &workspace, PermissionMode::Bypass);
+    run(json!({"autoCompactWindow":100_000}), &model, &workspace, auto(Reviewer::Nobody));
     let asked = model.asked();
     assert_eq!(asked.len(), 5);
     assert_eq!(asked[2].tools, asked[1].tools, "the summary reuses the cached prefix of the turn before");

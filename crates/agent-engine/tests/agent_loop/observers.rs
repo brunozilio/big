@@ -4,7 +4,6 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::subagent::FoundAgent;
 use agent_engine::tools::subagent_config::AgentConfig;
 use agent_engine::transcript::{Block, Message};
-use domain::PermissionMode;
 use serde_json::json;
 
 use crate::{Rig, request, tool_use};
@@ -47,7 +46,7 @@ fn run(rig: &Rig, model: &dyn agent_engine::model::ModelApi, prompt: &str) {
 
 #[test]
 fn an_observer_gets_a_digest_of_the_turn_and_its_report_reaches_the_observed_agent_s_inbox() {
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     observed(&mut rig, 97_001);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![Block::Text("All read.".into())]),
@@ -77,7 +76,7 @@ fn an_observer_gets_a_digest_of_the_turn_and_its_report_reaches_the_observed_age
 
 #[test]
 fn an_observer_resumes_its_own_conversation_on_the_next_turn() {
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     observed(&mut rig, 97_002);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![Block::Text("First.".into())]),
@@ -115,7 +114,7 @@ impl agent_engine::model::ModelApi for Routed {
 
 #[test]
 fn an_observer_watches_while_the_agent_works_and_its_report_reaches_the_agent_mid_turn() {
-    let mut rig = Rig::new(PermissionMode::AcceptEdits);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     observed(&mut rig, 97_003);
     let read = |id: &str| ScriptedModel::reply(vec![tool_use(id, "Read", json!({ "file_path": "notes.txt" }))]);
     let routed = Routed {

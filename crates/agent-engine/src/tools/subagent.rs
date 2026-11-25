@@ -151,8 +151,10 @@ mod tests {
         let offered = tool(&agents).expect("the Agent tool ships");
         assert!(offered.script().is_some(), "Agent is a script tool");
         let description = offered.spec().description;
+        let project = description.find("- reviewer: Reviews diffs.\n- ");
+        let shipped = description.find("- developer: ");
         assert!(
-            description.contains("- reviewer: Reviews diffs.\n- developer: "),
+            project.zip(shipped).is_some_and(|(project, shipped)| project < shipped),
             "project agents first: {description}"
         );
         assert!(description.contains("- fork: "));

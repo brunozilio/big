@@ -18,6 +18,7 @@ pub struct Launching<'a> {
     pub instructions: &'a str,
     pub model: &'a str,
     pub mode: PermissionMode,
+    pub lead: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,6 +39,7 @@ fn spec(launching: &Launching<'_>) -> (PathBuf, domain::team::TeammateSpec) {
         mode: domain::command::mode_label(launching.mode).to_owned(),
         instructions: launching.instructions.to_owned(),
         lead_pid: Some(std::process::id()),
+        lead: launching.lead.map(str::to_owned),
     };
     (path, details)
 }
@@ -95,7 +97,8 @@ mod tests {
             prompt: "fix the tests",
             instructions: "# Team coordination",
             model: "claude-sonnet-5-5",
-            mode: PermissionMode::AcceptEdits,
+            mode: PermissionMode::Auto,
+            lead: Some("planner"),
         }
     }
 
@@ -116,7 +119,8 @@ mod tests {
         assert_eq!(path, &PathBuf::from(&spec_file));
         assert_eq!((spec.team.as_str(), spec.name.as_str(), spec.cwd.as_str()), ("team-1", "tester", "/work"));
         assert_eq!((spec.model.as_str(), spec.instructions.as_str()), ("claude-sonnet-5-5", "# Team coordination"));
-        assert_eq!(spec.mode, domain::command::mode_label(PermissionMode::AcceptEdits));
+        assert_eq!(spec.mode, domain::command::mode_label(PermissionMode::Auto));
+        assert_eq!(spec.lead.as_deref(), Some("planner"));
         assert!(planned.log.ends_with("teams/team-1/logs/tester.log"));
         assert!(!args.iter().any(|arg| arg.contains("fix the tests")), "the task goes through the mailbox");
     }

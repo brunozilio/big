@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 use crate::error::ActionError;
 use crate::http::{Http, HttpRequest, HttpResponse};
 
-pub const TOOLS: [&str; 13] = [
+pub const TOOLS: [&str; 14] = [
     "getAccessibleAtlassianResources",
     "atlassianUserInfo",
     "getJiraIssue",
@@ -15,6 +15,7 @@ pub const TOOLS: [&str; 13] = [
     "searchJiraIssuesUsingJql",
     "createJiraIssue",
     "editJiraIssue",
+    "createIssueLink",
     "transitionJiraIssue",
     "addOrEditJiraIssueComment",
     "discover",

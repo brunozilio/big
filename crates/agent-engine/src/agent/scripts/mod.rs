@@ -52,6 +52,16 @@ impl<'a, 'env> Within<'a, 'env> {
         let permission = calling.permission;
         Self { id: calling.id, parent: calling.parent, run: calling.run, spawn: calling.spawn, permission }
     }
+
+    fn permitting<'s>(&'s self, subject: &'s str, shown: Option<&'s str>) -> crate::agent::permission::Permitting<'s> {
+        crate::agent::permission::Permitting {
+            id: self.id,
+            subject,
+            shown,
+            parent: self.parent,
+            hook_permission: self.permission,
+        }
+    }
 }
 
 thread_local! {
@@ -111,7 +121,7 @@ impl Agent<'_> {
     ) -> Outcome {
         let call = ScriptCall { agent: self, tool, within: Within::the_call(calling) };
         let shown = tool.shown(input, self.workspace);
-        self.permitted_as(calling.id, &call, summary, shown.as_deref(), input, calling.permission)
+        self.permitted(&calling.permitting(summary, shown.as_deref()), &call, input)
     }
 
     pub(in crate::agent) fn project_skill<'t>(&self, tool: &'t dyn Tool, input: &Value) -> Option<&'t FoundSkill> {
@@ -129,10 +139,10 @@ impl Agent<'_> {
     ) -> Outcome {
         let shown = format!("{summary}, the project's script {}", skill.file.display());
         let Some(script) = tool.script() else {
-            return self.permitted_as(calling.id, tool, summary, Some(&shown), input, calling.permission);
+            return self.permitted(&calling.permitting(summary, Some(&shown)), tool, input);
         };
         let call = ScriptCall { agent: self, tool: script, within: Within::the_call(calling) };
-        self.permitted_as(calling.id, &call, summary, Some(&shown), input, calling.permission)
+        self.permitted(&calling.permitting(summary, Some(&shown)), &call, input)
     }
 
     fn script_context(&self) -> Value {
@@ -231,7 +241,14 @@ impl Agent<'_> {
         let call = HostCall { capability, script: script.name, origin: script.origin };
         let id = format!("{}-{}-{}", within.id, capability.name(), self.control.next_agent());
         let (subject, shown) = (call.subject(arguments), call.shown(arguments));
-        HostCall::answer(self.permitted_as(&id, &call, &subject, Some(&shown), arguments, None))
+        let permitting = crate::agent::permission::Permitting {
+            id: &id,
+            subject: &subject,
+            shown: Some(&shown),
+            parent: within.parent,
+            hook_permission: None,
+        };
+        HostCall::answer(self.permitted(&permitting, &call, arguments))
     }
 
     fn primitive(&self, script: &Script<'_>, function: &str, arguments: &Value) -> Result<Value, String> {

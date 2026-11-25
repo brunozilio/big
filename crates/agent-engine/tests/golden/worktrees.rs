@@ -1,4 +1,3 @@
-use domain::PermissionMode;
 use serde_json::json;
 
 use crate::models::{call, no_findings, says};
@@ -26,7 +25,7 @@ fn a_main_agent_isolated_in_a_worktree_writes_there_and_the_worktree_is_retained
         no_findings(),
     ]);
     let mut request = stage.request("Create the work file");
-    request.policy.permission = PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
 
     stage.play("prompt", &request);
 
@@ -60,7 +59,7 @@ fn a_main_agent_isolated_in_a_worktree_writes_there_and_the_worktree_is_retained
         == prompt: conversation ==
         user:
           text "Create the work file"
-          reminder "# Runtime reminder\nThe user enabled autonomous execution. Stay within the authorized task and verify the result.\nCollect background agent reports before completing. U…
+          reminder "# Runtime reminder\nAuto mode is on: act without asking for permission. A reviewer checks risky actions before they run and asks the user only when one looks dangerous.…
         assistant:
           tool_use w1 Write "{\"content\":\"isolated\\n\",\"file_path\":\"work.txt\"}"
         user:

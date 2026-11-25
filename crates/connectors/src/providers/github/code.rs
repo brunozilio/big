@@ -95,6 +95,7 @@ fn review(found: &Value) -> Value {
     json!({
         "id": found["id"].to_string(),
         "author": text_of(found, "/user/login"),
+        "agent": idempotency::author(&text_of(found, "/body")),
         "verdict": verdict(&found["state"]),
         "body": idempotency::strip(&text_of(found, "/body")),
         "at": text_of(found, "/submitted_at"),
@@ -149,6 +150,7 @@ fn thread_comments(thread: &Value) -> Vec<Value> {
                 "path": thread["path"],
                 "line": thread["line"],
                 "author": text_of(comment, "/author/login"),
+                "agent": idempotency::author(&text_of(comment, "/body")),
                 "body": idempotency::strip(&text_of(comment, "/body")),
                 "resolved": thread["isResolved"].as_bool().unwrap_or(false),
                 "outdated": thread["isOutdated"].as_bool().unwrap_or(false),
@@ -187,13 +189,17 @@ pub async fn submit_review(api: &Api<'_>, args: Args<'_>, key: &str) -> Result<V
             return Ok(json!({ "id": found["id"].to_string(), "verdict": verdict(&found["state"]), "created": false }));
         }
     }
+    let agent = args.optional_text("agent");
     let comments: Vec<Value> = args
         .list("lines")
         .iter()
-        .map(|line| json!({ "path": line["path"], "line": line["line"], "body": line["body"], "side": "RIGHT" }))
+        .map(|line| {
+            let said = idempotency::authored(line["body"].as_str().unwrap_or_default(), agent);
+            json!({ "path": line["path"], "line": line["line"], "body": said, "side": "RIGHT" })
+        })
         .collect();
-    let mut body =
-        json!({ "event": event, "body": idempotency::marked(args.optional_text("body").unwrap_or_default(), key) });
+    let said = idempotency::authored(args.optional_text("body").unwrap_or_default(), agent);
+    let mut body = json!({ "event": event, "body": idempotency::marked(&said, key) });
     if !comments.is_empty() {
         body["comments"] = json!(comments);
     }

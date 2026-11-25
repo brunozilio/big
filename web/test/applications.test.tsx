@@ -85,6 +85,8 @@ describe('aba Aplicações', () => {
     expect(made?.repositories[0]).toMatchObject({ directory: `${MOCK_HOME}/projetos/web`, code: { connection: 'c-github', repo: 'acme/web' }, run: ['bun api', 'bun web'], verify: ['bun test', 'bun run lint'] })
     await waitFor(() => expect(view.getByRole('button', { name: 'Remover web' })).toBeTruthy())
     fireEvent.click(view.getByRole('button', { name: 'Remover web' }))
+    expect(getState().applications?.length).toBe(2)
+    fireEvent.click(await view.findByRole('button', { name: 'Remover' }))
     await waitFor(() => expect(getState().applications?.length).toBe(1))
   })
 
@@ -185,7 +187,7 @@ describe('aplicações no composer', () => {
       fireEvent.keyDown(await view.findByRole('button', { name: 'Adicionar' }), { key: 'Enter' })
       fireEvent.click(await view.findByRole('menuitem', { name: /Importar issue do/ }))
     }
-    const menu = await view.findByRole('button', { name: 'Aplicação: Checkout' })
+    const menu = await view.findByRole('combobox', { name: 'Aplicação: Checkout' })
     await openIssues()
     await view.findByRole('dialog', { name: /Importar issue do/ })
     await waitFor(() => expect(searched.length).toBeGreaterThan(0))
@@ -194,10 +196,10 @@ describe('aplicações no composer', () => {
     fireEvent.keyDown(view.getByPlaceholderText(/Buscar issue do/), { key: 'Escape' })
 
     fireEvent.keyDown(menu, { key: 'Enter' })
-    expect(view.queryByRole('menuitem', { name: /Todas/ })).toBeNull()
-    expect(await view.findByRole('menuitem', { name: 'Adicionar aplicação' })).toBeTruthy()
-    fireEvent.click(await view.findByRole('menuitem', { name: 'Infra' }))
-    await waitFor(() => expect(view.getByRole('button', { name: 'Aplicação: Infra' })).toBeTruthy())
+    expect(view.queryByRole('option', { name: /Todas/ })).toBeNull()
+    expect(await view.findByRole('option', { name: 'Adicionar aplicação' })).toBeTruthy()
+    fireEvent.click(await view.findByRole('option', { name: 'Infra' }))
+    await waitFor(() => expect(view.getByRole('combobox', { name: 'Aplicação: Infra' })).toBeTruthy())
     const infra = getState().applications?.find((a) => a.name === 'Infra')
     expect(localStorage.getItem('composer.application')).toBe(infra?.id ?? '')
     searched.length = 0

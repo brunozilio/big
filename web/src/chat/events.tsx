@@ -3,14 +3,18 @@ import { now } from '@/api/clock'
 import type { Agent, SessionEvent, ThinkingStep, ToolCall } from '@/api/contract'
 import { AgentAvatar } from '@/ui/agentAvatar'
 import { ChatMarkdown } from '@/ui/chatMarkdown'
-import { cn, plural } from '@/ui/cn'
+import { cn } from '@/ui/cn'
+import { plural, useT } from '@/i18n'
 import { CodeBlock, DiffView, Spinner } from '@/ui/display'
 import { PersonAvatar, personName, ProviderLogo } from '@/ui/domain'
 import { Icon, type IconName } from '@/ui/icon'
 import { AnimatePresence, Collapse, IconSwap, motion, tween } from '@/ui/motion'
 import { Tooltip } from '@/ui/overlay'
+import { JobBadge, LiveDot, StopJobButton } from './jobs'
 import { NoticeLine, NoticeMessage } from './Notices'
 import { parseNotices, statusNotice } from './noticeText'
+
+const rail = 'flex h-6 w-[22px] shrink-0 items-center justify-center'
 
 export type Ev<T extends SessionEvent['type']> = Extract<SessionEvent, { type: T }>
 
@@ -34,39 +38,39 @@ export function UserMessage({ event }: { event: Ev<'user'> }) {
   return <PersonMessage event={event} />
 }
 
+function Sender({ event }: { event: Ev<'user'> }) {
+  const agent = useAgent(event.agent)
+  if (!event.author.agent) return <>{personName(event.author)}<PersonAvatar person={event.author} size={20} /></>
+  return <>{agent?.name ?? event.author.name}<AgentMark size={18} agent={event.agent} /></>
+}
+
 function PersonMessage({ event }: { event: Ev<'user'> }) {
-  const [expanded, setExpanded] = useState(false)
-  const long = event.text.length > 320
+  const t = useT()
   return (
     <div className="group flex flex-col items-end gap-2">
       <div className="flex items-center gap-2 text-base text-muted">
-        {personName(event.author)}
-        <PersonAvatar person={event.author} size={20} />
+        <Sender event={event} />
       </div>
       {event.attachments > 0 && (
         <span className="inline-flex h-8 items-center gap-1.5 rounded-full bg-surface px-3 text-base text-fg2 shadow-card">
           <Icon name="attach" size={15} className="text-muted" />
-          <span className="tabular-nums">{event.attachments}</span> {plural(event.attachments, 'anexo', 'anexos')}
+          <span className="tabular-nums">{event.attachments}</span> {t(`plan.attachment_${plural(event.attachments)}`)}
         </span>
       )}
       <div className="prose-chat prose-user max-w-[85%] rounded-overlay bg-primary px-4 py-3 text-md leading-6 text-primary-fg shadow-[0_1px_2px_rgb(0_0_0/0.12)] sm:max-w-[75%]">
-        <ChatMarkdown text={long && !expanded ? `${event.text.slice(0, 320)}…` : event.text} />
-        {long && (
-          <button className="ml-2 text-sm underline opacity-70" onClick={() => setExpanded(!expanded)}>
-            {expanded ? 'mostrar menos' : 'mostrar mais'}
-          </button>
-        )}
+        <ChatMarkdown text={event.text} />
       </div>
     </div>
   )
 }
 
 export function AssistantMessage({ event }: { event: Ev<'assistant'> }) {
+  const t = useT()
   const agent = useAgent(event.agent)
   return (
     <div className="group flex gap-3">
       <span className="mt-[3px]">
-        <Tooltip content={agent?.name ?? 'Agente'}><span className="flex"><AgentMark size={18} agent={event.agent} /></span></Tooltip>
+        <Tooltip content={agent?.name ?? t('plan.agent')}><span className="flex"><AgentMark size={18} agent={event.agent} /></span></Tooltip>
       </span>
       <div className="min-w-0 flex-1">
         <div className="prose-chat">
@@ -77,38 +81,27 @@ export function AssistantMessage({ event }: { event: Ev<'assistant'> }) {
   )
 }
 
-const TAIL = 280
-
 export function thoughtText(steps: ThinkingStep[], live: boolean): string {
   const written = visibleSteps(steps).map((s) => s.text.trim())
   if (!live) return written.join('\n\n')
-  const last = written[written.length - 1] ?? ''
-  return last.length > TAIL ? `…${last.slice(-TAIL).trimStart()}` : last
+  return written[written.length - 1] ?? ''
 }
 
 export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
-  const [open, setOpen] = useState(false)
+  const t = useT()
   const text = thoughtText(event.steps, event.live)
-  const long = !event.live && (text.length > TAIL || text.split('\n').length > 3)
   return (
-    <div className="flex gap-2.5">
-      <motion.span animate={event.live ? { opacity: [0.45, 1, 0.45] } : { opacity: 1 }} transition={event.live ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : tween} className={cn('mt-[3px] flex shrink-0', event.live ? 'text-warning-fg' : 'text-muted')}>
-        <Icon name="idea" size={16} />
+    <div className="flex gap-3.5">
+      <motion.span animate={event.live ? { opacity: [0.45, 1, 0.45] } : { opacity: 1 }} transition={event.live ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : tween} className={cn(rail, event.live ? 'text-warning-fg' : 'text-muted')}>
+        <Icon name="idea" size={18} />
       </motion.span>
       <div className="min-w-0 flex-1 text-md leading-6 text-muted">
         {text ? (
-          <>
-            <div className={cn('prose-chat prose-thought break-words', !open && 'line-clamp-3', event.live && 'text-shimmer')}>
-              <ChatMarkdown text={text} />
-            </div>
-            {long && (
-              <button onClick={() => setOpen(!open)} className="mt-1 text-sm text-faint transition-colors hover:text-fg">
-                {open ? 'Mostrar menos' : 'Mostrar tudo'}
-              </button>
-            )}
-          </>
+          <div className={cn('prose-chat prose-thought break-words', event.live && 'thought-tail')}>
+            <ChatMarkdown key={event.live ? `live-${visibleSteps(event.steps).length}` : 'done'} text={text} />
+          </div>
         ) : (
-          <p className="text-shimmer">Pensando…</p>
+          <p className="text-shimmer">{t('plan.thinking')}</p>
         )}
       </div>
     </div>
@@ -147,16 +140,20 @@ export function ToolCallItem({ call, last, single }: { call: ToolCall; last?: bo
   return (
     <li className={cn('relative list-none', !single && 'pb-5')}>
       {!last && <span className="absolute bottom-0 left-[11px] top-[28px] w-px bg-line-strong" />}
-      <button disabled={!hasDetail} onClick={() => setOpen(!open)} className="group flex w-full items-center gap-3.5 text-left disabled:cursor-default">
-        <span className={cn('relative flex size-[22px] shrink-0 items-center justify-center text-muted', call.state === 'error' && 'text-danger-fg')}>
+      <div className="flex items-center gap-2">
+      <button disabled={!hasDetail} onClick={() => setOpen(!open)} className="group flex min-w-0 flex-1 items-center gap-3.5 text-left disabled:cursor-default">
+        <span className={cn(rail, 'relative text-muted', call.state === 'error' && 'text-danger-fg')}>
           <IconSwap k={call.state === 'running' ? 'r' : call.logo ? 'c' : call.state === 'error' ? 'e' : 'i'}>
             {call.state === 'running' ? <Spinner size={18} className="text-fg2" /> : call.logo ? <ProviderLogo logo={call.logo} size={18} /> : <Icon name={call.state === 'error' ? 'alert' : toolIcons[call.kind]} size={21} />}
           </IconSwap>
+          {call.jobRunning && <LiveDot className="absolute -right-0.5 -top-0.5 ring-2 ring-bg rounded-full" />}
         </span>
         <span title={call.title} className={cn('min-w-0 flex-1 truncate text-body text-fg2 transition-colors', hasDetail && 'group-hover:text-fg', call.state === 'error' && 'text-danger-fg', call.state === 'running' && 'text-shimmer')}>{call.title}</span>
         <span className="hidden text-sm tabular-nums text-muted opacity-0 transition-opacity group-hover:opacity-100 sm:inline">{call.durationMs < 1000 ? `${call.durationMs}ms` : `${(call.durationMs / 1000).toFixed(1)}s`}</span>
-        <span className={cn('inline-flex h-7 items-center rounded-control-sm bg-inset px-2.5 text-base text-muted', call.state === 'error' && 'bg-danger-soft text-danger-fg')}>{call.tag}</span>
+        {call.job ? <JobBadge running={!!call.jobRunning} /> : scriptOf(call.input) === null && <span className={cn('inline-flex h-7 items-center rounded-control-sm bg-inset px-2.5 text-base text-muted', call.state === 'error' && 'bg-danger-soft text-danger-fg')}>{call.tag}</span>}
       </button>
+      {call.job && call.jobStoppable && <StopJobButton job={call.job} />}
+      </div>
       <Collapse open={open}>
         <div className="ml-[36px]">
           <ToolCallDetail call={call} />
@@ -167,8 +164,9 @@ export function ToolCallItem({ call, last, single }: { call: ToolCall; last?: bo
 }
 
 function SubagentSteps({ steps }: { steps: string[] }) {
+  const t = useT()
   return (
-    <ol aria-label="Passos do subagente" className="space-y-1 border-l border-line-strong pl-3 text-sm text-muted">
+    <ol aria-label={t('plan.subagentSteps')} className="space-y-1 border-l border-line-strong pl-3 text-sm text-muted">
       {steps.map((step, i) => (
         <li key={i} className="truncate" title={step}>{step}</li>
       ))}
@@ -188,14 +186,15 @@ function ToolCallInput({ input }: { input: unknown }) {
 }
 
 function ToolCallDetail({ call }: { call: ToolCall }) {
+  const t = useT()
   const output = call.output ?? ''
   const isJson = output.trim().startsWith('{') || output.trim().startsWith('[')
   return (
     <div className="mt-3 space-y-2.5">
       {call.input != null && <ToolCallInput input={call.input} />}
-      {call.steps && call.steps.length > 0 && <SubagentSteps steps={call.steps} />}
+      {scriptOf(call.input) === null && call.steps && call.steps.length > 0 && <SubagentSteps steps={call.steps} />}
       {call.diff && <DiffView diff={call.diff} />}
-      {output && <CodeBlock language={isJson ? 'json' : call.kind === 'command' ? 'Terminal' : 'Saída'} code={isJson ? prettyJson(output) : output} className={cn(call.state === 'error' && 'ring-1 ring-danger/30')} />}
+      {output && <CodeBlock language={isJson ? 'json' : call.kind === 'command' ? 'Terminal' : t('plan.output')} code={isJson ? prettyJson(output) : output} className={cn(call.state === 'error' && 'ring-1 ring-danger/30')} />}
     </div>
   )
 }
@@ -209,7 +208,7 @@ function prettyJson(s: string) {
 }
 
 export function backgroundNotice(text: string): { command: string; ok: boolean; code: number | null } | null {
-  const found = /^\[background [^\]]+\] `([\s\S]+)` (finished|failed|was killed|stopped)(?: \(exit code (-?\d+)\))?\.?$/.exec(text.trim())
+  const found = /^\[background [^\]]+\] `([\s\S]+)` (finished|failed|was killed|was stopped by the user|stopped)(?: \(exit code (-?\d+)\))?\.?$/.exec(text.trim())
   if (!found) return null
   const code = found[3] === undefined ? null : Number(found[3])
   const command = found[1].replace(/'[^']*\/worktrees\/[^/']+\/([^']*)'/g, '$1').replace(/\S*\/worktrees\/[^/\s]+\/(\S*)/g, '$1').replace(/\s+/g, ' ').trim()
@@ -217,12 +216,15 @@ export function backgroundNotice(text: string): { command: string; ok: boolean; 
 }
 
 function BackgroundDone({ notice }: { notice: NonNullable<ReturnType<typeof backgroundNotice>> }) {
+  const t = useT()
   return (
-    <p className="flex min-w-0 items-center gap-2 text-sm text-muted">
-      <span className={cn('flex size-4 shrink-0 items-center justify-center rounded-full', notice.ok ? 'bg-success text-white' : 'bg-danger text-white')}>
-        <Icon name={notice.ok ? 'check' : 'close'} size={10} strokeWidth={2.6} />
+    <p className="flex min-w-0 items-center gap-3.5 text-sm text-muted">
+      <span className={rail}>
+        <span className={cn('flex size-4 items-center justify-center rounded-full', notice.ok ? 'bg-success text-white' : 'bg-danger text-white')}>
+          <Icon name={notice.ok ? 'check' : 'close'} size={10} strokeWidth={2.6} />
+        </span>
       </span>
-      <span className="shrink-0">Tarefa em segundo plano {notice.ok ? 'concluída' : notice.code === null ? 'interrompida' : `falhou (código ${notice.code})`}</span>
+      <span className="shrink-0">{notice.ok ? t('plan.background_done') : notice.code === null ? t('plan.background_stopped') : t('plan.background_failed', { code: notice.code })}</span>
       <code className="min-w-0 truncate rounded-[5px] bg-inset px-1.5 py-0.5 font-mono text-xs text-fg2" title={notice.command}>{notice.command}</code>
     </p>
   )
@@ -235,24 +237,18 @@ export function observerReport(text: string): { observer: string; message: strin
 }
 
 function ObserverReport({ report }: { report: NonNullable<ReturnType<typeof observerReport>> }) {
-  const [open, setOpen] = useState(false)
-  const long = report.message.length > TAIL || report.message.split('\n').length > 3
+  const t = useT()
   return (
-    <div className="flex gap-2.5">
-      <Tooltip content={`Observer: ${report.observer}`}>
-        <span className="mt-[3px] flex shrink-0 text-muted">
+    <div className="flex gap-3.5">
+      <Tooltip content={`${t('plan.notice_observer')}: ${report.observer}`}>
+        <span className={cn(rail, 'text-muted')}>
           <Icon name="eye" size={16} />
         </span>
       </Tooltip>
       <div className="min-w-0 flex-1 text-md leading-6 text-muted">
-        <div className={cn('prose-chat prose-thought break-words', !open && 'line-clamp-3')}>
+        <div className="prose-chat prose-thought break-words">
           <ChatMarkdown text={report.message} />
         </div>
-        {long && (
-          <button onClick={() => setOpen(!open)} className="mt-1 text-sm text-faint transition-colors hover:text-fg">
-            {open ? 'Mostrar menos' : 'Mostrar tudo'}
-          </button>
-        )}
       </div>
     </div>
   )
@@ -265,16 +261,19 @@ export function StatusLine({ event }: { event: Ev<'status'> }) {
   if (notice) return <BackgroundDone notice={notice} />
   const sent = statusNotice(event.text)
   if (sent) return <NoticeLine notice={sent} />
-  if (event.status !== 'error') return <p className="text-sm text-muted">{event.text}</p>
+  if (event.status !== 'error') return <p className="pl-9 text-sm text-muted">{event.text}</p>
   return (
-    <p className="flex items-center gap-2 text-sm text-muted">
-      <Icon name="stop" size={14} />
+    <p className="flex items-center gap-3.5 text-sm text-muted">
+      <span className={rail}>
+        <Icon name="stop" size={14} />
+      </span>
       {event.text}
     </p>
   )
 }
 
 export function TurnHeader({ startedAt, endedAt, live }: { startedAt: string; endedAt: string; live: boolean }) {
+  const t = useT()
   const [tick, setTick] = useState(() => now())
   useEffect(() => {
     if (!live) return
@@ -287,11 +286,11 @@ export function TurnHeader({ startedAt, endedAt, live }: { startedAt: string; en
     <span className="text-md">
       {live ? (
         <span className="text-shimmer">
-          Trabalhando há <span className="tabular-nums">{duration(secs)}</span>
+          {t('plan.workingFor')} <span className="tabular-nums">{duration(secs)}</span>
         </span>
       ) : (
         <span className="text-muted">
-          Trabalhou por <span className="tabular-nums">{duration(secs)}</span>
+          {t('plan.workedFor')} <span className="tabular-nums">{duration(secs)}</span>
         </span>
       )}
     </span>

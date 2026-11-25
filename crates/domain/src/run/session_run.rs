@@ -122,7 +122,7 @@ mod tests {
         let resumed = Carried { id: Some(SessionId("s".into())), ..Carried::default() };
         let events = [
             started("another"),
-            EngineEvent::ModeChanged(PermissionMode::Bypass),
+            EngineEvent::ModeChanged(PermissionMode::Auto),
             EngineEvent::Steered("one".into()),
             EngineEvent::Steered("two".into()),
             cost(0.25),
@@ -138,7 +138,7 @@ mod tests {
     #[test]
     fn a_branch_moves_to_its_new_session_without_touching_mode_or_lessons() {
         let resumed = Carried { id: Some(SessionId("s".into())), ..Carried::default() };
-        let events = [started("branch"), EngineEvent::ModeChanged(PermissionMode::Bypass), DONE];
+        let events = [started("branch"), EngineEvent::ModeChanged(PermissionMode::Auto), DONE];
         let carried = after(&resumed, Some(SessionCommand::Branch(2)), &events);
         assert_eq!(carried.id, Some(SessionId("branch".into())));
         assert_eq!(carried.mode, resumed.mode);

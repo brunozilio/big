@@ -65,6 +65,7 @@ pub struct Environment {
     pub tools: Vec<String>,
     pub skills: String,
     pub mcp_instructions: Vec<McpInstructions>,
+    pub language: Option<String>,
 }
 
 pub const MCP_INSTRUCTIONS: usize = 2_048;
@@ -111,6 +112,7 @@ impl Environment {
             "mcp_instructions": self.mcp_instructions.iter().map(|served| {
                 serde_json::json!({ "server": served.server, "text": McpInstructions::of(&served.server, &served.text).text })
             }).collect::<Vec<_>>(),
+            "language": self.language,
             "contract": CONTRACT_VERSION,
             "brand": content::brand(),
         })

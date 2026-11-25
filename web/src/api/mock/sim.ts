@@ -1,22 +1,26 @@
 import type { ItemGit, ItemSource } from '../contract'
+import { say } from './say'
+import { findingsFor, type Triage } from './security'
 
 
-export type StepId = 'plan' | 'ticket' | 'develop' | 'checks' | 'pr' | 'ci' | 'review' | 'merge' | 'release'
+export type StepId = 'plan' | 'ticket' | 'develop' | 'checks' | 'pr' | 'ci' | 'review' | 'merge' | 'quality' | 'release' | 'security'
 export type SimState = 'pending' | 'running' | 'waiting' | 'passed' | 'failed' | 'skipped' | 'blocked'
-export type Need = 'ai' | 'tracker' | 'code' | 'cloud'
+export type Need = 'ai' | 'tracker' | 'code' | 'cloud' | 'security' | 'quality'
 
 export interface Step { id: StepId; label: string; icon: string; logo?: string; dur: number; needs?: Need; doing: string }
 
 export const STEPS: Step[] = [
-  { id: 'plan', label: 'Plano', icon: 'sPlan', dur: 7, needs: 'ai', doing: 'Planejando' },
-  { id: 'ticket', label: 'Jira', icon: 'sTicket', logo: 'jira', dur: 3, needs: 'tracker', doing: 'Criando issue' },
-  { id: 'develop', label: 'Develop', icon: 'sCode', dur: 14, needs: 'ai', doing: 'Desenvolvendo' },
-  { id: 'checks', label: 'Checks', icon: 'sTest', dur: 6, doing: 'Rodando checks' },
-  { id: 'pr', label: 'Pull request', icon: 'sPr', logo: 'github', dur: 3, needs: 'code', doing: 'Abrindo PR' },
-  { id: 'ci', label: 'CI', icon: 'sCi', logo: 'github', dur: 12, needs: 'code', doing: 'Aguardando CI' },
-  { id: 'review', label: 'Review', icon: 'sReview', dur: Infinity, doing: 'Esperando você' },
-  { id: 'merge', label: 'Merge', icon: 'sMerge', logo: 'github', dur: 3, needs: 'code', doing: 'Mergeando' },
+  { id: 'plan', get label() { return say('stepPlan') }, icon: 'sPlan', dur: 7, needs: 'ai', get doing() { return say('doingPlan') } },
+  { id: 'ticket', label: 'Jira', icon: 'sTicket', logo: 'jira', dur: 3, needs: 'tracker', get doing() { return say('doingTicket') } },
+  { id: 'develop', label: 'Develop', icon: 'sCode', dur: 14, needs: 'ai', get doing() { return say('doingDevelop') } },
+  { id: 'checks', label: 'Checks', icon: 'sTest', dur: 6, get doing() { return say('doingChecks') } },
+  { id: 'pr', label: 'Pull request', icon: 'sPr', logo: 'github', dur: 3, needs: 'code', get doing() { return say('doingPr') } },
+  { id: 'ci', label: 'CI', icon: 'sCi', logo: 'github', dur: 12, needs: 'code', get doing() { return say('doingCi') } },
+  { id: 'review', label: 'Review', icon: 'sReview', dur: Infinity, get doing() { return say('doingReview') } },
+  { id: 'merge', label: 'Merge', icon: 'sMerge', logo: 'github', dur: 3, needs: 'code', get doing() { return say('doingMerge') } },
+  { id: 'quality', get label() { return say('stepQuality') }, icon: 'analytics', logo: 'sonar', dur: 5, needs: 'quality', get doing() { return say('doingQuality') } },
   { id: 'release', label: 'Release', icon: 'sRelease', dur: 11, needs: 'cloud', doing: 'Deploy' },
+  { id: 'security', get label() { return say('stepSecurity') }, icon: 'hSecurityCheck', logo: 'veracode', dur: 4, needs: 'security', get doing() { return say('doingSecurity') } },
 ]
 export const IDX = Object.fromEntries(STEPS.map((s, i) => [s.id, i])) as Record<StepId, number>
 export const isStepId = (s: string): s is StepId => s in IDX
@@ -63,6 +67,9 @@ export interface SimItem {
   reviewComments: Note[]
   model: string
   origin?: { sources: ItemSource[]; git: ItemGit[] }
+  workflow?: string
+  archivedAt?: number | null
+  triage?: Triage | null
 }
 
 export interface ConnectionState { id: string; provider: string; label: string; account: string; capabilities: string[]; status?: 'ok' | 'error' }
@@ -97,7 +104,7 @@ export const fileOf = (it: SimItem) => ['src/auth/session.ts', 'src/billing/retr
 export const moduleOf = (it: SimItem) => testName(it).split('::')[0]
 export const diffOf = (it: SimItem) => ({ additions: 40 + (it.h % 380), deletions: 6 + ((it.h >> 4) % 120), files: 2 + ((it.h >> 8) % 9) })
 
-const needCapability: Record<Need, string> = { ai: 'ai', tracker: 'tracker', code: 'code', cloud: 'cloud' }
+const needCapability: Record<Need, string> = { ai: 'ai', tracker: 'tracker', code: 'code', cloud: 'cloud', security: 'security', quality: 'quality' }
 export function connectionFor(n?: Need) {
   if (!n) return undefined
   return store.connections.find((c) => c.capabilities.includes(needCapability[n]))
@@ -111,22 +118,23 @@ export const isPlanWaiting = (it: SimItem) => !it.done && STEPS[it.cur]?.id === 
 export const isReviewWaiting = (it: SimItem) => !it.done && !it.bounce && STEPS[it.cur]?.id === 'review' && it.states.review === 'waiting'
 export const isMergeReady = (it: SimItem) => !it.done && !it.bounce && STEPS[it.cur]?.id === 'merge' && it.states.merge === 'waiting'
 export const isGate = (it: SimItem) => !it.done && STEPS[it.cur]?.id === 'release' && (it.gate || it.rejected)
+export const isTriageWaiting = (it: SimItem) => !it.done && STEPS[it.cur]?.id === 'security' && it.states.security === 'waiting'
 export const isPaused = (it: SimItem) => !it.done && STEPS[it.cur]?.id === 'develop' && it.states.develop === 'waiting'
-export const withYou = (it: SimItem) => isBlocked(it) || isPlanWaiting(it) || isReviewWaiting(it) || isMergeReady(it) || isGate(it) || isPaused(it)
+export const withYou = (it: SimItem) => isBlocked(it) || isPlanWaiting(it) || isReviewWaiting(it) || isMergeReady(it) || isGate(it) || isPaused(it) || isTriageWaiting(it)
 
 export function planText(it: SimItem, revision: number) {
-  const extra = revision > 0 ? `\n4. ${it.reasons.filter((r) => r.kind === 'plan')[revision - 1]?.text ?? 'Ajustar conforme pedido'}` : ''
+  const extra = revision > 0 ? `\n4. ${it.reasons.filter((r) => r.kind === 'plan')[revision - 1]?.text ?? say('adjustAsAsked')}` : ''
   return [
     `# ${it.title}`,
-    `## Contexto\nO comportamento de \`${moduleOf(it)}\` não cobre este pedido. Ao final, o fluxo funciona de ponta a ponta e fica coberto por teste.`,
-    `## Abordagem\n1. Ajustar \`${fileOf(it)}\`\n2. Cobrir \`${moduleOf(it)}\` com teste\n3. Rodar a suíte do módulo${extra}`,
-    `## Arquivos críticos\n- \`${fileOf(it)}\` — a mudança principal\n- \`${moduleOf(it)}\` — testes novos`,
-    `## Riscos\n- Chamadores antigos dependem do formato atual; manter a assinatura pública.`,
-    `## Verificação\n- \`cargo nextest run -p ${moduleOf(it).split('/')[0] || 'server'}\`\n- Abrir o fluxo no app e conferir o resultado`,
+    say('planContext', { module: moduleOf(it) }),
+    `${say('planApproach', { file: fileOf(it), module: moduleOf(it) })}${extra}`,
+    say('planFiles', { file: fileOf(it), module: moduleOf(it) }),
+    say('planRisks'),
+    say('planVerify', { crate: moduleOf(it).split('/')[0] || 'server' }),
   ].join('\n\n')
 }
 
-interface Seed { key: string; title: string; at?: number; elapsed?: number; fail?: Partial<Record<StepId, number>>; skipPlan?: boolean; done?: boolean; pause?: Pause['kind']; planWaiting?: boolean }
+interface Seed { key: string; title: string; at?: number; elapsed?: number; fail?: Partial<Record<StepId, number>>; skipPlan?: boolean; done?: boolean; pause?: Pause['kind']; planWaiting?: boolean; triage?: boolean }
 
 function makeItem(o: Seed): SimItem {
   const at = o.at ?? 0
@@ -168,6 +176,7 @@ function makeItem(o: Seed): SimItem {
     a.start = store.clock - it.elapsed
   }
   if (o.planWaiting) finishPlan(it)
+  if (o.triage) waitTriage(it)
   it.waitedAt = store.clock - (o.elapsed ?? 0) - (it.h % 9)
   return it
 }
@@ -208,10 +217,17 @@ function pass(it: SimItem, s: Step) {
   } else startStep(it, next)
 }
 
+function waitTriage(it: SimItem) {
+  it.states.security = 'waiting'
+  const a = last(it, 'security')
+  if (a) a.state = 'waiting'
+  it.waitedAt = store.clock
+}
+
 function fail(it: SimItem, s: Step) {
   it.states[s.id] = 'failed'
   last(it, s.id).state = 'failed'
-  it.reasons.push({ kind: 'checks', text: `cargo nextest run falhou em ${testName(it)}: esperado Refreshed, veio Expired` })
+  it.reasons.push({ kind: 'checks', text: s.id === 'quality' ? say('qualityGateFailed') : say('checksFailed', { test: testName(it) }) })
   it.bounce = 3
 }
 
@@ -246,6 +262,10 @@ function advance(it: SimItem) {
     finishPlan(it)
     return
   }
+  if (s.id === 'security' && !it.triage && findingsFor(it, null).length > 0) {
+    waitTriage(it)
+    return
+  }
   const f = it.fail[s.id] ?? 0
   if (f > 0) {
     it.fail[s.id] = f - 1
@@ -278,7 +298,7 @@ export function revisePlan(id: number, feedback: string) {
     p.resolution = 'revised'
     p.feedback = feedback
   }
-  it.reasons.push({ kind: 'plan', text: feedback || 'Ajustar o plano' })
+  it.reasons.push({ kind: 'plan', text: feedback || say('adjustPlan') })
   it.states.plan = 'pending'
   startStep(it, IDX.plan)
   emit()
@@ -307,7 +327,7 @@ export function submitReview(id: number, verdict: 'comment' | 'approve' | 'chang
     it.states.review = 'failed'
     last(it, 'review').state = 'failed'
     const lines = notes.map((n) => `${n.file}:${n.line}: ${n.body}`)
-    it.reasons.push({ kind: 'review', text: [body, ...lines].filter(Boolean).join('\n') || 'Mudanças pedidas na revisão' })
+    it.reasons.push({ kind: 'review', text: [body, ...lines].filter(Boolean).join('\n') || say('changesRequested') })
     it.bounce = 2
   }
   emit()
@@ -332,6 +352,14 @@ export function rejectDeploy(id: number) {
   emit()
 }
 
+export function triageFindings(id: number, decisions: Triage) {
+  const it = find(id)
+  if (!it || !isTriageWaiting(it)) return
+  it.triage = decisions
+  pass(it, STEPS[IDX.security])
+  emit()
+}
+
 export function mergePr(id: number) {
   const it = find(id)
   if (!it || !isMergeReady(it)) return
@@ -352,6 +380,14 @@ export function rerunFrom(id: number, step: StepId) {
   emit()
 }
 
+export function archiveItem(id: number, archived: boolean) {
+  const it = find(id)
+  if (!it) return
+  if (archived && !it.done) throw new Error(say('archiveOnlyDelivered'))
+  it.archivedAt = archived ? (it.archivedAt ?? store.clock) : null
+  emit()
+}
+
 export function cancelItem(id: number) {
   store.items = store.items.filter((x) => x.id !== id)
   emit()
@@ -364,7 +400,7 @@ export function chat(id: number, where: 'plan' | 'review', text: string) {
   lines.push({ id: `u${Date.now()}`, tick: store.clock, role: 'user', text })
   emit()
   setTimeout(() => {
-    lines.push({ id: `a${Date.now()}`, tick: store.clock, role: 'assistant', agent: where === 'plan' ? 'planner' : 'reviewer', text: where === 'plan' ? 'Anotado. Vou levar isso em conta no plano.' : `Boa pergunta. A mudança em \`${fileOf(it)}\` segue o padrão de \`src/lib/retry.ts\`.` })
+    lines.push({ id: `a${Date.now()}`, tick: store.clock, role: 'assistant', agent: where === 'plan' ? 'planner' : 'reviewer', text: where === 'plan' ? say('planNoted') : say('reviewAnswer', { file: fileOf(it) }) })
     emit()
   }, 1400)
 }
@@ -380,25 +416,26 @@ export function commentIssue(key: string, body: string) {
 
 export interface IssueSeed { key: string; title: string; kind: 'story' | 'bug' | 'task'; used?: boolean }
 export const ISSUES: IssueSeed[] = [
-  { key: 'APP-251', title: 'Exportar faturas em CSV', kind: 'story' },
-  { key: 'APP-249', title: 'Timeout no webhook de pagamento', kind: 'bug' },
-  { key: 'APP-247', title: 'Filtro por data na lista de clientes', kind: 'story' },
-  { key: 'APP-246', title: 'Remover feature flag do checkout antigo', kind: 'task' },
-  { key: 'APP-244', title: 'Mensagem de erro do cartão recusado', kind: 'bug' },
-  { key: 'OPS-31', title: 'Alerta de fila parada no worker', kind: 'task' },
-  { key: 'OPS-28', title: 'Rotacionar chaves do bucket de backups', kind: 'task' },
+  { key: 'APP-251', get title() { return say('issue251') }, kind: 'story' },
+  { key: 'APP-249', get title() { return say('issue249') }, kind: 'bug' },
+  { key: 'APP-247', get title() { return say('issue247') }, kind: 'story' },
+  { key: 'APP-246', get title() { return say('issue246') }, kind: 'task' },
+  { key: 'APP-244', get title() { return say('issue244') }, kind: 'bug' },
+  { key: 'OPS-31', get title() { return say('issueOps31') }, kind: 'task' },
+  { key: 'OPS-28', get title() { return say('issueOps28') }, kind: 'task' },
 ]
 
 export const PROJECTS = [
-  { id: '10000', key: 'APP', name: 'Aplicativo', avatar: null },
-  { id: '10001', key: 'OPS', name: 'Operações', avatar: null },
+  { id: '10000', key: 'APP', get name() { return say('projectApp') }, avatar: null },
+  { id: '10001', key: 'OPS', get name() { return say('projectOps') }, avatar: null },
 ]
 
-export function createItem(text: string, issueKey: string | null, model: string, project: string | null = null) {
+export function createItem(text: string, issueKey: string | null, model: string, project: string | null = null, workflow?: string) {
   const issue = issueKey ? ISSUES.find((i) => i.key === issueKey) : undefined
   const it = issue ? makeItem({ key: issue.key, title: issue.title }) : makeItem({ key: `${project ?? 'APP'}-${252 + seq}`, title: text.replace(/^./, (c) => c.toUpperCase()) })
   it.createdAt = store.clock
   it.model = model
+  it.workflow = workflow
   if (issue) {
     it.states.ticket = 'skipped'
     it.linked = true
@@ -430,20 +467,25 @@ export function reset(connections: ConnectionState[]) {
   store.connections = connections.map((c) => ({ ...c }))
   ISSUES.forEach((i) => (i.used = false))
   store.items = [
-    makeItem({ key: 'APP-228', title: 'Atualizar dependências', at: IDX.review }),
-    makeItem({ key: 'APP-253', title: 'Paginação na lista de faturas', at: 0, planWaiting: true }),
-    makeItem({ key: 'APP-242', title: 'Acessibilidade na tela de configurações', at: 0, elapsed: 2 }),
-    makeItem({ key: 'APP-240', title: 'Retry de cobrança com backoff', at: IDX.develop, elapsed: 5, pause: 'ask' }),
-    makeItem({ key: 'APP-238', title: 'Índice na tabela de pedidos', at: IDX.develop, elapsed: 5, pause: 'permission' }),
-    makeItem({ key: 'APP-234', title: 'Crash no cold start', at: IDX.checks, elapsed: 2, fail: { checks: 1 } }),
-    makeItem({ key: 'APP-219', title: 'Migração de auth para OIDC', at: IDX.ci, elapsed: 7, skipPlan: true }),
-    makeItem({ key: 'APP-231', title: 'Teste flaky de auth', at: IDX.release }),
-    makeItem({ key: 'APP-210', title: 'Revisão da documentação', done: true }),
-    makeItem({ key: 'APP-205', title: 'Limite de taxa na API pública', done: true }),
+    makeItem({ key: 'APP-228', title: say('seed228'), at: IDX.review }),
+    makeItem({ key: 'APP-253', title: say('seed253'), at: 0, planWaiting: true }),
+    makeItem({ key: 'APP-242', title: say('seed242'), at: 0, elapsed: 2 }),
+    makeItem({ key: 'APP-240', title: say('seed240'), at: IDX.develop, elapsed: 5, pause: 'ask' }),
+    makeItem({ key: 'APP-238', title: say('seed238'), at: IDX.develop, elapsed: 5, pause: 'permission' }),
+    makeItem({ key: 'APP-234', title: say('seed234'), at: IDX.checks, elapsed: 2, fail: { checks: 1 } }),
+    makeItem({ key: 'APP-219', title: say('seed219'), at: IDX.ci, elapsed: 7, skipPlan: true }),
+    makeItem({ key: 'APP-231', title: say('seed231'), at: IDX.release }),
+    makeItem({ key: 'APP-226', title: say('seed226'), at: IDX.security, triage: true }),
+    makeItem({ key: 'APP-224', title: say('seed224'), at: IDX.quality, elapsed: 2, fail: { quality: 1 } }),
+    makeItem({ key: 'APP-210', title: say('seed210'), done: true }),
+    makeItem({ key: 'APP-205', title: say('seed205'), done: true }),
+    makeItem({ key: 'APP-212', title: say('seed212'), done: true }),
+    makeItem({ key: 'APP-214', title: say('seed214'), done: true }),
+    makeItem({ key: 'APP-216', title: say('seed216'), done: true }),
   ]
   const first = store.items[0]
   first.attempts.checks.unshift({ state: 'failed', ticks: 6, start: store.clock - 60 })
   first.attempts.develop.unshift({ state: 'passed', ticks: 14, start: store.clock - 80 })
-  first.reasons.push({ kind: 'checks', text: 'cargo nextest run falhou em deps::lock::resolves_semver: versão 2.x incompatível' })
+  first.reasons.push({ kind: 'checks', text: say('depsFailed') })
   emit()
 }

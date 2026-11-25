@@ -14,8 +14,10 @@ fn keys(value: &Value) -> Vec<String> {
     keys
 }
 
-const ITEM_KEYS: [&str; 20] = [
+const ITEM_KEYS: [&str; 25] = [
+    "accepting",
     "activity",
+    "archivedAt",
     "attention",
     "change",
     "createdAt",
@@ -26,14 +28,17 @@ const ITEM_KEYS: [&str; 20] = [
     "id",
     "impediment",
     "issue",
+    "joinable",
+    "links",
     "live",
     "recap",
     "sources",
     "status",
     "steps",
     "title",
+    "trail",
+    "untitled",
     "updatedAt",
-    "workflow",
     "workflow",
 ];
 
@@ -246,7 +251,7 @@ async fn connections_list_sign_in_with_a_device_choose_an_account_and_disconnect
     let listed = world.get("/api/connections").await;
     assert_eq!(listed["providers"][0]["key"], "fake");
     assert_eq!(listed["providers"][0]["signIn"], "device");
-    assert_eq!(listed["providers"][0]["group"], "Tarefas");
+    assert_eq!(listed["providers"][0]["group"], "tracker");
     assert_eq!(
         listed["connections"][0],
         json!({
@@ -347,7 +352,10 @@ async fn models_branding_and_attachments() {
     assert_eq!(models["models"][0]["fast"], false);
     fixture("models", &models);
     let branding = world.get("/api/branding").await;
-    assert_eq!(branding, json!({ "name": brand::NAME, "logo": "/api/branding/logo", "theme": "system" }));
+    assert_eq!(
+        (&branding["name"], &branding["logo"], &branding["theme"], &branding["language"]),
+        (&json!(brand::NAME), &json!("/api/branding/logo"), &json!("system"), &json!("pt-BR"))
+    );
     let (status, saved) = world.send(Method::PUT, "/api/branding", Some(json!({ "theme": "dark" }))).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(saved["theme"], "dark");
@@ -389,6 +397,20 @@ async fn the_page_is_served_for_every_route_of_the_router_and_unknown_api_paths_
     assert_eq!(body["error"]["code"], "not_found");
     let (status, _) = world.send(Method::GET, "/api/connections/oauth/callback?state=x&code=y", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_error_is_told_in_the_language_chosen_in_the_settings() {
+    let world = World::new().await;
+    let (_, body) = world.send(Method::GET, "/api/items/nothing/steps/plan", None).await;
+    assert_eq!(body["error"]["message"], "Não há esse item.");
+    let (status, _) = world.send(Method::PUT, "/api/branding", Some(json!({ "language": "en" }))).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, body) = world.send(Method::GET, "/api/items/nothing/steps/plan", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["error"], json!({ "code": "not_found", "message": "There is no such item." }));
+    let (_, body) = world.send(Method::PUT, "/api/branding", Some(json!({ "language": "fr" }))).await;
+    assert_eq!(body["error"]["message"], "The language is en, es or pt-BR.");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -491,6 +513,8 @@ async fn an_api_token_connects_without_a_browser_and_is_kept_without_expiry() {
     assert_eq!(alternative["signIn"], "token", "{alternative}");
     assert_eq!(alternative["fields"][0]["secret"], true);
     assert_eq!(alternative["fields"][0]["help"], "Gere o token.");
+    assert_eq!(alternative["fields"][0]["value"], Value::Null);
+    assert_eq!(alternative["fields"][1]["value"], "web.test");
     let start = |token: &str| json!({ "fields": { "token": token }, "method": "api_token" });
     let empty = world.send(Method::POST, "/api/connections/web/start", Some(start("  "))).await;
     assert_eq!(empty.0, StatusCode::BAD_REQUEST, "{}", empty.1);
@@ -511,6 +535,20 @@ async fn an_api_token_connects_without_a_browser_and_is_kept_without_expiry() {
         (kept.access_token.as_str(), kept.expires_at, kept.method.as_deref()),
         ("zt-123", None, Some("api_token"))
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_setting_typed_with_the_token_reaches_the_account_but_not_the_token() {
+    let world = World::new().await;
+    let start = json!({ "fields": { "token": "zt-9", "site": " eu.web " }, "method": "api_token" });
+    let (status, started) = world.send(Method::POST, "/api/connections/web/start", Some(start)).await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    let done =
+        world.send(Method::POST, "/api/connections/device/poll", Some(json!({ "flow": started["flow"] }))).await.1;
+    assert_eq!(done["connection"]["label"], "eu.web", "{done}");
+    let id = done["connection"]["id"].as_str().expect("id").to_owned();
+    let kept = world.connectors.keeper().store().load(&domain::connection::ConnectionId::from(id.as_str())).await;
+    assert_eq!(kept.expect("store").expect("grant").access_token, "zt-9");
 }
 
 fn folder(world: &World, name: &str) -> String {
@@ -626,30 +664,37 @@ async fn requested(world: &World, wanted: impl Fn(&domain::PromptRequest) -> boo
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn btw_opens_a_conversation_in_the_application_folder_that_goes_on_without_making_an_item() {
+async fn btw_becomes_an_item_that_talks_in_the_application_folder_until_it_is_closed() {
     let world = World::new().await;
     let (app, _) = application(&world, "acme/web").await;
     let body = json!({ "text": " o swagger está atualizado? ", "application": app, "model": "auto" });
-    let (status, opened) = world.send(Method::POST, "/api/btw", Some(body)).await;
-    assert_eq!(status, StatusCode::OK, "{opened}");
-    assert_eq!(opened["session"], SESSION);
-    let asked = requested(&world, |r| r.prompt.text == "o swagger está atualizado?").await;
-    assert_eq!(asked.session.cwd.to_string_lossy(), folder(&world, "web"));
+    let (status, item) = world.send(Method::POST, "/api/btw", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    assert_eq!(item["workflow"], "btw");
+    assert_eq!(item["title"], "o swagger está atualizado?");
+    let id = item["id"].as_str().expect("id").to_owned();
+    let asked =
+        requested(&world, |r| r.session.command.is_none() && r.prompt.text == "o swagger está atualizado?").await;
+    assert_eq!(asked.session.agent.as_ref().map(|agent| agent.name.as_str()), Some("aside"));
+    assert_eq!(asked.session.cwd.to_string_lossy(), folder(&world, "web"), "the folder itself, not a worktree");
     assert_eq!(asked.policy.permission, domain::PermissionMode::Plan);
-    assert!(asked.session.resume.is_none(), "a fresh session, not one of an item");
-    for _ in 0..200 {
-        if world.get(&format!("/api/sessions/{SESSION}")).await["status"] == "idle" {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    let more = json!({ "text": "e o readme?", "model": null, "attachments": [] });
-    let sent = world.send(Method::POST, &format!("/api/sessions/{SESSION}/messages"), Some(more)).await;
-    assert_eq!(sent.0, StatusCode::NO_CONTENT, "{}", sent.1);
-    let next = requested(&world, |r| r.prompt.text == "e o readme?").await;
-    assert_eq!(next.session.resume.as_ref().map(|s| s.0.as_str()), Some(SESSION));
-    let (_, items) = world.send(Method::GET, "/api/items", None).await;
-    assert_eq!(items.as_array().map(Vec::len), Some(0), "{items}");
+    let waiting = world.until("talking", |item| item["group"] == "you").await;
+    assert_eq!(waiting["status"], "Conversando");
+    assert!(kept(&world, &waiting).get("issue").is_none(), "no tracker issue");
+    let closed = json!({ "action": "close", "payload": null });
+    let answered = world.send(Method::POST, &format!("/api/items/{id}/steps/aside/input"), Some(closed)).await;
+    assert_eq!(answered.0, StatusCode::NO_CONTENT, "{}", answered.1);
+    let done = world.until("closed", |item| item["group"] == "delivered").await;
+    assert_eq!(done["status"], "Feito");
+    assert!(done["archivedAt"].is_null());
+    let archive = format!("/api/items/{id}/archive");
+    assert_eq!(world.send(Method::POST, &archive, Some(json!({}))).await.0, StatusCode::NO_CONTENT);
+    world.until("archived", |item| item["archivedAt"].is_string()).await;
+    assert_eq!(world.send(Method::DELETE, &archive, None).await.0, StatusCode::NO_CONTENT);
+    world.until("back", |item| item["id"] == id.as_str() && item["archivedAt"].is_null()).await;
+    let nope = world.send(Method::POST, "/api/items/nope/archive", Some(json!({}))).await;
+    assert_eq!(nope.0, StatusCode::NOT_FOUND);
+    assert!(world.provider.calls.lock().expect("calls").is_empty(), "no provider was called");
     let empty = json!({ "text": "  ", "application": app });
     assert_eq!(world.send(Method::POST, "/api/btw", Some(empty)).await.0, StatusCode::BAD_REQUEST);
     let nowhere = json!({ "text": "oi?" });

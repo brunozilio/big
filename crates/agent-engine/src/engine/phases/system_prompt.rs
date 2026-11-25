@@ -100,6 +100,7 @@ impl Job {
                     server.instructions().map(|text| prompt::McpInstructions::of(server.name(), &text))
                 })
                 .collect(),
+            language: self.request.session.language.map(|language| language.prompt_name().to_owned()),
         }
     }
 

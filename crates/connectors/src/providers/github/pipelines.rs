@@ -62,6 +62,9 @@ fn runs_path(repo: &str, args: Args<'_>) -> Result<String, ActionError> {
         if let Some(reference) = args.optional_text("ref") {
             query.append_pair(if sha_like(reference) { "head_sha" } else { "branch" }, reference);
         }
+        if let Some(status) = args.optional_text("status") {
+            query.append_pair("status", status);
+        }
     }
     Ok(format!("{}?{}", url.path(), url.query().unwrap_or_default()))
 }

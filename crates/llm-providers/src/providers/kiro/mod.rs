@@ -97,8 +97,8 @@ impl Shape for Provider {
     fn limits(&self, config: &Config) -> Option<Call> {
         Some(limits::call(config))
     }
-    fn windows(&self, value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
-        limits::windows(value)
+    fn windows(&self, value: &Value, language: domain::Language) -> Result<domain::billing::PlanUsage, ProviderError> {
+        limits::windows(value, language)
     }
     fn hits(&self, value: &Value) -> Result<Vec<llm_providers::web_search::Hit>, ProviderError> {
         search::hits(value)

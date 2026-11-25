@@ -21,7 +21,7 @@ mod settings;
 
 pub use agent_engine::meter::estimate as estimated_cost;
 pub use agent_engine::prompt::output_style::{OutputStyle, all as output_styles};
-pub use api::{Backend, BackendError, Wake};
+pub use api::{Backend, BackendError, BackgroundJob, Wake};
 pub(crate) use catalog::SessionCatalog;
 pub use client::{Builder, Client, Error, Headless, Run, RunControl, Session, SignedIn};
 pub(crate) use data_root::DataRoot;
@@ -31,6 +31,7 @@ pub use domain::provider::{ModelProvider, ProviderSummary};
 pub use domain::{
     AgentAsk, AskId, AskKind, Decision, Effort, EngineEvent, ModelOption as Model, PermissionMode, SessionId,
 };
+pub use features::memory::{ApplicationOf, ApplicationRef, MemoryShelf};
 pub use handler::local::LocalBackend;
 pub(crate) use homes::{Homes, OwnerHome};
 pub use keyed::KeyedEngine;

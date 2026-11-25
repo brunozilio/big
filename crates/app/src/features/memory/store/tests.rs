@@ -18,7 +18,13 @@ fn by(now: i64) -> Provenance {
 
 fn remember(kind: MemoryKind, text: &str, tags: &[&str], touches: &[&str]) -> MemoryEdit {
     let owned = |words: &[&str]| words.iter().map(|word| (*word).to_owned()).collect();
-    MemoryEdit::Remember { kind, text: text.into(), tags: owned(tags), touches: owned(touches) }
+    MemoryEdit::Remember {
+        kind,
+        text: text.into(),
+        tags: owned(tags),
+        touches: owned(touches),
+        scope: Default::default(),
+    }
 }
 
 fn fact(text: &str) -> MemoryEdit {
@@ -74,7 +80,7 @@ fn what_a_project_learns() -> Vec<Change> {
 }
 
 fn keeps_what_the_domain_decides(store: &dyn MemoryStore) {
-    let (project, other) = (Path::new("/work/project"), Path::new("/work/other"));
+    let (project, other) = ("/work/project", "/work/other");
     let (mut expected, mut revision) = (MemoryBook::default(), 0);
     assert_eq!((store.revision(project), store.read(project)), (0, Revised::default()));
 
@@ -126,7 +132,7 @@ fn every_store_keeps_exactly_what_the_domain_decides() {
 #[test]
 fn memory_and_its_undo_point_are_kept_between_runs_of_the_program() {
     let dir = tempfile::tempdir().expect("dir");
-    let project = Path::new("/work/project");
+    let project = "/work/project";
     let mut book = MemoryBook::default();
     book.apply(&[fact("Uses wgpu"), fact("Inter is the only font")], &by(5));
     let store = SqliteMemoryStore::new(Db::open(&dir.path().join("app.db")).expect("open"));
@@ -138,14 +144,14 @@ fn memory_and_its_undo_point_are_kept_between_runs_of_the_program() {
 
     assert_eq!(reopened.read(project), Revised { revision: 1, book });
     assert_eq!(reopened.undo_point(project), Some(MemoryBook::default()));
-    assert_eq!(reopened.load(Path::new("/other")), MemoryBook::default());
+    assert_eq!(reopened.load("/other"), MemoryBook::default());
 }
 
 #[test]
 fn a_change_writes_only_the_rows_it_changed() {
     let db = Db::in_memory().expect("db");
     let store = SqliteMemoryStore::new(db.clone());
-    let project = Path::new("/work/project");
+    let project = "/work/project";
     let facts: Vec<MemoryEdit> = (0..100).map(|n| fact(&format!("Fact number {n}"))).collect();
     store.update(project, &mut |book| drop(book.apply(&facts, &by(5)))).expect("facts");
     let written = || db.read(|connection| Ok(connection.total_changes())).expect("changes");
@@ -178,7 +184,7 @@ fn two_programs_on_one_database_lose_none_of_each_other_s_memories() {
     const EACH: u32 = 200;
     let dir = tempfile::tempdir().expect("dir");
     let file = dir.path().join("app.db");
-    let project = Path::new("/work/project");
+    let project = "/work/project";
     let start = Barrier::new(2);
     std::thread::scope(|scope| {
         for writer in 0..2 {
@@ -211,7 +217,7 @@ fn a_store_that_cannot_write_says_so_and_reads_as_empty() {
     let dir = tempfile::tempdir().expect("dir");
     let file = dir.path().join("app.db");
     let store = SqliteMemoryStore::new(Db::open(&file).expect("open"));
-    let project = Path::new("/work/project");
+    let project = "/work/project";
     Db::open(&file)
         .expect("other")
         .write(|transaction| transaction.execute_batch("DROP TABLE memories; DROP TABLE memory_undo_points"))

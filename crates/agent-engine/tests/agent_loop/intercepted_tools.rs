@@ -1,7 +1,7 @@
 use agent_engine::intercept::{Interceptor, Interceptors, Level};
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::{Decision, EngineEvent, PermissionMode};
+use domain::{Decision, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, answering, tool_use};
@@ -33,7 +33,7 @@ fn calling(name: &str, input: serde_json::Value) -> ScriptedModel {
 
 #[test]
 fn an_interceptor_retries_a_failed_tool_with_another_input_and_the_model_reads_the_second_answer() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.interceptors = intercepting(
         &rig,
         "Read",
@@ -52,7 +52,7 @@ fn an_interceptor_retries_a_failed_tool_with_another_input_and_the_model_reads_t
 
 #[test]
 fn an_interceptor_answers_for_the_tool_without_running_it_and_other_tools_pass_through() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.interceptors =
         intercepting(&rig, "Write", r#"export default () => ({ content: "writes are frozen", isError: true });"#);
     let model = ScriptedModel::new([
@@ -72,7 +72,7 @@ fn an_interceptor_answers_for_the_tool_without_running_it_and_other_tools_pass_t
 
 #[test]
 fn an_input_changed_outside_the_tool_s_schema_is_refused_before_the_tool_runs() {
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.interceptors =
         intercepting(&rig, "Read", r#"export default (input, ctx, next) => next({ path: input.file_path });"#);
     let model = calling("Read", json!({"file_path": "notes.txt"}));
@@ -86,7 +86,7 @@ fn an_input_changed_outside_the_tool_s_schema_is_refused_before_the_tool_runs() 
 #[cfg(unix)]
 #[test]
 fn an_input_changed_by_an_interceptor_still_asks_for_permission() {
-    let mut rig = Rig::new(PermissionMode::Ask);
+    let mut rig = Rig::new(domain::Reviewer::Human);
     rig.workspace.interceptors = intercepting(
         &rig,
         "Bash",
@@ -127,7 +127,7 @@ fn a_ts_agent_s_interceptor_sits_between_the_global_one_and_a_tool_wrapper_file(
     use agent_engine::tools::subagent::{self, FoundAgent};
     use agent_engine::tools::{agent_file, subagent_config::AgentConfig};
     agent_engine::providers::install_testing();
-    let mut rig = Rig::new(PermissionMode::Bypass);
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
     let root = rig.dir.path().join(brand::DIR);
     for (folder, name, mark) in [("intercept", "trail.js", "[global]"), ("tools", "Read.intercept.js", "[tool]")] {
         std::fs::create_dir_all(root.join(folder)).expect("folder");

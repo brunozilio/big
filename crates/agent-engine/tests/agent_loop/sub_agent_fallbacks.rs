@@ -3,7 +3,7 @@ use agent_engine::model::TurnRequest;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools;
 use agent_engine::transcript::{Block, Message};
-use domain::{EngineEvent, PermissionMode};
+use domain::EngineEvent;
 use serde_json::{Value, json};
 
 use crate::{Rig, request, tool_use};
@@ -44,7 +44,7 @@ fn agent_result(history: &[Message]) -> (bool, String) {
 #[test]
 fn a_model_the_provider_does_not_serve_falls_back_to_the_run_s_model() {
     agent_engine::providers::install_testing();
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let input = json!({"description": "Look", "prompt": "Say hi", "model": "some-other-vendor-model"});
     let (model, history) = delegate(&rig, input, 2);
     assert_eq!(model.asked()[1].model, "m", "the sub-agent ran on the run's model");
@@ -54,7 +54,7 @@ fn a_model_the_provider_does_not_serve_falls_back_to_the_run_s_model() {
 
 #[test]
 fn a_worktree_outside_a_repository_with_a_commit_runs_the_agent_without_isolation() {
-    let rig = Rig::new(PermissionMode::AcceptEdits);
+    let rig = Rig::new(domain::Reviewer::Human);
     let input = json!({"description": "Look", "prompt": "Say hi", "isolation": "worktree"});
     let (model, history) = delegate(&rig, input, 2);
     assert_eq!(model.asked().len(), 3, "the sub-agent ran");
@@ -65,7 +65,7 @@ fn a_worktree_outside_a_repository_with_a_commit_runs_the_agent_without_isolatio
 
 #[test]
 fn a_planning_caller_s_worktree_request_is_ignored_since_the_agent_only_reads() {
-    let rig = Rig::new(PermissionMode::Plan);
+    let rig = Rig::planning();
     let input = json!({"description": "Look", "prompt": "Say hi", "isolation": "worktree"});
     let (model, history) = delegate(&rig, input, 2);
     assert_eq!(model.asked().len(), 3, "the sub-agent ran");

@@ -6,7 +6,7 @@ use crossbeam_channel::RecvError;
 
 use tokio::sync::oneshot;
 
-use domain::{AskId, Decision, PermissionMode};
+use domain::{AskId, Decision, PermissionMode, Reviewer};
 use platform::Stop;
 use platform::sync::Locked;
 
@@ -35,6 +35,7 @@ pub struct Control {
     mode: Mutex<PermissionMode>,
     ceiling: Option<PermissionMode>,
     no_prompts: bool,
+    reviewer: Reviewer,
     remembered: Mutex<Remembered>,
     asks: Asks,
     steered: Arc<Mutex<Vec<String>>>,
@@ -49,12 +50,21 @@ impl Control {
             mode: Mutex::new(mode),
             ceiling: None,
             no_prompts: false,
+            reviewer: Reviewer::default(),
             remembered: Mutex::default(),
             asks: Arc::default(),
             steered: Arc::default(),
             spawned: AtomicUsize::new(0),
             children: Mutex::default(),
         }
+    }
+
+    pub fn reviewed_by(self, reviewer: Reviewer) -> Self {
+        Self { reviewer, ..self }
+    }
+
+    pub fn reviewer(&self) -> Reviewer {
+        self.reviewer
     }
 
     pub fn child(&self) -> Arc<Self> {
@@ -78,6 +88,7 @@ impl Control {
         let child = Arc::new(Self {
             ceiling,
             no_prompts: self.no_prompts || no_prompts,
+            reviewer: self.reviewer,
             remembered: Mutex::new(self.remembered()),
             steered,
             ..Self::new(self.mode().capped(ceiling), Arc::default())
@@ -217,7 +228,7 @@ mod tests {
 
     #[test]
     fn answers_reach_the_open_ask_once() {
-        let control = Control::new(PermissionMode::Ask, Arc::default());
+        let control = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human);
         let id = AskId("a".into());
         let mut waiting = control.open(id.clone());
         control.answer(&id, Decision::Allow);
@@ -243,13 +254,13 @@ mod tests {
         let control = Control::new(PermissionMode::Plan, Arc::default());
         poison(&control.mode);
         assert_eq!(control.mode(), PermissionMode::Plan);
-        control.set_mode(PermissionMode::Ask);
-        assert_eq!(control.mode(), PermissionMode::Ask);
+        control.set_mode(PermissionMode::Auto);
+        assert_eq!(control.mode(), PermissionMode::Auto);
     }
 
     #[test]
     fn a_crashed_thread_still_lets_a_run_be_cancelled_and_answered() {
-        let control = Control::new(PermissionMode::Ask, Arc::default());
+        let control = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human);
         let child = control.child();
         let id = AskId("a".into());
         let mut waiting = control.open(id.clone());
@@ -263,7 +274,7 @@ mod tests {
 
     #[test]
     fn cancelling_releases_waiting_asks() {
-        let control = Control::new(PermissionMode::Ask, Arc::default());
+        let control = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human);
         let mut waiting = control.open(AskId("a".into()));
         control.cancel();
         assert!(control.is_stopped());
@@ -272,8 +283,9 @@ mod tests {
 
     #[test]
     fn a_question_being_waited_on_ends_the_moment_its_run_is_cancelled() {
-        let control = Arc::new(Control::new(PermissionMode::Ask, Arc::default()));
-        let parent = Control::new(PermissionMode::Ask, Arc::default());
+        let control =
+            Arc::new(Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human));
+        let parent = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human);
         let child = parent.child();
         let mut asked = control.open(AskId("a".into()));
         let mut asked_of_child = child.open(AskId("b".into()));
@@ -294,15 +306,15 @@ mod child_policy_tests {
     use super::*;
     #[test]
     fn child_permission_ceiling_survives_parent_mode_changes() {
-        let parent = Control::new(PermissionMode::Bypass, Arc::default());
+        let parent = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Nobody);
         let read_only = parent.child_configured(Some(PermissionMode::Plan), false);
         let inherited = parent.child();
         assert_eq!(read_only.mode(), PermissionMode::Plan);
-        parent.set_mode(PermissionMode::Ask);
-        assert_eq!(inherited.mode(), PermissionMode::Ask);
+        parent.set_mode(PermissionMode::Auto);
+        assert_eq!(inherited.mode(), PermissionMode::Auto);
         assert_eq!(read_only.mode(), PermissionMode::Plan);
-        parent.set_mode(PermissionMode::Bypass);
-        assert_eq!(inherited.mode(), PermissionMode::Bypass);
+        parent.set_mode(PermissionMode::Auto);
+        assert_eq!(inherited.mode(), PermissionMode::Auto);
         assert_eq!(read_only.mode(), PermissionMode::Plan);
         parent.cancel();
         assert!(read_only.is_stopped() && inherited.is_stopped());
@@ -310,8 +322,8 @@ mod child_policy_tests {
 
     #[test]
     fn a_reconfigured_control_hears_what_its_handle_is_told_and_a_sub_agent_does_not() {
-        let handle = Control::new(PermissionMode::Ask, Arc::default());
-        let run = handle.reconfigured(Some(PermissionMode::AcceptEdits), false);
+        let handle = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human);
+        let run = handle.reconfigured(Some(PermissionMode::Auto), false);
         let sub_agent = run.child();
         handle.steer("also the tests".into());
         assert!(sub_agent.take_steered().is_empty());
@@ -323,8 +335,8 @@ mod child_policy_tests {
         handle.answer(&id, Decision::Allow);
         assert_eq!(waiting.recv(), Ok(Decision::Allow));
 
-        handle.set_mode(PermissionMode::Bypass);
-        assert_eq!(run.mode(), PermissionMode::AcceptEdits);
+        handle.set_mode(PermissionMode::Auto);
+        assert_eq!(run.mode(), PermissionMode::Auto);
         handle.set_mode(PermissionMode::Plan);
         assert_eq!((run.mode(), sub_agent.mode()), (PermissionMode::Plan, PermissionMode::Plan));
 

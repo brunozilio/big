@@ -157,6 +157,12 @@ pub struct WorkItem {
     pub recap: Option<ItemRecap>,
     #[serde(default)]
     pub heads_up: BTreeMap<String, HeadsUpNote>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub links: Vec<ItemId>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub released: Vec<ItemId>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub accepting: bool,
 }
 
 impl WorkItem {

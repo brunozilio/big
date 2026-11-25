@@ -1,6 +1,7 @@
 use connectors::ProviderDescriptor;
+use domain::Language;
 use domain::board::Group;
-use domain::workflow::{StepState, WorkItem};
+use domain::workflow::{ItemId, StepState, WorkItem};
 use orchestrator::{ItemSummary, NEEDS_CONNECTION, NEEDS_RECONNECT, StepSummary};
 use serde_json::{Value, json};
 use store::ConnectionRecord;
@@ -11,7 +12,12 @@ pub struct Known<'a> {
     pub connections: &'a [ConnectionRecord],
     pub stale: &'a [String],
     pub descriptors: &'a [ProviderDescriptor],
-    pub labels: &'a Value,
+    pub described: &'a Value,
+    pub language: Language,
+}
+
+fn language_of(known: &Known<'_>, item: Option<&WorkItem>) -> Language {
+    item.and_then(|item| item.input["language"].as_str()).and_then(Language::named).unwrap_or(known.language)
 }
 
 fn group(group: Group) -> &'static str {
@@ -26,9 +32,23 @@ pub fn state(state: StepState) -> Value {
     serde_json::to_value(state).unwrap_or(json!("pending"))
 }
 
-fn meta<'a>(known: &'a Known<'_>, step: &StepSummary) -> &'a Value {
-    let by_kind = step.kind.as_deref().map(|kind| &known.labels[kind]).filter(|found| !found.is_null());
-    by_kind.unwrap_or(&known.labels[step.id.as_str()])
+fn meta(known: &Known<'_>, step: &StepSummary) -> Value {
+    let labels = &known.described["labels"];
+    let by_kind = step.kind.as_deref().map(|kind| &labels[kind]).filter(|found| !found.is_null());
+    let mut found = by_kind.unwrap_or(&labels[step.id.as_str()]).clone();
+    if let Some(own) = known.described["nodes"][step.id.as_str()].as_object() {
+        if !found.is_object() {
+            found = json!({});
+        }
+        for (key, value) in own.iter().filter(|(_, value)| !value.is_null()) {
+            found[key] = value.clone();
+        }
+    }
+    found
+}
+
+fn parent_of(id: &str) -> Option<&str> {
+    id.rsplit_once('/').map(|(parent, _)| parent)
 }
 
 fn step_json(known: &Known<'_>, step: &StepSummary) -> Value {
@@ -41,10 +61,14 @@ fn step_json(known: &Known<'_>, step: &StepSummary) -> Value {
         "attempts": step.attempts,
         "seconds": step.seconds,
     });
-    if let Some(needs) = meta["needs"].as_str() {
-        value["needs"] = json!(needs);
+    if let Some(parent) = parent_of(&step.id) {
+        value["parent"] = json!(parent);
+        value["depth"] = json!(step.id.matches('/').count());
     }
-    let serves = meta["needs"].as_str().and_then(|needs| serving(known.connections, needs));
+    if let Some(requires) = meta["requires"].as_str() {
+        value["requires"] = json!(requires);
+    }
+    let serves = meta["requires"].as_str().and_then(|requires| serving(known.connections, requires));
     if let Some(record) = serves {
         let mark = mark_of(known.descriptors, &record.provider);
         value["logo"] = mark["logo"].clone();
@@ -91,7 +115,7 @@ fn checks(known: &Known<'_>, summary: &ItemSummary, item: &WorkItem) -> Value {
     let Some(at) = summary.steps.iter().position(|step| step.id == opened.id) else { return Value::Null };
     summary.steps[at + 1..]
         .iter()
-        .find(|step| meta(known, step)["needs"] == "pipelines")
+        .find(|step| meta(known, step)["requires"] == "pipelines")
         .map_or(Value::Null, |step| checks_state(step.state))
 }
 
@@ -177,30 +201,59 @@ fn reconnect(known: &Known<'_>, reason: &str) -> Option<Value> {
     Some(mark_of(known.descriptors, &lost.provider))
 }
 
-fn impediment(known: &Known<'_>, summary: &ItemSummary) -> Value {
+fn impediment(known: &Known<'_>, summary: &ItemSummary, language: Language) -> Value {
     let Some(found) = &summary.impediment else { return Value::Null };
-    let reason = found.reason.clone().unwrap_or_else(|| "o item está impedido".to_owned());
+    let reason = found.reason.clone().unwrap_or_else(|| {
+        language.pick("the item is impeded", "el ítem está impedido", "o item está impedido").to_owned()
+    });
     let connect = reason
         .strip_prefix(NEEDS_CONNECTION)
         .and_then(|wanted| offering(known.descriptors, wanted.trim()))
         .map(mark)
         .or_else(|| reconnect(known, &reason))
         .unwrap_or(Value::Null);
-    json!({ "reason": headline(&reason, &connect), "detail": reason, "connect": connect })
+    let said = said(&reason, &connect);
+    json!({ "reason": headline(&reason, &connect, language), "detail": reason, "connect": connect, "said": said })
+}
+
+fn key(key: &str, vars: Value) -> Value {
+    json!({ "key": key, "vars": vars })
+}
+
+pub fn said(reason: &str, connect: &Value) -> Value {
+    let named = connect["name"].as_str().map(|name| json!({ "name": name }));
+    if reason.starts_with(NEEDS_RECONNECT) {
+        return named.map_or_else(|| key("reconnect_account", json!({})), |vars| key("reconnect_named", vars));
+    }
+    if reason.starts_with(NEEDS_CONNECTION) {
+        return named.map_or_else(|| key("connect_account", json!({})), |vars| key("connect_named", vars));
+    }
+    if orchestrator::is_workflow_changed(reason) {
+        return key("workflow_changed", json!({}));
+    }
+    Value::Null
 }
 
 const MOST_HEADLINE: usize = 48;
 
-pub fn headline(reason: &str, connect: &Value) -> String {
+pub fn headline(reason: &str, connect: &Value, language: Language) -> String {
     let name = connect["name"].as_str();
     if reason.starts_with(NEEDS_RECONNECT) {
-        return name.map_or_else(|| "Reconecte a conta".to_owned(), |name| format!("Reconecte o {name}"));
+        return name.map_or_else(
+            || language.pick("Reconnect the account", "Reconecta la cuenta", "Reconecte a conta").to_owned(),
+            |name| {
+                language.pick(format!("Reconnect {name}"), format!("Reconecta {name}"), format!("Reconecte o {name}"))
+            },
+        );
     }
     if reason.starts_with(NEEDS_CONNECTION) {
-        return name.map_or_else(|| "Conecte uma conta".to_owned(), |name| format!("Conecte o {name}"));
+        return name.map_or_else(
+            || language.pick("Connect an account", "Conecta una cuenta", "Conecte uma conta").to_owned(),
+            |name| language.pick(format!("Connect {name}"), format!("Conecta {name}"), format!("Conecte o {name}")),
+        );
     }
-    if reason.starts_with("o código do workflow mudou") {
-        return "O workflow mudou".to_owned();
+    if orchestrator::is_workflow_changed(reason) {
+        return language.pick("The workflow changed", "El workflow cambió", "O workflow mudou").to_owned();
     }
     let head = reason.split_once(": ").map_or(reason, |(head, _)| head).trim();
     let mut short: String = head.chars().take(MOST_HEADLINE).collect();
@@ -211,40 +264,52 @@ pub fn headline(reason: &str, connect: &Value) -> String {
     letters.next().map(|first| first.to_uppercase().chain(letters).collect()).unwrap_or_default()
 }
 
-fn short_reason(known: &Known<'_>, reason: &str) -> String {
-    headline(reason, &reconnect(known, reason).unwrap_or(Value::Null))
+fn short_reason(known: &Known<'_>, reason: &str, language: Language) -> (String, Value) {
+    let connect = reconnect(known, reason).unwrap_or(Value::Null);
+    (headline(reason, &connect, language), said(reason, &connect))
 }
 
-fn attention(summary: &ItemSummary) -> Value {
+fn impeded(language: Language) -> String {
+    language.pick("Impeded", "Impedido", "Impedido").to_owned()
+}
+
+fn attention(summary: &ItemSummary, language: Language) -> Value {
     let waiting = summary.steps.iter().find(|step| step.state == StepState::WaitingHuman).map(|step| step.id.clone());
     let at = summary.current.clone().or_else(|| waiting.clone());
     if summary.asks > 0 && summary.plans == summary.asks {
-        let action = at.map(|step| json!({ "label": "Revisar plano", "icon": "sPlan", "step": step }));
-        let badge = json!({ "text": "Plano pronto", "tone": "info", "icon": "sPlan" });
+        let action = at.map(|step| json!({ "label": language.pick("Review plan", "Revisar plan", "Revisar plano"), "icon": "sPlan", "step": step, "said": key("review_plan", json!({})) }));
+        let badge = json!({ "text": language.pick("Plan ready", "Plan listo", "Plano pronto"), "tone": "info", "icon": "sPlan", "said": key("plan_ready", json!({})) });
         return json!({ "badge": badge, "diff": null, "action": action });
     }
     if summary.asks > 0 {
-        let action = at.map(|step| json!({ "label": "Responder", "icon": "chat", "step": step }));
-        let badge = json!({ "text": "Pergunta do agente", "tone": "warning", "icon": "help" });
+        let action = at.map(|step| json!({ "label": language.pick("Answer", "Responder", "Responder"), "icon": "chat", "step": step, "said": key("answer", json!({})) }));
+        let badge = json!({ "text": language.pick("Agent question", "Pregunta del agente", "Pergunta do agente"), "tone": "warning", "icon": "help", "said": key("agent_question", json!({})) });
         return json!({ "badge": badge, "diff": null, "action": action });
     }
     if let Some(step) = waiting {
-        let badge = json!({ "text": "Esperando você", "tone": "info" });
-        return json!({ "badge": badge, "diff": null, "action": { "label": "Abrir", "step": step } });
+        let badge = json!({ "text": language.pick("Waiting for you", "Esperándote", "Esperando você"), "tone": "info", "said": key("waiting_you", json!({})) });
+        let action =
+            json!({ "label": language.pick("Open", "Abrir", "Abrir"), "step": step, "said": key("open", json!({})) });
+        return json!({ "badge": badge, "diff": null, "action": action });
     }
     if let Some(found) = &summary.impediment {
-        let text =
-            found.reason.as_deref().map_or_else(|| "Impedido".to_owned(), |reason| headline(reason, &Value::Null));
-        return json!({ "badge": { "text": text, "tone": "danger" }, "diff": null, "action": null });
+        let (text, said) = found.reason.as_deref().map_or_else(
+            || (impeded(language), key("impeded", json!({}))),
+            |reason| (headline(reason, &Value::Null, language), said(reason, &Value::Null)),
+        );
+        return json!({ "badge": { "text": text, "tone": "danger", "said": said }, "diff": null, "action": null });
     }
     Value::Null
 }
 
-fn activity(known: &Known<'_>, summary: &ItemSummary) -> Value {
+fn activity(known: &Known<'_>, summary: &ItemSummary, language: Language) -> Value {
     if let Some(found) = &summary.impediment {
         let since = iso(summary.updated_at);
-        let text = found.reason.as_deref().map_or_else(|| "Impedido".to_owned(), |reason| short_reason(known, reason));
-        return json!({ "text": text, "since": since, "tone": "danger" });
+        let (text, said) = found.reason.as_deref().map_or_else(
+            || (impeded(language), key("impeded", json!({}))),
+            |reason| short_reason(known, reason, language),
+        );
+        return json!({ "text": text, "since": since, "tone": "danger", "said": said });
     }
     let Some(current) = summary.steps.iter().find(|step| Some(&step.id) == summary.current.as_ref()) else {
         return Value::Null;
@@ -254,12 +319,15 @@ fn activity(known: &Known<'_>, summary: &ItemSummary) -> Value {
     json!({ "text": text, "since": iso(current.since.unwrap_or(summary.updated_at)) })
 }
 
-fn title(summary: &ItemSummary) -> String {
+fn title(summary: &ItemSummary, language: Language) -> String {
     let chosen = summary.title.trim();
     if !chosen.is_empty() {
         return chosen.to_owned();
     }
-    summary.issue.clone().unwrap_or_else(|| "Item sem título".to_owned())
+    summary
+        .issue
+        .clone()
+        .unwrap_or_else(|| language.pick("Untitled item", "Ítem sin título", "Item sem título").to_owned())
 }
 
 fn collapsed(steps: &[StepSummary]) -> Vec<StepSummary> {
@@ -295,9 +363,11 @@ fn shown_steps(summary: &ItemSummary) -> ItemSummary {
 
 pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -> Value {
     let summary = &shown_steps(summary);
+    let language = language_of(known, item);
     json!({
         "id": summary.id.as_str(),
-        "title": title(summary),
+        "title": title(summary, language),
+        "untitled": summary.title.trim().is_empty() && summary.issue.is_none(),
         "workflow": summary.workflow,
         "group": group(summary.group),
         "status": summary.status,
@@ -308,14 +378,35 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "steps": summary.steps.iter().map(|step| step_json(known, step)).collect::<Vec<_>>(),
         "current": summary.current,
         "live": summary.live,
-        "activity": activity(known, summary),
-        "impediment": impediment(known, summary),
-        "attention": attention(summary),
+        "activity": activity(known, summary, language),
+        "impediment": impediment(known, summary, language),
+        "attention": attention(summary, language),
         "recap": item.and_then(|item| item.recap.as_ref()).map(|recap| recap.text.clone()),
         "createdAt": iso(summary.created_at),
         "updatedAt": iso(summary.updated_at),
         "doneAt": summary.ended_at.map(iso),
+        "links": item.map(|item| item.links.iter().map(ItemId::as_str).collect::<Vec<_>>()).unwrap_or_default(),
+        "trail": item.map(trail).unwrap_or(Value::Null),
+        "accepting": item.is_some_and(|item| item.accepting && !item.is_ended()),
+        "joinable": item.is_some_and(joinable),
     })
+}
+
+fn joinable(item: &WorkItem) -> bool {
+    !item.is_ended()
+        && item.steps.iter().any(|run| {
+            run.state == StepState::WaitingHuman
+                && run.view.as_array().is_some_and(|blocks| {
+                    blocks.iter().any(|block| block["type"] == "members" && block["removable"] == true)
+                })
+        })
+}
+
+fn trail(item: &WorkItem) -> Value {
+    let found = item.steps.iter().rev().find_map(|run| {
+        run.view.as_array()?.iter().find(|block| block["type"] == "stages").map(|block| block["stages"].clone())
+    });
+    found.unwrap_or(Value::Null)
 }
 
 #[cfg(test)]
@@ -337,7 +428,13 @@ mod tests {
     fn an_expired_login_offers_to_reconnect_the_account_that_lost_it() {
         let connections = [record("c-gh", "github"), record("c-jira", "jira")];
         let stale = ["c-jira".to_owned()];
-        let known = Known { connections: &connections, stale: &stale, descriptors: &[], labels: &Value::Null };
+        let known = Known {
+            connections: &connections,
+            stale: &stale,
+            descriptors: &[],
+            described: &Value::Null,
+            language: Language::default(),
+        };
         let reason = format!("{NEEDS_RECONNECT}refresh_token is invalid");
         assert_eq!(reconnect(&known, &reason).map(|found| found["provider"].clone()), Some(json!("jira")));
         assert_eq!(reconnect(&known, "outra falha"), None);
@@ -347,12 +444,24 @@ mod tests {
     fn an_impediment_reads_as_a_few_words_and_keeps_the_detail_for_the_step() {
         let jira = json!({ "provider": "jira", "name": "Jira" });
         let expired = format!("{NEEDS_RECONNECT}connector: Auth: the access could not be renewed");
-        assert_eq!(headline(&expired, &jira), "Reconecte o Jira");
+        assert_eq!(headline(&expired, &jira, Language::Portuguese), "Reconecte o Jira");
+        assert_eq!(headline(&expired, &jira, Language::English), "Reconnect Jira");
+        assert_eq!(headline(&expired, &Value::Null, Language::Spanish), "Reconecta la cuenta");
         assert_eq!(
-            headline("Develop falhou: a pasta de trabalho não é um repositório git", &Value::Null),
+            headline(
+                "Develop falhou: a pasta de trabalho não é um repositório git",
+                &Value::Null,
+                Language::Portuguese
+            ),
             "Develop falhou"
         );
-        assert_eq!(headline("o código do workflow mudou e não reproduz o histórico", &Value::Null), "O workflow mudou");
-        assert!(headline(&"x".repeat(200), &Value::Null).chars().count() <= MOST_HEADLINE + 1);
+        assert_eq!(
+            headline("o código do workflow mudou e não reproduz o histórico", &Value::Null, Language::Portuguese),
+            "O workflow mudou"
+        );
+        assert!(headline(&"x".repeat(200), &Value::Null, Language::Portuguese).chars().count() <= MOST_HEADLINE + 1);
+        assert_eq!(said(&expired, &jira), json!({ "key": "reconnect_named", "vars": { "name": "Jira" } }));
+        assert_eq!(said(&expired, &Value::Null), json!({ "key": "reconnect_account", "vars": {} }));
+        assert_eq!(said("Develop falhou: x", &Value::Null), Value::Null);
     }
 }

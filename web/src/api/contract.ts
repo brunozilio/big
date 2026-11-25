@@ -17,6 +17,7 @@ export interface Person {
   name: string
   avatar: AvatarLook | null
   you?: boolean
+  agent?: boolean
 }
 
 export interface ProviderMark {
@@ -45,20 +46,27 @@ export interface DiffSummary {
   url: string | null
 }
 
+export interface Said {
+  key: string
+  vars?: Record<string, string | number>
+}
+
 export interface Impediment {
   reason: string
+  said?: Said | null
   detail?: string
   connect: ProviderMark | null
 }
 
 export interface Attention {
-  badge: { text: string; tone: Tone; icon?: string } | null
+  badge: { text: string; tone: Tone; icon?: string; said?: Said | null } | null
   diff: DiffSummary | null
-  action: { label: string; icon?: string; step: string } | null
+  action: { label: string; icon?: string; step: string; said?: Said | null } | null
 }
 
 export interface Activity {
   text: string
+  said?: Said | null
   since: Iso
   tone?: 'danger'
 }
@@ -68,7 +76,9 @@ export interface ItemStep {
   label: string
   icon: string
   logo?: string
-  needs?: string
+  requires?: string
+  parent?: string
+  depth?: number
   provider?: string
   state: StepState
   attempts: number
@@ -107,6 +117,7 @@ export type NewGit = Record<string, { base?: string; head?: string }>
 export interface Item {
   id: string
   title: string
+  untitled?: boolean
   workflow: string
   group: BoardGroup
   status: string | null
@@ -124,6 +135,11 @@ export interface Item {
   createdAt: Iso
   updatedAt: Iso
   doneAt: Iso | null
+  archivedAt: Iso | null
+  links?: string[]
+  trail?: StageView[] | null
+  accepting?: boolean
+  joinable?: boolean
 }
 
 export interface NewItem {
@@ -222,6 +238,75 @@ export interface TestCaseView {
 
 export type MergeMethod = 'squash' | 'merge' | 'rebase'
 
+export type FindingKind = 'static' | 'dependency' | 'dynamic' | 'manual'
+
+export type FindingChoice = 'fix' | 'task' | 'ignore'
+
+export type IgnoreReason = 'false_positive' | 'accepted_risk'
+
+export interface LinkRef {
+  key: string
+  url: string | null
+}
+
+export interface FindingDecision {
+  choice: FindingChoice
+  reason: IgnoreReason | null
+  task: LinkRef | null
+  pr: LinkRef | null
+}
+
+export interface Finding {
+  id: string
+  title: string
+  severity: number
+  kind: FindingKind
+  new: boolean
+  policy: boolean
+  cwe: { id: string; name: string } | null
+  cve: { id: string; cvss: number | null } | null
+  file: string | null
+  line: number | null
+  component: string | null
+  version: string | null
+  fixedIn: string | null
+  description: string
+  held: LinkRef | null
+  suggested: FindingChoice
+  decision: FindingDecision | null
+  url: string | null
+}
+
+export type QualityGrade = 'A' | 'B' | 'C' | 'D' | 'E'
+
+export interface QualityCondition {
+  metric: string
+  value: string
+  threshold: string
+  passed: boolean
+}
+
+export interface QualityIssue {
+  key: string
+  type: 'bug' | 'vulnerability' | 'code_smell' | 'hotspot'
+  severity: 'blocker' | 'critical' | 'major' | 'minor' | 'info'
+  message: string
+  file: string | null
+  line: number | null
+  url: string | null
+}
+
+export interface QualityReport {
+  gate: 'passed' | 'failed'
+  ratings: { reliability: QualityGrade; security: QualityGrade; maintainability: QualityGrade }
+  counts: { bugs: number; vulnerabilities: number; smells: number; hotspots: number; hotspotsReviewed: number }
+  coverage: number | null
+  duplication: number | null
+  conditions: QualityCondition[]
+  issues: QualityIssue[]
+  total: number
+}
+
 export type Block =
   | { type: 'chat'; session: string; composer: boolean; title?: string }
   | { type: 'issue'; connection: string; key: string; comment: boolean }
@@ -235,8 +320,71 @@ export type Block =
   | { type: 'calls'; calls: ToolCall[] }
   | { type: 'form'; title?: string; fields: FormField[]; submit: { action: string; label: string } }
   | { type: 'actions'; buttons: ActionButton[] }
+  | { type: 'findings'; connection: string; project: string; scannedAt: Iso | null; url: string | null; triage: string | null; findings: Finding[] }
+  | { type: 'quality'; connection: string; project: string; branch: string; analyzedAt: Iso | null; url: string | null; report: QualityReport }
+  | { type: 'stages'; stages: StageView[]; live: boolean }
+  | { type: 'members'; items: MemberView[]; removable: boolean }
+  | { type: 'tasks'; tasks: ChangeTaskView[]; kinds: TaskKindView[]; locked: boolean; environment: string | null }
 
 export type BlockType = Block['type']
+
+export interface StageAction {
+  id: string
+  label: string
+  icon?: string
+  variant?: string
+  payload?: unknown
+  disabled?: boolean
+}
+
+export interface StageView {
+  id: string
+  label: string
+  short: string
+  icon: string
+  state: StepState
+  gate: 'none' | 'merge' | 'change'
+  window: string | null
+  picker: boolean
+  change: { key: string; status: string; label: string; url: string | null } | null
+  busy: string | null
+  actions: StageAction[]
+}
+
+export interface MemberView {
+  id: string
+  title: string
+  issue: string | null
+}
+
+export interface TaskFile {
+  name: string
+  size: number
+}
+
+export interface ChangeTaskView {
+  id: string
+  kind: string
+  title: string
+  detail: string
+  owner: string | null
+  link: string | null
+  start: string
+  end: string
+  files: TaskFile[]
+  service?: string
+  template?: string
+}
+
+export interface TaskKindView {
+  id?: string
+  kind: string
+  label?: string
+  icon: string
+  tone: string
+  attachable?: boolean
+  editable?: boolean
+}
 
 export interface HumanInput {
   action: string
@@ -356,6 +504,7 @@ export type ConnectionCall =
   | { action: 'tracker.search'; args: { query: string; project?: string }; result: IssueSummary[] }
   | { action: 'tracker.projects'; args: { query?: string }; result: TrackerProject[] }
   | { action: 'tests.projects'; args: { query?: string }; result: TrackerProject[] }
+  | { action: 'security.projects'; args: { query?: string }; result: TrackerProject[] }
   | { action: 'code.repos'; args: { query?: string }; result: CodeRepo[] }
   | { action: 'code.pulls'; args: { repo: string }; result: OpenPull[] }
   | { action: 'code.branches'; args: { repo: string }; result: CodeBranch[] }
@@ -375,7 +524,7 @@ export type CallArgs<A extends CallAction> = Extract<ConnectionCall, { action: A
 export type CallResult<A extends CallAction> = Extract<ConnectionCall, { action: A }>['result']
 
 export type SessionStatus = 'idle' | 'running' | 'waiting'
-export type SessionMode = 'ask' | 'accept_edits' | 'plan' | 'bypass'
+export type SessionMode = 'auto' | 'plan'
 
 export interface Agent {
   id: string
@@ -402,6 +551,9 @@ export interface ToolCall {
   diff?: string
   durationMs: number
   steps?: string[]
+  job?: string
+  jobRunning?: boolean
+  jobStoppable?: boolean
 }
 
 export interface AskQuestion {
@@ -414,7 +566,7 @@ export interface AskQuestion {
 export type PermissionDecision = 'allowed' | 'always' | 'denied'
 
 export type SessionEvent =
-  | { id: string; at: Iso; type: 'user'; author: Person; text: string; attachments: number }
+  | { id: string; at: Iso; type: 'user'; author: Person; text: string; attachments: number; agent?: string }
   | { id: string; at: Iso; type: 'thinking'; seconds: number; steps: ThinkingStep[]; live: boolean }
   | { id: string; at: Iso; type: 'tools'; calls: ToolCall[]; seconds: number; live: boolean; agent?: string }
   | { id: string; at: Iso; type: 'assistant'; text: string; agent?: string }
@@ -422,6 +574,9 @@ export type SessionEvent =
   | { id: string; at: Iso; type: 'ask'; questions: AskQuestion[]; answers: string[] | null; agent?: string }
   | { id: string; at: Iso; type: 'permission'; tool: string; detail: string; risk: 'low' | 'medium' | 'high'; logo?: string; rememberable?: boolean; resolution: 'pending' | PermissionDecision }
   | { id: string; at: Iso; type: 'plan'; text: string; resolution: 'pending' | 'approved' | 'revised'; feedback?: string; agent?: string }
+  | { id: string; at: Iso; type: 'artifact'; artifactId: string; title: string; name: string; kind: ArtifactKind | null; agent?: string }
+
+export type ArtifactKind = 'page' | 'markdown' | 'pdf' | 'image' | 'text'
 
 export interface Session {
   id: string
@@ -441,8 +596,14 @@ export interface SessionTask {
   status: string
 }
 
+export interface BackgroundJob {
+  id: string
+  command: string
+}
+
 export interface SessionWork {
-  background: string[]
+  background: BackgroundJob[]
+  stoppable?: boolean
   tasks: SessionTask[]
 }
 
@@ -461,10 +622,6 @@ export interface SideQuestion {
 
 export interface SideAnswer {
   answer: string
-}
-
-export interface BtwOpened {
-  session: string
 }
 
 export interface Btw {
@@ -571,6 +728,26 @@ export interface Usage {
   byAccount: UsageAccountRow[]
 }
 
+export interface ItemSpent {
+  costUsd: number | null
+  input: number
+  output: number
+  cacheRead: number
+  cacheWrite: number
+  calls: number
+}
+
+export interface ItemContext {
+  used: number
+  window: number
+  percent: number
+}
+
+export interface ItemUsage {
+  spent: ItemSpent
+  context: ItemContext | null
+}
+
 export interface UsageWindow {
   id: string
   label: string
@@ -643,6 +820,7 @@ export interface OutputStyle {
 export interface Branding {
   name: string
   logo: string | null
+  editor: string
   theme: Theme
   language: Language
   output_style: string | null
@@ -691,6 +869,7 @@ export interface Application {
   name: string
   tracker: TrackerChoice | null
   tests?: TrackerChoice | null
+  security?: TrackerChoice | null
   cloud?: CloudChoice | null
   repositories: ApplicationRepository[]
   skipDependabot?: boolean
@@ -717,8 +896,10 @@ export type LiveEvent =
   | { type: 'item'; item: Item }
   | { type: 'item.removed'; id: string }
   | { type: 'session'; session: string; event: SessionEvent }
+  | { type: 'session.event.removed'; session: string; id: string }
   | { type: 'session.status'; session: string; status: SessionStatus }
   | { type: 'session.suggestion'; session: string; suggestion: string | null }
+  | { type: 'session.work'; session: string; work: SessionWork }
   | { type: 'connections'; connections: Connections }
   | { type: 'branding'; branding: Branding }
   | { type: 'resync' }
@@ -728,15 +909,21 @@ export interface Api {
   createItem(input: NewItem): Promise<Item>
   rerun(item: string, step: string | null): Promise<void>
   cancel(item: string): Promise<void>
+  openFolders(item: string): Promise<void>
+  archive(item: string): Promise<void>
+  unarchive(item: string): Promise<void>
   step(item: string, step: string, attempt: number | null): Promise<StepView>
   input(item: string, step: string, input: HumanInput): Promise<void>
+  itemUsage(item: string): Promise<ItemUsage>
   call<A extends CallAction>(connection: string, action: A, args: CallArgs<A>): Promise<CallResult<A>>
   session(id: string): Promise<Session>
   send(session: string, message: NewMessage): Promise<void>
   side(session: string, question: SideQuestion): Promise<SideAnswer>
-  btw(question: Btw): Promise<BtwOpened>
+  btw(question: Btw): Promise<Item>
   respond(session: string, event: string, response: AskResponse): Promise<void>
   stop(session: string): Promise<void>
+  stopJob(session: string, job: string): Promise<void>
+  openFile(session: string, file: FileRef): Promise<void>
   connections(): Promise<Connections>
   startSignIn(provider: string, fields: Record<string, string>, method?: string): Promise<SignInStart>
   pollSignIn(request: SignInPollRequest): Promise<SignInPoll>
@@ -755,10 +942,17 @@ export interface Api {
   live(onEvent: (event: LiveEvent) => void, onState: (connected: boolean) => void): () => void
 }
 
+export type FileRef = { path: string; line: number | null; column: number | null }
+
+export const BTW_WORKFLOW = 'btw'
+
 export const ROUTES = {
   items: '/api/items',
   rerun: (id: string) => `/api/items/${encodeURIComponent(id)}/rerun`,
   cancel: (id: string) => `/api/items/${encodeURIComponent(id)}/cancel`,
+  openFolders: (id: string) => `/api/items/${encodeURIComponent(id)}/open`,
+  archive: (id: string) => `/api/items/${encodeURIComponent(id)}/archive`,
+  itemUsage: (id: string) => `/api/items/${encodeURIComponent(id)}/usage`,
   step: (id: string, step: string) => `/api/items/${encodeURIComponent(id)}/steps/${encodeURIComponent(step)}`,
   input: (id: string, step: string) => `/api/items/${encodeURIComponent(id)}/steps/${encodeURIComponent(step)}/input`,
   call: (connection: string) => `/api/connections/${encodeURIComponent(connection)}/call`,
@@ -768,6 +962,8 @@ export const ROUTES = {
   btw: '/api/btw',
   respond: (id: string) => `/api/sessions/${encodeURIComponent(id)}/respond`,
   stop: (id: string) => `/api/sessions/${encodeURIComponent(id)}/stop`,
+  stopJob: (id: string, job: string) => `/api/sessions/${encodeURIComponent(id)}/jobs/${encodeURIComponent(job)}/stop`,
+  openFile: (id: string) => `/api/sessions/${encodeURIComponent(id)}/open`,
   connections: '/api/connections',
   connection: (id: string) => `/api/connections/${encodeURIComponent(id)}`,
   start: (provider: string) => `/api/connections/${encodeURIComponent(provider)}/start`,
@@ -781,5 +977,6 @@ export const ROUTES = {
   dirs: (path: string | null) => (path ? `/api/fs/dirs?path=${encodeURIComponent(path)}` : '/api/fs/dirs'),
   attachments: '/api/attachments',
   attachment: (id: string) => `/api/attachments/${encodeURIComponent(id)}`,
+  artifactContent: (id: string, download = false) => `/api/artifacts/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`,
   live: '/api/live',
 } as const

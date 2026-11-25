@@ -233,7 +233,7 @@ impl Orchestrator {
             }
             let base = resources.chain().first().and_then(|name| resources.factory_dir(name));
             let mut input = json!({
-                "title": title(kind, data),
+                "title": title(crate::agent::language_of(&self.shared, &origin.input), kind, data),
                 "factory": {
                     "kind": kind,
                     "subject": subject,
@@ -258,13 +258,13 @@ impl Orchestrator {
     }
 }
 
-fn title(kind: &str, data: &Value) -> String {
+fn title(language: domain::Language, kind: &str, data: &Value) -> String {
     let step = data["step"].as_str().unwrap_or_default();
     let workflow = data["workflow"].as_str().unwrap_or_default();
     if kind == ESCAPED {
         let gate = data["gate"].as_str().unwrap_or_default();
-        return format!("Avaliação: {gate} deixou passar um defeito de {step} ({workflow})");
+        return crate::texts::escaped(language, gate, step, workflow);
     }
     let count = data["count"].as_u64().unwrap_or_default();
-    format!("Fábrica: {step} falhou {count} vezes ({workflow})")
+    crate::texts::recurring(language, step, count, workflow)
 }

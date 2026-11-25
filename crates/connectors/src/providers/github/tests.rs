@@ -36,10 +36,11 @@ fn the_device_flow_uses_the_configured_client_and_workflow_scope() {
 
 #[test]
 fn a_personal_access_token_is_the_alternative_to_the_device_sign_in() {
-    let [alternative] = Github.alternatives().try_into().unwrap_or_else(|_| panic!("not one alternative"));
+    let [alternative] =
+        Github.alternatives(domain::Language::Portuguese).try_into().unwrap_or_else(|_| panic!("not one alternative"));
     let AuthSpec::Token(spec) = alternative.auth else { panic!("not a token") };
     assert_eq!(alternative.key, API_TOKEN);
-    assert_eq!(spec.access_token(&json!({ "token": "ghp_1" })), Ok("ghp_1".to_owned()));
+    assert_eq!(spec.access_token(&json!({ "token": "ghp_1" }), domain::Language::Portuguese), Ok("ghp_1".to_owned()));
 }
 
 #[tokio::test]
@@ -121,9 +122,12 @@ async fn merge_deletes_the_head_branch_and_a_failed_delete_keeps_the_merge() {
 async fn a_branch_from_a_fork_is_not_deleted() {
     let mut forked = pull("open", None);
     forked["head"]["repo"]["full_name"] = json!("someone/app");
-    let http = FakeHttp::new()
-        .once(Method::Get, "/pulls/7", 200, &forked.to_string())
-        .once(Method::Put, "/pulls/7/merge", 200, r#"{"merged":true,"sha":"s9"}"#);
+    let http = FakeHttp::new().once(Method::Get, "/pulls/7", 200, &forked.to_string()).once(
+        Method::Put,
+        "/pulls/7/merge",
+        200,
+        r#"{"merged":true,"sha":"s9"}"#,
+    );
     let answer = call(&http, code_actions::MERGE, json!({"pr": "acme/app#7"}), "k").await;
     assert_eq!(answer.map(|a| a["deleted"].clone()), Ok(json!(false)));
     assert!(http.sent_to(Method::Delete, "/git/refs").is_empty());
@@ -215,6 +219,23 @@ async fn a_review_with_lines_is_submitted_with_its_event() {
 }
 
 #[tokio::test]
+async fn an_agent_s_review_comes_back_with_the_agent_as_its_author() {
+    let http = FakeHttp::new().once(Method::Post, "/pulls/7/reviews", 200, r#"{"id":5,"state":"COMMENTED"}"#);
+    let args = json!({"pr": "acme/app#7", "verdict": "comment", "agent": "reviewer",
+                      "lines": [{"path": "src/a.rs", "line": 3, "body": "aqui"}]});
+    assert!(call(&http, code_actions::SUBMIT_REVIEW, args, "").await.is_ok());
+    let said = http.sent()[0].body_json()["comments"][0]["body"].as_str().unwrap_or_default().to_owned();
+    let threads = json!({"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [
+        {"id": "T1", "isResolved": false, "isOutdated": false, "path": "src/a.rs", "line": 3,
+         "comments": {"nodes": [{"id": "C1", "body": said, "createdAt": "x", "author": {"login": "ana"}}]}}
+    ]}}}}});
+    let http = FakeHttp::new().once(Method::Post, "/graphql", 200, &threads.to_string());
+    let read = call(&http, code_actions::REVIEW_COMMENTS, json!({"pr": "acme/app#7"}), "").await;
+    let Ok(read) = read else { panic!("{read:?}") };
+    assert_eq!((read[0]["agent"].as_str(), read[0]["body"].as_str()), (Some("reviewer"), Some("aqui")));
+}
+
+#[tokio::test]
 async fn review_threads_and_their_resolution_go_through_graphql() {
     let threads = json!({"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [
         {"id": "T1", "isResolved": false, "isOutdated": false, "path": "a.rs", "line": 2,
@@ -288,6 +309,34 @@ async fn a_run_is_the_job_graph_with_needs_and_steps() {
     assert_eq!(answer["jobs"][0]["steps"][0]["name"], "checkout");
     assert_eq!(answer["jobs"][1]["key"], "test");
     assert_eq!(answer["jobs"][1]["needs"], json!(["build"]));
+}
+
+#[tokio::test]
+async fn runs_filter_by_status_for_the_last_good_deploy() {
+    let http = FakeHttp::new().once(
+        Method::Get,
+        "/actions/workflows/deployment.yml/runs?per_page=1&branch=release&status=success",
+        200,
+        r#"{"workflow_runs":[{"id":4,"status":"completed","conclusion":"success","head_sha":"abc"}]}"#,
+    );
+    let args = json!({"pipeline": "deployment.yml", "ref": "release", "status": "success", "limit": 1});
+    let answer = call(&http, pipeline_actions::RUNS, args, "").await;
+    let Ok(answer) = answer else { panic!("{answer:?}") };
+    assert_eq!(answer[0]["ref"], "acme/app/runs/4");
+}
+
+#[tokio::test]
+async fn merging_a_branch_into_another_reports_when_there_was_nothing_to_merge() {
+    let http = FakeHttp::new()
+        .once(Method::Post, "/repos/acme/app/merges", 201, r#"{"sha":"f00"}"#)
+        .once(Method::Post, "/repos/acme/app/merges", 204, "");
+    let args = json!({"base": "release", "head": "develop"});
+    let first = call(&http, code_actions::MERGE_BRANCHES, args.clone(), "m1").await;
+    assert_eq!(first, Ok(json!({"merged": true, "already": false, "sha": "f00"})));
+    let again = call(&http, code_actions::MERGE_BRANCHES, args, "m1").await;
+    assert_eq!(again, Ok(json!({"merged": true, "already": true})));
+    let bad = call(&http, code_actions::MERGE_BRANCHES, json!({"base": "release", "head": "a..b"}), "m2").await;
+    assert!(bad.is_err());
 }
 
 #[tokio::test]
@@ -430,7 +479,12 @@ async fn the_repositories_can_be_filtered_by_name() {
 
 #[tokio::test]
 async fn the_open_pull_requests_of_a_repository_are_listed() {
-    let http = FakeHttp::new().once(Method::Get, "/repos/acme/app/pulls?state=open", 200, &json!([pull("open", None)]).to_string());
+    let http = FakeHttp::new().once(
+        Method::Get,
+        "/repos/acme/app/pulls?state=open",
+        200,
+        &json!([pull("open", None)]).to_string(),
+    );
     let answer = call(&http, code_actions::PULL_REQUESTS, json!({ "repo": "acme/app" }), "k").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer[0]["ref"], json!("acme/app#7"));

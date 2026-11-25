@@ -8,7 +8,7 @@ use agent_engine::model::TurnRequest;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::{self, Workspace};
 use agent_engine::transcript::{Block, Message};
-use domain::{Effort, EngineEvent, PermissionMode};
+use domain::{Effort, EngineEvent};
 use serde_json::json;
 
 const WRAPPED_READ: &str = r#"
@@ -30,7 +30,7 @@ export function execute(input, ctx) {
 
 fn run(dir: &std::path::Path, calls: Vec<Block>) -> (Vec<Message>, Vec<EngineEvent>) {
     let workspace = Workspace::new(dir);
-    let control = Control::new(PermissionMode::Bypass, Arc::default());
+    let control = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Nobody);
     let tools = tools::standard();
     let events: Arc<Mutex<Vec<EngineEvent>>> = Arc::default();
     let seen = Arc::clone(&events);

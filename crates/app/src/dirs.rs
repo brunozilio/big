@@ -16,7 +16,7 @@ pub fn memory_key(project: &Path) -> String {
     project_key(&main_checkout(project))
 }
 
-fn main_checkout(project: &Path) -> PathBuf {
+pub(crate) fn main_checkout(project: &Path) -> PathBuf {
     let Ok(marker) = std::fs::read_to_string(project.join(".git")) else { return project.to_path_buf() };
     let Some(pointed) = marker.trim().strip_prefix("gitdir:").map(str::trim) else { return project.to_path_buf() };
     let pointed = project.join(pointed);

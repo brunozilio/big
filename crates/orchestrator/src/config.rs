@@ -84,6 +84,7 @@ pub struct Config {
     pub factory: Factory,
     pub sync: bool,
     pub sync_config: sync::SyncConfig,
+    pub schedules: crate::schedules::Schedules,
     pub watch: Arc<std::sync::OnceLock<Watch>>,
 }
 
@@ -114,8 +115,15 @@ impl Config {
             factory: Factory::from_config(),
             sync: true,
             sync_config: sync::SyncConfig::from_brand(),
+            schedules: crate::schedules::Schedules::from_config(),
             watch: Arc::default(),
         }
+    }
+
+    #[must_use]
+    pub fn with_schedules(mut self, schedules: crate::schedules::Schedules) -> Config {
+        self.schedules = schedules;
+        self
     }
 
     #[must_use]

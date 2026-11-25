@@ -7,7 +7,7 @@ use serde_json::Value;
 use store::{Application, CloudChoice, CodeChoice, Repository, TrackerChoice};
 
 use crate::attachments::random_id;
-use crate::error::{ApiError, ApiResult, done, json as reply};
+use crate::error::{ApiError, ApiResult, done, json as reply, said};
 use crate::state::{Ctx, Shared};
 
 fn trimmed(text: &str) -> String {
@@ -21,10 +21,18 @@ fn lines(found: &[String]) -> Vec<String> {
 fn repository(found: Repository) -> ApiResult<Repository> {
     let directory = trimmed(&found.directory);
     if directory.is_empty() {
-        return Err(ApiError::bad("Escolha a pasta de cada repositório."));
+        return Err(ApiError::bad(said(
+            "Choose the folder of each repository.",
+            "Elige la carpeta de cada repositorio.",
+            "Escolha a pasta de cada repositório.",
+        )));
     }
     if !Path::new(&directory).is_dir() {
-        return Err(ApiError::bad(format!("A pasta {directory} não existe.")));
+        return Err(ApiError::bad(said(
+            format!("The folder {directory} does not exist."),
+            format!("La carpeta {directory} no existe."),
+            format!("A pasta {directory} não existe."),
+        )));
     }
     let id = Some(trimmed(&found.id)).filter(|id| !id.is_empty()).map_or_else(random_id, Ok)?;
     let code = found
@@ -45,10 +53,18 @@ fn cloud(chosen: CloudChoice) -> CloudChoice {
 pub fn checked(mut application: Application) -> ApiResult<Application> {
     application.name = trimmed(&application.name);
     if application.name.is_empty() {
-        return Err(ApiError::bad("Dê um nome à aplicação."));
+        return Err(ApiError::bad(said(
+            "Give the application a name.",
+            "Dale un nombre a la aplicación.",
+            "Dê um nome à aplicação.",
+        )));
     }
     if application.repositories.is_empty() {
-        return Err(ApiError::bad("Adicione ao menos um repositório."));
+        return Err(ApiError::bad(said(
+            "Add at least one repository.",
+            "Agrega al menos un repositorio.",
+            "Adicione ao menos um repositório.",
+        )));
     }
     application.tracker = application
         .tracker
@@ -69,7 +85,13 @@ pub fn checked(mut application: Application) -> ApiResult<Application> {
 }
 
 fn parsed(body: Value) -> ApiResult<Application> {
-    serde_json::from_value(body).map_err(|error| ApiError::bad(format!("A aplicação veio incompleta: {error}")))
+    serde_json::from_value(body).map_err(|error| {
+        ApiError::bad(said(
+            format!("The application came incomplete: {error}"),
+            format!("La aplicación llegó incompleta: {error}"),
+            format!("A aplicação veio incompleta: {error}"),
+        ))
+    })
 }
 
 pub async fn all(shared: &Shared) -> ApiResult<Vec<Application>> {
@@ -98,7 +120,11 @@ pub async fn update(
     Json(body): Json<Value>,
 ) -> ApiResult<Response> {
     if ctx.backend.store.application(&id)?.is_none() {
-        return Err(ApiError::missing("Não há essa aplicação."));
+        return Err(ApiError::missing(said(
+            "There is no such application.",
+            "No existe esa aplicación.",
+            "Não há essa aplicação.",
+        )));
     }
     let mut application = parsed(body)?;
     application.id = id;
@@ -109,7 +135,11 @@ pub async fn update(
 
 pub async fn remove(State(ctx): State<Ctx>, UrlPath(id): UrlPath<String>) -> ApiResult<Response> {
     if !ctx.backend.store.delete_application(&id)? {
-        return Err(ApiError::missing("Não há essa aplicação."));
+        return Err(ApiError::missing(said(
+            "There is no such application.",
+            "No existe esa aplicación.",
+            "Não há essa aplicação.",
+        )));
     }
     Ok(done())
 }

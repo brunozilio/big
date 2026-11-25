@@ -5,7 +5,6 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::model::{BoxFuture, CancellationToken, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
 use agent_engine::tools;
 use agent_engine::transcript::{Block, Message};
-use domain::PermissionMode;
 use serde_json::json;
 
 use crate::{Rig, request, tool_use};
@@ -49,7 +48,7 @@ impl LongReport {
 
 #[test]
 fn a_long_background_report_is_saved_whole_and_handed_over_by_its_ends() {
-    let rig = Rig::new(PermissionMode::Bypass);
+    let rig = Rig::new(domain::Reviewer::Nobody);
     let model = LongReport { parent: AtomicUsize::new(0), handed_over: std::sync::Mutex::default() };
     let tools = tools::standard();
     let emit = |_| {};

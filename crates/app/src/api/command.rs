@@ -50,6 +50,10 @@ pub enum ClientCommand {
     CancelRequest {
         request: RequestId,
     },
+    BackgroundJobs,
+    StopBackground {
+        id: String,
+    },
 }
 
 impl ClientCommand {
@@ -67,6 +71,8 @@ impl ClientCommand {
             Self::ListSessions => "list_sessions",
             Self::SessionHistory { .. } => "session_history",
             Self::CancelRequest { .. } => "cancel_request",
+            Self::BackgroundJobs => "background_jobs",
+            Self::StopBackground { .. } => "stop_background",
         }
     }
 }
@@ -97,6 +103,8 @@ mod tests {
             ClientCommand::ListSessions,
             ClientCommand::SessionHistory { session: SessionId("s".into()), cwd: "/repo".into() },
             ClientCommand::CancelRequest { request: RequestId(7) },
+            ClientCommand::BackgroundJobs,
+            ClientCommand::StopBackground { id: "bash_1".into() },
         ];
         for command in commands {
             let json = serde_json::to_string(&command).expect("serialize");

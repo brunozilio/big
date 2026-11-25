@@ -38,8 +38,16 @@ impl Live {
         self.publish(&json!({ "type": "session", "session": session, "event": event }));
     }
 
+    pub fn session_event_removed(&self, session: &str, id: &str) {
+        self.publish(&json!({ "type": "session.event.removed", "session": session, "id": id }));
+    }
+
     pub fn session_suggestion(&self, session: &str, suggestion: Option<&str>) {
         self.publish(&json!({ "type": "session.suggestion", "session": session, "suggestion": suggestion }));
+    }
+
+    pub fn session_work(&self, session: &str, work: Value) {
+        self.publish(&json!({ "type": "session.work", "session": session, "work": work }));
     }
 
     pub fn session_status(&self, session: &str, status: &str) {

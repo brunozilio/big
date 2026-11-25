@@ -25,7 +25,15 @@ pub enum Reply {
     Sessions(Vec<Listed>),
     History(Vec<Record>),
     Providers(ProviderEvent),
+    Background(Vec<BackgroundJob>),
     Error { message: String },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct BackgroundJob {
+    pub id: String,
+    pub command: String,
+    pub running: bool,
 }
 
 impl Reply {
@@ -83,6 +91,7 @@ mod tests {
             Reply::Models(vec![ModelOption::new("m", "M")]),
             Reply::Sessions(Vec::new()),
             Reply::History(Vec::new()),
+            Reply::Background(vec![BackgroundJob { id: "bash_1".into(), command: "npm start".into(), running: true }]),
             Reply::error("could not save the settings"),
         ];
         replies.extend(provider_events().into_iter().map(Reply::Providers));

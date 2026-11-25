@@ -90,7 +90,11 @@ pub trait Provider: Sync {
         None
     }
 
-    fn windows(&self, _value: &Value) -> Result<domain::billing::PlanUsage, ProviderError> {
+    fn windows(
+        &self,
+        _value: &Value,
+        _language: domain::Language,
+    ) -> Result<domain::billing::PlanUsage, ProviderError> {
         Err(ProviderError::Invalid(format!("{} does not report plan limits", self.name())))
     }
 

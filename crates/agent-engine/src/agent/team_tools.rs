@@ -62,6 +62,7 @@ impl Agent<'_> {
             instructions: &instructions,
             model: &model,
             mode: self.control.mode(),
+            lead: Some(self.workspace.agent_name.as_str()).filter(|name| *name != "main"),
         };
         if let Err(error) = launch(&launching) {
             team.left(&name);

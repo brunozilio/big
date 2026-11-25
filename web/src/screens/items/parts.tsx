@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { api } from '@/api'
 import { ago, mins, minutesSince } from '@/api/clock'
+import { useT, type T } from '@/i18n'
+import { spoken } from '@/i18n/server'
 import type { ChangeRef, ExternalRef, Item, ItemGit, ItemSource, ItemStep, StepState } from '@/api/contract'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
@@ -12,9 +15,15 @@ import { DiffStat } from '@/ui/pill'
 
 export type NodeState = StepState | 'blocked'
 
+export function archiveToggle(it: Item): Promise<void> {
+  return it.archivedAt ? api().unarchive(it.id) : api().archive(it.id)
+}
+
 export const stop = { onClick: (e: { stopPropagation: () => void }) => e.stopPropagation(), onPointerDown: (e: { stopPropagation: () => void }) => e.stopPropagation() }
 
-export const stateLabel: Record<NodeState, string> = { pending: 'Pendente', running: 'Rodando', waiting_human: 'Esperando você', passed: 'Concluído', failed: 'Falhou', skipped: 'Pulado', blocked: 'Sem conexão' }
+export function stateLabel(t: T, state: NodeState): string {
+  return t(`items.state_${state}`)
+}
 
 export function nodeState(it: Item, s: ItemStep): NodeState {
   return it.impediment && it.current === s.id && s.state === 'waiting_human' ? 'blocked' : s.state
@@ -75,16 +84,17 @@ function Link({ from, to }: { from: NodeState; to: NodeState }) {
 }
 
 export function Pipeline({ it, onStep }: { it: Item; onStep: (s: string) => void }) {
+  const t = useT()
   return (
     <span className="hidden items-center md:flex">
-      {it.steps.map((s, i) => {
+      {it.steps.filter((s) => !s.parent).map((s, i, top) => {
         const st = nodeState(it, s)
-        const next = it.steps[i + 1]
+        const next = top[i + 1]
         const locked = st === 'pending'
         return (
           <span key={s.id} className="flex items-center">
-            <Tooltip content={`${s.label} · ${stateLabel[st]}`}>
-              <button aria-label={`${s.label}: ${stateLabel[st]}`} aria-disabled={locked} onClick={() => !locked && onStep(s.id)} className={cn('flex rounded-full', locked ? 'cursor-default' : 'transition-transform duration-150 hover:scale-110 active:scale-95')}>
+            <Tooltip content={`${s.label} · ${stateLabel(t, st)}`}>
+              <button aria-label={`${s.label}: ${stateLabel(t, st)}`} aria-disabled={locked} onClick={() => !locked && onStep(s.id)} className={cn('flex rounded-full', locked ? 'cursor-default' : 'transition-transform duration-150 hover:scale-110 active:scale-95')}>
                 <Node s={s} state={st} />
               </button>
             </Tooltip>
@@ -97,6 +107,7 @@ export function Pipeline({ it, onStep }: { it: Item; onStep: (s: string) => void
 }
 
 export function IssueKey({ issue }: { issue: ExternalRef }) {
+  const t = useT()
   const inner = (
     <>
       <ProviderLogo logo={issue.logo} name={issue.name} size={15} />
@@ -105,7 +116,7 @@ export function IssueKey({ issue }: { issue: ExternalRef }) {
   )
   if (!issue.url) return <span className="flex min-w-[88px] shrink-0 items-center gap-2 text-base text-fg2">{inner}</span>
   return (
-    <Tooltip content={`Abrir no ${issue.name}`}>
+    <Tooltip content={t('items.openIn', { name: issue.name })}>
       <a href={issue.url} target="_blank" rel="noreferrer" {...stop} className="flex min-w-[88px] shrink-0 items-center gap-2 text-base text-fg2 transition-colors hover:text-fg">
         {inner}
       </a>
@@ -114,6 +125,7 @@ export function IssueKey({ issue }: { issue: ExternalRef }) {
 }
 
 export function ChangeChip({ change }: { change: ChangeRef | null }) {
+  const t = useT()
   if (!change) return null
   const body = (
     <>
@@ -125,25 +137,27 @@ export function ChangeChip({ change }: { change: ChangeRef | null }) {
   const cls = 'inline-flex h-6 shrink-0 items-center gap-1.5 rounded-control-sm bg-inset px-2 text-sm leading-none text-fg2 transition-colors hover:bg-active hover:text-fg'
   if (!change.url) return <span className={cls}>{body}</span>
   return (
-    <Tooltip content={`Abrir no ${change.name}`}>
+    <Tooltip content={t('items.openIn', { name: change.name })}>
       <a href={change.url} target="_blank" rel="noreferrer" {...stop} className={cls}>{body}</a>
     </Tooltip>
   )
 }
 
 function StepText({ it }: { it: Item }) {
+  const t = useT()
   useMinuteTick(!!it.activity)
   if (!it.activity) return null
-  if (it.activity.tone === 'danger') return <span className="hidden w-[136px] justify-end text-sm text-danger-fg lg:flex">{it.activity.text}</span>
+  if (it.activity.tone === 'danger') return <span className="hidden w-[136px] justify-end text-sm text-danger-fg lg:flex">{spoken(t, it.activity.said, it.activity.text)}</span>
   return (
     <span className="hidden w-[136px] items-center justify-end gap-1.5 text-sm lg:flex">
-      <span className="text-shimmer">{it.activity.text}</span>
+      <span className="text-shimmer">{spoken(t, it.activity.said, it.activity.text)}</span>
       <span className="tabular-nums text-faint">{mins(minutesSince(it.activity.since))}</span>
     </span>
   )
 }
 
 export function RowRight({ it, onStep, onConnect }: { it: Item; onStep: (s: string) => void; onConnect: (provider: string) => void }) {
+  const t = useT()
   useMinuteTick(!!it.doneAt)
   if (it.doneAt) {
     return (
@@ -158,8 +172,8 @@ export function RowRight({ it, onStep, onConnect }: { it: Item; onStep: (s: stri
     return (
       <>
         <ChangeChip change={it.change} />
-        <Badge className="min-w-0" icon={<Icon name="lock" size={12} className="shrink-0" />}><span className="truncate" title={it.impediment.reason}>{it.impediment.reason}</span></Badge>
-        {c && <Button size="sm" variant="secondary" icon={<ProviderLogo logo={c.logo} name={c.name} size={15} />} onClick={() => onConnect(c.provider)}>Conectar</Button>}
+        <Badge className="min-w-0" icon={<Icon name="lock" size={12} className="shrink-0" />}><span className="truncate" title={spoken(t, it.impediment.said, it.impediment.reason)}>{spoken(t, it.impediment.said, it.impediment.reason)}</span></Badge>
+        {c && <Button size="sm" variant="secondary" icon={<ProviderLogo logo={c.logo} name={c.name} size={15} />} onClick={() => onConnect(c.provider)}>{t('items.connect')}</Button>}
       </>
     )
   }
@@ -168,9 +182,9 @@ export function RowRight({ it, onStep, onConnect }: { it: Item; onStep: (s: stri
     return (
       <>
         <ChangeChip change={it.change} />
-        {a.badge && <Badge tone={a.badge.tone === 'accent' ? 'neutral' : a.badge.tone} icon={a.badge.icon ? <NamedIcon name={a.badge.icon} size={12} /> : undefined}>{a.badge.text}</Badge>}
+        {a.badge && <Badge tone={a.badge.tone === 'accent' ? 'neutral' : a.badge.tone} icon={a.badge.icon ? <NamedIcon name={a.badge.icon} size={12} /> : undefined}>{spoken(t, a.badge.said, a.badge.text)}</Badge>}
         {a.diff && <span className="hidden md:inline-flex"><DiffStat files={a.diff.files} additions={a.diff.additions} deletions={a.diff.deletions} href={a.diff.url ?? undefined} /></span>}
-        {a.action && <Button size="sm" variant="primary" icon={a.action.icon ? <NamedIcon name={a.action.icon} size={15} /> : undefined} onClick={() => a.action && onStep(a.action.step)}>{a.action.label}</Button>}
+        {a.action && <Button size="sm" variant="primary" icon={a.action.icon ? <NamedIcon name={a.action.icon} size={15} /> : undefined} onClick={() => a.action && onStep(a.action.step)}>{spoken(t, a.action.said, a.action.label)}</Button>}
       </>
     )
   }
@@ -183,13 +197,15 @@ export function RowRight({ it, onStep, onConnect }: { it: Item; onStep: (s: stri
   )
 }
 
-const SOURCE_LABEL: Record<string, string> = { issue: 'Issue', pull_request: 'Pull request', branch: 'Branch' }
+const SOURCE_KINDS = ['issue', 'pull_request', 'branch'] as const
 
-export function sourceLabel(source: ItemSource): string {
-  return `${SOURCE_LABEL[source.kind] ?? source.kind} ${source.key}`
+export function sourceLabel(t: T, source: ItemSource): string {
+  const kind = SOURCE_KINDS.find((k) => k === source.kind)
+  return `${kind ? t(`items.source_${kind}`) : source.kind} ${source.key}`
 }
 
 export function SourceChip({ source }: { source: ItemSource }) {
+  const t = useT()
   const glyph = source.kind === 'branch' ? 'branch' : source.kind === 'pull_request' ? 'hGitPullRequest' : 'sTicket'
   const body = (
     <>
@@ -198,17 +214,18 @@ export function SourceChip({ source }: { source: ItemSource }) {
     </>
   )
   const cls = 'inline-flex h-6 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-control-sm bg-inset px-2 text-sm leading-none text-fg2'
-  if (!source.url) return <span aria-label={sourceLabel(source)} className={cls}>{body}</span>
+  if (!source.url) return <span aria-label={sourceLabel(t, source)} className={cls}>{body}</span>
   return (
-    <a href={source.url} target="_blank" rel="noreferrer" aria-label={sourceLabel(source)} {...stop} className={cn(cls, 'transition-colors hover:bg-active hover:text-fg')}>{body}</a>
+    <a href={source.url} target="_blank" rel="noreferrer" aria-label={sourceLabel(t, source)} {...stop} className={cn(cls, 'transition-colors hover:bg-active hover:text-fg')}>{body}</a>
   )
 }
 
 export function BranchLine({ git }: { git: ItemGit }) {
-  const base = git.base ?? 'padrão do repositório'
-  const head = git.head ?? 'branch novo'
+  const t = useT()
+  const base = git.base ?? t('items.repositoryDefault')
+  const head = git.head ?? t('items.newBranch')
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-fg2" aria-label={`${git.name}: ${base} para ${head}`}>
+    <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-fg2" aria-label={t('items.branchRoute', { name: git.name ?? '', base, head })}>
       <Icon name="branch" size={13} className="shrink-0 text-muted" />
       {git.name && <span className="truncate text-muted">{git.name}</span>}
       <span className="truncate">{base}</span>
@@ -219,11 +236,12 @@ export function BranchLine({ git }: { git: ItemGit }) {
 }
 
 export function Origins({ it }: { it: Item }) {
+  const t = useT()
   const sources = it.sources ?? []
   const git = it.git ?? []
   if (!sources.some((s) => s.kind !== 'issue') && git.length === 0) return null
   return (
-    <div className="flex flex-wrap items-center gap-2 px-5 pb-3" aria-label="Origens">
+    <div className="flex flex-wrap items-center gap-2 px-5 pb-3" aria-label={t('items.origins')}>
       {sources.map((s) => <SourceChip key={`${s.kind}:${s.key}`} source={s} />)}
       {git.map((g) => <BranchLine key={g.repository} git={g} />)}
     </div>

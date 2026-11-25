@@ -208,7 +208,11 @@ fn find_asks_the_model_when_one_is_given() {
     let ask: Ask = Arc::new(|_, _| Some("{\"refs\": [\"ref_2\"]}".to_owned()));
     let session = Session::new(hub.clone(), "s", settings(folder.path()), vec![]).asking(Some(ask));
     let found = call(&session, "find", json!({ "query": "login button", "tabId": 1 }));
-    assert!(first_text(&found).starts_with("Found 1 matching element:\n\n- ref_2: button \"Entrar\""), "{}", first_text(&found));
+    assert!(
+        first_text(&found).starts_with("Found 1 matching element:\n\n- ref_2: button \"Entrar\""),
+        "{}",
+        first_text(&found)
+    );
     hub.unlink(1);
     worker.join().unwrap_or_default();
 }

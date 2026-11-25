@@ -62,7 +62,7 @@ fn the_report_names_providers_and_counts_every_day() {
     tally.add("s", "2026-11-23", &usage("claude-subscription", 0.5));
     tally.add("s", "2026-11-23", &usage("", 0.25));
     let providers = [summary("claude-subscription", "Claude", "claude")];
-    let listed = listing(7, &window, &tally.report(), &providers);
+    let listed = listing(7, &window, &tally.report(), &providers, domain::Language::default());
     assert_eq!((listed["from"].as_str(), listed["to"].as_str()), (Some("2026-11-17"), Some("2026-11-23")));
     assert_eq!(listed["daily"].as_array().map(Vec::len), Some(7));
     assert_eq!(listed["daily"][0]["byProvider"], json!({}));

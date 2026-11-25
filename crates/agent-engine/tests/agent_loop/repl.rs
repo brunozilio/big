@@ -2,13 +2,13 @@ use std::sync::Arc;
 
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
-use domain::{Decision, EngineEvent, PermissionMode};
+use domain::{Decision, EngineEvent};
 use serde_json::json;
 
 use crate::{Rig, tool_use};
 
-fn code_mode(mode: PermissionMode) -> Rig {
-    code_mode_as(mode, domain::code_mode::Mode::Only)
+fn code_mode(reviewer: domain::Reviewer) -> Rig {
+    code_mode_as(reviewer, domain::code_mode::Mode::Only)
 }
 
 fn only_shipped_content() {
@@ -17,9 +17,9 @@ fn only_shipped_content() {
     let _ = content::use_folder(folder.path().to_path_buf());
 }
 
-fn code_mode_as(mode: PermissionMode, code: domain::code_mode::Mode) -> Rig {
+fn code_mode_as(reviewer: domain::Reviewer, code: domain::code_mode::Mode) -> Rig {
     only_shipped_content();
-    let mut rig = Rig::new(mode);
+    let mut rig = Rig::new(reviewer);
     rig.workspace.policy.code_mode = code;
     rig.workspace.session_id = format!("repl-loop-{}", uuid_like(&rig));
     rig
@@ -79,7 +79,7 @@ fn lanes(rig: &Rig) -> Vec<(usize, String, String)> {
 
 #[test]
 fn a_script_calls_tools_and_only_what_it_returns_reaches_the_model() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let code = "const [text, found] = await Promise.all([Read({ file_path: 'notes.txt' }), \
                 Grep({ pattern: 'beta', path: '.', output_mode: 'files_with_matches' })]);\n\
                 self.log('read', text.length > 0);\n\
@@ -144,7 +144,7 @@ impl agent_engine::tools::Tool for Slow {
 }
 
 fn detaching_soon() -> Rig {
-    let mut rig = code_mode(PermissionMode::AcceptEdits);
+    let mut rig = code_mode(domain::Reviewer::Human);
     rig.workspace.policy.code_mode_detach = Some(std::time::Duration::from_millis(100));
     rig
 }
@@ -240,7 +240,7 @@ impl agent_engine::tools::Tool for Broken {
 
 #[test]
 fn a_built_in_tool_resolves_with_an_error_and_an_mcp_tool_throws() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let code = "const missing = await Read({ file_path: 'nowhere.txt' }); \
                 let thrown = 'nothing'; \
                 try { await mcp__tracker__get({}) } catch (error) { thrown = `${error.name} ${error.tool}: ${error.message}` } \
@@ -264,7 +264,7 @@ fn a_built_in_tool_resolves_with_an_error_and_an_mcp_tool_throws() {
 
 #[test]
 fn file_write_and_edit_work_on_the_raw_text_through_the_tools() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     std::fs::write(rig.dir.path().join("long.txt"), format!("{}\nend", "x".repeat(3000))).expect("write");
     let code = "const text = await file('notes.txt').text(); \
                 await write('copy.txt', text.toUpperCase()); \
@@ -284,7 +284,7 @@ fn file_write_and_edit_work_on_the_raw_text_through_the_tools() {
 
 #[test]
 fn the_shell_tag_throws_on_a_failing_command_and_nothrow_gives_its_exit_code() {
-    let rig = code_mode(PermissionMode::Bypass);
+    let rig = code_mode(domain::Reviewer::Nobody);
     let code = "const listed = await $`ls`; \
                 const quiet = await $`exit 3`.nothrow(); \
                 let thrown = ''; \
@@ -301,7 +301,7 @@ fn the_shell_tag_throws_on_a_failing_command_and_nothrow_gives_its_exit_code() {
 
 #[test]
 fn a_script_that_calls_no_tool_opens_no_lane() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
 
     scripts(&rig, &["1 + 1"]);
 
@@ -310,7 +310,7 @@ fn a_script_that_calls_no_tool_opens_no_lane() {
 
 #[test]
 fn in_code_only_mode_the_model_sees_the_repl_and_reaches_the_rest_from_scripts() {
-    let rig = code_mode_as(PermissionMode::Bypass, domain::code_mode::Mode::Only);
+    let rig = code_mode_as(domain::Reviewer::Nobody, domain::code_mode::Mode::Only);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use(
             "r0",
@@ -335,7 +335,7 @@ fn in_code_only_mode_the_model_sees_the_repl_and_reaches_the_rest_from_scripts()
 
 #[test]
 fn search_tools_finds_deferred_tools_and_returns_their_declarations() {
-    let mut rig = code_mode_as(PermissionMode::AcceptEdits, domain::code_mode::Mode::Only);
+    let mut rig = code_mode_as(domain::Reviewer::Human, domain::code_mode::Mode::Only);
     let specs = (0..25).map(|n| agent_engine::model::ToolSpec {
         name: format!("mcp__tracker__tool_{n}"),
         description: if n == 7 { "Create an issue in the tracker.".into() } else { format!("Other thing {n}.") },
@@ -358,7 +358,7 @@ fn search_tools_finds_deferred_tools_and_returns_their_declarations() {
 
 #[test]
 fn reads_in_a_script_do_not_count_as_reads_the_model_has_seen() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use(
             "r0",
@@ -384,7 +384,7 @@ fn reads_in_a_script_do_not_count_as_reads_the_model_has_seen() {
 
 #[test]
 fn a_script_after_earlier_ones_in_a_new_context_is_told_their_values_are_gone() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let mut history = vec![
         Message::user("go"),
         Message::assistant(vec![tool_use("before", "REPL", json!({ "code": "const kept = 1" }))]),
@@ -421,7 +421,7 @@ fn a_script_after_earlier_ones_in_a_new_context_is_told_their_values_are_gone() 
 
 #[test]
 fn what_one_script_keeps_the_next_one_reads() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
 
     let history = scripts(&rig, &["const notes = await Read({ file_path: 'notes.txt' })", "notes.includes('beta')"]);
 
@@ -430,7 +430,7 @@ fn what_one_script_keeps_the_next_one_reads() {
 
 #[test]
 fn a_call_the_user_refuses_throws_in_the_script_and_nothing_is_written() {
-    let rig = code_mode(PermissionMode::Ask);
+    let rig = code_mode(domain::Reviewer::Human);
     let (control, events) = (Arc::clone(&rig.control), Arc::clone(&rig.events));
     let denier = std::thread::spawn(move || {
         for _ in 0..2000 {
@@ -446,7 +446,7 @@ fn a_call_the_user_refuses_throws_in_the_script_and_nothing_is_written() {
         }
     });
     let code = "let went = 'stopped'; \
-                try { await Write({ file_path: 'made.txt', content: 'x' }); went = 'on'; } catch (error) { went = 'caught'; } \
+                try { await Bash({ command: 'touch made.txt' }); went = 'on'; } catch (error) { went = 'caught'; } \
                 self.log('after the refusal:', went); went";
 
     let history = scripts(&rig, &[code]);
@@ -454,15 +454,15 @@ fn a_call_the_user_refuses_throws_in_the_script_and_nothing_is_written() {
 
     let (content, failed) = &results(&history)[0];
     assert!(failed, "a refusal at a prompt stops the script: {content}");
-    assert!(content.contains("- Write: "), "the refused call is listed: {content}");
-    assert!(content.contains("<stopped>\nThe user refused Write at a permission prompt"), "{content}");
+    assert!(content.contains("- Bash: "), "the refused call is listed: {content}");
+    assert!(content.contains("<stopped>\nThe user refused Bash at a permission prompt"), "{content}");
     assert!(!content.contains("after the refusal: on"), "{content}");
     assert!(!rig.dir.path().join("made.txt").exists());
 }
 
 #[test]
 fn a_script_cannot_call_the_repl_itself_and_a_thrown_error_fails_the_call() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
 
     let history = scripts(&rig, &["await REPL({ code: '1' })", "await tools.REPL({ code: '1' })"]);
 
@@ -516,7 +516,7 @@ fn run_tools(rig: &Rig, input: serde_json::Value, tools: Vec<Box<dyn agent_engin
 
 #[test]
 fn what_a_script_carries_from_an_mcp_server_comes_back_as_its_report() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let tools: Vec<Box<dyn agent_engine::tools::Tool>> = vec![Box::new(Tracker)];
 
     let (content, failed) = run_tools(&rig, json!({ "code": "await mcp__tracker__list({})" }), tools);
@@ -527,7 +527,7 @@ fn what_a_script_carries_from_an_mcp_server_comes_back_as_its_report() {
 
 #[test]
 fn describe_tool_gives_a_tool_s_whole_declaration() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let code = "[await describeTool('Grep'), await describeTool('Nope')]";
 
     let (content, failed) = run_tools(&rig, json!({ "code": code }), Vec::new());
@@ -539,7 +539,7 @@ fn describe_tool_gives_a_tool_s_whole_declaration() {
 
 #[test]
 fn the_timeout_counts_the_script_s_own_running_not_its_waits_on_tools() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let tools = || -> Vec<Box<dyn agent_engine::tools::Tool>> { vec![Box::new(Slow)] };
 
     let waited = run_tools(
@@ -595,7 +595,7 @@ impl agent_engine::tools::Tool for Snap {
 
 #[test]
 fn an_image_a_script_s_call_returned_reaches_the_model_beside_the_script_s_output() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use(
             "r0",
@@ -624,7 +624,7 @@ fn an_image_a_script_s_call_returned_reaches_the_model_beside_the_script_s_outpu
 
 #[test]
 fn a_tool_that_answers_in_json_gives_the_script_an_object() {
-    let rig = code_mode(PermissionMode::AcceptEdits);
+    let rig = code_mode(domain::Reviewer::Human);
     let code = "const made = await TaskCreate({ subject: 'Build' }); [typeof made, made.task_id, made.subject]";
     let tools: Vec<Box<dyn agent_engine::tools::Tool>> = Vec::new();
 

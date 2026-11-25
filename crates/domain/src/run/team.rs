@@ -199,6 +199,8 @@ pub struct TeammateSpec {
     pub instructions: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lead_pid: Option<u32>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lead: Option<String>,
 }
 
 pub const ASK_PREFIX: &str = "teammate-ask:";
@@ -290,7 +292,7 @@ pub fn decided(answer: &Protocol) -> Option<crate::Decision> {
         Protocol::PermissionResponse { approved: true, always: true, .. } => Some(crate::Decision::AllowAlways),
         Protocol::PermissionResponse { approved: true, .. } => Some(crate::Decision::Allow),
         Protocol::PlanApprovalResponse { approved: true, mode, .. } => Some(crate::Decision::Approve(
-            mode.as_deref().and_then(crate::command::mode_named).unwrap_or(crate::PermissionMode::AcceptEdits),
+            mode.as_deref().and_then(crate::command::mode_named).unwrap_or(crate::PermissionMode::Auto),
         )),
         Protocol::PermissionResponse { feedback: Some(note), .. }
         | Protocol::PlanApprovalResponse { feedback: Some(note), .. } => Some(crate::Decision::DenyWith(note.clone())),
@@ -446,7 +448,7 @@ mod tests {
         assert!(
             matches!(&ask.ask().kind, crate::AskKind::Plan { plan } if plan.contains("teammate tester") && plan.contains("1. edit"))
         );
-        let approved = crate::Decision::Approve(crate::PermissionMode::AcceptEdits);
+        let approved = crate::Decision::Approve(crate::PermissionMode::Auto);
         assert_eq!(decided(&ask.answer(&approved)), Some(approved));
         assert_eq!(
             decided(&ask.answer(&crate::Decision::DenyWith("smaller".into()))),

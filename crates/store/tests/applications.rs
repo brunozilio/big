@@ -7,6 +7,7 @@ fn application(id: &str, name: &str) -> Application {
         name: name.into(),
         tracker: Some(TrackerChoice { connection: "c-tracker".into(), project: "APP".into() }),
         tests: Some(TrackerChoice { connection: "c-tests".into(), project: "APP".into() }),
+        security: Some(TrackerChoice { connection: "c-security".into(), project: "f1e2".into() }),
         cloud: Some(CloudChoice { connection: "c-cloud".into(), account: "111".into(), role: "Deploy".into() }),
         repositories: vec![
             Repository {

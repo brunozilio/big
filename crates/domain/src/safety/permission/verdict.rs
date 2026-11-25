@@ -29,17 +29,26 @@ impl Guard {
 pub enum Reason {
     Mode,
     Hook,
+    Listed,
+    Flagged(String),
     Outside(PathBuf),
     Guarded { path: PathBuf, guard: Guard },
 }
 
 impl Reason {
     pub fn rememberable(&self) -> bool {
-        !matches!(self, Self::Hook)
+        self.reviewable()
+    }
+
+    pub fn reviewable(&self) -> bool {
+        !matches!(self, Self::Hook | Self::Listed | Self::Flagged(_))
     }
 
     pub fn unattended(&self, tool: &str) -> String {
-        format!("{tool} requires permission; dontAsk denies unapproved actions.")
+        match self {
+            Self::Flagged(why) => format!("{tool} was blocked. {why} Find a safer way to do this or ask the user."),
+            _ => format!("{tool} requires permission; dontAsk denies unapproved actions."),
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import type { Item, ItemStep } from '../src/api/contract'
-import { fileEntry, parsePlan, structured } from '../src/chat/planDoc'
+import { fileEntry, parsePlan, storied, stressed, structured } from '../src/chat/planDoc'
 import { planDestination } from '../src/screens/items/ItemModal'
 
 const text = `# Login com SSO
@@ -46,11 +46,33 @@ describe('plano estruturado', () => {
   })
 })
 
+describe('plano em inglês e espanhol', () => {
+  test('as seções em inglês têm o mesmo tipo', () => {
+    const doc = parsePlan('# SSO\n\n## Description\nAs a user, I want SSO so that I log in once.\n\n## Acceptance criteria\n- Given a user, when they log in, then they see the board.\n\n## Subtasks\n### Create the route\nOne line.')
+    expect(doc.sections.map((s) => s.kind)).toEqual(['story', 'criteria', 'subtasks'])
+  })
+
+  test('as seções em espanhol têm o mesmo tipo', () => {
+    const doc = parsePlan('# SSO\n\n## Descripción\nComo usuario, quiero SSO para que entre una vez.\n\n## Criterios de aceptación\n- Dado un usuario, cuando entra, entonces ve el tablero.\n\n## Subtareas\n- Crear la ruta\n\n## Riesgos\n- Ninguno')
+    expect(doc.sections.map((s) => s.kind)).toEqual(['story', 'criteria', 'subtasks', 'risks'])
+  })
+
+  test('destaca as palavras do critério e da história em inglês', () => {
+    expect(stressed('Given a user, when they log in, then they see the board')).toBe('**Given** a user, **When** they log in, **Then** they see the board')
+    expect(storied('As a user, I want SSO so that I log in once')).toBe('**As a** user, **I want** SSO **So that** I log in once')
+  })
+
+  test('destaca as palavras do critério e da história em espanhol', () => {
+    expect(stressed('Dado un usuario, cuando entra, entonces ve el tablero')).toBe('**Dado** un usuario, **Cuando** entra, **Entonces** ve el tablero')
+    expect(storied('Como usuario, quiero SSO para que entre una vez')).toBe('**Como** usuario, **Quiero** SSO **Para que** entre una vez')
+  })
+})
+
 const stepOf = (id: string, extra: Partial<ItemStep> = {}): ItemStep => ({ id, label: id, icon: 'sCode', state: 'pending', attempts: 0, seconds: 0, ...extra })
 const itemWith = (steps: ItemStep[], issue: Item['issue'] = null) => ({ issue, steps }) as Item
 
 describe('destino do plano', () => {
-  const steps = [stepOf('plan', { state: 'waiting_human' }), stepOf('ticket', { needs: 'tracker', provider: 'Tracker', logo: '<svg/>' }), stepOf('develop')]
+  const steps = [stepOf('plan', { state: 'waiting_human' }), stepOf('ticket', { requires: 'tracker', provider: 'Tracker', logo: '<svg/>' }), stepOf('develop')]
 
   test('a próxima etapa que cria a issue dá nome ao botão', () => {
     expect(planDestination(itemWith(steps), 'plan')).toEqual({ name: 'Tracker', logo: '<svg/>' })

@@ -45,7 +45,7 @@ impl Bench {
     fn with(tools: Vec<Box<dyn Tool>>) -> Self {
         let dir = tempfile::tempdir().expect("dir");
         let workspace = Workspace::new(dir.path());
-        let control = Control::new(domain::PermissionMode::Bypass, Arc::default());
+        let control = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Nobody);
         Self { _dir: dir, workspace, control, tools, events: Mutex::default() }
     }
 

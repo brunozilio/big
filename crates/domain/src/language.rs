@@ -26,6 +26,14 @@ impl Language {
         Self::ALL.into_iter().find(|language| language.code() == code)
     }
 
+    pub fn pick<T>(self, english: T, spanish: T, portuguese: T) -> T {
+        match self {
+            Self::English => english,
+            Self::Spanish => spanish,
+            Self::Portuguese => portuguese,
+        }
+    }
+
     pub fn prompt_name(self) -> &'static str {
         match self {
             Self::English => "English",
@@ -47,5 +55,6 @@ mod tests {
         }
         assert_eq!(Language::named("fr"), None);
         assert_eq!(Language::default().prompt_name(), "Brazilian Portuguese");
+        assert_eq!(Language::Spanish.pick("one", "uno", "um"), "uno");
     }
 }

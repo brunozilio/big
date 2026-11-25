@@ -16,12 +16,14 @@ fn seed(services: &LocalServices, project: &Path) {
         text: "The release codename of this project is PERSIMMON.".into(),
         tags: vec!["release".into()],
         touches: vec![],
+        scope: Default::default(),
     }];
     edits.extend((0..30).map(|n| MemoryEdit::Remember {
         kind: MemoryKind::Semantic,
         text: format!("Module m{n} keeps its helpers in m{n}/util."),
         tags: vec![],
         touches: vec![],
+        scope: Default::default(),
     }));
     let by = Provenance { author: Author::User, now: 0, origin: None };
     services.memories.edit(project, &edits, by).expect("seed");

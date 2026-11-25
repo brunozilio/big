@@ -4,7 +4,6 @@ mod sqlite;
 mod tests;
 
 use std::collections::HashMap;
-use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use platform::sync::Locked;
@@ -20,39 +19,39 @@ pub struct Revised {
 }
 
 pub trait MemoryStore: Send + Sync {
-    fn revision(&self, project: &Path) -> u64;
-    fn read(&self, project: &Path) -> Revised;
-    fn update(&self, project: &Path, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised>;
-    fn undo_point(&self, project: &Path) -> Option<MemoryBook>;
-    fn set_undo_point(&self, project: &Path, book: Option<&MemoryBook>) -> std::io::Result<()>;
+    fn revision(&self, key: &str) -> u64;
+    fn read(&self, key: &str) -> Revised;
+    fn update(&self, key: &str, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised>;
+    fn undo_point(&self, key: &str) -> Option<MemoryBook>;
+    fn set_undo_point(&self, key: &str, book: Option<&MemoryBook>) -> std::io::Result<()>;
 
-    fn load(&self, project: &Path) -> MemoryBook {
-        self.read(project).book
+    fn load(&self, key: &str) -> MemoryBook {
+        self.read(key).book
     }
 
-    fn save(&self, project: &Path, book: &MemoryBook) -> std::io::Result<()> {
-        self.update(project, &mut |kept| *kept = book.clone()).map(drop)
+    fn save(&self, key: &str, book: &MemoryBook) -> std::io::Result<()> {
+        self.update(key, &mut |kept| *kept = book.clone()).map(drop)
     }
 }
 
 #[derive(Debug, Default)]
 pub struct InMemoryStore {
-    books: Mutex<HashMap<PathBuf, Revised>>,
-    undo_points: Mutex<HashMap<PathBuf, MemoryBook>>,
+    books: Mutex<HashMap<String, Revised>>,
+    undo_points: Mutex<HashMap<String, MemoryBook>>,
 }
 
 impl MemoryStore for InMemoryStore {
-    fn revision(&self, project: &Path) -> u64 {
-        self.books.locked().get(project).map_or(0, |kept| kept.revision)
+    fn revision(&self, key: &str) -> u64 {
+        self.books.locked().get(key).map_or(0, |kept| kept.revision)
     }
 
-    fn read(&self, project: &Path) -> Revised {
-        self.books.locked().get(project).cloned().unwrap_or_default()
+    fn read(&self, key: &str) -> Revised {
+        self.books.locked().get(key).cloned().unwrap_or_default()
     }
 
-    fn update(&self, project: &Path, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised> {
+    fn update(&self, key: &str, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised> {
         let mut books = self.books.locked();
-        let kept = books.entry(project.to_path_buf()).or_default();
+        let kept = books.entry(key.to_owned()).or_default();
         let before = kept.book.clone();
         change(&mut kept.book);
         if kept.book != before {
@@ -61,15 +60,15 @@ impl MemoryStore for InMemoryStore {
         Ok(kept.clone())
     }
 
-    fn undo_point(&self, project: &Path) -> Option<MemoryBook> {
-        self.undo_points.locked().get(project).cloned()
+    fn undo_point(&self, key: &str) -> Option<MemoryBook> {
+        self.undo_points.locked().get(key).cloned()
     }
 
-    fn set_undo_point(&self, project: &Path, book: Option<&MemoryBook>) -> std::io::Result<()> {
+    fn set_undo_point(&self, key: &str, book: Option<&MemoryBook>) -> std::io::Result<()> {
         let mut points = self.undo_points.locked();
         match book {
-            Some(book) => points.insert(project.to_path_buf(), book.clone()),
-            None => points.remove(project),
+            Some(book) => points.insert(key.to_owned(), book.clone()),
+            None => points.remove(key),
         };
         Ok(())
     }

@@ -51,9 +51,9 @@ describe('cliente HTTP', () => {
   })
 
   test('/btw vai para a rota btw com a aplicação e o modelo', async () => {
-    const { calls, fetcher } = recorder({ session: 's9' })
-    const opened = await httpApi(fetcher).btw({ text: 'o swagger está atualizado?', application: 'a1', model: 'opus' })
-    expect(opened).toEqual({ session: 's9' })
+    const { calls, fetcher } = recorder({ id: 'i9', workflow: 'btw' })
+    const made = await httpApi(fetcher).btw({ text: 'o swagger está atualizado?', application: 'a1', model: 'opus' })
+    expect(made).toMatchObject({ id: 'i9', workflow: 'btw' })
     expect(calls).toEqual([{ url: '/api/btw', method: 'POST', body: { text: 'o swagger está atualizado?', application: 'a1', model: 'opus' } }])
   })
 

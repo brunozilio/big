@@ -5,7 +5,7 @@ use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
 use domain::inbox::Notice;
-use domain::{EngineEvent, PermissionMode, PromptRequest};
+use domain::{EngineEvent, PromptRequest};
 use serde_json::json;
 
 use crate::{Source, finish, model, start};
@@ -25,7 +25,7 @@ fn a_notice_reaches_the_model_with_the_next_tool_results() {
     let engine =
         Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&scripted)]))), Arc::new(InMemorySessions::default()));
     let mut request = PromptRequest::plain(dir.path().into(), "read it", model());
-    request.policy.permission = PermissionMode::Bypass;
+    request.policy.reviewer = domain::Reviewer::Nobody;
     request.host.credentials.client = 93_001;
     agent_engine::tools::inbox::push(93_001, Notice::new("monitor bash_9", "ERROR: build failed"));
     let events = finish(&start(&engine, &request));
@@ -64,15 +64,15 @@ fn a_channel_that_takes_permission_prompts_can_allow_a_call_while_the_terminal_w
     let scripted = Arc::new(ScriptedModel::new([
         ScriptedModel::reply(vec![Block::ToolUse {
             id: "w".into(),
-            name: "Write".into(),
-            input: json!({"file_path": "out.txt", "content": "from the phone"}),
+            name: "Bash".into(),
+            input: json!({"command": "printf 'from the phone' > out.txt"}),
         }]),
         ScriptedModel::reply(vec![Block::Text("Written.".into())]),
     ]));
     let engine =
         Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&scripted)]))), Arc::new(InMemorySessions::default()));
     let mut request = PromptRequest::plain(dir.path().into(), "write it", model());
-    request.policy.permission = PermissionMode::Ask;
+    request.policy.reviewer = domain::Reviewer::Human;
     request.host.credentials.client = 93_002;
     let events = finish(&start(&engine, &request));
     assert!(events.iter().any(|event| matches!(event, EngineEvent::Asked(_))), "the terminal was asked too");

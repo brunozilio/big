@@ -9,10 +9,10 @@ use serde_json::{Value, json};
 use super::Api;
 use super::refs::{pull_ref, run_ref};
 use super::states::{state, verdict};
-use crate::{contracts, idempotency};
 use crate::error::ActionError;
 use crate::http::{Http, Method};
 use crate::provider::{Credentials, EventBatch, EventSource, ExternalEvent, text_of, timestamp};
+use crate::{contracts, idempotency};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct GithubEvents;

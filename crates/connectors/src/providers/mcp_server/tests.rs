@@ -29,13 +29,14 @@ fn now() -> Timestamp {
 
 fn entered(fields: Value) -> Result<Loopback, String> {
     let AuthSpec::Loopback(generic) = McpServers.descriptor().auth else { panic!("not loopback") };
-    generic.entered(&fields)
+    generic.entered(&fields, domain::Language::Portuguese)
 }
 
 #[test]
 fn the_person_enters_the_server_address_and_a_name_and_only_safe_addresses_pass() {
     let AuthSpec::Loopback(generic) = McpServers.descriptor().auth else { panic!("not loopback") };
-    let names: Vec<String> = generic.0.fields().into_iter().map(|field| field.name).collect();
+    let names: Vec<String> =
+        generic.0.fields(domain::Language::Portuguese).into_iter().map(|field| field.name).collect();
     assert_eq!(names, ["url", "label"]);
     assert_eq!(McpServers.descriptor().capabilities, vec![Capability::from("mcp")]);
     assert!(entered(json!({})).is_err());
@@ -94,7 +95,9 @@ async fn the_account_is_the_named_server_with_its_tool_count_and_its_tools_are_l
     let accounts = McpServers.accounts(&http, &creds("at")).await;
     let Ok([account]) = accounts.as_deref() else { panic!("{accounts:?}") };
     assert_eq!(account.label, "Linear");
-    assert_eq!(account.settings, json!({ "url": SERVER, "detail": "2 ferramentas · tools.test" }));
+    assert_eq!(account.settings, json!({ "url": SERVER, "shown": { "tools": 2, "host": "tools.test" } }));
+    let detail = crate::texts::detail(domain::Language::Portuguese, &account.settings);
+    assert_eq!(detail.as_deref(), Some("2 ferramentas · tools.test"));
     assert_eq!(http.sent()[0].header_value("authorization"), Some("Bearer at"));
     let http = listing(FakeHttp::new());
     let listed = McpServers.call(&http, &creds(""), actions::TOOLS, &json!({}), "k").await;

@@ -1,6 +1,6 @@
 import { clsx, type ClassValue } from 'clsx'
 import { extendTailwindMerge } from 'tailwind-merge'
-import { currentLocale } from '@/i18n'
+import { currentLanguage, currentLocale, translate } from '@/i18n'
 
 const radiusRoles = ['control-sm', 'control', 'card', 'overlay']
 
@@ -30,8 +30,8 @@ export function relTime(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const future = diff < 0
   const m = Math.round(Math.abs(diff) / 60_000)
-  const fmt = (v: string) => (future ? `em ${v}` : v)
-  if (m < 1) return 'agora'
+  const fmt = (v: string) => (future ? translate(currentLanguage(), 'editor.inTime', { time: v }) : v)
+  if (m < 1) return translate(currentLanguage(), 'editor.now')
   if (m < 60) return fmt(`${m}min`)
   const h = Math.round(m / 60)
   if (h < 24) return fmt(`${h}h`)

@@ -9,6 +9,9 @@ import { ProductMark, ProviderLogo } from '@/ui/domain'
 import { Field, Input, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { tweenClose } from '@/ui/motion'
+import { LanguagePicker } from '@/i18n/LanguagePicker'
+import { useT, type T } from '@/i18n'
+import { groupName } from '@/i18n/server'
 import { ConnectDialog } from '../settings/ConnectDialog'
 import { ConnectionCard } from '../settings/ConnectionCard'
 import { FolderDialog } from '../settings/FolderDialog'
@@ -20,10 +23,12 @@ const NONE = 'none'
 
 type Stage = 'connections' | 'ai' | 'application'
 
-const STAGES: { stage: Stage; label: string; title: string; text: string }[] = [
-  { stage: 'connections', label: 'Conexões', title: 'Conecte suas ferramentas', text: 'Código, tarefas e nuvem. Dá para mudar depois em Configurações.' },
-  { stage: 'ai', label: 'IA', title: 'Conecte um provedor de IA', text: 'É ele que dá vida aos agentes. Conecte pelo menos um.' },
-  { stage: 'application', label: 'Aplicação', title: 'Crie sua aplicação', text: 'A pasta do código e onde as tarefas vivem.' },
+const ORDER: Stage[] = ['connections', 'ai', 'application']
+
+const STAGES = (t: T): { stage: Stage; label: string; title: string; text: string }[] => [
+  { stage: 'connections', label: t('app.stageConnectionsLabel'), title: t('app.stageConnectionsTitle'), text: t('app.stageConnectionsText') },
+  { stage: 'ai', label: t('app.stageAiLabel'), title: t('app.stageAiTitle'), text: t('app.stageAiText') },
+  { stage: 'application', label: t('app.stageApplicationLabel'), title: t('app.stageApplicationTitle'), text: t('app.stageApplicationText') },
 ]
 
 export function skippedOnboarding(): boolean {
@@ -55,10 +60,11 @@ interface Draft {
 const blank: Draft = { name: '', tracker: null, repository: { id: '', code: null, directory: '', run: [], verify: [] } }
 
 function Steps({ stage }: { stage: Stage }) {
-  const at = STAGES.findIndex((s) => s.stage === stage)
+  const t = useT()
+  const at = ORDER.indexOf(stage)
   return (
     <div className="mb-6 flex items-center gap-2 text-sm text-muted">
-      {STAGES.map(({ label }, i) => (
+      {STAGES(t).map(({ label }, i) => (
         <span key={label} className="flex items-center gap-2">
           {i > 0 && <span className="h-px w-6 bg-border" />}
           <span className={cn('flex size-5 items-center justify-center rounded-full text-xs tabular-nums', i < at ? 'bg-success text-white' : i === at ? 'bg-fg text-bg' : 'bg-inset text-faint')}>
@@ -72,6 +78,7 @@ function Steps({ stage }: { stage: Stage }) {
 }
 
 function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider: string) => void }) {
+  const t = useT()
   const data = useStore((s) => s.connections)
   if (!data) return null
   const providers = data.providers.filter((p) => !!p.ai === ai)
@@ -80,7 +87,7 @@ function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider
     <div className="space-y-5">
       {groups.map((g) => (
         <section key={g}>
-          <h3 className="mb-2 text-sm font-medium text-muted">{g}</h3>
+          <h3 className="mb-2 text-sm font-medium text-muted">{groupName(t, g)}</h3>
           <div className="grid gap-2">
             {providers.filter((p) => p.group === g).map((p) => <ConnectionCard key={p.key} provider={p} accounts={accountsOf(p, data.connections)} onConnect={onConnect} />)}
           </div>
@@ -93,12 +100,13 @@ function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider
 function ApplicationStage({ draft, onChange, onFolder, projects, repos }: { draft: Draft; onChange: (next: Draft) => void; onFolder: () => void; projects: Record<string, TrackerProject[]>; repos: Record<string, CodeRepo[]> }) {
   const trackers = useSources('tracker')
   const coders = useSources('code')
+  const t = useT()
   const spaces = [
-    { value: NONE, label: 'Nenhum' },
+    { value: NONE, label: t('app.none') },
     ...trackers.flatMap((s) => (projects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: `${p.name} · ${p.key}`, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
   ]
   const codes = [
-    { value: NONE, label: 'Nenhum' },
+    { value: NONE, label: t('app.none') },
     ...coders.flatMap((s) => (repos[s.connection.id] ?? []).map((r) => ({ value: choiceKey(s.connection.id, r.ref), label: r.ref, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
   ]
   const space = draft.tracker ? choiceKey(draft.tracker.connection, draft.tracker.project) : NONE
@@ -106,25 +114,25 @@ function ApplicationStage({ draft, onChange, onFolder, projects, repos }: { draf
   if (draft.repository.code && !codes.some((o) => o.value === code)) codes.push({ value: code, label: draft.repository.code.repo })
   return (
     <div className="space-y-5">
-      <Field label="Nome">
-        <Input aria-label="Nome" value={draft.name} placeholder="Checkout" onChange={(e) => onChange({ ...draft, name: e.target.value })} />
+      <Field label={t('app.name')}>
+        <Input aria-label={t('app.name')} value={draft.name} placeholder="Checkout" onChange={(e) => onChange({ ...draft, name: e.target.value })} />
       </Field>
       <div className="space-y-2">
-        <span className="text-base font-medium text-fg">Pasta do repositório</span>
-        <button type="button" aria-label="Pasta do repositório" onClick={onFolder} className="ring-field flex h-10 w-full items-center gap-2 rounded-control bg-surface px-3 text-left shadow-card transition-colors hover:bg-hover">
+        <span className="text-base font-medium text-fg">{t('app.repositoryFolder')}</span>
+        <button type="button" aria-label={t('app.repositoryFolder')} onClick={onFolder} className="ring-field flex h-10 w-full items-center gap-2 rounded-control bg-surface px-3 text-left shadow-card transition-colors hover:bg-hover">
           <Icon name="folder" size={16} className="text-faint" />
-          <span className={draft.repository.directory ? 'min-w-0 flex-1 truncate font-mono text-sm text-fg' : 'min-w-0 flex-1 truncate text-base text-muted'}>{draft.repository.directory || 'Escolher pasta'}</span>
+          <span className={draft.repository.directory ? 'min-w-0 flex-1 truncate font-mono text-sm text-fg' : 'min-w-0 flex-1 truncate text-base text-muted'}>{draft.repository.directory || t('app.chooseFolder')}</span>
         </button>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Espaço">
-          <Select label="Espaço" className="w-full" value={space} options={spaces} onValueChange={(v) => {
+        <Field label={t('app.space')}>
+          <Select label={t('app.space')} className="w-full" value={space} options={spaces} onValueChange={(v) => {
             const picked = fromKey(v)
             onChange({ ...draft, tracker: picked ? { connection: picked.connection, project: picked.key } : null })
           }} />
         </Field>
-        <Field label="Repositório remoto">
-          <Select label="Repositório remoto" className="w-full" value={code} options={codes} onValueChange={(v) => {
+        <Field label={t('app.remoteRepository')}>
+          <Select label={t('app.remoteRepository')} className="w-full" value={code} options={codes} onValueChange={(v) => {
             const picked = fromKey(v)
             onChange({ ...draft, repository: { ...draft.repository, code: picked ? { connection: picked.connection, repo: picked.key } : null } })
           }} />
@@ -191,12 +199,16 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
     skipOnboarding()
     onDone()
   }
+  const t = useT()
   const ready = draft.name.trim() !== '' && draft.repository.directory !== ''
-  const at = STAGES.findIndex((s) => s.stage === stage)
-  const current = STAGES[at]
+  const at = ORDER.indexOf(stage)
+  const current = STAGES(t)[at]
   return (
     <div className="flex min-h-full flex-col items-center bg-subtle px-4 py-10">
-      <ProductMark size={34} className="mb-8" />
+      <div className="mb-8 flex w-full max-w-[560px] items-center justify-between">
+        <ProductMark size={34} />
+        <LanguagePicker className="w-36" />
+      </div>
       <div className="w-full max-w-[560px] rounded-card bg-bg shadow-card">
         <div className="flex max-h-[calc(100dvh-160px)] min-h-[520px] flex-col p-6 md:p-8">
           <Steps stage={stage} />
@@ -215,12 +227,12 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
           </AnimatePresence>
           {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
           <div className="mt-6 flex items-center gap-2">
-            {at > 0 && <Button variant="ghost" icon={<Icon name="left" size={15} />} onClick={() => setStage(STAGES[at - 1].stage)}>Voltar</Button>}
-            <Button variant="ghost" onClick={skip}>Pular por agora</Button>
+            {at > 0 && <Button variant="ghost" icon={<Icon name="left" size={15} />} onClick={() => setStage(ORDER[at - 1])}>{t('app.back')}</Button>}
+            <Button variant="ghost" onClick={skip}>{t('app.skipForNow')}</Button>
             {stage !== 'application' ? (
-              <Button variant="primary" className="ml-auto" onClick={() => setStage(STAGES[at + 1].stage)}>Continuar</Button>
+              <Button variant="primary" className="ml-auto" onClick={() => setStage(ORDER[at + 1])}>{t('app.continue')}</Button>
             ) : (
-              <Button variant="primary" className="ml-auto" loading={busy} disabled={!ready} onClick={create}>Criar aplicação</Button>
+              <Button variant="primary" className="ml-auto" loading={busy} disabled={!ready} onClick={create}>{t('app.createApplication')}</Button>
             )}
           </div>
         </div>

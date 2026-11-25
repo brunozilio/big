@@ -1,5 +1,6 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
+use domain::Language;
 use domain::connection::{Capability, ProviderKey};
 use serde::Serialize;
 use serde_json::{Map, Value, json};
@@ -72,11 +73,28 @@ pub struct TokenField {
     pub label: String,
     pub help: String,
     pub secret: bool,
+    pub setting: bool,
+    pub value: String,
 }
 
 impl TokenField {
     pub fn new(name: &str, label: &str, help: &str, secret: bool) -> TokenField {
-        TokenField { name: name.to_owned(), label: label.to_owned(), help: help.to_owned(), secret }
+        TokenField {
+            name: name.to_owned(),
+            label: label.to_owned(),
+            help: help.to_owned(),
+            secret,
+            setting: false,
+            value: String::new(),
+        }
+    }
+
+    pub fn filled(self, value: &str) -> TokenField {
+        TokenField { value: value.to_owned(), ..self }
+    }
+
+    pub fn setting(name: &str, label: &str, help: &str) -> TokenField {
+        TokenField { setting: true, ..TokenField::new(name, label, help, false) }
     }
 }
 
@@ -87,12 +105,12 @@ pub struct TokenSpec {
 }
 
 impl TokenSpec {
-    pub fn access_token(&self, given: &Value) -> Result<String, String> {
+    pub fn access_token(&self, given: &Value, language: Language) -> Result<String, String> {
         let mut texts = Vec::new();
-        for field in &self.fields {
+        for field in self.fields.iter().filter(|field| !field.setting) {
             let value = given[&field.name].as_str().map(str::trim).unwrap_or_default();
             if value.is_empty() {
-                return Err(format!("Informe o {}.", field.label));
+                return Err(crate::texts::missing_field(language, &field.label));
             }
             texts.push((field.name.as_str(), value));
         }
@@ -105,6 +123,16 @@ impl TokenSpec {
                     .to_string()
             }
         })
+    }
+}
+
+impl TokenSpec {
+    pub fn settings(&self, given: &Value) -> Value {
+        let kept = self.fields.iter().filter(|field| field.setting).filter_map(|field| {
+            let value = given[&field.name].as_str().map(str::trim).filter(|value| !value.is_empty())?;
+            Some((field.name.clone(), json!(value)))
+        });
+        Value::Object(kept.collect())
     }
 }
 
@@ -139,11 +167,18 @@ pub struct AlternateAuth {
 }
 
 impl AlternateAuth {
-    pub fn token(key: &str, label: &str, site: &str, fields: Vec<TokenField>, form: TokenForm) -> AlternateAuth {
+    pub fn token(
+        language: Language,
+        key: &str,
+        label: &str,
+        site: &str,
+        fields: Vec<TokenField>,
+        form: TokenForm,
+    ) -> AlternateAuth {
         AlternateAuth {
             key: key.to_owned(),
             label: label.to_owned(),
-            button: "Conectar".to_owned(),
+            button: crate::texts::connect(language).to_owned(),
             site: site.to_owned(),
             auth: AuthSpec::Token(TokenSpec { fields, form }),
         }
@@ -237,13 +272,27 @@ mod tests {
         let spec = |form| TokenSpec { fields: vec![field("email"), field("token")], form };
         let given = json!({ "email": " ana@x.com ", "token": "t1" });
         assert_eq!(
-            spec(TokenForm::Basic).access_token(&given),
+            spec(TokenForm::Basic).access_token(&given, domain::Language::Portuguese),
             Ok(format!("Basic {}", STANDARD.encode("ana@x.com:t1")))
         );
-        let keys = spec(TokenForm::Json).access_token(&given).unwrap_or_default();
+        let keys = spec(TokenForm::Json).access_token(&given, domain::Language::Portuguese).unwrap_or_default();
         assert_eq!(serde_json::from_str::<Value>(&keys).ok(), Some(json!({ "email": "ana@x.com", "token": "t1" })));
         let single = TokenSpec { fields: vec![field("token")], form: TokenForm::Bearer };
-        assert_eq!(single.access_token(&given), Ok("t1".to_owned()));
-        assert_eq!(spec(TokenForm::Basic).access_token(&json!({ "email": "a" })), Err("Informe o token.".to_owned()));
+        assert_eq!(single.access_token(&given, domain::Language::Portuguese), Ok("t1".to_owned()));
+        let sited = TokenSpec {
+            fields: vec![TokenField::setting("site", "site", ""), field("token")],
+            form: TokenForm::Bearer,
+        };
+        assert_eq!(sited.access_token(&given, domain::Language::Portuguese), Ok("t1".to_owned()));
+        assert_eq!(sited.settings(&json!({ "site": " eu ", "token": "t1" })), json!({ "site": "eu" }));
+        assert_eq!(sited.settings(&json!({ "site": " ", "token": "t1" })), json!({}));
+        assert_eq!(
+            spec(TokenForm::Basic).access_token(&json!({ "email": "a" }), domain::Language::Portuguese),
+            Err("Informe o token.".to_owned())
+        );
+        assert_eq!(
+            spec(TokenForm::Basic).access_token(&json!({ "email": "a" }), domain::Language::English),
+            Err("Enter the token.".to_owned())
+        );
     }
 }

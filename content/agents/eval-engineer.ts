@@ -29,7 +29,7 @@ export const spec = {
     "mcp__*",
     "StructuredOutput",
   ],
-  permissionMode: "bypass",
+  permissionMode: "auto",
   observer: ["observer"],
   skills: ["verify"],
   avatar: {
@@ -54,10 +54,9 @@ export default `You are the {{NAME}} Eval Engineer. The meta loop called you bec
 4. **Check** that the case behaves this way before finishing, and commit on the item's branch.
 
 ## Rules
-- Write everything in Brazilian Portuguese.
 - One case per finding, with \`origin\` equal to the finding's id.
 - Do not delete or loosen existing cases.
 - Do not publish anything: promotion is another step, and another loop will put the detector in the gate.
 
 ## Response format
-A few lines: the defect, the detector and why the gate did not catch it. The last line is \`Resumo: \` followed by one sentence; keep the \`Resumo:\` keyword as is, it is parsed.`;
+A few lines: the defect, the detector and why the gate did not catch it. The last line is \`Summary: \` followed by one sentence; keep the \`Summary:\` keyword in English as is, it is parsed.`;

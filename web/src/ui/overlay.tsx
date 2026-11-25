@@ -4,6 +4,7 @@ import * as RPopover from '@radix-ui/react-popover'
 import * as RTooltip from '@radix-ui/react-tooltip'
 import { AnimatePresence, motion } from 'framer-motion'
 import type { ReactNode } from 'react'
+import { useT } from '@/i18n'
 import { cn } from './cn'
 import { Icon } from './icon'
 import { dur, easeOut, tween, tweenClose } from './motion'
@@ -78,6 +79,7 @@ export function MenuSeparator() {
 const overlayFade = { duration: dur.quick, ease: easeOut }
 
 export function Dialog({ open, onOpenChange, title, description, children, size = 'md', footer, bare, static: still }: { open: boolean; onOpenChange: (o: boolean) => void; title?: ReactNode; description?: ReactNode; children: ReactNode; size?: 'sm' | 'md' | 'lg' | 'xl'; footer?: ReactNode; bare?: boolean; static?: boolean }) {
+  const t = useT()
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
       <AnimatePresence>
@@ -109,17 +111,17 @@ export function Dialog({ open, onOpenChange, title, description, children, size 
               >
                 {bare ? (
                   <>
-                    <RDialog.Title className="sr-only">{title ?? 'Caixa de diálogo'}</RDialog.Title>
+                    <RDialog.Title className="sr-only">{title ?? t('editor.dialog')}</RDialog.Title>
                     {children}
                   </>
                 ) : (
                   <>
                     <div className="flex items-start justify-between gap-4 px-6 pt-6">
                       <div>
-                        {title ? <RDialog.Title className="text-lg font-medium tracking-tightish text-fg">{title}</RDialog.Title> : <RDialog.Title className="sr-only">Caixa de diálogo</RDialog.Title>}
+                        {title ? <RDialog.Title className="text-lg font-medium tracking-tightish text-fg">{title}</RDialog.Title> : <RDialog.Title className="sr-only">{t('editor.dialog')}</RDialog.Title>}
                         {description && <RDialog.Description className="mt-1 text-base text-muted">{description}</RDialog.Description>}
                       </div>
-                      <RDialog.Close className="-mr-2 -mt-1 rounded-control-sm p-1.5 text-muted transition-colors hover:bg-hover hover:text-fg" aria-label="Fechar">
+                      <RDialog.Close className="-mr-2 -mt-1 rounded-control-sm p-1.5 text-muted transition-colors hover:bg-hover hover:text-fg" aria-label={t('editor.close')}>
                         <Icon name="close" size={18} />
                       </RDialog.Close>
                     </div>

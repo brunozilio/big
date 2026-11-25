@@ -98,7 +98,19 @@ impl CommandHandler {
                 }
                 Reply::Done
             }
+            ClientCommand::BackgroundJobs => Reply::Background(self.background()),
+            ClientCommand::StopBackground { id } => {
+                let stopped = agent_engine::tools::clients::stop_background(self.client, &id);
+                Reply::done_or(if stopped { Ok(()) } else { Err(format!("no background job {id} is running")) })
+            }
         })
+    }
+
+    fn background(&self) -> Vec<crate::api::BackgroundJob> {
+        agent_engine::tools::clients::background(self.client)
+            .into_iter()
+            .map(|(id, command, running)| crate::api::BackgroundJob { id, command, running })
+            .collect()
     }
 
     pub fn cancel_all(&self) {

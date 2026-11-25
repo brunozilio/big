@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use domain::{AskId, Decision, PermissionMode};
+use domain::{AskId, Decision};
 use serde_json::json;
 
 use super::channel;
@@ -57,7 +57,7 @@ fn within(waiting: &mut Awaited, wait: Duration) -> Option<Decision> {
 #[test]
 fn a_permission_prompt_is_sent_to_the_channel_and_its_answer_settles_it() {
     let _server = channel::open(&spec("chat", ANSWERING), &http(), 9601).expect("channel");
-    let control = Control::new(PermissionMode::Ask, Arc::default());
+    let control = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human);
     let ask = AskId("ask-1".into());
     let mut waiting = control.open(ask.clone());
     let relayed =
@@ -69,7 +69,7 @@ fn a_permission_prompt_is_sent_to_the_channel_and_its_answer_settles_it() {
 #[test]
 fn a_channel_cannot_allow_a_call_to_its_own_tool_and_the_terminal_still_can_answer() {
     let _server = channel::open(&spec("chat", ANSWERING), &http(), 9602).expect("channel");
-    let control = Control::new(PermissionMode::Ask, Arc::default());
+    let control = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human);
     let ask = AskId("ask-2".into());
     let mut waiting = control.open(ask.clone());
     let _relayed = channel_relay::ask(
@@ -89,7 +89,7 @@ fn a_channel_cannot_allow_a_call_to_its_own_tool_and_the_terminal_still_can_answ
 #[test]
 fn a_channel_that_does_not_take_permission_prompts_is_not_asked() {
     let _server = channel::open(&spec("quiet", SILENT), &http(), 9603).expect("channel");
-    let control = Control::new(PermissionMode::Ask, Arc::default());
+    let control = Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human);
     let ask = AskId("ask-3".into());
     let _waiting = control.open(ask.clone());
     assert!(channel_relay::ask(9603, "call-3", "Bash", "Run ls", &json!({}), control.answerer(&ask)).is_none());

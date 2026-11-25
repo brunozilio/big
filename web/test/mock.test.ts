@@ -63,12 +63,12 @@ describe('adaptador mock', () => {
     expect((await api.items()).find((i) => i.id === id)?.group).toBe('running')
   })
 
-  test('permissão aparece mesmo em bypass', async () => {
+  test('permissão sinalizada pelo revisor aparece no modo auto', async () => {
     const api = fresh()
     const id = byKey('APP-238')
     tick()
     const session = await api.session(`s-${id}`)
-    expect(session.mode).toBe('bypass')
+    expect(session.mode).toBe('auto')
     expect(session.events.find((e) => e.type === 'permission')).toMatchObject({ resolution: 'pending' })
   })
 
@@ -150,5 +150,7 @@ describe('adaptador mock', () => {
     const saved = await api.saveBranding({ theme: 'dark' })
     expect(saved.theme).toBe('dark')
     expect(saved.logo).toBe('/api/branding/logo')
+    expect(saved.language).toBe('pt-BR')
+    expect((await api.saveBranding({ language: 'es' })).language).toBe('es')
   })
 })

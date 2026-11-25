@@ -1,4 +1,5 @@
 import type { Application, ApplicationDraft, CloudAccount, CloudChoice, CodeBranch, CodeRepo, DirListing, OpenPull } from '../contract'
+import { say } from './say'
 
 export const MOCK_HOME = '/Users/voce'
 
@@ -51,7 +52,7 @@ function remoteOf(path: string): string | null {
 export function listDirs(path: string | null): DirListing {
   const wanted = (path ?? MOCK_HOME).replace(/\/+$/, '') || '/'
   const folders = TREE[wanted]
-  if (!folders) throw new Error('Essa pasta não existe.')
+  if (!folders) throw new Error(say('folderMissing'))
   const ref = remoteOf(wanted)
   return {
     path: wanted,
@@ -92,10 +93,10 @@ function checkedCloud(chosen: CloudChoice | null | undefined): CloudChoice | nul
 
 export function checkedApplication(draft: ApplicationDraft, id: string): Application {
   const name = draft.name.trim()
-  if (!name) throw new Error('Dê um nome à aplicação.')
-  if (draft.repositories.length === 0) throw new Error('Adicione ao menos um repositório.')
+  if (!name) throw new Error(say('appNameRequired'))
+  if (draft.repositories.length === 0) throw new Error(say('addRepository'))
   const repositories = draft.repositories.map((r) => {
-    if (!r.directory.trim()) throw new Error('Escolha a pasta de cada repositório.')
+    if (!r.directory.trim()) throw new Error(say('chooseFolder'))
     counter += 1
     return {
       id: r.id || `r-${Date.now()}-${counter}`,
@@ -111,8 +112,8 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
 
 export function openPulls(repo: string): OpenPull[] {
   return [
-    { key: `${repo}#42`, number: 42, title: 'Corrigir cálculo do frete', head: 'fix/frete', base: 'main', author: 'ana', url: null, draft: false },
-    { key: `${repo}#38`, number: 38, title: 'Novo checkout em uma página', head: 'feat/checkout', base: 'main', author: 'bia', url: null, draft: true },
+    { key: `${repo}#42`, number: 42, title: say('pullFreight'), head: 'fix/frete', base: 'main', author: 'ana', url: null, draft: false },
+    { key: `${repo}#38`, number: 38, title: say('pullOnePage'), head: 'feat/checkout', base: 'main', author: 'bia', url: null, draft: true },
   ]
 }
 

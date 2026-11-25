@@ -7,6 +7,7 @@ import { Button } from '@/ui/button'
 import { Icon } from '@/ui/icon'
 import { tweenClose } from '@/ui/motion'
 import { Dialog } from '@/ui/overlay'
+import { type T, useT } from '@/i18n'
 import {
   AccountChoice,
   BrowserWait,
@@ -38,10 +39,10 @@ interface Way {
   site: string
 }
 
-function wayOf(provider: Provider, method: string | null): Way {
+function wayOf(provider: Provider, method: string | null, t: T): Way {
   const alternative = provider.alternatives?.find((a) => a.key === method)
   if (method && alternative) return { method, fields: alternative.fields, button: alternative.button, site: alternative.site }
-  return { fields: provider.fields, button: provider.button ?? `Entrar com ${provider.name}`, site: provider.site ?? `do ${provider.name}` }
+  return { fields: provider.fields, button: provider.button ?? t('settings.signIn_with', { name: provider.name }), site: provider.site ?? t('settings.signIn_site', { name: provider.name }) }
 }
 
 function flowOf(step: Step): string | null {
@@ -120,13 +121,13 @@ function leave(start: RedirectStart) {
   else globalThis.open?.(start.url, '_blank', 'noopener')
 }
 
-function primaryOf(signIn: ReturnType<typeof useSignIn>, way: Way, ready: boolean, onClose: () => void): Primary {
+function primaryOf(signIn: ReturnType<typeof useSignIn>, way: Way, ready: boolean, onClose: () => void, t: T): Primary {
   const { step, busy } = signIn
   if (step.kind === 'start') return { label: way.button, onClick: signIn.begin, disabled: !ready, loading: busy, icon: true }
-  if (step.kind === 'browser' && step.start.paste) return { label: 'Concluir', onClick: () => signIn.send(step.start.flow, { code: signIn.pasted.trim() }), disabled: !signIn.pasted.trim(), loading: busy }
-  if (step.kind === 'choose') return { label: 'Salvar', onClick: () => signIn.choice && signIn.send(step.flow, { choice: signIn.choice }), disabled: !signIn.choice, loading: busy }
-  if (step.kind === 'done') return { label: 'Concluir', onClick: onClose }
-  return { label: 'Aguardando…', loading: true }
+  if (step.kind === 'browser' && step.start.paste) return { label: t('settings.signIn_finish'), onClick: () => signIn.send(step.start.flow, { code: signIn.pasted.trim() }), disabled: !signIn.pasted.trim(), loading: busy }
+  if (step.kind === 'choose') return { label: t('settings.save'), onClick: () => signIn.choice && signIn.send(step.flow, { choice: signIn.choice }), disabled: !signIn.choice, loading: busy }
+  if (step.kind === 'done') return { label: t('settings.signIn_finish'), onClick: onClose }
+  return { label: t('settings.signIn_waiting'), loading: true }
 }
 
 function Body({ signIn, way, accounts, fields, onField, toggle }: { signIn: ReturnType<typeof useSignIn>; way: Way; accounts: Connection[]; fields: Record<string, string>; onField: (name: string, value: string) => void; toggle: ReactNode }) {
@@ -146,22 +147,23 @@ function Body({ signIn, way, accounts, fields, onField, toggle }: { signIn: Retu
 }
 
 export function ConnectDialog({ provider: key, resume, onClose }: { provider: string | null; resume?: string | null; onClose: () => void }) {
+  const t = useT()
   const provider = useStore((s) => s.connections?.providers.find((p) => p.key === key) ?? null)
   const all = useStore((s) => s.connections?.connections)
   const accounts = (all ?? []).filter((c) => c.provider === key)
   const [method, setMethod] = useState<string | null>(null)
   const [fields, setFields] = useState<Record<string, string>>({})
-  const way = provider ? wayOf(provider, method) : null
+  const way = provider ? wayOf(provider, method, t) : null
   const signIn = useSignIn(provider, way, fields, resume ?? null, onClose)
   useEffect(() => setMethod(null), [key])
   useEffect(() => {
     setFields(Object.fromEntries((way?.fields ?? []).map((f) => [f.name, f.value ?? ''])))
   }, [way?.fields])
   const ready = !way?.fields.some((f) => !fields[f.name]?.trim())
-  const primary = way ? primaryOf(signIn, way, ready, onClose) : null
+  const primary = way ? primaryOf(signIn, way, ready, onClose, t) : null
   const footer = primary && (
     <>
-      {signIn.step.kind !== 'done' && <Button variant="ghost" onClick={onClose}>Cancelar</Button>}
+      {signIn.step.kind !== 'done' && <Button variant="ghost" onClick={onClose}>{t('settings.cancel')}</Button>}
       <Button variant="primary" className="min-w-[132px]" loading={primary.loading} disabled={primary.disabled} onClick={primary.onClick}>
         {primary.label}
         {primary.icon && !primary.loading && <Icon name="arrowUpRight" size={15} />}
@@ -169,7 +171,7 @@ export function ConnectDialog({ provider: key, resume, onClose }: { provider: st
     </>
   )
   const ways = [
-    ...(method && provider ? [{ key: null, label: `Entrar com a conta ${provider.name}` }] : []),
+    ...(method && provider ? [{ key: null, label: t('settings.signIn_withAccount', { name: provider.name }) }] : []),
     ...(provider?.alternatives ?? []).filter((a) => a.key !== method).map((a) => ({ key: a.key, label: a.label })),
   ]
   const toggle = ways.length > 0 && (
@@ -182,7 +184,7 @@ export function ConnectDialog({ provider: key, resume, onClose }: { provider: st
     </div>
   )
   return (
-    <Dialog open={!!provider} onOpenChange={(o) => !o && !signIn.busy && onClose()} title={provider ? `Conectar ${provider.name}` : ''} footer={footer}>
+    <Dialog open={!!provider} onOpenChange={(o) => !o && !signIn.busy && onClose()} title={provider ? t('settings.signIn_title', { name: provider.name }) : ''} footer={footer}>
       {provider && way && (
         <div className="flex min-h-[242px] flex-col gap-4">
           <ConnectHeader logo={provider.logo} name={provider.name} description={provider.description} />

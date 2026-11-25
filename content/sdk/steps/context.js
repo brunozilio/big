@@ -5,10 +5,28 @@ export const SUCCEEDED = ["passed", "skipped"];
 
 const LIMIT = 8000;
 
-export const LANGUAGE = "Reply and write everything in Brazilian Portuguese.";
+export const LANGUAGES = { en: "English", es: "Spanish", "pt-BR": "Brazilian Portuguese" };
 
-export function inLanguage(text) {
-  return `${text}\n\n${LANGUAGE}`;
+export function languageOf(ctx) {
+  const chosen = ctx?.item?.language;
+  return Object.hasOwn(LANGUAGES, chosen ?? "") ? chosen : "pt-BR";
+}
+
+export function inLanguage(ctx, text) {
+  return `${text}\n\nReply and write everything in ${LANGUAGES[languageOf(ctx)]}.`;
+}
+
+const HEADINGS = {
+  description: ["description", "descrição", "descricao", "descripción", "descripcion"],
+  criteria: ["acceptance criteria", "critérios de aceite", "criterios de aceite", "criterios de aceptación", "criterios de aceptacion"],
+  subtasks: ["subtasks", "subtarefas", "subtareas"],
+  infra: ["infrastructure", "infraestrutura", "infraestructura", "manual tasks", "tarefas manuais", "tareas manuales"],
+};
+
+const CRITERIA = { en: "Acceptance criteria", es: "Criterios de aceptación", "pt-BR": "Critérios de aceite" };
+
+function heading(found, kind) {
+  return HEADINGS[kind].map((name) => found[name]).find((text) => text !== undefined) ?? "";
 }
 
 export function defined(fields) {
@@ -76,16 +94,18 @@ function subtasksOf(text) {
     });
 }
 
-export function parsePlan(text) {
+export function parsePlan(text, language) {
   const lines = String(text ?? "").split("\n");
   const at = lines.findIndex((line) => /^# \S/.test(line));
-  if (at < 0) return { title: "", story: "", subtasks: [], text: String(text ?? "").trim() };
+  if (at < 0) return { title: "", story: "", subtasks: [], infra: [], text: String(text ?? "").trim() };
   const title = lines[at].slice(2).trim();
   const found = sections(lines.slice(at + 1).join("\n"));
-  const description = found["descrição"] ?? found["descricao"] ?? "";
-  const criteria = found["critérios de aceite"] ?? found["criterios de aceite"] ?? "";
-  const story = [description, criteria ? `## Critérios de aceite\n${criteria}` : ""].filter(Boolean).join("\n\n");
-  return { title, story, subtasks: subtasksOf(found["subtarefas"]), text: lines.slice(at).join("\n").trim() };
+  const description = heading(found, "description");
+  const criteria = heading(found, "criteria");
+  const named = CRITERIA[language] ?? CRITERIA["pt-BR"];
+  const story = [description, criteria ? `## ${named}\n${criteria}` : ""].filter(Boolean).join("\n\n");
+  const subtasks = subtasksOf(heading(found, "subtasks"));
+  return { title, story, subtasks, infra: subtasksOf(heading(found, "infra")), text: lines.slice(at).join("\n").trim() };
 }
 
 export function planOf(ctx, opts) {
@@ -95,11 +115,12 @@ export function planOf(ctx, opts) {
     text: opts.plan ?? found.plan ?? "",
     story: found.story ?? "",
     subtasks: Array.isArray(found.subtasks) ? found.subtasks : [],
+    infra: Array.isArray(found.infra) ? found.infra : [],
   };
 }
 
 export function summaryLine(text) {
-  const found = String(text ?? "").match(/^\**Resumo:?\**:?\s*(.+)$/im);
+  const found = String(text ?? "").match(/^\**(?:Summary|Resumo|Resumen):?\**:?\s*(.+)$/im);
   if (found) return found[1].trim();
   const first = String(text ?? "").split(/\n\s*\n/).map((part) => part.trim()).find((part) => part && !part.startsWith("#"));
   return first ? first.split("\n")[0].slice(0, 280) : "";

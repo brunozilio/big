@@ -120,7 +120,11 @@ mod tests {
         std::fs::write(folder.path().join("tools/A.ts"), "mine").expect("edit");
         assert_eq!(crate::user_text(Some(folder.path()), "tools/A.ts").as_deref(), Some("mine"));
         std::fs::write(folder.path().join("tools/B.ts"), "new").expect("write");
-        assert_eq!(crate::user_text(Some(folder.path()), "tools/B.ts").as_deref(), Some("new"), "a file of the owner's own");
+        assert_eq!(
+            crate::user_text(Some(folder.path()), "tools/B.ts").as_deref(),
+            Some("new"),
+            "a file of the owner's own"
+        );
     }
 
     #[test]

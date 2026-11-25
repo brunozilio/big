@@ -26,7 +26,7 @@ fn the_sign_in_is_the_configured_mcp_server_asking_for_the_api_scope() {
     assert_eq!(flow.server, brand::connectors::ZEPHYR_MCP_URL);
     assert_eq!(flow.redirect, brand::connectors::ZEPHYR_OAUTH_REDIRECT);
     assert_eq!(flow.scopes, vec!["api".to_owned()]);
-    assert_eq!(Zephyr.presentation().group, "Testes");
+    assert_eq!(Zephyr.presentation(domain::Language::Portuguese).group, "tests");
     assert!(Zephyr.events().is_none());
 }
 
@@ -193,18 +193,21 @@ async fn projects_are_paged_filtered_and_the_only_one_becomes_the_account_projec
     let http = ZephyrMcp::new().answer("zephyr_get_projects", json!({ "values": [{ "id": 1, "key": "BIG" }] }));
     let options = Zephyr.accounts(&http, &creds(json!({}))).await;
     let Ok(options) = options else { panic!("{options:?}") };
-    assert_eq!(options[0].settings, json!({ "project": "BIG", "detail": "Projeto BIG" }));
+    assert_eq!(options[0].settings, json!({ "project": "BIG", "shown": { "projects": ["BIG"] } }));
+    let detail = crate::texts::detail(domain::Language::English, &options[0].settings);
+    assert_eq!(detail.as_deref(), Some("Project BIG"));
 }
 
 #[test]
 fn the_smartbear_sign_in_is_the_default_and_an_api_token_the_alternative() {
     let AuthSpec::Loopback(_) = Zephyr.descriptor().auth else { panic!("not loopback") };
-    let [alternative] = Zephyr.alternatives().try_into().unwrap_or_else(|_| panic!("not one alternative"));
+    let [alternative] =
+        Zephyr.alternatives(domain::Language::Portuguese).try_into().unwrap_or_else(|_| panic!("not one alternative"));
     let AuthSpec::Token(spec) = alternative.auth else { panic!("not a token") };
     assert_eq!((alternative.key.as_str(), alternative.label.as_str()), (API_TOKEN, "Usar API token"));
     assert_eq!(spec.fields[0].name, "token");
     assert!(spec.fields[0].help.contains("Zephyr API Access Tokens"));
-    assert_eq!(spec.access_token(&json!({ "token": " zt-1 " })), Ok("zt-1".to_owned()));
+    assert_eq!(spec.access_token(&json!({ "token": " zt-1 " }), domain::Language::Portuguese), Ok("zt-1".to_owned()));
 }
 
 fn no_more(field: &str) -> Value {

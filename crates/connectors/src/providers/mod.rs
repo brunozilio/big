@@ -1,12 +1,24 @@
 pub mod aws;
+pub mod datadog;
 pub mod github;
 pub mod jira;
 pub mod mcp_server;
+pub mod mock_changes;
+pub mod veracode;
 pub mod zephyr;
 
 use crate::provider::Provider;
 
-pub static ALL: &[&dyn Provider] = &[&github::Github, &jira::Jira, &aws::Aws, &zephyr::Zephyr, &mcp_server::McpServers];
+pub static ALL: &[&dyn Provider] = &[
+    &github::Github,
+    &jira::Jira,
+    &aws::Aws,
+    &zephyr::Zephyr,
+    &veracode::Veracode,
+    &datadog::Datadog,
+    &mcp_server::McpServers,
+    &mock_changes::MockChanges,
+];
 
 #[cfg(test)]
 mod tests {

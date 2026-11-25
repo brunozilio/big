@@ -3,6 +3,8 @@ mod cloud;
 mod control;
 mod factory;
 mod flow;
+mod links;
+mod package;
 mod repos;
 mod restart;
 mod triggers;
@@ -44,8 +46,16 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value, String)>>,
 }
 
-const ACTIONS: [&str; 7] = [
+const ACTIONS: [&str; 15] = [
     "tracker.issue",
+    "tracker.create_issue",
+    "tracker.update_issue",
+    "tracker.link_issues",
+    "code.open_pull_request",
+    "pipelines.runs",
+    "changes.create",
+    "changes.update",
+    "changes.get",
     "tracker.comment",
     "tracker.transition",
     "tracker.set_impediment",
@@ -95,6 +105,7 @@ impl Provider for FakeProvider {
                 Capability::from("pipelines"),
                 Capability::from("code"),
                 Capability::from("cloud"),
+                Capability::from("changes"),
             ],
             auth: AuthSpec::Device(DeviceApp {
                 client_id: "c".into(),
@@ -323,7 +334,7 @@ pub struct World {
 pub const SERVER: &str = "http://127.0.0.1:9";
 
 pub const WORKER: &str =
-    "---\nname: worker\npermissionMode: bypass\nmodel: auto\ntools: [Read, Edit]\n---\nVocê trabalha.";
+    "---\nname: worker\npermissionMode: auto\nmodel: auto\ntools: [Read, Edit]\n---\nVocê trabalha.";
 
 impl World {
     pub fn new() -> World {
@@ -376,7 +387,7 @@ impl World {
             provider: "fake".into(),
             label: "Fake".into(),
             account: Some("me".into()),
-            capabilities: vec!["tracker".into(), "pipelines".into(), "code".into()],
+            capabilities: vec!["tracker".into(), "pipelines".into(), "code".into(), "changes".into()],
             settings: json!({}),
         };
         store.save_connection(&record).expect("connection");
@@ -397,7 +408,8 @@ impl World {
         let mut config = Config::new(store, hub, Arc::new(self.engine.clone()), self.dir.path().join("data"))
             .with_resources(resources)
             .with_limits(Limits { max_parallel_items: self.parallel, ..limits() })
-            .with_server(SERVER);
+            .with_server(SERVER)
+            .with_schedules(crate::Schedules { enabled: false, ..crate::Schedules::from_config() });
         if self.git {
             config.repo = Some(self.repo());
         }
