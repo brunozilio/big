@@ -1,5 +1,6 @@
 mod device;
 mod loopback;
+mod stepped;
 pub mod mcp;
 mod tokens;
 
@@ -14,7 +15,8 @@ use crate::clock::after_seconds;
 use crate::error::ActionError;
 use crate::http::HttpResponse;
 
-pub use device::{DeviceApp, DeviceCode, Dialect, Polled, RegisteredClient, SsoSpec, register_client};
+pub use device::{DeviceApp, DeviceCode, Dialect, Polled, RegisteredClient};
+pub use stepped::{DeviceSignIn, Started, Stepped};
 pub use loopback::{Authorization, Loopback, LoopbackSignIn};
 pub use tokens::{MemoryTokenStore, REFRESH_WINDOW_SECONDS, TokenKeeper, TokenStore};
 

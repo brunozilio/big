@@ -1,4 +1,3 @@
-pub mod sigv4;
 
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -101,7 +100,6 @@ pub fn call(name: &str, arguments: &Value) -> Result<Value, String> {
             let pair = pkce()?;
             return Ok(json!({ "verifier": pair.verifier, "challenge": pair.challenge, "method": "S256" }));
         }
-        "sigv4" => return sigv4::call(arguments),
         other => return Err(format!("crypto.{other} is not a function")),
     };
     Ok(Value::String(answer))

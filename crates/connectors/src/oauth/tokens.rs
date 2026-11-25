@@ -150,11 +150,7 @@ impl TokenKeeper {
         let http = self.http.as_ref();
         match auth {
             AuthSpec::Device(app) => app.refresh(http, refresh_token, now).await,
-            AuthSpec::Sso(spec) => {
-                let client = grant.client.as_ref().ok_or_else(|| reconnect("the registered client is missing"))?;
-                let region = grant.extra["region"].as_str().unwrap_or_default();
-                spec.in_region(region).device_for(client, "").refresh(http, refresh_token, now).await
-            }
+            AuthSpec::Steps(sign_in) => sign_in.0.refresh(http, grant, now).await,
             AuthSpec::Loopback(sign_in) => sign_in.0.refresh(http, grant, now).await,
             AuthSpec::Token(_) => Err(reconnect("the API token was refused")),
         }

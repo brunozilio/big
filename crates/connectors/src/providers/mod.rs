@@ -1,20 +1,9 @@
-pub mod aws;
-
 use std::sync::Arc;
 
 use crate::provider::Provider;
 
-pub static ALL: &[&dyn Provider] = &[
-    &aws::Aws,
-];
-
 pub fn all() -> Vec<Arc<dyn Provider>> {
-    let mut all: Vec<Arc<dyn Provider>> = Vec::new();
-    for provider in ALL {
-        all.push(Arc::new(Shared(*provider)));
-    }
-    all.extend(crate::scripted::discover());
-    all
+    crate::scripted::discover()
 }
 
 #[derive(Debug)]

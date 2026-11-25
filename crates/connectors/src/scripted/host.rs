@@ -5,6 +5,8 @@ use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use jiff::Timestamp;
 use serde_json::{Map, Value, json};
+use ring::rand::SystemRandom;
+use ring::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair};
 use sha2::{Digest, Sha256};
 
 use super::bridge::{Answers, Waits, encoded};
@@ -85,6 +87,38 @@ fn remember(arguments: &Value) -> Value {
     Value::Null
 }
 
+fn p256_pair(private: &str) -> Result<EcdsaKeyPair, String> {
+    let pkcs8 = STANDARD.decode(private).map_err(|error| error.to_string())?;
+    EcdsaKeyPair::from_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &pkcs8, &SystemRandom::new())
+        .map_err(|error| format!("the private key is not a P-256 key: {error}"))
+}
+
+fn p256_public(pair: &EcdsaKeyPair) -> Result<Value, String> {
+    let point = pair.public_key().as_ref();
+    let (Some(x), Some(y)) = (point.get(1..33), point.get(33..65)) else {
+        return Err("the public key is not an uncompressed P-256 point".to_owned());
+    };
+    Ok(json!({ "kty": "EC", "crv": "P-256", "x": URL_SAFE_NO_PAD.encode(x), "y": URL_SAFE_NO_PAD.encode(y) }))
+}
+
+fn ecdsa_generate() -> Result<Value, String> {
+    let pkcs8 = EcdsaKeyPair::generate_pkcs8(&ECDSA_P256_SHA256_FIXED_SIGNING, &SystemRandom::new())
+        .map_err(|error| error.to_string())?;
+    let private = STANDARD.encode(pkcs8.as_ref());
+    let public = p256_public(&p256_pair(&private)?)?;
+    Ok(json!({ "private": private, "public": public }))
+}
+
+fn ecdsa_public(arguments: &Value) -> Result<Value, String> {
+    p256_public(&p256_pair(field(arguments, "private"))?)
+}
+
+fn ecdsa_sign(arguments: &Value) -> Result<Value, String> {
+    let pair = p256_pair(field(arguments, "private"))?;
+    let signed = pair.sign(&SystemRandom::new(), &input(arguments, "data")?).map_err(|error| error.to_string())?;
+    text_of(signed.as_ref(), field(arguments, "output")).map(Value::String)
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Local;
 
@@ -98,6 +132,9 @@ impl Answers for Local {
             "crypto.sha256" => digest(arguments),
             "crypto.hmac" => hmac(arguments),
             "crypto.random" => random(arguments),
+            "crypto.ecdsa.generate" => ecdsa_generate(),
+            "crypto.ecdsa.public" => ecdsa_public(arguments),
+            "crypto.ecdsa.sign" => ecdsa_sign(arguments),
             "encoding.convert" => convert(arguments),
             "clock.now" => Ok(json!(Timestamp::now().as_second())),
             "net.site" => Ok(json!(domain::site::site(field(arguments, "url")))),

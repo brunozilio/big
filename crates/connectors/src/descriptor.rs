@@ -5,7 +5,7 @@ use domain::connection::{Capability, ProviderKey};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
-use crate::oauth::{DeviceApp, Loopback, SsoSpec};
+use crate::oauth::{DeviceApp, Loopback, Stepped};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -63,7 +63,7 @@ impl ActionSpec {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AuthSpec {
     Device(DeviceApp),
-    Sso(SsoSpec),
+    Steps(Stepped),
     Loopback(Loopback),
     Token(TokenSpec),
 }
@@ -90,6 +90,8 @@ pub struct TokenField {
     pub setting: bool,
     #[serde(default)]
     pub value: String,
+    #[serde(default)]
+    pub placeholder: String,
 }
 
 impl TokenField {
@@ -101,6 +103,7 @@ impl TokenField {
             secret,
             setting: false,
             value: String::new(),
+            placeholder: String::new(),
         }
     }
 
@@ -156,7 +159,7 @@ impl AuthSpec {
     pub fn kind(&self) -> &'static str {
         match self {
             AuthSpec::Device(_) => "device",
-            AuthSpec::Sso(_) => "sso",
+            AuthSpec::Steps(_) => "steps",
             AuthSpec::Loopback(_) => "loopback",
             AuthSpec::Token(_) => "token",
         }

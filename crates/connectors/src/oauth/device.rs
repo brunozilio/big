@@ -1,6 +1,6 @@
 use jiff::Timestamp;
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value, json};
+use serde_json::Value;
 
 use super::{Grant, error_code, granted, number, refused, text, token_error};
 use crate::error::ActionError;
@@ -15,7 +15,6 @@ pub const DEFAULT_EXPIRES_IN: i64 = 900;
 pub enum Dialect {
     #[default]
     Form,
-    CamelJson,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -33,14 +32,25 @@ pub struct DeviceApp {
     pub dialect: Dialect,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DeviceCode {
     pub device_code: String,
     pub user_code: String,
     pub verification_uri: String,
+    #[serde(default)]
     pub verification_uri_complete: Option<String>,
+    #[serde(default = "default_expires_in")]
     pub expires_in: i64,
+    #[serde(default = "default_interval")]
     pub interval: i64,
+}
+
+fn default_expires_in() -> i64 {
+    DEFAULT_EXPIRES_IN
+}
+
+fn default_interval() -> i64 {
+    DEFAULT_INTERVAL
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -58,57 +68,8 @@ pub struct RegisteredClient {
     pub client_secret: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SsoSpec {
-    pub registration_endpoint: String,
-    pub client_name: String,
-    pub scopes: Vec<String>,
-    pub start_field: String,
-    pub region: String,
-    pub device: DeviceApp,
-}
-
-impl SsoSpec {
-    pub fn in_region(&self, region: &str) -> SsoSpec {
-        let region = if region.trim().is_empty() { self.region.as_str() } else { region.trim() };
-        let place = |url: &str| url.replace("{region}", region);
-        let mut spec = self.clone();
-        spec.registration_endpoint = place(&self.registration_endpoint);
-        spec.device.device_endpoint = place(&self.device.device_endpoint);
-        spec.device.token_endpoint = place(&self.device.token_endpoint);
-        spec.region = region.to_owned();
-        spec
-    }
-
-    pub fn device_for(&self, client: &RegisteredClient, start_url: &str) -> DeviceApp {
-        let mut device = self.device.clone();
-        device.client_id.clone_from(&client.client_id);
-        device.client_secret = Some(client.client_secret.clone());
-        if !start_url.is_empty() {
-            device.start_fields.push((self.start_field.clone(), start_url.to_owned()));
-        }
-        device
-    }
-}
-
 fn owned(fields: &[(&str, &str)]) -> Vec<(String, String)> {
     fields.iter().map(|(key, value)| ((*key).to_owned(), (*value).to_owned())).collect()
-}
-
-fn camel(key: &str) -> String {
-    let mut out = String::new();
-    let mut upper = false;
-    for character in key.chars() {
-        if character == '_' {
-            upper = true;
-        } else if upper {
-            out.push(character.to_ascii_uppercase());
-            upper = false;
-        } else {
-            out.push(character);
-        }
-    }
-    out
 }
 
 fn polled(code: &str, answer: &Value) -> Option<Polled> {
@@ -136,17 +97,8 @@ impl DeviceApp {
             all.extend(owned(&[("client_secret", secret)]));
         }
         all.extend(fields.iter().cloned());
-        match self.dialect {
-            Dialect::Form => {
-                let pairs: Vec<(&str, &str)> = all.iter().map(|(key, value)| (key.as_str(), value.as_str())).collect();
-                Ok(request.form(&pairs))
-            }
-            Dialect::CamelJson => {
-                let body: Map<String, Value> =
-                    all.into_iter().map(|(key, value)| (camel(&key), json!(value))).collect();
-                request.json(&body)
-            }
-        }
+        let pairs: Vec<(&str, &str)> = all.iter().map(|(key, value)| (key.as_str(), value.as_str())).collect();
+        Ok(request.form(&pairs))
     }
 
     fn scope_fields(&self) -> Vec<(String, String)> {
@@ -182,9 +134,7 @@ impl DeviceApp {
 
     pub async fn refresh(&self, http: &dyn Http, refresh_token: &str, now: Timestamp) -> Result<Grant, ActionError> {
         let mut fields = owned(&[("grant_type", "refresh_token"), ("refresh_token", refresh_token)]);
-        if self.dialect == Dialect::Form {
-            fields.extend(self.scope_fields());
-        }
+        fields.extend(self.scope_fields());
         let answer = answered(http.send(self.request(&self.token_endpoint, &fields)?).await?)?;
         let mut fresh = granted(&answer, now)?;
         if fresh.refresh_token.is_none() {
@@ -192,21 +142,6 @@ impl DeviceApp {
         }
         Ok(fresh)
     }
-}
-
-pub async fn register_client(http: &dyn Http, spec: &SsoSpec) -> Result<RegisteredClient, ActionError> {
-    let registration = json!({
-        "clientName": spec.client_name,
-        "clientType": "public",
-        "scopes": spec.scopes,
-        "grantTypes": [DEVICE_GRANT, "refresh_token"],
-    });
-    let request = HttpRequest::post(&spec.registration_endpoint).json(&registration)?;
-    let answer = answered(http.send(request).await?)?;
-    let needed = |name: &str| {
-        text(&answer, &[name]).ok_or_else(|| ActionError::decode(format!("the registration has no {name}")))
-    };
-    Ok(RegisteredClient { client_id: needed("clientId")?, client_secret: needed("clientSecret")? })
 }
 
 #[cfg(test)]
@@ -224,25 +159,6 @@ mod tests {
             scopes: vec!["repo".into()],
             start_fields: Vec::new(),
             dialect: Dialect::Form,
-        }
-    }
-
-    fn sso() -> SsoSpec {
-        SsoSpec {
-            registration_endpoint: "https://oidc.example/client/register".into(),
-            client_name: "app".into(),
-            scopes: vec!["account:access".into()],
-            start_field: "start_url".into(),
-            region: "r1".into(),
-            device: DeviceApp {
-                client_id: String::new(),
-                client_secret: None,
-                device_endpoint: "https://oidc.example/device_authorization".into(),
-                token_endpoint: "https://oidc.example/token".into(),
-                scopes: Vec::new(),
-                start_fields: Vec::new(),
-                dialect: Dialect::CamelJson,
-            },
         }
     }
 
@@ -278,31 +194,5 @@ mod tests {
         let http = FakeHttp::new().once(Method::Post, "/token", 400, r#"{"error":"bad_client"}"#);
         let polled = form_app().poll(&http, "dc", now()).await;
         assert_eq!(polled.map_err(|e| e.class), Err(ErrorClass::Auth));
-    }
-
-    #[tokio::test]
-    async fn a_dynamic_client_is_registered_and_used_with_camel_json() {
-        let http = FakeHttp::new()
-            .once(Method::Post, "/client/register", 200, r#"{"clientId":"c1","clientSecret":"s1"}"#)
-            .once(
-                Method::Post,
-                "/device_authorization",
-                200,
-                r#"{"deviceCode":"d","userCode":"U","verificationUri":"https://v","verificationUriComplete":"https://v?c=U","expiresIn":600,"interval":2}"#,
-            )
-            .once(Method::Post, "/token", 400, r#"{"error":"expired_token"}"#);
-        let spec = sso();
-        let client = register_client(&http, &spec).await;
-        assert_eq!(client.as_ref().map(|c| c.client_id.as_str()), Ok("c1"));
-        let Ok(client) = client else { panic!("no client") };
-        let device = spec.device_for(&client, "https://portal.example/start");
-        let code = device.start(&http).await;
-        assert_eq!(code.map(|c| c.verification_uri_complete), Ok(Some("https://v?c=U".to_owned())));
-        assert_eq!(device.poll(&http, "d", now()).await, Ok(Polled::Expired));
-        let start = http.sent()[1].body_json();
-        assert_eq!(start["clientId"], "c1");
-        assert_eq!(start["clientSecret"], "s1");
-        assert_eq!(start["startUrl"], "https://portal.example/start");
-        assert_eq!(http.sent()[2].body_json()["grantType"], DEVICE_GRANT);
     }
 }

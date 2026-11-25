@@ -35,9 +35,10 @@ fn fields_of(fields: &[TokenField]) -> Value {
         .map(|field| {
             let help = (!field.help.is_empty()).then_some(&field.help);
             let value = (!field.value.is_empty()).then_some(&field.value);
+            let placeholder = (!field.placeholder.is_empty()).then_some(&field.placeholder);
             json!({
                 "name": field.name, "label": field.label, "kind": "text", "mono": true,
-                "secret": field.secret, "help": help, "value": value,
+                "secret": field.secret, "help": help, "value": value, "placeholder": placeholder,
             })
         })
         .collect();
@@ -48,19 +49,7 @@ fn sign_in_of(auth: &AuthSpec, language: Language) -> (&'static str, Value) {
     match auth {
         AuthSpec::Loopback(sign_in) => ("oauth", fields_of(&sign_in.0.fields(language))),
         AuthSpec::Device(_) => ("device", json!([])),
-        AuthSpec::Sso(spec) => {
-            let start = json!({
-                "name": spec.start_field,
-                "label": language.pick("IAM Identity Center Start URL", "Start URL de IAM Identity Center", "Start URL do IAM Identity Center"),
-                "kind": "text", "mono": true,
-                "placeholder": language.pick("https://company.awsapps.com/start", "https://empresa.awsapps.com/start", "https://empresa.awsapps.com/start"),
-            });
-            let region = json!({
-                "name": "region", "label": language.pick("Region", "Región", "Região"), "kind": "text", "mono": true,
-                "value": spec.region,
-            });
-            ("sso", json!([start, region]))
-        }
+        AuthSpec::Steps(sign_in) => ("device", fields_of(&sign_in.0.fields(language))),
         AuthSpec::Token(spec) => ("token", fields_of(&spec.fields)),
     }
 }

@@ -68,7 +68,8 @@ impl Script {
         let stop = Arc::new(AtomicBool::new(false));
         let host: Arc<dyn script::Host> = Arc::new(super::host::Local);
         let limit = script::Limit::Busy(script::MOST_BUSY);
-        let found = script::run_modules_in(&self.modules, WRAPPER, "kind", &[json!(name)], &self.data, host, stop, limit);
+        let found =
+            script::run_modules_in(&self.modules, WRAPPER, "kind", &[json!(name)], &self.data, host, stop, limit);
         found.ok().and_then(|kind| kind.as_str().map(str::to_owned)).unwrap_or_default()
     }
 

@@ -5,8 +5,6 @@ author = "brunozilio"
 
 [connectors]
 oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
-aws_login_client_id = "arn:aws:signin:::devtools/same-device"
-aws_region = "us-east-1"
 
 [zephyr]
 mcp_url = "https://zephyr.mcp.smartbear.com/mcp"
@@ -20,6 +18,10 @@ client_id = "178c6fc778ccc68e1d6a"
 
 [jira]
 mcp_url = "https://mcp.atlassian.com/v2/mcp"
+
+[aws]
+login_client_id = "arn:aws:signin:::devtools/same-device"
+region = "us-east-1"
 
 [datadog]
 mcp_url = "https://mcp.{site}/v1/mcp"

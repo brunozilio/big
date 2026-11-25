@@ -4,6 +4,7 @@ use std::time::{Duration, Instant};
 
 use connectors::{
     AccountOption, AuthSpec, Authorization, DeviceApp, DeviceCode, Grant, Loopback, Polled, ProviderDescriptor,
+    Started, Stepped,
 };
 use domain::Language;
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
@@ -20,7 +21,8 @@ const FLOW_LASTS: Duration = Duration::from_secs(1800);
 #[derive(Debug, Clone)]
 pub enum Waiting {
     Redirect { sign_in: Loopback, authorization: Authorization },
-    Device { app: DeviceApp, code: DeviceCode, client: Option<connectors::RegisteredClient> },
+    Device { app: DeviceApp, code: DeviceCode },
+    Steps { sign_in: Stepped, started: Started },
     Ai(AiFlow),
 }
 
@@ -137,7 +139,7 @@ fn unknown_provider(language: Language) -> Stage {
 fn missing_client(found: &ProviderDescriptor, auth: &AuthSpec, language: Language) -> Option<String> {
     let client_id = match auth {
         AuthSpec::Device(app) => app.client_id.as_str(),
-        AuthSpec::Sso(_) | AuthSpec::Loopback(_) | AuthSpec::Token(_) => return None,
+        AuthSpec::Steps(_) | AuthSpec::Loopback(_) | AuthSpec::Token(_) => return None,
     };
     client_id.trim().is_empty().then(|| {
         let name = &found.name;
@@ -177,20 +179,18 @@ pub async fn start(
             let flow = opened(Waiting::Redirect { sign_in, authorization })?;
             Ok(json!({ "flow": flow, "kind": "redirect", "url": url, "paste": false, "returns": true }))
         }
-        AuthSpec::Device(app) => device(shared, app.clone(), None, &opened).await,
-        AuthSpec::Sso(spec) => {
-            let start_url = fields[&spec.start_field].as_str().map(str::trim).unwrap_or_default();
-            if start_url.is_empty() {
-                return Err(ApiError::bad(said(
-                    "Enter the IAM Identity Center Start URL.",
-                    "Indica la Start URL de IAM Identity Center.",
-                    "Informe a Start URL do IAM Identity Center.",
-                )));
-            }
-            let spec = spec.in_region(fields["region"].as_str().unwrap_or_default());
-            let client = connectors::oauth::register_client(http, &spec).await?;
-            let app = spec.device_for(&client, start_url);
-            device(shared, app, Some(client), &opened).await
+        AuthSpec::Device(app) => {
+            let code = app.start(http).await?;
+            let answer = device_answer(&code);
+            let flow = opened(Waiting::Device { app: app.clone(), code })?;
+            Ok(with_flow(answer, &flow))
+        }
+        AuthSpec::Steps(sign_in) => {
+            let started =
+                sign_in.0.start(http, fields, shared.language()).await.map_err(|error| ApiError::bad(error.message))?;
+            let answer = device_answer(&started.code);
+            let flow = opened(Waiting::Steps { sign_in: sign_in.clone(), started })?;
+            Ok(with_flow(answer, &flow))
         }
         AuthSpec::Token(spec) => {
             let token = spec.access_token(fields, shared.language()).map_err(ApiError::bad)?;
@@ -200,21 +200,16 @@ pub async fn start(
     }
 }
 
-async fn device(
-    shared: &Shared,
-    app: DeviceApp,
-    client: Option<connectors::RegisteredClient>,
-    opened: &(dyn Fn(Waiting) -> ApiResult<String> + Sync),
-) -> ApiResult<Value> {
-    let code = app.start(shared.backend.connectors.http()).await?;
+fn device_answer(code: &DeviceCode) -> Value {
     let url = code.verification_uri_complete.clone().unwrap_or_else(|| code.verification_uri.clone());
-    let answer = json!({
+    json!({
         "kind": "device", "url": url, "code": code.user_code, "expiresIn": code.expires_in, "interval": code.interval,
-    });
-    let flow = opened(Waiting::Device { app, code, client })?;
-    let mut answer = answer;
+    })
+}
+
+fn with_flow(mut answer: Value, flow: &str) -> Value {
     answer["flow"] = json!(flow);
-    Ok(answer)
+    answer
 }
 
 pub fn back_to(provider: &str, id: &str) -> String {
@@ -255,10 +250,12 @@ pub async fn poll(shared: &Shared, flow_id: &str, choice: Option<&str>) -> ApiRe
         return Ok(json!({ "state": "failed", "message": message }));
     };
     let stage = match flow.stage.clone() {
-        Stage::Waiting(Waiting::Device { app, code, client }) => match device_poll(shared, &app, &code, client).await {
-            Stage::Granted(grant) => accounts(shared, &flow, grant).await,
-            other => other,
-        },
+        Stage::Waiting(waiting @ (Waiting::Device { .. } | Waiting::Steps { .. })) => {
+            match device_poll(shared, waiting).await {
+                Stage::Granted(grant) => accounts(shared, &flow, grant).await,
+                other => other,
+            }
+        }
         Stage::Waiting(Waiting::Ai(ai)) => crate::ai::poll(shared, &ai),
         Stage::Granted(grant) => accounts(shared, &flow, grant).await,
         Stage::Choose { grant, options } => {
@@ -306,17 +303,16 @@ fn detail(language: domain::Language, settings: &Value) -> String {
     texts.unwrap_or_default().join(" · ")
 }
 
-async fn device_poll(
-    shared: &Shared,
-    app: &DeviceApp,
-    code: &DeviceCode,
-    client: Option<connectors::RegisteredClient>,
-) -> Stage {
+async fn device_poll(shared: &Shared, waiting: Waiting) -> Stage {
     let http = shared.backend.connectors.http();
-    match app.poll(http, &code.device_code, jiff::Timestamp::now()).await {
-        Ok(Polled::Pending | Polled::SlowDown { .. }) => {
-            Stage::Waiting(Waiting::Device { app: app.clone(), code: code.clone(), client })
-        }
+    let now = jiff::Timestamp::now();
+    let polled = match &waiting {
+        Waiting::Device { app, code } => app.poll(http, &code.device_code, now).await,
+        Waiting::Steps { sign_in, started } => sign_in.0.poll(http, started, now).await,
+        Waiting::Redirect { .. } | Waiting::Ai(_) => Ok(Polled::Pending),
+    };
+    match polled {
+        Ok(Polled::Pending | Polled::SlowDown { .. }) => Stage::Waiting(waiting),
         Ok(Polled::Expired) => Stage::Failed(
             shared
                 .language()
@@ -328,10 +324,7 @@ async fn device_poll(
                 .to_owned(),
         ),
         Ok(Polled::Denied) => Stage::Failed(refused_text(shared.language())),
-        Ok(Polled::Authorized(mut grant)) => {
-            grant.client = client;
-            Stage::Granted(grant)
-        }
+        Ok(Polled::Authorized(grant)) => Stage::Granted(grant),
         Err(error) => Stage::Failed(error.message),
     }
 }
@@ -350,10 +343,6 @@ async fn accounts(shared: &Shared, flow: &Flow, mut grant: Grant) -> Stage {
     let provider = flow.provider.as_str();
     let Ok(found) = descriptor(shared, provider) else { return unknown_provider(shared.language()) };
     grant.method.clone_from(&flow.method);
-    let region = flow.fields["region"].as_str().filter(|region| !region.trim().is_empty());
-    if let (Some(region), true) = (region, grant.extra.is_null()) {
-        grant.extra = json!({ "region": region.trim() });
-    }
     let probe = format!("probe-{}", random_id().unwrap_or_default());
     let keeper = shared.backend.connectors.keeper();
     if let Err(error) = keeper.keep(&ConnectionId::from(probe.as_str()), &grant).await {

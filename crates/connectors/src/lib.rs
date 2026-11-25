@@ -24,6 +24,6 @@ pub use hub::Connectors;
 pub use limiter::RateLimiter;
 pub use oauth::{
     Authorization, DeviceApp, DeviceCode, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, Polled, RegisteredClient,
-    SsoSpec, TokenKeeper, TokenStore,
+    DeviceSignIn, Started, Stepped, TokenKeeper, TokenStore,
 };
 pub use provider::{AccountOption, Args, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SettingsSink};

@@ -15,12 +15,12 @@ use bridge::{WRAPPER, invoke, wrapper};
 pub use host::Local;
 use host::Online;
 pub use sign_in::ScriptedSignIn;
-use sign_in::redirect;
+use sign_in::{SIGN_IN, redirect};
 
 use crate::descriptor::{ActionSpec, AlternateAuth, AuthSpec, Presentation, ProviderDescriptor, TokenSpec};
 use crate::error::ActionError;
 use crate::http::Http;
-use crate::oauth::{DeviceApp, Loopback};
+use crate::oauth::{DeviceApp, Loopback, Stepped};
 use crate::provider::{AccountOption, Credentials, EventBatch, EventSource, ExternalEvent, Provider};
 
 pub const FOLDER: &str = "connectors/";
@@ -84,9 +84,15 @@ fn auth_of(script: &Script, key: &str, auth: &Value) -> Result<AuthSpec, String>
     match kind {
         "token" => serde_json::from_value::<TokenSpec>(auth.clone()).map(AuthSpec::Token).map_err(|_| parsed(kind)),
         "device" => serde_json::from_value::<DeviceApp>(auth.clone()).map(AuthSpec::Device).map_err(|_| parsed(kind)),
-        "loopback" => {
+        "loopback" | "steps" => {
             let state = auth.get("state").cloned().unwrap_or(json!({}));
-            Ok(AuthSpec::Loopback(Loopback::new(ScriptedSignIn::new(script.clone(), key, state))))
+            let using = auth["using"].as_str().filter(|using| !using.is_empty()).unwrap_or(SIGN_IN);
+            let sign_in = ScriptedSignIn::new(script.clone(), key, using, state);
+            if kind == "steps" {
+                Ok(AuthSpec::Steps(Stepped::new(sign_in)))
+            } else {
+                Ok(AuthSpec::Loopback(Loopback::new(sign_in)))
+            }
         }
         other => Err(format!("{key}: no sign-in is called `{other}`")),
     }
@@ -97,9 +103,7 @@ fn logo_of(root: Option<&std::path::Path>, folder: &str, logo: &str) -> String {
         return logo.to_owned();
     }
     let path = format!("{folder}{logo}");
-    content::bytes_in(root, &path)
-        .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-        .unwrap_or_default()
+    content::bytes_in(root, &path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).unwrap_or_default()
 }
 
 impl ScriptedProvider {
@@ -185,7 +189,8 @@ impl Provider for ScriptedProvider {
         args: &Value,
         idempotency_key: &str,
     ) -> Result<Value, ActionError> {
-        let input = json!({ "action": action, "args": args, "creds": creds_of(creds), "idempotencyKey": idempotency_key });
+        let input =
+            json!({ "action": action, "args": args, "creds": creds_of(creds), "idempotencyKey": idempotency_key });
         self.online(http, "call", input).await
     }
 
@@ -210,7 +215,13 @@ impl Provider for ScriptedProvider {
                 let auth = auth_of(&self.script, &self.key, &alternate.auth)
                     .inspect_err(|error| tracing::error!(%error, "an alternative sign-in was skipped"))
                     .ok()?;
-                Some(AlternateAuth { key: alternate.key, label: alternate.label, button: alternate.button, site: alternate.site, auth })
+                Some(AlternateAuth {
+                    key: alternate.key,
+                    label: alternate.label,
+                    button: alternate.button,
+                    site: alternate.site,
+                    auth,
+                })
             })
             .collect()
     }

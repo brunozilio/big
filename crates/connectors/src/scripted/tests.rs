@@ -5,6 +5,7 @@ use serde_json::json;
 use super::*;
 use crate::http::{FakeHttp, HttpResponse, Method};
 
+mod aws;
 mod datadog;
 mod github;
 mod mcp;
