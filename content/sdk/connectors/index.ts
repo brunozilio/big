@@ -201,15 +201,7 @@ export function siteOf(url: string): string {
   return host.replace(/^www\./, "");
 }
 
-export function formComponent(text: string): string {
-  return encodeURIComponent(text)
-    .replace(/[!'()~]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
-    .replace(/%20/g, "+");
-}
-
-export function query(pairs: [string, string][]): string {
-  return pairs.map(([name, value]) => `${formComponent(name)}=${formComponent(value)}`).join("&");
-}
+export const formComponent = encode;
 
 export function textOf(value: unknown, path: string[]): string {
   let found: any = value;
