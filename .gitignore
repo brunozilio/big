@@ -9,3 +9,5 @@
 web/node_modules
 web/dist
 web/.build.lock
+
+CLAUDE.md
