@@ -174,8 +174,8 @@ impl Provider for Picky {
         Ok(vec![AccountOption { id: "s".into(), label: "only.test".into(), settings: json!({ "site": "only.test" }) }])
     }
 
-    fn chooses(&self) -> &'static [&'static str] {
-        &["site"]
+    fn chooses(&self) -> Vec<String> {
+        vec!["site".to_owned()]
     }
 }
 

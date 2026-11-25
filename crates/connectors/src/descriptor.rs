@@ -2,25 +2,33 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use domain::Language;
 use domain::connection::{Capability, ProviderKey};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::oauth::{DeviceApp, Loopback, SsoSpec};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Idempotency {
     Native,
     Lookup,
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionSpec {
     pub name: String,
+    #[serde(default)]
     pub input_schema: Value,
+    #[serde(default)]
     pub output_schema: Value,
+    #[serde(default)]
     pub writes: bool,
+    #[serde(default = "native")]
     pub idempotent: Idempotency,
+}
+
+fn native() -> Idempotency {
+    Idempotency::Native
 }
 
 impl ActionSpec {
@@ -60,20 +68,27 @@ pub enum AuthSpec {
     Token(TokenSpec),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum TokenForm {
+    #[default]
     Bearer,
     Basic,
     Json,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct TokenField {
     pub name: String,
+    #[serde(default)]
     pub label: String,
+    #[serde(default)]
     pub help: String,
+    #[serde(default)]
     pub secret: bool,
+    #[serde(default)]
     pub setting: bool,
+    #[serde(default)]
     pub value: String,
 }
 
@@ -98,9 +113,10 @@ impl TokenField {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct TokenSpec {
     pub fields: Vec<TokenField>,
+    #[serde(default)]
     pub form: TokenForm,
 }
 
@@ -147,7 +163,8 @@ impl AuthSpec {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Presentation {
     pub description: String,
     pub group: String,

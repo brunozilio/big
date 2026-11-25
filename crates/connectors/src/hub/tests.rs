@@ -182,7 +182,7 @@ fn the_default_registry_lists_every_provider() {
         Arc::new(FixedClock::at_second(0)),
     );
     let hub = Connectors::new(Arc::new(FakeHttp::new()), keeper);
-    assert_eq!(hub.descriptors().len(), providers::ALL.len());
+    assert_eq!(hub.descriptors().len(), providers::all().len());
     for descriptor in hub.descriptors() {
         assert_eq!(hub.descriptor(&descriptor.key).map(|d| d.name.clone()), Ok(descriptor.name.clone()));
         assert!(descriptor.listing()["actions"].as_array().is_some_and(|a| !a.is_empty()));
@@ -212,8 +212,8 @@ impl Provider for Picky {
         Ok(self.sites.lock().unwrap_or_else(PoisonError::into_inner).clone())
     }
 
-    fn chooses(&self) -> &'static [&'static str] {
-        &["site"]
+    fn chooses(&self) -> Vec<String> {
+        vec!["site".to_owned()]
     }
 }
 

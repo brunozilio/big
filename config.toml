@@ -9,11 +9,13 @@ oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
 atlassian_mcp_url = "https://mcp.atlassian.com/v2/mcp"
 zephyr_mcp_url = "https://zephyr.mcp.smartbear.com/mcp"
 zephyr_oauth_redirect = "http://127.0.0.1:33418/oauth/callback"
-datadog_mcp_url = "https://mcp.{site}/v1/mcp"
-datadog_site = "datadoghq.com"
 aws_login_client_id = "arn:aws:signin:::devtools/same-device"
 aws_region = "us-east-1"
 veracode_region = "com"
+
+[datadog]
+mcp_url = "https://mcp.{site}/v1/mcp"
+site = "datadoghq.com"
 
 [claude]
 client_id = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"

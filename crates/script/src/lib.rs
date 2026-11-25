@@ -142,6 +142,20 @@ pub fn run_modules(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub fn run_modules_in(
+    modules: &[(String, String)],
+    entry: &str,
+    export: &str,
+    arguments: &[Value],
+    data: &Value,
+    host: Arc<dyn Host>,
+    stop: Arc<AtomicBool>,
+    limit: Limit,
+) -> Result<Value, String> {
+    on_its_own_stack(|| run_here(modules, entry, export, arguments, data, host, stop, limit))
+}
+
+#[allow(clippy::too_many_arguments)]
 fn run_here(
     modules: &[(String, String)],
     entry: &str,

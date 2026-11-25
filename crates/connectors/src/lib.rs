@@ -10,6 +10,7 @@ pub mod mcp;
 pub mod oauth;
 pub mod provider;
 pub mod providers;
+pub mod scripted;
 pub mod texts;
 
 pub use clock::{Clock, FixedClock, SystemClock};

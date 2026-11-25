@@ -10,12 +10,13 @@ use crate::descriptor::TokenField;
 use crate::error::ActionError;
 use crate::http::Http;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct Authorization {
     pub url: String,
     pub state: String,
     pub verifier: String,
     pub redirect_uri: String,
+    #[serde(default)]
     pub carried: Value,
 }
 

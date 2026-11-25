@@ -15,7 +15,7 @@ use crate::providers;
 
 #[derive(Debug)]
 struct Entry {
-    provider: &'static dyn Provider,
+    provider: Arc<dyn Provider>,
     descriptor: ProviderDescriptor,
     alternatives: Vec<AlternateAuth>,
 }
@@ -54,16 +54,21 @@ pub fn filled(settings: &Value, extra: &Value) -> Value {
 
 impl Connectors {
     pub fn new(http: Arc<dyn Http>, keeper: TokenKeeper) -> Connectors {
-        Connectors::with_providers(providers::ALL, http, keeper)
+        Connectors::from_providers(providers::all(), http, keeper)
     }
 
     pub fn with_providers(providers: &[&'static dyn Provider], http: Arc<dyn Http>, keeper: TokenKeeper) -> Connectors {
+        let shared = providers.iter().map(|provider| Arc::new(providers::Shared(*provider)) as Arc<dyn Provider>);
+        Connectors::from_providers(shared.collect(), http, keeper)
+    }
+
+    pub fn from_providers(providers: Vec<Arc<dyn Provider>>, http: Arc<dyn Http>, keeper: TokenKeeper) -> Connectors {
         let entries = providers
-            .iter()
+            .into_iter()
             .map(|provider| Entry {
-                provider: *provider,
                 descriptor: provider.descriptor(),
                 alternatives: provider.alternatives(Language::default()),
+                provider,
             })
             .collect();
         Connectors { entries, http, keeper, limiter: RateLimiter::new(), learned: Mutex::default(), sink: None }
@@ -74,7 +79,7 @@ impl Connectors {
         self
     }
 
-    pub fn chooses(&self, key: &ProviderKey) -> &'static [&'static str] {
+    pub fn chooses(&self, key: &ProviderKey) -> Vec<String> {
         self.entry(key).map(|entry| entry.provider.chooses()).unwrap_or_default()
     }
 

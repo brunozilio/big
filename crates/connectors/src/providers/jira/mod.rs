@@ -274,8 +274,8 @@ impl Provider for Jira {
         Ok(options)
     }
 
-    fn chooses(&self) -> &'static [&'static str] {
-        &["cloud_id"]
+    fn chooses(&self) -> Vec<String> {
+        vec!["cloud_id".to_owned()]
     }
 
     fn events(&self) -> Option<&dyn EventSource> {

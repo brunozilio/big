@@ -10,20 +10,26 @@ pub const DEVICE_GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 pub const DEFAULT_INTERVAL: i64 = 5;
 pub const DEFAULT_EXPIRES_IN: i64 = 900;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Dialect {
+    #[default]
     Form,
     CamelJson,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct DeviceApp {
     pub client_id: String,
+    #[serde(default)]
     pub client_secret: Option<String>,
     pub device_endpoint: String,
     pub token_endpoint: String,
+    #[serde(default)]
     pub scopes: Vec<String>,
+    #[serde(default)]
     pub start_fields: Vec<(String, String)>,
+    #[serde(default)]
     pub dialect: Dialect,
 }
 

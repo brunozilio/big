@@ -11,6 +11,7 @@ mod factory_tests;
 #[cfg(test)]
 mod graph_tests;
 mod install;
+mod modules;
 mod render;
 #[cfg(test)]
 mod sdk_tests;
@@ -19,6 +20,7 @@ mod security_tests;
 #[cfg(test)]
 mod stdlib_tests;
 
+pub use modules::{bytes_in, listed, listed_in, modules, modules_in};
 pub use install::{Installed, MANIFEST, install_files, install_once};
 
 pub use render::{LIMIT, call, call_in, exports, render, render_export, render_export_in, render_in, value, value_in};

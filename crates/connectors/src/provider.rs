@@ -91,8 +91,8 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
         Vec::new()
     }
 
-    fn chooses(&self) -> &'static [&'static str] {
-        &[]
+    fn chooses(&self) -> Vec<String> {
+        Vec::new()
     }
 }
 
