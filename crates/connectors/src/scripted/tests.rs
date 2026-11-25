@@ -9,6 +9,9 @@ mod datadog;
 mod github;
 mod mcp;
 mod mock_changes;
+mod veracode;
+mod zephyr;
+mod zephyr_fake;
 
 pub fn loaded(key: &str) -> ScriptedProvider {
     let entry = format!("{FOLDER}{key}/{ENTRY}");

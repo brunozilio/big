@@ -33,3 +33,17 @@ export function author(command: string, body: string): string | null {
 }
 
 export const carries = (command: string, body: string, key: string) => key !== "" && body.includes(marker(command, key));
+
+const commandOf = (ctx) => ctx.brand?.COMMAND ?? "";
+
+export function label(ctx, key: string): string {
+  const digest: string = ctx.crypto.sha256({ data: key, output: "hex" });
+  return `${commandOf(ctx)}-${digest.slice(0, 12)}`;
+}
+
+export const tag = (ctx, key: string) => `[${label(ctx, key)}]`;
+
+export const tagged = (ctx, body: string, key: string) => (key === "" ? body : `${body}\n\n${tag(ctx, key)}`.trimStart());
+
+export const carriesTag = (ctx, body: string, key: string) =>
+  key !== "" && (body.includes(tag(ctx, key)) || carries(commandOf(ctx), body, key));

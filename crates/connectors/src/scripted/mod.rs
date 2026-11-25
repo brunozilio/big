@@ -10,7 +10,7 @@ use domain::connection::{Capability, ProviderKey};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-pub use bridge::Script;
+pub use bridge::{Answers, Script};
 use bridge::{WRAPPER, invoke, wrapper};
 pub use host::Local;
 use host::Online;
@@ -62,11 +62,13 @@ pub struct ScriptedProvider {
     descriptor: ProviderDescriptor,
     chooses: Vec<String>,
     events: Option<ScriptedEvents>,
+    answers: Arc<dyn Answers>,
 }
 
 #[derive(Debug)]
 struct ScriptedEvents {
     script: Script,
+    answers: Arc<dyn Answers>,
 }
 
 fn config_of(key: &str) -> Value {
@@ -124,8 +126,17 @@ impl ScriptedProvider {
             auth: auth_of(&script, &key, &declared.auth)?,
             actions: declared.actions,
         };
-        let events = polls.then(|| ScriptedEvents { script: script.clone() });
-        Ok(ScriptedProvider { key, script, descriptor, chooses: declared.chooses, events })
+        let answers: Arc<dyn Answers> = Arc::new(Local);
+        let events = polls.then(|| ScriptedEvents { script: script.clone(), answers: Arc::clone(&answers) });
+        Ok(ScriptedProvider { key, script, descriptor, chooses: declared.chooses, events, answers })
+    }
+
+    pub fn with_answers(mut self, answers: Arc<dyn Answers>) -> ScriptedProvider {
+        if let Some(events) = &mut self.events {
+            events.answers = Arc::clone(&answers);
+        }
+        self.answers = answers;
+        self
     }
 
     fn local(&self, name: &str, language: Language) -> Value {
@@ -135,7 +146,7 @@ impl ScriptedProvider {
 
     async fn online(&self, http: &dyn Http, name: &str, input: Value) -> Result<Value, ActionError> {
         let online = Online { http, redirect: redirect() };
-        invoke(&self.script, Arc::new(Local), &online, name, input).await
+        invoke(&self.script, Arc::clone(&self.answers), &online, name, input).await
     }
 }
 
@@ -214,7 +225,7 @@ impl EventSource for ScriptedEvents {
     async fn poll(&self, http: &dyn Http, creds: &Credentials, cursor: Option<&str>) -> Result<EventBatch, ActionError> {
         let online = Online { http, redirect: redirect() };
         let input = json!({ "creds": creds_of(creds), "cursor": cursor });
-        let batch = invoke(&self.script, Arc::new(Local), &online, "poll", input).await?;
+        let batch = invoke(&self.script, Arc::clone(&self.answers), &online, "poll", input).await?;
         let mut events = Vec::new();
         for mut event in batch["events"].as_array().cloned().unwrap_or_default() {
             event["connection"] = json!(creds.connection);

@@ -106,5 +106,4 @@ fn a_server_that_only_accepts_a_fixed_redirect_gets_its_own_callback_port() {
     assert_eq!(sign_in().callback_port(), None);
     let fixed = McpSignIn { redirect: "http://127.0.0.1:33418/oauth/callback".into(), ..sign_in() };
     assert_eq!(fixed.callback_port(), Some(33418));
-    assert_eq!(crate::providers::zephyr::sign_in().callback_port(), Some(33418));
 }

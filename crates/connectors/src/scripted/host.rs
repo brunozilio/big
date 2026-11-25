@@ -104,6 +104,7 @@ impl Answers for Local {
             "net.safeEndpoint" => Ok(json!(domain::mcp_oauth::endpoint_ok(field(arguments, "url")))),
             "memory.get" => Ok(remembered(arguments)),
             "memory.set" => Ok(remember(arguments)),
+            "clock.millis" => Ok(json!(Timestamp::now().as_millisecond())),
             _ => return None,
         })
     }

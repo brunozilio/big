@@ -6,11 +6,15 @@ author = "brunozilio"
 [connectors]
 oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
 atlassian_mcp_url = "https://mcp.atlassian.com/v2/mcp"
-zephyr_mcp_url = "https://zephyr.mcp.smartbear.com/mcp"
-zephyr_oauth_redirect = "http://127.0.0.1:33418/oauth/callback"
 aws_login_client_id = "arn:aws:signin:::devtools/same-device"
 aws_region = "us-east-1"
-veracode_region = "com"
+
+[zephyr]
+mcp_url = "https://zephyr.mcp.smartbear.com/mcp"
+oauth_redirect = "http://127.0.0.1:33418/oauth/callback"
+
+[veracode]
+region = "com"
 
 [github]
 client_id = "178c6fc778ccc68e1d6a"

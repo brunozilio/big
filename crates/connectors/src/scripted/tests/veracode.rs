@@ -1,29 +1,54 @@
-use domain::connection::ConnectionId;
-use serde_json::json;
+use std::sync::Arc;
 
-use super::*;
-use crate::clock::FixedClock;
-use crate::error::ErrorClass;
+use domain::Language;
+use domain::connection::Capability;
+use serde_json::{Value, json};
+
+use super::{creds as creds_with, loaded};
+use crate::descriptor::{AuthSpec, TokenForm};
+use crate::error::{ActionError, ErrorClass};
 use crate::http::{FakeHttp, Method};
+use crate::provider::{AccountOption, Credentials, Provider};
+use crate::scripted::{Answers, Local, ScriptedProvider};
 
 const GUID: &str = "1f2e3d4c-0000-4000-8000-0123456789ab";
 const OTHER: &str = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const NO_PROJECT: &str = "Choose the project.";
+const NONCE: &str = "000102030405060708090a0b0c0d0e0f";
 
-fn fixed_nonce() -> Result<Vec<u8>, ActionError> {
-    Ok((0..16).collect())
+#[derive(Debug)]
+struct Fixed {
+    millis: i64,
+}
+
+impl Answers for Fixed {
+    fn now(&self, function: &str, arguments: &Value) -> Option<Result<Value, String>> {
+        match function {
+            "clock.millis" => Some(Ok(json!(self.millis))),
+            "crypto.random" => Some(Ok(json!(NONCE))),
+            _ => Local.now(function, arguments),
+        }
+    }
+}
+
+fn veracode_at(millis: i64) -> ScriptedProvider {
+    loaded("veracode").with_answers(Arc::new(Fixed { millis }))
+}
+
+fn veracode() -> ScriptedProvider {
+    veracode_at(1_700_000_000_000)
 }
 
 fn creds(settings: Value) -> Credentials {
     let token = json!({ "apiId": "vera01ki-abc123", "apiKey": "vera01ks-00112233445566778899aabbccddeeff" });
-    Credentials::new(&ConnectionId::from("v1"), &token.to_string(), settings)
+    creds_with(&token.to_string(), settings)
 }
 
 async fn call(http: &FakeHttp, settings: Value, action: &str, args: Value) -> Result<Value, ActionError> {
-    let clock = FixedClock::at_second(1_700_000_000);
-    let api = Api::new(http, &creds(settings), &clock, fixed_nonce)?;
-    let answer = run(&api, action, &args).await;
+    let provider = veracode();
+    let answer = provider.call(http, &creds(settings), action, &args, "k").await;
     if let Ok(value) = &answer {
-        let spec = Veracode.descriptor().action(action).cloned().unwrap_or_else(|| panic!("no {action}"));
+        let spec = provider.descriptor().action(action).cloned().unwrap_or_else(|| panic!("no {action}"));
         assert_eq!(crate::descriptor::conforms(&spec.output_schema, value), Ok(()), "{action}: {value}");
     }
     answer
@@ -75,52 +100,86 @@ fn every_scan(http: FakeHttp, statics: &[Value], scas: &[Value]) -> FakeHttp {
         .once(Method::Get, "scan_type=MANUAL", 200, &findings_page(&[]))
 }
 
+fn ids(found: &Value) -> Vec<String> {
+    found.as_array().into_iter().flatten().map(|f| f["id"].as_str().unwrap_or_default().to_owned()).collect()
+}
+
 #[test]
 fn the_provider_signs_in_with_an_api_id_a_key_and_a_region() {
-    let descriptor = Veracode.descriptor();
+    let provider = loaded("veracode");
+    let descriptor = provider.descriptor();
     let AuthSpec::Token(spec) = descriptor.auth else { panic!("not a token") };
     let names: Vec<(&str, bool, bool)> =
         spec.fields.iter().map(|field| (field.name.as_str(), field.secret, field.setting)).collect();
     assert_eq!(names, [("region", false, true), ("apiId", false, false), ("apiKey", true, false)]);
-    assert_eq!(spec.fields[0].value, brand::connectors::VERACODE_REGION);
+    assert_eq!(spec.fields[0].value, "com");
     assert_eq!(spec.form, TokenForm::Json);
-    assert_eq!(descriptor.capabilities, vec![Capability::from(contracts::SECURITY)]);
-    assert_eq!(Veracode.presentation(Language::Portuguese).group, "security");
+    assert_eq!(descriptor.capabilities, vec![Capability::from("security")]);
+    assert_eq!(provider.presentation(Language::Portuguese).group, "security");
     assert!(spec.fields.iter().all(|field| field.help.is_empty()));
 }
 
-#[test]
-fn regions_name_their_api_host() {
-    assert_eq!(region_of("eu").map(|r| r.1), Some("api.veracode.eu"));
-    assert_eq!(region_of(" https://api.veracode.us/ ").map(|r| r.1), Some("api.veracode.us"));
-    assert_eq!(region_of("").map(|r| r.0), Some(brand::connectors::VERACODE_REGION));
-    assert_eq!(region_of("mars"), None);
-    assert!(is_guid(GUID));
-    assert!(!is_guid("My App"));
+#[tokio::test]
+async fn the_signature_follows_the_veracode_key_chain() {
+    let key = "0123456789abcdef".repeat(8);
+    let token = json!({ "apiId": "3ddaeeb10ca690df3fee5e3bd1c329fa", "apiKey": key });
+    let http = FakeHttp::new().once(Method::Get, "/appsec/v1/applications", 200, &applications_page(&[], 1));
+    let found = veracode_at(1_700_000_000_123)
+        .call(&http, &creds_with(&token.to_string(), json!({})), "security.projects", &json!({}), "k")
+        .await;
+    assert_eq!(found, Ok(json!([])));
+    assert_eq!(
+        http.sent()[0].header_value("authorization"),
+        Some(
+            "VERACODE-HMAC-SHA-256 id=3ddaeeb10ca690df3fee5e3bd1c329fa,ts=1700000000123,nonce=000102030405060708090a0b0c0d0e0f,sig=70efdd004ee88f27c06d7e38b108c0b1a71f2629a76a2976751bf85d142e4ad3"
+        )
+    );
+}
+
+#[tokio::test]
+async fn typed_keys_lose_their_prefix_and_a_key_that_is_not_hex_cannot_sign() {
+    let bad = json!({ "apiId": "a", "apiKey": "xyz" });
+    let refused = veracode()
+        .call(&FakeHttp::new(), &creds_with(&bad.to_string(), json!({})), "security.projects", &json!({}), "k")
+        .await;
+    assert!(refused.is_err_and(|error| error.class == ErrorClass::Auth && error.message.contains("not valid hex")));
+    for empty in [json!({ "apiId": "", "apiKey": "0f" }), json!("not json")] {
+        let text = empty.as_str().map_or_else(|| empty.to_string(), str::to_owned);
+        let refused = veracode()
+            .call(&FakeHttp::new(), &creds_with(&text, json!({})), "security.projects", &json!({}), "k")
+            .await;
+        assert_eq!(refused.map_err(|error| error.class), Err(ErrorClass::Auth));
+    }
+}
+
+#[tokio::test]
+async fn regions_name_their_api_host_and_a_guid_skips_the_lookup() {
+    for (region, host) in
+        [("eu", "api.veracode.eu"), (" https://api.veracode.us/ ", "api.veracode.us"), ("", "api.veracode.com")]
+    {
+        let http = FakeHttp::new().once(Method::Get, "/appsec/v1/applications", 200, &applications_page(&[], 1));
+        assert_eq!(call(&http, json!({ "region": region }), "security.projects", json!({})).await, Ok(json!([])));
+        assert!(http.sent()[0].url.starts_with(&format!("https://{host}/")), "{region}");
+    }
+    let mars = call(&FakeHttp::new(), json!({ "region": "mars" }), "security.projects", json!({})).await;
+    assert_eq!(mars.map_err(|error| error.class), Err(ErrorClass::Permanent));
+    let http = every_scan(FakeHttp::new(), &[], &[]);
+    assert_eq!(call(&http, json!({ "project": GUID }), "security.findings", json!({})).await, Ok(json!([])));
+    assert_eq!(http.sent().len(), 4);
 }
 
 #[tokio::test]
 async fn every_request_carries_the_veracode_signature_for_its_host_and_path() {
     let http = FakeHttp::new().once(Method::Get, "/appsec/v1/applications", 200, &applications_page(&[], 1));
-    let found = call(&http, json!({ "region": "eu" }), actions::PROJECTS, json!({})).await;
+    let found = call(&http, json!({ "region": "eu" }), "security.projects", json!({})).await;
     assert_eq!(found, Ok(json!([])));
     let sent = http.sent();
     assert_eq!(sent[0].url, "https://api.veracode.eu/appsec/v1/applications?page=0&size=100");
-    let keys = Keys { api_id: "abc123".to_owned(), api_key: "00112233445566778899aabbccddeeff".to_owned() };
-    let request = sign::Request {
-        method: "GET",
-        host: "api.veracode.eu",
-        path_and_query: "/appsec/v1/applications?page=0&size=100",
-    };
-    let nonce = fixed_nonce().unwrap_or_default();
-    let expected = sign::header(&keys, request, 1_700_000_000_000, &nonce);
-    assert_eq!(sent[0].header_value("authorization"), expected.as_deref());
     let told = sent[0].header_value("authorization").unwrap_or_default();
-    assert!(
-        told.starts_with(
-            "VERACODE-HMAC-SHA-256 id=abc123,ts=1700000000000,nonce=000102030405060708090a0b0c0d0e0f,sig="
-        )
-    );
+    let prefix = "VERACODE-HMAC-SHA-256 id=abc123,ts=1700000000000,nonce=000102030405060708090a0b0c0d0e0f,sig=";
+    assert!(told.starts_with(prefix), "{told}");
+    let sig = told.trim_start_matches(prefix);
+    assert!(sig.len() == 64 && sig.chars().all(|c| c.is_ascii_hexdigit()), "{sig}");
 }
 
 #[tokio::test]
@@ -131,7 +190,7 @@ async fn projects_are_listed_across_pages_and_filtered_by_the_query() {
         200,
         &applications_page(&[(OTHER, "Back office")], 2),
     );
-    let found = call(&http, json!({}), actions::PROJECTS, json!({})).await;
+    let found = call(&http, json!({}), "security.projects", json!({})).await;
     assert_eq!(
         found,
         Ok(json!([
@@ -141,14 +200,14 @@ async fn projects_are_listed_across_pages_and_filtered_by_the_query() {
     );
     assert_eq!(http.sent()[0].url, "https://api.veracode.com/appsec/v1/applications?page=0&size=100");
     let http = FakeHttp::new().once(Method::Get, "name=shop", 200, &applications_page(&[(GUID, "Shop API")], 1));
-    let found = call(&http, json!({}), actions::PROJECTS, json!({ "query": "shop" })).await;
+    let found = call(&http, json!({}), "security.projects", json!({ "query": "shop" })).await;
     assert_eq!(found.map(|listed| listed[0]["name"].clone()), Ok(json!("Shop API")));
 }
 
 #[tokio::test]
 async fn findings_are_normalized_whatever_their_scan() {
     let http = every_scan(FakeHttp::new(), &[static_finding(7, 4)], &[sca_finding(9, 3)]);
-    let found = call(&http, json!({ "project": GUID }), actions::FINDINGS, json!({})).await.unwrap_or_default();
+    let found = call(&http, json!({ "project": GUID }), "security.findings", json!({})).await.unwrap_or_default();
     assert_eq!(
         found[0],
         json!({
@@ -184,14 +243,13 @@ async fn findings_are_filtered_sorted_and_limited() {
     approved["finding_status"]["resolution_status"] = json!("APPROVED");
     let statics = [static_finding(20, 2), static_finding(11, 4), closed, approved, static_finding(10, 4)];
     let http = every_scan(FakeHttp::new(), &statics, &[sca_finding(9, 5)]);
-    let found = call(&http, json!({ "project": GUID }), actions::FINDINGS, json!({ "limit": 3 })).await;
-    let ids = |found: &Value| found.as_array().into_iter().flatten().map(|f| text_of(f, "/id")).collect::<Vec<_>>();
+    let found = call(&http, json!({ "project": GUID }), "security.findings", json!({ "limit": 3 })).await;
     assert_eq!(found.as_ref().map(ids), Ok(vec!["9".to_owned(), "10".to_owned(), "11".to_owned()]));
 
     let statics = [static_finding(20, 2), static_finding(11, 4)];
     let http = FakeHttp::new().once(Method::Get, "scan_type=STATIC", 200, &findings_page(&statics));
     let args = json!({ "kinds": ["static"], "minSeverity": 3, "policy": true, "open": false });
-    let found = call(&http, json!({ "project": GUID }), actions::FINDINGS, args).await;
+    let found = call(&http, json!({ "project": GUID }), "security.findings", args).await;
     assert_eq!(found.as_ref().map(ids), Ok(vec!["11".to_owned()]));
     assert_eq!(http.sent().len(), 1);
     assert!(http.sent()[0].url.ends_with("scan_type=STATIC&violates_policy=TRUE&severity_gte=3"));
@@ -200,16 +258,16 @@ async fn findings_are_filtered_sorted_and_limited() {
     closed["finding_status"]["status"] = json!("CLOSED");
     let http = FakeHttp::new().once(Method::Get, "scan_type=STATIC", 200, &findings_page(&[closed]));
     let args = json!({ "kinds": ["static"], "open": false });
-    let found = call(&http, json!({ "project": GUID }), actions::FINDINGS, args).await;
+    let found = call(&http, json!({ "project": GUID }), "security.findings", args).await;
     assert_eq!(found.map(|listed| listed[0]["status"].clone()), Ok(json!("closed")));
 }
 
 #[tokio::test]
 async fn a_bad_kind_or_a_missing_project_stops_before_any_request() {
     let http = FakeHttp::new();
-    let found = call(&http, json!({ "project": GUID }), actions::FINDINGS, json!({ "kinds": ["fuzz"] })).await;
+    let found = call(&http, json!({ "project": GUID }), "security.findings", json!({ "kinds": ["fuzz"] })).await;
     assert_eq!(found.map_err(|error| error.class), Err(ErrorClass::Permanent));
-    let found = call(&http, json!({}), actions::FINDINGS, json!({})).await;
+    let found = call(&http, json!({}), "security.findings", json!({})).await;
     assert_eq!(found.map_err(|error| error.blocker().map(str::to_owned)), Err(Some(NO_PROJECT.to_owned())));
     assert!(http.sent().is_empty());
 }
@@ -218,26 +276,25 @@ async fn a_bad_kind_or_a_missing_project_stops_before_any_request() {
 async fn a_project_name_is_resolved_to_its_guid() {
     let listed = applications_page(&[(OTHER, "Shop API v2"), (GUID, "Shop API")], 1);
     let http = every_scan(FakeHttp::new().once(Method::Get, "/appsec/v1/applications", 200, &listed), &[], &[]);
-    let found = call(&http, json!({ "project": OTHER }), actions::FINDINGS, json!({ "project": "shop api" })).await;
+    let found = call(&http, json!({ "project": OTHER }), "security.findings", json!({ "project": "shop api" })).await;
     assert_eq!(found, Ok(json!([])));
     let sent = http.sent();
     assert_eq!(sent[0].url, "https://api.veracode.com/appsec/v1/applications?page=0&size=100&name=shop+api");
     assert!(sent[1].url.contains(&format!("/applications/{GUID}/findings")));
     let http = FakeHttp::new().once(Method::Get, "/appsec/v1/applications", 200, &applications_page(&[], 1));
-    let found = call(&http, json!({}), actions::FINDINGS, json!({ "project": "Nope" })).await;
+    let found = call(&http, json!({}), "security.findings", json!({ "project": "Nope" })).await;
     assert_eq!(found.map_err(|error| error.class), Err(ErrorClass::Permanent));
 }
 
 #[tokio::test]
 async fn refused_credentials_are_an_auth_error() {
     let http = FakeHttp::new().once(Method::Get, "/appsec/v1/applications", 401, "{\"message\":\"no\"}");
-    let found = call(&http, json!({}), actions::PROJECTS, json!({})).await;
+    let found = call(&http, json!({}), "security.projects", json!({})).await;
     assert_eq!(found.map_err(|error| error.class), Err(ErrorClass::Auth));
     let http = FakeHttp::new();
-    let bad = Credentials::new(&ConnectionId::from("v1"), "not json", json!({}));
-    let found = Veracode.call(&http, &bad, actions::PROJECTS, &json!({}), "k").await;
+    let found = veracode().call(&http, &creds_with("not json", json!({})), "security.projects", &json!({}), "k").await;
     assert_eq!(found.map_err(|error| error.class), Err(ErrorClass::Auth));
-    let found = Veracode.call(&http, &creds(json!({ "region": "mars" })), actions::PROJECTS, &json!({}), "k").await;
+    let found = veracode().call(&http, &creds(json!({ "region": "mars" })), "security.projects", &json!({}), "k").await;
     assert_eq!(found.map_err(|error| error.class), Err(ErrorClass::Permanent));
 }
 
@@ -245,7 +302,7 @@ async fn refused_credentials_are_an_auth_error() {
 async fn the_account_shows_the_applications_and_picks_the_only_one() {
     let http =
         FakeHttp::new().once(Method::Get, "/appsec/v1/applications", 200, &applications_page(&[(GUID, "Shop API")], 1));
-    let listed = Veracode.accounts(&http, &creds(json!({ "region": "us" }))).await;
+    let listed = loaded("veracode").accounts(&http, &creds(json!({ "region": "us" }))).await;
     let expected = AccountOption {
         id: "veracode-us".to_owned(),
         label: "Veracode FedRAMP".to_owned(),
@@ -257,8 +314,15 @@ async fn the_account_shows_the_applications_and_picks_the_only_one() {
     assert!(told.contains(",nonce=") && told.len() > 100);
 }
 
-#[test]
-fn descriptions_lose_their_markup_and_stay_short() {
-    assert_eq!(findings::plain("<p>a&nbsp;&quot;b&quot;</p>\n<br/>c &#39;d&#39;"), "a \"b\" c 'd'");
-    assert_eq!(findings::plain(&"x".repeat(3000)).len(), 2000);
+#[tokio::test]
+async fn descriptions_lose_their_markup_and_stay_short() {
+    let mut finding = static_finding(1, 3);
+    finding["description"] = json!("<p>a&nbsp;&quot;b&quot;</p>\n<br/>c &#39;d&#39;");
+    let mut long = static_finding(2, 3);
+    long["description"] = json!("x".repeat(3000));
+    let http = FakeHttp::new().once(Method::Get, "scan_type=STATIC", 200, &findings_page(&[finding, long]));
+    let found = call(&http, json!({ "project": GUID }), "security.findings", json!({ "kinds": ["static"] })).await;
+    let found = found.unwrap_or_default();
+    assert_eq!(found[0]["description"], "a \"b\" c 'd'");
+    assert_eq!(found[1]["description"].as_str().map(str::len), Some(2000));
 }

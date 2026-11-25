@@ -53,7 +53,7 @@ pub fn outcome(answer: Result<Value, String>) -> Result<Value, ActionError> {
     Ok(answer.get("ok").cloned().unwrap_or(Value::Null))
 }
 
-pub trait Answers: Send + Sync {
+pub trait Answers: Send + Sync + std::fmt::Debug {
     fn now(&self, function: &str, arguments: &Value) -> Option<Result<Value, String>>;
 }
 

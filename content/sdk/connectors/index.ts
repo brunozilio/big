@@ -108,7 +108,32 @@ export function form(fields: [string, string][]): string {
   return fields.map(([name, value]) => `${encode(name)}=${encode(value)}`).join("&");
 }
 
-const encode = (text: string) => encodeURIComponent(text).replace(/%20/g, "+");
+export const encode = (text: string) =>
+  encodeURIComponent(text)
+    .replace(/[!'()~]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/%20/g, "+");
+
+export const query = form;
+
+export function textAt(value: unknown, path: string[]): string {
+  let found: any = value;
+  for (const key of path) found = found == null ? undefined : found[key];
+  return typeof found === "string" ? found : "";
+}
+
+export function idAt(value: unknown, path: string[]): string {
+  let found: any = value;
+  for (const key of path) found = found == null ? undefined : found[key];
+  if (typeof found === "string") return found;
+  if (typeof found === "number") return String(found);
+  return "";
+}
+
+export const blocked = (reason: string): never => fail("permanent", `blocked: ${reason}`);
+
+export const NO_PROJECT = "Choose the project.";
+
+export const useApiToken = (language: Language) => pick(language, "Use an API token", "Usar un API token", "Usar API token");
 
 export function text(args: Record<string, unknown>, name: string): string {
   const value = args?.[name];
