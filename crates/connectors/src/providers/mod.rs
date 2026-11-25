@@ -1,12 +1,10 @@
 pub mod aws;
-pub mod jira;
 
 use std::sync::Arc;
 
 use crate::provider::Provider;
 
 pub static ALL: &[&dyn Provider] = &[
-    &jira::Jira,
     &aws::Aws,
 ];
 

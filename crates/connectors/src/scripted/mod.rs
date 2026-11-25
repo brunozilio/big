@@ -145,7 +145,7 @@ impl ScriptedProvider {
     }
 
     async fn online(&self, http: &dyn Http, name: &str, input: Value) -> Result<Value, ActionError> {
-        let online = Online { http, redirect: redirect() };
+        let online = Online::new(http, redirect());
         invoke(&self.script, Arc::clone(&self.answers), &online, name, input).await
     }
 }
@@ -223,7 +223,7 @@ impl Provider for ScriptedProvider {
 #[async_trait]
 impl EventSource for ScriptedEvents {
     async fn poll(&self, http: &dyn Http, creds: &Credentials, cursor: Option<&str>) -> Result<EventBatch, ActionError> {
-        let online = Online { http, redirect: redirect() };
+        let online = Online::new(http, redirect());
         let input = json!({ "creds": creds_of(creds), "cursor": cursor });
         let batch = invoke(&self.script, Arc::clone(&self.answers), &online, "poll", input).await?;
         let mut events = Vec::new();

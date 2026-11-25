@@ -115,15 +115,27 @@ export const encode = (text: string) =>
 
 export const query = form;
 
-export function textAt(value: unknown, path: string[]): string {
+const own = (value, key: string) => value !== null && typeof value === "object" && Object.prototype.hasOwnProperty.call(value, key);
+
+const keysOf = (path: string[] | string): string[] =>
+  typeof path === "string" ? path.split("/").slice(1).map((part) => part.replace(/~1/g, "/").replace(/~0/g, "~")) : path;
+
+export function at(value: unknown, path: string[] | string) {
   let found: any = value;
-  for (const key of path) found = found == null ? undefined : found[key];
+  for (const key of keysOf(path)) {
+    if (!own(found, key)) return undefined;
+    found = found[key];
+  }
+  return found;
+}
+
+export function textAt(value: unknown, path: string[] | string): string {
+  const found = at(value, path);
   return typeof found === "string" ? found : "";
 }
 
-export function idAt(value: unknown, path: string[]): string {
-  let found: any = value;
-  for (const key of path) found = found == null ? undefined : found[key];
+export function idAt(value: unknown, path: string[] | string): string {
+  const found = at(value, path);
   if (typeof found === "string") return found;
   if (typeof found === "number") return String(found);
   return "";
@@ -235,4 +247,32 @@ export function classOf(error): string {
   } catch (_) {
     return "permanent";
   }
+}
+
+export const kindOf = classOf;
+
+export const isObject = (value): value is Record<string, any> => value !== null && typeof value === "object" && !Array.isArray(value);
+
+
+const asciiLower = (text: string) => text.replace(/[A-Z]/g, (c) => c.toLowerCase());
+
+export const sameAscii = (left: string, right: string) => asciiLower(left) === asciiLower(right);
+
+
+export function idempotencyLabel(ctx, key: string): string {
+  const hex: string = ctx.crypto.sha256({ data: key });
+  return `${ctx.brand.COMMAND}-${hex.slice(0, 12)}`;
+}
+
+export function timestampOf(text: string): number | undefined {
+  const match = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(\.\d+)?(Z|[+-]\d{2}:?\d{2})$/.exec(String(text ?? "").trim());
+  if (!match) return undefined;
+  const fraction = match[2] ? `.${match[2].slice(1, 4).padEnd(3, "0")}` : "";
+  const zone = match[3] === "Z" ? "Z" : `${match[3].slice(0, 3)}:${match[3].slice(-2)}`;
+  const parsed = Date.parse(`${match[1]}${fraction}${zone}`);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+export function timestampText(ms: number): string {
+  return new Date(ms).toISOString().replace(/\.(\d*?)0*Z$/, (_, digits) => (digits ? `.${digits}Z` : "Z"));
 }

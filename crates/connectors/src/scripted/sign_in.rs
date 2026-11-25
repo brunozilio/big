@@ -49,7 +49,7 @@ impl ScriptedSignIn {
     }
 
     async fn online(&self, http: &dyn Http, name: &str, extra: Value) -> Result<Value, ActionError> {
-        let online = Online { http, redirect: redirect() };
+        let online = Online::new(http, redirect());
         invoke(&self.script, Arc::new(Local), &online, name, self.input(extra)).await
     }
 }

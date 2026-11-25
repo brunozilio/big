@@ -12,6 +12,7 @@ mod mock_changes;
 mod veracode;
 mod zephyr;
 mod zephyr_fake;
+mod jira;
 
 pub fn loaded(key: &str) -> ScriptedProvider {
     let entry = format!("{FOLDER}{key}/{ENTRY}");

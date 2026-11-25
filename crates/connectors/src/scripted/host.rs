@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -159,13 +159,39 @@ fn now_of(arguments: &Value) -> Timestamp {
     arguments["now"].as_i64().and_then(|second| Timestamp::from_second(second).ok()).unwrap_or_else(Timestamp::now)
 }
 
+type Session<'a> = (String, String, Arc<McpClient<'a>>);
+
 #[derive(Debug)]
 pub struct Online<'a> {
-    pub http: &'a dyn Http,
-    pub redirect: String,
+    http: &'a dyn Http,
+    redirect: String,
+    sessions: Mutex<Vec<Session<'a>>>,
 }
 
-impl Online<'_> {
+impl<'a> Online<'a> {
+    pub fn new(http: &'a dyn Http, redirect: String) -> Online<'a> {
+        Online { http, redirect, sessions: Mutex::new(Vec::new()) }
+    }
+
+    async fn session(&self, arguments: &Value) -> Result<Arc<McpClient<'a>>, ActionError> {
+        let url = field(arguments, "url");
+        let token = field(arguments, "token");
+        let known = self
+            .sessions
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .iter()
+            .find(|(at, by, _)| at == url && by == token)
+            .map(|(_, _, client)| Arc::clone(client));
+        if let Some(client) = known {
+            return Ok(client);
+        }
+        let client = Arc::new(McpClient::connect(self.http, url, token).await?);
+        let mut sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
+        sessions.push((url.to_owned(), token.to_owned(), Arc::clone(&client)));
+        Ok(client)
+    }
+
     fn sign_in(&self, arguments: &Value) -> McpSignIn {
         let scopes = arguments["scopes"].as_array().into_iter().flatten().filter_map(Value::as_str);
         let redirect = arguments["redirect"].as_str().filter(|redirect| !redirect.is_empty());
@@ -178,20 +204,17 @@ impl Online<'_> {
     }
 
     async fn reach(&self, function: &str, arguments: &Value) -> Result<Value, ActionError> {
-        let token = field(arguments, "token");
         match function {
             "http" => match self.http.send(request(arguments)?).await {
                 Ok(answer) => Ok(response(&answer, arguments["binary"].as_bool().unwrap_or(false))),
                 Err(error) => Ok(json!({ "failed": error })),
             },
-            "mcp.tools" => {
-                Ok(json!(McpClient::connect(self.http, field(arguments, "url"), token).await?.tools().await?))
-            }
+            "mcp.tools" => Ok(json!(self.session(arguments).await?.tools().await?)),
             "mcp.call" => {
-                let client = McpClient::connect(self.http, field(arguments, "url"), token).await?;
+                let client = self.session(arguments).await?;
                 client.call(field(arguments, "tool"), arguments["arguments"].clone()).await
             }
-            "mcp.connect" => McpClient::connect(self.http, field(arguments, "url"), token).await.map(|_| json!(true)),
+            "mcp.connect" => self.session(arguments).await.map(|_| json!(true)),
             "oauth.mcp.begin" => {
                 let port = u16::try_from(arguments["port"].as_u64().unwrap_or_default()).unwrap_or_default();
                 let started = self.sign_in(arguments).begin(self.http, port).await?;

@@ -1,6 +1,11 @@
-use serde_json::json;
+use serde_json::{Value, json};
 
-use super::*;
+use super::probe;
+
+fn adf_to_markdown(document: &Value) -> String {
+    let found = probe("connectors/jira/adf.ts", "return m.adfToMarkdown(input);", document.clone());
+    found.as_str().unwrap_or_default().to_owned()
+}
 
 fn document(blocks: Value) -> Value {
     json!({"type": "doc", "version": 1, "content": blocks})
