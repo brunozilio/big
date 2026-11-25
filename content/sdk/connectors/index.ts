@@ -176,6 +176,36 @@ export function siteOf(url: string): string {
   return host.replace(/^www\./, "");
 }
 
+export function formComponent(text: string): string {
+  return encodeURIComponent(text)
+    .replace(/[!'()~]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`)
+    .replace(/%20/g, "+");
+}
+
+export function query(pairs: [string, string][]): string {
+  return pairs.map(([name, value]) => `${formComponent(name)}=${formComponent(value)}`).join("&");
+}
+
+export function textOf(value: unknown, path: string[]): string {
+  let found: any = value;
+  for (const key of path) found = found == null ? undefined : found[key];
+  return typeof found === "string" ? found : "";
+}
+
+export const jsonText = (value: unknown): string => JSON.stringify(value === undefined ? null : value);
+
+export const listIn = (value: unknown): any[] => (Array.isArray(value) ? value : []);
+
+export function timestamp(text: string): number | undefined {
+  if (typeof text !== "string" || text === "") return undefined;
+  const at = Date.parse(text.replace(/([+-]\d\d)(\d\d)$/, "$1:$2"));
+  return Number.isNaN(at) ? undefined : at;
+}
+
+export function iso(ms: number): string {
+  return new Date(ms).toISOString().replace(".000Z", "Z");
+}
+
 export function expiresAt(nowSecond: number, seconds: number | undefined): string | null {
   if (seconds === undefined || seconds === null || !Number.isFinite(seconds)) return null;
   return new Date((nowSecond + seconds) * 1000).toISOString();

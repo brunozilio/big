@@ -6,6 +6,7 @@ use super::*;
 use crate::http::{FakeHttp, HttpResponse, Method};
 
 mod datadog;
+mod github;
 mod mcp;
 mod mock_changes;
 
@@ -45,7 +46,8 @@ async fn an_error_thrown_by_the_script_keeps_its_class() {
     let http = FakeHttp::new().once(Method::Post, "/v1/mcp", 401, r#"{"error":"invalid_token"}"#);
     let refused = provider.accounts(&http, &creds("at", json!({}))).await;
     assert_eq!(refused.map_err(|error| error.class), Err(crate::error::ErrorClass::Auth));
-    let unknown = provider.call(&http, &creds("at", json!({ "url": "https://x" })), "tracker.issue", &json!({}), "k").await;
+    let unknown =
+        provider.call(&http, &creds("at", json!({ "url": "https://x" })), "tracker.issue", &json!({}), "k").await;
     assert!(unknown.is_err_and(|error| error.message.contains("tracker.issue")));
     let _ = HttpResponse::new(200, "");
 }

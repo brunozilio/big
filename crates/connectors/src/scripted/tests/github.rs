@@ -1,20 +1,22 @@
 use base64::Engine;
-use domain::connection::ConnectionId;
-use serde_json::json;
+use serde_json::{Value, json};
 
-use super::*;
-use crate::error::ErrorClass;
+use super::{creds as scripted_creds, loaded};
+use crate::descriptor::AuthSpec;
+use crate::error::{ActionError, ErrorClass};
 use crate::http::{FakeHttp, HttpResponse, Method};
 use crate::idempotency;
+use crate::provider::{Credentials, Provider};
 
 fn creds() -> Credentials {
-    Credentials::new(&ConnectionId::from("gh1"), "ght", json!({ "repos": ["acme/app"] }))
+    scripted_creds("ght", json!({ "repos": ["acme/app"] }))
 }
 
 async fn call(http: &FakeHttp, action: &str, args: Value, key: &str) -> Result<Value, ActionError> {
-    let answer = Github.call(http, &creds(), action, &args, key).await;
+    let github = loaded("github");
+    let answer = github.call(http, &creds(), action, &args, key).await;
     if let Ok(value) = &answer {
-        let spec = Github.descriptor().action(action).cloned().unwrap_or_else(|| panic!("no {action}"));
+        let spec = github.descriptor().action(action).cloned().unwrap_or_else(|| panic!("no {action}"));
         assert_eq!(crate::descriptor::conforms(&spec.output_schema, value), Ok(()), "{action}: {value}");
     }
     answer
@@ -29,17 +31,20 @@ fn pull(state: &str, merged_at: Option<&str>) -> Value {
 
 #[test]
 fn the_device_flow_uses_the_configured_client_and_workflow_scope() {
-    let AuthSpec::Device(app) = Github.descriptor().auth else { panic!("not device") };
-    assert_eq!(app.client_id, brand::connectors::GITHUB_CLIENT_ID);
+    let AuthSpec::Device(app) = loaded("github").descriptor().auth else { panic!("not device") };
+    assert_eq!(app.client_id, brand::github::CLIENT_ID);
+    assert_eq!(app.device_endpoint, "https://github.com/login/device/code");
     assert!(app.scopes.contains(&"workflow".to_owned()));
 }
 
 #[test]
 fn a_personal_access_token_is_the_alternative_to_the_device_sign_in() {
-    let [alternative] =
-        Github.alternatives(domain::Language::Portuguese).try_into().unwrap_or_else(|_| panic!("not one alternative"));
+    let [alternative] = loaded("github")
+        .alternatives(domain::Language::Portuguese)
+        .try_into()
+        .unwrap_or_else(|_| panic!("not one alternative"));
     let AuthSpec::Token(spec) = alternative.auth else { panic!("not a token") };
-    assert_eq!(alternative.key, API_TOKEN);
+    assert_eq!(alternative.key, "api_token");
     assert_eq!(spec.access_token(&json!({ "token": "ghp_1" }), domain::Language::Portuguese), Ok("ghp_1".to_owned()));
 }
 
@@ -52,7 +57,7 @@ async fn an_open_pull_request_of_the_branch_is_reused() {
         &json!([pull("open", None)]).to_string(),
     );
     let args = json!({"repo": "acme/app", "head": "big/x", "base": "main", "title": "T"});
-    let answer = call(&http, code_actions::OPEN_PULL_REQUEST, args, "k").await;
+    let answer = call(&http, "code.open_pull_request", args, "k").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!((answer["ref"].clone(), answer["created"].clone()), (json!("acme/app#7"), json!(false)));
     assert_eq!((answer["repo"].as_str(), answer["number"].as_u64()), (Some("acme/app"), Some(7)));
@@ -69,7 +74,7 @@ async fn a_new_pull_request_carries_the_invisible_marker() {
         &pull("open", None).to_string(),
     );
     let args = json!({"head": "big/x", "base": "main", "title": "T", "body": "corpo"});
-    let answer = call(&http, code_actions::OPEN_PULL_REQUEST, args, "k1").await;
+    let answer = call(&http, "code.open_pull_request", args, "k1").await;
     assert_eq!(answer.map(|a| a["created"].clone()), Ok(json!(true)));
     let sent = http.sent()[1].body_json();
     assert!(idempotency::carries(sent["body"].as_str().unwrap_or_default(), "k1"));
@@ -83,10 +88,7 @@ async fn a_race_on_create_finds_the_pull_request_that_won() {
         .once(Method::Post, "/pulls", 422, r#"{"message":"A pull request already exists for acme:big/x."}"#)
         .once(Method::Get, "/pulls?head=", 200, &json!([pull("open", None)]).to_string());
     let args = json!({"repo": "acme/app", "head": "big/x", "base": "main", "title": "T"});
-    assert_eq!(
-        call(&http, code_actions::OPEN_PULL_REQUEST, args, "k").await.map(|a| a["created"].clone()),
-        Ok(json!(false))
-    );
+    assert_eq!(call(&http, "code.open_pull_request", args, "k").await.map(|a| a["created"].clone()), Ok(json!(false)));
 }
 
 #[tokio::test]
@@ -97,7 +99,7 @@ async fn merging_a_merged_pull_request_is_a_success() {
         200,
         &pull("closed", Some("2024-01-01T00:00:00Z")).to_string(),
     );
-    let answer = call(&http, code_actions::MERGE, json!({"pr": "acme/app#7", "delete_branch": false}), "k").await;
+    let answer = call(&http, "code.merge", json!({"pr": "acme/app#7", "delete_branch": false}), "k").await;
     assert_eq!(answer, Ok(json!({"merged": true, "already": true, "sha": "m1", "deleted": false})));
     assert!(http.sent_to(Method::Put, "/merge").is_empty());
     assert!(http.sent_to(Method::Delete, "/git/refs").is_empty());
@@ -112,9 +114,9 @@ async fn merge_deletes_the_head_branch_and_a_failed_delete_keeps_the_merge() {
         .once(Method::Get, "/pulls/7", 200, &pull("closed", Some("2024-01-01T00:00:00Z")).to_string())
         .once(Method::Delete, "/git/refs/heads/big/x", 422, r#"{"message":"Reference does not exist"}"#);
     let args = json!({"pr": "acme/app#7"});
-    let answer = call(&http, code_actions::MERGE, args.clone(), "k").await;
+    let answer = call(&http, "code.merge", args.clone(), "k").await;
     assert_eq!(answer, Ok(json!({"merged": true, "already": false, "sha": "s9", "deleted": true})));
-    let again = call(&http, code_actions::MERGE, args, "k").await;
+    let again = call(&http, "code.merge", args, "k").await;
     assert_eq!(again.map(|a| a["deleted"].clone()), Ok(json!(false)));
 }
 
@@ -128,7 +130,7 @@ async fn a_branch_from_a_fork_is_not_deleted() {
         200,
         r#"{"merged":true,"sha":"s9"}"#,
     );
-    let answer = call(&http, code_actions::MERGE, json!({"pr": "acme/app#7"}), "k").await;
+    let answer = call(&http, "code.merge", json!({"pr": "acme/app#7"}), "k").await;
     assert_eq!(answer.map(|a| a["deleted"].clone()), Ok(json!(false)));
     assert!(http.sent_to(Method::Delete, "/git/refs").is_empty());
 }
@@ -141,10 +143,10 @@ async fn merge_sends_the_method_and_the_head_it_saw_and_a_moved_head_is_a_confli
         .once(Method::Get, "/pulls/7", 200, &pull("open", None).to_string())
         .once(Method::Put, "/pulls/7/merge", 409, r#"{"message":"Head branch was modified"}"#);
     let args = json!({"pr": "acme/app#7", "method": "squash", "delete_branch": false});
-    let answer = call(&http, code_actions::MERGE, args.clone(), "k").await;
+    let answer = call(&http, "code.merge", args.clone(), "k").await;
     assert_eq!(answer, Ok(json!({"merged": true, "already": false, "sha": "s9", "deleted": false})));
     assert_eq!(http.sent()[1].body_json(), json!({"merge_method": "squash", "sha": "abc"}));
-    assert_eq!(call(&http, code_actions::MERGE, args, "k").await.map_err(|e| e.class), Err(ErrorClass::Conflict));
+    assert_eq!(call(&http, "code.merge", args, "k").await.map_err(|e| e.class), Err(ErrorClass::Conflict));
 }
 
 #[tokio::test]
@@ -157,7 +159,7 @@ async fn a_pull_request_reads_checks_and_reviews() {
         .once(Method::Get, "/pulls/7", 200, &pull("open", None).to_string())
         .once(Method::Get, "/commits/abc/check-runs", 200, checks)
         .once(Method::Get, "/pulls/7/reviews", 200, &reviews);
-    let answer = call(&http, code_actions::PULL_REQUEST, json!({"pr": "acme/app#7"}), "").await;
+    let answer = call(&http, "code.pull_request", json!({"pr": "acme/app#7"}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer["checks"][0], json!({"name": "ci", "state": "passed", "url": null}));
     assert_eq!(answer["checks"][1]["state"], "running");
@@ -176,8 +178,7 @@ async fn a_review_already_carrying_the_key_is_not_submitted_again() {
         200,
         &json!([{"id": 3, "state": "APPROVED", "body": body}]).to_string(),
     );
-    let answer =
-        call(&http, code_actions::SUBMIT_REVIEW, json!({"pr": "acme/app#7", "verdict": "approve"}), "rk").await;
+    let answer = call(&http, "code.submit_review", json!({"pr": "acme/app#7", "verdict": "approve"}), "rk").await;
     assert_eq!(answer, Ok(json!({"id": "3", "verdict": "approve", "created": false})));
 }
 
@@ -191,7 +192,7 @@ async fn a_verdict_on_one_s_own_pull_request_goes_as_a_comment_with_the_same_tex
         .once(Method::Post, "/pulls/7/reviews", 200, r#"{"id":5,"state":"COMMENTED"}"#);
     let args = json!({"pr": "acme/app#7", "verdict": "request_changes", "body": "corrija",
                       "lines": [{"path": "src/a.rs", "line": 3, "body": "aqui"}]});
-    let answer = call(&http, code_actions::SUBMIT_REVIEW, args, "rk3").await;
+    let answer = call(&http, "code.submit_review", args, "rk3").await;
     assert_eq!(answer, Ok(json!({"id": "5", "verdict": "request_changes", "created": true, "as": "comment"})));
     let again = http.sent()[2].body_json();
     assert_eq!(again["event"], "COMMENT");
@@ -209,12 +210,12 @@ async fn a_review_with_lines_is_submitted_with_its_event() {
     );
     let args = json!({"pr": "acme/app#7", "verdict": "request_changes", "body": "veja",
                       "lines": [{"path": "src/a.rs", "line": 3, "body": "aqui"}]});
-    let answer = call(&http, code_actions::SUBMIT_REVIEW, args, "rk2").await;
+    let answer = call(&http, "code.submit_review", args, "rk2").await;
     assert_eq!(answer.map(|a| a["created"].clone()), Ok(json!(true)));
     let sent = http.sent()[1].body_json();
     assert_eq!(sent["event"], "REQUEST_CHANGES");
     assert_eq!(sent["comments"][0], json!({"path": "src/a.rs", "line": 3, "body": "aqui", "side": "RIGHT"}));
-    let wrong = call(&http, code_actions::SUBMIT_REVIEW, json!({"pr": "acme/app#7", "verdict": "nah"}), "").await;
+    let wrong = call(&http, "code.submit_review", json!({"pr": "acme/app#7", "verdict": "nah"}), "").await;
     assert_eq!(wrong.map_err(|e| e.class), Err(ErrorClass::Permanent));
 }
 
@@ -223,14 +224,14 @@ async fn an_agent_s_review_comes_back_with_the_agent_as_its_author() {
     let http = FakeHttp::new().once(Method::Post, "/pulls/7/reviews", 200, r#"{"id":5,"state":"COMMENTED"}"#);
     let args = json!({"pr": "acme/app#7", "verdict": "comment", "agent": "reviewer",
                       "lines": [{"path": "src/a.rs", "line": 3, "body": "aqui"}]});
-    assert!(call(&http, code_actions::SUBMIT_REVIEW, args, "").await.is_ok());
+    assert!(call(&http, "code.submit_review", args, "").await.is_ok());
     let said = http.sent()[0].body_json()["comments"][0]["body"].as_str().unwrap_or_default().to_owned();
     let threads = json!({"data": {"repository": {"pullRequest": {"reviewThreads": {"nodes": [
         {"id": "T1", "isResolved": false, "isOutdated": false, "path": "src/a.rs", "line": 3,
          "comments": {"nodes": [{"id": "C1", "body": said, "createdAt": "x", "author": {"login": "ana"}}]}}
     ]}}}}});
     let http = FakeHttp::new().once(Method::Post, "/graphql", 200, &threads.to_string());
-    let read = call(&http, code_actions::REVIEW_COMMENTS, json!({"pr": "acme/app#7"}), "").await;
+    let read = call(&http, "code.review_comments", json!({"pr": "acme/app#7"}), "").await;
     let Ok(read) = read else { panic!("{read:?}") };
     assert_eq!((read[0]["agent"].as_str(), read[0]["body"].as_str()), (Some("reviewer"), Some("aqui")));
 }
@@ -250,7 +251,7 @@ async fn review_threads_and_their_resolution_go_through_graphql() {
             r#"{"data":{"resolveReviewThread":{"thread":{"id":"T1","isResolved":true}}}}"#,
         )
         .once(Method::Post, "/graphql", 200, r#"{"errors":[{"message":"Could not resolve to a node"}]}"#);
-    let read = call(&http, code_actions::REVIEW_COMMENTS, json!({"pr": "acme/app#7"}), "").await;
+    let read = call(&http, "code.review_comments", json!({"pr": "acme/app#7"}), "").await;
     let Ok(read) = read else { panic!("{read:?}") };
     assert_eq!((read[0]["author"].as_str(), read[0]["thread"].as_str()), (Some("ana"), Some("T1")));
     assert_eq!(
@@ -258,9 +259,9 @@ async fn review_threads_and_their_resolution_go_through_graphql() {
         (Some("a.rs"), Some(2), Some(false))
     );
     assert_eq!(http.sent()[0].body_json()["variables"], json!({"owner": "acme", "name": "app", "number": 7}));
-    let resolved = call(&http, code_actions::RESOLVE_THREAD, json!({"thread": "T1"}), "k").await;
+    let resolved = call(&http, "code.resolve_thread", json!({"thread": "T1"}), "k").await;
     assert_eq!(resolved, Ok(json!({"thread": "T1", "resolved": true})));
-    let missing = call(&http, code_actions::RESOLVE_THREAD, json!({"thread": "T9"}), "k").await;
+    let missing = call(&http, "code.resolve_thread", json!({"thread": "T9"}), "k").await;
     assert_eq!(missing.map_err(|e| e.class), Err(ErrorClass::Permanent));
 }
 
@@ -272,7 +273,7 @@ async fn files_diff_lists_every_changed_file() {
         200,
         r#"[{"filename":"a.rs","status":"modified","additions":1,"deletions":2,"patch":"@@"}]"#,
     );
-    let answer = call(&http, code_actions::FILES_DIFF, json!({"pr": 7}), "").await;
+    let answer = call(&http, "code.files_diff", json!({"pr": 7}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!((answer[0]["path"].as_str(), answer[0]["change"].as_str()), (Some("a.rs"), Some("modified")));
 }
@@ -280,7 +281,7 @@ async fn files_diff_lists_every_changed_file() {
 #[tokio::test]
 async fn a_bad_repo_never_reaches_the_api() {
     let http = FakeHttp::new();
-    let answer = call(&http, code_actions::PULL_REQUEST, json!({"pr": "../x#1"}), "").await;
+    let answer = call(&http, "code.pull_request", json!({"pr": "../x#1"}), "").await;
     assert_eq!(answer.map_err(|e| e.class), Err(ErrorClass::Permanent));
     assert!(http.sent().is_empty());
 }
@@ -298,7 +299,7 @@ async fn a_run_is_the_job_graph_with_needs_and_steps() {
         .once(Method::Get, "/actions/runs/5/jobs", 200, &jobs.to_string())
         .once(Method::Get, "/actions/runs/5", 200, &run.to_string())
         .once(Method::Get, "/contents/.github/workflows/ci.yml?ref=abc", 200, &json!({"content": content}).to_string());
-    let answer = call(&http, pipeline_actions::RUN, json!({"run": "acme/app/runs/5"}), "").await;
+    let answer = call(&http, "pipelines.run", json!({"run": "acme/app/runs/5"}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!((answer["ref"].as_str(), answer["state"].as_str()), (Some("acme/app/runs/5"), Some("running")));
     assert_eq!(
@@ -320,22 +321,25 @@ async fn runs_filter_by_status_for_the_last_good_deploy() {
         r#"{"workflow_runs":[{"id":4,"status":"completed","conclusion":"success","head_sha":"abc"}]}"#,
     );
     let args = json!({"pipeline": "deployment.yml", "ref": "release", "status": "success", "limit": 1});
-    let answer = call(&http, pipeline_actions::RUNS, args, "").await;
+    let answer = call(&http, "pipelines.runs", args, "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer[0]["ref"], "acme/app/runs/4");
 }
 
 #[tokio::test]
 async fn merging_a_branch_into_another_reports_when_there_was_nothing_to_merge() {
-    let http = FakeHttp::new()
-        .once(Method::Post, "/repos/acme/app/merges", 201, r#"{"sha":"f00"}"#)
-        .once(Method::Post, "/repos/acme/app/merges", 204, "");
+    let http = FakeHttp::new().once(Method::Post, "/repos/acme/app/merges", 201, r#"{"sha":"f00"}"#).once(
+        Method::Post,
+        "/repos/acme/app/merges",
+        204,
+        "",
+    );
     let args = json!({"base": "release", "head": "develop"});
-    let first = call(&http, code_actions::MERGE_BRANCHES, args.clone(), "m1").await;
+    let first = call(&http, "code.merge_branches", args.clone(), "m1").await;
     assert_eq!(first, Ok(json!({"merged": true, "already": false, "sha": "f00"})));
-    let again = call(&http, code_actions::MERGE_BRANCHES, args, "m1").await;
+    let again = call(&http, "code.merge_branches", args, "m1").await;
     assert_eq!(again, Ok(json!({"merged": true, "already": true})));
-    let bad = call(&http, code_actions::MERGE_BRANCHES, json!({"base": "release", "head": "a..b"}), "m2").await;
+    let bad = call(&http, "code.merge_branches", json!({"base": "release", "head": "a..b"}), "m2").await;
     assert!(bad.is_err());
 }
 
@@ -350,14 +354,14 @@ async fn runs_filter_by_branch_or_sha() {
         )
         .once(Method::Get, "/actions/workflows/ci.yml/runs?per_page=20&head_sha=", 200, r#"{"workflow_runs":[]}"#)
         .once(Method::Get, "/actions/runs?per_page=1", 200, r#"{"workflow_runs":[]}"#);
-    let answer = call(&http, pipeline_actions::RUNS, json!({"ref": "big/x", "limit": 5}), "").await;
+    let answer = call(&http, "pipelines.runs", json!({"ref": "big/x", "limit": 5}), "").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!((answer[0]["ref"].as_str(), answer[0]["state"].as_str()), (Some("acme/app/runs/1"), Some("failed")));
     assert_eq!(answer[0]["actor"], "dependabot[bot]");
     let sha = "a".repeat(40);
-    let answer = call(&http, pipeline_actions::RUNS, json!({"ref": sha, "pipeline": "ci.yml"}), "").await;
+    let answer = call(&http, "pipelines.runs", json!({"ref": sha, "pipeline": "ci.yml"}), "").await;
     assert_eq!(answer, Ok(json!([])));
-    let whole = call(&http, pipeline_actions::RUNS, json!({"limit": 1}), "").await;
+    let whole = call(&http, "pipelines.runs", json!({"limit": 1}), "").await;
     assert_eq!(whole, Ok(json!([])), "without a ref it lists the repository's runs");
 }
 
@@ -365,7 +369,7 @@ async fn runs_filter_by_branch_or_sha() {
 async fn a_job_log_keeps_the_tail() {
     let http = FakeHttp::new().once(Method::Get, "/actions/jobs/10/logs", 200, "a\nb\nc\nd");
     let args = json!({"run": "acme/app/runs/5", "job": "10", "tail": 2});
-    let answer = call(&http, pipeline_actions::JOB_LOG, args, "").await;
+    let answer = call(&http, "pipelines.job_log", args, "").await;
     assert_eq!(answer, Ok(json!({"text": "c\nd", "truncated": true})));
 }
 
@@ -378,10 +382,10 @@ async fn a_deployment_is_reviewed_once_and_nothing_pending_is_already_done() {
         .once(Method::Post, "/actions/runs/5/pending_deployments", 200, "[]")
         .once(Method::Get, "/actions/runs/5/pending_deployments", 200, "[]");
     let args = json!({"run": "acme/app/runs/5", "decision": "approve", "deployments": ["production"], "comment": "ok"});
-    let answer = call(&http, pipeline_actions::REVIEW_DEPLOYMENT, args.clone(), "k").await;
+    let answer = call(&http, "pipelines.review_deployment", args.clone(), "k").await;
     assert_eq!(answer, Ok(json!({"decision": "approve", "deployments": ["42"], "already": false})));
     assert_eq!(http.sent()[1].body_json(), json!({"environment_ids": [42], "state": "approved", "comment": "ok"}));
-    let again = call(&http, pipeline_actions::REVIEW_DEPLOYMENT, args, "k").await;
+    let again = call(&http, "pipelines.review_deployment", args, "k").await;
     assert_eq!(again, Ok(json!({"decision": "approve", "deployments": [], "already": true})));
 }
 
@@ -389,14 +393,15 @@ async fn a_deployment_is_reviewed_once_and_nothing_pending_is_already_done() {
 async fn a_rate_limited_answer_is_classified_with_its_wait() {
     let limited = HttpResponse::new(429, "{}").with_header("retry-after", "12");
     let http = FakeHttp::new().respond(Method::Get, "/pulls/7", limited);
-    let answer = call(&http, code_actions::MERGE, json!({"pr": "acme/app#7"}), "k").await;
+    let answer = call(&http, "code.merge", json!({"pr": "acme/app#7"}), "k").await;
     let wait = std::time::Duration::from_secs(12);
     assert_eq!(answer.map_err(|e| e.class), Err(ErrorClass::RateLimited { retry_after: wait }));
 }
 
 #[tokio::test]
 async fn events_come_from_pulls_reviews_and_runs_changed_since_the_cursor_and_etags_are_kept() {
-    let source = Github.events().unwrap_or_else(|| panic!("no events"));
+    let github = loaded("github");
+    let source = github.events().unwrap_or_else(|| panic!("no events"));
     let cursor = r#"{"since":"2024-01-02T00:00:00Z","etags":{}}"#;
     let pulls = json!([
         {"number": 7, "state": "closed", "merged_at": "2024-01-02T05:00:00Z", "updated_at": "2024-01-02T05:00:00Z", "head": {"ref": "big/x"}},
@@ -425,8 +430,8 @@ async fn events_come_from_pulls_reviews_and_runs_changed_since_the_cursor_and_et
         (Some("acme/app/runs/5"), Some("failed"))
     );
     assert_eq!(batch.events[0].capability.as_str(), "pipelines");
-    let next: events::Cursor = serde_json::from_str(&batch.cursor).unwrap_or_else(|_| panic!("bad cursor"));
-    assert_eq!(next.since.to_string(), "2024-01-02T05:00:00Z");
+    let next: Value = serde_json::from_str(&batch.cursor).unwrap_or_else(|_| panic!("bad cursor"));
+    assert_eq!(next["since"], "2024-01-02T05:00:00Z");
     let http = FakeHttp::new().once(Method::Get, "/pulls?state=all", 304, "").once(
         Method::Get,
         "/actions/runs?per_page=50",
@@ -456,7 +461,7 @@ async fn the_repositories_are_listed_page_by_page_until_a_short_page() {
         200,
         &repos_page(100, 3),
     );
-    let answer = call(&http, code_actions::REPOS, json!({}), "k").await;
+    let answer = call(&http, "code.repos", json!({}), "k").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     let listed = answer.as_array().expect("list");
     assert_eq!(listed.len(), 103);
@@ -471,7 +476,7 @@ async fn the_repositories_are_listed_page_by_page_until_a_short_page() {
 #[tokio::test]
 async fn the_repositories_can_be_filtered_by_name() {
     let http = FakeHttp::new().once(Method::Get, "/user/repos?per_page=100&page=1&", 200, &repos_page(0, 12));
-    let answer = call(&http, code_actions::REPOS, json!({ "query": "R1" }), "k").await;
+    let answer = call(&http, "code.repos", json!({ "query": "R1" }), "k").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     let names: Vec<&str> = answer.as_array().expect("list").iter().filter_map(|repo| repo["ref"].as_str()).collect();
     assert_eq!(names, ["acme/r1", "acme/r10", "acme/r11"]);
@@ -485,7 +490,7 @@ async fn the_open_pull_requests_of_a_repository_are_listed() {
         200,
         &json!([pull("open", None)]).to_string(),
     );
-    let answer = call(&http, code_actions::PULL_REQUESTS, json!({ "repo": "acme/app" }), "k").await;
+    let answer = call(&http, "code.pull_requests", json!({ "repo": "acme/app" }), "k").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer[0]["ref"], json!("acme/app#7"));
     assert_eq!(answer[0]["head"], json!("big/x"));
@@ -496,7 +501,74 @@ async fn the_branches_mark_the_default_one() {
     let http = FakeHttp::new()
         .once(Method::Get, "/repos/acme/app/branches", 200, &json!([{ "name": "dev" }, { "name": "main" }]).to_string())
         .once(Method::Get, "/repos/acme/app", 200, &json!({ "default_branch": "main" }).to_string());
-    let answer = call(&http, code_actions::BRANCHES, json!({}), "k").await;
+    let answer = call(&http, "code.branches", json!({}), "k").await;
     let Ok(answer) = answer else { panic!("{answer:?}") };
     assert_eq!(answer, json!([{ "name": "dev", "default": false }, { "name": "main", "default": true }]));
+}
+#[tokio::test]
+async fn the_account_is_the_login_and_an_unknown_action_is_refused() {
+    let http = FakeHttp::new().once(Method::Get, "/user", 200, r#"{"login":"ana"}"#);
+    let accounts = loaded("github").accounts(&http, &creds()).await;
+    let Ok([account]) = accounts.as_deref() else { panic!("{accounts:?}") };
+    assert_eq!((account.id.as_str(), account.label.as_str()), ("ana", "ana"));
+    assert_eq!(account.settings, json!({ "login": "ana" }));
+    let refused = loaded("github").call(&http, &creds(), "tracker.issue", &json!({}), "k").await;
+    assert_eq!(refused.map_err(|e| e.class), Err(ErrorClass::Permanent));
+}
+
+#[tokio::test]
+async fn refs_name_the_repository_and_fall_back_to_the_connection_s_repository() {
+    let pull = json!({"number": 12, "state": "open", "head": {"sha": "s"}});
+    let http = FakeHttp::new()
+        .always(Method::Get, "/repos/o/r/pulls/12", 200, &pull.to_string())
+        .always(Method::Get, "/repos/acme/app/pulls/7", 200, &pull.to_string())
+        .always(Method::Get, "/check-runs", 200, r#"{"check_runs":[]}"#)
+        .always(Method::Get, "/reviews", 200, "[]");
+    let named = call(&http, "code.pull_request", json!({ "pr": "o/r#12" }), "").await;
+    assert_eq!(named.map(|a| a["repo"].clone()), Ok(json!("o/r")));
+    let bare = call(&http, "code.pull_request", json!({ "pr": 7 }), "").await;
+    assert_eq!(bare.map(|a| a["repo"].clone()), Ok(json!("acme/app")));
+    assert!(call(&http, "pipelines.run", json!({ "run": "o/r/runs/x" }), "").await.is_err());
+}
+
+#[tokio::test]
+async fn the_provider_s_states_and_every_yaml_form_of_needs_are_read() {
+    let yaml = "name: ci\non:\n  push:\n\njobs:\n  build:\n    name: Build app\n    runs-on: ubuntu-latest\n  test:\n    needs: build\n  # comment\n  deploy:\n    needs: [build, \"test\"]\n  notify:\n    needs:\n      - deploy\n      - test\nenv:\n  A: 1\n";
+    let content = base64::engine::general_purpose::STANDARD.encode(yaml);
+    let run = json!({"id": 5, "path": ".github/workflows/ci.yml", "head_sha": "abc", "status": "completed", "conclusion": "timed_out"});
+    let jobs = json!({"jobs": [
+        {"id": 1, "name": "Build app", "status": "completed", "conclusion": "neutral"},
+        {"id": 2, "name": "test (a)", "status": "waiting"},
+        {"id": 3, "name": "deploy / call", "status": "requested"},
+        {"id": 4, "name": "notify", "status": "completed", "conclusion": "success"}
+    ]});
+    let http = FakeHttp::new()
+        .once(Method::Get, "/actions/runs/5/jobs", 200, &jobs.to_string())
+        .once(Method::Get, "/actions/runs/5", 200, &run.to_string())
+        .once(Method::Get, "/contents/", 200, &json!({"content": content}).to_string());
+    let answer = call(&http, "pipelines.run", json!({"run": "acme/app/runs/5"}), "").await;
+    let Ok(answer) = answer else { panic!("{answer:?}") };
+    assert_eq!(answer["state"], "failed");
+    let shown: Vec<(String, String, Value)> = answer["jobs"]
+        .as_array()
+        .map(Vec::as_slice)
+        .unwrap_or_default()
+        .iter()
+        .map(|job| {
+            (
+                job["key"].as_str().unwrap_or_default().to_owned(),
+                job["state"].as_str().unwrap_or_default().to_owned(),
+                job["needs"].clone(),
+            )
+        })
+        .collect();
+    let expected = [
+        ("build", "skipped", json!([])),
+        ("test", "waiting", json!(["build"])),
+        ("deploy", "queued", json!(["build", "test"])),
+        ("notify", "passed", json!(["deploy", "test"])),
+    ];
+    let expected: Vec<(String, String, Value)> =
+        expected.into_iter().map(|(key, state, needs)| (key.to_owned(), state.to_owned(), needs)).collect();
+    assert_eq!(shown, expected);
 }

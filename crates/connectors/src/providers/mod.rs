@@ -1,5 +1,4 @@
 pub mod aws;
-pub mod github;
 pub mod jira;
 pub mod veracode;
 pub mod zephyr;
@@ -9,7 +8,6 @@ use std::sync::Arc;
 use crate::provider::Provider;
 
 pub static ALL: &[&dyn Provider] = &[
-    &github::Github,
     &jira::Jira,
     &aws::Aws,
     &zephyr::Zephyr,

@@ -114,7 +114,7 @@ impl Hub {
     fn connections(store: &Store) {
         let code = ConnectionRecord {
             id: CODE.into(),
-            provider: connectors::providers::github::KEY.into(),
+            provider: "github".into(),
             label: "Código".into(),
             account: Some("agente".into()),
             capabilities: vec!["code".into(), "pipelines".into()],
@@ -147,8 +147,9 @@ impl Hub {
         let http: Arc<dyn connectors::Http> = Arc::clone(&self.github) as Arc<dyn connectors::Http>;
         let keeper = TokenKeeper::new(tokens, Arc::clone(&http), Arc::new(FixedClock::at_second(1_000)));
         let fake: &'static dyn Provider = self.tracker;
-        let providers: [&'static dyn Provider; 2] = [&connectors::providers::github::Github, fake];
-        let connectors = Arc::new(Connectors::with_providers(&providers, http, keeper));
+        let github = connectors::scripted::ScriptedProvider::load_in(None, "connectors/github/index.ts").expect("github");
+        let providers: Vec<Arc<dyn Provider>> = vec![Arc::new(github), Arc::new(connectors::providers::Shared(fake))];
+        let connectors = Arc::new(Connectors::from_providers(providers, http, keeper));
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();
         let builtin: orchestrator::Builtin = Arc::new(content::builtin_text);
         let resources = Resources::new(Some(self.repo().join(brand::DIR)), None, builtin).listing(listed);
