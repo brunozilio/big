@@ -10,6 +10,7 @@ use crate::error::{ApiError, ApiResult, json as reply, said};
 use crate::state::Ctx;
 
 pub const LOGO_ROUTE: &str = "/api/branding/logo";
+pub const FAVICON_ROUTE: &str = "/api/branding/favicon";
 const THEMES: [&str; 3] = ["system", "light", "dark"];
 
 pub fn current(store: &Store) -> ApiResult<Value> {
@@ -19,7 +20,7 @@ pub fn current(store: &Store) -> ApiResult<Value> {
     let style =
         kept.get("output_style").and_then(Value::as_str).filter(|key| styles.iter().any(|style| style.key == *key));
     Ok(json!({
-        "name": brand::NAME, "logo": LOGO_ROUTE, "editor": crate::editor::editor_name(), "theme": theme, "language": store.language()?.code(),
+        "name": brand::NAME, "logo": LOGO_ROUTE, "favicon": FAVICON_ROUTE, "editor": crate::editor::editor_name(), "theme": theme, "language": store.language()?.code(),
         "output_style": style, "output_styles": styles,
     }))
 }
@@ -75,7 +76,15 @@ pub async fn put(State(ctx): State<Ctx>, Json(patch): Json<Value>) -> ApiResult<
 }
 
 pub async fn logo() -> Response {
-    ([(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "no-cache")], brand::LOGO).into_response()
+    png(brand::LOGO)
+}
+
+pub async fn favicon() -> Response {
+    png(brand::FAVICON)
+}
+
+fn png(bytes: &'static [u8]) -> Response {
+    ([(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "no-cache")], bytes).into_response()
 }
 
 #[cfg(test)]
@@ -92,6 +101,7 @@ mod tests {
         let saved = apply(&store, &json!({ "theme": "dark", "logo": "data:x" })).expect("saved");
         assert_eq!(saved["theme"], "dark");
         assert_eq!(saved["logo"], LOGO_ROUTE);
+        assert_eq!(saved["favicon"], FAVICON_ROUTE);
         assert!(apply(&store, &json!({ "theme": "pink" })).is_err());
     }
 

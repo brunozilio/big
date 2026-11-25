@@ -38,8 +38,9 @@ mod tests {
     }
 
     #[test]
-    fn the_logo_is_a_png() {
+    fn the_logo_and_favicon_are_pngs() {
         assert!(LOGO.starts_with(b"\x89PNG"));
+        assert!(FAVICON.starts_with(b"\x89PNG"));
     }
 
     #[test]

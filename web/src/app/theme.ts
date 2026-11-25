@@ -33,7 +33,7 @@ export function useBrandTitle() {
   useEffect(() => {
     if (!branding) return
     document.title = branding.name
-    const href = branding.logo
+    const href = branding.favicon
     let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
     if (!href) {
       link?.remove()

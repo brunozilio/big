@@ -820,6 +820,7 @@ export interface OutputStyle {
 export interface Branding {
   name: string
   logo: string | null
+  favicon: string | null
   editor: string
   theme: Theme
   language: Language

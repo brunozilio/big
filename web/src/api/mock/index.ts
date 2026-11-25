@@ -47,7 +47,7 @@ export function mockApi(options: MockOptions = {}): Api {
   reset(initialConnections())
   let lastTick = Date.now()
   setClock(() => EPOCH + store.clock * TICK_MS + Math.min(TICK_MS, ((Date.now() - lastTick) / tickMs) * TICK_MS))
-  let branding: Branding = { name: 'Entregas', logo: '/api/branding/logo', editor: 'VS Code', theme: 'system', language: currentLanguage(), output_style: null, output_styles: [{ key: 'concise', name: 'Concise', description: say('shortReplies') }] }
+  let branding: Branding = { name: 'Entregas', logo: '/api/branding/logo', favicon: '/api/branding/favicon', editor: 'VS Code', theme: 'system', language: currentLanguage(), output_style: null, output_styles: [{ key: 'concise', name: 'Concise', description: say('shortReplies') }] }
   let applications: Application[] = initialApplications()
   const flows = new Map<string, Flow>()
   const listeners = new Set<(e: LiveEvent) => void>()

@@ -50,6 +50,13 @@ fn section_code(file: &std::path::Path, sections: &[(String, Pairs)]) -> String 
     code
 }
 
+fn image_code(file: &std::path::Path, name: &str, image: &str) -> String {
+    let path = file.parent().map_or_else(|| PathBuf::from(image), |folder| folder.join(image));
+    println!("cargo:rerun-if-changed={}", path.display());
+    let path = std::fs::canonicalize(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    format!("pub const {name}: &[u8] = include_bytes!({:?});\n", path.display().to_string())
+}
+
 fn main() {
     let manifest = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
     let file = std::env::var("BRAND_FILE").map_or_else(|_| manifest.join("../../config.toml"), PathBuf::from);
@@ -86,10 +93,9 @@ fn main() {
         let lower = if name == "ENV" { "env_prefix".to_owned() } else { name.to_ascii_lowercase() };
         code.push_str(&format!("#[macro_export]\nmacro_rules! {lower} {{ () => {{ {value:?} }}; }}\n"));
     }
-    let logo = file.parent().map_or_else(|| PathBuf::from("logo.png"), |folder| folder.join("logo.png"));
-    println!("cargo:rerun-if-changed={}", logo.display());
-    let logo = std::fs::canonicalize(&logo).unwrap_or_else(|error| panic!("{}: {error}", logo.display()));
-    code.push_str(&format!("pub const LOGO: &[u8] = include_bytes!({:?});\n", logo.display().to_string()));
+    for (name, image) in [("LOGO", "logo.png"), ("FAVICON", "favicon.png")] {
+        code.push_str(&image_code(&file, name, image));
+    }
     code.push_str(&section_code(&file, &sections));
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap_or_default()).join("brand.rs");
     std::fs::write(&out, code).unwrap_or_else(|error| panic!("{}: {error}", out.display()));

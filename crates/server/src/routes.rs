@@ -43,6 +43,7 @@ fn api() -> Router<Ctx> {
         .route("/api/usage", get(usage::report))
         .route("/api/branding", get(branding::get).put(branding::put))
         .route(branding::LOGO_ROUTE, get(branding::logo))
+        .route(branding::FAVICON_ROUTE, get(branding::favicon))
         .route("/api/applications", get(applications::list).post(applications::create))
         .route("/api/applications/{id}", put(applications::update).delete(applications::remove))
         .route(&cloud::route(), get(cloud::credentials))

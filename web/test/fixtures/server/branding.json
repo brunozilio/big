@@ -1,5 +1,6 @@
 {
   "editor": "VS Code",
+  "favicon": "/api/branding/favicon",
   "language": "pt-BR",
   "logo": "/api/branding/logo",
   "name": "Big",
