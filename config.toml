@@ -47,6 +47,13 @@ client_id = "b1a00492-073a-47ea-816f-4c329264a828"
 client_id = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
 client_secret = "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"
 
+[kiro]
+user_agent_streaming = "aws-sdk-rust/1.10.0 ua/2.1 api/codewhispererstreaming/0.1.19636 os/macos lang/rust/1.94.1 md/appVersion-3.6.0 app/AmazonQ-For-CLI"
+user_agent_runtime = "aws-sdk-rust/1.10.0 ua/2.1 api/codewhispererruntime/0.1.19636 os/macos lang/rust/1.94.1 md/appVersion-3.6.0 app/AmazonQ-For-CLI"
+
+[content]
+install = true
+
 [server]
 port = 7420
 open_browser = true
@@ -106,7 +113,9 @@ seen_retention_days = "30"
 stream_idle_seconds = "300"
 
 [log]
-filter = "warn"
+filter = "info"
+terminal = "info,hyper=warn,reqwest=warn,h2=warn,rustls=warn"
+format = "text"
 
 [traces]
 otlp_endpoint = ""
@@ -221,3 +230,6 @@ grok_4_3 = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"
 grok_4_20_0309_reasoning = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"
 grok_4_20_0309_non_reasoning = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"
 grok_4_20_multi_agent_0309 = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"
+
+[sonarqube]
+url = "https://sonarcloud.io"

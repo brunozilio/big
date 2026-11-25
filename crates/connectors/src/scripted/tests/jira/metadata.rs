@@ -83,7 +83,7 @@ fn type_fields() -> Value {
 
 #[tokio::test]
 async fn fields_are_the_required_fields_of_the_issue_type_that_nothing_else_fills() {
-    let http = session(&[issue_types(), type_fields()]);
+    let http = session(&[issue_types(), json!([]), issue_types(), type_fields()]);
     let found = call(&http, "tracker.fields", json!({}), "").await;
     let ambiente = json!({"key": "customfield_10050", "name": "Ambiente", "type": "option", "required": true,
         "values": [{"id": "1", "name": "Produção"}, {"id": "2", "name": "Homologação"}]});
@@ -94,10 +94,10 @@ async fn fields_are_the_required_fields_of_the_issue_type_that_nothing_else_fill
     let calls = tool_calls(&http);
     assert_eq!(calls[0].1["name"], "listJiraProjectIssueTypesMetadata");
     assert_eq!(calls[0].1["inputs"]["projectIdOrKey"], "BIG");
-    assert_eq!(calls[1].1["name"], "getJiraIssueTypeMetaWithFields");
+    assert_eq!(calls[3].1["name"], "getJiraIssueTypeMetaWithFields");
     assert_eq!(
-        calls[1].1["inputs"]["issueTypeId"], "10020",
-        "no type is the default Task, found by its untranslated name"
+        calls[3].1["inputs"]["issueTypeId"], "10020",
+        "no type is the schema's default, the Task found by its untranslated name"
     );
     let http = session(&[issue_types()]);
     let unknown = call(&http, "tracker.fields", json!({"project": "BIG", "type": "Épico"}), "").await;
@@ -152,4 +152,58 @@ async fn an_issue_reads_description_subtasks_comments_and_the_flag() {
     assert_eq!(read["attachments"][0]["name"], "a.png");
     assert_eq!(tool_calls(&http)[0].1["responseContentFormat"], "markdown");
     assert_eq!(tool_calls(&http)[0].1["view"], "full");
+}
+
+#[tokio::test]
+async fn the_schema_has_the_levels_of_the_types_their_children_and_the_statuses_of_each_type() {
+    let types = json!({"issueTypes": [
+        {"id": "3", "name": "Construção", "hierarchyLevel": -1, "subtask": true},
+        {"id": "4", "name": "Teste", "hierarchyLevel": -1, "subtask": true},
+        {"id": "1", "name": "Épico", "hierarchyLevel": 1},
+        {"id": "2", "name": "Bug", "hierarchyLevel": 0},
+        {"id": "5", "name": "Spike", "hierarchyLevel": 0}
+    ]});
+    let grouped = json!([
+        {"id": "2", "name": "Bug", "statuses": [status("1", "Aberto", "new"), status("7", "Corrigindo", "indeterminate")]},
+        {"id": "3", "name": "Construção", "statuses": [status("9", "Construindo", "indeterminate"), status("3", "Pronto", "done")]},
+    ]);
+    let found = call(&session(&[types, grouped]), "tracker.schema", json!({"project": "OPS"}), "").await;
+    let Ok(found) = found else { panic!("{found:?}") };
+    let levels: Vec<(Value, Value)> =
+        found["types"].as_array().into_iter().flatten().map(|t| (t["name"].clone(), t["level"].clone())).collect();
+    assert_eq!(levels[0], (json!("Épico"), json!(1)));
+    assert_eq!(levels[1..3], [(json!("Bug"), json!(2)), (json!("Spike"), json!(2))]);
+    assert_eq!(levels[3..], [(json!("Construção"), json!(3)), (json!("Teste"), json!(3))]);
+    assert_eq!(found["types"][0]["children"], json!(["Bug", "Spike"]));
+    assert_eq!(found["types"][1]["children"], json!(["Construção", "Teste"]));
+    assert_eq!(found["types"][1]["statuses"][1], json!({"id": "7", "name": "Corrigindo", "category": "doing"}));
+    assert_eq!(found["types"][3]["statuses"][1]["category"], "done");
+    assert_eq!(found["types"][4]["statuses"], json!([]));
+    assert_eq!(found["default"], "Bug");
+}
+
+#[tokio::test]
+async fn a_transition_to_a_category_walks_through_the_workflow_until_it_gets_there() {
+    let http = session(&[
+        json!({"fields": {"status": status("1", "Aberto", "new")}}),
+        json!({"transitions": [{"id": "21", "to": status("5", "Em análise", "indeterminate")}]}),
+        json!({"key": "BIG-1", "status": {"name": "Em análise"}}),
+        json!({"transitions": [
+            {"id": "22", "to": status("1", "Aberto", "new")},
+            {"id": "23", "to": status("3", "Concluído", "done")}
+        ]}),
+        json!({"key": "BIG-1", "status": {"name": "Concluído"}}),
+    ]);
+    let answer = call(&http, "tracker.transition", json!({"issue": "BIG-1", "category": "done"}), "k").await;
+    assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Concluído", "changed": true})));
+    let sent: Vec<Value> =
+        tool_calls(&http).iter().filter(|(name, _)| name == "transitionJiraIssue").map(|c| c.1["transitionId"].clone()).collect();
+    assert_eq!(sent, [json!("21"), json!("23")]);
+}
+
+#[tokio::test]
+async fn a_transition_that_is_already_in_the_category_changes_nothing() {
+    let http = session(&[json!({"fields": {"status": status("7", "Corrigindo", "indeterminate")}})]);
+    let answer = call(&http, "tracker.transition", json!({"issue": "BIG-1", "category": "doing"}), "k").await;
+    assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Corrigindo", "changed": false})));
 }

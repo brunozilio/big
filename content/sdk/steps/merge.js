@@ -1,5 +1,5 @@
 import { step, merge as merging } from "sdk";
-import { codeOptions, eachOf, effects, object, pullRequestsOf, targetFields, waitOptions } from "./context.js";
+import { codeOptions, eachOf, effects, gitOf, object, pullRequestsOf, source, targetFields, waitOptions } from "./context.js";
 
 const METHODS = ["squash", "merge", "rebase"];
 
@@ -18,6 +18,13 @@ async function mergeOne(ctx, opts, entry, method) {
   return { ...targetFields(entry), pr: entry.pr, merged: merged?.merged === true, sha: merged?.sha ?? null };
 }
 
+export function pendingOf(reviewed, prs) {
+  if (Object.keys(reviewed).length === 0) return [];
+  if (reviewed.verdict !== "approve") return prs.map((entry) => entry.pr);
+  const approved = new Set(Array.isArray(reviewed.prs) ? reviewed.prs : [reviewed.pr]);
+  return prs.filter((entry) => !approved.has(entry.pr)).map((entry) => entry.pr);
+}
+
 export default step({
   name: "merge",
   label: "Merge",
@@ -28,8 +35,14 @@ export default step({
   async run(ctx, opts) {
     const prs = pullRequestsOf(ctx, opts);
     if (prs.length === 0) return ctx.fail({ error: "there is no pull request to merge" });
+    const pending = opts.approved === false ? [] : pendingOf(source(ctx, opts, "review"), prs);
+    if (pending.length > 0) {
+      const error = `every pull request must be approved before the merge; still waiting: ${pending.join(", ")}`;
+      return opts.onPending === null ? ctx.fail({ pending, error }) : ctx.goto(opts.onPending ?? "review", { pending, error });
+    }
     const pr = prs[0].pr;
-    const methods = ordered(opts);
+    const declared = gitOf(ctx, prs[0].repository).method;
+    const methods = ordered(METHODS.includes(declared) ? { ...opts, method: declared } : opts);
     let method = methods[0];
     if (opts.manual !== false) {
       const answer = await ctx.waitHuman(prs.map((entry) => merging(entry.pr, methods)), waitOptions(opts));

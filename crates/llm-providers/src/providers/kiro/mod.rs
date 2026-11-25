@@ -147,11 +147,22 @@ pub fn management(profile_arn: &str) -> String {
 }
 
 pub fn headers(access_token: &str, target: &str) -> Vec<(String, String)> {
+    let agent = user_agent(target);
     vec![
         ("authorization".into(), format!("Bearer {access_token}")),
         ("content-type".into(), "application/x-amz-json-1.0".into()),
         ("x-amz-target".into(), target.into()),
+        ("user-agent".into(), agent.into()),
+        ("x-amz-user-agent".into(), agent.into()),
     ]
+}
+
+pub fn user_agent(target: &str) -> &'static str {
+    if target.starts_with("AmazonCodeWhispererStreamingService.") {
+        brand::kiro::USER_AGENT_STREAMING
+    } else {
+        brand::kiro::USER_AGENT_RUNTIME
+    }
 }
 
 pub fn shape(body: &mut Value) {
@@ -230,6 +241,10 @@ mod tests {
         let headers = config.headers(&Provider);
         assert!(headers.contains(&("authorization".into(), "Bearer a".into())));
         assert!(headers.contains(&("x-amz-target".into(), CHAT.into())));
+        let agent = headers.iter().find(|(name, _)| name == "user-agent").map(|(_, value)| value.as_str());
+        assert_eq!(agent, Some(brand::kiro::USER_AGENT_STREAMING));
+        assert_eq!(user_agent(MODELS), brand::kiro::USER_AGENT_RUNTIME);
+        assert!(headers.iter().any(|(name, value)| name == "x-amz-user-agent" && Some(value.as_str()) == agent));
         let without_arn =
             Config { auth: Some(Tokens { refresh_token: "r".into(), ..Tokens::bearer("a") }), ..Config::default() };
         assert!(without_arn.validate(&Provider).is_err());

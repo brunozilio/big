@@ -154,6 +154,16 @@ impl ScriptedProvider {
     }
 }
 
+pub fn evaluate(root: Option<&std::path::Path>, entry: &str, function: &str, input: &Value) -> Result<Value, String> {
+    let mut modules = content::modules_in(root, entry)?;
+    modules.push((WRAPPER.to_owned(), wrapper(entry)));
+    let script = Script { modules: Arc::new(modules), data: json!({ "brand": { "COMMAND": brand::COMMAND } }) };
+    if script.kind(function) != "function" {
+        return Ok(Value::Null);
+    }
+    script.invoke_here(function, input, Arc::new(Local)).map_err(|error| error.message)
+}
+
 fn creds_of(creds: &Credentials) -> Value {
     json!({ "connection": creds.connection, "token": creds.access_token, "settings": creds.settings })
 }
@@ -233,9 +243,15 @@ impl Provider for ScriptedProvider {
 
 #[async_trait]
 impl EventSource for ScriptedEvents {
-    async fn poll(&self, http: &dyn Http, creds: &Credentials, cursor: Option<&str>) -> Result<EventBatch, ActionError> {
+    async fn poll(
+        &self,
+        http: &dyn Http,
+        creds: &Credentials,
+        cursor: Option<&str>,
+        watch: &[String],
+    ) -> Result<EventBatch, ActionError> {
         let online = Online::new(http, redirect());
-        let input = json!({ "creds": creds_of(creds), "cursor": cursor });
+        let input = json!({ "creds": creds_of(creds), "cursor": cursor, "watch": watch });
         let batch = invoke(&self.script, Arc::clone(&self.answers), &online, "poll", input).await?;
         let mut events = Vec::new();
         for mut event in batch["events"].as_array().cloned().unwrap_or_default() {

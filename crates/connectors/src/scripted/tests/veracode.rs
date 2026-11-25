@@ -117,6 +117,39 @@ fn the_provider_signs_in_with_an_api_id_a_key_and_a_region() {
     assert_eq!(descriptor.capabilities, vec![Capability::from("security")]);
     assert_eq!(provider.presentation(Language::Portuguese).group, "security");
     assert!(spec.fields.iter().all(|field| field.help.is_empty()));
+    let bindings = provider.presentation(Language::Portuguese).bindings;
+    let declared: Vec<(&str, &str, &str)> = bindings
+        .iter()
+        .map(|binding| (binding.capability.as_str(), binding.scope.as_str(), binding.label.as_str()))
+        .collect();
+    assert_eq!(declared, [("security", "repository", "Veracode")]);
+}
+
+#[tokio::test]
+async fn the_status_says_when_a_scan_finished_after_the_given_moment() {
+    let application = json!({
+        "guid": GUID, "last_completed_scan_date": "2026-11-20T10:00:00.000Z",
+        "scans": [
+            { "scan_type": "STATIC", "status": "PUBLISHED", "modified_date": "2026-11-24T09:30:00.000Z" },
+            { "scan_type": "SCA", "status": "SCAN_IN_PROGRESS", "modified_date": "2026-11-25T08:00:00.000Z" },
+        ],
+    })
+    .to_string();
+    let http = FakeHttp::new().once(Method::Get, GUID, 200, &application);
+    let found = call(&http, json!({}), "security.status", json!({ "project": GUID })).await;
+    assert_eq!(found, Ok(json!({ "status": "done", "scannedAt": "2026-11-24T09:30:00.000Z", "running": true })));
+    assert!(http.sent()[0].url.ends_with(&format!("/appsec/v1/applications/{GUID}")));
+    let http = FakeHttp::new().once(Method::Get, GUID, 200, &application);
+    let since = json!({ "project": GUID, "since": "2026-11-24T09:30:00.000Z" });
+    let found = call(&http, json!({}), "security.status", since).await;
+    assert_eq!(found.map(|found| found["status"].clone()), Ok(json!("pending")));
+}
+
+#[tokio::test]
+async fn the_options_to_bind_a_repository_are_its_applications_by_name() {
+    let http = FakeHttp::new().once(Method::Get, "page=0", 200, &applications_page(&[(GUID, "Shop API")], 1));
+    let found = call(&http, json!({}), "security.options", json!({})).await;
+    assert_eq!(found, Ok(json!([{ "value": GUID, "label": format!("Shop API · {GUID}") }])));
 }
 
 #[tokio::test]

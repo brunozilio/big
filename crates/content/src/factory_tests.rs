@@ -187,7 +187,7 @@ fn autonomy_decides_where_the_human_stands() {
 #[test]
 fn the_factory_library_names_no_provider_and_has_no_comments() {
     for (path, bytes) in super::builtin_files("sdk/factory/") {
-        let text = String::from_utf8_lossy(bytes).to_lowercase();
+        let text = String::from_utf8_lossy(&bytes).to_lowercase();
         for provider in ["jira", "github", "aws", "atlassian", "gitlab"] {
             assert!(!text.contains(provider), "{path} names {provider}");
         }

@@ -6,8 +6,8 @@ import { basesOf, defaultBranch, gitOf, linkedRepos, matchesPull, placesOf, pull
 import { Origins } from '@/screens/items/parts'
 
 const app: Application = {
-  id: 'a1', name: 'Loja', tracker: null,
-  repositories: [{ id: 'r1', code: { connection: 'c-code', repo: 'acme/web' }, directory: '/p/web', run: [], verify: [] }],
+  id: 'a1', name: 'Loja', bindings: {},
+  repositories: [{ id: 'r1', bindings: { code: { connection: 'c-code', value: 'acme/web' } }, directory: '/p/web', run: [], verify: [] }],
 }
 
 describe('origens do item', () => {
@@ -45,7 +45,7 @@ describe('origens do item', () => {
       git: { [repo.id]: { base: 'develop' } },
     })
     expect(it.sources.map((s) => [s.kind, s.key])).toEqual([['pull_request', 'acme/checkout#9']])
-    expect(it.git).toEqual([{ repository: repo.id, name: repo.code?.repo ?? repo.directory, base: 'develop', head: null }])
+    expect(it.git).toEqual([{ repository: repo.id, name: repo.bindings?.code?.value ?? repo.directory, base: 'develop', head: null }])
     render(<Origins it={it as Item} />)
     expect(screen.getByLabelText('Pull request acme/checkout#9')).toBeTruthy()
     expect(screen.getByText('develop')).toBeTruthy()
@@ -62,8 +62,9 @@ describe('origens do item', () => {
 })
 
 describe('pickers do composer', () => {
-  test('o branch base padrão é a main, senão o padrão do repositório', () => {
-    expect(defaultBranch([{ name: 'dev', default: true }, { name: 'main', default: false }])).toBe('main')
+  test('o branch base padrão é o que o repositório declara, senão o primeiro', () => {
+    expect(defaultBranch([{ name: 'dev', default: true }, { name: 'main', default: false }])).toBe('dev')
+    expect(defaultBranch([{ name: 'develop', default: false }, { name: 'main', default: false }])).toBe('develop')
     expect(defaultBranch([{ name: 'a', default: false }, { name: 'trunk', default: true }])).toBe('trunk')
     expect(defaultBranch(undefined)).toBeNull()
     const places = [{ id: 'r1', name: 'acme/web' }, { id: 'r2', name: 'infra' }]
@@ -78,9 +79,9 @@ describe('pickers do composer', () => {
   })
 
   test('só repositórios conectados entram na busca', () => {
-    const app = { id: 'a', name: 'A', tracker: null, repositories: [
-      { id: 'r1', code: { connection: 'c-gh', repo: 'acme/web' }, directory: '/w', run: [], verify: [] },
-      { id: 'r2', code: null, directory: '/i', run: [], verify: [] },
+    const app: Application = { id: 'a', name: 'A', repositories: [
+      { id: 'r1', bindings: { code: { connection: 'c-gh', value: 'acme/web' } }, directory: '/w', run: [], verify: [] },
+      { id: 'r2', bindings: {}, directory: '/i', run: [], verify: [] },
     ] }
     expect(linkedRepos(app)).toEqual([{ place: 'r1', connection: 'c-gh', repo: 'acme/web' }])
     expect(linkedRepos(null)).toEqual([])

@@ -17,6 +17,7 @@ import { NewItem } from './items/NewItem'
 import { needsOnboarding, Onboarding, returnedTo } from './onboarding/Onboarding'
 import { ConnectDialog } from './settings/ConnectDialog'
 import { SettingsView, type SettingsTab } from './settings/Settings'
+import { SecurityView } from './security/SecurityView'
 
 export function App() {
   useThemeSync()
@@ -72,6 +73,8 @@ function DeliveryPage() {
   const [fresh, setFresh] = useState<string | null>(null)
   const t = useT()
   const settings = location.pathname.startsWith('/settings')
+  const security = location.pathname.startsWith('/security')
+  const aside = settings || security
   const tab: SettingsTab = params.tab === 'appearance' || params.tab === 'browser' || params.tab === 'permissions' || params.tab === 'memory' || params.tab === 'applications' || params.tab === 'usage' ? params.tab : 'connections'
   const connecting = search.get('connect')
   const items = useStore((s) => s.items)
@@ -83,18 +86,23 @@ function DeliveryPage() {
     <div className="mx-auto w-full max-w-[1120px] px-5 pb-16 pt-6 md:px-10">
       <div className="mb-8 flex h-10 items-center gap-3">
         <AnimatePresence mode="wait" initial={false}>
-          {settings ? (
+          {aside ? (
             <motion.div key="back" initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0 }} transition={tweenClose} className="flex items-center gap-2">
               <IconButton tooltip={t('app.back')} onClick={() => navigate('/')}><Icon name="left" size={18} /></IconButton>
-              <span className="text-lg font-medium text-fg">{t('app.settings')}</span>
+              <span className="text-lg font-medium text-fg">{security ? t('app.security') : t('app.settings')}</span>
             </motion.div>
           ) : (
             <motion.span key="mark" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={tweenClose} className="flex">
-              <ProductMark size={30} />
+              <ProductMark />
             </motion.span>
           )}
         </AnimatePresence>
         <div className="ml-auto flex items-center gap-2">
+          <Tooltip content={t('app.security')}>
+            <button aria-label={t('app.security')} onClick={() => navigate(security ? '/' : '/security')} className={cn('relative flex size-9 items-center justify-center rounded-control text-fg2 transition-colors hover:bg-hover hover:text-fg', security && 'bg-active text-fg')}>
+              <Icon name="shield" size={19} />
+            </button>
+          </Tooltip>
           <Tooltip content={t('app.settings')}>
             <button aria-label={t('app.settings')} onClick={() => navigate(settings ? '/' : '/settings/connections')} className={cn('relative flex size-9 items-center justify-center rounded-control text-fg2 transition-colors hover:bg-hover hover:text-fg', settings && 'bg-active text-fg')}>
               <motion.span animate={{ rotate: settings ? 90 : 0 }} transition={tween} className="flex"><Icon name="settings" size={19} /></motion.span>
@@ -104,9 +112,11 @@ function DeliveryPage() {
       </div>
       <LoadState />
       <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={settings ? 'settings' : 'items'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tweenClose}>
+        <motion.div key={settings ? 'settings' : security ? 'security' : 'items'} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tweenClose}>
           {settings ? (
             <SettingsView tab={tab} onTab={(next) => navigate(`/settings/${next}`)} onConnect={(p) => setSearch({ connect: p })} />
+          ) : security ? (
+            <SecurityView />
           ) : (
             <>
               <NewItem onCreated={(it) => {
@@ -118,7 +128,7 @@ function DeliveryPage() {
           )}
         </motion.div>
       </AnimatePresence>
-      <ItemModal it={settings ? null : open} step={params.step ?? null} onStep={(s) => open && openItem(open.id, s)} onClose={() => navigate('/')} onConnect={goConnect} />
+      <ItemModal it={aside ? null : open} step={params.step ?? null} onStep={(s) => open && openItem(open.id, s)} onClose={() => navigate('/')} onConnect={goConnect} />
       <ConnectDialog provider={settings ? connecting : null} resume={search.get('flow')} onClose={() => setSearch({})} />
     </div>
   )

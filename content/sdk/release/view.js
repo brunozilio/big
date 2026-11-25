@@ -54,7 +54,7 @@ export function render(config, state) {
   return [
     stages(envs.map((env) => stageOf(config, state, env))),
     members(state.members.map((member) => ({ id: member.id, title: member.title, issue: member.issue || null })), { removable: accepting(envs, state) }),
-    tasks(list, { kinds: taskKinds(config), locked: tasksLocked(envs, state), environment: here ? here.short || here.label : null }),
+    tasks(list, { kinds: taskKinds(config), locked: tasksLocked(envs, state), environment: here ? here.short || here.label : null, owners: state.owners || [] }),
   ];
 }
 

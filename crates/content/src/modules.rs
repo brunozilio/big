@@ -24,7 +24,7 @@ fn normalized(path: &Path) -> Option<String> {
 }
 
 fn exists(folder: Option<&Path>, path: &str) -> bool {
-    super::builtin(path).is_some()
+    super::shipped(path).is_some()
         || folder.and_then(|folder| super::override_path(folder, path)).is_some_and(|file| file.is_file())
 }
 
@@ -77,7 +77,7 @@ pub fn modules(entry: &str) -> Result<Vec<(String, String)>, String> {
     modules_in(super::folder().as_deref(), entry)
 }
 
-fn walk(root: &Path, dir: &Path, found: &mut Vec<String>) {
+pub(crate) fn walk(root: &Path, dir: &Path, found: &mut Vec<String>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();
@@ -95,6 +95,7 @@ fn walk(root: &Path, dir: &Path, found: &mut Vec<String>) {
 pub fn listed_in(folder: Option<&Path>, prefix: &str) -> Vec<String> {
     let mut all: BTreeSet<String> =
         super::paths().into_iter().filter(|path| path.starts_with(prefix)).map(str::to_owned).collect();
+    all.extend(super::place::live_paths(prefix));
     if let Some(folder) = folder {
         let mut found = Vec::new();
         walk(folder, &folder.join(prefix), &mut found);
@@ -109,7 +110,7 @@ pub fn listed(prefix: &str) -> Vec<String> {
 
 pub fn bytes_in(folder: Option<&Path>, path: &str) -> Option<Vec<u8>> {
     let mine = folder.and_then(|folder| super::override_path(folder, path)).and_then(|file| std::fs::read(file).ok());
-    mine.or_else(|| super::builtin(path).map(<[u8]>::to_vec))
+    mine.or_else(|| super::shipped(path).map(std::borrow::Cow::into_owned))
 }
 
 #[cfg(test)]

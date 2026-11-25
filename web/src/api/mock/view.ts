@@ -47,7 +47,7 @@ export function originOf(input: NewItem, app: Application | undefined): { source
     })
   const git = Object.entries(input.git ?? {}).map(([repository, b]): ItemGit => {
     const repo = app?.repositories.find((r) => r.id === repository)
-    return { repository, name: repo?.code?.repo ?? repo?.directory ?? repository, base: b.base ?? null, head: b.head ?? null }
+    return { repository, name: repo?.bindings?.code?.value ?? repo?.directory ?? repository, base: b.base ?? null, head: b.head ?? null }
   })
   return { sources, git }
 }

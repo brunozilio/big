@@ -1,5 +1,5 @@
 use serde_json::json;
-use store::{Application, CodeChoice, Repository, TrackerChoice};
+use store::{Application, Binding, Bindings, Repository};
 
 use super::*;
 
@@ -14,10 +14,10 @@ fn checkout(world: &World) -> Application {
     Application {
         id: "app".into(),
         name: "Checkout".into(),
-        tracker: Some(TrackerChoice { connection: "c1".into(), project: "BIG".into() }),
+        bindings: Bindings::from([("tracker".to_owned(), Binding::new("c1", "BIG"))]),
         repositories: vec![Repository {
             id: "web".into(),
-            code: Some(CodeChoice { connection: "c1".into(), repo: "o/r".into() }),
+            bindings: Bindings::from([("code".to_owned(), Binding::new("c1", "o/r"))]),
             directory: world.repo().to_string_lossy().into_owned(),
             ..Repository::default()
         }],

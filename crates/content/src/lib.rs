@@ -12,6 +12,7 @@ mod factory_tests;
 mod graph_tests;
 mod install;
 mod modules;
+mod place;
 mod render;
 #[cfg(test)]
 mod sdk_tests;
@@ -21,7 +22,8 @@ mod security_tests;
 mod stdlib_tests;
 
 pub use modules::{bytes_in, listed, listed_in, modules, modules_in};
-pub use install::{Installed, MANIFEST, install_files, install_once};
+pub use install::{CACHE, Installed, MANIFEST, install_files, install_once};
+pub use place::{Mode, folder, home, installs, live_root, mode, shipped, skills, use_folder};
 
 pub use render::{LIMIT, call, call_in, exports, render, render_export, render_export_in, render_in, value, value_in};
 
@@ -51,21 +53,12 @@ pub fn builtin(path: &str) -> Option<&'static [u8]> {
     embedded::FILES.iter().find(|(file, _)| *file == path).map(|(_, bytes)| *bytes)
 }
 
-pub fn builtin_files(prefix: &str) -> Vec<(&'static str, &'static [u8])> {
-    embedded::FILES.iter().filter(|(file, _)| file.starts_with(prefix)).copied().collect()
-}
-
-static FOLDER: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
-
-pub fn use_folder(folder: PathBuf) -> Result<(), PathBuf> {
-    FOLDER.set(folder)
-}
-
-pub fn folder() -> Option<PathBuf> {
-    match FOLDER.get() {
-        Some(folder) => Some(folder.clone()),
-        None => std::env::home_dir().map(|home| home.join(brand::DIR)),
-    }
+pub fn builtin_files(prefix: &str) -> Vec<(&'static str, std::borrow::Cow<'static, [u8]>)> {
+    embedded::FILES
+        .iter()
+        .filter(|(file, _)| file.starts_with(prefix))
+        .map(|(file, bytes)| (*file, shipped(file).unwrap_or(std::borrow::Cow::Borrowed(*bytes))))
+        .collect()
 }
 
 pub fn override_path(folder: &Path, path: &str) -> Option<PathBuf> {
@@ -90,14 +83,14 @@ pub fn source(path: &str) -> Option<String> {
 }
 
 pub fn builtin_text(path: &str) -> Option<String> {
-    builtin(path).map(|bytes| brand::text(String::from_utf8_lossy(bytes).trim_end_matches('\n')))
+    shipped(path).map(|bytes| brand::text(String::from_utf8_lossy(&bytes).trim_end_matches('\n')))
 }
 
 pub fn text_in(folder: Option<&Path>, path: &str) -> String {
     let overridden =
         folder.and_then(|folder| override_path(folder, path)).and_then(|file| std::fs::read_to_string(file).ok());
     let raw = overridden
-        .unwrap_or_else(|| builtin(path).map(|bytes| String::from_utf8_lossy(bytes).into_owned()).unwrap_or_default());
+        .unwrap_or_else(|| shipped(path).map(|bytes| String::from_utf8_lossy(&bytes).into_owned()).unwrap_or_default());
     brand::text(raw.trim_end_matches('\n'))
 }
 

@@ -6,7 +6,8 @@ import { mockApi } from '../src/api/mock'
 import { MOCK_HOME } from '../src/api/mock/applications'
 import { boot, getState, stop } from '../src/api/store'
 import { NewItem } from '../src/screens/items/NewItem'
-import { ApplicationsView, cloudChoice, cloudKey, cloudOptions, suggestedCode } from '../src/screens/settings/Applications'
+import { ApplicationsView } from '../src/screens/settings/Applications'
+import { fieldsOf, suggested, withBinding, withChoices } from '../src/screens/settings/bindings'
 import { FolderDialog } from '../src/screens/settings/FolderDialog'
 import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '../src/ui/overlay'
@@ -50,11 +51,30 @@ describe('diálogo de pasta', () => {
     expect(chosen[0].remote.ref).toBe('acme/web')
   })
 
-  test('o repositório é sugerido pelo remote do git', () => {
-    const repos = { 'c-github': [{ id: '1', ref: 'acme/web', name: 'web', url: null, defaultBranch: 'main', private: true }] }
-    expect(suggestedCode('ACME/web', repos)).toEqual({ connection: 'c-github', repo: 'acme/web' })
-    expect(suggestedCode('acme/outro', repos)).toBeNull()
-    expect(suggestedCode(null, repos)).toBeNull()
+  test('os valores extras de um vínculo não repetem o principal nem entre si', () => {
+    const binding = { connection: 'c', value: 'APP', label: 'App' }
+    expect(withChoices(binding, [{ value: 'OPS' }, { value: 'APP' }, { value: 'OPS' }])).toEqual({ ...binding, more: [{ value: 'OPS' }] })
+    expect(withChoices({ ...binding, more: [{ value: 'OPS' }] }, [])).toEqual(binding)
+  })
+
+  test('o vínculo do repositório é sugerido pelo remote do git entre as opções do conector', () => {
+    const github = { key: 'github', name: 'GitHub', group: 'code', description: '', logo: '', signIn: 'device' as const, fields: [], multiple: true }
+    const connection = { id: 'c-github', provider: 'github', label: 'acme', account: '', capabilities: ['code'], status: 'ok' as const }
+    const fields = [{ capability: 'code', label: 'Repositório do GitHub', sources: [{ connection, provider: github }] }]
+    const options = { code: { 'c-github': [{ value: 'acme/web', label: 'acme/web' }] } }
+    expect(suggested('ACME/web', fields, options, {})).toEqual({ code: { connection: 'c-github', value: 'acme/web', label: 'acme/web' } })
+    expect(suggested('acme/outro', fields, options, {})).toEqual({})
+    const kept = { code: { connection: 'c-github', value: 'acme/api' } }
+    expect(suggested('acme/web', fields, options, kept)).toEqual(kept)
+    expect(withBinding(kept, 'code', null)).toEqual({})
+  })
+
+  test('só há campo de vínculo quando um conector conectado o declara, no escopo que ele pede', () => {
+    const veracode = { key: 'veracode', name: 'Veracode', group: 'security', description: '', logo: '', signIn: 'token' as const, fields: [], multiple: true, bindings: [{ capability: 'security', scope: 'repository' as const, label: 'Veracode' }] }
+    const connection = { id: 'c-v', provider: 'veracode', label: 'Veracode', account: '', capabilities: ['security'], status: 'ok' as const }
+    expect(fieldsOf([connection], [veracode], 'repository').map((f) => f.label)).toEqual(['Veracode'])
+    expect(fieldsOf([connection], [veracode], 'application')).toEqual([])
+    expect(fieldsOf([], [veracode], 'repository')).toEqual([])
   })
 })
 
@@ -72,17 +92,22 @@ describe('aba Aplicações', () => {
     fireEvent.click(view.getByRole('button', { name: 'Escolher' }))
     const name = (await view.findByLabelText('Nome')) as HTMLInputElement
     await waitFor(() => expect(name.value).toBe('web'))
-    expect((await view.findByRole('combobox', { name: 'Repositório' }, { timeout: 3000 })).textContent).toContain('acme/web')
+    expect((await view.findByRole('combobox', { name: 'Repositório do GitHub' }, { timeout: 3000 })).textContent).toContain('acme/web')
     fireEvent.change(view.getByLabelText('Verificação 1'), { target: { value: 'bun test' } })
     fireEvent.click(view.getAllByRole('button', { name: 'Adicionar comando' })[1])
     fireEvent.change(await view.findByLabelText('Verificação 2'), { target: { value: ' bun run lint ' } })
     fireEvent.click(view.getAllByRole('button', { name: 'Adicionar comando' })[0])
     fireEvent.change(view.getByLabelText('Rodar 1'), { target: { value: 'bun api' } })
     fireEvent.change(await view.findByLabelText('Rodar 2'), { target: { value: 'bun web' } })
+    fireEvent.change(view.getByLabelText('Testes E2E 1'), { target: { value: 'npx cypress run' } })
+    fireEvent.change(view.getByLabelText('Pasta dos testes E2E'), { target: { value: ' e2e ' } })
+    fireEvent.change(view.getByLabelText('Nome 1'), { target: { value: 'CYPRESS_BASE_URL' } })
+    fireEvent.change(view.getByLabelText('Valor 1'), { target: { value: 'http://localhost:3000' } })
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(getState().applications?.length).toBe(2))
     const made = getState().applications?.[1]
-    expect(made?.repositories[0]).toMatchObject({ directory: `${MOCK_HOME}/projetos/web`, code: { connection: 'c-github', repo: 'acme/web' }, run: ['bun api', 'bun web'], verify: ['bun test', 'bun run lint'] })
+    expect(made?.repositories[0]).toMatchObject({ directory: `${MOCK_HOME}/projetos/web`, bindings: { code: { connection: 'c-github', value: 'acme/web' } }, run: ['bun api', 'bun web'], verify: ['bun test', 'bun run lint'], e2e: ['npx cypress run'], e2eDirectory: 'e2e' })
+    expect(made?.env).toEqual({ CYPRESS_BASE_URL: 'http://localhost:3000' })
     await waitFor(() => expect(view.getByRole('button', { name: 'Remover web' })).toBeTruthy())
     fireEvent.click(view.getByRole('button', { name: 'Remover web' }))
     expect(getState().applications?.length).toBe(2)
@@ -100,6 +125,16 @@ describe('aba Aplicações', () => {
     fireEvent.change(name, { target: { value: ' ' } })
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     expect((await view.findByRole('alert')).textContent).toContain('nome')
+  })
+
+  test('cada repositório escolhe o fluxo de branch, automático por padrão', async () => {
+    await started()
+    const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    await view.findByLabelText('Nome')
+    const selects = await view.findAllByRole('combobox', { name: 'Fluxo de branch' })
+    expect(selects.length).toBe(2)
+    expect(selects[0].textContent).toContain('Automático')
   })
 
   test('a opção do dependabot aparece escrita, vem ligada e desliga ao clicar no texto', async () => {
@@ -126,25 +161,12 @@ describe('conta e papel na nuvem', () => {
     } }
   }
 
-  test('cada papel de cada conta vira uma opção, e a conta sem papel vira uma só', () => {
-    const accounts = [{ id: '111', name: 'prod', email: '', roles: ['Admin', 'Deploy'] }, { id: '222', name: '', email: '', roles: [] }]
-    expect(cloudOptions(accounts)).toEqual([
-      { key: '111/Admin', label: 'prod · Admin' },
-      { key: '111/Deploy', label: 'prod · Deploy' },
-      { key: '222', label: '222' },
-    ])
-    expect(cloudChoice('c-aws::111/Deploy')).toEqual({ connection: 'c-aws', account: '111', role: 'Deploy' })
-    expect(cloudChoice('c-aws::222')).toEqual({ connection: 'c-aws', account: '222', role: '' })
-    expect(cloudChoice('none')).toBeNull()
-    expect(cloudKey({ connection: 'c-aws', account: '111', role: 'Deploy' })).toBe('c-aws::111/Deploy')
-  })
-
   test('sem conexão de nuvem o campo não aparece', async () => {
     await started()
     const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
     fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
     await view.findByLabelText('Nome')
-    expect(view.queryByRole('combobox', { name: 'Conta e papel na nuvem' })).toBeNull()
+    expect(view.queryByRole('combobox', { name: 'Conta e papel da AWS' })).toBeNull()
   })
 
   test('lista as contas e papéis da conexão e guarda a escolha na aplicação', async () => {
@@ -154,16 +176,16 @@ describe('conta e papel na nuvem', () => {
     await started(spy)
     const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
     fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
-    const field = await view.findByRole('combobox', { name: 'Conta e papel na nuvem' })
-    expect(field.textContent).toContain('Padrão da conexão')
-    await waitFor(() => expect(asked).toContain('c-aws cloud.accounts_and_roles'))
+    const field = await view.findByRole('combobox', { name: 'Conta e papel da AWS' })
+    expect(field.textContent).toContain('Nenhum')
+    await waitFor(() => expect(asked).toContain('c-aws cloud.options'))
     fireEvent.keyDown(field, { key: 'Enter' })
     const option = await view.findByRole('option', { name: 'acme-prod · Deploy' })
     expect(view.getByRole('option', { name: 'acme-dev · Developer' })).toBeTruthy()
     fireEvent.keyDown(option, { key: 'Enter' })
     await waitFor(() => expect(field.textContent).toContain('acme-prod · Deploy'))
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
-    await waitFor(() => expect(getState().applications?.[0]?.cloud).toEqual({ connection: 'c-aws', account: '111122223333', role: 'Deploy' }))
+    await waitFor(() => expect(getState().applications?.[0]?.bindings?.cloud).toEqual({ connection: 'c-aws', value: '111122223333/Deploy', label: 'acme-prod · Deploy' }))
   })
 })
 
@@ -179,7 +201,7 @@ describe('aplicações no composer', () => {
     }
     await started(spy)
     await act(async () => {
-      await base.createApplication({ name: 'Infra', tracker: { connection: 'c-jira', project: 'OPS' }, repositories: [{ id: '', code: null, directory: `${MOCK_HOME}/projetos/infra`, run: [], verify: [] }] })
+      await base.createApplication({ name: 'Infra', bindings: { tracker: { connection: 'c-jira', value: 'OPS' } }, repositories: [{ id: '', directory: `${MOCK_HOME}/projetos/infra`, run: [], verify: [] }] })
       await boot(spy)
     })
     const view = render(<MemoryRouter><TooltipProvider><NewItem onCreated={() => undefined} /></TooltipProvider></MemoryRouter>)

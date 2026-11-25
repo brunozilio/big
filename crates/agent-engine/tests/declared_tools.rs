@@ -94,6 +94,8 @@ fn a_user_s_copy_of_a_built_in_tool_replaces_it_and_reaches_the_primitives() {
         return;
     }
 
+    let home = std::env::home_dir().expect("home");
+    assert!(content::use_folder(home.join(brand::DIR)).is_ok());
     let dir = tempfile::tempdir().expect("dir");
     std::fs::write(dir.path().join("notes.txt"), "alpha\nbeta\n").expect("write");
     let specs = Agent::specs(&tools::standard());

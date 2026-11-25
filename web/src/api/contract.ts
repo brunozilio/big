@@ -281,6 +281,7 @@ export type QualityGrade = 'A' | 'B' | 'C' | 'D' | 'E'
 
 export interface QualityCondition {
   metric: string
+  label?: string
   value: string
   threshold: string
   passed: boolean
@@ -324,7 +325,7 @@ export type Block =
   | { type: 'quality'; connection: string; project: string; branch: string; analyzedAt: Iso | null; url: string | null; report: QualityReport }
   | { type: 'stages'; stages: StageView[]; live: boolean }
   | { type: 'members'; items: MemberView[]; removable: boolean }
-  | { type: 'tasks'; tasks: ChangeTaskView[]; kinds: TaskKindView[]; locked: boolean; environment: string | null }
+  | { type: 'tasks'; tasks: ChangeTaskView[]; kinds: TaskKindView[]; locked: boolean; environment: string | null; owners?: TaskOwner[] }
 
 export type BlockType = Block['type']
 
@@ -360,6 +361,11 @@ export interface MemberView {
 export interface TaskFile {
   name: string
   size: number
+}
+
+export interface TaskOwner {
+  value: string
+  label: string
 }
 
 export interface ChangeTaskView {
@@ -444,10 +450,12 @@ export interface IssueData {
   url: string | null
   title: string
   status: string | null
+  type?: string | null
+  parent?: string | null
   assignee: Person | null
   description: string
   attachments: { name: string; size: string; url?: string }[]
-  subtasks: { key: string; title: string; done: boolean; byAgent: boolean }[]
+  subtasks: { key: string; title: string; done: boolean; byAgent: boolean; type?: string | null }[]
   comments: Comment[]
 }
 
@@ -514,6 +522,10 @@ export type ConnectionCall =
   | { action: 'ci.run'; args: { run: string }; result: PipelineRun }
   | { action: 'cloud.accounts_and_roles'; args: Record<string, never>; result: CloudAccount[] }
   | { action: 'mcp.tools'; args: Record<string, never>; result: McpTool[] }
+  | { action: 'security.findings'; args: { project: string; open?: boolean; limit?: number }; result: Record<string, unknown>[] }
+  | { action: 'security.status'; args: { project: string; since?: string }; result: { status: string; scannedAt: string | null; running?: boolean } }
+  | { action: 'quality.report'; args: { project: string; pullRequest?: string; branch?: string }; result: Record<string, unknown> & { status: string } }
+  | { action: `${string}.options`; args: { query?: string; field?: string }; result: BindingOption[] }
 
 export interface McpTool {
   name: string
@@ -659,6 +671,7 @@ export interface Provider {
   multiple: boolean
   alternatives?: SignInAlternative[]
   ai?: boolean
+  bindings?: BindingSpec[]
 }
 
 export interface Connection {
@@ -834,22 +847,6 @@ export interface BrandingPatch {
   output_style?: string | null
 }
 
-export interface TrackerChoice {
-  connection: string
-  project: string
-}
-
-export interface CodeChoice {
-  connection: string
-  repo: string
-}
-
-export interface CloudChoice {
-  connection: string
-  account: string
-  role: string
-}
-
 export interface CloudAccount {
   id: string
   name: string
@@ -857,23 +854,69 @@ export interface CloudAccount {
   roles: string[]
 }
 
+export interface BindingChoice {
+  value: string
+  label?: string
+}
+
+export interface Binding {
+  connection: string
+  value: string
+  label?: string
+  more?: BindingChoice[]
+  fields?: Record<string, BindingChoice>
+  profiles?: Record<string, BindingChoice>[]
+}
+
+export type Bindings = Record<string, Binding>
+
+export type BindingScope = 'application' | 'repository'
+
+export interface BindingSpec {
+  capability: string
+  scope: BindingScope
+  label: string
+  multiple?: boolean
+  fields?: BindingFieldSpec[]
+  each?: BindingEach
+}
+
+export interface BindingFieldSpec {
+  key: string
+  label: string
+  required?: boolean
+}
+
+export interface BindingEach {
+  key: string
+  label: string
+  fields: BindingFieldSpec[]
+}
+
+export interface BindingOption {
+  value: string
+  label: string
+  detail?: string | null
+}
+
 export interface ApplicationRepository {
   id: string
-  code: CodeChoice | null
   directory: string
   run: string[]
   verify: string[]
+  e2e?: string[]
+  e2eDirectory?: string
+  bindings?: Bindings
+  flow?: string
 }
 
 export interface Application {
   id: string
   name: string
-  tracker: TrackerChoice | null
-  tests?: TrackerChoice | null
-  security?: TrackerChoice | null
-  cloud?: CloudChoice | null
+  bindings?: Bindings
   repositories: ApplicationRepository[]
   skipDependabot?: boolean
+  env?: Record<string, string>
 }
 
 export type ApplicationDraft = Omit<Application, 'id'> & { id?: string }
@@ -935,6 +978,7 @@ export interface Api {
   branding(): Promise<Branding>
   saveBranding(patch: BrandingPatch): Promise<Branding>
   applications(): Promise<Application[]>
+  flows(): Promise<string[]>
   createApplication(application: ApplicationDraft): Promise<Application>
   saveApplication(application: Application): Promise<Application>
   deleteApplication(id: string): Promise<void>
@@ -974,6 +1018,7 @@ export const ROUTES = {
   usageLimits: '/api/usage/limits',
   branding: '/api/branding',
   applications: '/api/applications',
+  flows: '/api/flows',
   application: (id: string) => `/api/applications/${encodeURIComponent(id)}`,
   dirs: (path: string | null) => (path ? `/api/fs/dirs?path=${encodeURIComponent(path)}` : '/api/fs/dirs'),
   attachments: '/api/attachments',

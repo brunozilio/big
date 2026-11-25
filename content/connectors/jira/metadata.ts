@@ -1,16 +1,35 @@
 import { fail, isObject, kindOf as errorKind, optionalText, sameAscii, textAt } from "sdk/connectors/index.ts";
 import { items } from "sdk/connectors/mcp.ts";
-import { type Api, projectOf, search } from "./api.ts";
+import { type Api, jqlKey, projectOf, search, tool } from "./api.ts";
 import { ISSUE_TYPES, STATUSES, TYPE_FIELDS, foundList, idOf, read } from "./operations.ts";
+import { childType, schema } from "./schema.ts";
 
 const FILLED = ["project", "issuetype", "summary", "description", "parent", "labels"];
 const SAMPLE_FIELDS = ["status", "issuetype"];
 
 type Args = Record<string, any>;
 
-export function kindOf(args: Args): string {
-  const fallback = optionalText(args, "parent") !== undefined ? "Subtask" : "Task";
-  return optionalText(args, "type") ?? fallback;
+function parentType(api: Api, parent: string): string {
+  const answer = tool(api, "getJiraIssue", { issueIdOrKey: jqlKey(parent), fields: ["issuetype"] });
+  return textAt(answer, "/fields/issuetype/name");
+}
+
+function declaredType(api: Api, project: string, parent: string | undefined): string | undefined {
+  try {
+    const found = schema(api, project);
+    return parent === undefined ? found.default : childType(found, parentType(api, parent));
+  } catch (error) {
+    if (errorKind(error) !== "permanent") throw error;
+    return undefined;
+  }
+}
+
+export function kindOf(api: Api, project: string, args: Args): string {
+  const given = optionalText(args, "type");
+  if (given !== undefined) return given;
+  const parent = optionalText(args, "parent");
+  const fallback = parent !== undefined ? "Subtask" : "Task";
+  return declaredType(api, project, parent) ?? fallback;
 }
 
 function category(status) {
@@ -110,7 +129,7 @@ function fieldOf(field) {
 
 export function fields(api: Api, args: Args) {
   const project = projectOf(api, args);
-  return required(api, project, kindOf(args)).map(fieldOf);
+  return required(api, project, kindOf(api, project, args)).map(fieldOf);
 }
 
 const NUMBER = /^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/;
@@ -133,7 +152,7 @@ function shaped(field, value) {
 export function extra(api: Api, project: string, args: Args) {
   const given = args?.fields;
   if (!isObject(given) || Object.keys(given).length === 0) return null;
-  const known = required(api, project, kindOf(args));
+  const known = required(api, project, kindOf(api, project, args));
   const sent: Args = {};
   for (const [key, value] of Object.entries(given)) sent[key] = shaped(known.find((field) => fieldKey(field) === key), value);
   return sent;

@@ -20,11 +20,22 @@ export const spec = {
         "type": "array"
       },
       "verify": {
-        "description": "The commands that check a change in this repository (tests, lint, end-to-end tests).",
+        "description": "The commands that check a change in this repository (tests, lint).",
         "items": {
           "type": "string"
         },
         "type": "array"
+      },
+      "e2e": {
+        "description": "The commands that run the end-to-end suite (Cypress, Playwright...) that lives in this repository.",
+        "items": {
+          "type": "string"
+        },
+        "type": "array"
+      },
+      "e2eDirectory": {
+        "description": "The folder of the end-to-end suite, relative to the repository root. Empty when it is the root.",
+        "type": "string"
       }
     },
     "required": [
@@ -35,7 +46,7 @@ export const spec = {
   description: `Add a repository to the application this task belongs to, or update the one already registered at that directory. Call it whenever you create a new repository or service for the application, or learn how one is run or verified, so the next steps of this task and later tasks in {{NAME}} work in it too. Fields you leave out keep their current value.`,
 };
 
-type Input = { directory?: string; repo?: string; run?: string[]; verify?: string[] };
+type Input = { directory?: string; repo?: string; run?: string[]; verify?: string[]; e2e?: string[]; e2eDirectory?: string };
 
 export function effects(_input: Input | null) {
   return [{ edits: true }];

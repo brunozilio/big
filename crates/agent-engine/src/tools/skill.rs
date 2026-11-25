@@ -44,8 +44,7 @@ pub fn discover(folder: Folder<'_>, home: Option<&Path>) -> Vec<FoundSkill> {
     for dir in folder.extensions.iter().flat_map(|extensions| &extensions.dirs) {
         sources.push((dir.join("skills"), None, true));
     }
-    content::install_once();
-    if let Some(installed) = content::folder().map(|folder| folder.join("skills"))
+    if let Some(installed) = content::skills()
         && !sources.iter().any(|(dir, _, _)| *dir == installed)
     {
         sources.push((installed, None, true));

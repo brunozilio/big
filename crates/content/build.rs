@@ -34,8 +34,9 @@ fn main() {
         let absolute = std::fs::canonicalize(file).unwrap_or_else(|_| file.clone());
         entries.push_str(&format!("    ({relative:?}, include_bytes!({:?})),\n", absolute.display().to_string()));
     }
+    let live = std::fs::canonicalize(&root).unwrap_or(root).display().to_string();
     let code = format!(
-        "pub(crate) const FILES: &[(&str, &[u8])] = &[\n{entries}];\npub(crate) const HASH: u64 = {};\n",
+        "pub(crate) const FILES: &[(&str, &[u8])] = &[\n{entries}];\npub(crate) const HASH: u64 = {};\npub(crate) const ROOT: &str = {live:?};\n",
         hasher.finish()
     );
     let out = PathBuf::from(std::env::var("OUT_DIR").unwrap_or_default()).join("content.rs");

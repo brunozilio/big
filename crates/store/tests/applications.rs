@@ -1,24 +1,30 @@
-use store::{Application, CloudChoice, CodeChoice, Repository, Store, TrackerChoice};
+use store::{Application, Binding, Bindings, Repository, Store};
 
 fn application(id: &str, name: &str) -> Application {
     Application {
         skip_dependabot: true,
         id: id.into(),
         name: name.into(),
-        tracker: Some(TrackerChoice { connection: "c-tracker".into(), project: "APP".into() }),
-        tests: Some(TrackerChoice { connection: "c-tests".into(), project: "APP".into() }),
-        security: Some(TrackerChoice { connection: "c-security".into(), project: "f1e2".into() }),
-        cloud: Some(CloudChoice { connection: "c-cloud".into(), account: "111".into(), role: "Deploy".into() }),
+        bindings: Bindings::from([
+            ("tracker".into(), Binding::new("c-tracker", "APP")),
+            ("tests".into(), Binding::new("c-tests", "APP")),
+            ("cloud".into(), Binding::new("c-cloud", "111/Deploy")),
+        ]),
         repositories: vec![
             Repository {
                 id: "r1".into(),
-                code: Some(CodeChoice { connection: "c-code".into(), repo: "acme/web".into() }),
                 directory: "/src/web".into(),
                 run: vec!["bun dev".into()],
                 verify: vec!["bun test".into(), "bun run lint".into()],
+                bindings: Bindings::from([
+                    ("code".into(), Binding::new("c-code", "acme/web")),
+                    ("security".into(), Binding::new("c-security", "f1e2")),
+                ]),
+                ..Repository::default()
             },
-            Repository { id: "r2".into(), code: None, directory: "/src/api".into(), run: vec![], verify: vec![] },
+            Repository { id: "r2".into(), directory: "/src/api".into(), ..Repository::default() },
         ],
+        ..Application::default()
     }
 }
 
@@ -54,7 +60,8 @@ fn a_repository_saved_with_a_single_run_command_reads_it_as_a_list() {
 fn an_application_saved_before_the_dependabot_flag_skips_its_runs() {
     let old: Application = serde_json::from_str(r#"{"id":"a","name":"Loja","repositories":[]}"#).expect("old data");
     assert!(old.skip_dependabot);
-    assert_eq!(old.cloud, None, "agents keep the connection's own account and role");
+    assert_eq!(old.bound("cloud"), None, "agents keep the connection's own account and role");
     let off: Application = serde_json::from_str(r#"{"name":"Loja","skipDependabot":false}"#).expect("turned off");
     assert!(!off.skip_dependabot);
 }
+

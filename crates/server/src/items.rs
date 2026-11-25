@@ -87,6 +87,7 @@ struct Origin<'a> {
     git: Map<String, Value>,
     application: Option<&'a Application>,
     title: Option<String>,
+    kind: Option<String>,
 }
 
 fn filled(value: &Value) -> Option<String> {
@@ -135,7 +136,7 @@ fn git(body: &Value) -> Map<String, Value> {
 fn code_record(shared: &Shared, source: &Value, application: Option<&Application>) -> ApiResult<ConnectionRecord> {
     let connections = shared.backend.store.connections()?;
     let repositories = application.into_iter().flat_map(|application| &application.repositories);
-    let linked = repositories.filter_map(|repository| repository.code.as_ref()).next();
+    let linked = repositories.filter_map(|repository| repository.bound(contracts::CODE)).next();
     match filled(&source["connection"]).or_else(|| linked.map(|code| code.connection.clone())) {
         Some(id) => connections.into_iter().find(|record| record.id == id).ok_or_else(|| {
             ApiError::bad(said(
@@ -152,6 +153,18 @@ fn code_record(shared: &Shared, source: &Value, application: Option<&Application
             ))
         }),
     }
+}
+
+async fn issue_type(shared: &Shared, source: &Value) -> Option<String> {
+    let connections = shared.backend.store.connections().ok()?;
+    let record = match filled(&source["connection"]) {
+        Some(id) => connections.iter().find(|record| record.id == id),
+        None => serving(&connections, contracts::TRACKER),
+    }?;
+    let args = json!({ "issue": filled(&source["subject"])? });
+    let hub = &shared.backend.connectors;
+    let found = hub.call(&connection(record), &record.settings, contracts::tracker::ISSUE, &args, "").await.ok()?;
+    filled(&found["type"])
 }
 
 async fn read_pull(shared: &Shared, record: &ConnectionRecord, subject: &str) -> ApiResult<Value> {
@@ -176,7 +189,7 @@ fn pull_repo(found: &Value) -> Option<String> {
 fn matching<'a>(applications: &'a [Application], repo: &str) -> Option<(&'a Application, &'a Repository)> {
     applications.iter().find_map(|application| {
         let same = |repository: &&Repository| {
-            repository.code.as_ref().is_some_and(|code| code.repo.eq_ignore_ascii_case(repo))
+            repository.bound(contracts::CODE).is_some_and(|code| code.value.eq_ignore_ascii_case(repo))
         };
         application.repositories.iter().find(same).map(|repository| (application, repository))
     })
@@ -192,7 +205,7 @@ impl<'a> Origin<'a> {
             let connection = filled(&body["issue"]["connection"]);
             sources.insert(0, json!({ "kind": ISSUE, "connection": connection, "subject": key }));
         }
-        Ok(Origin { sources, git: git(body), application, title: None })
+        Ok(Origin { sources, git: git(body), application, title: None, kind: None })
     }
 
     fn of(&self, kind: &str) -> Option<&Value> {
@@ -208,6 +221,7 @@ impl<'a> Origin<'a> {
             match self.sources[at]["kind"].as_str() {
                 Some(PULL_REQUEST) => self.pull(shared, applications, at).await?,
                 Some(BRANCH) => self.branch(at)?,
+                Some(ISSUE) => self.kind = issue_type(shared, &self.sources[at]).await,
                 _ => {}
             }
         }
@@ -381,11 +395,14 @@ fn input(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<Value>
         input["git"] = Value::Object(origin.git.clone());
     }
     let application = origin.application;
+    if let Some(kind) = &origin.kind {
+        input["type"] = json!(kind);
+    }
     if let Some(issue) = origin.of(ISSUE) {
         input["issue"] = issue["subject"].clone();
         input["connection"] = issue["connection"].clone();
-    } else if let Some(chosen) = application.and_then(|application| application.tracker.as_ref()) {
-        input["project"] = json!(chosen.project);
+    } else if let Some(chosen) = application.and_then(|application| application.bound(contracts::TRACKER)) {
+        input["project"] = json!(chosen.value);
         input["connection"] = json!(chosen.connection);
     }
     if let Some(application) = application {

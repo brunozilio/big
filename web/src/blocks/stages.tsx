@@ -5,7 +5,7 @@ import { Badge } from '@/ui/display'
 import { Icon, isIconName } from '@/ui/icon'
 import { Node } from '@/screens/items/parts'
 import { SendError, useSend } from './shared'
-import { windowLabel, WindowPicker } from './windowPicker'
+import { windowLabel, WindowPicker, zoneOf } from './windowPicker'
 
 type Of<T extends Block['type']> = Extract<Block, { type: T }>
 
@@ -41,7 +41,7 @@ function Stage({ stage, last, live, send, busy }: { stage: StageView; last: bool
       <div className="mt-2 flex flex-col items-start gap-2 pr-4">
         <div className="text-sm font-medium text-fg">{stage.label}</div>
         <Change stage={stage} />
-        {stage.picker && live && <WindowPicker value={stage.window ?? undefined} onChange={(at) => send('window', { env: stage.id, at })} />}
+        {stage.picker && live && <WindowPicker value={stage.window ?? undefined} onChange={(at) => send('window', { env: stage.id, at, zone: zoneOf(at) })} />}
         {stage.busy && <span className="text-xs text-muted">{stage.busy}</span>}
         {live && stage.actions.map((action) => (
           <Button key={action.id} size="sm" variant={variantOf(action.variant)} disabled={busy || action.disabled} icon={action.icon && isIconName(action.icon) ? <Icon name={action.icon} size={14} /> : undefined} onClick={() => send(action.id, action.payload ?? null)}>

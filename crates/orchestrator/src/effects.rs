@@ -232,7 +232,14 @@ pub fn connection_of(shared: &Shared, call: &Call) -> Result<(Connection, Value)
 }
 
 async fn call(shared: &Shared, command: &Command, key: &str) -> Result<Value, Failure> {
-    let call = command.call();
+    let mut call = command.call();
+    let store = crate::kept::store(&shared.config.data);
+    let mut args = std::mem::take(&mut call.args);
+    call.args = blocking(move || {
+        crate::kept::expand(&store, &mut args);
+        args
+    })
+    .await?;
     if command.optional && call.connection.is_none() {
         match connection_of(shared, &call) {
             Err(Failure::Blocked(_)) => return Ok(Value::Null),
@@ -280,6 +287,7 @@ async fn exec(shared: &Shared, item: &WorkItem, command: &Command) -> Result<Val
     let cwd = command.args["cwd"].as_str().map_or_else(|| worktree.clone(), |dir| worktree.join(dir));
     let mut process = tokio::process::Command::from(platform::shell(&command.text("command")));
     process.current_dir(&cwd).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    process.envs(crate::application::environment(&shared.store, &item.input));
     if let Some(env) = command.args["env"].as_object() {
         process.envs(
             env.iter()

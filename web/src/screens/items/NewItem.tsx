@@ -137,7 +137,7 @@ export function pullSubject(text: string, application: Application | null): stri
   const url = PULL_URL.exec(trimmed)
   if (url) return `${url[1].replace(/\/-$/, '')}#${url[2]}`
   if (/^\d+$/.test(trimmed)) {
-    const repos = (application?.repositories ?? []).flatMap((r) => (r.code ? [r.code.repo] : []))
+    const repos = linkedRepos(application).map((r) => r.repo)
     return repos.length === 1 ? `${repos[0]}#${trimmed}` : trimmed
   }
   return trimmed
@@ -155,7 +155,10 @@ export interface Linked {
 }
 
 export function linkedRepos(application: Application | null): Linked[] {
-  return (application?.repositories ?? []).flatMap((r) => (r.code ? [{ place: r.id, connection: r.code.connection, repo: r.code.repo }] : []))
+  return (application?.repositories ?? []).flatMap((r) => {
+    const code = r.bindings?.code
+    return code ? [{ place: r.id, connection: code.connection, repo: code.value }] : []
+  })
 }
 
 interface Listed {
@@ -228,7 +231,7 @@ interface Place {
 
 export function placesOf(application: Application | null): Place[] {
   if (!application) return [{ id: '', name: translate(currentLanguage(), 'items.repository') }]
-  return application.repositories.map((r) => ({ id: r.id, name: r.code?.repo ?? r.directory.split('/').filter(Boolean).pop() ?? r.directory }))
+  return application.repositories.map((r) => ({ id: r.id, name: r.bindings?.code?.value ?? r.directory.split('/').filter(Boolean).pop() ?? r.directory }))
 }
 
 export function gitOf(bases: Record<string, string>, places: Place[]): NewGit | undefined {
@@ -241,7 +244,7 @@ export function gitOf(bases: Record<string, string>, places: Place[]): NewGit | 
 
 export function defaultBranch(list: CodeBranch[] | undefined): string | null {
   if (!list?.length) return null
-  return list.find((b) => b.name === 'main')?.name ?? list.find((b) => b.default)?.name ?? list[0].name
+  return list.find((b) => b.default)?.name ?? list[0].name
 }
 
 export function basesOf(chosen: Record<string, string>, branches: Record<string, CodeBranch[]>, places: Place[]): Record<string, string> {
@@ -428,7 +431,7 @@ export function NewItem({ onCreated, onAsked }: { onCreated: (it: Item) => void;
     setBusy(true)
     setError(null)
     const picked = issue ? { connection: issue.source.connection.id, key: issue.key } : null
-    const git = pull ? undefined : gitOf(effective, places)
+    const git = pull ? undefined : gitOf(bases, places)
     api()
       .createItem({ application: chosen?.id ?? null, text, issue: picked, sources: sourcesOf(picked, pull), git, model: chosenModel, ...tuning, attachments })
       .then((it) => {

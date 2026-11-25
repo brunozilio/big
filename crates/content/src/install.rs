@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub const MANIFEST: &str = ".content.json";
+
+pub const CACHE: &str = ".builtin";
 
 #[derive(Debug, Default, PartialEq, Eq)]
 pub struct Installed {
@@ -92,6 +94,9 @@ pub fn branded(bytes: &[u8]) -> Vec<u8> {
 
 pub fn install_once() {
     static DONE: std::sync::Once = std::sync::Once::new();
+    if super::mode() != super::Mode::Installed {
+        return;
+    }
     DONE.call_once(|| {
         let Some(folder) = super::folder() else { return };
         let branded: Vec<(&str, Vec<u8>)> =
@@ -105,6 +110,39 @@ pub fn install_once() {
             Err(error) => tracing::warn!(%error, folder = %folder.display(), "the built-in content was not copied"),
         }
     });
+}
+
+pub fn extract(root: &Path, prefix: &str) -> std::io::Result<()> {
+    let shipped: Vec<&str> =
+        super::embedded::FILES.iter().map(|(path, _)| *path).filter(|path| path.starts_with(prefix)).collect();
+    for stale in super::listed_in(Some(root), prefix).iter().filter(|path| !shipped.contains(&path.as_str())) {
+        if let Some(file) = super::override_path(root, stale) {
+            std::fs::remove_file(file)?;
+        }
+    }
+    for (path, bytes) in super::embedded::FILES.iter().filter(|(path, _)| path.starts_with(prefix)) {
+        let Some(file) = super::override_path(root, path) else { continue };
+        let bytes = branded(bytes);
+        if std::fs::read(&file).ok().as_deref() != Some(bytes.as_slice()) {
+            write_atomically(&file, &bytes)?;
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn extracted_skills() -> Option<PathBuf> {
+    static DONE: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+    DONE.get_or_init(|| {
+        let root = super::home()?.join(CACHE);
+        match extract(&root, "skills/") {
+            Ok(()) => Some(root.join("skills")),
+            Err(error) => {
+                tracing::warn!(%error, folder = %root.display(), "the built-in skills were not unpacked");
+                None
+            }
+        }
+    })
+    .clone()
 }
 
 #[cfg(test)]
@@ -164,6 +202,24 @@ mod tests {
         let named = branded(b"Ask {{NAME}} in {{DIR}}.");
         assert_eq!(String::from_utf8(named).expect("text"), format!("Ask {} in {}.", brand::NAME, brand::DIR));
         assert_eq!(branded(&[0xff, 0xfe]), [0xff, 0xfe]);
+    }
+
+    #[test]
+    fn unpacking_restores_the_shipped_files_and_drops_everything_else() {
+        let root = tempfile::tempdir().expect("root");
+        let (path, bytes) = super::super::embedded::FILES
+            .iter()
+            .find(|(path, _)| path.starts_with("skills/"))
+            .expect("a shipped skill");
+        extract(root.path(), "skills/").expect("unpack");
+        let file = root.path().join(path);
+        assert_eq!(std::fs::read(&file).expect("unpacked"), branded(bytes));
+        std::fs::write(&file, b"edited").expect("edit");
+        std::fs::write(root.path().join("skills/extra.md"), b"mine").expect("extra");
+        extract(root.path(), "skills/").expect("again");
+        assert_eq!(std::fs::read(&file).expect("restored"), branded(bytes), "an edit does not survive");
+        assert!(!root.path().join("skills/extra.md").exists());
+        assert!(!root.path().join(MANIFEST).exists(), "nothing marks it as the user's folder");
     }
 
     #[test]

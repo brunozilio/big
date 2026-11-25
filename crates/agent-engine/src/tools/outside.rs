@@ -68,7 +68,7 @@ impl Workspace {
     pub fn bounds(&self) -> domain::permission::Bounds {
         let roots = std::iter::once(self.project_root()).chain(self.added_dirs.iter().map(|dir| settled(dir)));
         let saved = settled(&super::persisted::results_dir(&self.session_id));
-        let own = content::folder().map(|folder| settled(&folder.join("skills")));
+        let own = content::skills().map(|skills| settled(&skills));
         let shared = self.home.as_ref().map(|home| home.join(brand::DIR)).into_iter().flat_map(|folder| {
             std::iter::once(brand::INSTRUCTIONS).chain(SHARED_FOLDERS).map(move |part| settled(&folder.join(part)))
         });

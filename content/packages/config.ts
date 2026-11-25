@@ -1,20 +1,25 @@
+import { spec as flow } from "../flows/gitflow.ts";
+
+const [promotion] = flow.promote;
+
 export default {
-  arrival: { step: "merge", base: "develop", filter: { data: { workflow: ["default", "pull-request"], step: "merge", state: "passed", base: "develop" } } },
+  arrival: { step: "merge", base: flow.base, integrated: true, filter: { data: { workflow: ["default", "pull-request"], step: "merge", state: "passed", base: flow.base } } },
   environments: [
-    { id: "develop", label: "Develop", short: "Develop", icon: "branch", branch: "develop", gate: { kind: "none" }, rollback: true },
+    { id: "develop", label: "Develop", short: "Develop", icon: "branch", branch: flow.base, gate: { kind: "none" }, rollback: true },
     {
       id: "hi",
       label: "Homologação interna",
       short: "HI",
       icon: "sTest",
-      gate: { kind: "merge", from: "develop", into: "release", method: "merge", title: "Promover {from} para {into}" },
+      gate: { kind: "merge", promotion: 0, from: promotion.from, into: promotion.into, method: promotion.method, title: "Promover {from} para {into}" },
       autoPromote: true,
       rollback: true,
     },
-    { id: "hext", label: "Homologação externa", short: "HEXT", icon: "globe", gate: { kind: "change" }, seals: true },
-    { id: "prd", label: "Produção", short: "Produção", icon: "rocket", gate: { kind: "change" }, locksTasks: true },
+    { id: "hext", label: "Homologação externa", short: "HEXT", icon: "globe", gate: { kind: "change", environment: "HST" }, seals: true },
+    { id: "prd", label: "Produção", short: "Produção", icon: "rocket", gate: { kind: "change", environment: "PRD" }, locksTasks: true },
   ],
-  rollbackVersion: { kind: "pipeline", pipeline: "deployment.yml", ref: "release" },
+  zone: "-03:00",
+  rollbackVersion: { kind: "pipeline", pipeline: "deployment.yml", ref: `{into}` },
   services: [],
   card: { type: "Pacote", link: "Relates" },
   monitor: { everyMs: 60000 },

@@ -47,6 +47,8 @@ export const change = (pr) => block("change", { pr });
 export const review = (pr, options) => block("review", options && options.session ? { pr, session: options.session } : { pr });
 export const pipeline = (run) => block("pipeline", { run });
 export const merge = (pr, methods) => block("merge", { pr, methods: methods || [] });
+export const findingList = (fields) => block("findings", fields || {});
+export const qualityReport = (fields) => block("quality", fields || {});
 export const markdown = (text) => block("markdown", { text: String(text === undefined ? "" : text) });
 export const testCases = (list, options) =>
   block("cases", {
@@ -74,6 +76,7 @@ export const tasks = (list, options) => {
     kinds: chosen.kinds || [],
     locked: Boolean(chosen.locked),
     environment: chosen.environment || null,
+    owners: Array.isArray(chosen.owners) ? chosen.owners : [],
   });
 };
 export const actions = (buttons) =>
@@ -357,7 +360,8 @@ class Ctx {
 
   unclaimed(step, state, options) {
     const base = options && options.base ? { base: options.base } : {};
-    return this.call("items", "unclaimed", { step, state: state || "passed", ...base });
+    const lane = options && options.integrated === true ? { integrated: true } : {};
+    return this.call("items", "unclaimed", { step, state: state || "passed", ...base, ...lane });
   }
 
   impediment(on, reason, options) {
@@ -506,6 +510,73 @@ async function guarded(work) {
   }
 }
 
+function statusObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+}
+
+const sameStatus = (left, right) => typeof left === "string" && typeof right === "string" && left.toLowerCase() === right.toLowerCase();
+
+export function wantsStatus(value) {
+  if (typeof value === "string") return value !== "";
+  const wanted = statusObject(value);
+  return typeof wanted.category === "string" || Object.keys(statusObject(wanted.byType)).length > 0;
+}
+
+export function transitionArgs(value) {
+  if (typeof value === "string") return value ? { status: value } : null;
+  const wanted = statusObject(value);
+  return typeof wanted.category === "string" ? { category: wanted.category } : null;
+}
+
+async function quietStatus(work) {
+  try {
+    return statusObject(await work());
+  } catch {
+    return {};
+  }
+}
+
+function statusIssue(scope) {
+  const item = statusObject(scope.item);
+  if (item.issue) return String(item.issue);
+  const ticket = statusObject(scope.output("ticket"));
+  return ticket.issue ? String(ticket.issue) : null;
+}
+
+function statusByType(wanted, type) {
+  const named = Object.entries(statusObject(wanted.byType)).find(([name]) => sameStatus(name, type));
+  return named && typeof named[1] === "string" ? named[1] : null;
+}
+
+function statusIn(statuses, category) {
+  const matching = statuses.map(plain).filter((status) => status.category === category && status.name);
+  const chosen = category === "done" ? matching[matching.length - 1] : matching[0];
+  return chosen ? chosen.name : null;
+}
+
+export async function resolveStatus(scope, value) {
+  if (typeof value === "string") return value || null;
+  const wanted = statusObject(value);
+  const options = { optional: true };
+  const issue = statusIssue(scope);
+  const found = issue ? await quietStatus(() => scope.call("tracker", "issue", { issue }, options)) : {};
+  const type = found.type ?? null;
+  const fixed = type ? statusByType(wanted, type) : null;
+  if (fixed) return fixed;
+  if (typeof wanted.category !== "string") return null;
+  const project = found.project ?? statusObject(scope.item).project;
+  const schema = await quietStatus(() => scope.call("tracker", "schema", project ? { project } : {}, options));
+  const types = Array.isArray(schema.types) ? schema.types.map(plain) : [];
+  const kind = types.find((entry) => sameStatus(entry.name, type)) ?? types.find((entry) => sameStatus(entry.name, schema.default)) ?? types[0];
+  return statusIn(Array.isArray(statusObject(kind).statuses) ? kind.statuses : [], wanted.category);
+}
+
+export async function applyStatus(scope, value) {
+  if (!wantsStatus(value)) return;
+  const name = await resolveStatus(scope, value);
+  if (name) await scope.status(name);
+}
+
 async function closed(ctx, scope, call, result) {
   const data = dataOf(result);
   if (result.outcome !== "cancelled") {
@@ -513,9 +584,7 @@ async function closed(ctx, scope, call, result) {
     ctx.runtime.outputs.set(`${ctx.branch}|${scope.step}`, data);
   }
   const finished = result.outcome === "passed" || result.outcome === "skipped";
-  if (finished && call.options && typeof call.options.doneStatus === "string") {
-    await scope.status(call.options.doneStatus);
-  }
+  if (finished && call.options) await applyStatus(scope, call.options.doneStatus);
   ctx.runtime.signal(scope, "step.finished", { outcome: result.outcome, data, to: result.to || null });
   return result;
 }
@@ -523,7 +592,7 @@ async function closed(ctx, scope, call, result) {
 async function runStep(ctx, type, call, from) {
   const named = { ...call, id: call.id || type.name };
   const scope = opened(ctx, named, type.name, from);
-  if (call.options && typeof call.options.status === "string") await scope.status(call.options.status);
+  if (call.options) await applyStatus(scope, call.options.status);
   const result = await guarded(() => type.run(scope, call.options || {}));
   return closed(ctx, scope, named, result);
 }
@@ -545,7 +614,7 @@ async function runGroup(ctx, node, children, entry, from) {
   const call = { ...node.call, id: node.path };
   const options = call.options || {};
   const scope = opened(ctx, call, node.kind, from);
-  if (typeof options.status === "string") await scope.status(options.status);
+  await applyStatus(scope, options.status);
   const settings = { root: false, entry, from, failFast: options.failFast };
   const result = await guarded(() => graph(scope, plan(children, node.path), settings));
   return closed(ctx, scope, call, collected(node, result));

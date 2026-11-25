@@ -7,6 +7,7 @@ publish.workspace = true
 license.workspace = true
 
 [dependencies]
+base64.workspace = true
 domain.workspace = true
 store.workspace = true
 connectors.workspace = true

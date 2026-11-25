@@ -3,7 +3,8 @@ use std::sync::Arc;
 
 use agent_engine::tools::{self, Workspace};
 use serde_json::Value;
-use store::{Application, CodeChoice, Repository, Store};
+use connectors::contracts::CODE;
+use store::{Application, Binding, Repository, Store};
 
 pub const ADD_REPOSITORY: &str = domain::ToolName::AddRepository.as_str();
 
@@ -18,6 +19,11 @@ pub fn live(store: &Store, input: &Value) -> Value {
     let mut input = input.clone();
     input["application"]["repositories"] = repositories;
     input
+}
+
+pub fn environment(store: &Store, input: &Value) -> Vec<(String, String)> {
+    let found = id_of(input).and_then(|id| store.application(&id).ok().flatten());
+    found.map(|application| application.env.into_iter().collect()).unwrap_or_default()
 }
 
 pub fn offer(client: u64, store: &Arc<Store>, application: String) {
@@ -35,6 +41,8 @@ struct Wanted {
     repo: Option<String>,
     run: Option<Vec<String>>,
     verify: Option<Vec<String>>,
+    e2e: Option<Vec<String>>,
+    e2e_directory: Option<String>,
 }
 
 fn text(input: &Value, name: &str) -> Option<String> {
@@ -57,6 +65,14 @@ fn lines(input: &Value, name: &str) -> Option<Vec<String>> {
     })
 }
 
+fn inside(input: &Value) -> Result<Option<String>, String> {
+    let Some(folder) = text(input, "e2eDirectory").map(|folder| folder.trim_matches('/').to_owned()) else {
+        return Ok(None);
+    };
+    let normal = std::path::Path::new(&folder).components().all(|part| matches!(part, std::path::Component::Normal(_)));
+    if normal { Ok(Some(folder)) } else { Err(format!("`e2eDirectory` {folder} must be a folder inside the repository.")) }
+}
+
 fn wanted(input: &Value, workspace: &Workspace) -> Result<Wanted, String> {
     let directory = text(input, "directory").filter(|dir| !dir.is_empty()).ok_or("Give the repository `directory`.")?;
     let directory = workspace.resolve(&directory);
@@ -68,11 +84,13 @@ fn wanted(input: &Value, workspace: &Workspace) -> Result<Wanted, String> {
         repo: text(input, "repo").filter(|repo| !repo.is_empty()),
         run: text(input, "run").map(|line| lines_of(&[line])).or_else(|| lines(input, "run")),
         verify: lines(input, "verify"),
+        e2e: lines(input, "e2e"),
+        e2e_directory: inside(input)?,
     })
 }
 
 fn connection(application: &Application) -> Option<String> {
-    application.repositories.iter().find_map(|repository| repository.code.as_ref().map(|code| code.connection.clone()))
+    application.repositories.iter().find_map(|repository| repository.bound(CODE).map(|code| code.connection.clone()))
 }
 
 fn original(application: &Application, directory: &str) -> Option<String> {
@@ -99,14 +117,22 @@ fn apply(application: &mut Application, mut wanted: Wanted) -> bool {
     });
     let Some(repository) = application.repositories.get_mut(index) else { return added };
     if let Some(repo) = wanted.repo {
-        let connection = repository.code.as_ref().map(|code| code.connection.clone()).or(connection);
-        repository.code = connection.map(|connection| CodeChoice { connection, repo });
+        let connection = repository.bound(CODE).map(|code| code.connection.clone()).or(connection);
+        if let Some(connection) = connection {
+            repository.bindings.insert(CODE.to_owned(), Binding::new(&connection, &repo));
+        }
     }
     if let Some(run) = wanted.run {
         repository.run = run;
     }
     if let Some(verify) = wanted.verify {
         repository.verify = verify;
+    }
+    if let Some(e2e) = wanted.e2e {
+        repository.e2e = e2e;
+    }
+    if let Some(folder) = wanted.e2e_directory {
+        repository.e2e_directory = folder;
     }
     added
 }
@@ -122,11 +148,18 @@ fn described(application: &Application, directory: &str, added: bool) -> String 
         if !repository.verify.is_empty() {
             let _ = write!(text, "\nTo verify: {}", repository.verify.join(", "));
         }
+        if !repository.e2e.is_empty() {
+            let _ = write!(text, "\nE2E: {}{}", repository.e2e.join(", "), folder_note(&repository.e2e_directory));
+        }
     }
     text.push_str(
         "\nThe next steps of this task already get a worktree of it; in this step, work in the folder itself.",
     );
     text
+}
+
+fn folder_note(folder: &str) -> String {
+    if folder.is_empty() { String::new() } else { format!(" (in {folder})") }
 }
 
 fn save(store: &Store, application: &str, input: &Value, workspace: &Workspace) -> Result<String, String> {

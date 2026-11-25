@@ -1,15 +1,29 @@
 [
   {
-    "cloud": null,
+    "bindings": {
+      "tracker": {
+        "connection": "c1",
+        "value": "APP"
+      }
+    },
+    "env": {
+      "CYPRESS_BASE_URL": "http://localhost:3000"
+    },
     "id": "app-0",
     "name": "Loja nova",
     "repositories": [
       {
-        "code": {
-          "connection": "c1",
-          "repo": "acme/web"
+        "bindings": {
+          "code": {
+            "connection": "c1",
+            "value": "acme/web"
+          }
         },
         "directory": "/projetos/web",
+        "e2e": [
+          "npx cypress run"
+        ],
+        "e2eDirectory": "e2e",
         "id": "repo-0-0",
         "run": [
           "bun api",
@@ -20,19 +34,15 @@
         ]
       },
       {
-        "code": null,
+        "bindings": {},
         "directory": "/projetos/api",
+        "e2e": [],
+        "e2eDirectory": "",
         "id": "repo-0-1",
         "run": [],
         "verify": []
       }
     ],
-    "security": null,
-    "skipDependabot": true,
-    "tests": null,
-    "tracker": {
-      "connection": "c1",
-      "project": "APP"
-    }
+    "skipDependabot": true
   }
 ]

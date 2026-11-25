@@ -1,14 +1,15 @@
+import { projectOf } from "sdk/bindings.js";
 import { step, markdown } from "sdk";
-import { attempt, codeTargets, defined, effects, languageOf, object, parsePlan, repoOf } from "./context.js";
+import { attempt, codeTargets, defined, effects, languageOf, object, parsePlan, repoOf, repositoriesOf } from "./context.js";
 
 const MARK = "security-findings";
 
 const SEVERITIES = ["Informational", "Very low", "Low", "Medium", "High", "Very high"];
 
 const TEXTS = {
-  en: { title: "Fix security findings", none: "No new security findings to fix.", unset: "The application has no security project chosen. Choose one in Settings → Applications." },
-  es: { title: "Corregir vulnerabilidades", none: "No hay vulnerabilidades nuevas para corregir.", unset: "La aplicación no tiene un proyecto de seguridad elegido. Elige uno en Ajustes → Aplicaciones." },
-  "pt-BR": { title: "Corrigir vulnerabilidades", none: "Nenhuma vulnerabilidade nova para corrigir.", unset: "A aplicação não tem projeto de segurança escolhido. Escolha um em Configurações → Aplicações." },
+  en: { title: "Fix security findings", none: "No new security findings to fix.", unset: "No repository of the application has a security project chosen. Choose one in Settings → Applications." },
+  es: { title: "Corregir vulnerabilidades", none: "No hay vulnerabilidades nuevas para corregir.", unset: "Ningún repositorio de la aplicación tiene un proyecto de seguridad elegido. Elige uno en Ajustes → Aplicaciones." },
+  "pt-BR": { title: "Corrigir vulnerabilidades", none: "Nenhuma vulnerabilidade nova para corrigir.", unset: "Nenhum repositório da aplicação tem projeto de segurança escolhido. Escolha um em Configurações → Aplicações." },
 };
 
 export function markerOf(ids) {
@@ -30,7 +31,8 @@ function list(value) {
 }
 
 function securityOf(ctx, opts) {
-  const chosen = object(object(ctx.item.application).security);
+  const holder = repositoriesOf(ctx).find((known) => projectOf(known, "security").project) ?? ctx.item.application;
+  const chosen = projectOf(holder, "security");
   return { project: opts.project ?? chosen.project, connection: opts.connection ?? chosen.connection };
 }
 
@@ -129,7 +131,8 @@ export default step({
     const security = securityOf(ctx, opts);
     if (!security.project) return ctx.fail({ error: texts.unset });
     const args = defined({ project: security.project, kinds: opts.kinds, minSeverity: opts.minSeverity ?? 3, policy: opts.policy, open: true, limit: opts.scan ?? 200 });
-    const found = list(await ctx.call("security", "findings", args, effects({ ...opts, connection: security.connection })));
+    const handed = list(ctx.item.findings);
+    const found = handed.length > 0 ? handed : list(await ctx.call("security", "findings", args, effects({ ...opts, connection: security.connection })));
     const taken = await held(ctx, opts);
     const fresh = found.filter((finding) => finding.id !== undefined && !taken.has(String(finding.id)));
     const chosen = fresh.slice(0, opts.batch ?? 5);

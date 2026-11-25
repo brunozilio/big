@@ -75,6 +75,11 @@ pub fn known(shared: &Shared) -> ApiResult<Vec<app::Model>> {
     Ok(models)
 }
 
+pub async fn flows() -> ApiResult<Response> {
+    let found = tokio::task::spawn_blocking(orchestrator::flows::names).await.map_err(ApiError::failed)?;
+    Ok(reply(serde_json::json!(found)))
+}
+
 pub async fn list(State(ctx): State<Ctx>) -> ApiResult<Response> {
     let shared = Arc::clone(&ctx);
     let models = tokio::task::spawn_blocking(move || known(&shared)).await.map_err(ApiError::failed)??;

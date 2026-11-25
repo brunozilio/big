@@ -1,3 +1,4 @@
+import { bindingOf, codeOf } from "sdk/bindings.js";
 import { markdown, actions } from "sdk";
 
 export const FINISHED = ["passed", "failed", "cancelled", "skipped"];
@@ -189,7 +190,7 @@ function folderName(directory) {
 }
 
 export function nameOf(repository) {
-  const code = object(object(repository).code);
+  const code = object(codeOf(repository));
   return code.repo || folderName(object(repository).directory);
 }
 
@@ -198,7 +199,7 @@ export function repositoriesOf(ctx) {
   const listed = Array.isArray(application.repositories) ? application.repositories : [];
   return listed
     .filter((repository) => repository && repository.id)
-    .map((repository) => ({ ...repository, name: nameOf(repository), code: repository.code ?? null }));
+    .map((repository) => ({ ...repository, name: nameOf(repository), code: codeOf(repository) }));
 }
 
 function touched(changes, target) {
@@ -334,4 +335,19 @@ export async function attempt(work) {
   } catch {
     return undefined;
   }
+}
+
+export function boundPullRequests(ctx, opts, capability) {
+  const repositories = repositoriesOf(ctx);
+  const commits = source(ctx, opts, "develop");
+  return pullRequestsOf(ctx, opts).flatMap((entry) => {
+    const sole = repositories.length === 1 ? repositories[0] : null;
+    const repository = repositories.find((known) => known.id === entry.repository) ?? sole;
+    const bound = repository ? bindingOf(repository, capability) : null;
+    if (!bound) return [];
+    const changed = (Array.isArray(commits.repositories) ? commits.repositories : []).find((tree) => object(tree).id === repository.id);
+    const commit = object(changed).commit ?? (repositories.length === 1 ? commits.commit : undefined);
+    const number = entry.number ?? String(entry.pr ?? "").split("#").pop();
+    return [defined({ ...entry, repository: repository.id, name: entry.name ?? repository.name, bound, number: number ? String(number) : undefined, commit })];
+  });
 }

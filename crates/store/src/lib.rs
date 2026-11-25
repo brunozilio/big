@@ -15,7 +15,7 @@ use std::time::Duration;
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
-pub use applications::{Application, CloudChoice, CodeChoice, Repository, TrackerChoice};
+pub use applications::{Application, Binding, Bindings, Choice, Environment, Fields, Repository, watched};
 pub use connections::ConnectionRecord;
 pub use error::Error;
 pub use factory::Generation;

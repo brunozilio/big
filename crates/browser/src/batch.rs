@@ -3,7 +3,7 @@ use serde_json::{Value, json};
 use crate::session::Session;
 use crate::spec;
 
-const NEEDS_TAB: [&str; 14] = [
+const NEEDS_TAB: [&str; 15] = [
     "computer",
     "file_upload",
     "find",
@@ -12,6 +12,7 @@ const NEEDS_TAB: [&str; 14] = [
     "gif_creator",
     "javascript_tool",
     "navigate",
+    "network_intercept",
     "read_console_messages",
     "read_network_requests",
     "read_page",

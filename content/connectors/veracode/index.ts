@@ -16,7 +16,7 @@ import {
   tokenField,
   unknownAction,
 } from "sdk/connectors/index.ts";
-import { security } from "sdk/connectors/contracts.ts";
+import { binding, options, projectOptions, security, securityStatus } from "sdk/connectors/contracts.ts";
 import { type Filter, chosen, filterOf } from "./findings.ts";
 import { type Keys, header, readKeys } from "./sign.ts";
 
@@ -52,7 +52,7 @@ export function provider({ language }: { language?: Language }, ctx: Ctx) {
     logo: "logo.svg",
     capabilities: ["security"],
     auth: { kind: "token", fields, form: "json" },
-    actions: security(),
+    actions: [...security(), securityStatus(), options("security")],
   };
 }
 
@@ -64,6 +64,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "Veracode", "de Veracode", "do Veracode"),
     choose_title: pick(language, "Veracode account", "Cuenta de Veracode", "Conta do Veracode"),
     hidden: false,
+    bindings: [binding("security", "repository", "Veracode")],
   };
 }
 
@@ -162,10 +163,37 @@ function securityFindings(api: Api, args: Record<string, unknown>) {
   return chosen(raw, filter);
 }
 
+const millisOf = (text: string) => {
+  const found = Date.parse(text);
+  return Number.isFinite(found) ? found : undefined;
+};
+
+export function scanStatus(application: any, since: string | undefined) {
+  const scans = Array.isArray(application?.scans) ? application.scans : [];
+  const published = scans
+    .filter((scan) => String(scan?.status ?? "").toUpperCase() === "PUBLISHED")
+    .map((scan) => String(scan?.modified_date ?? ""))
+    .filter((text) => millisOf(text) !== undefined);
+  const latest = [String(application?.last_completed_scan_date ?? ""), ...published]
+    .filter((text) => millisOf(text) !== undefined)
+    .sort((a, b) => (millisOf(b) ?? 0) - (millisOf(a) ?? 0))[0];
+  const running = scans.some((scan) => !["PUBLISHED", ""].includes(String(scan?.status ?? "").toUpperCase()));
+  const after = since === undefined ? undefined : millisOf(since);
+  const done = latest !== undefined && (after === undefined || (millisOf(latest) ?? 0) > after);
+  return { status: done ? "done" : "pending", scannedAt: latest ?? null, running };
+}
+
+function lastScan(api: Api, args: Record<string, unknown>) {
+  const guid = projectGuid(api, args);
+  return scanStatus(get(api, `${APPLICATIONS}/${guid}`, []), optionalText(args, "since"));
+}
+
 export function call({ action, args, creds }: { action: string; args: Record<string, unknown>; creds: Creds }, ctx: Ctx) {
   const api = apiOf(ctx, creds);
+  if (action === "security.status") return lastScan(api, args);
   if (action === "security.projects") return projects(api, args);
   if (action === "security.findings") return securityFindings(api, args);
+  if (action === "security.options") return projectOptions(projects(api, args));
   return unknownAction(action);
 }
 

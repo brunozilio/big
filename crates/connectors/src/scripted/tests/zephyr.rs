@@ -1,8 +1,8 @@
 use domain::Language;
 use serde_json::{Value, json};
 
-use super::{loaded, now};
 use super::zephyr_fake::ZephyrMcp;
+use super::{loaded, now};
 use crate::descriptor::AuthSpec;
 use crate::error::{ActionError, ErrorClass};
 use crate::http::{FakeHttp, Http, Method};
@@ -307,4 +307,34 @@ async fn a_retried_case_with_the_same_key_is_found_by_its_label_and_not_created_
     let calls = retried.calls();
     assert_eq!(calls[1].1["startAtId"], 7);
     assert!(calls.iter().all(|(name, _)| !name.starts_with("zephyr_create")), "{calls:?}");
+}
+
+#[tokio::test]
+async fn a_result_with_the_issue_id_is_linked_to_the_issue() {
+    let http = ZephyrMcp::new()
+        .answer("zephyr_create_test_execution", json!({ "id": 9, "key": "BIG-E9" }))
+        .answer("zephyr_create_test_execution_issue_link", json!({}));
+    let args = json!({ "case": "BIG-T1", "cycle": "BIG-R1", "status": "passed", "issue_id": "10009" });
+    assert_eq!(zephyr().call(&http, &creds(json!({})), "tests.record", &args, "").await, Ok(json!({ "ref": "BIG-E9" })));
+    let calls = http.calls();
+    assert_eq!(calls[1], ("zephyr_create_test_execution_issue_link".to_owned(), json!({ "testExecutionIdOrKey": "BIG-E9", "issueId": 10009 })));
+}
+
+#[tokio::test]
+async fn a_cycle_is_finished_with_the_project_s_done_status() {
+    let statuses = json!({ "values": [
+        { "id": 1, "name": "Not Executed" }, { "id": 2, "name": "Done", "archived": true }, { "id": 3, "name": "Concluído" },
+    ], "isLast": true });
+    let http = ZephyrMcp::new().answer("zephyr_get_statuses", statuses).answer("zephyr_update_test_cycle", json!({}));
+    let answer = call(&http, "tests.finish_cycle", json!({ "cycle": "OPS-R4", "status": "done" })).await;
+    assert_eq!(answer, Ok(json!({ "ref": "OPS-R4", "status": "Concluído" })));
+    let calls = http.calls();
+    assert_eq!(calls[0].1["statusType"], "TEST_CYCLE");
+    assert_eq!(calls[0].1["projectKey"], "BIG");
+    assert_eq!(calls[1].1, json!({ "testCycleIdOrKey": "OPS-R4", "statusId": 3 }));
+
+    let http = ZephyrMcp::new().answer("zephyr_get_statuses", json!({ "values": [], "isLast": true }));
+    let answer = call(&http, "tests.finish_cycle", json!({ "cycle": "OPS-R4", "status": "done" })).await;
+    assert_eq!(answer, Ok(json!({ "ref": "OPS-R4" })), "a project without that status keeps the cycle as it is");
+    assert_eq!(http.calls().len(), 1);
 }

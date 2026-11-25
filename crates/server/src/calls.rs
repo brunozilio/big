@@ -95,7 +95,11 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
         "ci.run" => pipeline(&caller, arg(args, "run")?).await,
         "cloud.accounts_and_roles" => Ok(accounts(&caller.call(cloud::ACCOUNTS_AND_ROLES, json!({})).await?)),
         "mcp.tools" => caller.call(mcp::TOOLS, json!({})).await,
-        "changes.get" => caller.call(connectors::contracts::changes::GET, json!({ "change": arg(args, "change")? })).await,
+        action if is_options(action) => options(&caller, action, args).await,
+        action if REPORTS.contains(&action) => caller.call(action, args.clone()).await,
+        "changes.get" => {
+            caller.call(connectors::contracts::changes::GET, json!({ "change": arg(args, "change")? })).await
+        }
         _ => Err(ApiError::bad(said(
             format!("The action {action} does not exist for the page."),
             format!("La acción {action} no existe para la página."),
@@ -154,6 +158,34 @@ async fn search(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
     Ok(json!(listed))
 }
 
+const REPORTS: [&str; 3] = [
+    connectors::contracts::security::FINDINGS,
+    connectors::contracts::security::STATUS,
+    connectors::contracts::quality::REPORT,
+];
+
+fn is_options(action: &str) -> bool {
+    action.split_once('.').is_some_and(|(capability, name)| !capability.is_empty() && name == connectors::contracts::OPTIONS)
+}
+
+async fn options(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<Value> {
+    let mut wanted = json!({});
+    if let Some(query) = args["query"].as_str().filter(|query| !query.is_empty()) {
+        wanted["query"] = json!(query);
+    }
+    let found = caller.call(action, wanted).await?;
+    let listed: Vec<Value> = items(&found)
+        .iter()
+        .map(|option| {
+            let value = text(&option["value"]);
+            let label = Some(text(&option["label"])).filter(|label| !label.is_empty()).unwrap_or_else(|| value.clone());
+            json!({ "value": value, "label": label, "detail": option["detail"].as_str() })
+        })
+        .filter(|option| !text(&option["value"]).is_empty())
+        .collect();
+    Ok(json!(listed))
+}
+
 async fn projects(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<Value> {
     let mut wanted = json!({});
     if let Some(query) = args["query"].as_str().filter(|query| !query.is_empty()) {
@@ -198,14 +230,18 @@ pub fn issue(raw: &Value) -> Value {
         .iter()
         .map(|task| {
             let done = task["done"].as_bool().unwrap_or(false);
-            json!({ "key": text(&task["ref"]), "title": text(&task["title"]), "done": done, "byAgent": false })
+            json!({
+                "key": text(&task["ref"]), "title": text(&task["title"]), "done": done, "byAgent": false,
+                "type": task["type"].as_str(),
+            })
         })
         .collect();
     let comments: Vec<Value> = list(raw, "comments").iter().map(|found| comment(found, "comment")).collect();
     let assignee = if raw["assignee"].is_null() { Value::Null } else { person(&raw["assignee"]) };
     json!({
         "key": text(&raw["ref"]), "url": raw["url"].as_str(), "title": text(&raw["title"]),
-        "status": raw["status"].as_str(), "assignee": assignee, "description": text(&raw["description"]),
+        "status": raw["status"].as_str(), "type": raw["type"].as_str(), "parent": raw["parent"].as_str(),
+        "assignee": assignee, "description": text(&raw["description"]),
         "attachments": attachments, "subtasks": subtasks, "comments": comments,
     })
 }

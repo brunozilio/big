@@ -1,4 +1,5 @@
 mod adf;
+mod attach;
 mod fake;
 mod pure;
 
@@ -31,7 +32,10 @@ fn jira() -> ScriptedProvider {
 
 pub fn probe(module: &str, body: &str, input: Value) -> Value {
     let mut modules = content::modules_in(None, module).unwrap_or_else(|error| panic!("{error}"));
-    modules.push(("@probe".to_owned(), format!("import * as m from {module:?};\nexport function probe(input, ctx) {{ {body} }}\n")));
+    modules.push((
+        "@probe".to_owned(),
+        format!("import * as m from {module:?};\nexport function probe(input, ctx) {{ {body} }}\n"),
+    ));
     modules.push((WRAPPER.to_owned(), wrapper("@probe")));
     let script = Script { modules: Arc::new(modules), data: json!({ "brand": { "COMMAND": brand::COMMAND } }) };
     script.invoke_here("probe", &input, Arc::new(Local)).unwrap_or_else(|error| panic!("{error:?}"))
@@ -80,7 +84,8 @@ async fn the_sign_in_is_the_configured_mcp_server_with_dynamic_registration() {
     let AuthSpec::Loopback(sign_in) = jira().descriptor().auth else { panic!("not loopback") };
     assert_eq!(sign_in.0.name(), SERVER);
     assert_eq!(sign_in.0.callback_port(), None);
-    let resource = r#"{"resource":"https://mcp.atlassian.com/v2/mcp","authorization_servers":["https://auth.atlassian.com"]}"#;
+    let resource =
+        r#"{"resource":"https://mcp.atlassian.com/v2/mcp","authorization_servers":["https://auth.atlassian.com"]}"#;
     let server = r#"{"authorization_endpoint":"https://auth.atlassian.com/authorize","token_endpoint":"https://auth.atlassian.com/token","registration_endpoint":"https://auth.atlassian.com/register"}"#;
     let http = FakeHttp::new()
         .once(Method::Get, "/.well-known/oauth-protected-resource", 200, resource)
@@ -113,7 +118,10 @@ async fn the_sites_come_from_the_accessible_resources_with_their_projects() {
     assert_eq!(detail.as_deref(), Some("Projects APP, OPS"));
     assert_eq!(http.sent()[0].header_value("authorization"), Some("Bearer at"));
     let (name, sent) = tool_calls(&http)[1].clone();
-    assert_eq!((name.as_str(), &sent["cloudId"], &sent["name"]), ("executeRead", &json!("c1"), &json!("listJiraProjects")));
+    assert_eq!(
+        (name.as_str(), &sent["cloudId"], &sent["name"]),
+        ("executeRead", &json!("c1"), &json!("listJiraProjects"))
+    );
 }
 
 #[tokio::test]
@@ -123,7 +131,9 @@ async fn create_issue_finds_the_issue_already_labelled_with_the_key() {
     let answer = call(&http, "tracker.create_issue", json!({"title": "Fix it!"}), "k1").await;
     assert_eq!(
         answer,
-        Ok(json!({"ref": "BIG-2", "title": "Fix it!", "status": "A fazer", "url": "https://acme.atlassian.net/browse/BIG-2", "created": false}))
+        Ok(
+            json!({"ref": "BIG-2", "title": "Fix it!", "status": "A fazer", "url": "https://acme.atlassian.net/browse/BIG-2", "created": false})
+        )
     );
     let calls = tool_calls(&http);
     assert_eq!(calls.len(), 1);
@@ -135,18 +145,25 @@ async fn create_issue_finds_the_issue_already_labelled_with_the_key() {
 
 #[tokio::test]
 async fn create_issue_creates_with_the_key_as_a_label() {
-    let http = session(&[json!({ "issues": [] }), json!({"id": "10", "key": "BIG-10"})]);
+    let types = json!({"issueTypes": [
+        {"id": "1", "name": "Épico", "hierarchyLevel": 1},
+        {"id": "2", "name": "História", "hierarchyLevel": 0},
+        {"id": "3", "name": "Construção", "hierarchyLevel": -1, "subtask": true}
+    ]});
+    let parent = json!({"key": "BIG-1", "fields": {"issuetype": {"name": "História"}}});
+    let http =
+        session(&[json!({ "issues": [] }), types, json!([]), parent, json!({"id": "10", "key": "BIG-10"})]);
     let args = json!({"project": "BIG", "title": "T", "description": "**b**", "parent": "BIG-1", "labels": ["x"]});
     let answer = call(&http, "tracker.create_issue", args, "k2").await;
     assert_eq!(
         answer.map(|a| (a["ref"].clone(), a["title"].clone(), a["created"].clone())),
         Ok((json!("BIG-10"), json!("T"), json!(true)))
     );
-    let (name, sent) = tool_calls(&http)[1].clone();
+    let (name, sent) = tool_calls(&http)[4].clone();
     assert_eq!(name, "createJiraIssue");
     assert_eq!(sent["labels"], json!(["x", label("k2")]));
     assert_eq!(label("k2"), crate::idempotency::label("k2"));
-    assert_eq!(sent["issueType"], "Subtask");
+    assert_eq!(sent["issueType"], "Construção");
     assert_eq!(sent["parent"], "BIG-1");
     assert_eq!(sent["contentFormat"], "markdown");
     assert_eq!(sent["description"], "**b**");
@@ -193,7 +210,9 @@ async fn a_comment_already_posted_is_not_posted_again() {
     let answer = call(&http, "tracker.comment", json!({"issue": "BIG-1", "body": "oi"}), "k3").await;
     assert_eq!(
         answer,
-        Ok(json!({"id": "7", "author": {"id": "a1", "name": "Ana"}, "body": "Oi!", "at": "2024-01-01T00:00:00.000+0000", "created": false}))
+        Ok(
+            json!({"id": "7", "author": {"id": "a1", "name": "Ana"}, "body": "Oi!", "at": "2024-01-01T00:00:00.000+0000", "created": false})
+        )
     );
 }
 
@@ -285,13 +304,15 @@ async fn the_fake_server_refuses_the_tools_only_the_first_version_had() {
 
 #[tokio::test]
 async fn an_api_token_reaches_the_mcp_server_as_basic_auth() {
-    let [alternative] = jira().alternatives(Language::Portuguese).try_into().unwrap_or_else(|_| panic!("not one alternative"));
+    let [alternative] =
+        jira().alternatives(Language::Portuguese).try_into().unwrap_or_else(|_| panic!("not one alternative"));
     assert_eq!(alternative.key, "api_token");
     assert_eq!(alternative.label, "Usar API token");
     let AuthSpec::Token(spec) = alternative.auth else { panic!("not a token") };
     let token =
         spec.access_token(&json!({ "email": "ana@acme.com", "token": "t1" }), Language::Portuguese).unwrap_or_default();
-    let http = session(&[json!([{"id": "c1", "url": "https://acme.atlassian.net", "name": "acme"}]), json!({"values": []})]);
+    let http =
+        session(&[json!([{"id": "c1", "url": "https://acme.atlassian.net", "name": "acme"}]), json!({"values": []})]);
     let options = jira().accounts(&http, &creds_with(&token, json!({}))).await;
     assert!(options.is_ok(), "{options:?}");
     assert_eq!(http.sent()[0].header_value("authorization"), Some("Basic YW5hQGFjbWUuY29tOnQx"));

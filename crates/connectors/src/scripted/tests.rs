@@ -8,12 +8,13 @@ use crate::http::{FakeHttp, HttpResponse, Method};
 mod aws;
 mod datadog;
 mod github;
+mod jira;
 mod mcp;
 mod mock_changes;
+mod sonarqube;
 mod veracode;
 mod zephyr;
 mod zephyr_fake;
-mod jira;
 
 pub fn loaded(key: &str) -> ScriptedProvider {
     let entry = format!("{FOLDER}{key}/{ENTRY}");

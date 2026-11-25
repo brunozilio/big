@@ -7,14 +7,15 @@ import { cn } from './cn'
 import { Avatar } from './display'
 import { Logo, svgDef } from './icon'
 
-export function ProductMark({ size = 22, className }: { size?: number; className?: string }) {
+export function ProductMark({ className }: { className?: string }) {
+  const size = 30
   const branding = useStore((s) => s.branding)
   const name = branding?.name ?? ''
   if (branding?.logo) {
-    return <img src={branding.logo} alt={name} className={cn('shrink-0 object-contain', className)} style={{ width: size, height: size, borderRadius: size * 0.23 }} />
+    return <img src={branding.logo} alt={name} className={cn('shrink-0 object-contain', className)} style={{ height: 30, borderRadius: size * 0.23 }} />
   }
   return (
-    <span role="img" aria-label={name} className={cn('inline-flex shrink-0 items-center justify-center bg-primary font-semibold text-primary-fg', className)} style={{ width: size, height: size, borderRadius: size * 0.23, fontSize: size * 0.48 }}>
+    <span role="img" aria-label={name} className={cn('inline-flex shrink-0 items-center justify-center bg-primary font-semibold text-primary-fg', className)} style={{ width: 30, height: 30, borderRadius: size * 0.23, fontSize: size * 0.48 }}>
       {name.slice(0, 1).toUpperCase()}
     </span>
   )

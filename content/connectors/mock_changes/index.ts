@@ -1,5 +1,5 @@
-import { type Creds, type Language, connect, fail, pick, text, tokenField, unknownAction } from "sdk/connectors/index.ts";
-import { changes } from "sdk/connectors/contracts.ts";
+import { type Creds, type Language, connect, fail, optionalText, pick, text, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { binding, bindingField, changes } from "sdk/connectors/contracts.ts";
 
 export const KEY = "mock-changes";
 export const AWAITING = "awaiting_approval";
@@ -7,7 +7,18 @@ export const EXECUTING = "executing";
 export const DONE = "done";
 export const CANCELLED = "cancelled";
 const KEY_BASE = 4830;
-const UPDATABLE = ["title", "window", "tasks", "notes", "attachments", "versions", "description"];
+const UPDATABLE = ["title", "start", "end", "settings", "tasks", "notes", "attachments", "versions", "description"];
+const SHOWN = ["title", "environment", "start", "end", "settings", "requester"];
+const MOMENT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
+
+const CHOICES: Record<string, [string, string][]> = {
+  template: [["tpl-hst-deploy", "Deploy de aplicação · HST"], ["tpl-prd-deploy", "Deploy de aplicação · PRD"], ["tpl-prd-emergency", "Emergencial · PRD"]],
+  company: [["acme", "ACME S.A."], ["acme-pay", "ACME Pagamentos"]],
+  requester_group: [["squad-xpto", "Squad XPTO"], ["squad-pix", "Squad Pix"], ["time-clientes", "Time de Clientes"]],
+  classification: [["standard", "Padrão"], ["normal", "Normal"], ["emergency", "Emergencial"]],
+  environment: [["HST", "Homologação (HST)"], ["PRD", "Produção (PRD)"]],
+  owner: [["Produção N1", "Produção N1"], ["DBA N1", "DBA N1"], ["MIDDLE N1", "MIDDLE N1"], ["Time de infra", "Time de infra"], ["Squad XPTO", "Squad XPTO"], ["Time de Clientes", "Time de Clientes"]],
+};
 const MEMORY = `${KEY}:ledger`;
 
 type Pace = { approval: number; execution: number };
@@ -48,14 +59,27 @@ function shown(reference: string, change: Change, pace: Pace, now: number) {
     status: change.cancelled ? CANCELLED : status(pace, change.created, now),
     revision: change.revision,
   };
-  for (const name of ["title", "environment", "window"]) {
+  for (const name of SHOWN) {
     if (name in change.data) out[name] = change.data[name];
   }
   return out;
 }
 
+export function moment(args: Record<string, unknown>, name: string, required: boolean): void {
+  const value = required ? text(args, name) : optionalText(args, name);
+  if (value !== undefined && !MOMENT.test(value)) fail("permanent", `\`${name}\` must be an ISO 8601 date and time with a timezone, got ${value}`);
+}
+
+function settingsOf(args: Record<string, unknown>): Record<string, unknown> {
+  const given = args.settings;
+  return given && typeof given === "object" && !Array.isArray(given) ? (given as Record<string, unknown>) : {};
+}
+
 function create(ledger: Ledger, args: Record<string, unknown>, key: string, pace: Pace, now: number) {
-  for (const name of ["title", "environment", "window"]) text(args, name);
+  for (const name of ["title", "environment"]) text(args, name);
+  moment(args, "start", true);
+  moment(args, "end", true);
+  text(settingsOf(args), "template");
   const known = key !== "" ? ledger.keys[key] : undefined;
   if (known !== undefined) return { ...shown(known, entry(ledger, known), pace, now), created: false };
   ledger.seq += 1;
@@ -70,6 +94,8 @@ function update(ledger: Ledger, args: Record<string, unknown>, pace: Pace, now: 
   const reference = text(args, "change");
   const change = entry(ledger, reference);
   if (change.cancelled) fail("permanent", `the change ${reference} was cancelled`);
+  moment(args, "start", false);
+  moment(args, "end", false);
   for (const name of UPDATABLE) {
     if (args[name] !== undefined && args[name] !== null) change.data[name] = args[name];
   }
@@ -84,9 +110,16 @@ function read(ledger: Ledger, args: Record<string, unknown>, pace: Pace, now: nu
   return shown(reference, change, pace, now);
 }
 
+export function choices(args: Record<string, unknown>) {
+  const query = (optionalText(args, "query") ?? "").toLowerCase();
+  const listed = CHOICES[optionalText(args, "field") ?? ""] ?? [];
+  return listed.filter(([value, label]) => `${value} ${label}`.toLowerCase().includes(query)).map(([value, label]) => ({ value, label }));
+}
+
 export function run({ action, args, key, ledger, pace, now }) {
   const held: Ledger = ledger ?? emptyLedger();
   const value = (() => {
+    if (action === "changes.options") return choices(args);
     if (action === "changes.create") return create(held, args, key ?? "", pace, now);
     if (action === "changes.update") return update(held, args, pace, now);
     if (action === "changes.get") return read(held, args, pace, now, false);
@@ -148,6 +181,22 @@ export function provider() {
   };
 }
 
+function changeBinding(language: Language) {
+  const each = {
+    key: "environment",
+    label: pick(language, "Environment", "Ambiente", "Ambiente"),
+    fields: [
+      bindingField("template", pick(language, "Template", "Plantilla", "Template"), true),
+      bindingField("classification", pick(language, "Classification", "Clasificación", "Classificação")),
+    ],
+  };
+  const fields = [
+    bindingField("company", pick(language, "Company", "Empresa", "Empresa")),
+    bindingField("requester_group", pick(language, "Requester group", "Grupo solicitante", "Grupo solicitante")),
+  ];
+  return binding("changes", "application", pick(language, "Change requests", "Cambios", "Mudanças"), { fields, each });
+}
+
 export function presentation({ language }: { language: Language }) {
   return {
     description: pick(language, "Simulated change requests", "Cambios simulados", "Mudanças simuladas"),
@@ -156,11 +205,14 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "the simulated system", "del sistema simulado", "do sistema simulado"),
     choose_title: "",
     hidden: false,
+    bindings: [changeBinding(language)],
   };
 }
 
-export function call({ action, args, idempotencyKey }, ctx) {
-  const ran = run({ action, args, key: idempotencyKey, ledger: ctx.memory.get({ name: MEMORY }), pace: paceOf(ctx), now: ctx.clock.now() });
+export function call({ action, args, idempotencyKey, creds }: { action: string; args: Record<string, unknown>; idempotencyKey?: string; creds: Creds }, ctx) {
+  const requester = creds?.token?.trim() || KEY;
+  const given = action === "changes.create" ? { ...args, requester } : args;
+  const ran = run({ action, args: given, key: idempotencyKey, ledger: ctx.memory.get({ name: MEMORY }), pace: paceOf(ctx), now: ctx.clock.now() });
   ctx.memory.set({ name: MEMORY, value: ran.ledger });
   return ran.value;
 }

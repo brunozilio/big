@@ -113,9 +113,9 @@ async fn the_agent_gets_the_account_and_role_chosen_for_its_application() {
     let mut world = World::new();
     world.cloud = true;
     world.provider.always("cloud.identity", json!({ "access_key_id": "AK", "secret_access_key": "SK", "region": "" }));
-    let chosen = store::CloudChoice { connection: "aws".into(), account: "111".into(), role: "Deploy".into() };
-    let application =
-        store::Application { id: "app".into(), name: "Loja".into(), cloud: Some(chosen), ..Default::default() };
+    let chosen = store::Binding::new("aws", "111/Deploy");
+    let bindings = store::Bindings::from([("cloud".to_owned(), chosen)]);
+    let application = store::Application { id: "app".into(), name: "Loja".into(), bindings, ..Default::default() };
     world.store().save_application(&application).expect("application");
     world.workflow("cloudy", CLOUDY);
     let kernel = world.start().await;
@@ -124,5 +124,5 @@ async fn the_agent_gets_the_account_and_role_chosen_for_its_application() {
     let calls = world.provider.calls.lock().expect("lock").clone();
     let asked: Vec<Value> =
         calls.into_iter().filter(|(name, _, _)| name == "cloud.identity").map(|(_, args, _)| args).collect();
-    assert_eq!(asked.first(), Some(&json!({ "account": "111", "role": "Deploy" })), "{asked:?}");
+    assert_eq!(asked.first(), Some(&json!({ "binding": "111/Deploy" })), "{asked:?}");
 }

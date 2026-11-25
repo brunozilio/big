@@ -53,6 +53,14 @@ pub fn base_of(item: &WorkItem) -> Option<String> {
     })
 }
 
+pub fn integrated(item: &WorkItem) -> bool {
+    let fallback = base_of(item);
+    item.input["git"].as_object().into_iter().flatten().any(|(_, entry)| {
+        let Some(lane) = entry["promote"].get(0).and_then(|first| text_at(&first["from"])) else { return false };
+        text_at(&entry["base"]).or_else(|| fallback.clone()).is_some_and(|base| base == lane)
+    })
+}
+
 pub fn summary(item: &WorkItem) -> Value {
     let mut value = item_json(item);
     let steps: Vec<Value> =
@@ -71,14 +79,23 @@ pub fn claimed_by_peers(all: &[WorkItem], workflow: &str) -> BTreeSet<ItemId> {
         .collect()
 }
 
-pub fn unclaimed(me: &WorkItem, all: &[WorkItem], step: &str, state: &str, base: Option<&str>) -> Vec<ItemId> {
+pub fn unclaimed(
+    me: &WorkItem,
+    all: &[WorkItem],
+    step: &str,
+    state: &str,
+    base: Option<&str>,
+    lane: bool,
+) -> Vec<ItemId> {
     let taken = claimed_by_peers(all, &me.workflow);
     all.iter()
         .filter(|other| other.id != me.id && other.workflow != me.workflow && !other.is_cancelled())
         .filter(|other| application_of(other) == application_of(me))
         .filter(|other| state_name(other, step).as_deref() == Some(state))
         .filter(|other| !taken.contains(&other.id))
-        .filter(|other| base.is_none_or(|wanted| base_of(other).as_deref() == Some(wanted)))
+        .filter(|other| {
+            base.is_none_or(|wanted| base_of(other).as_deref() == Some(wanted)) || (lane && integrated(other))
+        })
         .map(|other| other.id.clone())
         .collect()
 }
@@ -115,7 +132,8 @@ pub fn call(shared: &Shared, item: &ItemId, call: &Call) -> Result<Value, Failur
             let all = shared.store.items().map_err(failure)?;
             let step = text(call, "step").ok_or_else(|| Failure::permanent("the argument `step` is missing"))?;
             let state = text(call, "state").unwrap_or("passed");
-            Ok(json!(unclaimed(&me, &all, step, state, text(call, "base"))))
+            let lane = call.args["integrated"].as_bool().unwrap_or(false);
+            Ok(json!(unclaimed(&me, &all, step, state, text(call, "base"), lane)))
         }
         other => Err(Failure::permanent(format!("the kernel does not offer {other}"))),
     }

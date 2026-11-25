@@ -1,4 +1,4 @@
-import { BOARD_GROUPS, STEP_STATES, type Application, type Block, type BlockType, type CloudAccount, type Item, type LiveEvent, type McpTool, type Session, type SessionEvent, type StepView } from './contract'
+import { BOARD_GROUPS, STEP_STATES, type Application, type BindingChoice, type Block, type BlockType, type CloudAccount, type Item, type LiveEvent, type McpTool, type Session, type SessionEvent, type StepView } from './contract'
 
 type Shape = Record<string, unknown>
 
@@ -80,7 +80,7 @@ const blockChecks: Record<BlockType, (b: Shape) => boolean> = {
   quality: (b) => str(b.connection) && str(b.project) && str(b.branch) && strOrNull(b.analyzedAt) && strOrNull(b.url) && obj(b.report) && (b.report.gate === 'passed' || b.report.gate === 'failed') && Array.isArray(b.report.conditions) && Array.isArray(b.report.issues),
   stages: (b) => Array.isArray(b.stages) && bool(b.live),
   members: (b) => Array.isArray(b.items) && bool(b.removable),
-  tasks: (b) => Array.isArray(b.tasks) && Array.isArray(b.kinds) && bool(b.locked) && strOrNull(b.environment),
+  tasks: (b) => Array.isArray(b.tasks) && Array.isArray(b.kinds) && bool(b.locked) && strOrNull(b.environment) && (b.owners === undefined || Array.isArray(b.owners)),
 }
 
 export function isBlock(v: unknown): v is Block {
@@ -133,14 +133,22 @@ export function isLiveEvent(v: unknown): v is LiveEvent {
   }
 }
 
-const choice = (v: unknown, ...keys: string[]) => v === null || v === undefined || (obj(v) && keys.every((k) => str(v[k])))
+const choice = (v: unknown): v is BindingChoice => obj(v) && str(v.value) && (v.label === undefined || str(v.label))
+
+const chosen = (v: unknown): v is Record<string, BindingChoice> => obj(v) && Object.values(v).every(choice)
+
+const bound = (v: unknown) => obj(v) && str(v.connection) && str(v.value) && (v.label === undefined || str(v.label)) && (v.more === undefined || arr(v.more, choice)) && (v.fields === undefined || chosen(v.fields)) && (v.profiles === undefined || arr(v.profiles, chosen))
+
+const bindings = (v: unknown) => v === undefined || (obj(v) && Object.values(v).every(bound))
+
+const variables = (v: unknown) => v === undefined || (obj(v) && Object.values(v).every(str))
 
 function isRepository(v: unknown): v is Application['repositories'][number] {
-  return obj(v) && str(v.id) && str(v.directory) && arr(v.run, str) && arr(v.verify, str) && choice(v.code, 'connection', 'repo')
+  return obj(v) && str(v.id) && str(v.directory) && arr(v.run, str) && arr(v.verify, str) && (v.e2e === undefined || arr(v.e2e, str)) && (v.e2eDirectory === undefined || str(v.e2eDirectory)) && (v.flow === undefined || str(v.flow)) && bindings(v.bindings)
 }
 
 export function isApplication(v: unknown): v is Application {
-  return obj(v) && str(v.id) && str(v.name) && choice(v.tracker, 'connection', 'project') && choice(v.tests, 'connection', 'project') && choice(v.cloud, 'connection', 'account', 'role') && arr(v.repositories, isRepository)
+  return obj(v) && str(v.id) && str(v.name) && bindings(v.bindings) && arr(v.repositories, isRepository) && variables(v.env)
 }
 
 export function isCloudAccount(v: unknown): v is CloudAccount {

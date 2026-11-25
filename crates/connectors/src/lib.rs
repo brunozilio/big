@@ -19,11 +19,11 @@ pub use descriptor::{
     TokenSpec,
 };
 pub use error::{ActionError, ErrorClass};
-pub use http::{FakeHttp, Http, HttpRequest, HttpResponse, Method, ReqwestHttp};
+pub use http::{FakeHttp, Http, HttpRequest, HttpResponse, Method, Part, ReqwestHttp};
 pub use hub::Connectors;
 pub use limiter::RateLimiter;
 pub use oauth::{
-    Authorization, DeviceApp, DeviceCode, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, Polled, RegisteredClient,
-    DeviceSignIn, Started, Stepped, TokenKeeper, TokenStore,
+    Authorization, DeviceApp, DeviceCode, DeviceSignIn, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, Polled,
+    RegisteredClient, Started, Stepped, TokenKeeper, TokenStore,
 };
 pub use provider::{AccountOption, Args, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SettingsSink};

@@ -1,4 +1,5 @@
 import { PASSED, RUNNING, WAITING, after } from "./rules.js";
+import { codeOf } from "sdk/bindings.js";
 
 export const fill = (text, values) =>
   String(text || "").replace(/\{(\w+)\}/g, (_, name) => (values[name] === undefined ? "" : String(values[name])));
@@ -9,10 +10,28 @@ function repositoriesOf(member) {
   return [...new Set([...named, ...sourced])];
 }
 
+function promotionsOf(state, repository) {
+  for (const member of state.members) {
+    const found = ((member && member.git) || {})[repository];
+    if (found && Array.isArray(found.promote) && found.promote.length > 0) return found.promote;
+  }
+  return null;
+}
+
+export function gateFor(env, service) {
+  const gate = env.gate || {};
+  const at = gate.promotion;
+  const steps = service && Array.isArray(service.promote) ? service.promote : null;
+  if (gate.kind !== "merge" || !Number.isInteger(at) || !steps || !steps[at]) return gate;
+  return { ...gate, ...steps[at] };
+}
+
 export function services(state, config, application) {
   const repositories = (application && application.repositories) || [];
   const wanted = new Set(state.members.flatMap(repositoriesOf));
-  const chosen = repositories.filter((repository) => wanted.size === 0 || wanted.has(repository.id));
+  const chosen = repositories
+    .filter((repository) => wanted.size === 0 || wanted.has(repository.id))
+    .map((repository) => ({ ...repository, code: codeOf(repository) }));
   return chosen
     .filter((repository) => repository.code && repository.code.repo)
     .map((repository) => {
@@ -25,6 +44,7 @@ export function services(state, config, application) {
         connection: repository.code.connection,
         pipeline: given.pipeline || (config.rollbackVersion && config.rollbackVersion.pipeline) || "",
         version: given.version || (sha ? sha.slice(0, 7) : "next"),
+        promote: promotionsOf(state, repository.id),
       };
     });
 }
@@ -39,8 +59,8 @@ async function quietly(work) {
 
 export async function promote(ctx, state, config, env, application) {
   state.stages[env.id] = RUNNING;
-  const gate = env.gate;
   for (const service of services(state, config, application)) {
+    const gate = gateFor(env, service);
     const options = { connection: service.connection };
     const title = fill(gate.title || "Promote {from} to {into}", gate);
     const pull = await quietly(() => ctx.call("code", "open_pull_request", { repo: service.repo, head: gate.from, base: gate.into, title }, options));
@@ -60,9 +80,11 @@ export async function rollback(ctx, state, config, env, application) {
   state.stages[env.id] = RUNNING;
   state.reverting = env.id;
   const command = (env.rollback && env.rollback.command) || DEFAULT_REVERT;
-  const branch = env.branch || (env.gate && env.gate.into) || "";
+  const listed = services(state, config, application);
   const shas = env.gate.kind === "merge" ? state.merges[env.id] || {} : state.memberShas || {};
   for (const [repository, sha] of Object.entries(shas)) {
+    const gate = gateFor(env, listed.find((service) => service.id === repository));
+    const branch = env.branch || gate.into || "";
     for (const one of [].concat(sha || [])) await ctx.exec(fill(command, { branch, sha: one }), { repository });
   }
   state.reverting = null;
@@ -70,8 +92,16 @@ export async function rollback(ctx, state, config, env, application) {
   for (const later of after(config.environments, env.id)) state.stages[later.id] = "pending";
 }
 
+function promotedOf(service) {
+  const steps = service && Array.isArray(service.promote) ? service.promote : [];
+  const first = steps[0];
+  return first && first.into ? { into: first.into, from: first.from } : {};
+}
+
 export async function versions(ctx, config, env, list) {
   const finder = { ...(config.rollbackVersion || {}), ...((env && env.rollbackVersion) || {}) };
+  const merging = (config.environments || []).find((entry) => entry.gate && entry.gate.kind === "merge");
+  const fallback = merging ? { from: merging.gate.from, into: merging.gate.into } : {};
   const found = {};
   for (const service of list) {
     if (finder.kind === "cloud") {
@@ -79,7 +109,7 @@ export async function versions(ctx, config, env, list) {
       found[service.name] = (last && last.version) || null;
       continue;
     }
-    const args = { repo: service.repo, pipeline: service.pipeline, ref: fill(finder.ref || "", env), status: "success", limit: 1 };
+    const args = { repo: service.repo, pipeline: service.pipeline, ref: fill(finder.ref || "", { ...fallback, ...env, ...promotedOf(service) }), status: "success", limit: 1 };
     const runs = await quietly(() => ctx.call("pipelines", "runs", args, { connection: service.connection, optional: true }));
     const last = Array.isArray(runs) ? runs[0] : null;
     found[service.name] = last ? String(last.head || last.ref || "") : null;
@@ -87,10 +117,10 @@ export async function versions(ctx, config, env, list) {
   return found;
 }
 
-export async function createChange(ctx, state, config, env, payload) {
+export async function createChange(ctx, state, config, env, payload, using) {
   state.versions[env.id] = await versions(ctx, config, env, state.services);
-  const made = await ctx.call("changes", "create", { title: state.title, environment: env.id, window: state.windows[env.id], ...payload });
-  state.changes[env.id] = { ref: made.ref, key: made.key, status: made.status, url: made.url || null };
+  const made = await ctx.call("changes", "create", { title: state.title, environment: env.id, ...payload }, using);
+  state.changes[env.id] = { ref: made.ref, key: made.key, status: made.status, url: made.url || null, connection: (using && using.connection) || null };
   state.stages[env.id] = RUNNING;
 }
 

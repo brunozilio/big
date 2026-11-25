@@ -71,6 +71,7 @@ function Subtasks({ issue }: { issue: IssueData }) {
           <li key={s.key} className="flex h-12 items-center gap-3 px-4 [&+&]:border-t">
             <Check checked={s.done} />
             <span className="w-[68px] shrink-0 text-sm text-muted">{s.key}</span>
+            {s.type && <span className="shrink-0 rounded-full bg-inset px-2 py-0.5 text-xs text-fg2">{s.type}</span>}
             <span className={cn('flex-1 truncate text-base transition-colors', s.done ? 'text-muted line-through' : 'text-fg')} title={s.title}>{s.title}</span>
           </li>
         ))}
@@ -113,6 +114,8 @@ export function IssueBlock({ block }: { block: Of<'issue'> }) {
   return (
     <div className="space-y-8 px-2 py-2">
       <div className="flex items-center gap-2 text-sm text-muted">
+        {issue.type && <span className="rounded-full bg-inset px-2 py-0.5 text-xs font-medium text-fg2">{issue.type}</span>}
+        {issue.parent && <span className="text-faint">↑ {issue.parent}</span>}
         {issue.status && <span>{issue.status}</span>}
         {issue.assignee && (
           <>

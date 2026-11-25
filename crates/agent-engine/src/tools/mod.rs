@@ -257,7 +257,7 @@ mod declared_tests {
         let scripts: Vec<(&str, String)> = content::builtin_files("tools/")
             .into_iter()
             .filter(|(path, _)| path.ends_with(".ts") && !path.ends_with(".d.ts"))
-            .map(|(path, source)| (path, String::from_utf8_lossy(source).into_owned()))
+            .map(|(path, source)| (path, String::from_utf8_lossy(&source).into_owned()))
             .collect();
         assert!(scripts.len() > 30, "{}", scripts.len());
         for (path, source) in &scripts {

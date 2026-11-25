@@ -186,11 +186,7 @@ pub fn tokens(
 }
 
 pub fn profiles(region: &str, access_token: &str) -> (String, Vec<(String, String)>, String) {
-    let headers = vec![
-        ("authorization".into(), format!("Bearer {access_token}")),
-        ("content-type".into(), "application/x-amz-json-1.0".into()),
-        ("x-amz-target".into(), PROFILES.into()),
-    ];
+    let headers = super::headers(access_token, PROFILES);
     (format!("https://q.{region}.amazonaws.com/"), headers, json!({ "maxResults": 10 }).to_string())
 }
 

@@ -32,7 +32,7 @@ fn application(first: &Path, second: &Path) -> Value {
     json!({
         "id": "app", "name": "Loja",
         "repositories": [
-            { "id": "web", "directory": first.to_string_lossy(), "code": { "connection": "c1", "repo": "acme/web" },
+            { "id": "web", "directory": first.to_string_lossy(), "bindings": { "code": { "connection": "c1", "value": "acme/web" } },
               "run": "bun dev", "verify": ["bun test"] },
             { "id": "api", "directory": second.to_string_lossy(), "verify": ["cargo test"] },
         ],
@@ -101,4 +101,50 @@ export default workflow({ name: "plain", async run(ctx) { const ran = await ctx.
     let there = output(&ended(&kernel, &there).await);
     assert!(here["ls"].as_str().is_some_and(|text| text.contains("README")) && here["other"].is_null());
     assert!(there["ls"].as_str().is_some_and(|text| text.contains("OTHER.txt")) && there["other"] == true);
+}
+
+const ENVIRONMENT: &str = r#"
+import { workflow } from "sdk";
+
+export default workflow({
+  name: "ambiente",
+  async run(ctx) {
+    await ctx.agent("worker", "faça");
+    const ran = await ctx.exec("printf %s \"$APP_URL\"", { repository: "web" });
+    return { url: ran.stdout };
+  },
+});
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_application_s_variables_reach_its_commands_and_agents_without_entering_the_item() {
+    let mut world = World::new();
+    world.init_git();
+    world.workflow("ambiente", ENVIRONMENT);
+    let repository = store::Repository {
+        id: "web".into(),
+        directory: world.repo().to_string_lossy().into_owned(),
+        e2e: vec!["npx cypress run".into()],
+        e2e_directory: "e2e".into(),
+        ..store::Repository::default()
+    };
+    let application = store::Application {
+        id: "app".into(),
+        name: "Loja".into(),
+        repositories: vec![repository],
+        env: store::Environment::from([("APP_URL".to_owned(), "http://loja.local".to_owned())]),
+        ..store::Application::default()
+    };
+    let snapshot = crate::provenance::snapshot(&world.store(), &application);
+    world.store().save_application(&application).expect("app");
+    let kernel = world.start().await;
+
+    let id = kernel.create_item("ambiente", json!({ "title": "x", "application": snapshot })).expect("item");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item)["url"], "http://loja.local");
+    assert!(item.input["application"].get("env").is_none());
+    let request = &world.engine.requests()[0];
+    assert!(request.host.environment.contains(&("APP_URL".to_owned(), "http://loja.local".to_owned())));
+    let system = request.session.append_system.clone().unwrap_or_default();
+    assert!(system.contains("End-to-end suite in `e2e`: `npx cypress run`"), "{system}");
 }

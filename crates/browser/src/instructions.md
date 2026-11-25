@@ -6,7 +6,7 @@ Start a browser task whose tools are not yet loaded with a single call loading t
 
 ToolSearch with query "select:{{SERVER}}tabs_context_mcp,{{SERVER}}navigate,{{SERVER}}computer,{{SERVER}}read_page,{{SERVER}}find,{{SERVER}}browser_batch,{{SERVER}}tabs_create_mcp,{{SERVER}}tabs_close_mcp"
 
-Add task-specific tools to the same call when the task obviously needs them: read_console_messages / read_network_requests for debugging, form_input for forms, gif_creator for recordings, javascript_tool for page scripting, file_upload / upload_image for uploads. Only issue a second ToolSearch if the task later needs a tool you did not anticipate.
+Add task-specific tools to the same call when the task obviously needs them: read_console_messages / read_network_requests for debugging, network_intercept to change, mock or block requests and responses, form_input for forms, gif_creator for recordings, javascript_tool for page scripting, file_upload / upload_image for uploads. Only issue a second ToolSearch if the task later needs a tool you did not anticipate.
 
 ## Tab context and session startup
 

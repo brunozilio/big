@@ -175,6 +175,36 @@ pub struct Presentation {
     pub site: String,
     pub choose_title: String,
     pub hidden: bool,
+    pub bindings: Vec<BindingSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BindingSpec {
+    pub capability: String,
+    pub scope: String,
+    pub label: String,
+    pub multiple: bool,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub fields: Vec<BindingField>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub each: Option<BindingEach>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BindingField {
+    pub key: String,
+    pub label: String,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BindingEach {
+    pub key: String,
+    pub label: String,
+    pub fields: Vec<BindingField>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

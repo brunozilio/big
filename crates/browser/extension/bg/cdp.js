@@ -4,9 +4,14 @@ const PROTOCOL = "1.3";
 const attached = new Set();
 const attaching = new Map();
 const listeners = new Set();
+const attachListeners = new Set();
 
 export function onEvent(listener) {
   listeners.add(listener);
+}
+
+export function onAttach(listener) {
+  attachListeners.add(listener);
 }
 
 chrome.debugger.onEvent.addListener((source, method, params) => {
@@ -47,6 +52,11 @@ export async function attach(tabId) {
       raw(tabId, "Network.enable", { maxPostDataSize: 0 }),
     ]);
     await raw(tabId, "Network.setBypassServiceWorker", { bypass: true }).catch(() => {});
+    for (const listener of attachListeners) {
+      try {
+        await listener(tabId);
+      } catch {}
+    }
   })();
   attaching.set(tabId, work);
   try {

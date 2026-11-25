@@ -3,7 +3,8 @@
 Id `kiro-subscription`. Signs in through the browser via
 `app.kiro.dev/signin`, callback `http://localhost:49153/oauth/callback`.
 
-Kiro is spoken as Kiro CLI 3.1.0 does. Sign-in opens Kiro's portal with a
+Kiro is spoken as Kiro CLI 3.6.0 does, with its AWS SDK
+`user-agent` and `x-amz-user-agent`, read from `[kiro]` in `config.toml`. Sign-in opens Kiro's portal with a
 PKCE challenge and `redirect_uri=http://localhost:49153` (Kiro's sign-in
 accepts only that port); the portal returns
 `/oauth/callback?login_option=…&code=…`, and Google or GitHub codes are

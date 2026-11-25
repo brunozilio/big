@@ -1,3 +1,4 @@
+import { projectOf } from "sdk/bindings.js";
 import { step, markdown, testCases } from "sdk";
 import { agentOptions, attempt, defined, effects, inLanguage, issueOf, languageOf, missingConnection, object, planOf, waitOptions } from "./context.js";
 
@@ -134,8 +135,8 @@ async function judged(ctx, opts, draft) {
   }
 }
 
-function chosen(ctx, field) {
-  return object(object(ctx.item.application)[field]);
+function chosen(ctx, capability) {
+  return projectOf(ctx.item.application, capability);
 }
 
 function testsOptions(ctx, opts) {
@@ -198,7 +199,8 @@ async function created(ctx, given, cases, issue, existing) {
   }
   const title = issue ? `${issue} · ${planOf(ctx, opts).title}` : planOf(ctx, opts).title;
   const cycle = await ctx.call("tests", "create_cycle", defined({ project: opts.project, title, issue: issue ?? undefined, issue_id: issueId }), effects(opts));
-  return defined({ cases: [...existing, ...made], reused: existing.length > 0 ? existing.map((entry) => entry.ref) : undefined, cycle: cycle.ref, cycleUrl: cycle.url ?? null });
+  const reused = existing.length > 0 ? existing.map((entry) => entry.ref) : undefined;
+  return defined({ cases: [...existing, ...made], reused, cycle: cycle.ref, cycleUrl: cycle.url ?? null, issueId: issueId ?? undefined });
 }
 
 export default step({

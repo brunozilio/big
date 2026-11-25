@@ -1,12 +1,12 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
 import { api } from '@/api'
-import type { Application, ApplicationRepository, CodeRepo, DirListing, TrackerProject } from '@/api/contract'
+import type { Application, ApplicationRepository, Bindings, DirListing } from '@/api/contract'
 import { errorText, setApplications, useStore } from '@/api/store'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
-import { ProductMark, ProviderLogo } from '@/ui/domain'
-import { Field, Input, Select } from '@/ui/form'
+import { ProductMark } from '@/ui/domain'
+import { Field, Input } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { tweenClose } from '@/ui/motion'
 import { LanguagePicker } from '@/i18n/LanguagePicker'
@@ -16,10 +16,11 @@ import { ConnectDialog } from '../settings/ConnectDialog'
 import { ConnectionCard } from '../settings/ConnectionCard'
 import { FolderDialog } from '../settings/FolderDialog'
 import { accountsOf } from '../settings/Settings'
-import { choiceKey, folderName, fromKey, loadProjects, loadRepos, suggestedCode, useListed, useSources } from '../settings/Applications'
+import { folderName } from '../settings/Applications'
+import { BindingFields, suggested, useBindingFields, useBindingOptions, type BindingField, type BindingOptions } from '../settings/bindings'
+import { FlowSelect, useFlows, withFlow } from '../settings/flows'
 
 const SKIPPED = 'onboarding:skipped'
-const NONE = 'none'
 
 type Stage = 'connections' | 'ai' | 'application'
 
@@ -53,11 +54,16 @@ export function needsOnboarding(ready: boolean, applications: Application[] | nu
 
 interface Draft {
   name: string
-  tracker: { connection: string; project: string } | null
+  bindings: Bindings
   repository: ApplicationRepository
 }
 
-const blank: Draft = { name: '', tracker: null, repository: { id: '', code: null, directory: '', run: [], verify: [] } }
+const blank: Draft = { name: '', bindings: {}, repository: { id: '', directory: '', run: [], verify: [], bindings: {} } }
+
+interface Binder {
+  fields: BindingField[]
+  options: BindingOptions
+}
 
 function Steps({ stage }: { stage: Stage }) {
   const t = useT()
@@ -97,21 +103,9 @@ function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider
   )
 }
 
-function ApplicationStage({ draft, onChange, onFolder, projects, repos }: { draft: Draft; onChange: (next: Draft) => void; onFolder: () => void; projects: Record<string, TrackerProject[]>; repos: Record<string, CodeRepo[]> }) {
-  const trackers = useSources('tracker')
-  const coders = useSources('code')
+function ApplicationStage({ draft, onChange, onFolder, shared, own }: { draft: Draft; onChange: (next: Draft) => void; onFolder: () => void; shared: Binder; own: Binder }) {
   const t = useT()
-  const spaces = [
-    { value: NONE, label: t('app.none') },
-    ...trackers.flatMap((s) => (projects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: `${p.name} · ${p.key}`, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
-  ]
-  const codes = [
-    { value: NONE, label: t('app.none') },
-    ...coders.flatMap((s) => (repos[s.connection.id] ?? []).map((r) => ({ value: choiceKey(s.connection.id, r.ref), label: r.ref, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
-  ]
-  const space = draft.tracker ? choiceKey(draft.tracker.connection, draft.tracker.project) : NONE
-  const code = draft.repository.code ? choiceKey(draft.repository.code.connection, draft.repository.code.repo) : NONE
-  if (draft.repository.code && !codes.some((o) => o.value === code)) codes.push({ value: code, label: draft.repository.code.repo })
+  const flows = useFlows(true)
   return (
     <div className="space-y-5">
       <Field label={t('app.name')}>
@@ -125,18 +119,9 @@ function ApplicationStage({ draft, onChange, onFolder, projects, repos }: { draf
         </button>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label={t('app.space')}>
-          <Select label={t('app.space')} className="w-full" value={space} options={spaces} onValueChange={(v) => {
-            const picked = fromKey(v)
-            onChange({ ...draft, tracker: picked ? { connection: picked.connection, project: picked.key } : null })
-          }} />
-        </Field>
-        <Field label={t('app.remoteRepository')}>
-          <Select label={t('app.remoteRepository')} className="w-full" value={code} options={codes} onValueChange={(v) => {
-            const picked = fromKey(v)
-            onChange({ ...draft, repository: { ...draft.repository, code: picked ? { connection: picked.connection, repo: picked.key } : null } })
-          }} />
-        </Field>
+        <BindingFields fields={shared.fields} options={shared.options} bindings={draft.bindings} onChange={(bindings) => onChange({ ...draft, bindings })} />
+        <BindingFields fields={own.fields} options={own.options} bindings={draft.repository.bindings} onChange={(bindings) => onChange({ ...draft, repository: { ...draft.repository, bindings } })} />
+        <FlowSelect value={draft.repository.flow} flows={flows} onChange={(flow) => onChange({ ...draft, repository: withFlow(draft.repository, flow) })} />
       </div>
     </div>
   )
@@ -171,15 +156,15 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
   const [choosing, setChoosing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const trackers = useSources('tracker')
-  const coders = useSources('code')
-  const projects = useListed<TrackerProject>(trackers, loadProjects, stage === 'application')
-  const repos = useListed<CodeRepo>(coders, loadRepos, stage === 'application')
+  const sharedFields = useBindingFields('application')
+  const ownFields = useBindingFields('repository')
+  const sharedOptions = useBindingOptions(sharedFields, stage === 'application')
+  const ownOptions = useBindingOptions(ownFields, stage === 'application')
   const chosen = (listing: DirListing) => {
     setDraft((d) => ({
       ...d,
       name: d.name.trim() ? d.name : folderName(listing.path),
-      repository: { ...d.repository, directory: listing.path, code: d.repository.code ?? suggestedCode(listing.remote.ref, repos) },
+      repository: { ...d.repository, directory: listing.path, bindings: suggested(listing.remote.ref, ownFields, ownOptions, d.repository.bindings) },
     }))
     setChoosing(false)
   }
@@ -187,7 +172,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
     setBusy(true)
     setError(null)
     api()
-      .createApplication({ name: draft.name.trim(), tracker: draft.tracker, repositories: [draft.repository] })
+      .createApplication({ name: draft.name.trim(), bindings: draft.bindings, repositories: [draft.repository] })
       .then((saved) => {
         setApplications((list) => [...list, saved])
         onDone()
@@ -206,7 +191,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
   return (
     <div className="flex min-h-full flex-col items-center bg-subtle px-4 py-10">
       <div className="mb-8 flex w-full max-w-[560px] items-center justify-between">
-        <ProductMark size={34} />
+        <ProductMark />
         <LanguagePicker className="w-36" />
       </div>
       <div className="w-full max-w-[560px] rounded-card bg-bg shadow-card">
@@ -220,7 +205,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
                 {stage !== 'application' ? (
                   <ConnectionsStage ai={stage === 'ai'} onConnect={setConnecting} />
                 ) : (
-                  <ApplicationStage draft={draft} onChange={setDraft} onFolder={() => setChoosing(true)} projects={projects} repos={repos} />
+                  <ApplicationStage draft={draft} onChange={setDraft} onFolder={() => setChoosing(true)} shared={{ fields: sharedFields, options: sharedOptions }} own={{ fields: ownFields, options: ownOptions }} />
                 )}
               </div>
             </motion.div>

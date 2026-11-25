@@ -1,5 +1,5 @@
 import { type Creds, type Language, decode, fetchJson, form, missing, optionalText, pick, setting, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
-import { cloud } from "sdk/connectors/contracts.ts";
+import { binding, cloud, options } from "sdk/connectors/contracts.ts";
 import { caller, keysOf, type Keys } from "./sts.ts";
 import { isoSeconds } from "./login.ts";
 
@@ -23,7 +23,7 @@ export function provider() {
     logo: "logo.svg",
     capabilities: ["cloud"],
     auth: { kind: "loopback" },
-    actions: cloud().filter((action) => action.name !== "cloud.last_deployment"),
+    actions: [...cloud().filter((action) => action.name !== "cloud.last_deployment"), options("cloud")],
   };
 }
 
@@ -35,6 +35,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "AWS", "de AWS", "da AWS"),
     choose_title: pick(language, "Account and role", "Cuenta y rol", "Conta e papel"),
     hidden: false,
+    bindings: [binding("cloud", "application", pick(language, "AWS account and role", "Cuenta y rol de AWS", "Conta e papel da AWS"))],
   };
 }
 
@@ -117,11 +118,26 @@ function consoleIdentity(ctx, creds: Creds, keys: Keys) {
   };
 }
 
+export function boundOf(value: string | undefined): { account?: string; role?: string } {
+  if (value === undefined || value === "") return {};
+  const at = value.indexOf("/");
+  return at < 0 ? { account: value } : { account: value.slice(0, at), role: value.slice(at + 1) || undefined };
+}
+
+export function cloudOptions(listed: { id: string; name: string; roles: string[] }[]) {
+  return listed.flatMap((account) => {
+    const name = account.name || spaced(account.id);
+    if (account.roles.length === 0) return [{ value: account.id, label: name }];
+    return account.roles.map((role) => ({ value: `${account.id}/${role}`, label: `${name} · ${role}` }));
+  });
+}
+
 function identity(ctx, creds: Creds, args: Record<string, unknown>) {
   const keys = keysOf(creds.token);
   if (keys) return consoleIdentity(ctx, creds, keys);
-  const account = optionalText(args, "account") ?? setting(creds, "account") ?? missing("account");
-  const role = optionalText(args, "role") ?? setting(creds, "role") ?? missing("role");
+  const bound = boundOf(optionalText(args, "binding"));
+  const account = optionalText(args, "account") ?? bound.account ?? setting(creds, "account") ?? missing("account");
+  const role = optionalText(args, "role") ?? bound.role ?? setting(creds, "role") ?? missing("role");
   const answer = portalGet(ctx, creds, "/federation/credentials", [["account_id", account], ["role_name", role]]);
   const held = answer?.roleCredentials ?? decode("no roleCredentials");
   const expiration = Number.isInteger(held.expiration) ? held.expiration : undefined;
@@ -140,6 +156,7 @@ function identity(ctx, creds: Creds, args: Record<string, unknown>) {
 export function call({ action, args, creds }: { action: string; args: Record<string, unknown>; creds: Creds }, ctx) {
   if (action === "cloud.accounts_and_roles") return accountsAndRoles(ctx, creds);
   if (action === "cloud.identity") return identity(ctx, creds, args ?? {});
+  if (action === "cloud.options") return cloudOptions(accountsAndRoles(ctx, creds).accounts);
   return unknownAction(action);
 }
 

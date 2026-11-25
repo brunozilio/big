@@ -64,7 +64,10 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value)>>,
 }
 
-const ACTIONS: [&str; 9] = [
+const ACTIONS: [&str; 12] = [
+    "quality.report",
+    "security.findings",
+    "cloud.identity",
     "code.repos",
     "tracker.issue",
     "tracker.search",
@@ -113,7 +116,7 @@ impl Provider for FakeProvider {
         Ok(match action {
             "tracker.issue" => {
                 json!({ "ref": "K-1", "url": "https://tracker.test/K-1", "title": "Corrigir", "status": "A fazer",
-                "description": "texto", "subtasks": [], "attachments": [], "comments": [] })
+                "type": "Bug", "description": "texto", "subtasks": [], "attachments": [], "comments": [] })
             }
             "tracker.search" => json!({ "issues": [{ "ref": "K-1", "title": "Corrigir", "status": "A fazer" }] }),
             "tracker.projects" => json!([
@@ -133,6 +136,9 @@ impl Provider for FakeProvider {
                   "default_branch": "main", "private": true },
             ]),
             "pipelines.run" => json!({ "ref": "o/r/runs/9", "pipeline": "CI", "state": "passed", "jobs": [] }),
+            "quality.report" => json!({ "status": "done", "gate": "passed", "conditions": [], "issues": [], "total": 0 }),
+            "security.findings" => json!([{ "id": "11", "title": "SQL injection", "severity": 5, "file": "a.rs" }]),
+            "cloud.identity" => json!({ "access_key_id": "AK", "secret_access_key": "SK" }),
             "cloud.accounts_and_roles" => json!({ "accounts": [
                 { "id": "111122223333", "name": "prod", "email": "ops@acme.test", "roles": ["Admin", "Deploy"] },
             ] }),

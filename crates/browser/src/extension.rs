@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-const FILES: [(&str, &str); 19] = [
+const FILES: [(&str, &str); 20] = [
     ("manifest.json", include_str!("../extension/manifest.json")),
     ("config.js", include_str!("../extension/config.js")),
     ("bg/main.js", include_str!("../extension/bg/main.js")),
@@ -12,6 +12,7 @@ const FILES: [(&str, &str); 19] = [
     ("bg/page.js", include_str!("../extension/bg/page.js")),
     ("bg/results.js", include_str!("../extension/bg/results.js")),
     ("bg/logs.js", include_str!("../extension/bg/logs.js")),
+    ("bg/intercept.js", include_str!("../extension/bg/intercept.js")),
     ("bg/frames.js", include_str!("../extension/bg/frames.js")),
     ("bg/sites.js", include_str!("../extension/bg/sites.js")),
     ("bg/ask.js", include_str!("../extension/bg/ask.js")),

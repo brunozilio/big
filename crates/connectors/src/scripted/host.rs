@@ -4,14 +4,14 @@ use std::sync::{Arc, Mutex, OnceLock, PoisonError};
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use jiff::Timestamp;
-use serde_json::{Map, Value, json};
 use ring::rand::SystemRandom;
 use ring::signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair};
+use serde_json::{Map, Value, json};
 use sha2::{Digest, Sha256};
 
 use super::bridge::{Answers, Waits, encoded};
 use crate::error::ActionError;
-use crate::http::{Http, HttpRequest, HttpResponse, Method};
+use crate::http::{Http, HttpRequest, HttpResponse, Method, Part};
 use crate::mcp::McpClient;
 use crate::oauth::mcp::McpSignIn;
 use crate::oauth::{Authorization, Grant, LoopbackSignIn};
@@ -174,8 +174,20 @@ fn request(arguments: &Value) -> Result<HttpRequest, ActionError> {
         request.body = text.as_bytes().to_vec();
     } else if let Some(encoded) = arguments["base64"].as_str() {
         request.body = STANDARD.decode(encoded).map_err(|error| ActionError::permanent(error.to_string()))?;
+    } else if let Some(listed) = arguments["parts"].as_array() {
+        let parts = listed.iter().map(part).collect::<Result<Vec<Part>, ActionError>>()?;
+        request = request.multipart(&parts);
     }
     Ok(request)
+}
+
+fn part(found: &Value) -> Result<Part, ActionError> {
+    let text = |name: &str| found[name].as_str().filter(|text| !text.is_empty()).map(str::to_owned);
+    let bytes = match found["base64"].as_str() {
+        Some(encoded) => STANDARD.decode(encoded).map_err(|error| ActionError::permanent(error.to_string()))?,
+        None => field(found, "value").as_bytes().to_vec(),
+    };
+    Ok(Part { name: field(found, "name").to_owned(), filename: text("filename"), content_type: text("contentType"), bytes })
 }
 
 fn response(answer: &HttpResponse, binary: bool) -> Value {

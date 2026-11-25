@@ -21,7 +21,9 @@ impl Synchronizer {
     ) -> Result<Option<PollReport>, Error> {
         let id = entry.connection.id.as_str();
         let cursor = self.store.cursor(id)?;
-        let Some(batch) = self.connectors.poll(&entry.connection, &entry.settings, cursor.as_deref()).await? else {
+        let watch = store::watched(&self.store.applications()?, id);
+        let Some(batch) = self.connectors.poll(&entry.connection, &entry.settings, cursor.as_deref(), &watch).await?
+        else {
             return Ok(None);
         };
         let mut events = batch.events;

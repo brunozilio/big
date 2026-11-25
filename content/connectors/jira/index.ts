@@ -1,9 +1,11 @@
-import { type Creds, type Language, pick, text, textAt, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
-import { tracker } from "sdk/connectors/contracts.ts";
+import { type Creds, type Language, optionalText, pick, text, textAt, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { binding, options, projectOptions, tracker } from "sdk/connectors/contracts.ts";
 import { items } from "sdk/connectors/mcp.ts";
 import { NO_SITES, apiOf, projectOf, siteApi } from "./api.ts";
+import { attach } from "./attach.ts";
 import { linkIssues, updateIssue } from "./edit.ts";
 import { fields, statuses } from "./metadata.ts";
+import { schema } from "./schema.ts";
 import { visibleProjects } from "./projects.ts";
 import { comment, createIssue, issue, projects, search, setImpediment, transition, transitions } from "./tracker.ts";
 
@@ -24,7 +26,7 @@ export function provider() {
     logo: "logo.svg",
     capabilities: ["tracker"],
     auth: { kind: "loopback" },
-    actions: tracker(),
+    actions: [...tracker(), options("tracker")],
     chooses: ["cloud_id"],
   };
 }
@@ -37,6 +39,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "Atlassian", "de Atlassian", "da Atlassian"),
     choose_title: pick(language, "Jira site", "Sitio de Jira", "Site do Jira"),
     hidden: false,
+    bindings: [binding("tracker", "application", pick(language, "Jira spaces", "Espacios de Jira", "Espaços do Jira"), { multiple: true })],
   };
 }
 
@@ -77,17 +80,23 @@ export function call({ action, args, creds, idempotencyKey }: Input, ctx) {
     case "tracker.fields":
       return fields(api, args);
     case "tracker.transition":
-      return transition(api, text(args, "issue"), text(args, "status"));
+      return transition(api, text(args, "issue"), { status: optionalText(args, "status"), category: optionalText(args, "category") });
+    case "tracker.schema":
+      return schema(api, projectOf(api, args));
     case "tracker.set_impediment":
       return setImpediment(api, args, idempotencyKey);
     case "tracker.search":
       return search(api, args);
     case "tracker.projects":
       return projects(api, args);
+    case "tracker.options":
+      return projectOptions(projects(api, args));
     case "tracker.update_issue":
       return updateIssue(api, args);
     case "tracker.link_issues":
       return linkIssues(api, args);
+    case "tracker.attach":
+      return attach(api, args);
     default:
       return unknownAction(action);
   }

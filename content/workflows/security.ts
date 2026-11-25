@@ -4,13 +4,12 @@ import { findings, ticket, develop, checks, pr, review } from "sdk/steps";
 export default workflow({
   name: "security",
   triggers: [on("schedule", { cron: "0 8 * * *", applications: "security", title: "Vulnerabilidades" })],
-  statuses: ["A fazer", "Fazendo", "Feito"],
   steps: [
-    findings({ id: "plan", minSeverity: 3, batch: 5, status: "A fazer" }),
+    findings({ id: "plan", minSeverity: 3, batch: 5, status: { category: "todo" } }),
     ticket(),
-    develop({ agent: "security-fixer", status: "Fazendo" }),
+    develop({ agent: "security-fixer", status: { category: "doing" } }),
     checks({ agent: "verifier", onFail: "develop", retries: 3 }),
     pr(),
-    review({ status: "Fazendo", onChanges: "develop", doneStatus: "Feito" }),
+    review({ status: { category: "doing" }, onChanges: "develop", doneStatus: { category: "done" } }),
   ],
 });

@@ -40,12 +40,13 @@ async fn applications_are_created_changed_checked_and_removed() {
     let world = World::new().await;
     let (web, api) = (folder(&world, "web"), folder(&world, "api"));
     let body = json!({
-        "name": " Loja ", "tracker": { "connection": "c1", "project": "APP" },
+        "name": " Loja ", "bindings": { "tracker": { "connection": "c1", "value": "APP" } },
         "repositories": [
-            { "code": { "connection": "c1", "repo": "acme/web" }, "directory": web, "run": [" bun api ", "bun web", ""],
-              "verify": ["bun test", " "] },
-            { "code": null, "directory": api, "run": "", "verify": [] },
+            { "bindings": { "code": { "connection": "c1", "value": "acme/web" } }, "directory": web, "run": [" bun api ", "bun web", ""],
+              "verify": ["bun test", " "], "e2e": [" npx cypress run ", ""], "e2eDirectory": "/e2e/" },
+            { "directory": api, "run": "", "verify": [] },
         ],
+        "env": { " CYPRESS_BASE_URL ": "http://localhost:3000", "": "x" },
     });
     let (status, made) = world.send(Method::POST, "/api/applications", Some(body.clone())).await;
     assert_eq!(status, StatusCode::OK, "{made}");
@@ -53,6 +54,9 @@ async fn applications_are_created_changed_checked_and_removed() {
     assert_eq!(made["repositories"][0]["verify"], json!(["bun test"]));
     assert_eq!(made["repositories"][0]["run"], json!(["bun api", "bun web"]));
     assert_eq!(made["repositories"][1]["run"], json!([]));
+    assert_eq!(made["repositories"][0]["e2e"], json!(["npx cypress run"]));
+    assert_eq!(made["repositories"][0]["e2eDirectory"], "e2e");
+    assert_eq!(made["env"], json!({ "CYPRESS_BASE_URL": "http://localhost:3000" }));
     let ids: Vec<&str> =
         made["repositories"].as_array().expect("repos").iter().filter_map(|repo| repo["id"].as_str()).collect();
     assert!(ids.len() == 2 && ids[0] != ids[1] && !ids[0].is_empty());
@@ -69,6 +73,12 @@ async fn applications_are_created_changed_checked_and_removed() {
 
     let nameless = json!({ "name": " ", "repositories": body["repositories"] });
     assert_eq!(world.send(Method::POST, "/api/applications", Some(nameless)).await.0, StatusCode::BAD_REQUEST);
+    let mut bad_name = body.clone();
+    bad_name["env"] = json!({ "BASE URL": "x" });
+    assert_eq!(world.send(Method::POST, "/api/applications", Some(bad_name)).await.0, StatusCode::BAD_REQUEST);
+    let mut outside = body.clone();
+    outside["repositories"][0]["e2eDirectory"] = json!("../fora");
+    assert_eq!(world.send(Method::POST, "/api/applications", Some(outside)).await.0, StatusCode::BAD_REQUEST);
     let lost = json!({ "name": "x", "repositories": [{ "directory": "/não/existe" }] });
     let (status, error) = world.send(Method::POST, "/api/applications", Some(lost)).await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -83,8 +93,9 @@ async fn a_new_item_keeps_a_snapshot_of_its_application_and_its_space() {
     let world = World::new().await;
     let web = folder(&world, "web");
     let body = json!({
-        "name": "Loja", "tracker": { "connection": "c1", "project": "APP" },
-        "repositories": [{ "code": { "connection": "c1", "repo": "acme/web" }, "directory": web, "verify": ["true"] }],
+        "name": "Loja", "bindings": { "tracker": { "connection": "c1", "value": "APP" } },
+        "repositories": [{ "bindings": { "code": { "connection": "c1", "value": "acme/web" } }, "directory": web, "verify": ["true"] }],
+        "env": { "API_TOKEN": "segredo" },
     });
     let made = world.send(Method::POST, "/api/applications", Some(body)).await.1;
     let item =
@@ -95,8 +106,21 @@ async fn a_new_item_keeps_a_snapshot_of_its_application_and_its_space() {
     let kept = world.handle.item(&id).expect("store").expect("item");
     assert_eq!((kept.input["project"].as_str(), kept.input["connection"].as_str()), (Some("APP"), Some("c1")));
     assert_eq!(kept.input["application"]["name"], "Loja");
-    assert_eq!(kept.input["application"]["repositories"][0]["code"]["pipelines"], true);
+    assert!(kept.input["application"].get("env").is_none(), "the variables stay with the application, not in the item");
+    assert_eq!(kept.input["application"]["repositories"][0]["bindings"]["code"]["capabilities"], json!(["tracker", "code", "pipelines"]));
     assert_eq!(kept.input["application"]["repositories"][0]["directory"], json!(web));
+
+    let from_issue = json!({ "text": "", "issue": { "connection": "c1", "key": "K-1" }, "model": "auto",
+        "attachments": [], "application": made["id"] });
+    let (status, created) = world.send(Method::POST, "/api/items", Some(from_issue)).await;
+    assert_eq!(status, StatusCode::OK, "{created}");
+    let id = domain::workflow::ItemId::from(created["id"].as_str().expect("id"));
+    let kept = world.handle.item(&id).expect("store").expect("item");
+    assert_eq!(kept.input["type"], "Bug", "the issue's type reaches the flows and the workflow");
+
+    let (status, flows) = world.send(Method::GET, "/api/flows", None).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(flows.as_array().is_some_and(|names| names.contains(&json!("gitflow"))), "{flows}");
 
     let gone = json!({ "text": "x", "issue": null, "model": "auto", "attachments": [], "application": "zz" });
     assert_eq!(world.send(Method::POST, "/api/items", Some(gone)).await.0, StatusCode::BAD_REQUEST);
@@ -157,22 +181,39 @@ async fn an_application_keeps_the_cloud_account_and_role_its_agents_use() {
 
     let web = folder(&world, "web");
     let body = json!({
-        "name": "Loja", "cloud": { "connection": " c1 ", "account": "111122223333", "role": " Deploy " },
+        "name": "Loja", "bindings": { "cloud": { "connection": " c1 ", "value": " 111122223333/Deploy " } },
         "repositories": [{ "directory": web }],
     });
     let (status, made) = world.send(Method::POST, "/api/applications", Some(body)).await;
     assert_eq!(status, StatusCode::OK, "{made}");
-    assert_eq!(made["cloud"], json!({ "connection": "c1", "account": "111122223333", "role": "Deploy" }));
+    assert_eq!(made["bindings"]["cloud"], json!({ "connection": "c1", "value": "111122223333/Deploy" }));
     let id = made["id"].as_str().expect("id").to_owned();
     let kept = world.store.application(&id).expect("read").expect("there");
-    assert_eq!(kept.cloud.map(|chosen| chosen.role), Some("Deploy".to_owned()));
+    assert_eq!(kept.bound("cloud").map(|chosen| chosen.value.as_str()), Some("111122223333/Deploy"));
 
     let mut cleared = made.clone();
-    cleared["cloud"] = json!({ "connection": "c1", "account": " ", "role": "Deploy" });
+    cleared["bindings"]["cloud"] = json!({ "connection": "c1", "value": " " });
     let (status, saved) = world.send(Method::PUT, &format!("/api/applications/{id}"), Some(cleared)).await;
     assert_eq!(
-        (status, saved["cloud"].clone()),
+        (status, saved["bindings"]["cloud"].clone()),
         (StatusCode::OK, Value::Null),
         "no account is the connection's default"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_page_reads_the_quality_and_security_reports_but_never_the_cloud_credentials() {
+    let world = World::new().await;
+    let mut record = world.store.connections().expect("connections").into_iter().next().expect("c1");
+    record.capabilities.extend(["quality".into(), "security".into(), "cloud".into()]);
+    world.store.save_connection(&record).expect("capabilities");
+    let ask = |action: &str, args: Value| json!({ "action": action, "args": args });
+    let quality = ask("quality.report", json!({ "project": "acme_web", "branch": "main" }));
+    let (status, report) = world.send(Method::POST, "/api/connections/c1/call", Some(quality)).await;
+    assert_eq!((status, &report["gate"]), (StatusCode::OK, &json!("passed")), "{report}");
+    let security = ask("security.findings", json!({ "project": "guid", "open": true }));
+    let (status, findings) = world.send(Method::POST, "/api/connections/c1/call", Some(security)).await;
+    assert_eq!((status, &findings[0]["id"]), (StatusCode::OK, &json!("11")), "{findings}");
+    let secret = ask("cloud.identity", json!({}));
+    assert_eq!(world.send(Method::POST, "/api/connections/c1/call", Some(secret)).await.0, StatusCode::BAD_REQUEST);
 }

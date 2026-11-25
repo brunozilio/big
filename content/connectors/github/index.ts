@@ -1,5 +1,5 @@
 import { type Creds, type Language, pick, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
-import { code, pipelines } from "sdk/connectors/contracts.ts";
+import { binding, code, options, pipelines } from "sdk/connectors/contracts.ts";
 import { api, get } from "./api.ts";
 import * as reviews from "./code.ts";
 import * as runs from "./pipelines.ts";
@@ -21,7 +21,7 @@ export function provider(_: unknown, ctx) {
       scopes: SCOPES,
       dialect: "form",
     },
-    actions: [...code(), ...pipelines()],
+    actions: [...code(), ...pipelines(), options("code")],
   };
 }
 
@@ -33,6 +33,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "GitHub", "de GitHub", "do GitHub"),
     choose_title: pick(language, "Organization", "Organización", "Organização"),
     hidden: false,
+    bindings: [binding("code", "repository", pick(language, "GitHub repository", "Repositorio de GitHub", "Repositório do GitHub"))],
   };
 }
 
@@ -58,6 +59,7 @@ const ACTIONS: Record<string, (connection: any, args: Record<string, any>, key: 
   "code.resolve_thread": reviews.resolveThread,
   "code.merge": reviews.merge,
   "code.repos": reviews.repos,
+  "code.options": (connection, args) => reviews.repos(connection, args).map((repo: any) => ({ value: repo.ref, label: repo.ref })),
   "code.pull_requests": reviews.pullRequests,
   "code.branches": reviews.branches,
   "code.merge_branches": reviews.mergeBranches,

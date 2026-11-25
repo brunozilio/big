@@ -1,6 +1,7 @@
 import { attach } from "./cdp.js";
 import { computer, shot, viewport } from "./computer.js";
 import { captureFrame, gif } from "./frames.js";
+import { intercept } from "./intercept.js";
 import { connect, handle, identity, send } from "./link.js";
 import { readConsole, readNetwork } from "./logs.js";
 import { candidates, formInput, javascript, pageText, putFiles, readPage } from "./page.js";
@@ -159,6 +160,11 @@ async function networkTool({ session, input, sites }) {
   return ok(readNetwork(tab, input));
 }
 
+async function interceptTool({ session, input, sites }) {
+  const tab = await onPage(session, input, sites);
+  return ok(await intercept(tab, input));
+}
+
 async function resizeTool({ session, input }) {
   const tab = await owned(session, input.tabId);
   const width = Math.round(Number(input.width));
@@ -250,6 +256,7 @@ const TOOLS = {
   javascript_tool: javascriptTool,
   read_console_messages: consoleTool,
   read_network_requests: networkTool,
+  network_intercept: interceptTool,
   resize_window: resizeTool,
   gif_creator: gifTool,
   upload_image: uploadImageTool,

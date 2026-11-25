@@ -24,6 +24,7 @@ fn group(descriptor: &ProviderDescriptor) -> &'static str {
         "mcp" => "mcp",
         "tests" => "tests",
         "security" => "security",
+        "quality" => "quality",
         "changes" => "changes",
         _ => "code",
     }
@@ -86,6 +87,7 @@ fn provider_json(shared: &Shared, descriptor: &ProviderDescriptor) -> Value {
         "site": or(&look.site, said_with(shared, "from {}", "de {}", "do {}", &descriptor.name)),
         "logo": logo(&descriptor.logo), "signIn": sign_in, "fields": fields, "multiple": true,
         "alternatives": alternatives,
+        "bindings": look.bindings,
     })
 }
 

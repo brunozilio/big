@@ -15,6 +15,16 @@ function days(): Date[] {
   return Array.from({ length: 14 }, (_, i) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + i + 1))
 }
 
+export function zoneOf(value: string): string {
+  const [day, time = '00:00'] = value.split('T')
+  const [y, m, d] = day.split('-').map(Number)
+  const [h, min] = time.split(':').map(Number)
+  const offset = -new Date(y, m - 1, d, h || 0, min || 0).getTimezoneOffset()
+  const sign = offset < 0 ? '-' : '+'
+  const abs = Math.abs(offset)
+  return `${sign}${String(Math.floor(abs / 60)).padStart(2, '0')}:${String(abs % 60).padStart(2, '0')}`
+}
+
 export function windowLabel(value: string): string {
   const [day, time] = value.split('T')
   const [y, m, d] = day.split('-').map(Number)

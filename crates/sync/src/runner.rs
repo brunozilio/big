@@ -292,6 +292,7 @@ impl Synchronizer {
             subject: subject.to_owned(),
             data,
             at: jiff::Timestamp::now(),
+            scope: String::new(),
         }
     }
 }

@@ -1,6 +1,8 @@
 import { changeEnvs } from "./rules.js";
 import { shifted } from "./tasks.js";
 import { fill } from "./gates.js";
+import { projectOf as boundProject } from "sdk/bindings.js";
+import { changeSettings, windowOf } from "./change.js";
 
 function described(state, config) {
   const labels = config.labels || {};
@@ -17,10 +19,13 @@ function described(state, config) {
 }
 
 function changePayload(state, config, envId) {
+  const tasks = shifted(state, config, envId);
+  const env = changeEnvs(config.environments).find((one) => one.id === envId) || { id: envId };
   return {
     title: state.title,
-    window: state.windows[envId],
-    tasks: shifted(state, config, envId),
+    ...windowOf(state, config, envId, tasks),
+    settings: changeSettings(state.application, env).settings,
+    tasks,
     notes: state.members.map((member) => ({ item: member.id, issue: member.issue || null, title: member.title || "" })),
     attachments: state.tasks.flatMap((task) => task.files || []),
     versions: Object.entries(state.versions[envId] || {}).map(([service, version]) => ({ service, rollback: version })),
@@ -31,8 +36,8 @@ function changePayload(state, config, envId) {
 export async function openCard(ctx, state, config) {
   const card = config.card;
   if (!card || state.card || state.members.length === 0) return;
-  const tracker = state.application && state.application.tracker;
-  const project = card.project || (tracker && tracker.project) || projectOf(state.members);
+  const tracker = boundProject(state.application, "tracker");
+  const project = card.project || tracker.project || projectOf(state.members);
   const made = await ctx.call("tracker", "create_issue", { title: state.title, type: card.type, project, description: described(state, config) }, { optional: true });
   if (made && made.ref) state.card = { ref: made.ref, url: made.url || null };
 }
@@ -46,13 +51,18 @@ function projectOf(members) {
   return key ? key.slice(0, key.lastIndexOf("-")) : undefined;
 }
 
+export function connectionOf(state, env) {
+  const { connection } = changeSettings(state.application, env);
+  return connection ? { connection } : {};
+}
+
 export async function publish(ctx, state, config) {
   state.revision = (state.revision || 0) + 1;
   await openCard(ctx, state, config);
   for (const env of changeEnvs(config.environments)) {
     const change = state.changes[env.id];
     if (!change || change.status === "done" || change.status === "cancelled") continue;
-    await ctx.call("changes", "update", { change: change.ref, ...changePayload(state, config, env.id) });
+    await ctx.call("changes", "update", { change: change.ref, ...changePayload(state, config, env.id) }, connectionOf(state, env));
   }
   if (!state.card) return;
   await ctx.call("tracker", "update_issue", { issue: state.card.ref, title: state.title, description: described(state, config) }, { optional: true });

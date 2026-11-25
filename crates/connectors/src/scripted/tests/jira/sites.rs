@@ -11,7 +11,7 @@ async fn the_first_poll_starts_the_cursor_and_later_polls_read_changes_since_it(
     let provider = jira();
     let source = provider.events().unwrap_or_else(|| panic!("no events"));
     let http = FakeHttp::new();
-    let first = source.poll(&http, &creds(), None).await;
+    let first = source.poll(&http, &creds(), None, &[]).await;
     assert!(first.as_ref().is_ok_and(|b| b.events.is_empty() && !b.cursor.is_empty()), "{first:?}");
     assert!(http.sent().is_empty());
     let page =
@@ -30,7 +30,7 @@ async fn the_first_poll_starts_the_cursor_and_later_polls_read_changes_since_it(
             "items": [{"field": "status", "fromString": "Fazendo", "toString": "Feito"}, {"field": "labels"}]}]}
     });
     let http = session(&[page, detail]);
-    let batch = source.poll(&http, &creds(), Some("2024-01-02T00:00:00Z")).await;
+    let batch = source.poll(&http, &creds(), Some("2024-01-02T00:00:00Z"), &[]).await;
     let Ok(batch) = batch else { panic!("{batch:?}") };
     let kinds: Vec<&str> = batch.events.iter().map(|e| e.kind.as_str()).collect();
     assert_eq!(kinds, ["tracker.comment.added", "tracker.status.changed"]);
@@ -42,8 +42,28 @@ async fn the_first_poll_starts_the_cursor_and_later_polls_read_changes_since_it(
     assert_eq!(batch.events[1].at.to_string(), "2024-01-02T10:00:00Z");
     assert_eq!(batch.cursor, "2024-01-02T10:00:00Z");
     let calls = tool_calls(&http);
-    assert_eq!(calls[0].1["jql"], "project = \"BIG\" AND updated >= \"2024-01-01 09:00\" ORDER BY updated ASC");
+    assert_eq!(calls[0].1["jql"], "project in (\"BIG\") AND updated >= \"2024-01-01 09:00\" ORDER BY updated ASC");
     assert_eq!(calls[1].1["expand"], "changelog");
+    assert!(batch.events.iter().all(|event| event.scope == "BIG"));
+}
+
+#[tokio::test]
+async fn the_poll_watches_every_space_bound_to_the_connection_and_marks_each_event_with_its_space() {
+    let page =
+        json!({ "isLast": true, "issues": [{"key": "OPS-7", "fields": {"updated": "2024-01-02T10:00:00.000+0000"}}]});
+    let detail = json!({"key": "OPS-7", "fields": {"created": "2024-01-02T10:00:00.000+0000", "summary": "S",
+        "issuetype": {"name": "Bug"}, "parent": {"key": "OPS-1"}}});
+    let provider = jira();
+    let source = provider.events().unwrap_or_else(|| panic!("no events"));
+    let http = session(&[page, detail]);
+    let watch = ["WEB".to_owned(), "OPS".to_owned(), "WEB".to_owned()];
+    let batch = source.poll(&http, &creds(), Some("2024-01-02T00:00:00Z"), &watch).await;
+    let Ok(batch) = batch else { panic!("{batch:?}") };
+    assert_eq!(batch.events[0].scope, "OPS");
+    assert_eq!(batch.events[0].data["type"], "Bug", "a workflow can be triggered by the issue type");
+    assert_eq!(batch.events[0].data["parent"], "OPS-1");
+    let calls = tool_calls(&http);
+    assert_eq!(calls[0].1["jql"], "project in (\"WEB\", \"OPS\") AND updated >= \"2024-01-01 09:00\" ORDER BY updated ASC");
 }
 
 #[tokio::test]
@@ -55,7 +75,7 @@ async fn a_flag_change_in_the_history_is_an_impediment_event_with_booleans() {
             "items": [{"field": "Flagged", "fromString": "", "toString": "Impediment"}]}]}});
     let provider = jira();
     let source = provider.events().unwrap_or_else(|| panic!("no events"));
-    let batch = source.poll(&session(&[page, detail]), &creds(), Some("2024-01-01T00:00:00Z")).await;
+    let batch = source.poll(&session(&[page, detail]), &creds(), Some("2024-01-01T00:00:00Z"), &[]).await;
     let Ok(batch) = batch else { panic!("{batch:?}") };
     assert_eq!(batch.events[0].kind, "tracker.impediment.changed");
     assert_eq!(batch.events[0].id, "jira:BIG-1:Flagged:h2");
@@ -149,10 +169,12 @@ async fn projects_list_the_visible_projects_of_the_site_and_page_through_them() 
 
 #[tokio::test]
 async fn a_created_issue_goes_to_the_chosen_project_and_reads_a_wrapped_answer() {
-    let http = structured(&[json!({"issues": []}), json!({"result": {"id": "10", "key": "OPS-3"}})]);
+    let types = json!({"issueTypes": [{"id": "1", "name": "História", "hierarchyLevel": 0}]});
+    let http = structured(&[json!({"issues": []}), types, json!([]), json!({"result": {"id": "10", "key": "OPS-3"}})]);
     let answer = call(&http, "tracker.create_issue", json!({"project": "OPS", "title": "T"}), "k").await;
     assert_eq!(answer.map(|a| (a["ref"].clone(), a["id"].clone())), Ok((json!("OPS-3"), json!("10"))));
-    assert_eq!(tool_calls(&http)[1].1["projectKey"], "OPS");
+    assert_eq!(tool_calls(&http)[3].1["projectKey"], "OPS");
+    assert_eq!(tool_calls(&http)[3].1["issueType"], "História");
 }
 
 #[tokio::test]

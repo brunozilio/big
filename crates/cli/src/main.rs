@@ -31,7 +31,7 @@ enum Internal {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
-    logging::install();
+    logging::install(cli.command.is_none());
     let ended = match cli.command {
         Some(Internal::Teammate(args)) => teammate::run(args),
         Some(Internal::CloudCredentials(args)) => cloud::run(args),

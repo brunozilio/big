@@ -76,7 +76,9 @@ async fn an_issue_moved_outside_is_put_back_and_a_deploy_approved_outside_lets_t
     assert_eq!(done["status"], "Feito");
     assert!(hub.github.state().deploy_reviews.is_empty(), "nobody approved through the API");
     assert_eq!(hub.tracker.state().created, 1);
-    assert_eq!(hub.tracker.state().comments_posted, 0);
+    assert_eq!(hub.tracker.state().comments_posted, 1, "only the summary of the E2E tests");
+    let comments = hub.tracker.state().issues["K-101"].comments.clone();
+    assert!(comments[0].contains("K-R1"), "{comments:?}");
     assert_eq!(hub.github.pulls_created(), 1);
     assert_eq!(hub.github.state().merges, 1);
 }

@@ -64,8 +64,13 @@ fn item() -> Value {
         "schedule": { "day": "2026-11-24" },
         "application": {
             "id": "app", "name": "Loja",
-            "security": { "connection": "sec", "project": "guid-1" },
-            "repositories": [{ "id": "r1", "directory": "/src/loja", "code": { "connection": "code", "repo": "acme/loja" } }]
+            "repositories": [{
+                "id": "r1", "directory": "/src/loja",
+                "bindings": {
+                    "code": { "connection": "code", "value": "acme/loja" },
+                    "security": { "connection": "sec", "value": "guid-1" }
+                }
+            }]
         }
     })
 }
@@ -174,7 +179,7 @@ fn a_day_without_new_findings_ends_right_after_reading_them() {
 #[test]
 fn an_application_without_a_security_project_fails_with_what_to_do() {
     let mut unset = item();
-    unset["application"]["security"] = Value::Null;
+    unset["application"]["repositories"][0]["bindings"]["security"] = Value::Null;
     let fake = Fake { found: json!([]), open_body: String::new() };
     let (_, asked) = drive(&unset, |command| fake.reply(command));
     let shown = asked.iter().find(|command| command["kind"] == "wait.human").expect("the failure waits for a person");

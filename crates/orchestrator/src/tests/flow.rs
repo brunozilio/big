@@ -222,7 +222,7 @@ async fn the_built_in_delivery_workflow_loads_and_describes_its_steps() {
     let script = shared.script("default").expect("the default workflow compiles");
     assert_eq!(script.target, json!({ "workflow": "entrega" }));
     let steps = script.described["workflows"][0]["steps"].as_array().map(Vec::len);
-    assert_eq!(steps, Some(11));
+    assert_eq!(steps, Some(13));
 }
 
 const TEAM: &str = r#"

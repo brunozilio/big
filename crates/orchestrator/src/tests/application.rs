@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use agent_engine::tools::{Workspace, clients, hosted};
 use serde_json::json;
-use store::{Application, CodeChoice, Repository, Store};
+use store::{Application, Binding, Bindings, Repository, Store};
 
 use crate::application::{ADD_REPOSITORY, live, offer};
 
@@ -12,17 +12,16 @@ fn stored(web: &str) -> Arc<Store> {
         skip_dependabot: true,
         id: "app".into(),
         name: "Loja".into(),
-        tracker: None,
-        tests: None,
-        security: None,
-        cloud: None,
+        bindings: Bindings::new(),
         repositories: vec![Repository {
             id: "r1".into(),
-            code: Some(CodeChoice { connection: "c-code".into(), repo: "acme/web".into() }),
             directory: web.into(),
             run: vec!["bun dev".into()],
             verify: vec!["bun test".into()],
+            bindings: Bindings::from([("code".to_owned(), Binding::new("c-code", "acme/web"))]),
+            ..Repository::default()
         }],
+        ..Application::default()
     };
     store.save_application(&application).expect("saved");
     store
@@ -56,7 +55,7 @@ fn an_agent_adds_a_new_repository_to_its_application_with_the_application_s_code
     let added = application.repositories.last().expect("added");
     assert_eq!(application.repositories.len(), 2);
     assert_eq!(added.directory, api.to_string_lossy());
-    assert_eq!(added.code, Some(CodeChoice { connection: "c-code".into(), repo: "acme/api".into() }));
+    assert_eq!(added.bound("code"), Some(&Binding::new("c-code", "acme/api")));
     assert_eq!(
         (added.run.as_slice(), added.verify.as_slice()),
         (["cargo run".to_owned()].as_slice(), ["cargo test".to_owned()].as_slice())

@@ -2,8 +2,9 @@ import { step } from "sdk";
 import { environments, initialStages, accepting, changeEnvs, canCreateChange, canPromote, canRollback, tasksLocked, delivered, current, WAITING } from "./rules.js";
 import { defaultTasks, addTask, refreshServices, schedule, sanitize, unshifted } from "./tasks.js";
 import { services, promote, rollback, createChange, settleChange } from "./gates.js";
-import { publish, changeArgs } from "./publish.js";
+import { publish, changeArgs, connectionOf } from "./publish.js";
 import { render } from "./view.js";
+import { changeConnection, ownersOf, zoneOf } from "./change.js";
 
 export { environments, render };
 
@@ -13,6 +14,8 @@ function fresh(config, item) {
     members: [],
     stages: initialStages(config.environments),
     windows: {},
+    zones: {},
+    owners: null,
     changes: {},
     versions: {},
     merges: {},
@@ -70,6 +73,7 @@ async function act(ctx, state, config, item, said) {
     case "window":
       if (!env || env.gate.kind !== "change" || state.changes[env.id]) return false;
       state.windows[env.id] = String(values.at || "");
+      state.zones = { ...(state.zones || {}), [env.id]: zoneOf(values.zone, config.zone) };
       schedule(state, config);
       return true;
     case "promote":
@@ -83,7 +87,7 @@ async function act(ctx, state, config, item, said) {
     case "create_change":
       if (!env || !canCreateChange(envs, state, env)) return false;
       if (config.agents && config.agents.validate) await ctx.agent(config.agents.validate, { package: changeArgs(state, config, env.id), environment: env.id });
-      await createChange(ctx, state, config, env, changeArgs(state, config, env.id));
+      await createChange(ctx, state, config, env, changeArgs(state, config, env.id), connectionOf(state, env));
       if (!accepting(envs, state)) await ctx.accept(false);
       return true;
     case "add_task": {
@@ -101,9 +105,19 @@ async function act(ctx, state, config, item, said) {
   }
 }
 
+export function arrivals(config) {
+  const arrival = config.arrival || {};
+  const filter = arrival.filter || {};
+  if (arrival.integrated !== true) return [filter];
+  const { base: _, ...data } = filter.data || {};
+  return [filter, { ...filter, data: { ...data, integrated: true } }];
+}
+
 function waits(ctx, state, config, manual) {
   const list = [];
-  if (!manual && accepting(config.environments, state)) list.push(ctx.event("item.step.finished", (config.arrival && config.arrival.filter) || {}));
+  if (!manual && accepting(config.environments, state)) {
+    for (const filter of arrivals(config)) list.push(ctx.event("item.step.finished", filter));
+  }
   for (const env of changeEnvs(config.environments)) {
     const change = state.changes[env.id];
     if (!change || ["done", "cancelled", "rejected"].includes(change.status)) continue;
@@ -118,7 +132,7 @@ async function monitor(ctx, state, config) {
   for (const env of changeEnvs(config.environments)) {
     const change = state.changes[env.id];
     if (!change || ["done", "cancelled", "rejected"].includes(change.status)) continue;
-    const read = await ctx.call("changes", "get", { change: change.ref });
+    const read = await ctx.call("changes", "get", { change: change.ref }, change.connection ? { connection: change.connection } : {});
     if (settleChange(state, config, env, read.status)) moved = true;
   }
   return moved;
@@ -131,8 +145,9 @@ async function promotion(ctx, opts) {
   const manual = !item.event;
   for (;;) {
     let changed = false;
-    if (!manual && accepting(config.environments, state)) changed = await gather(ctx, state, config, item, await ctx.unclaimed(config.arrival.step || "merge", "passed", { base: config.arrival.base }));
+    if (!manual && accepting(config.environments, state)) changed = await gather(ctx, state, config, item, await ctx.unclaimed(config.arrival.step || "merge", "passed", { base: config.arrival.base, integrated: config.arrival.integrated === true }));
     if (changed) await publish(ctx, state, config);
+    if (!state.owners) state.owners = await ownersOf(ctx, changeConnection(state.application));
     if (delivered(config.environments, state)) return ctx.pass({ changes: state.changes, members: state.members.map((member) => member.id) });
     const answer = await ctx.race([...waits(ctx, state, config, manual), (branch) => branch.waitHuman(render(config, state))]);
     const said = answer.value && answer.value.action ? answer.value : null;

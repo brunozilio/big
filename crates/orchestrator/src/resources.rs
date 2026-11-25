@@ -53,7 +53,7 @@ impl Resources {
         content::install_once();
         let builtin: Builtin = Arc::new(content::builtin_text);
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();
-        Resources::new(repo.map(|repo| repo.join(brand::DIR)), content::folder(), builtin).listing(listed)
+        Resources::new(repo.map(|repo| repo.join(brand::DIR)), content::home(), builtin).listing(listed)
     }
 
     pub fn new(repo_dir: Option<PathBuf>, user_dir: Option<PathBuf>, builtin: Builtin) -> Resources {

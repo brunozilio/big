@@ -16,6 +16,7 @@ mod effects;
 mod error;
 mod events;
 mod factory;
+pub mod flows;
 mod git;
 mod kept;
 mod ledger;

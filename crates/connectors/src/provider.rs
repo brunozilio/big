@@ -50,6 +50,8 @@ pub struct ExternalEvent {
     pub subject: String,
     pub data: Value,
     pub at: Timestamp,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub scope: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -60,8 +62,13 @@ pub struct EventBatch {
 
 #[async_trait]
 pub trait EventSource: Send + Sync + std::fmt::Debug {
-    async fn poll(&self, http: &dyn Http, creds: &Credentials, cursor: Option<&str>)
-    -> Result<EventBatch, ActionError>;
+    async fn poll(
+        &self,
+        http: &dyn Http,
+        creds: &Credentials,
+        cursor: Option<&str>,
+        watch: &[String],
+    ) -> Result<EventBatch, ActionError>;
 }
 
 #[async_trait]

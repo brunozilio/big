@@ -135,6 +135,7 @@ pub fn event(id: &str, kind: &str, data: serde_json::Value) -> connectors::Exter
         subject: "repo/actions/runs/1".into(),
         data,
         at: jiff::Timestamp::UNIX_EPOCH,
+        scope: String::new(),
     }
 }
 

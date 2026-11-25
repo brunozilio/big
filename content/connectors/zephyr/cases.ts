@@ -167,10 +167,12 @@ function statusName(status: string): string {
   return fail("permanent", `${JSON.stringify(status)} is not a test status; use one of ${STATUSES.map(([name]) => name).join(", ")}`);
 }
 
-function caseProject(testCase: string): string | undefined {
-  const at = testCase.lastIndexOf("-T");
-  return at > 0 ? testCase.slice(0, at) : undefined;
+function projectOfKey(key: string, marker: string): string | undefined {
+  const at = key.lastIndexOf(marker);
+  return at > 0 ? key.slice(0, at) : undefined;
 }
+
+const caseProject = (testCase: string) => projectOfKey(testCase, "-T");
 
 export function record(api: Api, args: Record<string, unknown>, key: string) {
   const testCase = validKey(text(args, "case"));
@@ -182,10 +184,40 @@ export function record(api: Api, args: Record<string, unknown>, key: string) {
     const found = byCursor(api, "zephyr_get_test_executions", wanted, (execution) => carriesTag(api.ctx, textAt(execution, ["comment"]), key));
     if (found) return { ref: reference(found) };
   }
+  const link = issueId(args);
   const wanted: Record<string, unknown> = { projectKey: project, testCaseKey: testCase, testCycleKey: cycle, statusName: status };
   const comment = withMarker(api, optionalText(args, "comment"), key);
   if (comment !== undefined) wanted.comment = comment;
   const seconds = args?.seconds;
   if (typeof seconds === "number" && seconds >= 0) wanted.executionTime = Math.round(seconds * 1000);
-  return { ref: reference(api.tool("zephyr_create_test_execution", wanted)) };
+  const execution = reference(api.tool("zephyr_create_test_execution", wanted));
+  if (link !== undefined && execution !== "") api.tool("zephyr_create_test_execution_issue_link", { testExecutionIdOrKey: execution, issueId: link });
+  return { ref: execution };
+}
+
+const CYCLE_STATUSES: Record<string, string[]> = {
+  done: ["done", "completed", "concluído", "concluido", "finalizado", "terminado"],
+  in_progress: ["in progress", "em andamento", "en progreso", "en curso"],
+  not_executed: ["not executed", "não executado", "no ejecutado"],
+};
+
+function cycleStatus(api: Api, project: string, wanted: string) {
+  const names = CYCLE_STATUSES[wanted.trim().toLowerCase()] ?? [wanted.trim().toLowerCase()];
+  for (let page = 0; page < MOST_PAGES; page++) {
+    const answer = api.tool("zephyr_get_statuses", { projectKey: project, statusType: "TEST_CYCLE", startAt: page * PAGE, maxResults: PAGE });
+    const statuses = items(answer, "values").filter((status) => status?.archived !== true);
+    const found = statuses.find((status) => names.includes(textAt(status, ["name"]).toLowerCase()));
+    if (found) return found;
+    if (lastPage(answer, statuses.length)) break;
+  }
+  return undefined;
+}
+
+export function finishCycle(api: Api, args: Record<string, unknown>) {
+  const cycle = validKey(text(args, "cycle"));
+  const project = validKey(optionalText(args, "project") ?? api.project ?? projectOfKey(cycle, "-R") ?? blocked(NO_PROJECT));
+  const status = cycleStatus(api, project, text(args, "status"));
+  if (!status) return { ref: cycle };
+  api.tool("zephyr_update_test_cycle", { testCycleIdOrKey: cycle, statusId: status.id });
+  return { ref: cycle, status: textAt(status, ["name"]) };
 }

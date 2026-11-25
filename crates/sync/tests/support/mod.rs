@@ -135,6 +135,7 @@ impl EventSource for Fake {
         _http: &dyn Http,
         creds: &Credentials,
         cursor: Option<&str>,
+        _watch: &[String],
     ) -> Result<EventBatch, ActionError> {
         let mut world = self.world();
         world.cursors.push(cursor.map(str::to_owned));
@@ -355,5 +356,6 @@ pub fn event(id: &str, connection: &str, kind: &str, subject: &str, data: Value,
         subject: subject.into(),
         data,
         at: jiff::Timestamp::from_second(second).unwrap(),
+        scope: String::new(),
     }
 }

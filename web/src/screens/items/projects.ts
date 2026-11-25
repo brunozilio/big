@@ -1,3 +1,5 @@
+import type { Bindings } from '@/api/contract'
+
 export interface Space {
   connection: string
   key: string
@@ -8,12 +10,13 @@ export interface SearchTarget {
   args: { query: string; project?: string }
 }
 
-export function configuredSpaces(applications: { tracker: { connection: string; project: string } | null }[], connections: string[]): Space[] {
+export function configuredSpaces(applications: { bindings?: Bindings }[], connections: string[]): Space[] {
   const found: Space[] = []
-  for (const a of applications) {
-    const t = a.tracker
-    if (!t || !connections.includes(t.connection)) continue
-    if (!found.some((s) => s.connection === t.connection && s.key === t.project)) found.push({ connection: t.connection, key: t.project })
+  for (const bound of applications.flatMap((a) => Object.values(a.bindings ?? {}))) {
+    if (!connections.includes(bound.connection)) continue
+    for (const key of [bound.value, ...(bound.more ?? []).map((c) => c.value)]) {
+      if (!found.some((s) => s.connection === bound.connection && s.key === key)) found.push({ connection: bound.connection, key })
+    }
   }
   return found
 }

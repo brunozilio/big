@@ -29,7 +29,7 @@ const CALLER: &str = "<GetCallerIdentityResponse><GetCallerIdentityResult><Arn>a
 #[test]
 fn the_cloud_actions_are_offered_without_the_last_deployment() {
     let names: Vec<String> = loaded("aws").descriptor().actions.into_iter().map(|action| action.name).collect();
-    assert_eq!(names, ["cloud.identity", "cloud.accounts_and_roles"]);
+    assert_eq!(names, ["cloud.identity", "cloud.accounts_and_roles", "cloud.options"]);
 }
 
 #[tokio::test]
@@ -52,6 +52,28 @@ async fn accounts_and_roles_follow_every_page() {
     assert!(sent[0].url.starts_with("https://portal.sso.eu-west-1.amazonaws.com/assignment/accounts"));
     assert!(sent[1].url.contains("next_token=n1"));
     assert_eq!(sent[0].header_value("x-amz-sso_bearer_token"), Some("sso-at"));
+}
+
+#[tokio::test]
+async fn the_options_to_bind_are_each_account_and_role_the_identity_then_reads_back() {
+    let http = FakeHttp::new()
+        .once(Method::Get, "/assignment/accounts", 200, r#"{"accountList":[{"accountId":"111","accountName":"prod"}]}"#)
+        .once(Method::Get, "account_id=111", 200, r#"{"roleList":[{"roleName":"Admin"},{"roleName":"ReadOnly"}]}"#)
+        .once(
+            Method::Get,
+            "/federation/credentials?account_id=111&role_name=ReadOnly",
+            200,
+            r#"{"roleCredentials":{"accessKeyId":"ASIA","secretAccessKey":"s","sessionToken":"t"}}"#,
+        );
+    let options = checked(&http, &creds(), "cloud.options", &json!({})).await;
+    let Ok(options) = options else { panic!("{options:?}") };
+    assert_eq!(
+        options,
+        json!([{ "value": "111/Admin", "label": "prod · Admin" }, { "value": "111/ReadOnly", "label": "prod · ReadOnly" }])
+    );
+    let answer = checked(&http, &creds(), "cloud.identity", &json!({ "binding": "111/ReadOnly" })).await;
+    let Ok(answer) = answer else { panic!("{answer:?}") };
+    assert_eq!((&answer["account"], &answer["role"]), (&json!("111"), &json!("ReadOnly")));
 }
 
 #[tokio::test]

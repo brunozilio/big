@@ -159,6 +159,28 @@
     }
   },
   {
+    "name": "network_intercept",
+    "description": "Intercept the HTTP requests of a tab and change them: rewrite a request (URL, method, headers, body) before it is sent, answer it with a made-up response without touching the network, block it, or rewrite the real response (status, headers, body, text replacements) before the page sees it. Rules belong to one tab, act only while it stays on the site where they were added, and last until removed, until `times` uses run out or until the tab closes. Add rules before the requests happen (reload the page if needed) and check `list` to see hits. Remove rules when done. If you don't have a valid tab ID, use tabs_context_mcp first to get available tabs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "action": { "type": "string", "enum": ["add", "list", "remove", "clear"], "description": "'add' a rule, 'list' the tab's rules and recent interceptions, 'remove' one rule by `ruleId`, or 'clear' every rule of the tab." },
+        "tabId": { "type": "number", "description": "Tab whose requests are intercepted. Must be a tab in the current group." },
+        "urlPattern": { "type": "string", "description": "For 'add': wildcard matched against the full URL; `*` is any text, `?` one character, `\\` escapes. E.g. `*://api.example.com/v1/users*` or `*.js`." },
+        "stage": { "type": "string", "enum": ["request", "response"], "description": "For 'add': 'request' (default) acts before the request is sent; 'response' acts on the real response before the page reads it." },
+        "method": { "type": "string", "description": "For 'add': only requests with this HTTP method (e.g. POST)." },
+        "resourceType": { "type": "string", "description": "For 'add': only this resource type, e.g. Document, XHR, Fetch, Script, Stylesheet, Image, Font, Media." },
+        "request": { "type": "object", "description": "Stage 'request': change the request and let it go to the network.", "properties": { "url": { "type": "string" }, "method": { "type": "string" }, "headers": { "type": "object", "description": "Header name to value. A null value removes that header; other headers are kept." }, "body": { "type": "string", "description": "New request body (text)." } } },
+        "respond": { "type": "object", "description": "Stage 'request': answer with this response; the request never reaches the network.", "properties": { "status": { "type": "number", "description": "Default 200." }, "headers": { "type": "object", "description": "Header name to value. A null value removes that header; other headers are kept." }, "body": { "type": "string", "description": "Response body (text). Set a Content-Type header to match." } } },
+        "block": { "description": "Stage 'request': true to fail the request as BlockedByClient, or a network error name such as Failed, TimedOut, ConnectionRefused, NameNotResolved, InternetDisconnected or AccessDenied." },
+        "response": { "type": "object", "description": "Stage 'response': change the real response. Redirects and failed requests pass untouched.", "properties": { "status": { "type": "number" }, "headers": { "type": "object", "description": "Header name to value. A null value removes that header; other headers are kept." }, "body": { "type": "string", "description": "Replaces the whole body (text)." }, "replace": { "type": "array", "description": "Text replacements applied in order to the body, after `body` if both are given.", "items": { "type": "object", "properties": { "find": { "type": "string" }, "with": { "type": "string" }, "regex": { "type": "boolean", "description": "Treat `find` as a regular expression (all matches; `with` may use $1)." } }, "required": ["find"] } } } },
+        "times": { "type": "number", "description": "For 'add': remove the rule after this many uses. Absent or 0 keeps it until removed." },
+        "ruleId": { "type": "string", "description": "For 'remove': the rule ID returned by 'add' or shown by 'list'." }
+      },
+      "required": ["action", "tabId"]
+    }
+  },
+  {
     "name": "read_console_messages",
     "description": "Read browser console messages (console.log, console.error, console.warn, etc.) from a specific tab. Useful for debugging JavaScript errors, viewing application logs, or understanding what's happening in the browser console. Returns console messages from the current domain only. If you don't have a valid tab ID, use tabs_context_mcp first to get available tabs. IMPORTANT: Always provide a pattern to filter messages - without a pattern, you may get too many irrelevant messages.",
     "inputSchema": {

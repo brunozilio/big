@@ -27,7 +27,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_twenty_two_tools_are_declared_with_object_schemas_and_the_brand_filled() {
+    fn the_twenty_three_tools_are_declared_with_object_schemas_and_the_brand_filled() {
         let names: Vec<&str> = tools().iter().filter_map(|tool| tool["name"].as_str()).collect();
         assert_eq!(
             names,
@@ -42,6 +42,7 @@ mod tests {
                 "javascript_tool",
                 "list_connected_browsers",
                 "navigate",
+                "network_intercept",
                 "read_console_messages",
                 "read_network_requests",
                 "read_page",

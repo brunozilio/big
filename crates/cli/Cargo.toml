@@ -20,7 +20,10 @@ serde_json.workspace = true
 tokio = { workspace = true, features = ["rt-multi-thread", "signal", "macros"] }
 clap = { version = "4.6.7", features = ["derive"] }
 tracing.workspace = true
-tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "std"] }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "std", "ansi", "chrono", "registry", "json"] }
+
+[build-dependencies]
+brand.workspace = true
 
 [dev-dependencies]
 agent-engine = { workspace = true, features = ["test-support"] }

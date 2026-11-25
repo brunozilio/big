@@ -72,7 +72,7 @@ async fn an_item_runs_waits_for_the_human_and_is_delivered() {
     assert_eq!(waiting["attention"]["action"]["step"], "approve");
     assert_eq!(waiting["steps"][1]["state"], "waiting_human");
     assert_eq!(waiting["steps"][1]["logo"], "<svg/>");
-    assert!(waiting["steps"][1]["needs"].is_string(), "{waiting}");
+    assert!(waiting["steps"][1]["requires"].is_string(), "{waiting}");
     assert!(waiting["steps"][1]["provider"].is_string(), "{waiting}");
     assert_ne!(waiting["updatedAt"], item["updatedAt"]);
     fixture("item", &waiting);
@@ -560,7 +560,7 @@ fn folder(world: &World, name: &str) -> String {
 async fn application(world: &World, repo: &str) -> (String, String) {
     let body = json!({
         "name": "Loja",
-        "repositories": [{ "code": { "connection": "c1", "repo": repo }, "directory": folder(world, "web") }],
+        "repositories": [{ "bindings": { "code": { "connection": "c1", "value": repo } }, "directory": folder(world, "web") }],
     });
     let (status, made) = world.send(Method::POST, "/api/applications", Some(body)).await;
     assert_eq!(status, StatusCode::OK, "{made}");

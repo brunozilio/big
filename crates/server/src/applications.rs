@@ -4,7 +4,7 @@ use axum::Json;
 use axum::extract::{Path as UrlPath, State};
 use axum::response::Response;
 use serde_json::Value;
-use store::{Application, CloudChoice, CodeChoice, Repository, TrackerChoice};
+use store::{Application, Binding, Bindings, Choice, Environment, Fields, Repository};
 
 use crate::attachments::random_id;
 use crate::error::{ApiError, ApiResult, done, json as reply, said};
@@ -35,19 +35,91 @@ fn repository(found: Repository) -> ApiResult<Repository> {
         )));
     }
     let id = Some(trimmed(&found.id)).filter(|id| !id.is_empty()).map_or_else(random_id, Ok)?;
-    let code = found
-        .code
-        .map(|code| CodeChoice { connection: trimmed(&code.connection), repo: trimmed(&code.repo) })
-        .filter(|code| !code.connection.is_empty() && !code.repo.is_empty());
-    Ok(Repository { id, code, directory, run: lines(&found.run), verify: lines(&found.verify) })
+    let e2e_directory = inside(&found.e2e_directory)?;
+    Ok(Repository {
+        id,
+        directory,
+        run: lines(&found.run),
+        verify: lines(&found.verify),
+        e2e: lines(&found.e2e),
+        e2e_directory,
+        bindings: bound(found.bindings),
+        flow: trimmed(&found.flow),
+    })
 }
 
-fn cloud(chosen: CloudChoice) -> CloudChoice {
-    CloudChoice {
-        connection: trimmed(&chosen.connection),
-        account: trimmed(&chosen.account),
-        role: trimmed(&chosen.role),
+fn inside(folder: &str) -> ApiResult<String> {
+    let folder = trimmed(folder).trim_matches('/').to_owned();
+    let path = Path::new(&folder);
+    if path.components().all(|part| matches!(part, std::path::Component::Normal(_))) {
+        return Ok(folder);
     }
+    Err(ApiError::bad(said(
+        format!("The E2E folder {folder} must be a path inside the repository."),
+        format!("La carpeta E2E {folder} debe ser una ruta dentro del repositorio."),
+        format!("A pasta do E2E {folder} precisa ser um caminho dentro do repositório."),
+    )))
+}
+
+fn variable_name(name: &str) -> bool {
+    let mut chars = name.chars();
+    chars.next().is_some_and(|first| first.is_ascii_alphabetic() || first == '_')
+        && chars.all(|rest| rest.is_ascii_alphanumeric() || rest == '_')
+}
+
+fn environment(given: Environment) -> ApiResult<Environment> {
+    let mut kept = Environment::new();
+    for (name, value) in given {
+        let name = trimmed(&name);
+        if name.is_empty() {
+            continue;
+        }
+        if !variable_name(&name) {
+            return Err(ApiError::bad(said(
+                format!("{name} is not a valid environment variable name: use letters, digits and _."),
+                format!("{name} no es un nombre válido de variable de entorno: usa letras, dígitos y _."),
+                format!("{name} não é um nome válido de variável de ambiente: use letras, dígitos e _."),
+            )));
+        }
+        kept.insert(name, value);
+    }
+    Ok(kept)
+}
+
+fn chosen(given: Fields) -> Fields {
+    given
+        .into_iter()
+        .map(|(key, choice)| (trimmed(&key), Choice { value: trimmed(&choice.value), label: trimmed(&choice.label) }))
+        .filter(|(key, choice)| !key.is_empty() && !choice.value.is_empty())
+        .collect()
+}
+
+fn bound(given: Bindings) -> Bindings {
+    given
+        .into_iter()
+        .map(|(capability, binding)| {
+            let mut more: Vec<Choice> = Vec::new();
+            for choice in binding.more {
+                let value = trimmed(&choice.value);
+                if !value.is_empty() && value != binding.value.trim() && !more.iter().any(|known| known.value == value)
+                {
+                    more.push(Choice { value, label: trimmed(&choice.label) });
+                }
+            }
+            let profiles: Vec<Fields> =
+                binding.profiles.into_iter().map(chosen).filter(|profile| !profile.is_empty()).collect();
+            let binding = Binding {
+                connection: trimmed(&binding.connection),
+                value: trimmed(&binding.value),
+                label: trimmed(&binding.label),
+                more,
+                fields: chosen(binding.fields),
+                profiles,
+            };
+            (trimmed(&capability), binding)
+        })
+        .filter(|(capability, binding)| !capability.is_empty() && binding.is_set())
+        .collect()
 }
 
 pub fn checked(mut application: Application) -> ApiResult<Application> {
@@ -66,12 +138,8 @@ pub fn checked(mut application: Application) -> ApiResult<Application> {
             "Adicione ao menos um repositório.",
         )));
     }
-    application.tracker = application
-        .tracker
-        .map(|chosen| TrackerChoice { connection: trimmed(&chosen.connection), project: trimmed(&chosen.project) })
-        .filter(|chosen| !chosen.connection.is_empty() && !chosen.project.is_empty());
-    application.cloud =
-        application.cloud.map(cloud).filter(|chosen| !chosen.connection.is_empty() && !chosen.account.is_empty());
+    application.bindings = bound(application.bindings);
+    application.env = environment(application.env)?;
     let mut kept: Vec<Repository> = Vec::new();
     for found in application.repositories {
         let mut found = repository(found)?;

@@ -131,6 +131,9 @@ impl Orchestrator {
         }
         self.stamp_language(&mut input, parent.as_ref())?;
         let id = ItemId::new();
+        if parent.is_none() {
+            crate::flows::stamp(id.as_str(), &mut input);
+        }
         let named = parent.is_none() && !crate::naming::titled(&input);
         let text = input["text"].as_str().or(input["title"].as_str()).unwrap_or_default().to_owned();
         let wanted = input["model"].as_str().map(str::to_owned);

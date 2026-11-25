@@ -41,6 +41,8 @@ const issueOutput = () =>
     [
       ["id", "string"],
       ["project", "string"],
+      ["type", "string"],
+      ["parent", "string"],
       ["description", "string"],
       ["impediment", "object"],
       ["subtasks", "array"],
@@ -56,6 +58,14 @@ const projectList = () => listOf(object([["id", "string"], ["key", "string"], ["
 
 const fieldList = () =>
   listOf(object([["key", "string"], ["name", "string"], ["type", "string"]], [["required", "boolean"], ["values", "array"]]));
+
+const trackerSchema = () => {
+  const status = object([["name", "string"]], [["id", "string"], ["category", "string"]]);
+  const type = object([["name", "string"], ["level", "integer"], ["children", "array"], ["statuses", "array"]], [["id", "string"]]);
+  const shaped = object([["types", "array"]], [["default", "string"]]);
+  (shaped.properties as Record<string, Schema>).types = listOf({ ...type, properties: { ...(type.properties as object), statuses: listOf(status) } });
+  return shaped;
+};
 
 export function tracker(): Action[] {
   const newIssue = object(
@@ -73,7 +83,8 @@ export function tracker(): Action[] {
       "lookup",
     ),
     read("tracker.statuses", object([], [["project", "string"]]), list()),
-    write("tracker.transition", object([["issue", "string"], ["status", "string"]]), issueSummary(), "lookup"),
+    write("tracker.transition", object([["issue", "string"]], [["status", "string"], ["category", "string"]]), issueSummary(), "lookup"),
+    read("tracker.schema", object([], [["project", "string"]]), trackerSchema()),
     write(
       "tracker.set_impediment",
       object([["issue", "string"], ["on", "boolean"]], [["reason", "string"]]),
@@ -95,6 +106,7 @@ export function tracker(): Action[] {
       object([["issue", "string"], ["to", "string"]], [["already", "boolean"]]),
       "lookup",
     ),
+    write("tracker.attach", object([["issue", "string"], ["files", "array"]]), object([["attached", "array"]], [["skipped", "array"]]), "lookup"),
   ];
 }
 
@@ -165,7 +177,7 @@ export function cloud(): Action[] {
     [["role", "string"], ["arn", "string"], ["session_token", "string"], ["expires_at", "string"], ["region", "string"]],
   );
   return [
-    read("cloud.identity", object([], [["account", "string"], ["role", "string"]]), credentials),
+    read("cloud.identity", object([], [["account", "string"], ["role", "string"], ["binding", "string"]]), credentials),
     read("cloud.accounts_and_roles", { type: "object", properties: {} }, object([["accounts", "array"]])),
     read(
       "cloud.last_deployment",
@@ -177,6 +189,7 @@ export function cloud(): Action[] {
 
 export function changes(): Action[] {
   const fields: Fields = [
+    ["settings", "object"],
     ["tasks", "array"],
     ["notes", "array"],
     ["attachments", "array"],
@@ -185,14 +198,15 @@ export function changes(): Action[] {
   ];
   const output = object(
     [["ref", "string"], ["key", "string"], ["status", "string"]],
-    [["title", "string"], ["environment", "string"], ["window", "string"], ["url", "string"], ["revision", "integer"], ["created", "boolean"]],
+    [["title", "string"], ["environment", "string"], ["start", "string"], ["end", "string"], ["url", "string"], ["revision", "integer"], ["created", "boolean"]],
   );
   const changeRef = object([["change", "string"]]);
   return [
-    write("changes.create", object([["title", "string"], ["environment", "string"], ["window", "string"]], fields), output, "lookup"),
-    write("changes.update", object([["change", "string"]], [["title", "string"], ["window", "string"], ...fields]), output, "native"),
+    write("changes.create", object([["title", "string"], ["environment", "string"], ["start", "string"], ["end", "string"]], fields), output, "lookup"),
+    write("changes.update", object([["change", "string"]], [["title", "string"], ["start", "string"], ["end", "string"], ...fields]), output, "native"),
     read("changes.get", changeRef, output),
     write("changes.cancel", changeRef, output, "native"),
+    options("changes"),
   ];
 }
 
@@ -218,14 +232,22 @@ export function tests(): Action[] {
     ),
   );
   const newCycle = withIssueId(object([["title", "string"]], [["project", "string"], ["description", "string"], ["issue", "string"], ["issue_id", "string"]]));
-  const record = object([["case", "string"], ["cycle", "string"], ["status", "string"]], [["project", "string"], ["comment", "string"], ["seconds", "number"]]);
+  const record = withIssueId(
+    object([["case", "string"], ["cycle", "string"], ["status", "string"]], [["project", "string"], ["comment", "string"], ["seconds", "number"], ["issue_id", "string"]]),
+  );
+  const finish = object([["cycle", "string"], ["status", "string"]], [["project", "string"]]);
   return [
     write("tests.create_case", newCase, object([["ref", "string"], ["title", "string"], ["url", "string"]], [["created", "boolean"]]), "lookup"),
     read("tests.cases", object([["issue", "string"]]), listOf(object([["ref", "string"], ["title", "string"]]))),
     write("tests.create_cycle", newCycle, object([["ref", "string"], ["url", "string"]]), "native"),
     write("tests.record", record, object([["ref", "string"]]), "native"),
+    write("tests.finish_cycle", finish, object([["ref", "string"]], [["status", "string"]]), "native"),
     read("tests.projects", object([], [["query", "string"]]), projectList()),
   ];
+}
+
+export function securityStatus(): Action {
+  return read("security.status", object([], [["project", "string"], ["since", "string"]]), object([["status", "string"]], [["scannedAt", ["string", "null"]], ["running", "boolean"]]));
 }
 
 export function security(): Action[] {
@@ -258,4 +280,53 @@ export function security(): Action[] {
 
 export function mcp(): Action[] {
   return [read("mcp.tools", object([]), list())];
+}
+
+export function quality(): Action[] {
+  const wanted = object([["project", "string"]], [["pullRequest", "string"], ["branch", "string"], ["commit", "string"]]);
+  const report = object(
+    [["status", "string"]],
+    [
+      ["gate", "string"],
+      ["ratings", "object"],
+      ["counts", "object"],
+      ["coverage", ["number", "null"]],
+      ["duplication", ["number", "null"]],
+      ["conditions", "array"],
+      ["issues", "array"],
+      ["total", "integer"],
+      ["url", "string"],
+      ["analyzedAt", ["string", "null"]],
+    ],
+  );
+  return [read("quality.report", wanted, report)];
+}
+
+export type BindingScope = "application" | "repository";
+
+export type BindingField = { key: string; label: string; required?: boolean };
+
+export type BindingEach = { key: string; label: string; fields: BindingField[] };
+
+export type BindingSpec = { capability: string; scope: BindingScope; label: string; multiple?: boolean; fields?: BindingField[]; each?: BindingEach };
+
+export function binding(capability: string, scope: BindingScope, label: string, shape: { multiple?: boolean; fields?: BindingField[]; each?: BindingEach } = {}): BindingSpec {
+  return { capability, scope, label, ...shape };
+}
+
+export function bindingField(key: string, label: string, required = false): BindingField {
+  return { key, label, required };
+}
+
+export function options(capability: string): Action {
+  const option = object([["value", "string"], ["label", "string"]], [["detail", "string"]]);
+  return read(`${capability}.options`, object([], [["query", "string"], ["field", "string"]]), listOf(option));
+}
+
+export function projectOptions(found: unknown): { value: string; label: string }[] {
+  const listed = Array.isArray(found) ? found : [];
+  return listed
+    .map((project) => ({ key: String(project?.key ?? ""), name: String(project?.name ?? "") }))
+    .filter((project) => project.key !== "")
+    .map((project) => ({ value: project.key, label: project.name && project.name !== project.key ? `${project.name} · ${project.key}` : project.key }));
 }

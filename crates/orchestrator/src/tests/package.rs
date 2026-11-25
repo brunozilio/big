@@ -1,5 +1,5 @@
 use serde_json::json;
-use store::{Application, CodeChoice, Repository};
+use store::{Application, Binding, Bindings, Repository};
 
 use super::*;
 
@@ -15,7 +15,7 @@ fn world() -> World {
         name: "Checkout".into(),
         repositories: vec![Repository {
             id: "web".into(),
-            code: Some(CodeChoice { connection: "c1".into(), repo: "o/web".into() }),
+            bindings: Bindings::from([("code".to_owned(), Binding::new("c1", "o/web"))]),
             directory: world.repo().to_string_lossy().into_owned(),
             ..Repository::default()
         }],
@@ -35,7 +35,11 @@ fn world() -> World {
 }
 
 async fn merged(kernel: &Handle, title: &str) -> ItemId {
-    let input = json!({ "title": title, "issue": title, "application": { "id": "app", "repositories": [{ "id": "web", "code": { "connection": "c1", "repo": "o/web" } }] }, "git": { "web": { "head": "feat/x", "base": "develop" } } });
+    merged_with(kernel, title, json!({ "web": { "head": "feat/x", "base": "develop" } })).await
+}
+
+async fn merged_with(kernel: &Handle, title: &str, git: Value) -> ItemId {
+    let input = json!({ "title": title, "issue": title, "application": { "id": "app", "repositories": [{ "id": "web", "bindings": { "code": { "connection": "c1", "value": "o/web" } } }] }, "git": git });
     let story = kernel.create_item("default", input).expect("story");
     until(kernel, &story, WorkItem::waiting_human).await;
     kernel.human_input(&story, "merge", "ok", json!({})).expect("merge");
@@ -98,6 +102,8 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
     let created = fake.calls.lock().expect("lock").iter().find(|(name, _, _)| name == "changes.create").cloned().expect("create");
     assert_eq!(created.1["environment"], "hext");
     assert_eq!(created.1["tasks"][0]["start"], "22:00");
+    assert_eq!(created.1["start"], "2026-11-26T22:00:00-03:00");
+    assert!(created.1["end"].as_str().is_some_and(|end| end.ends_with("-03:00") && end > "2026-11-26T22:00"));
     assert!(item.links.contains(&first));
     let second = merged(&kernel, "APP-2").await;
     let all = packages(&kernel, 2).await;
@@ -112,6 +118,7 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
         subject: "mock-1".into(),
         data: json!({ "ref": "mock-1", "status": "done" }),
         at: jiff::Timestamp::UNIX_EPOCH,
+        scope: String::new(),
     }).expect("deliver");
     let item = until(&kernel, &package, |item| item.waiting_human() && stage(item, "hext")["state"] == "passed").await;
     assert_eq!(stage(&item, "prd")["picker"], true);
@@ -143,4 +150,22 @@ async fn a_package_built_by_hand_starts_empty_and_takes_only_what_is_moved_into_
     let left = kernel.item(&automatic).expect("store").expect("item");
     assert_eq!((left.links.clone(), left.released.clone()), (vec![first], vec![second]));
     assert!(!moved.accepting);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_package_promotes_each_repository_along_the_flow_its_repository_follows() {
+    let world = world();
+    let fake = world.provider;
+    let kernel = world.start().await;
+    let promote = json!([{ "from": "dev", "into": "homolog", "method": "squash" }]);
+    let story =
+        merged_with(&kernel, "APP-3", json!({ "web": { "head": "feature/APP-3", "base": "dev", "promote": promote } })).await;
+    let package = packages(&kernel, 1).await.remove(0);
+    let item = until(&kernel, &package, |item| item.is_ended() || stage(item, "hi")["state"] == "passed").await;
+    assert!(item.links.contains(&story), "the delivery arrives through its own flow's integration branch");
+    let calls = fake.calls.lock().expect("lock").clone();
+    let opened = calls.iter().find(|(name, _, _)| name == "code.open_pull_request").expect("a promotion");
+    assert_eq!((opened.1["head"].clone(), opened.1["base"].clone()), (json!("dev"), json!("homolog")));
+    let merge = calls.iter().find(|(name, _, _)| name == "code.merge").expect("merged");
+    assert_eq!(merge.1["method"], "squash");
 }

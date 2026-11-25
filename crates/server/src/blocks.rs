@@ -7,6 +7,7 @@ use crate::marks::serving;
 pub const REVIEW: &str = "review";
 pub const MERGE: &str = "merge";
 pub const SUBMIT: &str = "submit";
+pub const TRIAGE: &str = "findings.triage";
 
 pub struct Place<'a> {
     pub connections: &'a [ConnectionRecord],
@@ -106,6 +107,25 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
             "kinds": raw["kinds"].as_array().cloned().unwrap_or_default(),
             "locked": !place.waiting || raw["locked"] == true,
             "environment": raw["environment"].as_str(),
+            "owners": raw["owners"].as_array().cloned().unwrap_or_default(),
+        }),
+        "findings" => json!({
+            "type": "findings",
+            "connection": bound(place, raw, "security"),
+            "project": text(&raw["project"]),
+            "scannedAt": raw["scannedAt"].as_str(),
+            "url": raw["url"].as_str(),
+            "triage": (place.waiting && raw["triage"] == true).then_some(TRIAGE),
+            "findings": raw["findings"].as_array().cloned().unwrap_or_default(),
+        }),
+        "quality" => json!({
+            "type": "quality",
+            "connection": bound(place, raw, "quality"),
+            "project": text(&raw["project"]),
+            "branch": text(&raw["branch"]),
+            "analyzedAt": raw["analyzedAt"].as_str(),
+            "url": raw["url"].as_str(),
+            "report": raw["report"].clone(),
         }),
         "form" => form(raw, place.language),
         "actions" => json!({
@@ -115,6 +135,10 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
         _ => return None,
     };
     Some(block)
+}
+
+fn bound(place: &Place<'_>, raw: &Value, capability: &str) -> String {
+    raw["connection"].as_str().filter(|connection| !connection.is_empty()).map_or_else(|| place.connection(capability), str::to_owned)
 }
 
 fn optional(raw: &Value) -> Value {
@@ -273,5 +297,21 @@ mod tests {
         assert_eq!(action, "request_changes");
         assert_eq!(values["lines"][0], json!({ "path": "a.rs", "line": 2, "body": "y" }));
         assert_eq!(input("merge", json!({ "method": "squash" })).0, "merge");
+    }
+
+    #[test]
+    fn findings_are_triaged_only_while_waiting_and_a_quality_report_keeps_its_connection() {
+        let connections = [record("v", "security"), record("s", "quality")];
+        let raw = json!([
+            { "type": "findings", "project": "guid", "triage": true, "findings": [{ "id": "1" }] },
+            { "type": "quality", "connection": "s2", "project": "acme_web", "branch": "feat/x", "report": { "gate": "passed" } },
+        ]);
+        let waiting = Place { connections: &connections, waiting: true, language: Language::default() };
+        let blocks = normalized(&waiting, &raw);
+        assert_eq!((&blocks[0]["connection"], &blocks[0]["triage"]), (&json!("v"), &json!(TRIAGE)));
+        assert_eq!(blocks[0]["findings"][0]["id"], "1");
+        assert_eq!((&blocks[1]["connection"], &blocks[1]["report"]["gate"]), (&json!("s2"), &json!("passed")));
+        let done = Place { connections: &connections, waiting: false, language: Language::default() };
+        assert_eq!(normalized(&done, &raw)[0]["triage"], Value::Null);
     }
 }

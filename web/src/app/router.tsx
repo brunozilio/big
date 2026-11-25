@@ -7,6 +7,7 @@ export const routes = [
   { path: '/items/:id/:step', element: <App /> },
   { path: '/settings', element: <Navigate to="/settings/connections" replace /> },
   { path: '/settings/:tab', element: <App /> },
+  { path: '/security', element: <App /> },
   { path: '*', element: <Navigate to="/" replace /> },
 ]
 

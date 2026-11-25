@@ -13,11 +13,25 @@ impl script::Host for NoHost {
     }
 }
 
-const STEPS: [&str; 11] =
-    ["plan", "ticket", "cases", "develop", "checks", "pr", "ci", "review", "provision", "merge", "release"];
+const STEPS: [&str; 13] = [
+    "plan", "ticket", "cases", "develop", "checks", "pr", "ci", "quality", "review", "provision", "merge", "release",
+    "security",
+];
 
-const PROVIDERS: [&str; 9] =
-    ["jira", "github", "aws", "atlassian", "gitlab", "bitbucket", "amazon", "zephyr", "smartbear"];
+const PROVIDERS: [&str; 12] = [
+    "jira",
+    "github",
+    "aws",
+    "atlassian",
+    "gitlab",
+    "bitbucket",
+    "amazon",
+    "zephyr",
+    "smartbear",
+    "sonar",
+    "veracode",
+    "snyk",
+];
 
 const CUSTOM: &str = r#"
 import { workflow, step, markdown, actions } from "sdk";
@@ -164,8 +178,11 @@ impl Fake {
             ]),
             (Some("code"), Some("merge")) => json!({ "merged": true, "sha": "abc" }),
             (Some("tracker"), Some("issue")) => {
-                json!({ "ref": inner["issue"], "id": "10009", "title": "x", "status": "A fazer", "url": "" })
+                json!({ "ref": inner["issue"], "id": "10009", "title": "x", "status": "A fazer", "url": "", "type": "Tarefa" })
             }
+            (Some("tracker"), Some("schema")) => json!({ "default": "Tarefa", "types": [{ "name": "Tarefa", "level": 1,
+                "children": [], "statuses": [{ "name": "A fazer", "category": "todo" },
+                { "name": "Fazendo", "category": "doing" }, { "name": "Feito", "category": "done" }] }] }),
             (Some("tests"), Some("create_case")) => {
                 json!({ "ref": "Z-T1", "title": inner["title"], "url": "https://tests/Z-T1" })
             }
@@ -285,7 +302,8 @@ fn the_default_workflow_describes_its_statuses_and_its_steps_in_order() {
     let described = call(&default_workflow(), "host.describe", &[]);
     let workflow = &described["workflows"][0];
     assert_eq!(workflow["name"], "entrega");
-    assert_eq!(workflow["statuses"], json!(["A fazer", "Fazendo", "Feito"]));
+    assert_eq!(workflow["statuses"], json!([]), "the statuses come from the tracker, by category and issue type");
+    assert_eq!(workflow["steps"][3]["options"]["status"], json!({ "category": "doing" }));
     let ids: Vec<&str> =
         workflow["steps"].as_array().expect("steps").iter().filter_map(|call| call["id"].as_str()).collect();
     assert_eq!(ids, STEPS);
@@ -294,7 +312,8 @@ fn the_default_workflow_describes_its_statuses_and_its_steps_in_order() {
     assert_eq!(workflow["steps"][4]["options"]["agent"], "verifier");
     assert_eq!(workflow["steps"][4]["options"]["tester"], "tester");
     assert_eq!(workflow["steps"][6]["options"]["onFail"], "develop");
-    assert_eq!(workflow["steps"][7]["options"]["onChanges"], "develop");
+    assert_eq!(workflow["steps"][7]["options"]["onFail"], "develop");
+    assert_eq!(workflow["steps"][8]["options"]["onChanges"], "develop");
     let mut known = STEPS.to_vec();
     let at = known.iter().position(|step| *step == "checks").unwrap_or(0);
     known.splice(at..at, ["repo-checks", "e2e", "verifier"]);
@@ -797,8 +816,8 @@ fn infrastructure_the_change_needs_is_discovered_provisioned_and_the_rest_handed
     assert!(waited.zip(merged).is_some_and(|(at, merge)| at < merge), "the provisioning comes before the merge");
     let closed = calls(&asked, "transition")
         .into_iter()
-        .any(|call| call["args"]["args"] == json!({ "issue": "T-12", "status": "Feito" }));
-    assert!(closed, "the subtask is closed once provisioned");
+        .any(|call| call["args"]["args"] == json!({ "issue": "T-12", "category": "done" }));
+    assert!(closed, "the subtask is closed once provisioned, in whatever status its type calls done");
 }
 
 #[test]
@@ -850,13 +869,16 @@ fn each_subtask_moves_to_doing_and_to_done_around_its_own_developer_turn() {
                 return Some(format!("dev:{}", args["input"]["session"].as_str().unwrap_or("-")));
             }
             (args["action"] == "transition" && args["args"]["issue"] != "T-9")
-                .then(|| format!("{}>{}", args["args"]["issue"].as_str().unwrap_or(""), args["args"]["status"]))
+                .then(|| {
+                    let to = args["args"]["status"].as_str().or(args["args"]["category"].as_str()).unwrap_or("");
+                    format!("{}>{to}", args["args"]["issue"].as_str().unwrap_or(""))
+                })
         })
         .take(6)
         .collect();
     assert_eq!(
         trail,
-        ["T-11>\"Fazendo\"", "dev:-", "T-11>\"Feito\"", "T-12>\"Fazendo\"", "dev:dev-1", "T-12>\"Feito\""]
+        ["T-11>doing", "dev:-", "T-11>done", "T-12>doing", "dev:dev-1", "T-12>done"]
     );
     let developers: Vec<&Value> =
         of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "developer").collect();
@@ -1071,9 +1093,9 @@ fn the_provision_view_lists_what_a_person_creates_and_the_agents_chats() {
 fn application_item() -> Value {
     let mut chosen = item(Value::Null);
     chosen["application"] = json!({ "id": "app", "name": "Loja", "repositories": [
-        { "id": "web", "directory": "/src/web", "code": { "connection": "cw", "repo": "acme/web", "pipelines": true },
+        { "id": "web", "directory": "/src/web", "bindings": { "code": { "connection": "cw", "value": "acme/web", "capabilities": ["code", "pipelines"] } },
           "run": "bun dev", "verify": ["lint", "test"] },
-        { "id": "api", "directory": "/src/api", "code": { "connection": "cw", "repo": "acme/api", "pipelines": true },
+        { "id": "api", "directory": "/src/api", "bindings": { "code": { "connection": "cw", "value": "acme/api", "capabilities": ["code", "pipelines"] } },
           "verify": ["cargo test"] },
         { "id": "docs", "directory": "/src/docs", "verify": [] },
     ] });
@@ -1212,8 +1234,14 @@ fn test_cases_are_written_reviewed_by_a_person_and_created_linked_to_the_issue()
     let recorded = &calls(&asked, "record")[0]["args"]["args"];
     assert_eq!(
         *recorded,
-        json!({ "case": "Z-T1", "cycle": "Z-R1", "status": "passed", "comment": "api.spec.ts passou" })
+        json!({ "case": "Z-T1", "cycle": "Z-R1", "status": "passed", "comment": "api.spec.ts passou", "issue_id": "10009" })
     );
+    assert_eq!(calls(&asked, "finish_cycle")[0]["args"]["args"], json!({ "cycle": "Z-R1", "status": "done" }));
+    let posted = calls(&asked, "comment");
+    let summary = posted.iter().find(|call| call["args"]["args"]["issue"] == "T-9").expect("summary on the issue");
+    let body = summary["args"]["args"]["body"].as_str().unwrap_or_default();
+    assert!(body.contains("Testes E2E") && body.contains("Z-R1") && body.contains("✅ Z-T1") && body.contains("passou"), "{body}");
+    assert!(calls(&asked, "attach").is_empty(), "no file, nothing to attach");
 }
 
 const CASES_THEN_CHECKS: &str = r#"
@@ -1305,6 +1333,11 @@ fn each_case_keeps_its_terminal_output_and_its_screens_as_evidence() {
     assert!(comment.starts_with("tela.spec.ts passou") && comment.contains("✓ Z-T1 cadastra"), "{comment}");
     let text = result.to_string();
     assert!(text.contains("\"id\":\"a1\"") && text.contains("\"id\":\"b2\"") && !text.contains("sumiu"), "{text}");
+    let attach = &calls(&asked, "attach")[0]["args"];
+    assert_eq!(attach["capability"], "tracker");
+    assert_eq!(attach["args"], json!({ "issue": "T-1", "files": [{ "$file": "a1" }, { "$file": "b2" }] }));
+    let summary = calls(&asked, "comment").into_iter().find(|call| call["args"]["args"]["issue"] == "T-1").expect("summary");
+    assert!(summary["args"]["args"]["body"].as_str().is_some_and(|body| body.contains("✅ Z-T1")), "{summary}");
     let shown = step_view(
         "checks",
         json!({ "e2e": { "cases": [{ "case": "C-1", "title": "Login", "status": "failed",
@@ -1312,6 +1345,31 @@ fn each_case_keeps_its_terminal_output_and_its_screens_as_evidence() {
     );
     assert_eq!(shown[0]["commands"][0]["log"], "falhou\n\n✗ C-1", "the case shows its evidence and its terminal");
     assert_eq!(shown[0]["commands"][0]["files"][0]["id"], "a1");
+}
+
+#[test]
+fn the_e2e_suite_runs_in_the_repository_and_folder_that_declare_it() {
+    let mut fake = Fake::default();
+    let mut chosen = item(json!("T-1"));
+    chosen["application"] = json!({ "id": "app", "name": "Loja", "repositories": [
+        { "id": "web", "directory": "/src/web", "verify": [] },
+        { "id": "qa", "directory": "/src/qa", "e2e": ["npx cypress run"], "e2eDirectory": "suites/web" },
+    ] });
+    let (result, asked) = drive(&source("workflows/casos.ts", CASES_THEN_CHECKS), &chosen, |command| {
+        let prompt = command["args"]["input"]["prompt"].as_str().unwrap_or_default();
+        if command["kind"] == "agent" && prompt.starts_with("Automate") {
+            assert!(prompt.contains("qa/suites/web: `npx cypress run`"), "the tester is told where the suite is: {prompt}");
+            let results = json!([{ "case": "Z-T1", "status": "passed", "evidence": "login.cy.ts passou" }]);
+            return Some(json!({ "text": "", "session": "test-2", "output": { "results": results } }));
+        }
+        fake.reply(command)
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    let suites: Vec<&Value> =
+        of_kind(&asked, "exec").into_iter().filter(|command| command["args"]["command"] == "npx cypress run").collect();
+    assert_eq!(suites.len(), 1, "only the repository that declares the suite runs it");
+    assert_eq!(suites[0]["args"]["repository"], "qa");
+    assert_eq!(suites[0]["args"]["cwd"], "suites/web");
 }
 
 const ONLY_TICKET: &str = r#"
@@ -1377,7 +1435,7 @@ fn step_view(step: &str, state: Value) -> Value {
 fn one_repository_item() -> Value {
     let mut chosen = item(Value::Null);
     chosen["application"] = json!({ "id": "app", "name": "Loja", "repositories": [
-        { "id": "web", "directory": "/src/web", "code": { "connection": "cw", "repo": "acme/web", "pipelines": true } },
+        { "id": "web", "directory": "/src/web", "bindings": { "code": { "connection": "cw", "value": "acme/web", "capabilities": ["code", "pipelines"] } } },
     ] });
     chosen
 }
@@ -1498,7 +1556,7 @@ export default workflow({
 fn cases_go_to_the_test_project_chosen_in_the_application() {
     let mut fake = Fake::default();
     let mut chosen = item(json!("T-1"));
-    chosen["application"] = json!({ "tests": { "connection": "z1", "project": "QA" }, "repositories": [] });
+    chosen["application"] = json!({ "bindings": { "tests": { "connection": "z1", "value": "QA" } }, "repositories": [] });
     let (_, asked) = drive(&source("workflows/casos.ts", CASES_THEN_CHECKS), &chosen, |command| fake.reply(command));
     let created = &calls(&asked, "create_case")[0];
     assert_eq!(created["args"]["args"]["project"], "QA");
@@ -1598,4 +1656,201 @@ fn a_side_question_talks_in_the_application_folder_until_the_person_closes_it() 
         of_kind(&asked, "status.set").into_iter().map(|command| &command["args"]["name"]).collect();
     assert_eq!(statuses, [&json!("Conversando"), &json!("Feito")]);
     assert!(of_kind(&asked, "call").is_empty(), "no tracker, no pull request");
+}
+
+#[test]
+fn the_merge_waits_until_the_review_approved_every_pull_request() {
+    let loaded = source("probe.js", "import { pendingOf } from \"sdk/steps/merge.js\";\n");
+    let probe = format!("{loaded}\nexport const pending = (reviewed, prs) => __m[\"sdk/steps/merge.js\"].pendingOf(reviewed, prs);\n");
+    let prs = json!([{ "pr": "acme/web#1" }, { "pr": "acme/api#2" }]);
+    let pending = |reviewed: Value| call(&probe, "pending", &[reviewed, prs.clone()]);
+    assert_eq!(pending(json!({})), json!([]), "a workflow without a review merges as before");
+    assert_eq!(pending(json!({ "verdict": "approve", "prs": ["acme/web#1", "acme/api#2"] })), json!([]));
+    assert_eq!(pending(json!({ "verdict": "approve", "pr": "acme/web#1" })), json!(["acme/api#2"]));
+    assert_eq!(pending(json!({ "verdict": "request_changes", "pr": "acme/web#1" })), json!(["acme/web#1", "acme/api#2"]));
+}
+
+fn scanned_item() -> Value {
+    let mut chosen = application_item();
+    chosen["application"]["repositories"][0]["bindings"]["quality"] = json!({ "connection": "sq", "value": "acme_web" });
+    chosen["application"]["repositories"][0]["bindings"]["security"] = json!({ "connection": "vc", "value": "guid-web" });
+    chosen["application"]["bindings"] = json!({ "tracker": { "connection": "jt", "value": "APP" } });
+    chosen
+}
+
+fn report(gate: &str) -> Value {
+    json!({
+        "status": "done", "gate": gate, "url": "https://sonar/dashboard?id=acme_web&pullRequest=7",
+        "ratings": { "reliability": "C", "security": "A", "maintainability": "A" },
+        "counts": { "bugs": 1, "vulnerabilities": 0, "smells": 0, "hotspots": 0, "hotspotsReviewed": 0 },
+        "coverage": 71.4, "duplication": 1.2,
+        "conditions": [{ "metric": "new_coverage", "value": "71.4", "threshold": "80", "passed": gate == "passed" }],
+        "issues": [{ "key": "AX1", "type": "bug", "severity": "major", "message": "Null check", "file": "src/cart.ts", "line": 12 }],
+        "total": 1,
+    })
+}
+
+#[test]
+fn only_the_changed_repositories_bound_to_quality_and_security_are_analyzed_and_triaged() {
+    let mut fake = Fake::default();
+    let mut analyses = 0;
+    let (result, asked) = drive(&default_workflow(), &scanned_item(), |command| {
+        let args = &command["args"];
+        match (command["kind"].as_str(), args["capability"].as_str(), args["action"].as_str()) {
+            (Some("agent"), _, _) => Some(developed(args)),
+            (Some("call"), Some("code"), Some("files_diff")) => Some(json!([{ "path": "src/cart.ts" }])),
+            (Some("call"), Some("security"), Some("status")) => {
+                Some(json!({ "status": "done", "scannedAt": "2026-11-20T10:00:00Z", "running": false }))
+            }
+            (Some("wait.poll"), _, _) if args["call"]["capability"] == "security" => {
+                assert_eq!(args["call"]["args"]["since"], "2026-11-20T10:00:00Z");
+                Some(json!({ "status": "done", "scannedAt": "2026-11-25T10:00:00Z", "running": false }))
+            }
+            (Some("call"), Some("security"), Some("findings")) => Some(json!([
+                { "id": "11", "title": "SQL injection", "severity": 5, "kind": "static", "file": "cart.ts", "line": 3 },
+                { "id": "12", "title": "XSS", "severity": 4, "kind": "static", "file": "src/other.ts", "line": 9 },
+            ])),
+            (Some("wait.poll"), _, _) if args["call"]["capability"] == "quality" => {
+                analyses += 1;
+                Some(report(if analyses == 1 { "failed" } else { "passed" }))
+            }
+            (Some("wait.human"), _, _) if args["view"][0]["type"] == "findings" => {
+                Some(json!({ "action": "findings.triage", "values": { "decisions": { "11": { "choice": "task" } } }, "by": "ana" }))
+            }
+            _ => fake.reply(command),
+        }
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    let polled: Vec<&Value> = of_kind(&asked, "wait.poll")
+        .into_iter()
+        .filter(|command| command["args"]["call"]["capability"] == "quality")
+        .map(|command| &command["args"]["call"]["args"])
+        .collect();
+    assert!(polled.len() >= 2 && polled.iter().all(|args| args["project"] == "acme_web"), "{polled:?}");
+    let prompts: Vec<&str> = of_kind(&asked, "agent")
+        .iter()
+        .filter(|command| command["args"]["name"] == "developer")
+        .filter_map(|command| command["args"]["input"]["prompt"].as_str())
+        .collect();
+    assert!(prompts.iter().any(|prompt| prompt.contains("new_coverage") && prompt.contains("Null check")), "{prompts:?}");
+    let scanned = calls(&asked, "findings");
+    assert!(!scanned.is_empty() && scanned.iter().all(|command| command["args"]["args"]["project"] == "guid-web"));
+    let triaged = of_kind(&asked, "wait.human").into_iter().find(|command| command["args"]["view"][0]["type"] == "findings");
+    let shown = triaged.map(|command| command["args"]["view"][0]["findings"].clone()).unwrap_or_default();
+    assert_eq!(shown.as_array().map(Vec::len), Some(1), "only the finding in a touched file: {shown}");
+    assert_eq!((&shown[0]["id"], &shown[0]["suggested"]), (&json!("11"), &json!("fix")));
+    let tasks: Vec<&Value> = calls(&asked, "create_issue").into_iter().filter(|command| {
+        command["args"]["args"]["title"].as_str().is_some_and(|title| title.contains("SQL injection"))
+    }).collect();
+    assert_eq!(tasks.len(), 1);
+    assert_eq!(tasks[0]["args"]["args"]["project"], "APP");
+}
+
+#[test]
+fn without_any_bound_repository_quality_and_security_step_aside() {
+    let mut fake = Fake::default();
+    let (result, asked) = drive(&default_workflow(), &application_item(), |command| match command["kind"].as_str() {
+        Some("agent") => Some(developed(&command["args"])),
+        _ => fake.reply(command),
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    assert!(calls(&asked, "findings").is_empty() && calls(&asked, "files_diff").is_empty());
+    assert!(of_kind(&asked, "wait.poll").iter().all(|command| command["args"]["call"]["capability"] != "quality"));
+}
+
+#[test]
+fn a_finding_chosen_to_fix_after_the_merge_opens_a_security_item_for_its_repository() {
+    let mut fake = Fake::default();
+    let (result, asked) = drive(&default_workflow(), &scanned_item(), |command| {
+        let args = &command["args"];
+        match (command["kind"].as_str(), args["capability"].as_str(), args["action"].as_str()) {
+            (Some("agent"), _, _) => Some(developed(args)),
+            (Some("call"), Some("code"), Some("files_diff")) => Some(json!([{ "path": "src/cart.ts" }])),
+            (Some("call"), Some("security"), Some("status")) => Some(json!({ "status": "done", "scannedAt": null })),
+            (Some("call"), Some("security"), Some("findings")) => {
+                Some(json!([{ "id": "11", "title": "SQL injection", "severity": 5, "file": "src/cart.ts" }]))
+            }
+            (Some("wait.poll"), _, _) if args["call"]["capability"] == "quality" => Some(report("passed")),
+            (Some("wait.poll"), _, _) if args["call"]["capability"] == "security" => {
+                assert!(args["call"]["args"]["since"].is_null(), "a project never scanned waits for its first scan");
+                Some(json!({ "status": "done", "scannedAt": "2026-11-25T10:00:00Z" }))
+            }
+            (Some("wait.human"), _, _) if args["view"][0]["type"] == "findings" => {
+                Some(json!({ "action": "findings.triage", "values": { "decisions": { "11": { "choice": "fix" } } }, "by": "ana" }))
+            }
+            (Some("child"), _, _) => Some(json!({ "state": "completed" })),
+            _ => fake.reply(command),
+        }
+    });
+    assert_eq!(result["state"], "completed", "{result}");
+    let children = of_kind(&asked, "child");
+    assert_eq!(children.len(), 1);
+    let input = &children[0]["args"]["input"];
+    assert_eq!(children[0]["args"]["workflow"], "security");
+    assert_eq!(input["findings"][0]["id"], "11");
+    let kept: Vec<&Value> = input["application"]["repositories"].as_array().map(|all| all.iter().collect()).unwrap_or_default();
+    assert_eq!(kept.iter().map(|repository| &repository["id"]).collect::<Vec<_>>(), [&json!("web")]);
+    let merged = asked.iter().position(|command| command["args"]["action"] == "merge");
+    let scanned = asked.iter().position(|command| command["args"]["action"] == "findings");
+    assert!(merged < scanned, "the scan is read only after the merge");
+}
+
+const BY_TYPE: &str = r#"
+import { workflow, step } from "sdk";
+
+const work = step({ name: "work", async run(ctx) { return ctx.pass({}); } });
+
+export default workflow({
+  name: "por-tipo",
+  steps: [
+    work({ id: "start", status: { category: "doing", byType: { Bug: "Corrigindo" } } }),
+    work({ id: "finish", doneStatus: { category: "done" } }),
+  ],
+});
+"#;
+
+#[test]
+fn a_status_by_category_becomes_the_name_the_tracker_gives_it_for_the_issue_s_type() {
+    let schema = json!({ "default": "História", "types": [
+        { "name": "História", "level": 1, "children": [], "statuses": [
+            { "name": "A fazer", "category": "todo" }, { "name": "Em desenvolvimento", "category": "doing" }, { "name": "Entregue", "category": "done" }
+        ] },
+        { "name": "Bug", "level": 1, "children": [], "statuses": [
+            { "name": "Aberto", "category": "todo" }, { "name": "Validando", "category": "doing" },
+            { "name": "Resolvido", "category": "done" }, { "name": "Fechado", "category": "done" }
+        ] }
+    ] });
+    let run = |kind: &str| {
+        let mut item = item(json!("T-1"));
+        item["workflow"] = json!("por-tipo");
+        let (result, asked) = drive(&source("workflows/por-tipo.ts", BY_TYPE), &item, |command| {
+            match command["args"]["action"].as_str() {
+                Some("issue") => Some(json!({ "ref": "T-1", "type": kind, "project": "OPS" })),
+                Some("schema") => Some(schema.clone()),
+                _ => (command["kind"] == "status.set").then_some(Value::Null),
+            }
+        });
+        assert_eq!(result["state"], "completed", "{result}");
+        let named: Vec<Value> = of_kind(&asked, "status.set").iter().map(|command| command["args"]["name"].clone()).collect();
+        (named, calls(&asked, "schema").first().map(|command| command["args"]["args"].clone()))
+    };
+    let (bug, asked) = run("Bug");
+    assert_eq!(bug, [json!("Corrigindo"), json!("Fechado")]);
+    assert_eq!(asked, Some(json!({ "project": "OPS" })));
+    let (story, _) = run("História");
+    assert_eq!(story, [json!("Em desenvolvimento"), json!("Entregue")]);
+}
+
+#[test]
+fn the_merge_offers_first_the_method_the_repository_s_flow_declares() {
+    let mut fake = Fake::default();
+    let mut item = item(Value::Null);
+    item["git"] = json!({ "": { "base": "develop", "method": "rebase" } });
+    let (result, asked) = drive(&default_workflow(), &item, |command| fake.reply(command));
+    assert_eq!(result["state"], "completed", "{result}");
+    let offered = of_kind(&asked, "wait.human")
+        .into_iter()
+        .find(|command| command["args"]["view"][0]["type"] == "merge")
+        .map(|command| command["args"]["view"][0]["methods"].clone());
+    assert_eq!(offered, Some(json!(["rebase", "squash", "merge"])));
 }

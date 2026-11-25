@@ -1,3 +1,4 @@
+mod audit;
 pub(crate) mod date;
 mod job;
 mod live;

@@ -118,7 +118,10 @@ pub(crate) async fn fetch(ask: Ask<'_>, cancel: &CancellationToken) -> Result<Re
         return Err(ModelError::Cancelled);
     }
     let roots = roots_for(ask.url, super::web_client::proxied());
-    let mut response = sent(ask, roots, cancel).await?;
+    let started = std::time::Instant::now();
+    let first = sent(ask, roots, cancel).await;
+    audited(&ask, started, &first);
+    let mut response = first?;
     if roots == Roots::Skipped && !ask.one_hop && leaves_for_https(&response) {
         drop(response);
         response = sent(ask, Roots::Loaded, cancel).await?;
@@ -134,6 +137,30 @@ pub(crate) async fn fetch(ask: Ask<'_>, cancel: &CancellationToken) -> Result<Re
         None => Body::remote(response),
     };
     Ok(Response { status, headers, body })
+}
+
+fn audited(ask: &Ask<'_>, started: std::time::Instant, sent: &Result<reqwest::Response, ModelError>) {
+    let address = platform::address::parts(ask.url);
+    let (host, path) = (address.host.as_str(), address.path.as_str());
+    let duration_ms = started.elapsed().as_millis() as u64;
+    match sent {
+        Ok(response) => answered(ask.method, &address, response.status().as_u16(), duration_ms),
+        Err(ModelError::Cancelled) => {
+            tracing::event!(target: "audit", tracing::Level::DEBUG, component = "llm", http.request.method = ask.method, server.address = host, url.path = path, duration_ms, outcome = "cancelled", "http.client.request")
+        }
+        Err(error) => {
+            tracing::event!(target: "audit", tracing::Level::WARN, component = "llm", http.request.method = ask.method, server.address = host, url.path = path, duration_ms, outcome = "failure", error.message = %error, "http.client.request")
+        }
+    }
+}
+
+fn answered(method: &str, address: &platform::address::Address, status: u16, duration_ms: u64) {
+    let (host, path) = (address.host.as_str(), address.path.as_str());
+    if status >= 400 {
+        tracing::event!(target: "audit", tracing::Level::WARN, component = "llm", http.request.method = method, server.address = host, url.path = path, http.response.status_code = status, duration_ms, outcome = "failure", "http.client.request");
+    } else {
+        tracing::event!(target: "audit", tracing::Level::DEBUG, component = "llm", http.request.method = method, server.address = host, url.path = path, http.response.status_code = status, duration_ms, outcome = "success", "http.client.request");
+    }
 }
 
 async fn sent(ask: Ask<'_>, roots: Roots, cancel: &CancellationToken) -> Result<reqwest::Response, ModelError> {

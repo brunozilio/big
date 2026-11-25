@@ -78,15 +78,15 @@ describe('respostas reais do servidor', () => {
     const applications = load('applications') as Application[]
     expect(applications.length).toBeGreaterThan(0)
     expect(applications.every(isApplication)).toBe(true)
-    const chosen = { ...applications[0], cloud: { connection: 'c1', account: '111122223333', role: 'Deploy' } }
+    const chosen = { ...applications[0], bindings: { cloud: { connection: 'c1', value: '111122223333/Deploy' } } }
     expect(isApplication(chosen)).toBe(true)
-    expect(isApplication({ ...applications[0], cloud: { connection: 'c1' } })).toBe(false)
+    expect(isApplication({ ...applications[0], bindings: { cloud: { connection: 'c1' } } })).toBe(false)
     for (const a of applications) {
       expect(typeof a.id === 'string' && typeof a.name === 'string' && Array.isArray(a.repositories)).toBe(true)
-      expect(a.tracker === null || (typeof a.tracker.connection === 'string' && typeof a.tracker.project === 'string')).toBe(true)
+      expect(Object.values(a.bindings ?? {}).every((b) => typeof b.connection === 'string' && typeof b.value === 'string')).toBe(true)
       for (const r of a.repositories) {
         expect(typeof r.id === 'string' && typeof r.directory === 'string' && Array.isArray(r.run) && Array.isArray(r.verify)).toBe(true)
-        expect(r.code === null || (typeof r.code.connection === 'string' && typeof r.code.repo === 'string')).toBe(true)
+        expect(Object.values(r.bindings ?? {}).every((b) => typeof b.connection === 'string' && typeof b.value === 'string')).toBe(true)
       }
     }
   })

@@ -1,3 +1,4 @@
+pub mod address;
 pub mod atomic;
 pub mod bounded;
 pub mod child;

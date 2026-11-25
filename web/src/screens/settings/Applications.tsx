@@ -1,132 +1,68 @@
 import { motion } from 'framer-motion'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '@/api'
-import type { Application, ApplicationDraft, ApplicationRepository, CloudAccount, CloudChoice, CodeRepo, Connection, DirListing, Provider, TrackerProject } from '@/api/contract'
+import type { Application, ApplicationDraft, ApplicationRepository, Binding, Bindings, DirListing } from '@/api/contract'
 import { errorText, setApplications, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card, EmptyState } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
-import { Checkbox, Field, Input, Select } from '@/ui/form'
+import { Checkbox, Field, Input } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { stagger, tween } from '@/ui/motion'
 import { Dialog } from '@/ui/overlay'
 import { useT } from '@/i18n'
 import { FolderDialog } from './FolderDialog'
-
-interface Source {
-  connection: Connection
-  provider: Provider
-}
-
-const NONE = 'none'
-
-export function useSources(capability: string): Source[] {
-  const connections = useStore((s) => s.connections)
-  return useMemo(
-    () =>
-      (connections?.connections ?? []).flatMap((c) => {
-        const provider = connections?.providers.find((p) => p.key === c.provider)
-        return c.capabilities.includes(capability) && provider ? [{ connection: c, provider }] : []
-      }),
-    [connections, capability],
-  )
-}
-
-export function useListed<T>(sources: Source[], load: (connection: string) => Promise<T[]>, open: boolean): Record<string, T[]> {
-  const [listed, setListed] = useState<Record<string, T[]>>({})
-  useEffect(() => {
-    if (!open) return
-    let alive = true
-    for (const s of sources) {
-      const id = s.connection.id
-      load(id)
-        .then((found) => alive && setListed((known) => ({ ...known, [id]: found })))
-        .catch(() => alive && setListed((known) => ({ ...known, [id]: [] })))
-    }
-    return () => {
-      alive = false
-    }
-  }, [open, sources, load])
-  return listed
-}
-
-export const loadProjects = (connection: string) => api().call(connection, 'tracker.projects', {})
-export const loadTestProjects = (connection: string) => api().call(connection, 'tests.projects', {})
-export const loadSecurityProjects = (connection: string) => api().call(connection, 'security.projects', {})
-export const loadRepos = (connection: string) => api().call(connection, 'code.repos', {})
-export const loadCloudAccounts = (connection: string) => api().call(connection, 'cloud.accounts_and_roles', {})
-
-export function cloudOptions(accounts: CloudAccount[]): { key: string; label: string }[] {
-  return accounts.flatMap((a) => {
-    const name = a.name || a.id
-    if (a.roles.length === 0) return [{ key: a.id, label: name }]
-    return a.roles.map((role) => ({ key: `${a.id}/${role}`, label: `${name} · ${role}` }))
-  })
-}
-
-export function cloudKey(chosen: CloudChoice): string {
-  return choiceKey(chosen.connection, chosen.role ? `${chosen.account}/${chosen.role}` : chosen.account)
-}
-
-export function cloudChoice(value: string): CloudChoice | null {
-  const picked = fromKey(value)
-  if (!picked) return null
-  const at = picked.key.indexOf('/')
-  const account = at < 0 ? picked.key : picked.key.slice(0, at)
-  return { connection: picked.connection, account, role: at < 0 ? '' : picked.key.slice(at + 1) }
-}
-
-function CloudField({ open, value, onChange }: { open: boolean; value: CloudChoice | null; onChange: (next: CloudChoice | null) => void }) {
-  const t = useT()
-  const clouds = useSources('cloud')
-  const accounts = useListed<CloudAccount>(clouds, loadCloudAccounts, open)
-  if (clouds.length === 0) return null
-  const options = [
-    { value: NONE, label: t('settings.app_cloudDefault') },
-    ...clouds.flatMap((s) => cloudOptions(accounts[s.connection.id] ?? []).map((o) => ({ value: choiceKey(s.connection.id, o.key), label: o.label, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
-  ]
-  const current = value ? cloudKey(value) : NONE
-  if (value && !options.some((o) => o.value === current)) options.push({ value: current, label: value.role ? `${value.account} · ${value.role}` : value.account })
-  return (
-    <Field label={t('settings.app_cloud')}>
-      <Select label={t('settings.app_cloud')} className="w-full" leading={<Icon name="cloud" size={16} className="shrink-0 text-faint" />} value={current} options={options} onValueChange={(v) => onChange(cloudChoice(v))} />
-    </Field>
-  )
-}
+import { FlowSelect, useFlows, withFlow } from './flows'
+import { BindingFields, missingOf, suggested, useBindingFields, useBindingOptions, useBoundLook, type BindingField, type BindingOptions } from './bindings'
 
 export function folderName(directory: string): string {
   return directory.split('/').filter(Boolean).pop() ?? directory
 }
 
-export function suggestedCode(ref: string | null, repos: Record<string, CodeRepo[]>): ApplicationRepository['code'] {
-  if (!ref) return null
-  for (const [connection, list] of Object.entries(repos)) {
-    const found = list.find((r) => r.ref.toLowerCase() === ref.toLowerCase())
-    if (found) return { connection, repo: found.ref }
-  }
-  return null
-}
-
 function blankRepository(): ApplicationRepository {
-  return { id: '', code: null, directory: '', run: [], verify: [] }
+  return { id: '', directory: '', run: [], verify: [], e2e: [], e2eDirectory: '', bindings: {} }
 }
 
 function draftOf(application: Application | null): ApplicationDraft {
-  return application ? structuredClone(application) : { name: '', tracker: null, repositories: [blankRepository()], skipDependabot: true }
+  return application ? structuredClone(application) : { name: '', bindings: {}, repositories: [blankRepository()], skipDependabot: true, env: {} }
 }
 
-export function projectLabel(p: TrackerProject): string {
-  return p.name && p.name !== p.key ? `${p.name} · ${p.key}` : p.key
+type Variable = [string, string]
+
+function variablesOf(env: Record<string, string> | undefined): Variable[] {
+  return Object.entries(env ?? {})
 }
 
-export function choiceKey(connection: string, key: string): string {
-  return `${connection}::${key}`
+function envOf(rows: Variable[]): Record<string, string> {
+  return Object.fromEntries(rows.map(([name, value]): Variable => [name.trim(), value]).filter(([name]) => name))
 }
 
-export function fromKey(value: string): { connection: string; key: string } | null {
-  if (value === NONE) return null
-  const at = value.indexOf('::')
-  return at < 0 ? null : { connection: value.slice(0, at), key: value.slice(at + 2) }
+function cleanLines(lines: string[] | undefined): string[] {
+  return (lines ?? []).map((v) => v.trim()).filter(Boolean)
+}
+
+function EnvList({ value, onChange }: { value: Variable[]; onChange: (next: Variable[]) => void }) {
+  const t = useT()
+  const rows = value.length > 0 ? value : [['', ''] as Variable]
+  const set = (at: number, row: Variable) => onChange(rows.map((r, i) => (i === at ? row : r)))
+  return (
+    <div className="space-y-2">
+      <div className="space-y-0.5">
+        <span className="text-base font-medium text-fg">{t('settings.app_env')}</span>
+        <p className="text-xs text-muted">{t('settings.app_envHint')}</p>
+      </div>
+      <div className="space-y-2">
+        {rows.map(([name, val], i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <Input aria-label={`${t('settings.app_envName')} ${i + 1}`} className="font-mono text-sm sm:max-w-[16rem]" value={name} placeholder="CYPRESS_BASE_URL" onChange={(e) => set(i, [e.target.value, val])} />
+            <Input aria-label={`${t('settings.app_envValue')} ${i + 1}`} className="font-mono text-sm" value={val} placeholder="http://localhost:3000" onChange={(e) => set(i, [name, e.target.value])} />
+            {(rows.length > 1 || name || val) && <IconButton tooltip={t('settings.app_removeVariable')} size="sm" onClick={() => onChange(rows.filter((_, at) => at !== i))}><Icon name="trash" size={15} /></IconButton>}
+          </div>
+        ))}
+      </div>
+      <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => onChange([...rows, ['', '']])}>{t('settings.app_addVariable')}</Button>
+    </div>
+  )
 }
 
 function CommandList({ label, value, placeholder, onChange }: { label: string; value: string[]; placeholder: string; onChange: (next: string[]) => void }) {
@@ -149,14 +85,8 @@ function CommandList({ label, value, placeholder, onChange }: { label: string; v
   )
 }
 
-function RepositoryCard({ value, index, removable, repos, sources, onChange, onRemove, onFolder }: { value: ApplicationRepository; index: number; removable: boolean; repos: Record<string, CodeRepo[]>; sources: Source[]; onChange: (next: ApplicationRepository) => void; onRemove: () => void; onFolder: () => void }) {
+function RepositoryCard({ value, index, removable, fields, options, flows, onChange, onRemove, onFolder }: { value: ApplicationRepository; index: number; removable: boolean; fields: BindingField[]; options: BindingOptions; flows: string[]; onChange: (next: ApplicationRepository) => void; onRemove: () => void; onFolder: () => void }) {
   const t = useT()
-  const options = [
-    { value: NONE, label: t('settings.none') },
-    ...sources.flatMap((s) => (repos[s.connection.id] ?? []).map((r) => ({ value: choiceKey(s.connection.id, r.ref), label: r.ref, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
-  ]
-  const current = value.code ? choiceKey(value.code.connection, value.code.repo) : NONE
-  if (value.code && !options.some((o) => o.value === current)) options.push({ value: current, label: value.code.repo })
   return (
     <Card variant="inset" className="space-y-4 px-4 py-4" data-testid={`repository-${index}`}>
       <div className="flex items-center justify-between">
@@ -171,14 +101,14 @@ function RepositoryCard({ value, index, removable, repos, sources, onChange, onR
             <span className={value.directory ? 'min-w-0 flex-1 truncate font-mono text-sm text-fg' : 'min-w-0 flex-1 truncate text-base text-muted'}>{value.directory || t('settings.app_chooseFolder')}</span>
           </button>
         </div>
-        <Field label={t('settings.app_repository')}>
-          <Select label={t('settings.app_repository')} className="w-full" leading={<Icon name="branch" size={16} className="shrink-0 text-faint" />} value={current} options={options} onValueChange={(v) => {
-            const chosen = fromKey(v)
-            onChange({ ...value, code: chosen ? { connection: chosen.connection, repo: chosen.key } : null })
-          }} />
-        </Field>
+        <BindingFields fields={fields} options={options} bindings={value.bindings} onChange={(bindings) => onChange({ ...value, bindings })} />
         <CommandList label={t('settings.app_run')} value={value.run} placeholder="bun dev" onChange={(run) => onChange({ ...value, run })} />
         <CommandList label={t('settings.app_verify')} value={value.verify} placeholder="bun test" onChange={(verify) => onChange({ ...value, verify })} />
+        <CommandList label={t('settings.app_e2e')} value={value.e2e ?? []} placeholder="npx cypress run" onChange={(e2e) => onChange({ ...value, e2e })} />
+        <Field label={t('settings.app_e2eDirectory')} help={t('settings.app_e2eDirectoryHint')}>
+          <Input aria-label={t('settings.app_e2eDirectory')} className="font-mono text-sm" value={value.e2eDirectory ?? ''} placeholder="e2e" onChange={(e) => onChange({ ...value, e2eDirectory: e.target.value })} />
+        </Field>
+        <FlowSelect value={value.flow} flows={flows} onChange={(flow) => onChange(withFlow(value, flow))} />
       </div>
     </Card>
   )
@@ -187,54 +117,38 @@ function RepositoryCard({ value, index, removable, repos, sources, onChange, onR
 export function ApplicationDialog({ open, application, onClose }: { open: boolean; application: Application | null; onClose: () => void }) {
   const t = useT()
   const [draft, setDraft] = useState<ApplicationDraft>(() => draftOf(application))
+  const [variables, setVariables] = useState<Variable[]>(() => variablesOf(application?.env))
   const [folderFor, setFolderFor] = useState<number | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const trackers = useSources('tracker')
-  const coders = useSources('code')
-  const projects = useListed<TrackerProject>(trackers, loadProjects, open)
-  const testers = useSources('tests')
-  const testProjects = useListed<TrackerProject>(testers, loadTestProjects, open)
-  const scanners = useSources('security')
-  const scanned = useListed<TrackerProject>(scanners, loadSecurityProjects, open)
-  const repos = useListed<CodeRepo>(coders, loadRepos, open)
+  const shared = useBindingFields('application')
+  const own = useBindingFields('repository')
+  const sharedOptions = useBindingOptions(shared, open)
+  const ownOptions = useBindingOptions(own, open)
+  const flows = useFlows(open)
   useEffect(() => {
     if (open) {
       setDraft(draftOf(application))
+      setVariables(variablesOf(application?.env))
       setError(null)
     }
   }, [open, application])
-  const spaces = [
-    { value: NONE, label: t('settings.none') },
-    ...trackers.flatMap((s) => (projects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: projectLabel(p), icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
-  ]
-  const space = draft.tracker ? choiceKey(draft.tracker.connection, draft.tracker.project) : NONE
-  if (draft.tracker && !spaces.some((o) => o.value === space)) spaces.push({ value: space, label: draft.tracker.project })
-  const suites = [
-    { value: NONE, label: t('settings.none') },
-    ...testers.flatMap((s) => (testProjects[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: projectLabel(p), icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
-  ]
-  const suite = draft.tests ? choiceKey(draft.tests.connection, draft.tests.project) : NONE
-  if (draft.tests && !suites.some((o) => o.value === suite)) suites.push({ value: suite, label: draft.tests.project })
-  const scans = [
-    { value: NONE, label: t('settings.none') },
-    ...scanners.flatMap((s) => (scanned[s.connection.id] ?? []).map((p) => ({ value: choiceKey(s.connection.id, p.key), label: projectLabel(p), icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
-  ]
-  const scan = draft.security ? choiceKey(draft.security.connection, draft.security.project) : NONE
-  if (draft.security && !scans.some((o) => o.value === scan)) scans.push({ value: scan, label: draft.security.project })
   const change = (index: number, next: ApplicationRepository) => setDraft((d) => ({ ...d, repositories: d.repositories.map((r, i) => (i === index ? next : r)) }))
   const chosen = (listing: DirListing) => {
     if (folderFor === null) return
     const current = draft.repositories[folderFor]
-    const code = current.code ?? suggestedCode(listing.remote.ref, repos)
-    change(folderFor, { ...current, directory: listing.path, code })
+    const bindings = suggested(listing.remote.ref, own, ownOptions, current.bindings)
+    change(folderFor, { ...current, directory: listing.path, bindings })
     if (!draft.name.trim() && folderFor === 0) setDraft((d) => ({ ...d, name: folderName(listing.path) }))
     setFolderFor(null)
   }
   const save = () => {
+    const missing = missingOf(shared, draft.bindings) ?? draft.repositories.map((r) => missingOf(own, r.bindings)).find(Boolean) ?? null
+    if (missing) return setError(t('settings.app_bindingMissing', missing))
     setBusy(true)
     setError(null)
-    const clean = { ...draft, repositories: draft.repositories.map((r) => ({ ...r, run: r.run.map((v) => v.trim()).filter(Boolean), verify: r.verify.map((v) => v.trim()).filter(Boolean) })) }
+    const repositories = draft.repositories.map((r) => ({ ...r, run: cleanLines(r.run), verify: cleanLines(r.verify), e2e: cleanLines(r.e2e), e2eDirectory: (r.e2eDirectory ?? '').trim() }))
+    const clean = { ...draft, repositories, env: envOf(variables) }
     const sent = application ? api().saveApplication({ ...clean, id: application.id }) : api().createApplication(clean)
     sent
       .then((saved) => {
@@ -263,37 +177,16 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
             <Field label={t('settings.app_name')}>
               <Input aria-label={t('settings.app_name')} value={draft.name} placeholder="Checkout" onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
             </Field>
-            <Field label={t('settings.app_space')}>
-              <Select label={t('settings.app_space')} className="w-full" value={space} options={spaces} onValueChange={(v) => {
-                const picked = fromKey(v)
-                setDraft((d) => ({ ...d, tracker: picked ? { connection: picked.connection, project: picked.key } : null }))
-              }} />
-            </Field>
-            {testers.length > 0 && (
-              <Field label={t('settings.app_tests')}>
-                <Select label={t('settings.app_tests')} className="w-full" value={suite} options={suites} onValueChange={(v) => {
-                  const picked = fromKey(v)
-                  setDraft((d) => ({ ...d, tests: picked ? { connection: picked.connection, project: picked.key } : null }))
-                }} />
-              </Field>
-            )}
-            {scanners.length > 0 && (
-              <Field label={t('settings.app_security')}>
-                <Select label={t('settings.app_security')} className="w-full" value={scan} options={scans} onValueChange={(v) => {
-                  const picked = fromKey(v)
-                  setDraft((d) => ({ ...d, security: picked ? { connection: picked.connection, project: picked.key } : null }))
-                }} />
-              </Field>
-            )}
-            <CloudField open={open} value={draft.cloud ?? null} onChange={(cloud) => setDraft((d) => ({ ...d, cloud }))} />
+            <BindingFields fields={shared} options={sharedOptions} bindings={draft.bindings} onChange={(bindings) => setDraft((d) => ({ ...d, bindings }))} />
           </div>
           <div className="flex items-center gap-2.5">
             <span className="flex"><Checkbox label={t('settings.app_skipDependabot')} checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} /></span>
             <span className="cursor-pointer select-none text-base text-fg" onClick={() => setDraft((d) => ({ ...d, skipDependabot: d.skipDependabot === false }))}>{t('settings.app_skipDependabot')}</span>
           </div>
+          <EnvList value={variables} onChange={setVariables} />
           <div className="space-y-3">
             {draft.repositories.map((r, i) => (
-              <RepositoryCard key={r.id || `novo-${i}`} value={r} index={i} removable={draft.repositories.length > 1} repos={repos} sources={coders} onChange={(next) => change(i, next)} onRemove={() => setDraft((d) => ({ ...d, repositories: d.repositories.filter((_, at) => at !== i) }))} onFolder={() => setFolderFor(i)} />
+              <RepositoryCard key={r.id || `novo-${i}`} value={r} index={i} removable={draft.repositories.length > 1} fields={own} options={ownOptions} flows={flows} onChange={(next) => change(i, next)} onRemove={() => setDraft((d) => ({ ...d, repositories: d.repositories.filter((_, at) => at !== i) }))} onFolder={() => setFolderFor(i)} />
             ))}
             <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => setDraft((d) => ({ ...d, repositories: [...d.repositories, blankRepository()] }))}>{t('settings.app_addRepository')}</Button>
           </div>
@@ -319,29 +212,30 @@ function Fact({ label, value, logo }: { label: string; value: string; logo?: Rea
   )
 }
 
+function BoundFacts({ bindings }: { bindings: Bindings | undefined }) {
+  const look = useBoundLook()
+  return (
+    <>
+      {Object.entries(bindings ?? {}).map(([capability, binding]: [string, Binding]) => {
+        const { label, text, source } = look(capability, binding)
+        const logo = source ? <ProviderLogo logo={source.provider.logo} name={source.provider.name} size={12} /> : undefined
+        return <Fact key={capability} label={label} value={text} logo={logo} />
+      })}
+    </>
+  )
+}
+
 function ApplicationFacts({ application }: { application: Application }) {
   const t = useT()
-  const trackers = useSources('tracker')
-  const testers = useSources('tests')
-  const scanners = useSources('security')
-  const clouds = useSources('cloud')
-  const logoOf = (sources: Source[], connection: string | undefined) => {
-    const found = sources.find((s) => s.connection.id === connection)
-    return found ? <ProviderLogo logo={found.provider.logo} name={found.provider.name} size={12} /> : undefined
-  }
-  const { tracker, tests, security, cloud } = application
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      {tracker && <Fact label={t('settings.app_space')} value={tracker.project} logo={logoOf(trackers, tracker.connection)} />}
-      {tests && <Fact label={t('settings.app_tests')} value={tests.project} logo={logoOf(testers, tests.connection)} />}
-      {security && <Fact label={t('settings.app_security')} value={security.project} logo={logoOf(scanners, security.connection)} />}
-      {cloud && <Fact label={t('settings.app_cloudShort')} value={cloud.role ? `${cloud.account} · ${cloud.role}` : cloud.account} logo={logoOf(clouds, cloud.connection)} />}
+      <BoundFacts bindings={application.bindings} />
       {application.skipDependabot !== false && <Fact label="" value={t('settings.app_dependabotSkipped')} logo={<Icon name="shield" size={12} className="text-faint" />} />}
     </div>
   )
 }
 
-function CommandChips({ icon, label, commands }: { icon: 'play' | 'check'; label: string; commands: string[] }) {
+function CommandChips({ icon, label, commands }: { icon: 'play' | 'check' | 'sTest'; label: string; commands: string[] }) {
   return (
     <>
       {commands.map((c, i) => (
@@ -356,23 +250,22 @@ function CommandChips({ icon, label, commands }: { icon: 'play' | 'check'; label
 
 function RepositoryLine({ repository }: { repository: ApplicationRepository }) {
   const t = useT()
-  const coders = useSources('code')
-  const coder = coders.find((s) => s.connection.id === repository.code?.connection)
-  const empty = repository.run.length === 0 && repository.verify.length === 0
+  const e2e = (repository.e2e ?? []).map((c) => (repository.e2eDirectory ? `${repository.e2eDirectory}: ${c}` : c))
+  const empty = repository.run.length === 0 && repository.verify.length === 0 && e2e.length === 0
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:flex-nowrap">
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
-        <span className="flex size-6 shrink-0 items-center justify-center text-fg2">
-          {coder ? <ProviderLogo logo={coder.provider.logo} name={coder.provider.name} size={15} /> : <Icon name="folder" size={15} />}
-        </span>
+        <span className="flex size-6 shrink-0 items-center justify-center text-fg2"><Icon name="folder" size={15} /></span>
         <div className="min-w-0">
-          <p className="truncate text-sm font-medium text-fg">{repository.code?.repo ?? folderName(repository.directory)}</p>
+          <p className="truncate text-sm font-medium text-fg">{folderName(repository.directory)}</p>
           <p className="truncate font-mono text-xs text-faint" title={repository.directory}>{shortPath(repository.directory)}</p>
         </div>
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:justify-end">
+        <BoundFacts bindings={repository.bindings} />
         <CommandChips icon="play" label={t('settings.app_run')} commands={repository.run} />
         <CommandChips icon="check" label={t('settings.app_verify')} commands={repository.verify} />
+        <CommandChips icon="sTest" label={t('settings.app_e2e')} commands={e2e} />
         {empty && <span className="text-xs text-faint">{t('settings.app_noCommands')}</span>}
       </div>
     </li>

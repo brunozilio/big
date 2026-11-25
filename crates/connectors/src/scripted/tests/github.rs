@@ -418,7 +418,7 @@ async fn events_come_from_pulls_reviews_and_runs_changed_since_the_cursor_and_et
         )
         .once(Method::Get, "/pulls/7/reviews", 200, reviews)
         .once(Method::Get, "/actions/runs?per_page=50", 200, runs);
-    let batch = source.poll(&http, &creds(), Some(cursor)).await;
+    let batch = source.poll(&http, &creds(), Some(cursor), &[]).await;
     let Ok(batch) = batch else { panic!("{batch:?}") };
     let kinds: Vec<&str> = batch.events.iter().map(|e| e.kind.as_str()).collect();
     assert_eq!(kinds, ["pipelines.run.finished", "code.review.submitted", "code.pr.merged"]);
@@ -438,7 +438,7 @@ async fn events_come_from_pulls_reviews_and_runs_changed_since_the_cursor_and_et
         304,
         "",
     );
-    let quiet = source.poll(&http, &creds(), Some(&batch.cursor)).await;
+    let quiet = source.poll(&http, &creds(), Some(&batch.cursor), &[]).await;
     assert!(quiet.is_ok_and(|b| b.events.is_empty()));
     assert_eq!(http.sent()[0].header_value("if-none-match"), Some("\"p1\""));
 }

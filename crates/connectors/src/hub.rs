@@ -200,6 +200,7 @@ impl Connectors {
         connection: &Connection,
         settings: &Value,
         cursor: Option<&str>,
+        watch: &[String],
     ) -> Result<Option<EventBatch>, ActionError> {
         let entry = self.entry(&connection.provider)?;
         let Some(source) = entry.provider.events() else { return Ok(None) };
@@ -207,7 +208,7 @@ impl Connectors {
         let creds = self.credentials(entry, connection, &settings).await?;
         let metered = Metered { inner: self.http.as_ref(), limiter: &self.limiter, connection: &connection.id };
         let mut batch = source
-            .poll(&metered, &creds, cursor)
+            .poll(&metered, &creds, cursor, watch)
             .await
             .inspect_err(|error| self.limiter.learn(&connection.id, error))?;
         batch.events.retain(|event| connection.offers(&event.capability));

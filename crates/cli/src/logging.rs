@@ -3,8 +3,13 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::time::ChronoLocal;
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{Layer, fmt};
 
 const DEFAULT_FILTER: &str = "warn";
+const TIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.3f%:z";
 const KEPT_BYTES: u64 = 5 * 1024 * 1024;
 
 pub fn file_in(data: &Path) -> PathBuf {
@@ -28,19 +33,58 @@ pub fn open(file: &Path) -> std::io::Result<File> {
     OpenOptions::new().create(true).append(true).open(file)
 }
 
-pub fn install() -> Option<PathBuf> {
-    let data = platform::local_data_dir(brand::NAME, brand::COMMAND)?;
-    let path = file_in(&data);
-    let file = open(&path).ok()?;
-    tracing_subscriber::fmt()
-        .with_env_filter(filter(Some(brand::log::FILTER)))
-        .with_writer(Mutex::new(file))
-        .with_ansi(false)
-        .with_thread_names(true)
-        .try_init()
-        .ok()?;
+pub fn install(terminal: bool) -> Option<PathBuf> {
+    let path = platform::local_data_dir(brand::NAME, brand::COMMAND).map(|data| file_in(&data));
+    let file = path.as_deref().and_then(|path| open(path).ok());
+    let saved = file.map(|file| {
+        fmt::layer()
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .with_writer(Mutex::new(file))
+            .with_filter(filter(Some(brand::log::FILTER)))
+    });
+    let shown = terminal.then(|| shown(Format::chosen(brand::log::FORMAT)));
+    tracing_subscriber::registry().with(saved).with(shown).try_init().ok()?;
     log_panics();
-    Some(path)
+    path
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Format {
+    Text,
+    Json,
+}
+
+impl Format {
+    pub fn chosen(text: &str) -> Format {
+        if text.trim().eq_ignore_ascii_case("json") { Format::Json } else { Format::Text }
+    }
+}
+
+fn shown<S>(format: Format) -> Box<dyn Layer<S> + Send + Sync>
+where
+    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
+{
+    let filter = filter(Some(brand::log::TERMINAL));
+    match format {
+        Format::Json => fmt::layer()
+            .json()
+            .flatten_event(true)
+            .with_current_span(false)
+            .with_span_list(false)
+            .with_writer(std::io::stderr)
+            .with_filter(filter)
+            .boxed(),
+        Format::Text => fmt::layer()
+            .with_writer(std::io::stderr)
+            .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
+            .with_timer(ChronoLocal::new(TIME_FORMAT.to_owned()))
+            .with_target(false)
+            .with_filter(filter)
+            .boxed(),
+    }
 }
 
 fn log_panics() {
@@ -68,6 +112,14 @@ mod tests {
         assert_eq!(filter(Some("  ")).to_string(), "warn");
         assert_eq!(filter(Some("app=debug")).to_string(), "app=debug");
         assert_eq!(filter(Some("=[")).to_string(), "warn");
+    }
+
+    #[test]
+    fn the_terminal_shows_text_unless_json_is_asked() {
+        assert_eq!(Format::chosen("json"), Format::Json);
+        assert_eq!(Format::chosen(" JSON "), Format::Json);
+        assert_eq!(Format::chosen("text"), Format::Text);
+        assert_eq!(Format::chosen(""), Format::Text);
     }
 
     #[test]

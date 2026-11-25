@@ -9,6 +9,7 @@ pub const CLOUD: &str = "cloud";
 pub const TESTS: &str = "tests";
 pub const MCP: &str = "mcp";
 pub const SECURITY: &str = "security";
+pub const QUALITY: &str = "quality";
 pub const CHANGES: &str = "changes";
 
 pub mod tracker {
@@ -23,6 +24,8 @@ pub mod tracker {
     pub const FIELDS: &str = "tracker.fields";
     pub const UPDATE_ISSUE: &str = "tracker.update_issue";
     pub const LINK_ISSUES: &str = "tracker.link_issues";
+    pub const ATTACH: &str = "tracker.attach";
+    pub const SCHEMA: &str = "tracker.schema";
 }
 
 pub mod code {
@@ -47,6 +50,12 @@ pub mod pipelines {
     pub const REVIEW_DEPLOYMENT: &str = "pipelines.review_deployment";
 }
 
+pub const OPTIONS: &str = "options";
+
+pub fn options_of(capability: &str) -> String {
+    format!("{capability}.{OPTIONS}")
+}
+
 pub mod cloud {
     pub const IDENTITY: &str = "cloud.identity";
     pub const ACCOUNTS_AND_ROLES: &str = "cloud.accounts_and_roles";
@@ -66,12 +75,18 @@ pub mod tests {
     pub const CASES: &str = "tests.cases";
     pub const CREATE_CYCLE: &str = "tests.create_cycle";
     pub const RECORD: &str = "tests.record";
+    pub const FINISH_CYCLE: &str = "tests.finish_cycle";
     pub const PROJECTS: &str = "tests.projects";
 }
 
 pub mod security {
     pub const PROJECTS: &str = "security.projects";
     pub const FINDINGS: &str = "security.findings";
+    pub const STATUS: &str = "security.status";
+}
+
+pub mod quality {
+    pub const REPORT: &str = "quality.report";
 }
 
 pub mod mcp {
@@ -89,6 +104,8 @@ fn issue_output() -> Value {
         &[
             ("id", "string"),
             ("project", "string"),
+            ("type", "string"),
+            ("parent", "string"),
             ("description", "string"),
             ("impediment", "object"),
             ("subtasks", "array"),
@@ -118,6 +135,16 @@ fn field_list() -> Value {
     json!({ "type": "array", "items": field })
 }
 
+fn tracker_schema() -> Value {
+    let status = object(&[("name", "string")], &[("id", "string"), ("category", "string")]);
+    let mut kind =
+        object(&[("name", "string"), ("level", "integer"), ("children", "array"), ("statuses", "array")], &[("id", "string")]);
+    kind["properties"]["statuses"] = json!({ "type": "array", "items": status });
+    let mut shaped = object(&[("types", "array")], &[("default", "string")]);
+    shaped["properties"]["types"] = json!({ "type": "array", "items": kind });
+    shaped
+}
+
 pub fn tracker() -> Vec<ActionSpec> {
     let new_issue = object(
         &[("title", "string")],
@@ -142,10 +169,11 @@ pub fn tracker() -> Vec<ActionSpec> {
         ActionSpec::read(tracker::STATUSES, object(&[], &[("project", "string")]), list()),
         ActionSpec::write(
             tracker::TRANSITION,
-            object(&[("issue", "string"), ("status", "string")], &[]),
+            object(&[("issue", "string")], &[("status", "string"), ("category", "string")]),
             issue_summary(),
             Idempotency::Lookup,
         ),
+        ActionSpec::read(tracker::SCHEMA, object(&[], &[("project", "string")]), tracker_schema()),
         ActionSpec::write(
             tracker::SET_IMPEDIMENT,
             object(&[("issue", "string"), ("on", "boolean")], &[("reason", "string")]),
@@ -178,6 +206,12 @@ pub fn tracker() -> Vec<ActionSpec> {
             tracker::LINK_ISSUES,
             object(&[("issue", "string"), ("to", "string")], &[("kind", "string")]),
             object(&[("issue", "string"), ("to", "string")], &[("already", "boolean")]),
+            Idempotency::Lookup,
+        ),
+        ActionSpec::write(
+            tracker::ATTACH,
+            object(&[("issue", "string"), ("files", "array")], &[]),
+            object(&[("attached", "array")], &[("skipped", "array")]),
             Idempotency::Lookup,
         ),
     ]
@@ -315,7 +349,11 @@ pub fn cloud() -> Vec<ActionSpec> {
         ],
     );
     vec![
-        ActionSpec::read(cloud::IDENTITY, object(&[], &[("account", "string"), ("role", "string")]), credentials),
+        ActionSpec::read(
+            cloud::IDENTITY,
+            object(&[], &[("account", "string"), ("role", "string"), ("binding", "string")]),
+            credentials,
+        ),
         ActionSpec::read(
             cloud::ACCOUNTS_AND_ROLES,
             json!({ "type": "object", "properties": {} }),
@@ -335,7 +373,8 @@ fn change_output() -> Value {
         &[
             ("title", "string"),
             ("environment", "string"),
-            ("window", "string"),
+            ("start", "string"),
+            ("end", "string"),
             ("url", "string"),
             ("revision", "integer"),
             ("created", "boolean"),
@@ -345,28 +384,37 @@ fn change_output() -> Value {
 
 pub fn changes() -> Vec<ActionSpec> {
     let fields = [
-        ("title", "string"),
-        ("environment", "string"),
-        ("window", "string"),
+        ("settings", "object"),
         ("tasks", "array"),
         ("notes", "array"),
         ("attachments", "array"),
         ("versions", "array"),
         ("description", "string"),
     ];
-    let mut update_fields = vec![("change", "string")];
-    update_fields.extend(fields.iter().filter(|(name, _)| *name != "environment"));
+    let mut update_fields = vec![("title", "string"), ("start", "string"), ("end", "string")];
+    update_fields.extend(fields);
     let change_ref = object(&[("change", "string")], &[]);
+    let option = object(&[("value", "string"), ("label", "string")], &[("detail", "string")]);
     vec![
         ActionSpec::write(
             changes::CREATE,
-            object(&[("title", "string"), ("environment", "string"), ("window", "string")], &fields[3..]),
+            object(&[("title", "string"), ("environment", "string"), ("start", "string"), ("end", "string")], &fields),
             change_output(),
             Idempotency::Lookup,
         ),
-        ActionSpec::write(changes::UPDATE, object(&update_fields[..1], &update_fields[1..]), change_output(), Idempotency::Native),
+        ActionSpec::write(
+            changes::UPDATE,
+            object(&[("change", "string")], &update_fields),
+            change_output(),
+            Idempotency::Native,
+        ),
         ActionSpec::read(changes::GET, change_ref.clone(), change_output()),
         ActionSpec::write(changes::CANCEL, change_ref, change_output(), Idempotency::Native),
+        ActionSpec::read(
+            &options_of(CHANGES),
+            object(&[], &[("query", "string"), ("field", "string")]),
+            json!({ "type": "array", "items": option }),
+        ),
     ]
 }
 
@@ -393,10 +441,11 @@ pub fn tests() -> Vec<ActionSpec> {
         &[("title", "string")],
         &[("project", "string"), ("description", "string"), ("issue", "string"), ("issue_id", "string")],
     ));
-    let record = object(
+    let record = with_issue_id(object(
         &[("case", "string"), ("cycle", "string"), ("status", "string")],
-        &[("project", "string"), ("comment", "string"), ("seconds", "number")],
-    );
+        &[("project", "string"), ("comment", "string"), ("seconds", "number"), ("issue_id", "string")],
+    ));
+    let finish = object(&[("cycle", "string"), ("status", "string")], &[("project", "string")]);
     let case = object(&[("ref", "string"), ("title", "string")], &[]);
     vec![
         ActionSpec::write(
@@ -413,6 +462,12 @@ pub fn tests() -> Vec<ActionSpec> {
             Idempotency::Native,
         ),
         ActionSpec::write(tests::RECORD, record, object(&[("ref", "string")], &[]), Idempotency::Native),
+        ActionSpec::write(
+            tests::FINISH_CYCLE,
+            finish,
+            object(&[("ref", "string")], &[("status", "string")]),
+            Idempotency::Native,
+        ),
         ActionSpec::read(tests::PROJECTS, object(&[], &[("query", "string")]), project_list()),
     ]
 }
@@ -462,6 +517,27 @@ pub fn security() -> Vec<ActionSpec> {
     ]
 }
 
+pub fn quality() -> Vec<ActionSpec> {
+    let wanted =
+        object(&[("project", "string")], &[("pullRequest", "string"), ("branch", "string"), ("commit", "string")]);
+    let report = object(
+        &[("status", "string")],
+        &[
+            ("gate", "string"),
+            ("ratings", "object"),
+            ("counts", "object"),
+            ("coverage", "number"),
+            ("duplication", "number"),
+            ("conditions", "array"),
+            ("issues", "array"),
+            ("total", "integer"),
+            ("url", "string"),
+            ("analyzedAt", "string"),
+        ],
+    );
+    vec![ActionSpec::read(quality::REPORT, wanted, report)]
+}
+
 pub fn mcp() -> Vec<ActionSpec> {
     vec![ActionSpec::read(mcp::TOOLS, object(&[], &[]), list())]
 }
@@ -479,6 +555,7 @@ mod checks {
             (CLOUD, cloud()),
             (TESTS, tests()),
             (SECURITY, security()),
+            (QUALITY, quality()),
             (MCP, mcp()),
             (CHANGES, changes()),
         ];
@@ -493,7 +570,8 @@ mod checks {
 
     #[test]
     fn writes_declare_how_they_stay_idempotent() {
-        let all: Vec<ActionSpec> = [tracker(), code(), pipelines(), cloud(), tests(), security(), mcp(), changes()].concat();
+        let all: Vec<ActionSpec> =
+            [tracker(), code(), pipelines(), cloud(), tests(), security(), mcp(), changes()].concat();
         let lookups: Vec<&str> =
             all.iter().filter(|a| a.idempotent == Idempotency::Lookup).map(|a| a.name.as_str()).collect();
         assert!(lookups.contains(&tracker::CREATE_ISSUE));

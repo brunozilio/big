@@ -63,7 +63,7 @@ impl Hooks {
         Self::from_sources(files)
     }
 
-    pub fn from_builtin(files: &[(&str, &[u8])], user_folder: Option<&Path>) -> Self {
+    pub fn from_builtin<B: AsRef<[u8]>>(files: &[(&str, B)], user_folder: Option<&Path>) -> Self {
         let replaced = |path: &str| {
             let name = Path::new(path).file_name();
             user_folder.is_some_and(|folder| name.is_some_and(|name| folder.join(name).is_file()))
@@ -71,7 +71,7 @@ impl Hooks {
         let sources = files
             .iter()
             .filter(|(path, _)| path.ends_with(".js") && !replaced(path))
-            .map(|(path, bytes)| (format!("{BUILTIN}{path}"), brand::text(&String::from_utf8_lossy(bytes))));
+            .map(|(path, bytes)| (format!("{BUILTIN}{path}"), brand::text(&String::from_utf8_lossy(bytes.as_ref()))));
         Self::from_sources(sources)
     }
 

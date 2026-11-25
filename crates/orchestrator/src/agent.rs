@@ -270,7 +270,9 @@ impl AgentEffect<'_> {
         if let Some(application) = crate::application::id_of(&state.input) {
             crate::application::offer(client.0, &self.shared.store, application);
         }
-        request.host.environment = cloud.as_ref().map(|lease| lease.environment.clone()).unwrap_or_default();
+        let mut environment = crate::application::environment(&self.shared.store, &state.input);
+        environment.extend(cloud.as_ref().map(|lease| lease.environment.clone()).unwrap_or_default());
+        request.host.environment = environment;
         request.session.add_dirs = trees.iter().skip(1).map(|tree| tree.path.clone()).collect();
         if let Some(text) = repos::described(&trees) {
             let system = request.session.append_system.take().unwrap_or_default();

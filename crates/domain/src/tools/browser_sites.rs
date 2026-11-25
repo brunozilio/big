@@ -5,7 +5,7 @@ use serde_json::Value;
 
 use crate::permission::Effect;
 
-const ON_A_PAGE: [&str; 12] = [
+const ON_A_PAGE: [&str; 13] = [
     "computer",
     "file_upload",
     "find",
@@ -13,6 +13,7 @@ const ON_A_PAGE: [&str; 12] = [
     "get_page_text",
     "javascript_tool",
     "navigate",
+    "network_intercept",
     "read_console_messages",
     "read_network_requests",
     "read_page",

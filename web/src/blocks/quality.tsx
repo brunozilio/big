@@ -16,14 +16,6 @@ const GRADE: Record<QualityGrade, string> = {
   E: 'bg-danger text-white',
 }
 
-const METRIC: Record<string, MessageKey> = {
-  new_coverage: 'blocks.qualityCoverage',
-  new_duplicated_lines_density: 'blocks.qualityDuplication',
-  new_security_hotspots_reviewed: 'blocks.qualityHotspots',
-  new_reliability_rating: 'blocks.qualityReliability',
-  new_security_rating: 'blocks.qualitySecurity',
-  new_maintainability_rating: 'blocks.qualityMaintainability',
-}
 
 const TYPE: Record<QualityIssue['type'], { label: MessageKey; pill: string }> = {
   bug: { label: 'blocks.qualityTypeBug', pill: 'bg-warning-soft text-warning-fg' },
@@ -92,7 +84,7 @@ function Measures({ block }: { block: Of<'quality'> }) {
 
 function Condition({ c }: { c: QualityCondition }) {
   const t = useT()
-  const label = METRIC[c.metric] ? t(METRIC[c.metric]) : c.metric
+  const label = c.label || c.metric
   return (
     <li className="grid min-h-11 grid-cols-[20px_minmax(0,1fr)_auto_120px] items-center gap-3 px-4 py-2 [&+&]:border-t">
       <Icon name={c.passed ? 'check' : 'close'} size={15} strokeWidth={2.4} className={c.passed ? 'text-success-fg' : 'text-danger-fg'} />

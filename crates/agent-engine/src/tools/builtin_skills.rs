@@ -14,7 +14,7 @@ fn every_shipped_skill_speaks_as_brand() {
         if path.ends_with("LICENSE.txt") || !path.ends_with(".md") {
             continue;
         }
-        let text = String::from_utf8_lossy(bytes);
+        let text = String::from_utf8_lossy(&bytes);
         assert!(!brand::text(&text).contains("{{"), "{path}: an unknown placeholder");
         for other in ["Claude", "Anthropic", "claude.ai"] {
             assert!(!text.contains(other), "{path} names {other}");

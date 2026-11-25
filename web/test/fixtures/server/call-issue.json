@@ -4,8 +4,10 @@
   "comments": [],
   "description": "texto",
   "key": "K-1",
+  "parent": null,
   "status": "A fazer",
   "subtasks": [],
   "title": "Corrigir",
+  "type": "Bug",
   "url": "https://tracker.test/K-1"
 }

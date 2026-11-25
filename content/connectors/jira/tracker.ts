@@ -16,6 +16,7 @@ import { type Api, browse, jqlKey, jqlText, projectOf, search as searchJql, tool
 import { extra, kindOf } from "./metadata.ts";
 import { TRANSITIONS, foundList, idOf, read as readOperation } from "./operations.ts";
 import { visibleProjects } from "./projects.ts";
+import { PHASES, phaseOf, schema } from "./schema.ts";
 
 const ISSUE_FIELDS = [
   "summary",
@@ -27,6 +28,7 @@ const ISSUE_FIELDS = [
   "labels",
   "attachment",
   "subtasks",
+  "parent",
   "comment",
   "created",
   "updated",
@@ -76,8 +78,8 @@ export function createIssue(api: Api, args: Args, key: string) {
   const found = key === "" ? undefined : findIssue(api, project, key);
   if (found !== undefined) return { ...summary(api, found), created: false };
   const parent = optionalText(args, "parent");
-  const kind = kindOf(args);
-  const more = extra(api, project, args);
+  const kind = kindOf(api, project, args);
+  const more = extra(api, project, { ...args, type: kind });
   const labels = [...listOf(args, "labels")];
   if (key !== "") labels.push(idempotencyLabel(api.ctx, key));
   const sent: Args = { projectKey: project, summary: title, issueType: kind, description: optionalText(args, "description") ?? "", contentFormat: "markdown" };
@@ -116,7 +118,11 @@ function flagOf(fields, field: string) {
   return direct !== null && direct !== undefined ? direct : fields?.customFields?.[field];
 }
 
-const subtask = (api: Api, task) => ({ ...summary(api, task), done: textAt(task, "/fields/status/statusCategory/key") === "done" });
+function subtask(api: Api, task) {
+  const type = textAt(task, "/fields/issuetype/name");
+  const found = { ...summary(api, task), done: textAt(task, "/fields/status/statusCategory/key") === "done" };
+  return type === "" ? found : { ...found, type };
+}
 
 const attachment = (file) => ({
   id: textAt(file, "/id"),
@@ -137,6 +143,7 @@ export function issue(api: Api, key: string) {
     id: idOf(answer, "/id"),
     description: markdown(fields?.description),
     type: kind === "" ? null : kind,
+    parent: textAt(fields, "/parent/key") || null,
     project: project === "" ? null : project,
     labels: Array.isArray(fields?.labels) ? fields.labels : [],
     assignee: person(fields?.assignee),
@@ -165,16 +172,69 @@ export function comment(api: Api, issue: string, body: string, key: string) {
 
 const landed = (answer) => LANDED.map((place) => textAt(answer, place)).find((name) => name !== "") ?? "";
 
-export function transition(api: Api, issue: string, target: string) {
+const HOPS = 6;
+
+export type Target = { status?: string; category?: string };
+
+const named = (target: Target) => target.status ?? target.category ?? "";
+
+function reached(name: string, phase: string | null, target: Target): boolean {
+  return target.status !== undefined ? sameAscii(name, target.status) : phase !== null && phase === target.category;
+}
+
+function goalOf(api: Api, key: string, target: Target): string | null {
+  if (target.category !== undefined) return target.category;
+  const fields = read(api, key, ["issuetype", "project"])?.fields ?? null;
+  const found = schema(api, textAt(fields, "/project/key"));
+  const kind = found.types.find((type) => sameAscii(type.name, textAt(fields, "/issuetype/name")));
+  const all = kind === undefined ? found.types.flatMap((type) => type.statuses) : kind.statuses;
+  return all.find((status) => sameAscii(status.name, target.status ?? ""))?.category ?? null;
+}
+
+function distance(phase: string | null, goal: string | null): number {
+  const at = PHASES.indexOf(phase ?? "");
+  const to = PHASES.indexOf(goal ?? "");
+  return at < 0 || to < 0 ? PHASES.length : Math.abs(to - at);
+}
+
+function towards(known: any[], now: string | null, goal: string | null, visited: string[], lateral: boolean) {
+  const from = distance(now, goal);
+  const open = known.filter((step) => !visited.includes(textAt(step, "/to/name").toLowerCase()));
+  const scored = open.map((step) => ({ step, left: distance(phaseOf(step?.to), goal) })).filter(({ left }) => left < from || (lateral && left === from && from < PHASES.length));
+  scored.sort((left, right) => left.left - right.left);
+  return scored[0]?.step;
+}
+
+function direct(known: any[], target: Target) {
+  const found = known.find((step) => reached(textAt(step, "/to/name"), phaseOf(step?.to), target));
+  if (found !== undefined || target.status === undefined) return found;
+  return known.find((step) => sameAscii(textAt(step, "/name"), target.status ?? ""));
+}
+
+export function transition(api: Api, issue: string, target: Target) {
   const key = jqlKey(issue);
-  const now = statusName(read(api, key, ["status"]));
-  if (sameAscii(now, target)) return { ref: key, status: now, changed: false };
-  const known = transitions(api, key);
-  const reaches = (place: string) => known.find((step) => sameAscii(textAt(step, place), target));
-  const found = reaches("/to/name") ?? reaches("/name") ?? fail("permanent", `${key} cannot go from ${now} to ${target}`);
-  const answer = tool(api, "transitionJiraIssue", { issueIdOrKey: key, transitionId: idOf(found, "/id") });
-  const status = landed(answer) || textAt(found, "/to/name");
-  return { ref: key, status: status === "" ? target : status, changed: true };
+  if (named(target) === "") fail("permanent", "a transition needs a status or a category");
+  const current = read(api, key, ["status"]);
+  let now = statusName(current);
+  let phase = phaseOf(current?.fields?.status);
+  if (reached(now, phase, target)) return { ref: key, status: now, changed: false };
+  const visited = [now.toLowerCase()];
+  let goal: string | null | undefined;
+  for (let hop = 0; hop < HOPS; hop++) {
+    const known = transitions(api, key);
+    let found = direct(known, target);
+    if (found === undefined && known.length > 0) {
+      goal = goal === undefined ? goalOf(api, key, target) : goal;
+      found = towards(known, phase, goal, visited, target.status !== undefined);
+    }
+    if (found === undefined) fail("permanent", `${key} cannot go from ${now} to ${named(target)}`);
+    const answer = tool(api, "transitionJiraIssue", { issueIdOrKey: key, transitionId: idOf(found, "/id") });
+    now = landed(answer) || textAt(found, "/to/name") || named(target);
+    phase = phaseOf(found?.to);
+    if (reached(now, phase, target) || direct([found], target) !== undefined) return { ref: key, status: now, changed: true };
+    visited.push(now.toLowerCase());
+  }
+  return fail("permanent", `${key} did not reach ${named(target)} in ${HOPS} transitions`);
 }
 
 export function setImpediment(api: Api, args: Args, key: string) {

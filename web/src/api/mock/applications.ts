@@ -1,4 +1,4 @@
-import type { Application, ApplicationDraft, CloudAccount, CloudChoice, CodeBranch, CodeRepo, DirListing, OpenPull } from '../contract'
+import type { Application, ApplicationDraft, BindingOption, Bindings, CloudAccount, CodeBranch, CodeRepo, DirListing, OpenPull } from '../contract'
 import { say } from './say'
 
 export const MOCK_HOME = '/Users/voce'
@@ -69,11 +69,12 @@ export function initialApplications(): Application[] {
     {
       id: 'app-checkout',
       name: 'Checkout',
-      tracker: { connection: 'c-jira', project: 'APP' },
+      bindings: { tracker: { connection: 'c-jira', value: 'APP', label: 'App · APP' } },
       repositories: [
-        { id: 'r-checkout', code: { connection: 'c-github', repo: 'acme/checkout' }, directory: `${MOCK_HOME}/projetos/checkout`, run: ['bun dev'], verify: ['bun test', 'bun run lint', 'npx playwright test'] },
-        { id: 'r-infra', code: { connection: 'c-github', repo: 'acme/infra' }, directory: `${MOCK_HOME}/projetos/infra`, run: [], verify: ['terraform validate'] },
+        { id: 'r-checkout', bindings: { code: { connection: 'c-github', value: 'acme/checkout', label: 'acme/checkout' }, security: { connection: 'c-veracode', value: 'a1b2c3d4-0000-4000-8000-000000000001', label: 'Checkout · a1b2c3d4' }, quality: { connection: 'c-sonar', value: 'acme_checkout', label: 'Checkout · acme_checkout' } }, directory: `${MOCK_HOME}/projetos/checkout`, run: ['bun dev'], verify: ['bun test', 'bun run lint'], e2e: ['npx cypress run'], e2eDirectory: 'e2e' },
+        { id: 'r-infra', bindings: { code: { connection: 'c-github', value: 'acme/infra', label: 'acme/infra' } }, directory: `${MOCK_HOME}/projetos/infra`, run: [], verify: ['terraform validate'] },
       ],
+      env: { CYPRESS_BASE_URL: 'http://localhost:3000' },
     },
   ]
 }
@@ -85,10 +86,20 @@ export const CLOUD_ACCOUNTS: CloudAccount[] = [
   { id: '444455556666', name: 'acme-dev', email: 'dev@acme.com.br', roles: ['Developer'] },
 ]
 
-function checkedCloud(chosen: CloudChoice | null | undefined): CloudChoice | null {
-  if (!chosen) return null
-  const picked = { connection: chosen.connection.trim(), account: chosen.account.trim(), role: chosen.role.trim() }
-  return picked.connection && picked.account ? picked : null
+function checkedBindings(given: Bindings | undefined): Bindings {
+  const kept: Bindings = {}
+  for (const [capability, bound] of Object.entries(given ?? {})) {
+    const connection = bound.connection.trim()
+    const value = bound.value.trim()
+    const fields = Object.keys(bound.fields ?? {}).length > 0 ? { fields: bound.fields } : {}
+    const profiles = (bound.profiles ?? []).length > 0 ? { profiles: bound.profiles } : {}
+    if (capability && connection && (value || fields.fields || profiles.profiles)) kept[capability] = { connection, value, ...(bound.label ? { label: bound.label } : {}), ...fields, ...profiles }
+  }
+  return kept
+}
+
+export function cloudOptions(): BindingOption[] {
+  return CLOUD_ACCOUNTS.flatMap((a) => a.roles.map((role) => ({ value: `${a.id}/${role}`, label: `${a.name} · ${role}` })))
 }
 
 export function checkedApplication(draft: ApplicationDraft, id: string): Application {
@@ -100,14 +111,16 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
     counter += 1
     return {
       id: r.id || `r-${Date.now()}-${counter}`,
-      code: r.code && r.code.repo && r.code.connection ? r.code : null,
       directory: r.directory.trim(),
       run: r.run.map((v) => v.trim()).filter(Boolean),
       verify: r.verify.map((v) => v.trim()).filter(Boolean),
+      e2e: (r.e2e ?? []).map((v) => v.trim()).filter(Boolean),
+      e2eDirectory: (r.e2eDirectory ?? '').trim().replace(/^\/+|\/+$/g, ''),
+      bindings: checkedBindings(r.bindings),
     }
   })
-  const tracker = draft.tracker && draft.tracker.project && draft.tracker.connection ? draft.tracker : null
-  return { id, name, tracker, cloud: checkedCloud(draft.cloud), repositories, skipDependabot: draft.skipDependabot !== false }
+  const env = Object.fromEntries(Object.entries(draft.env ?? {}).map(([k, v]) => [k.trim(), v] as const).filter(([k]) => k))
+  return { id, name, bindings: checkedBindings(draft.bindings), repositories, skipDependabot: draft.skipDependabot !== false, env }
 }
 
 export function openPulls(repo: string): OpenPull[] {

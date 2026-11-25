@@ -67,11 +67,11 @@ export function qualityFor(it: SimItem, failed: boolean): QualityReport {
     coverage,
     duplication: failed ? 4.2 : 1 + (it.h % 20) / 10,
     conditions: [
-      { metric: 'new_coverage', value: `${coverage.toFixed(1)}%`, threshold: '≥ 80%', passed: coverage >= 80 },
-      { metric: 'new_duplicated_lines_density', value: failed ? '4.2%' : `${(1 + (it.h % 20) / 10).toFixed(1)}%`, threshold: '≤ 3%', passed: !failed },
-      { metric: 'new_security_hotspots_reviewed', value: `${Math.round((reviewed / hotspots) * 100)}%`, threshold: '100%', passed: reviewed === hotspots },
-      { metric: 'new_reliability_rating', value: failed ? 'C' : 'A', threshold: '≥ A', passed: !failed },
-      { metric: 'new_security_rating', value: 'A', threshold: '≥ A', passed: true },
+      { metric: 'new_coverage', label: 'Coverage on New Code', value: `${coverage.toFixed(1)}%`, threshold: '≥ 80%', passed: coverage >= 80 },
+      { metric: 'new_duplicated_lines_density', label: 'Duplicated Lines (%) on New Code', value: failed ? '4.2%' : `${(1 + (it.h % 20) / 10).toFixed(1)}%`, threshold: '≤ 3%', passed: !failed },
+      { metric: 'new_security_hotspots_reviewed', label: 'Security Hotspots Reviewed on New Code', value: `${Math.round((reviewed / hotspots) * 100)}%`, threshold: '100%', passed: reviewed === hotspots },
+      { metric: 'new_reliability_rating', label: 'Reliability Rating on New Code', value: failed ? 'C' : 'A', threshold: '≥ A', passed: !failed },
+      { metric: 'new_security_rating', label: 'Security Rating on New Code', value: 'A', threshold: '≥ A', passed: true },
     ],
     issues: [
       ...(failed ? [
@@ -84,4 +84,24 @@ export function qualityFor(it: SimItem, failed: boolean): QualityReport {
     ],
     total: failed ? 47 : 12 + (it.h % 20),
   }
+}
+
+const hashOf = (text: string) => [...text].reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7)
+
+export function scannedFindings(project: string): Record<string, unknown>[] {
+  const h = hashOf(project)
+  return [...STATIC, ...DEPENDENCY]
+    .filter((_, i) => ((h >> (i % 12)) & 3) !== 0 || i < 2)
+    .map((seed, i) => ({ ...seed, status: 'open', new: ((h >> i) & 1) === 1, policy: seed.severity >= 4, url: PORTAL }))
+}
+
+export function scanStatusOf(project: string) {
+  const day = 18 + (hashOf(project) % 7)
+  return { status: 'done', scannedAt: `2026-11-${day}T09:30:00.000Z`, running: false }
+}
+
+export function qualityReportOf(project: string) {
+  const h = hashOf(project)
+  const report = qualityFor({ h, done: true } as unknown as SimItem, h % 3 === 0)
+  return { status: 'done', ...report, url: `https://sonarcloud.io/dashboard?id=${encodeURIComponent(project)}`, analyzedAt: null }
 }

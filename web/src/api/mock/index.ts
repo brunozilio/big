@@ -1,9 +1,9 @@
 import { setClock } from '../clock'
 import { BTW_WORKFLOW } from '../contract'
 import { currentLanguage } from '@/i18n'
-import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
+import type { Api, Application, BindingOption, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
-import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, codeBranches, openPulls, initialApplications, listDirs } from './applications'
+import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, cloudOptions, codeBranches, openPulls, initialApplications, listDirs } from './applications'
 import { initialConnections, MCP_TOOLS, MODELS, providers as allProviders, usageFixture, usageLimitsFixture } from './fixtures'
 import { say } from './say'
 import { mockUsage } from './usage'
@@ -11,7 +11,7 @@ import { itemOfSession, sessionById } from './sessions'
 import {
   approveDeploy, approvePlan, archiveItem, cancelItem, chat, connect, createItem, disconnect, isStepId, mergePr, onChange, rejectDeploy, rerunFrom, reset, resolvePause, revisePlan, store, submitReview, tick,
   type Note, type SimItem, triageFindings } from './sim'
-import type { Triage } from './security'
+import { qualityReportOf, scanStatusOf, scannedFindings, type Triage } from './security'
 import { EPOCH, TICK_MS, originOf, stepView, toItem } from './view'
 
 export interface MockOptions {
@@ -39,6 +39,33 @@ function mcpServer(fields: Record<string, string>) {
   const local = /^http:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(url)
   if (!local && !url.startsWith('https://')) throw new Error(say('httpsOnly'))
   return { open: local, host: url.replace(/^\w+:\/\//, '').split(/[/:?#]/)[0] ?? url }
+}
+
+const SCANNED: BindingOption[] = [
+  { value: 'a1b2c3d4-0000-4000-8000-000000000001', label: 'Checkout · a1b2c3d4' },
+  { value: 'a1b2c3d4-0000-4000-8000-000000000002', label: 'Infra · a1b2c3d4' },
+]
+
+const CHANGE_OPTIONS: Record<string, string[]> = {
+  company: ['ACME', 'ACME Pagamentos'],
+  requester_group: ['Squad Checkout', 'Squad Pix'],
+  environment: ['HST', 'PRD'],
+  template: ['Deploy HST', 'Deploy PRD', 'Emergencial'],
+  classification: ['Normal', 'Padrão', 'Emergencial'],
+  owner: ['Produção N1', 'DBA N1', 'MIDDLE N1', 'Time de infra'],
+}
+
+function optionsOf(capability: string, query: string, field = ''): BindingOption[] {
+  const wanted = query.toLowerCase()
+  const found = (() => {
+    if (capability === 'changes') return (CHANGE_OPTIONS[field] ?? []).map((value) => ({ value, label: value }))
+    if (capability === 'code') return CODE_REPOS.map((r) => ({ value: r.ref, label: r.ref }))
+    if (capability === 'cloud') return cloudOptions()
+    if (capability === 'security') return SCANNED
+    if (capability === 'quality') return [{ value: 'acme_checkout', label: 'Checkout · acme_checkout' }, { value: 'acme_infra', label: 'Infra · acme_infra' }]
+    return trackerProjects('').map((p) => ({ value: p.key, label: p.name && p.name !== p.key ? `${p.name} · ${p.key}` : p.key }))
+  })()
+  return found.filter((o) => o.label.toLowerCase().includes(wanted) || o.value.toLowerCase().includes(wanted))
 }
 
 export function mockApi(options: MockOptions = {}): Api {
@@ -129,6 +156,10 @@ export function mockApi(options: MockOptions = {}): Api {
   const call = <A extends CallAction>(_connection: string, action: A, args: CallArgs<A>): Promise<CallResult<A>> =>
     wait(() => {
       const a = args as Record<string, string>
+      if (action.endsWith('.options')) return optionsOf(action.slice(0, -'.options'.length), a.query ?? '', a.field ?? '') as CallResult<A>
+      if (action === 'security.findings') return scannedFindings(a.project ?? '') as CallResult<A>
+      if (action === 'security.status') return scanStatusOf(a.project ?? '') as CallResult<A>
+      if (action === 'quality.report') return qualityReportOf(a.project ?? '') as unknown as CallResult<A>
       switch (action) {
         case 'tracker.search':
           return searchIssues(a.query ?? '', a.project) as CallResult<A>
@@ -229,7 +260,7 @@ export function mockApi(options: MockOptions = {}): Api {
     createItem: (input) => wait(() => {
       const app = applications.find((x) => x.id === input.application)
       if (input.application && !app) throw new Error(say('appGone'))
-      const space = app?.tracker?.project ?? null
+      const space = app?.bindings?.tracker?.value ?? null
       const issueKey = input.issue?.key ?? input.sources?.find((s) => s.kind === 'issue')?.subject ?? null
       const pull = input.sources?.find((s) => s.kind === 'pull_request')
       const text = input.text || (pull && !issueKey ? `Pull request ${pull.subject}` : '')
@@ -305,6 +336,7 @@ export function mockApi(options: MockOptions = {}): Api {
       return branding
     }),
     applications: () => wait(() => applications),
+    flows: () => wait(() => ['gitflow']),
     createApplication: (draft) => wait(() => {
       const made = checkedApplication(draft, `app-${Date.now()}-${applications.length}`)
       applications = [...applications, made]

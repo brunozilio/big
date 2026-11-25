@@ -92,8 +92,10 @@ impl Interceptors {
         let mut found = Self::default();
         for (path, bytes) in content::builtin_files(&format!("{FOLDER}/")) {
             if scripted(Path::new(path)) && !replaced(path) {
-                found
-                    .extend(&global(&format!("{BUILTIN_SCRIPT}{path}"), &brand::text(&String::from_utf8_lossy(bytes))));
+                found.extend(&global(
+                    &format!("{BUILTIN_SCRIPT}{path}"),
+                    &brand::text(&String::from_utf8_lossy(&bytes)),
+                ));
             }
         }
         for file in roots.iter().flat_map(|root| scripts_in(&root.join(FOLDER))).filter(|file| runs(file)) {

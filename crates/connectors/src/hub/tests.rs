@@ -76,6 +76,7 @@ impl EventSource for Echo {
         _http: &dyn Http,
         creds: &Credentials,
         cursor: Option<&str>,
+        _watch: &[String],
     ) -> Result<EventBatch, ActionError> {
         let event = |capability: &str| ExternalEvent {
             id: capability.to_owned(),
@@ -85,6 +86,7 @@ impl EventSource for Echo {
             subject: "s".into(),
             data: json!({}),
             at: jiff::Timestamp::UNIX_EPOCH,
+            scope: String::new(),
         };
         Ok(EventBatch { events: vec![event("x"), event("y")], cursor: format!("{}+", cursor.unwrap_or_default()) })
     }
@@ -166,7 +168,7 @@ async fn a_rate_limited_call_holds_the_connection() {
 #[tokio::test]
 async fn polling_keeps_only_events_of_capabilities_the_connection_offers() {
     let hub = hub(FakeHttp::new(), Some(Grant::bearer("tok"))).await;
-    let batch = hub.poll(&connection(&["y"]), &json!({}), Some("c")).await;
+    let batch = hub.poll(&connection(&["y"]), &json!({}), Some("c"), &[]).await;
     let Ok(Some(batch)) = batch else { panic!("{batch:?}") };
     assert_eq!(batch.events.iter().map(|e| e.kind.as_str()).collect::<Vec<_>>(), ["y.changed"]);
     assert_eq!(batch.cursor, "c+");

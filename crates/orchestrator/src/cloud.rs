@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use connectors::contracts;
 use domain::effect::{Call, ErrorClass};
 use serde_json::{Value, json};
-use store::CloudChoice;
+use store::Binding;
 
 use crate::agent::Failure;
 use crate::effects::connector;
@@ -45,7 +45,7 @@ impl Drop for Lease {
     }
 }
 
-fn wanted(command: &Command, chosen: Option<&CloudChoice>) -> Option<(Call, bool)> {
+fn wanted(command: &Command, chosen: Option<&Binding>) -> Option<(Call, bool)> {
     let asked = match &command.args["cloud"] {
         Value::Bool(true) => None,
         Value::String(id) if !id.is_empty() => Some(id.clone()),
@@ -55,10 +55,7 @@ fn wanted(command: &Command, chosen: Option<&CloudChoice>) -> Option<(Call, bool
     let chosen = chosen.filter(|chosen| asked.as_ref().is_none_or(|id| id == &chosen.connection));
     let mut args = json!({});
     if let Some(chosen) = chosen {
-        args["account"] = json!(chosen.account);
-        if !chosen.role.is_empty() {
-            args["role"] = json!(chosen.role);
-        }
+        args["binding"] = json!(chosen.value);
     }
     let connection = asked.or_else(|| chosen.map(|chosen| chosen.connection.clone()));
     let call = Call {
@@ -70,9 +67,10 @@ fn wanted(command: &Command, chosen: Option<&CloudChoice>) -> Option<(Call, bool
     Some((call, optional))
 }
 
-fn chosen(shared: &Shared, input: &Value) -> Option<CloudChoice> {
+fn chosen(shared: &Shared, input: &Value) -> Option<Binding> {
     let id = crate::application::id_of(input)?;
-    shared.store.application(&id).ok().flatten().and_then(|application| application.cloud)
+    let application = shared.store.application(&id).ok().flatten()?;
+    application.bound(contracts::CLOUD).cloned()
 }
 
 fn token() -> String {
@@ -213,19 +211,16 @@ mod tests {
 
     #[test]
     fn the_account_and_role_chosen_for_the_application_go_to_the_identity_call() {
-        let chosen = CloudChoice { connection: "cl-1".into(), account: "111".into(), role: "Deploy".into() };
+        let chosen = Binding::new("cl-1", "111/Deploy");
         let Some((call, optional)) = wanted(&command(json!(true)), Some(&chosen)) else { panic!("no call") };
         assert_eq!(call.connection.as_deref(), Some("cl-1"));
-        assert_eq!(call.args, json!({ "account": "111", "role": "Deploy" }));
+        assert_eq!(call.args, json!({ "binding": "111/Deploy" }));
         assert_eq!(call.action, contracts::cloud::IDENTITY);
         assert!(optional, "an agent that only wants the cloud still runs without it");
         let same = wanted(&command(json!("cl-1")), Some(&chosen)).map(|(call, _)| call.args);
-        assert_eq!(same, Some(json!({ "account": "111", "role": "Deploy" })));
+        assert_eq!(same, Some(json!({ "binding": "111/Deploy" })));
         let other = wanted(&command(json!("cl-2")), Some(&chosen)).map(|(call, _)| (call.connection, call.args));
         assert_eq!(other, Some((Some("cl-2".to_owned()), json!({}))));
-        let account_only = CloudChoice { role: String::new(), ..chosen };
-        let args = wanted(&command(json!(true)), Some(&account_only)).map(|(call, _)| call.args);
-        assert_eq!(args, Some(json!({ "account": "111" })));
     }
 
     #[test]

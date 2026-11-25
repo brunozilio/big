@@ -71,6 +71,7 @@ impl Tracker {
             subject: key.into(),
             data: json!({ "from": from, "to": to, "author": "Ana" }),
             at: jiff::Timestamp::now(),
+            scope: String::new(),
         });
     }
 }
@@ -99,9 +100,30 @@ fn create(state: &mut State, args: &Value, key: &str) -> Result<Value, ActionErr
     Ok(answer)
 }
 
+fn category_of(name: &str) -> &'static str {
+    match name {
+        "A fazer" => "todo",
+        "Feito" => "done",
+        _ => "doing",
+    }
+}
+
+fn schema() -> Value {
+    let statuses: Vec<Value> =
+        STATUSES.iter().map(|name| json!({ "id": name, "name": name, "category": category_of(name) })).collect();
+    json!({ "default": "Tarefa", "types": [{ "id": "1", "name": "Tarefa", "level": 1, "children": [], "statuses": statuses }] })
+}
+
 fn transition(state: &mut State, args: &Value) -> Result<Value, ActionError> {
     let key = text(args, "issue")?.to_owned();
-    let to = text(args, "status")?.to_owned();
+    let by_category = args["category"].as_str().and_then(|wanted| {
+        let mut named = STATUSES.iter().filter(|name| category_of(name) == wanted);
+        if wanted == "done" { named.next_back() } else { named.next() }
+    });
+    let to = match by_category {
+        Some(name) => (*name).to_owned(),
+        None => text(args, "status")?.to_owned(),
+    };
     if !STATUSES.contains(&to.as_str()) && !STAGES.contains(&to.as_str()) {
         return Err(ActionError::permanent(format!("{key} cannot go to {to}")));
     }
@@ -133,6 +155,8 @@ fn answer(state: &mut State, action: &str, args: &Value, key: &str) -> Result<Va
             let reference = text(args, "issue")?;
             let issue = state.issues.get(reference).ok_or_else(|| ActionError::permanent("no issue"))?;
             let mut found = summary(reference, issue);
+            found["type"] = json!("Tarefa");
+            found["project"] = json!("K");
             found["description"] = json!("");
             found["impediment"] = json!({ "on": issue.flagged, "reason": null });
             found["subtasks"] = json!([]);
@@ -163,6 +187,7 @@ fn answer(state: &mut State, action: &str, args: &Value, key: &str) -> Result<Va
                 .collect::<Vec<_>>()
         )),
         "tracker.projects" => Ok(json!([{ "id": "1", "key": "K", "name": "Kanban" }])),
+        "tracker.schema" => Ok(schema()),
         "tracker.fields" => Ok(json!([])),
         "tracker.search" => {
             let issues: Vec<Value> = state.issues.iter().map(|(key, issue)| summary(key, issue)).collect();
@@ -172,6 +197,7 @@ fn answer(state: &mut State, action: &str, args: &Value, key: &str) -> Result<Va
         "tests.create_case" => Ok(json!({ "ref": "K-T1", "title": args["title"], "url": "" })),
         "tests.create_cycle" => Ok(json!({ "ref": "K-R1", "url": "" })),
         "tests.record" => Ok(json!({ "ref": "K-E1" })),
+        "tests.finish_cycle" => Ok(json!({ "ref": args["cycle"], "status": "Done" })),
         other => Err(ActionError::permanent(format!("the fake tracker does not know {other}"))),
     }
 }
@@ -222,7 +248,13 @@ impl Provider for Tracker {
 
 #[async_trait]
 impl EventSource for Tracker {
-    async fn poll(&self, _: &dyn Http, _: &Credentials, cursor: Option<&str>) -> Result<EventBatch, ActionError> {
+    async fn poll(
+        &self,
+        _: &dyn Http,
+        _: &Credentials,
+        cursor: Option<&str>,
+        _: &[String],
+    ) -> Result<EventBatch, ActionError> {
         let mut state = self.state();
         state.polls += 1;
         let seen: usize = cursor.and_then(|text| text.parse().ok()).unwrap_or(0);

@@ -147,7 +147,8 @@ impl Hub {
         let http: Arc<dyn connectors::Http> = Arc::clone(&self.github) as Arc<dyn connectors::Http>;
         let keeper = TokenKeeper::new(tokens, Arc::clone(&http), Arc::new(FixedClock::at_second(1_000)));
         let fake: &'static dyn Provider = self.tracker;
-        let github = connectors::scripted::ScriptedProvider::load_in(None, "connectors/github/index.ts").expect("github");
+        let github =
+            connectors::scripted::ScriptedProvider::load_in(None, "connectors/github/index.ts").expect("github");
         let providers: Vec<Arc<dyn Provider>> = vec![Arc::new(github), Arc::new(connectors::providers::Shared(fake))];
         let connectors = Arc::new(Connectors::from_providers(providers, http, keeper));
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();

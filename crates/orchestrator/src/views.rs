@@ -24,8 +24,10 @@ fn heads(item: &WorkItem) -> Value {
         .into_iter()
         .filter(|id| !id.is_empty())
         .map(|id| {
-            let pair = json!({ "base": git::base_of(item, &id), "head": git::head_of(item, &id) });
-            (id, pair)
+            let mut pair = item.input["git"][&id].as_object().cloned().unwrap_or_default();
+            pair.insert("base".into(), json!(git::base_of(item, &id)));
+            pair.insert("head".into(), json!(git::head_of(item, &id)));
+            (id, Value::Object(pair))
         })
         .collect();
     Value::Object(resolved)

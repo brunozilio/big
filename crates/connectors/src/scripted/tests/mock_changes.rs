@@ -20,7 +20,13 @@ fn pace() -> Value {
 }
 
 fn args() -> Value {
-    json!({ "title": "Pacote 131", "environment": "hext", "window": "2026-11-26T22:00" })
+    json!({
+        "title": "Pacote 131",
+        "environment": "hext",
+        "start": "2026-11-26T22:00:00-03:00",
+        "end": "2026-11-26T23:30:00-03:00",
+        "settings": { "template": "tpl-hst-deploy", "company": "acme" }
+    })
 }
 
 struct Mock {
@@ -80,14 +86,48 @@ fn an_update_keeps_the_new_data_and_counts_revisions_until_cancelled() {
     let mut mock = Mock::new();
     let made = mock.run("changes.create", &args(), "k1", 100).unwrap_or_default();
     let change = made["ref"].clone();
-    let update = json!({ "change": change, "window": "2026-11-27T22:00", "tasks": [{ "title": "Deploy" }] });
+    let update = json!({ "change": change, "start": "2026-11-27T22:00:00Z", "tasks": [{ "title": "Deploy" }] });
     let updated = mock.run("changes.update", &update, "", 101).unwrap_or_default();
-    assert_eq!((updated["window"].clone(), updated["revision"].clone()), (json!("2026-11-27T22:00"), json!(1)));
+    assert_eq!((updated["start"].clone(), updated["revision"].clone()), (json!("2026-11-27T22:00:00Z"), json!(1)));
     let read = mock.run("changes.get", &json!({ "change": change }), "", 115).unwrap_or_default();
     assert_eq!(read["status"], EXECUTING);
     let cancelled = mock.run("changes.cancel", &json!({ "change": change }), "", 116).unwrap_or_default();
     assert_eq!(cancelled["status"], CANCELLED);
     assert!(mock.run("changes.update", &update, "", 117).is_err());
+}
+
+#[test]
+fn a_change_needs_a_template_and_a_window_with_its_timezone() {
+    let mut mock = Mock::new();
+    let mut local = args();
+    local["start"] = json!("2026-11-26T22:00");
+    assert!(mock.run("changes.create", &local, "k1", 100).is_err());
+    let mut bare = args();
+    bare["settings"] = json!({});
+    assert!(mock.run("changes.create", &bare, "k2", 100).is_err());
+    let made = mock.run("changes.create", &args(), "k3", 100).unwrap_or_default();
+    assert_eq!(made["settings"]["template"], "tpl-hst-deploy");
+}
+
+#[test]
+fn the_simulated_system_lists_the_choices_of_each_field() {
+    let mut mock = Mock::new();
+    let owners = mock.run("changes.options", &json!({ "field": "owner", "query": "dba" }), "", 100).unwrap_or_default();
+    assert_eq!(owners, json!([{ "value": "DBA N1", "label": "DBA N1" }]));
+    let none = mock.run("changes.options", &json!({ "field": "unknown" }), "", 100).unwrap_or_default();
+    assert_eq!(none, json!([]));
+}
+
+#[test]
+fn the_change_binding_declares_common_fields_and_a_profile_per_environment() {
+    let provider = loaded("mock_changes");
+    let look = provider.presentation(Language::Portuguese);
+    let spec = look.bindings.first().cloned().unwrap_or_default();
+    assert_eq!((spec.capability.as_str(), spec.scope.as_str()), ("changes", "application"));
+    assert_eq!(spec.fields.iter().map(|field| field.key.as_str()).collect::<Vec<_>>(), ["company", "requester_group"]);
+    let each = spec.each.unwrap_or_default();
+    assert_eq!(each.key, "environment");
+    assert_eq!(each.fields.iter().map(|field| (field.key.as_str(), field.required)).collect::<Vec<_>>(), [("template", true), ("classification", false)]);
 }
 
 #[test]
@@ -133,10 +173,10 @@ async fn a_change_made_through_the_provider_is_kept_between_calls_and_polled_as_
         provider.call(&http, &creds("mock", json!({})), "changes.get", &json!({ "change": made["ref"] }), "").await;
     assert_eq!(read.map(|read| read["key"].clone()), Ok(made["key"].clone()));
     let Some(events) = provider.events() else { panic!("no events") };
-    let first = events.poll(&http, &creds("mock", json!({})), None).await;
+    let first = events.poll(&http, &creds("mock", json!({})), None, &[]).await;
     let Ok(first) = first else { panic!("{first:?}") };
     assert!(first.events.is_empty() && !first.cursor.is_empty());
-    let later = events.poll(&http, &creds("mock", json!({})), Some("0")).await;
+    let later = events.poll(&http, &creds("mock", json!({})), Some("0"), &[]).await;
     assert!(later.is_ok(), "{later:?}");
     let accounts = provider.accounts(&http, &creds(" ", json!({}))).await.unwrap_or_default();
     assert_eq!(accounts.first().map(|account| account.label.as_str()), Some("mock-changes"));

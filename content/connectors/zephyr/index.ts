@@ -1,7 +1,7 @@
 import { type Creds, type Language, optionalText, pick, setting, text, textAt, tokenAlternative, tokenField, unknownAction, useApiToken } from "sdk/connectors/index.ts";
-import { tests } from "sdk/connectors/contracts.ts";
+import { binding, options, projectOptions, tests } from "sdk/connectors/contracts.ts";
 import { items } from "sdk/connectors/mcp.ts";
-import { cases, createCase, createCycle, record } from "./cases.ts";
+import { cases, createCase, createCycle, finishCycle, record } from "./cases.ts";
 import { type Api, idOf, lastPage, MOST_PAGES, PAGE } from "./api.ts";
 
 export const SCOPES = ["api"];
@@ -10,7 +10,7 @@ export const API_TOKEN = "api_token";
 type Ctx = { config: { mcp_url: string; oauth_redirect: string } } & Record<string, any>;
 
 export function provider() {
-  return { name: "Zephyr", logo: "logo.svg", capabilities: ["tests"], auth: { kind: "loopback" }, actions: tests() };
+  return { name: "Zephyr", logo: "logo.svg", capabilities: ["tests"], auth: { kind: "loopback" }, actions: [...tests(), options("tests")] };
 }
 
 export function presentation({ language }: { language: Language }) {
@@ -21,6 +21,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "SmartBear", "de SmartBear", "da SmartBear"),
     choose_title: pick(language, "Zephyr account", "Cuenta de Zephyr", "Conta do Zephyr"),
     hidden: false,
+    bindings: [binding("tests", "application", pick(language, "Zephyr project", "Proyecto de Zephyr", "Projeto do Zephyr"))],
   };
 }
 
@@ -94,7 +95,9 @@ export function call(
   if (action === "tests.cases") return cases(api, text(args, "issue"));
   if (action === "tests.create_cycle") return createCycle(api, args, idempotencyKey);
   if (action === "tests.record") return record(api, args, idempotencyKey);
+  if (action === "tests.finish_cycle") return finishCycle(api, args);
   if (action === "tests.projects") return projects(api, args);
+  if (action === "tests.options") return projectOptions(projects(api, args));
   return unknownAction(action);
 }
 

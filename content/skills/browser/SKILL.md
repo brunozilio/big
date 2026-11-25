@@ -70,6 +70,13 @@ the file was saved.
 tools first touched the tab; reload the page to capture its start-up. Always pass
 a `pattern` (or `urlPattern`) so the output stays small.
 
+`network_intercept` changes traffic of one tab: at stage `request` it rewrites
+the request (`request`), answers it without the network (`respond`) or fails it
+(`block`); at stage `response` it rewrites the real response (`response` with
+`status`, `headers`, `body` or `replace`). `urlPattern` is a wildcard over the
+full URL. Add the rule before the requests happen (reload if needed), check
+`list` for hits, and `clear` the rules when done: they keep acting until then.
+
 ## Dialogs
 
 Do not trigger `alert`, `confirm` or `prompt` dialogs: they block the page and

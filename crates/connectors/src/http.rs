@@ -31,6 +31,18 @@ impl Method {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Part {
+    pub name: String,
+    pub filename: Option<String>,
+    pub content_type: Option<String>,
+    pub bytes: Vec<u8>,
+}
+
+fn quoted(text: &str) -> String {
+    text.chars().filter(|c| !c.is_control()).map(|c| if c == '"' { '\'' } else { c }).collect()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HttpRequest {
     pub method: Method,
@@ -78,6 +90,28 @@ impl HttpRequest {
     pub fn form(self, fields: &[(&str, &str)]) -> HttpRequest {
         let body = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(fields).finish();
         self.body("application/x-www-form-urlencoded", body.into_bytes())
+    }
+
+    pub fn multipart(self, parts: &[Part]) -> HttpRequest {
+        let mut seed = [0_u8; 12];
+        let _ = getrandom::fill(&mut seed);
+        let boundary = format!("----part{}", seed.iter().map(|byte| format!("{byte:02x}")).collect::<String>());
+        let mut body = Vec::new();
+        for part in parts {
+            body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"", quoted(&part.name)).as_bytes());
+            if let Some(filename) = &part.filename {
+                body.extend_from_slice(format!("; filename=\"{}\"", quoted(filename)).as_bytes());
+            }
+            body.extend_from_slice(b"\r\n");
+            if let Some(content_type) = &part.content_type {
+                body.extend_from_slice(format!("Content-Type: {content_type}\r\n").as_bytes());
+            }
+            body.extend_from_slice(b"\r\n");
+            body.extend_from_slice(&part.bytes);
+            body.extend_from_slice(b"\r\n");
+        }
+        body.extend_from_slice(format!("--{boundary}--\r\n").as_bytes());
+        self.body(&format!("multipart/form-data; boundary={boundary}"), body)
     }
 
     pub fn header_value(&self, name: &str) -> Option<&str> {
@@ -194,6 +228,40 @@ fn transport(error: &reqwest::Error) -> ActionError {
 #[async_trait]
 impl Http for ReqwestHttp {
     async fn send(&self, request: HttpRequest) -> Result<HttpResponse, ActionError> {
+        let started = std::time::Instant::now();
+        let method = format!("{:?}", request.method).to_uppercase();
+        let address = platform::address::parts(&request.url);
+        let sent = self.sent(request).await;
+        let duration_ms = started.elapsed().as_millis() as u64;
+        match &sent {
+            Ok(response) => answered(&method, &address, response.status, duration_ms),
+            Err(error) => tracing::event!(
+                target: "audit", tracing::Level::WARN,
+                component = "connector",
+                http.request.method = %method,
+                server.address = %address.host,
+                url.path = %address.path,
+                duration_ms,
+                outcome = "failure",
+                error.message = %error,
+                "http.client.request"
+            ),
+        }
+        sent
+    }
+}
+
+fn answered(method: &str, address: &platform::address::Address, status: u16, duration_ms: u64) {
+    let (host, path) = (address.host.as_str(), address.path.as_str());
+    if status >= 400 {
+        tracing::event!(target: "audit", tracing::Level::WARN, component = "connector", http.request.method = method, server.address = host, url.path = path, http.response.status_code = status, duration_ms, outcome = "failure", "http.client.request");
+    } else {
+        tracing::event!(target: "audit", tracing::Level::INFO, component = "connector", http.request.method = method, server.address = host, url.path = path, http.response.status_code = status, duration_ms, outcome = "success", "http.client.request");
+    }
+}
+
+impl ReqwestHttp {
+    async fn sent(&self, request: HttpRequest) -> Result<HttpResponse, ActionError> {
         let mut builder = self.client.request(ReqwestHttp::method(request.method), &request.url);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
@@ -288,6 +356,20 @@ impl Http for FakeHttp {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_multipart_body_carries_each_field_and_file_between_boundaries() {
+        let file = Part { name: "file".into(), filename: Some("a\"b.png".into()), content_type: Some("image/png".into()), bytes: vec![0, 159, 1] };
+        let field = Part { name: "note".into(), bytes: b"oi".to_vec(), ..Part::default() };
+        let request = HttpRequest::post("https://h").multipart(&[file, field]);
+        let kind = request.header_value("content-type").unwrap_or_default().to_owned();
+        let boundary = kind.strip_prefix("multipart/form-data; boundary=").unwrap_or_default().to_owned();
+        assert!(boundary.len() > 10, "{kind}");
+        let mut expected = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a'b.png\"\r\nContent-Type: image/png\r\n\r\n").into_bytes();
+        expected.extend_from_slice(&[0, 159, 1]);
+        expected.extend_from_slice(format!("\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\noi\r\n--{boundary}--\r\n").as_bytes());
+        assert_eq!(request.body, expected);
+    }
 
     #[tokio::test]
     async fn the_fake_answers_in_order_and_records_what_was_sent() {

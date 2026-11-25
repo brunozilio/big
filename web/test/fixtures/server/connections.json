@@ -16,6 +16,7 @@
   "providers": [
     {
       "alternatives": [],
+      "bindings": [],
       "button": "Entrar com Fake",
       "description": "Sua conta Fake",
       "fields": [],
@@ -29,6 +30,7 @@
     },
     {
       "alternatives": [],
+      "bindings": [],
       "button": "Entrar com Picky",
       "description": "Sua conta Picky",
       "fields": [],
@@ -72,6 +74,7 @@
           "site": "da Web"
         }
       ],
+      "bindings": [],
       "button": "Entrar com Web",
       "description": "Sua conta Web",
       "fields": [],

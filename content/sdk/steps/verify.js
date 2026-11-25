@@ -25,7 +25,7 @@ async function verify(ctx, opts, group) {
   let output = "";
   const ran = [];
   for (const command of group.commands) {
-    const options = defined({ repository: group.repository, cwd: opts.cwd, env: opts.env, timeout: opts.timeout, retry: opts.retry });
+    const options = defined({ repository: group.repository, cwd: group.cwd ?? opts.cwd, env: opts.env, timeout: opts.timeout, retry: opts.retry });
     const result = await ctx.exec(command, options);
     output += `$ ${command}\n${result.output ?? ""}\n`;
     const passed = result.code === 0;

@@ -1,10 +1,11 @@
 import { Reorder, useDragControls } from 'framer-motion'
 import { useEffect, useRef, useState } from 'react'
-import type { Block, ChangeTaskView, TaskKindView } from '@/api/contract'
+import type { Block, ChangeTaskView, TaskKindView, TaskOwner } from '@/api/contract'
 import { useT } from '@/i18n'
 import { IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Badge } from '@/ui/display'
+import { Select } from '@/ui/form'
 import { Icon, isIconName } from '@/ui/icon'
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/ui/overlay'
 import { SendError, useSend } from './shared'
@@ -41,6 +42,15 @@ function Link({ task, label }: { task: ChangeTaskView; label: string }) {
   )
 }
 
+function Owner({ task, owners, locked, edit }: { task: ChangeTaskView; owners: TaskOwner[]; locked: boolean; edit: Edit }) {
+  const t = useT()
+  const shown = owners.find((o) => o.value === task.owner)?.label ?? task.owner
+  if (owners.length === 0 || locked) return shown ? <Badge>{shown}</Badge> : null
+  const choices = owners.map((o) => ({ value: o.value, label: o.label }))
+  if (task.owner && !owners.some((o) => o.value === task.owner)) choices.push({ value: task.owner, label: task.owner })
+  return <Select size="sm" label={t('blocks.taskOwner')} placeholder={t('blocks.taskOwner')} className="max-w-full" value={task.owner ?? ''} options={choices} onValueChange={(owner) => edit({ owner })} />
+}
+
 function Body({ task, edit, editable, link }: { task: ChangeTaskView; edit: Edit; editable: boolean; link: string }) {
   const t = useT()
   if (!editable) {
@@ -62,7 +72,7 @@ function Body({ task, edit, editable, link }: { task: ChangeTaskView; edit: Edit
   )
 }
 
-function Row({ task, kind, locked, env, edit, remove }: { task: ChangeTaskView; kind: TaskKindView | undefined; locked: boolean; env: string; edit: Edit; remove: () => void }) {
+function Row({ task, kind, owners, locked, env, edit, remove }: { task: ChangeTaskView; kind: TaskKindView | undefined; owners: TaskOwner[]; locked: boolean; env: string; edit: Edit; remove: () => void }) {
   const t = useT()
   const controls = useDragControls()
   const editable = !locked && !!kind?.editable
@@ -74,7 +84,7 @@ function Row({ task, kind, locked, env, edit, remove }: { task: ChangeTaskView; 
         <Body task={task} edit={edit} editable={editable} link={t('blocks.taskLink', { env })} />
         {kind?.attachable && <TaskFiles files={task.files} locked={locked} onChange={(files) => edit({ files })} />}
       </span>
-      <span className="flex w-[180px] shrink-0 justify-end">{task.owner && <Badge>{task.owner}</Badge>}</span>
+      <span className="flex w-[180px] shrink-0 justify-end"><Owner task={task} owners={owners} locked={locked} edit={edit} /></span>
       <span className="flex shrink-0 items-center gap-1 text-faint">
         <TimeField label={t('blocks.taskStart')} value={task.start} disabled={locked} onChange={(start) => edit({ start })} />
         <span>–</span>
@@ -122,7 +132,7 @@ export function TasksBlock({ block }: { block: Of<'tasks'> }) {
       {!block.locked && <div className="mb-1 flex justify-end"><AddTask kinds={block.kinds} onAdd={(template) => void send('add_task', { template })} /></div>}
       <Reorder.Group axis="y" values={list} onReorder={save}>
         {list.map((task) => (
-          <Row key={task.id} task={task} kind={kindOf(block.kinds, task)} locked={block.locked} env={env} edit={(change) => save(list.map((one) => (one.id === task.id ? { ...one, ...change } : one)))} remove={() => save(list.filter((one) => one.id !== task.id))} />
+          <Row key={task.id} task={task} kind={kindOf(block.kinds, task)} owners={block.owners ?? []} locked={block.locked} env={env} edit={(change) => save(list.map((one) => (one.id === task.id ? { ...one, ...change } : one)))} remove={() => save(list.filter((one) => one.id !== task.id))} />
         ))}
       </Reorder.Group>
       <SendError error={error} />

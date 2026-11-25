@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use crate::api::Orchestrator;
 use crate::error::Result;
 use crate::events::Wake;
-use crate::links::{CAPABILITY, application_of, base_of, claimed_by_peers};
+use crate::links::{CAPABILITY, application_of, base_of, claimed_by_peers, integrated};
 use crate::shared::Shared;
 
 pub const STEP_FINISHED: &str = "item.step.finished";
@@ -49,9 +49,11 @@ pub fn event_of(progress: &Progress, item: &WorkItem) -> ExternalEvent {
             "state": state,
             "application": application_of(item),
             "base": base_of(item),
+            "integrated": integrated(item),
             "title": crate::views::item_json(item)["title"],
         }),
         at: jiff::Timestamp::now(),
+        scope: String::new(),
     }
 }
 

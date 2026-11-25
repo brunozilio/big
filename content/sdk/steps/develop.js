@@ -1,4 +1,4 @@
-import { step, chat, markdown } from "sdk";
+import { step, chat, markdown, transitionArgs } from "sdk";
 import { agentOptions, attempt, branchOf, codeOptions, defined, effects, feedbackText, inLanguage, issueOf, object, planOf, pullRequestsOf, source, summaryLine } from "./context.js";
 
 const IDLE = "Nothing to fix: the pull request has no pending review comments or reported failures.";
@@ -85,13 +85,13 @@ async function subtasksOf(ctx, opts, issue) {
 }
 
 function statusesOf(ctx, opts) {
-  const declared = ctx.workflow ? ctx.workflow.statuses : [];
-  return { doing: opts.subtaskDoing ?? opts.status, done: opts.subtaskDone ?? declared[declared.length - 1] };
+  return { doing: opts.subtaskDoing ?? opts.status ?? { category: "doing" }, done: opts.subtaskDone ?? { category: "done" } };
 }
 
 async function move(ctx, opts, issue, status) {
-  if (!status) return;
-  await attempt(() => ctx.call("tracker", "transition", { issue, status }, trackerOptions(ctx, opts)));
+  const wanted = transitionArgs(status);
+  if (!wanted) return;
+  await attempt(() => ctx.call("tracker", "transition", { issue, ...wanted }, trackerOptions(ctx, opts)));
 }
 
 function subtaskText(task, index, total) {
@@ -156,6 +156,7 @@ export default step({
         branch: output.branch ?? branch,
         summary: output.summary ?? summaryLine(result.text),
         repositories,
+        commit: typeof result.commit === "string" && result.commit !== "" ? result.commit : undefined,
         threads: handed,
       }),
     );

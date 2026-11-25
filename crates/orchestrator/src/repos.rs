@@ -12,6 +12,8 @@ pub struct Checkout {
     pub directory: Option<PathBuf>,
     pub run: Vec<String>,
     pub verify: Vec<String>,
+    pub e2e: Vec<String>,
+    pub e2e_directory: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,7 +41,7 @@ fn quoted(commands: &[String]) -> String {
 
 fn checkout(repository: &Value) -> Checkout {
     let directory = Some(text(repository, "directory")).filter(|dir| !dir.is_empty()).map(PathBuf::from);
-    let named = text(&repository["code"], "repo");
+    let named = text(&repository["bindings"][connectors::contracts::CODE], "value");
     let folder = directory.as_deref().and_then(Path::file_name).map(|name| name.to_string_lossy().into_owned());
     let name = if named.is_empty() { folder.unwrap_or_default() } else { named };
     Checkout {
@@ -48,6 +50,8 @@ fn checkout(repository: &Value) -> Checkout {
         directory,
         run: commands(repository, "run"),
         verify: commands(repository, "verify"),
+        e2e: commands(repository, "e2e"),
+        e2e_directory: text(repository, "e2eDirectory"),
     }
 }
 
@@ -63,6 +67,8 @@ pub fn of_input(input: &Value, fallback: Option<&Path>) -> Vec<Checkout> {
         directory: fallback.map(Path::to_path_buf),
         run: Vec::new(),
         verify: Vec::new(),
+        e2e: Vec::new(),
+        e2e_directory: String::new(),
     }]
 }
 
@@ -91,6 +97,10 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
         }
         if !checkout.verify.is_empty() {
             let _ = write!(text, "\n  - To verify: {}", quoted(&checkout.verify));
+        }
+        if !checkout.e2e.is_empty() {
+            let place = if checkout.e2e_directory.is_empty() { String::new() } else { format!(" in `{}`", checkout.e2e_directory) };
+            let _ = write!(text, "\n  - End-to-end suite{place}: {}", quoted(&checkout.e2e));
         }
     }
     let _ = write!(
@@ -124,7 +134,7 @@ mod tests {
     #[test]
     fn the_application_s_repositories_come_in_order_with_their_commands() {
         let input = json!({ "application": { "repositories": [
-            { "id": "web", "directory": "/src/web", "code": { "connection": "c", "repo": "acme/web" },
+            { "id": "web", "directory": "/src/web", "bindings": { "code": { "connection": "c", "value": "acme/web" } },
               "run": "bun dev", "verify": ["bun test", " "] },
             { "id": "app", "directory": "/src/app", "run": ["bun api", " bun web ", ""] },
             { "id": "api", "directory": "/src/api" },

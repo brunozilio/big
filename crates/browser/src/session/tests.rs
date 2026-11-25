@@ -61,7 +61,7 @@ fn the_server_lists_the_browser_tools_under_its_own_name() {
     let folder = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
     let session = Session::new(Hub::new(), "s", settings(folder.path()), vec![]);
     let listed = session.handle(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" })).unwrap_or_default();
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(22));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(23));
     let initialized =
         session.handle(&json!({ "jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {} })).unwrap_or_default();
     assert_eq!(initialized["result"]["serverInfo"]["name"], spec::server_name());

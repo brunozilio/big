@@ -56,6 +56,8 @@ mod tests {
             directory: directory.map(Path::to_path_buf),
             run: Vec::new(),
             verify: Vec::new(),
+            e2e: Vec::new(),
+            e2e_directory: String::new(),
         }
     }
 

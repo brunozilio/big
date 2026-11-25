@@ -1,4 +1,4 @@
-import { step, actions, chat, markdown } from "sdk";
+import { step, actions, chat, markdown, transitionArgs } from "sdk";
 import { agentOptions, attempt, branchOf, defined, effects, inLanguage, issueOf, object, planOf, pullRequestsOf, source, waitOptions } from "./context.js";
 
 const NONE = "The delivered change needs no new infrastructure.";
@@ -97,11 +97,10 @@ async function confirmed(ctx, opts, manual, lead, buttons) {
 }
 
 async function close(ctx, opts, tasks) {
-  const declared = ctx.workflow ? ctx.workflow.statuses : [];
-  const status = opts.doneStatus ?? declared[declared.length - 1];
-  if (!status) return;
+  const wanted = transitionArgs(opts.doneStatus ?? { category: "done" });
+  if (!wanted) return;
   for (const task of tasks.filter((found) => found.issue)) {
-    await attempt(() => ctx.call("tracker", "transition", { issue: task.issue, status }, trackerOptions(ctx, opts)));
+    await attempt(() => ctx.call("tracker", "transition", { issue: task.issue, ...wanted }, trackerOptions(ctx, opts)));
   }
 }
 
