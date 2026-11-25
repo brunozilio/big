@@ -1,6 +1,6 @@
 [package]
 name = "brand"
-description = "The product's name, command, folders and owner, read from config.toml, and its logo and favicon, read from logo.png and favicon.png, when built."
+description = "The product's name, command, folders and owner, read from config.toml, and its logo and favicon, read from logo and favicon as .png or .svg, when built."
 version.workspace = true
 edition.workspace = true
 publish.workspace = true

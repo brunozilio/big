@@ -1,5 +1,17 @@
 include!(concat!(env!("OUT_DIR"), "/brand.rs"));
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Image {
+    pub bytes: &'static [u8],
+    pub mime: &'static str,
+}
+
+impl Image {
+    pub fn is_png(&self) -> bool {
+        self.mime == "image/png"
+    }
+}
+
 pub fn env(key: &str) -> String {
     format!("{ENV}_{key}")
 }
@@ -38,9 +50,12 @@ mod tests {
     }
 
     #[test]
-    fn the_logo_and_favicon_are_pngs() {
-        assert!(LOGO.starts_with(b"\x89PNG"));
-        assert!(FAVICON.starts_with(b"\x89PNG"));
+    fn the_logo_and_favicon_are_a_png_or_an_svg() {
+        for image in [LOGO, FAVICON] {
+            let svg = String::from_utf8_lossy(image.bytes).contains("<svg");
+            assert_eq!(image.is_png(), image.bytes.starts_with(b"\x89PNG"));
+            assert_eq!(image.mime == "image/svg+xml", svg);
+        }
     }
 
     #[test]

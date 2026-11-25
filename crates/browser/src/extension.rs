@@ -33,9 +33,11 @@ pub struct Installed {
 
 pub fn install(folder: &Path, port: u16) -> Result<Installed, String> {
     let mut written = 0;
+    let icon = icon();
     for (path, source) in FILES {
         let target = folder.join(path);
         let rendered = render(source, port);
+        let rendered = if path == "manifest.json" && icon.is_none() { without_icons(&rendered) } else { rendered };
         if std::fs::read_to_string(&target).is_ok_and(|current| current == rendered) {
             continue;
         }
@@ -45,11 +47,31 @@ pub fn install(folder: &Path, port: u16) -> Result<Installed, String> {
         std::fs::write(&target, rendered).map_err(|error| format!("{}: {error}", target.display()))?;
         written += 1;
     }
-    written += usize::from(write_if_changed(&folder.join(ICON), brand::LOGO)?);
+    match icon {
+        Some(bytes) => written += usize::from(write_if_changed(&folder.join(ICON), bytes)?),
+        None => {
+            let _ = std::fs::remove_file(folder.join(ICON));
+        }
+    }
     for gone in GONE {
         let _ = std::fs::remove_file(folder.join(gone));
     }
     Ok(Installed { folder: folder.to_path_buf(), written })
+}
+
+fn icon() -> Option<&'static [u8]> {
+    [brand::LOGO, brand::FAVICON].into_iter().find(brand::Image::is_png).map(|image| image.bytes)
+}
+
+fn without_icons(manifest: &str) -> String {
+    let Ok(mut parsed) = serde_json::from_str::<serde_json::Value>(manifest) else { return manifest.to_owned() };
+    if let Some(object) = parsed.as_object_mut() {
+        object.remove("icons");
+    }
+    if let Some(action) = parsed.get_mut("action").and_then(serde_json::Value::as_object_mut) {
+        action.remove("default_icon");
+    }
+    serde_json::to_string_pretty(&parsed).unwrap_or_else(|_| manifest.to_owned())
 }
 
 fn write_if_changed(target: &Path, bytes: &[u8]) -> Result<bool, String> {
@@ -72,13 +94,15 @@ mod tests {
     fn the_extension_is_written_with_the_brand_and_port_and_rewritten_only_when_it_changes() {
         let folder = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
         let first = install(folder.path(), 4321);
-        assert_eq!(first.map(|installed| installed.written), Ok(FILES.len() + 1));
-        assert_eq!(std::fs::read(folder.path().join(ICON)).ok().as_deref(), Some(brand::LOGO));
+        assert_eq!(first.map(|installed| installed.written), Ok(FILES.len() + usize::from(icon().is_some())));
+        assert_eq!(std::fs::read(folder.path().join(ICON)).ok().as_deref(), icon());
         let manifest = std::fs::read_to_string(folder.path().join("manifest.json")).unwrap_or_default();
         let parsed: serde_json::Value = serde_json::from_str(&manifest).unwrap_or_default();
         assert_eq!(parsed["manifest_version"], 3);
         assert_eq!(parsed["name"], brand::NAME);
-        assert_eq!(parsed["icons"]["128"], ICON);
+        if icon().is_some() {
+            assert_eq!(parsed["icons"]["128"], ICON);
+        }
         assert!(parsed["action"].get("default_popup").is_none());
         let config = std::fs::read_to_string(folder.path().join("config.js")).unwrap_or_default();
         assert!(config.contains("4321"));
@@ -88,5 +112,14 @@ mod tests {
         }
         assert_eq!(install(folder.path(), 4321).map(|installed| installed.written), Ok(0));
         assert_eq!(install(folder.path(), 9999).map(|installed| installed.written), Ok(1));
+    }
+
+    #[test]
+    fn without_a_png_the_manifest_keeps_no_icon() {
+        let manifest = without_icons(&render(FILES[0].1, 4321));
+        let parsed: serde_json::Value = serde_json::from_str(&manifest).unwrap_or_default();
+        assert!(parsed.get("icons").is_none());
+        assert!(parsed["action"].get("default_icon").is_none());
+        assert_eq!(parsed["action"]["default_title"], brand::NAME);
     }
 }

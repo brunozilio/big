@@ -50,11 +50,22 @@ fn section_code(file: &std::path::Path, sections: &[(String, Pairs)]) -> String 
     code
 }
 
-fn image_code(file: &std::path::Path, name: &str, image: &str) -> String {
-    let path = file.parent().map_or_else(|| PathBuf::from(image), |folder| folder.join(image));
-    println!("cargo:rerun-if-changed={}", path.display());
-    let path = std::fs::canonicalize(&path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
-    format!("pub const {name}: &[u8] = include_bytes!({:?});\n", path.display().to_string())
+fn image_code(file: &std::path::Path, name: &str, stem: &str) -> String {
+    let folder = file.parent().map_or_else(|| PathBuf::from("."), std::path::Path::to_path_buf);
+    let found: Vec<(PathBuf, &str)> = [("png", "image/png"), ("svg", "image/svg+xml")]
+        .into_iter()
+        .map(|(extension, mime)| (folder.join(format!("{stem}.{extension}")), mime))
+        .inspect(|(path, _)| println!("cargo:rerun-if-changed={}", path.display()))
+        .filter(|(path, _)| path.is_file())
+        .collect();
+    let [(path, mime)] = found.as_slice() else {
+        panic!("{} needs exactly one of {stem}.png or {stem}.svg", folder.display())
+    };
+    let path = std::fs::canonicalize(path).unwrap_or_else(|error| panic!("{}: {error}", path.display()));
+    format!(
+        "pub const {name}: Image = Image {{ bytes: include_bytes!({:?}), mime: {mime:?} }};\n",
+        path.display().to_string()
+    )
 }
 
 fn main() {
@@ -93,7 +104,7 @@ fn main() {
         let lower = if name == "ENV" { "env_prefix".to_owned() } else { name.to_ascii_lowercase() };
         code.push_str(&format!("#[macro_export]\nmacro_rules! {lower} {{ () => {{ {value:?} }}; }}\n"));
     }
-    for (name, image) in [("LOGO", "logo.png"), ("FAVICON", "favicon.png")] {
+    for (name, image) in [("LOGO", "logo"), ("FAVICON", "favicon")] {
         code.push_str(&image_code(&file, name, image));
     }
     code.push_str(&section_code(&file, &sections));

@@ -76,15 +76,15 @@ pub async fn put(State(ctx): State<Ctx>, Json(patch): Json<Value>) -> ApiResult<
 }
 
 pub async fn logo() -> Response {
-    png(brand::LOGO)
+    image(brand::LOGO)
 }
 
 pub async fn favicon() -> Response {
-    png(brand::FAVICON)
+    image(brand::FAVICON)
 }
 
-fn png(bytes: &'static [u8]) -> Response {
-    ([(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "no-cache")], bytes).into_response()
+fn image(image: brand::Image) -> Response {
+    ([(header::CONTENT_TYPE, image.mime), (header::CACHE_CONTROL, "no-cache")], image.bytes).into_response()
 }
 
 #[cfg(test)]
