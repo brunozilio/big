@@ -2,7 +2,7 @@ use llm_providers::ProviderError;
 use llm_providers::oauth::form;
 use serde_json::Value;
 
-pub const CLIENT: &str = "b1a00492-073a-47ea-816f-4c329264a828";
+pub const CLIENT: &str = brand::grok::CLIENT_ID;
 pub const SCOPE: &str = "openid profile email offline_access grok-cli:access api:access";
 pub const CODE: &str = "https://auth.x.ai/oauth2/device/code";
 pub const TOKEN: &str = "https://auth.x.ai/oauth2/token";
@@ -91,7 +91,7 @@ mod tests {
 
     #[test]
     fn the_code_is_asked_for_with_the_grok_scopes() {
-        assert!(code_body().starts_with("client_id=b1a00492-073a-47ea-816f-4c329264a828&scope="));
+        assert!(code_body().starts_with(&format!("client_id={CLIENT}&scope=")));
         assert!(code_body().contains("api%3Aaccess"));
         assert!(poll_body("dc").starts_with("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code"));
     }

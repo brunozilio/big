@@ -3,7 +3,7 @@
 Id `copilot-subscription`. Signs in with GitHub's device flow (a code typed
 at `github.com/login/device`) or a GitHub token.
 
-Copilot is spoken as the Copilot CLI does (client `Ov23ctDVkRmgkPke0Mmm`,
+Copilot is spoken as the Copilot CLI does (client id from `[copilot]` in `config.toml`,
 `Copilot-Integration-Id: copilot-developer-cli`): the GitHub token goes as
 is to the Copilot API named by `copilot_internal/user` (`endpoints.api`); it
 is never exchanged or refreshed, and classic `ghp_` tokens are refused.

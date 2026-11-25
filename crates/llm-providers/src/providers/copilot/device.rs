@@ -2,7 +2,7 @@ use llm_providers::ProviderError;
 use llm_providers::oauth::form;
 use serde_json::Value;
 
-pub const CLIENT: &str = "Ov23ctDVkRmgkPke0Mmm";
+pub const CLIENT: &str = brand::copilot::CLIENT_ID;
 pub const GITHUB: &str = "https://github.com";
 pub const USER: &str = "https://api.github.com/copilot_internal/user";
 pub const SCOPE: &str = "read:user";
@@ -150,7 +150,7 @@ mod tests {
     fn the_device_code_is_asked_for_with_the_copilot_cli_client() {
         let request = code_request();
         assert_eq!(request.url, "https://github.com/login/device/code");
-        assert_eq!(request.body, "client_id=Ov23ctDVkRmgkPke0Mmm&scope=read%3Auser");
+        assert_eq!(request.body, format!("client_id={CLIENT}&scope=read%3Auser"));
         let polled = poll_request("dc");
         assert_eq!(polled.url, "https://github.com/login/oauth/access_token");
         assert!(polled.body.ends_with("grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Adevice_code"));

@@ -25,7 +25,7 @@ fn the_account_comes_from_any_of_the_three_claims() {
 fn the_code_is_exchanged_with_a_form_without_state() {
     let request = exchange("c", "s", "v", REDIRECT);
     assert_eq!(request.url, TOKEN);
-    assert!(request.body.contains("client_id=app_EMoamEEZ73f0CkXaXp7hrann") && !request.body.contains("state"));
+    assert!(request.body.contains(&format!("client_id={CLIENT}")) && !request.body.contains("state"));
 }
 
 #[test]

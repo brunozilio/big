@@ -67,7 +67,7 @@ mod tests {
         assert_eq!(log.waits.iter().map(Duration::as_secs).collect::<Vec<_>>(), [6, 6, 15]);
         assert_eq!(config.access_token(), "gho_new");
         assert_eq!(config.base(&super::super::Provider), "https://api.individual.githubcopilot.com");
-        assert_eq!(log.sent[0].1, "client_id=Ov23ctDVkRmgkPke0Mmm&scope=read%3Auser");
+        assert_eq!(log.sent[0].1, format!("client_id={}&scope=read%3Auser", device::CLIENT));
         assert_eq!(log.sent[4].0, "https://api.github.com/copilot_internal/user");
     }
 

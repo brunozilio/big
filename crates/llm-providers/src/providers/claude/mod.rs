@@ -9,7 +9,7 @@ use llm_providers::oauth::{self, Browser, TokenRequest, Tokens, form};
 use llm_providers::request::remove;
 use llm_providers::{Config, Host, Provider as Shape, ProviderError};
 
-pub const CLIENT: &str = "9d1c250a-e61b-44d9-88ed-5944d1962f5e";
+pub const CLIENT: &str = brand::claude::CLIENT_ID;
 pub const TOKEN: &str = "https://platform.claude.com/v1/oauth/token";
 pub const CALLBACK: (u16, &str) = (0, "/callback");
 pub const FALLBACK: [&str; 4] = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"];

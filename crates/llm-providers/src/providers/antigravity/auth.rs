@@ -4,8 +4,8 @@ use serde_json::{Value, json};
 use llm_providers::ProviderError;
 use llm_providers::oauth::{self, TokenRequest, Tokens, form};
 
-pub const CLIENT: &str = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com";
-pub const SECRET: &str = "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";
+pub const CLIENT: &str = brand::antigravity::CLIENT_ID;
+pub const SECRET: &str = brand::antigravity::CLIENT_SECRET;
 pub const AUTHORIZE: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 pub const TOKEN: &str = "https://oauth2.googleapis.com/token";
 pub const USERINFO: &str = "https://www.googleapis.com/oauth2/v1/userinfo?alt=json";
@@ -122,7 +122,7 @@ mod tests {
     #[test]
     fn the_browser_asks_google_for_offline_access_with_pkce() {
         let url = authorize("ch", "st", "http://localhost:51121/oauth-callback");
-        assert!(url.starts_with("https://accounts.google.com/o/oauth2/v2/auth?client_id=1071006060591-"));
+        assert!(url.starts_with(&format!("https://accounts.google.com/o/oauth2/v2/auth?client_id={CLIENT}")));
         for wanted in [
             "redirect_uri=http%3A%2F%2Flocalhost%3A51121%2Foauth-callback",
             "scope=https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform+",

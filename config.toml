@@ -11,14 +11,29 @@ zephyr_mcp_url = "https://zephyr.mcp.smartbear.com/mcp"
 zephyr_oauth_redirect = "http://127.0.0.1:33418/oauth/callback"
 datadog_mcp_url = "https://mcp.{site}/v1/mcp"
 datadog_site = "datadoghq.com"
+aws_login_client_id = "arn:aws:signin:::devtools/same-device"
 aws_region = "us-east-1"
 veracode_region = "com"
 
 [claude]
+client_id = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
 anthropic_beta = "claude-code-20250219,oauth-2025-04-20"
 client_platform = "claude_code_cli"
 client_version = "2.1.330"
 user_agent = "claude-cli/2.1.330 (external, cli)"
+
+[chatgpt]
+client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
+
+[copilot]
+client_id = "Ov23ctDVkRmgkPke0Mmm"
+
+[grok]
+client_id = "b1a00492-073a-47ea-816f-4c329264a828"
+
+[antigravity]
+client_id = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
+client_secret = "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"
 
 [server]
 port = 7420

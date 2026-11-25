@@ -11,7 +11,7 @@ use llm_providers::oauth::{self, Browser, TokenRequest, Tokens, form};
 use llm_providers::request::remove;
 use llm_providers::{Config, Host, Provider as Shape, ProviderError};
 
-pub const CLIENT: &str = "app_EMoamEEZ73f0CkXaXp7hrann";
+pub const CLIENT: &str = brand::chatgpt::CLIENT_ID;
 pub const REDIRECT: &str = "http://localhost:1455/auth/callback";
 pub const TOKEN: &str = "https://auth.openai.com/oauth/token";
 pub const CALLBACK: (u16, &str) = (1455, "/auth/callback");

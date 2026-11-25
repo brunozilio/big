@@ -12,7 +12,7 @@ use crate::error::ActionError;
 use crate::http::{Http, HttpRequest};
 use crate::oauth::{Authorization, Grant, LoopbackSignIn, challenge, random_token};
 
-pub const CLIENT_ID: &str = "arn:aws:signin:::devtools/same-device";
+pub const CLIENT_ID: &str = brand::connectors::AWS_LOGIN_CLIENT_ID;
 pub const REDIRECT: &str = "http://127.0.0.1:{port}/oauth/callback";
 
 #[derive(Debug, Clone, PartialEq, Eq)]

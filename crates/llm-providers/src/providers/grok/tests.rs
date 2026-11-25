@@ -28,7 +28,7 @@ fn a_refresh_is_a_form_to_the_xai_token_endpoint() {
     let request = request.unwrap_or_else(|| panic!("refreshable"));
     assert_eq!(request.url, "https://auth.x.ai/oauth2/token");
     assert!(request.body.contains("grant_type=refresh_token") && request.body.contains("refresh_token=r0"));
-    assert!(request.body.contains("client_id=b1a00492-073a-47ea-816f-4c329264a828"));
+    assert!(request.body.contains(&format!("client_id={}", device::CLIENT)));
 }
 
 #[test]
