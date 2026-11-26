@@ -169,6 +169,7 @@ impl Local {
             "oauth.account" => Ok(json!(oauth::account_label(arguments.as_str().unwrap_or_default()))),
             "clock.now" => Ok(json!(Timestamp::now().to_string())),
             "clock.later" => Ok(later(arguments)),
+            "crypto.uuid" => Ok(json!(uuid::Uuid::new_v4().to_string())),
             "catalog.model" => Ok(json!(catalog::model_of(
                 self.provider,
                 &arguments["item"],

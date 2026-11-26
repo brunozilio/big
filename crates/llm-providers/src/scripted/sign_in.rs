@@ -107,7 +107,8 @@ impl Desk {
             .ok_or_else(|| ProviderError::Invalid("no such callback listener".into()))?;
         let others: Vec<String> = serde_json::from_value(arguments["others"].clone()).unwrap_or_default();
         let others: Vec<&str> = others.iter().map(String::as_str).collect();
-        let answer = listener.next(&text(arguments, "state"), &others)?;
+        let key = arguments["key"].as_str().filter(|key| !key.is_empty()).unwrap_or("state");
+        let answer = listener.next_by(key, &text(arguments, "state"), &others)?;
         let shown = json!({ "answer": self.answers.len(), "path": answer.path(), "query": answer.query() });
         self.answers.push(Some(answer));
         Ok(shown)

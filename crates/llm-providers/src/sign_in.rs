@@ -26,6 +26,12 @@ pub trait Listener {
     fn redirect_uri(&self) -> String;
     fn port(&self) -> u16;
     fn next(&self, state: &str, others: &[&str]) -> Result<Box<dyn Answer>, ProviderError>;
+    fn next_by(&self, key: &str, state: &str, others: &[&str]) -> Result<Box<dyn Answer>, ProviderError> {
+        if key == "state" {
+            return self.next(state, others);
+        }
+        Err(ProviderError::Invalid(format!("this sign-in cannot tell its callback by `{key}`")))
+    }
 }
 
 pub trait Answer {

@@ -47,7 +47,7 @@ impl ProviderClient {
         let transport =
             Arc::new(Transport { provider, http, keys, turns: Default::default(), cached: Mutex::new(None), model });
         let wire = provider.wire(transport.model.as_ref());
-        let api = super::wires::open(wire, transport.clone(), transport.model.as_ref()).ok_or_else(|| {
+        let api = super::wires::open(wire, transport.clone(), transport.model.as_ref(), provider).ok_or_else(|| {
             ModelError::Provider(format!("{} speaks {wire}, which this build does not have", provider.name()))
         })?;
         Ok(Ready { transport, api })

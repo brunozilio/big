@@ -3,6 +3,7 @@ pub mod cloud_code;
 pub mod event_stream;
 pub mod messages;
 pub mod responses;
+pub mod socket;
 
 use std::sync::Arc;
 
@@ -21,7 +22,15 @@ const ALL: &[(&str, Open)] = &[
     (cloud_code::NAME, cloud_code::open),
 ];
 
-pub fn open(name: &str, http: Arc<dyn Http>, model: Option<&ModelOption>) -> Option<Arc<dyn ModelApi>> {
+pub fn open(
+    name: &str,
+    http: Arc<dyn Http>,
+    model: Option<&ModelOption>,
+    provider: &'static dyn crate::Provider,
+) -> Option<Arc<dyn ModelApi>> {
+    if name == socket::NAME {
+        return Some(socket::open(http, provider));
+    }
     ALL.iter().find(|(known, _)| *known == name).map(|(_, open)| open(http, model))
 }
 

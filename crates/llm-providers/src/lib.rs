@@ -119,6 +119,14 @@ pub trait Provider: Sync {
         false
     }
 
+    fn framing(&self) -> &'static str {
+        "ndjson"
+    }
+
+    fn frame(&self, _state: &Value, _frame: &Value) -> Result<Value, ProviderError> {
+        Err(ProviderError::Invalid(format!("{} does not read stream frames", self.name())))
+    }
+
     fn finish(&self, models: Vec<ModelOption>) -> Vec<ModelOption> {
         models
     }

@@ -123,6 +123,9 @@ impl Listener for Loopback {
     fn next(&self, state: &str, others: &[&str]) -> Result<Box<dyn Answer>, ProviderError> {
         Ok(Box::new(Loopback::next(self, state, others).map_err(ProviderError::Unauthorized)?))
     }
+    fn next_by(&self, key: &str, state: &str, others: &[&str]) -> Result<Box<dyn Answer>, ProviderError> {
+        Ok(Box::new(Loopback::next_by(self, key, state, others).map_err(ProviderError::Unauthorized)?))
+    }
 }
 
 impl Answer for Pending {

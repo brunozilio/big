@@ -9,6 +9,7 @@ mod grok_client;
 mod kiro;
 mod kiro_client;
 mod kiro_sign_in;
+mod quick;
 mod llamacpp;
 mod smoke;
 

@@ -181,6 +181,9 @@ impl Listener for ScriptedListener {
     fn port(&self) -> u16 {
         self.port
     }
+    fn next_by(&self, _key: &str, state: &str, others: &[&str]) -> Result<Box<dyn Answer>, crate::ProviderError> {
+        self.next(state, others)
+    }
     fn next(&self, _state: &str, _others: &[&str]) -> Result<Box<dyn Answer>, crate::ProviderError> {
         let (path, query) = self
             .visits

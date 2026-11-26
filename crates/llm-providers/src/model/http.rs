@@ -207,6 +207,9 @@ impl Http for NetHttp {
         body: &'a str,
         cancel: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<Response, ModelError>> {
+        if super::socket::is_socket(url) {
+            return Box::pin(super::socket::exchange(url, headers, body, cancel));
+        }
         Box::pin(cancellable_http::fetch(
             Ask { idle: Some(stream_idle()), ..Ask::new(url, headers, Some(body)) },
             cancel,

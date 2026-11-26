@@ -58,6 +58,8 @@ struct Declared {
     #[serde(default)]
     path: String,
     #[serde(default)]
+    framing: String,
+    #[serde(default)]
     small_model: Option<String>,
     #[serde(default)]
     serves_all: bool,
@@ -78,6 +80,7 @@ pub struct ScriptedProvider {
     window: u64,
     wire: &'static str,
     path: &'static str,
+    framing: &'static str,
     small: Option<&'static str>,
     serves_all: bool,
 }
@@ -147,6 +150,7 @@ impl ScriptedProvider {
             window: declared.window,
             wire: intern(&declared.wire),
             path: intern(&declared.path),
+            framing: intern(&declared.framing),
             small: declared.small_model.as_deref().map(intern),
             serves_all: declared.serves_all,
         })
@@ -332,6 +336,15 @@ impl Provider for ScriptedProvider {
     }
     fn retries_after_refresh(&self, status: u16) -> bool {
         self.quiet("retriesAfterRefresh", json!({ "status": status }))
+    }
+    fn framing(&self) -> &'static str {
+        if self.framing.is_empty() { "ndjson" } else { self.framing }
+    }
+    fn frame(&self, state: &Value, frame: &Value) -> Result<Value, ProviderError> {
+        if !self.offers("frame") {
+            return Err(ProviderError::Invalid(format!("{} does not read stream frames", self.name)));
+        }
+        self.invoke("frame", json!({ "state": state, "frame": frame }))
     }
     fn finish(&self, models: Vec<ModelOption>) -> Vec<ModelOption> {
         if !self.offers("finish") {

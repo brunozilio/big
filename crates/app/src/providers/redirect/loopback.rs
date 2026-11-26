@@ -111,7 +111,7 @@ impl Loopback {
 
     #[cfg(test)]
     fn wait_query(&self, state: &str, timeout: Duration) -> Result<(String, String), String> {
-        let pending = self.next_within(state, &[], timeout)?;
+        let pending = self.next_within("state", state, &[], timeout)?;
         let query = pending.query.clone();
         let result = pending.code();
         pending.finish(result.as_ref().map(|_| ()));
@@ -119,10 +119,14 @@ impl Loopback {
     }
 
     pub fn next(&self, state: &str, others: &[&str]) -> Result<Pending, String> {
-        self.next_within(state, others, SIGN_IN_TIMEOUT)
+        self.next_within("state", state, others, SIGN_IN_TIMEOUT)
     }
 
-    fn next_within(&self, state: &str, others: &[&str], timeout: Duration) -> Result<Pending, String> {
+    pub fn next_by(&self, key: &str, state: &str, others: &[&str]) -> Result<Pending, String> {
+        self.next_within(key, state, others, SIGN_IN_TIMEOUT)
+    }
+
+    fn next_within(&self, key: &str, state: &str, others: &[&str], timeout: Duration) -> Result<Pending, String> {
         let deadline = Instant::now() + timeout;
         loop {
             let left = deadline.saturating_duration_since(Instant::now());
@@ -143,7 +147,7 @@ impl Loopback {
                 let _ = request.answer.send(page(screen(false, "Wrong address", message), StatusCode::NOT_FOUND));
                 continue;
             }
-            if state_of(query).as_deref() != Some(state) {
+            if param_of(query, key).as_deref() != Some(state) {
                 let message = concat!("This is not the sign-in ", brand::name!(), " is waiting for.");
                 let _ = request.answer.send(page(screen(false, "Not this sign-in", message), StatusCode::BAD_REQUEST));
                 continue;
@@ -242,8 +246,11 @@ impl Drop for Pending {
     }
 }
 
-fn state_of(query: &str) -> Option<String> {
-    query.split('&').find_map(|pair| pair.strip_prefix("state=")).map(super::decode)
+fn param_of(query: &str, key: &str) -> Option<String> {
+    query
+        .split('&')
+        .find_map(|pair| pair.split_once('=').filter(|(name, _)| *name == key).map(|(_, value)| value))
+        .map(super::decode)
 }
 
 fn page(body: String, status: StatusCode) -> Response {
@@ -290,6 +297,20 @@ mod tests {
     }
 
     #[test]
+    fn a_callback_can_be_told_by_another_query_parameter() {
+        let loopback = Loopback::bind().expect("bind");
+        let uri = format!("{}?account=1&nonce=n%3D", loopback.redirect_uri());
+        let hit = std::thread::spawn(move || {
+            let client = reqwest::blocking::Client::builder().no_proxy().build().expect("client");
+            client.get(uri).send().map(|response| response.status().as_u16()).expect("page")
+        });
+        let pending = loopback.next_within("nonce", "n=", &[], SIGN_IN_TIMEOUT).expect("callback");
+        assert_eq!(pending.query, "account=1&nonce=n%3D");
+        pending.finish(Ok(()));
+        assert_eq!(hit.join().expect("join"), 200);
+    }
+
+    #[test]
     fn the_page_names_the_account_that_signed_in() {
         let loopback = Loopback::bind().expect("bind");
         let uri = format!("{}?code=c&state=s", loopback.redirect_uri());
@@ -297,7 +318,7 @@ mod tests {
             let client = reqwest::blocking::Client::builder().no_proxy().build().expect("client");
             client.get(uri).send().and_then(reqwest::blocking::Response::text).expect("page")
         });
-        let pending = loopback.next_within("s", &[], SIGN_IN_TIMEOUT).expect("callback");
+        let pending = loopback.next_within("state", "s", &[], SIGN_IN_TIMEOUT).expect("callback");
         pending.signed_in(Some("dev@example.com"));
         let page = hit.join().expect("join");
         assert!(page.contains("As dev@example.com. Return to"), "{page}");
@@ -317,7 +338,7 @@ mod tests {
             let answer = client.get(uri).send().expect("answer");
             (answer.status().as_u16(), answer.headers().get("location").cloned())
         });
-        loopback.next_within("s", &[], SIGN_IN_TIMEOUT).expect("callback").signed_in(Some("dev@example.com"));
+        loopback.next_within("state", "s", &[], SIGN_IN_TIMEOUT).expect("callback").signed_in(Some("dev@example.com"));
         let (status, location) = hit.join().expect("join");
         assert_eq!(status, 302);
         assert_eq!(location.expect("location"), "http://127.0.0.1:7999/settings/connections");
@@ -336,7 +357,7 @@ mod tests {
             let answer = client.get(uri).send().expect("answer");
             (answer.status().as_u16(), answer.headers().get("location").cloned())
         });
-        loopback.next_within("s", &[], SIGN_IN_TIMEOUT).expect("callback").redirect("https://example.com/next");
+        loopback.next_within("state", "s", &[], SIGN_IN_TIMEOUT).expect("callback").redirect("https://example.com/next");
         let (status, location) = hit.join().expect("join");
         assert_eq!(status, 302);
         assert_eq!(location.as_ref().and_then(|value| value.to_str().ok()), Some("https://example.com/next"));
@@ -348,7 +369,7 @@ mod tests {
         let port = loopback.port();
         let uri = format!("{}?code=c&state=s", loopback.redirect_uri());
         let hit = std::thread::spawn(move || status(uri));
-        let arrived = loopback.next_within("s", &[], SIGN_IN_TIMEOUT).expect("callback");
+        let arrived = loopback.next_within("state", "s", &[], SIGN_IN_TIMEOUT).expect("callback");
         drop(arrived);
         drop(loopback);
         assert_eq!(hit.join().expect("join"), Ok(200));
@@ -360,7 +381,7 @@ mod tests {
         let stop = Arc::new(AtomicBool::new(false));
         let loopback = Loopback::bind().expect("bind").stopped_by(Arc::clone(&stop));
         let port = loopback.port();
-        let waiting = std::thread::spawn(move || loopback.next_within("s", &[], Duration::from_secs(30)).map(|_| ()));
+        let waiting = std::thread::spawn(move || loopback.next_within("state", "s", &[], Duration::from_secs(30)).map(|_| ()));
         std::thread::sleep(Duration::from_millis(50));
         let asked = Instant::now();
         stop.store(true, Ordering::SeqCst);

@@ -28,6 +28,8 @@ base64.workspace = true
 jiff.workspace = true
 url.workspace = true
 sha2.workspace = true
+futures-util.workspace = true
+tokio-tungstenite = { workspace = true, features = ["rustls-tls-native-roots"] }
 
 [dev-dependencies]
 crossbeam-channel.workspace = true

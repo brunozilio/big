@@ -13,6 +13,7 @@ pub mod script_http;
 pub mod scripted;
 #[cfg(any(test, feature = "test-support"))]
 mod scripted_http;
+pub mod socket;
 pub mod sse;
 pub(crate) mod sse_read;
 pub mod web_client;
