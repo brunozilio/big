@@ -18,7 +18,7 @@ import { Icon } from '@/ui/icon'
 import { springPop } from '@/ui/motion'
 import { Dialog, Menu, MenuContent, MenuItem, MenuTrigger } from '@/ui/overlay'
 import { UsageCard } from './UsageCard'
-import { archiveToggle, ChangeChip, IssueKey, Node, nodeState, Origins, RowRight, stateLabel } from './parts'
+import { archiveToggle, ChangeChip, IssueKey, Node, nodeState, RowRight, stateLabel } from './parts'
 
 export function followed(before: string | null, now: string | null, viewing: string | null): string | null {
   return before && now && now !== before && viewing === before ? now : null
@@ -51,7 +51,6 @@ export function ItemModal({ it, step, onStep, onClose, onConnect }: { it: Item |
             <ItemMenu it={it} step={step ?? it.current} onClose={onClose} />
             <IconButton tooltip={t('items.close')} onClick={onClose}><Icon name="close" size={18} /></IconButton>
           </div>
-          <Origins it={it} />
           <ItemDetail it={it} step={step ?? it.current ?? it.steps[0]?.id ?? ''} onStep={onStep} />
         </div>
       )}

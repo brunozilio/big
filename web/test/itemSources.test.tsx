@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test'
-import { cleanup, render, screen } from '@testing-library/react'
-import type { Application, Item } from '@/api/contract'
+import type { Application } from '@/api/contract'
 import { mockApi } from '@/api/mock'
 import { basesOf, defaultBranch, gitOf, linkedRepos, matchesPull, placesOf, pullSubject, sourcesOf } from '@/screens/items/NewItem'
-import { Origins } from '@/screens/items/parts'
 
 const app: Application = {
   id: 'a1', name: 'Loja', bindings: {},
@@ -34,7 +32,7 @@ describe('origens do item', () => {
     expect(sourcesOf(null, null)).toEqual([])
   })
 
-  test('o mock cria um item de pull request com base e mostra as origens', async () => {
+  test('o mock cria um item de pull request com base', async () => {
     const api = mockApi({ tickMs: 0, delayMs: 0 })
     const apps = await api.applications()
     const chosen = apps[0]
@@ -46,18 +44,6 @@ describe('origens do item', () => {
     })
     expect(it.sources.map((s) => [s.kind, s.key])).toEqual([['pull_request', 'acme/checkout#9']])
     expect(it.git).toEqual([{ repository: repo.id, name: repo.bindings?.code?.value ?? repo.directory, base: 'develop', head: null }])
-    render(<Origins it={it as Item} />)
-    expect(screen.getByLabelText('Pull request acme/checkout#9')).toBeTruthy()
-    expect(screen.getByText('develop')).toBeTruthy()
-    expect(screen.getByText('branch novo')).toBeTruthy()
-    cleanup()
-  })
-
-  test('só uma issue não repete a origem no cabeçalho', () => {
-    const it = { sources: [{ kind: 'issue', key: 'APP-1', connection: 'c', repository: null, provider: null, name: null, logo: null, url: null }], git: [] } as unknown as Item
-    const view = render(<Origins it={it} />)
-    expect(view.container.textContent).toBe('')
-    cleanup()
   })
 })
 

@@ -3,7 +3,7 @@ import { api } from '@/api'
 import { ago, mins, minutesSince } from '@/api/clock'
 import { useT, type T } from '@/i18n'
 import { spoken } from '@/i18n/server'
-import type { ChangeRef, ExternalRef, Item, ItemGit, ItemSource, ItemStep, StepState } from '@/api/contract'
+import type { ChangeRef, ExternalRef, Item, ItemSource, ItemStep, StepState } from '@/api/contract'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Badge, Spinner } from '@/ui/display'
@@ -220,30 +220,3 @@ export function SourceChip({ source }: { source: ItemSource }) {
   )
 }
 
-export function BranchLine({ git }: { git: ItemGit }) {
-  const t = useT()
-  const base = git.base ?? t('items.repositoryDefault')
-  const head = git.head ?? t('items.newBranch')
-  return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-sm text-fg2" aria-label={t('items.branchRoute', { name: git.name ?? '', base, head })}>
-      <Icon name="branch" size={13} className="shrink-0 text-muted" />
-      {git.name && <span className="truncate text-muted">{git.name}</span>}
-      <span className="truncate">{base}</span>
-      <Icon name="right" size={12} className="shrink-0 text-faint" />
-      <span className="truncate">{head}</span>
-    </span>
-  )
-}
-
-export function Origins({ it }: { it: Item }) {
-  const t = useT()
-  const sources = it.sources ?? []
-  const git = it.git ?? []
-  if (!sources.some((s) => s.kind !== 'issue') && git.length === 0) return null
-  return (
-    <div className="flex flex-wrap items-center gap-2 px-5 pb-3" aria-label={t('items.origins')}>
-      {sources.map((s) => <SourceChip key={`${s.kind}:${s.key}`} source={s} />)}
-      {git.map((g) => <BranchLine key={g.repository} git={g} />)}
-    </div>
-  )
-}
