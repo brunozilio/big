@@ -171,14 +171,15 @@ describe('conta e papel na nuvem', () => {
     const cloud = await view.findByTestId('binding-cloud')
     expect(within(cloud).getByText('AWS')).toBeTruthy()
     fireEvent.click(within(cloud).getByRole('button', { name: 'Adicionar Ambiente' }))
-    await waitFor(() => expect(asked).toContain('c-aws cloud.options environment'))
-    await waitFor(() => expect(asked).toContain('c-aws cloud.options account'))
-    const pick = async (name: string, option: string) => {
+    const pick = async (name: string, typed: string, option: string) => {
       fireEvent.keyDown(await within(cloud).findByRole('combobox', { name }), { key: 'Enter' })
+      fireEvent.change(await view.findByRole('textbox', { name: `${name}…` }), { target: { value: typed } })
       fireEvent.keyDown(await view.findByRole('option', { name: option }), { key: 'Enter' })
     }
-    await pick('Ambiente', 'Produção')
-    await pick('Conta e papel', 'acme-prod · Deploy')
+    await pick('Ambiente', 'prod', 'Produção')
+    expect(asked).toContain('c-aws cloud.options environment')
+    await pick('Conta e papel', 'deploy', 'acme-prod · Deploy')
+    expect(asked).toContain('c-aws cloud.options account')
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(getState().applications?.[0]?.bindings?.cloud).toEqual({
       connection: 'c-aws',

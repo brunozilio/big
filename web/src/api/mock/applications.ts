@@ -71,7 +71,7 @@ export function initialApplications(): Application[] {
       name: 'Checkout',
       bindings: { tracker: { connection: 'c-jira', value: 'APP', label: 'App · APP' } },
       repositories: [
-        { id: 'r-checkout', bindings: { code: { connection: 'c-github', value: 'acme/checkout', label: 'acme/checkout' }, security: { connection: 'c-veracode', value: 'a1b2c3d4-0000-4000-8000-000000000001', label: 'Checkout · a1b2c3d4' }, quality: { connection: 'c-sonar', value: 'acme_checkout', label: 'Checkout · acme_checkout' } }, directory: `${MOCK_HOME}/projetos/checkout`, run: ['bun dev'], verify: ['bun test', 'bun run lint'], e2e: ['npx cypress run'], e2eDirectory: 'e2e' },
+        { id: 'r-checkout', bindings: { code: { connection: 'c-github', value: 'acme/checkout', label: 'acme/checkout' }, security: { connection: 'c-veracode', value: 'a1b2c3d4-0000-4000-8000-000000000001', label: 'Checkout · a1b2c3d4' }, quality: { connection: 'c-sonar', value: 'acme_checkout', label: 'acme_checkout' } }, directory: `${MOCK_HOME}/projetos/checkout`, run: ['bun dev'], verify: ['bun test', 'bun run lint'], e2e: ['npx cypress run'], e2eDirectory: 'e2e' },
         { id: 'r-infra', bindings: { code: { connection: 'c-github', value: 'acme/infra', label: 'acme/infra' } }, directory: `${MOCK_HOME}/projetos/infra`, run: [], verify: ['terraform validate'] },
       ],
       env: { CYPRESS_BASE_URL: 'http://localhost:3000' },

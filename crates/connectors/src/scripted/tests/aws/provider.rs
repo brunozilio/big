@@ -175,6 +175,10 @@ async fn the_application_binds_an_account_and_role_to_each_environment() {
     let ids: Vec<&str> = listed.as_array().into_iter().flatten().filter_map(|env| env["value"].as_str()).collect();
     assert!(ids.contains(&"develop") && ids.contains(&"prod"), "{listed}");
     assert!(http.sent().is_empty(), "the environments come from the content, not from AWS");
+    let typed = checked(&http, &creds(), "cloud.options", &json!({ "field": "environment", "query": "PRO" })).await;
+    let Ok(typed) = typed else { panic!("{typed:?}") };
+    let ids: Vec<&str> = typed.as_array().into_iter().flatten().filter_map(|env| env["value"].as_str()).collect();
+    assert!(ids.contains(&"prod") && !ids.contains(&"develop"), "{typed}");
     let profiles = json!([
         { "environment": { "value": "develop", "label": "Develop" }, "account": { "value": "111/Dev" } },
         { "environment": { "value": "prod", "label": "Produção" }, "account": { "value": "222/Deploy" } },

@@ -69,7 +69,7 @@ function optionsOf(capability: string, query: string, field = ''): BindingOption
     if (capability === 'code') return CODE_REPOS.map((r) => ({ value: r.ref, label: r.ref }))
     if (capability === 'cloud') return field === 'environment' ? ENVIRONMENTS : cloudOptions()
     if (capability === 'security') return SCANNED
-    if (capability === 'quality') return [{ value: 'acme_checkout', label: 'Checkout · acme_checkout' }, { value: 'acme_infra', label: 'Infra · acme_infra' }]
+    if (capability === 'quality') return [{ value: 'acme_checkout', label: 'acme_checkout' }, { value: 'acme_infra', label: 'acme_infra' }]
     return trackerProjects('').map((p) => ({ value: p.key, label: p.name && p.name !== p.key ? `${p.name} · ${p.key}` : p.key }))
   })()
   return found.filter((o) => o.label.toLowerCase().includes(wanted) || o.value.toLowerCase().includes(wanted))

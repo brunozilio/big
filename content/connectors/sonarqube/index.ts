@@ -185,13 +185,15 @@ function projects(api: Api, wanted: string) {
   const found: { value: string; label: string }[] = [];
   for (let page = 1; page <= MOST_PAGES; page++) {
     const pairs: [string, string][] = [["qualifiers", "TRK"], ["ps", PAGE], ["p", String(page)]];
-    if (wanted !== "") pairs.push(["q", wanted]);
+    if (wanted.length >= 2) pairs.push(["q", wanted]);
     if (api.organization) pairs.push(["organization", api.organization]);
     const answered = get(api, "/api/components/search", pairs);
     const listed = listIn(answered?.components);
     for (const component of listed) {
       const key = textOf(component, ["key"]);
-      if (key !== "" && !found.some((known) => known.value === key)) found.push({ value: key, label: key });
+      const name = textOf(component, ["name"]);
+      const hit = wanted === "" || `${key} ${name}`.toLowerCase().includes(wanted.toLowerCase());
+      if (key !== "" && hit && !found.some((known) => known.value === key)) found.push({ value: key, label: key });
     }
     const total = Number(answered?.paging?.total);
     if (listed.length === 0 || (Number.isFinite(total) ? page * Number(PAGE) >= total : listed.length < Number(PAGE))) break;

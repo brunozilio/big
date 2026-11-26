@@ -167,11 +167,15 @@ function identity(ctx, creds: Creds, args: Record<string, unknown>) {
   };
 }
 
+export function matching(args: Record<string, unknown>, listed: { value: string; label: string }[]) {
+  const wanted = (optionalText(args, "query") ?? "").trim().toLowerCase();
+  return wanted === "" ? listed : listed.filter((option) => `${option.value} ${option.label}`.toLowerCase().includes(wanted));
+}
+
 export function call({ action, args, creds }: { action: string; args: Record<string, unknown>; creds: Creds }, ctx) {
   if (action === "cloud.accounts_and_roles") return accountsAndRoles(ctx, creds);
   if (action === "cloud.identity") return identity(ctx, creds, args ?? {});
-  if (action === "cloud.options" && args?.field === ENVIRONMENT) return environmentOptions();
-  if (action === "cloud.options") return cloudOptions(accountsAndRoles(ctx, creds).accounts);
+  if (action === "cloud.options") return matching(args ?? {}, args?.field === ENVIRONMENT ? environmentOptions() : cloudOptions(accountsAndRoles(ctx, creds).accounts));
   return unknownAction(action);
 }
 
