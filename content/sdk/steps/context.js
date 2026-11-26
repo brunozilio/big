@@ -351,3 +351,47 @@ export function boundPullRequests(ctx, opts, capability) {
     return [defined({ ...entry, repository: repository.id, name: entry.name ?? repository.name, bound, number: number ? String(number) : undefined, commit })];
   });
 }
+
+export function trackerOptions(ctx, opts) {
+  const connection = opts.trackerConnection ?? ctx.item.connection ?? sourcesOf(ctx, "issue")[0]?.connection ?? undefined;
+  return { ...effects({ ...opts, connection }), ...(connection ? {} : { optional: true }) };
+}
+
+function listed(value) {
+  return Array.isArray(value) ? value.map(object) : [];
+}
+
+function subtaskLines(found) {
+  return listed(found.subtasks).map((task) => `- ${task.ref ?? ""} ${task.title ?? ""}${task.status ? ` (${task.status})` : ""}`.trim());
+}
+
+function commentLines(found) {
+  return listed(found.comments)
+    .filter((comment) => String(comment.body ?? "").trim())
+    .map((comment) => `**${object(comment.author).name ?? ""}**${comment.at ? ` · ${comment.at}` : ""}\n${String(comment.body).trim()}`);
+}
+
+export function issueBrief(found) {
+  const issue = object(found);
+  if (!issue.ref && !issue.title) return "";
+  const facts = [
+    issue.type ? `Type: ${issue.type}` : "",
+    issue.status ? `Status: ${issue.status}` : "",
+    issue.parent ? `Parent: ${issue.parent}` : "",
+    Array.isArray(issue.labels) && issue.labels.length > 0 ? `Labels: ${issue.labels.join(", ")}` : "",
+    issue.url ? `Link: ${issue.url}` : "",
+  ].filter(Boolean);
+  const parts = [`## Issue ${issue.ref ?? ""}: ${issue.title ?? ""}`.trim(), facts.join("\n")];
+  if (String(issue.description ?? "").trim()) parts.push(`### Description\n\n${String(issue.description).trim()}`);
+  const subtasks = subtaskLines(issue);
+  if (subtasks.length > 0) parts.push(`### Subtasks\n\n${subtasks.join("\n")}`);
+  const comments = commentLines(issue);
+  if (comments.length > 0) parts.push(`### Comments\n\n${comments.join("\n\n")}`);
+  return parts.filter(Boolean).join("\n\n");
+}
+
+export async function readIssue(ctx, opts, issue) {
+  if (!issue) return null;
+  const found = await attempt(() => ctx.call("tracker", "issue", { issue: String(issue) }, trackerOptions(ctx, opts)));
+  return found && typeof found === "object" ? found : null;
+}

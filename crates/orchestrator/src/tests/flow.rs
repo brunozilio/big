@@ -328,3 +328,35 @@ async fn a_running_step_shows_its_connector_calls_done_and_in_progress() {
     assert_eq!(calls[0]["tag"], "tracker");
     assert!(calls[0]["output"].is_string() && calls[1].get("output").is_none(), "{calls:?}");
 }
+
+const PLANNED: &str = r#"
+import { workflow } from "sdk";
+import { plan } from "sdk/steps";
+export default workflow({ name: "planned", steps: [plan()] });
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn planning_reads_the_issue_from_the_tracker_and_hands_it_to_the_agent() {
+    let world = World::new();
+    world.workflow("planned", PLANNED);
+    let issue = json!({ "ref": "FIRP-2532", "title": "Exportar extrato", "status": "A fazer", "url": "https://t/FIRP-2532",
+        "type": "História", "description": "Como cliente quero exportar o extrato.\n\nCritérios: CSV e PDF.",
+        "subtasks": [{ "ref": "FIRP-2533", "title": "Backend", "status": "A fazer" }],
+        "comments": [{ "author": { "name": "Ana" }, "body": "Só o mês corrente.", "at": "2026-11-20" }] });
+    world.provider.always("tracker.issue", issue);
+    let kernel = world.start().await;
+    let id = kernel.create_item("planned", json!({ "title": "FIRP-2532", "issue": "FIRP-2532" })).expect("item");
+    for _ in 0..100 {
+        if !world.engine.requests().is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let text = world.engine.requests().first().map(|request| request.prompt.text.clone()).unwrap_or_default();
+    for expected in ["Issue FIRP-2532: Exportar extrato", "Critérios: CSV e PDF.", "FIRP-2533 Backend", "Só o mês corrente.", "already read for you"] {
+        assert!(text.contains(expected), "{expected} missing in {text}");
+    }
+    let asked = world.provider.calls.lock().expect("lock").iter().any(|(action, args, _)| action == "tracker.issue" && args["issue"] == "FIRP-2532");
+    assert!(asked, "the plan step reads the issue");
+    drop(id);
+}

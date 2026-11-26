@@ -1,5 +1,5 @@
 import { step, chat, markdown, transitionArgs } from "sdk";
-import { agentOptions, attempt, branchOf, codeOptions, defined, effects, feedbackText, inLanguage, issueOf, object, planOf, pullRequestsOf, source, summaryLine } from "./context.js";
+import { agentOptions, attempt, branchOf, codeOptions, defined, effects, feedbackText, inLanguage, issueOf, object, planOf, pullRequestsOf, source, summaryLine, trackerOptions } from "./context.js";
 
 const IDLE = "Nothing to fix: the pull request has no pending review comments or reported failures.";
 
@@ -58,11 +58,6 @@ function stalled(result) {
   const trees = Array.isArray(result.repositories) && result.repositories.length > 0 ? result.repositories : [result];
   const known = trees.filter((tree) => tree && typeof tree === "object" && tree.commit);
   return known.length > 0 && known.every((tree) => tree.commit === tree.base);
-}
-
-function trackerOptions(ctx, opts) {
-  const connection = opts.trackerConnection ?? ctx.item.connection ?? undefined;
-  return { ...effects({ ...opts, connection }), ...(connection ? {} : { optional: true }) };
 }
 
 function detailsOf(plan, title) {
