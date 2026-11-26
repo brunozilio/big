@@ -5,17 +5,15 @@ import { commentOf } from "./tracker.ts";
 
 const PAGES = 10;
 const DETAIL = ["summary", "status", "issuetype", "parent", "created", "updated", "comment"];
-const MARGIN_MS = 15 * 60 * 60 * 1000;
+const MARGIN_MINUTES = 5;
+const MINUTE_MS = 60 * 1000;
 
 type Event = { id: string; capability: string; kind: string; subject: string; scope: string; data: unknown; at: string; ms: number };
 
-const pad = (value: number) => String(value).padStart(2, "0");
-
-export function eventsJql(projects: string[], since: number): string {
-  const from = new Date(since - MARGIN_MS);
-  const day = `${from.getUTCFullYear()}-${pad(from.getUTCMonth() + 1)}-${pad(from.getUTCDate())} ${pad(from.getUTCHours())}:${pad(from.getUTCMinutes())}`;
+export function eventsJql(projects: string[], since: number, now: number): string {
+  const minutes = Math.max(0, Math.ceil((now - since) / MINUTE_MS)) + MARGIN_MINUTES;
   const keys = projects.map((project) => `"${jqlKey(project)}"`).join(", ");
-  return `project in (${keys}) AND updated >= "${day}" ORDER BY updated ASC`;
+  return `project in (${keys}) AND updated >= "-${minutes}m" ORDER BY updated ASC`;
 }
 
 export function spaceOf(key: string): string {
@@ -90,6 +88,11 @@ function latest(issues: any[], since: number): number {
   return issues.map((issue) => timestampOf(textAt(issue, "/fields/updated"))).reduce<number>((newest, at) => (at !== undefined && at > newest ? at : newest), since);
 }
 
+function changed(issue, since: number): boolean {
+  const at = timestampOf(textAt(issue, "/fields/updated"));
+  return at === undefined || at > since;
+}
+
 function detail(api: Api, key: string) {
   return tool(api, "getJiraIssue", { issueIdOrKey: key, fields: DETAIL, expand: "changelog", view: "full", responseContentFormat: "markdown" });
 }
@@ -99,14 +102,14 @@ export function poll({ creds, cursor, watch }: { creds: Creds; cursor: string | 
   if (since === undefined) return { events: [], cursor: timestampText(Date.now()) };
   const projects = watchedOf(creds, watch);
   const api = apiOf(ctx, creds);
-  const jql = eventsJql(projects, since);
+  const jql = eventsJql(projects, since, Date.now());
   const collector = new Collector(since);
   let newest = since;
   let token: string | undefined;
   for (let page = 0; page < PAGES; page++) {
     const found = search(api, jql, ["updated"], token);
     const issues = items(found, "issues");
-    for (const issue of issues) collector.issue(detail(api, textAt(issue, "/key")));
+    for (const issue of issues.filter((issue) => changed(issue, since))) collector.issue(detail(api, textAt(issue, "/key")));
     newest = latest(issues, newest);
     token = isObject(found) && typeof found.nextPageToken === "string" && found.isLast !== true ? found.nextPageToken : undefined;
     if (token === undefined) break;

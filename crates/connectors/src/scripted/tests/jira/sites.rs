@@ -42,7 +42,7 @@ async fn the_first_poll_starts_the_cursor_and_later_polls_read_changes_since_it(
     assert_eq!(batch.events[1].at.to_string(), "2024-01-02T10:00:00Z");
     assert_eq!(batch.cursor, "2024-01-02T10:00:00Z");
     let calls = tool_calls(&http);
-    assert_eq!(calls[0].1["jql"], "project in (\"BIG\") AND updated >= \"2024-01-01 09:00\" ORDER BY updated ASC");
+    assert_window(&calls[0].1["jql"], "project in (\"BIG\")", "2024-01-02T00:00:00Z");
     assert_eq!(calls[1].1["expand"], "changelog");
     assert!(batch.events.iter().all(|event| event.scope == "BIG"));
 }
@@ -63,7 +63,38 @@ async fn the_poll_watches_every_space_bound_to_the_connection_and_marks_each_eve
     assert_eq!(batch.events[0].data["type"], "Bug", "a workflow can be triggered by the issue type");
     assert_eq!(batch.events[0].data["parent"], "OPS-1");
     let calls = tool_calls(&http);
-    assert_eq!(calls[0].1["jql"], "project in (\"WEB\", \"OPS\") AND updated >= \"2024-01-01 09:00\" ORDER BY updated ASC");
+    assert_window(&calls[0].1["jql"], "project in (\"WEB\", \"OPS\")", "2024-01-02T00:00:00Z");
+}
+
+fn assert_window(jql: &Value, projects: &str, since: &str) {
+    let jql = jql.as_str().unwrap_or_default();
+    let minutes = jql
+        .strip_prefix(&format!("{projects} AND updated >= \"-"))
+        .and_then(|rest| rest.strip_suffix("m\" ORDER BY updated ASC"))
+        .and_then(|minutes| minutes.parse::<i64>().ok());
+    let since: jiff::Timestamp = since.parse().unwrap_or_else(|error| panic!("{error}"));
+    let elapsed = jiff::Timestamp::now().as_second().saturating_sub(since.as_second()) / 60;
+    assert!(
+        minutes.is_some_and(|minutes| minutes > elapsed && minutes <= elapsed + 7),
+        "the window is relative to now, covers the cursor and keeps only a few minutes of margin: {jql}"
+    );
+}
+
+#[tokio::test]
+async fn an_issue_not_updated_since_the_cursor_is_not_read_again() {
+    let page = json!({ "isLast": true, "issues": [
+        {"key": "BIG-1", "fields": {"updated": "2024-01-01T23:00:00.000+0000"}},
+        {"key": "BIG-2", "fields": {"updated": "2024-01-02T00:00:00.000+0000"}}
+    ]});
+    let provider = jira();
+    let source = provider.events().unwrap_or_else(|| panic!("no events"));
+    let http = session(&[page]);
+    let batch = source.poll(&http, &creds(), Some("2024-01-02T00:00:00Z"), &[]).await;
+    let Ok(batch) = batch else { panic!("{batch:?}") };
+    assert!(batch.events.is_empty());
+    assert_eq!(batch.cursor, "2024-01-02T00:00:00Z");
+    let calls = tool_calls(&http);
+    assert_eq!(calls.len(), 1, "only the search runs: {calls:?}");
 }
 
 #[tokio::test]
