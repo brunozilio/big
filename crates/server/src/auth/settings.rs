@@ -1,0 +1,131 @@
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mode {
+    Local,
+    Shared,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Method {
+    Email,
+    Passkey,
+    Sso,
+}
+
+impl Method {
+    pub fn key(self) -> &'static str {
+        match self {
+            Method::Email => "email",
+            Method::Passkey => "passkey",
+            Method::Sso => "sso",
+        }
+    }
+
+    fn named(name: &str) -> Option<Method> {
+        match name.trim() {
+            "email" => Some(Method::Email),
+            "passkey" => Some(Method::Passkey),
+            "sso" => Some(Method::Sso),
+            _ => None,
+        }
+    }
+}
+
+pub fn mode() -> Mode {
+    mode_of(brand::auth::MODE)
+}
+
+pub fn mode_of(text: &str) -> Mode {
+    if text.trim() == "shared" { Mode::Shared } else { Mode::Local }
+}
+
+pub fn methods() -> Vec<Method> {
+    methods_of(brand::auth::METHODS)
+}
+
+pub fn methods_of(text: &str) -> Vec<Method> {
+    let mut methods: Vec<Method> = text.split(',').filter_map(Method::named).collect();
+    methods.dedup();
+    methods
+}
+
+pub fn offers(method: Method) -> bool {
+    methods().contains(&method) && (method != Method::Sso || sso_ready())
+}
+
+pub fn sso_ready() -> bool {
+    !brand::auth::SSO_ISSUER.trim().is_empty() && !brand::auth::SSO_CLIENT_ID.trim().is_empty()
+}
+
+pub fn allowed_domains() -> Vec<String> {
+    domains_of(brand::auth::ALLOWED_DOMAINS)
+}
+
+pub fn domains_of(text: &str) -> Vec<String> {
+    text.split([',', ' ']).map(|domain| domain.trim().to_lowercase()).filter(|domain| !domain.is_empty()).collect()
+}
+
+fn number(text: &str, fallback: i64) -> i64 {
+    text.trim().parse().ok().filter(|value: &i64| *value > 0).unwrap_or(fallback)
+}
+
+pub fn session_seconds() -> i64 {
+    number(brand::auth::SESSION_HOURS, 336) * 3600
+}
+
+pub fn code_seconds() -> i64 {
+    number(brand::auth::CODE_MINUTES, 10) * 60
+}
+
+pub fn code_attempts() -> i64 {
+    number(brand::auth::CODE_ATTEMPTS, 5)
+}
+
+pub fn now() -> i64 {
+    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |elapsed| i64::try_from(elapsed.as_secs()).unwrap_or(0))
+}
+
+pub fn public_origin(port: u16) -> String {
+    origin_of(brand::server::PUBLIC_URL, port)
+}
+
+pub fn origin_of(configured: &str, port: u16) -> String {
+    let configured = configured.trim().trim_end_matches('/');
+    if configured.is_empty() { format!("http://127.0.0.1:{port}") } else { configured.to_owned() }
+}
+
+pub fn host_of(origin: &str) -> String {
+    let rest = origin.split_once("://").map_or(origin, |(_, rest)| rest);
+    let host = rest.split('/').next().unwrap_or(rest);
+    match host.rsplit_once(':') {
+        Some((name, port)) if port.chars().all(|c| c.is_ascii_digit()) && !name.ends_with(']') => name.to_owned(),
+        _ => host.to_owned(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_shared_turns_the_login_on() {
+        assert_eq!(mode_of("shared"), Mode::Shared);
+        assert_eq!(mode_of("local"), Mode::Local);
+        assert_eq!(mode_of("anything"), Mode::Local);
+    }
+
+    #[test]
+    fn methods_and_domains_are_lists() {
+        assert_eq!(methods_of("email, sso,nope,passkey"), vec![Method::Email, Method::Sso, Method::Passkey]);
+        assert_eq!(domains_of("Acme.com, b.io"), vec!["acme.com".to_owned(), "b.io".to_owned()]);
+    }
+
+    #[test]
+    fn the_public_origin_falls_back_to_the_loopback_port() {
+        assert_eq!(origin_of("", 7420), "http://127.0.0.1:7420");
+        assert_eq!(origin_of("https://app.acme.com/", 7420), "https://app.acme.com");
+        assert_eq!(host_of("https://app.acme.com"), "app.acme.com");
+        assert_eq!(host_of("http://localhost:7420/x"), "localhost");
+    }
+}

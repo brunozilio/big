@@ -8,6 +8,7 @@ pub mod identity;
 pub mod knowledge;
 pub mod language;
 pub mod models;
+pub mod principal;
 pub mod run;
 pub mod safety;
 pub mod session;

@@ -30,6 +30,9 @@ jiff.workspace = true
 async-trait = "0.1"
 uuid.workspace = true
 tower-http = { version = "0.6", features = ["fs"] }
+reqwest.workspace = true
+url.workspace = true
+lettre = { version = "0.11", default-features = false, features = ["builder", "smtp-transport", "hostname", "tokio1", "tokio1-rustls", "ring", "rustls-native-certs"] }
 
 [dev-dependencies]
 agent-engine = { workspace = true, features = ["test-support"] }

@@ -5,6 +5,7 @@ mod connections;
 mod connector_memory;
 mod error;
 mod factory;
+mod identity;
 mod log;
 mod preferences;
 mod schema;
@@ -20,6 +21,7 @@ pub use applications::{Application, Binding, Bindings, Choice, Environment, Fiel
 pub use connections::ConnectionRecord;
 pub use error::Error;
 pub use factory::Generation;
+pub use identity::{CodeCheck, Passkey};
 
 pub type Result<T> = std::result::Result<T, Error>;
 

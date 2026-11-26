@@ -14,7 +14,7 @@ use crate::{applications, attachments, branding, cloud, connections, folders, it
 const MOST_BODY_BYTES: usize = 32 * 1024 * 1024;
 
 fn api() -> Router<Ctx> {
-    Router::new()
+    crate::auth::routes()
         .route("/api/items", get(items::list).post(items::create))
         .route("/api/items/{id}/rerun", post(items::rerun))
         .route("/api/items/{id}/cancel", post(items::cancel))
@@ -100,7 +100,8 @@ pub fn router(ctx: Ctx) -> Router {
         None if page::has_index(bundle) => api.fallback(move |uri: Uri| async move { page::serve(bundle, &uri) }),
         None => api.fallback(|| async { (StatusCode::SERVICE_UNAVAILABLE, Html(page::MISSING)).into_response() }),
     };
-    app.layer(axum::middleware::from_fn_with_state(ctx.clone(), crate::error::localized))
+    app.layer(axum::middleware::from_fn_with_state(ctx.clone(), crate::auth::gate))
+        .layer(axum::middleware::from_fn_with_state(ctx.clone(), crate::error::localized))
         .layer(DefaultBodyLimit::max(MOST_BODY_BYTES))
         .layer(axum::middleware::from_fn(crate::access::logged))
         .with_state(ctx)

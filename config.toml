@@ -197,9 +197,27 @@ install = true
 
 [server]
 port = 7420
+bind = "127.0.0.1"
+public_url = ""
 open_browser = true
 assets_dir = ""
 max_parallel_items = 4
+
+[auth]
+mode = "local"
+methods = "email,passkey,sso"
+local_email = ""
+allowed_domains = ""
+session_hours = "336"
+code_minutes = "10"
+code_attempts = "5"
+mail_from = ""
+smtp_url = ""
+sso_label = ""
+sso_issuer = ""
+sso_client_id = ""
+sso_client_secret = ""
+sso_scopes = "openid email profile"
 
 [editor]
 kind = "vscode"

@@ -94,6 +94,45 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (connection, name)
     ) WITHOUT ROWID;
 ",
+    "
+    CREATE TABLE users (
+        id TEXT PRIMARY KEY,
+        email TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        created INTEGER NOT NULL,
+        seen INTEGER NOT NULL
+    );
+    CREATE TABLE auth_sessions (
+        token TEXT PRIMARY KEY,
+        user TEXT NOT NULL,
+        created INTEGER NOT NULL,
+        expires INTEGER NOT NULL
+    );
+    CREATE INDEX auth_sessions_by_user ON auth_sessions (user);
+    CREATE TABLE auth_codes (
+        email TEXT PRIMARY KEY,
+        code TEXT NOT NULL,
+        expires INTEGER NOT NULL,
+        attempts INTEGER NOT NULL
+    );
+    CREATE TABLE auth_challenges (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        data TEXT NOT NULL,
+        expires INTEGER NOT NULL
+    );
+    CREATE TABLE passkeys (
+        id TEXT PRIMARY KEY,
+        user TEXT NOT NULL,
+        public_key BLOB NOT NULL,
+        algorithm INTEGER NOT NULL,
+        counter INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        created INTEGER NOT NULL,
+        used INTEGER
+    );
+    CREATE INDEX passkeys_by_user ON passkeys (user);
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
