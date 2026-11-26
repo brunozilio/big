@@ -4,6 +4,7 @@ import { design } from "sdk/connectors/contracts.ts";
 const MOST_TEXTS = 200;
 const MOST_LINES = 150;
 const DEEPEST = 5;
+const MOST_PICTURE = 5 * 1024 * 1024;
 const KINDS = new Set(["file", "design", "proto", "board", "slides", "buzz", "make"]);
 
 type Ctx = { config: { api_url: string; hosts?: string } } & Record<string, any>;
@@ -86,6 +87,19 @@ function rendered(api: Api, link: Link): string | null {
   return typeof image === "string" ? image : null;
 }
 
+function picture(api: Api, image: string | null) {
+  if (!image) return null;
+  let data = "";
+  try {
+    const answer = send(api.ctx, { method: "GET", url: image, binary: true });
+    data = answer.status === 200 ? (answer.base64 ?? "") : "";
+  } catch {
+    return null;
+  }
+  if (data === "" || data.length > (MOST_PICTURE * 4) / 3) return null;
+  return { media_type: "image/png", data };
+}
+
 export function frame(api: Api, url: string) {
   const link = linkOf(api.ctx, url);
   const whole = link.node ? get(api, `/v1/files/${link.file}/nodes?ids=${encodeURIComponent(link.node)}`) : get(api, `/v1/files/${link.file}?depth=3`);
@@ -94,6 +108,7 @@ export function frame(api: Api, url: string) {
   const lines: string[] = [];
   const texts: string[] = [];
   walk(root, 0, lines, texts);
+  const image = rendered(api, link);
   return {
     ref: link.node ? `${link.file}:${link.node}` : link.file,
     name: String(root.name ?? whole?.name ?? ""),
@@ -101,7 +116,8 @@ export function frame(api: Api, url: string) {
     url,
     texts,
     outline: lines.join("\n"),
-    image: rendered(api, link),
+    image,
+    picture: picture(api, image),
   };
 }
 

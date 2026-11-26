@@ -311,6 +311,7 @@ export function design(): Action[] {
       ["texts", "array"],
       ["outline", "string"],
       ["image", ["string", "null"]],
+      ["picture", ["object", "null"]],
     ],
   );
   return [read("design.frame", object([["url", "string"]]), frame)];

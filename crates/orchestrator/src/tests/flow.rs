@@ -329,6 +329,40 @@ async fn a_running_step_shows_its_connector_calls_done_and_in_progress() {
     assert!(calls[0]["output"].is_string() && calls[1].get("output").is_none(), "{calls:?}");
 }
 
+const PNG: &str = "iVBORw0KGgogcmVzdA==";
+
+const DELIVERED: &str = r#"
+import { workflow } from "sdk";
+import { plan, develop } from "sdk/steps";
+export default workflow({ name: "delivered", steps: [plan(), develop()] });
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_developer_sees_the_designs_the_plan_read() {
+    let world = World::new();
+    world.workflow("delivered", DELIVERED);
+    let link = "https://www.figma.com/design/AbC/App?node-id=1-2";
+    world.provider.always("tracker.issue", json!({ "ref": "FIRP-1", "title": "Tooltip", "description": format!("Tela: {link}") }));
+    let screen = json!({ "ref": "AbC:1:2", "name": "Cadastro", "file": "App", "url": link, "texts": ["Informe o CPF"],
+        "outline": "- Cadastro (frame)", "image": null, "picture": { "media_type": "image/png", "data": PNG } });
+    world.provider.always("design.frame", screen);
+    let kernel = world.start().await;
+    let id = kernel.create_item("delivered", json!({ "title": "FIRP-1", "issue": "FIRP-1" })).expect("item");
+    for _ in 0..200 {
+        if world.engine.requests().len() >= 2 {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    let requests = world.engine.requests();
+    let Some(developer) = requests.get(1) else { panic!("the developer never ran: {} requests", requests.len()) };
+    assert!(developer.prompt.text.contains("Implement the item"), "{}", developer.prompt.text);
+    assert!(developer.prompt.text.contains("## Design: Cadastro (App)"), "{}", developer.prompt.text);
+    assert!(developer.prompt.text.contains("- Informe o CPF"), "{}", developer.prompt.text);
+    assert_eq!(developer.prompt.images.len(), 1);
+    drop(id);
+}
+
 const PLANNED: &str = r#"
 import { workflow } from "sdk";
 import { plan } from "sdk/steps";
@@ -345,7 +379,8 @@ async fn planning_reads_the_issue_from_the_tracker_and_hands_it_to_the_agent() {
         "comments": [{ "author": { "name": "Ana" }, "body": "Só o mês corrente.", "at": "2026-11-20" }] });
     world.provider.always("tracker.issue", issue);
     let screen = json!({ "ref": "AbC:1:2", "name": "Extrato", "file": "App", "url": "https://www.figma.com/design/AbC/App?node-id=1-2",
-        "texts": ["Exportar extrato"], "outline": "- Extrato (frame)", "image": null });
+        "texts": ["Exportar extrato"], "outline": "- Extrato (frame)", "image": "https://img/1-2.png",
+        "picture": { "media_type": "image/png", "data": PNG } });
     world.provider.always("design.frame", screen);
     let kernel = world.start().await;
     let id = kernel.create_item("planned", json!({ "title": "FIRP-2532", "issue": "FIRP-2532" })).expect("item");
@@ -364,9 +399,12 @@ async fn planning_reads_the_issue_from_the_tracker_and_hands_it_to_the_agent() {
         "already read for you",
         "## Design: Extrato (App)",
         "- Exportar extrato",
+        "attached as images",
     ] {
         assert!(text.contains(expected), "{expected} missing in {text}");
     }
+    let images = world.engine.requests().first().map(|request| request.prompt.images.clone()).unwrap_or_default();
+    assert_eq!(images.iter().map(|image| image.media_type.as_str()).collect::<Vec<_>>(), ["image/png"]);
     let asked = world
         .provider
         .calls
@@ -380,4 +418,18 @@ async fn planning_reads_the_issue_from_the_tracker_and_hands_it_to_the_agent() {
     });
     assert!(designed, "the plan step reads the linked design");
     drop(id);
+}
+
+#[test]
+fn only_real_images_from_the_input_reach_the_agent() {
+    let input = json!({ "images": [
+        { "media_type": "image/png", "data": PNG },
+        { "media_type": "image/jpeg", "data": PNG },
+        { "media_type": "image/png", "data": "!!" },
+        { "media_type": "image/png" },
+        "solto"
+    ] });
+    let images = crate::agent::images_of(&input);
+    assert_eq!(images.len(), 1);
+    assert!(crate::agent::images_of(&json!({ "prompt": "x" })).is_empty());
 }

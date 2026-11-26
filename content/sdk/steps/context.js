@@ -168,6 +168,7 @@ export function planOf(ctx, opts) {
     story: found.story ?? "",
     subtasks: Array.isArray(found.subtasks) ? found.subtasks : [],
     infra: Array.isArray(found.infra) ? found.infra : [],
+    designs: Array.isArray(found.designs) ? found.designs.filter((link) => typeof link === "string") : [],
   };
 }
 
@@ -461,6 +462,26 @@ export async function readDesigns(ctx, opts, links) {
     if (found && typeof found === "object" && found.ref) read.push(found);
   }
   return read;
+}
+
+const MOST_PICTURES = 3;
+
+export const DESIGNED = "These designs are linked from the item and were read for you from the design tool. Use their texts and structure as the source of truth for the screens.";
+
+export const PICTURED = "The rendered screens are attached as images, in the same order.";
+
+export function picturesOf(frames) {
+  return frames
+    .map((frame) => object(frame.picture))
+    .filter((picture) => typeof picture.media_type === "string" && typeof picture.data === "string" && picture.data !== "")
+    .slice(0, MOST_PICTURES)
+    .map((picture) => ({ media_type: picture.media_type, data: picture.data }));
+}
+
+export function designNote(frames) {
+  const brief = designBrief(frames);
+  if (!brief) return "";
+  return [picturesOf(frames).length > 0 ? `${DESIGNED} ${PICTURED}` : DESIGNED, brief].join("\n\n");
 }
 
 export function designBrief(frames) {

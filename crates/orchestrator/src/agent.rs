@@ -151,6 +151,14 @@ fn prompt_of(input: &Value) -> String {
     }
 }
 
+pub(crate) fn images_of(input: &Value) -> Vec<domain::Image> {
+    let listed = input.get("images").and_then(Value::as_array).map(Vec::as_slice).unwrap_or_default();
+    listed
+        .iter()
+        .filter_map(|image| domain::Image::from_mcp(image["media_type"].as_str()?, image["data"].as_str()?).ok())
+        .collect()
+}
+
 fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, resume: Option<&str>) -> PromptRequest {
     let input = &command.args["input"];
     let wanted = command.args["model"].as_str().or(profile.model.as_deref());
@@ -158,6 +166,9 @@ fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, re
     let carried = input.get("session").and_then(Value::as_str);
     let text = if resume.is_some() { RESUME.to_owned() } else { prompt_of(input) };
     let mut request = PromptRequest::plain(cwd.to_path_buf(), text, option);
+    if resume.is_none() {
+        request.prompt.images = images_of(input);
+    }
     if let Some(effort) = command.args["effort"].as_str().and_then(domain::Effort::named) {
         request.session.effort = effort;
     }

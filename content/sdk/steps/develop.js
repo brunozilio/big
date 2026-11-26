@@ -1,5 +1,5 @@
 import { step, chat, markdown, transitionArgs } from "sdk";
-import { agentOptions, attempt, branchOf, codeOptions, defined, effects, feedbackText, inLanguage, issueOf, object, planOf, pullRequestsOf, source, summaryLine, trackerOptions } from "./context.js";
+import { agentOptions, attempt, branchOf, codeOptions, defined, designNote, effects, feedbackText, inLanguage, issueOf, object, picturesOf, planOf, pullRequestsOf, readDesigns, source, summaryLine, trackerOptions } from "./context.js";
 
 const IDLE = "Nothing to fix: the pull request has no pending review comments or reported failures.";
 
@@ -34,11 +34,13 @@ function shown(s) {
   return s.idle ? [markdown(s.idle)] : [];
 }
 
-function request(ctx, plan, issue, feedback) {
+function request(ctx, plan, issue, feedback, frames) {
   const item = ctx.item;
   const parts = [`Implement the item: ${plan.title || item.title || ""}`];
   if (issue) parts.push(`Issue: ${issue}`);
   if (plan.text) parts.push(`## Approved plan\n\n${plan.text}`);
+  const designs = designNote(frames);
+  if (designs) parts.push(designs);
   const back = feedbackText(feedback);
   if (back) parts.push(`## What needs fixing\n\n${back}`);
   return inLanguage(ctx, parts.join("\n\n"));
@@ -124,12 +126,16 @@ export default step({
     if (opts.feedbackOnly && !feedback) return ctx.skip({ idle: IDLE });
     const previous = object(ctx.output(ctx.step));
     const branch = opts.branch ?? previous.branch ?? branchOf(ctx, opts);
+    const links = previous.session || opts.prompt ? [] : plan.designs;
+    const frames = links.length > 0 ? await readDesigns(ctx, opts, links) : [];
+    const pictures = picturesOf(frames);
     const input = defined({
-      prompt: opts.prompt ?? request(ctx, plan, issue, feedback),
+      prompt: opts.prompt ?? request(ctx, plan, issue, feedback, frames),
       plan: plan.text,
       issue,
       feedback,
       session: previous.session,
+      images: pictures.length > 0 ? pictures : undefined,
     });
     const worktree = opts.worktree ?? branch ?? ctx.item.id;
     const agent = opts.agent ?? "developer";

@@ -39,7 +39,8 @@ async fn a_frame_link_brings_its_texts_structure_and_rendered_image() {
         "/v1/images/AbC123",
         200,
         r#"{"images":{"12:34":"https://img.test/12-34.png"}}"#,
-    );
+    )
+    .once(Method::Get, "/12-34.png", 200, "png");
     let found = frame(&http, "https://www.figma.com/design/AbC123/App?node-id=12-34&t=x").await;
     let Ok(found) = found else { panic!("{found:?}") };
     assert_eq!(found["ref"], "AbC123:12:34");
@@ -53,7 +54,9 @@ async fn a_frame_link_brings_its_texts_structure_and_rendered_image() {
     );
     assert!(!outline.contains("oculto"), "{outline}");
     assert_eq!(found["image"], "https://img.test/12-34.png");
+    assert_eq!(found["picture"], json!({ "media_type": "image/png", "data": "cG5n" }));
     let sent = http.sent();
+    assert!(!sent[2].headers.iter().any(|(name, _)| name == "x-figma-token"), "the image host must not get the token");
     assert!(sent[0].url.contains("ids=12%3A34"), "{}", sent[0].url);
     assert!(sent[0].headers.iter().any(|(name, value)| name == "x-figma-token" && value == "figd_1"));
 }
@@ -63,7 +66,10 @@ async fn a_branch_link_reads_the_branch_and_a_file_link_reads_the_whole_file() {
     let file = r#"{"name":"App","document":{"name":"Document","type":"DOCUMENT","children":[{"name":"Tela","type":"CANVAS"}]}}"#;
     let http = FakeHttp::new().once(Method::Get, "/v1/files/Br4nch", 200, file);
     let found = frame(&http, "https://www.figma.com/design/AbC123/branch/Br4nch/App").await;
-    assert_eq!(found.map(|found| (found["ref"].clone(), found["image"].clone())), Ok((json!("Br4nch"), Value::Null)));
+    assert_eq!(
+        found.map(|found| (found["ref"].clone(), found["image"].clone(), found["picture"].clone())),
+        Ok((json!("Br4nch"), Value::Null, Value::Null))
+    );
     assert!(http.sent()[0].url.contains("depth=3"));
 }
 
