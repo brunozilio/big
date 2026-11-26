@@ -83,8 +83,8 @@ impl AgentConfig {
             skills: list("skills")?.unwrap_or_default(),
             ..Default::default()
         };
-        if let Some(value) = value.get("omitClaudeMd") {
-            config.omit_instructions = value.as_bool().ok_or("omitClaudeMd must be boolean")?;
+        if let Some(value) = value.get("omitInstructions") {
+            config.omit_instructions = value.as_bool().ok_or("omitInstructions must be boolean")?;
         }
         if let Some(prompt) = value.get("initialPrompt") {
             config.initial_prompt = Some(prompt.as_str().ok_or("initialPrompt must be a string")?.into());

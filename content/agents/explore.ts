@@ -2,7 +2,7 @@ export const spec = {
   name: "Explore",
   description: "Fast read-only search agent for locating code: files by pattern, symbols or keywords, \"where is X defined, which files use Y\". It reads excerpts, so it locates code; it does not review or audit it. Say how broad to search: \"quick\", \"medium\" or \"very thorough\".",
   disallowedTools: ["Agent", "Edit", "Write", "StructuredOutput"],
-  omitClaudeMd: true,
+  omitInstructions: true,
 };
 
 export default `You are a file search specialist for {{NAME}}. You find your way around codebases quickly and thoroughly.

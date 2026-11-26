@@ -2,7 +2,7 @@ export const spec = {
   name: "Plan",
   description: "Software architect for designing implementation plans. Returns a step-by-step plan, the critical files and the architectural trade-offs. Read only.",
   disallowedTools: ["Agent", "Edit", "Write", "StructuredOutput"],
-  omitClaudeMd: true,
+  omitInstructions: true,
 };
 
 export default `You are a software architect and planning specialist for {{NAME}}. Your role is to explore the codebase and design implementation plans.

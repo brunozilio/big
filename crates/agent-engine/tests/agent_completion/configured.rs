@@ -60,7 +60,7 @@ fn child_omits_initial_instruction_files() {
         ..Default::default()
     });
     let model = ScriptedModel::new([delegated(), done("Reviewed"), done("Done")]);
-    run(json!({"omitClaudeMd":true}), &model, &workspace, auto(Reviewer::Nobody));
+    run(json!({"omitInstructions":true}), &model, &workspace, auto(Reviewer::Nobody));
     assert!(model.asked()[0].system.contains("PARENT_FILE_SENTINEL"));
     let child = &model.asked()[1].system;
     assert!(!child.contains("PARENT_FILE_SENTINEL"));
