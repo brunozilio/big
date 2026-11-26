@@ -521,6 +521,7 @@ export type ConnectionCall =
   | { action: 'code.branches'; args: { repo: string }; result: CodeBranch[] }
   | { action: 'tracker.issue'; args: { key: string }; result: IssueData }
   | { action: 'tracker.comment'; args: { key: string; body: string }; result: Comment }
+  | { action: 'tracker.create_issue'; args: { title: string; description?: string; project?: string }; result: LinkRef }
   | { action: 'code.change'; args: { change: string }; result: ChangeData }
   | { action: 'ci.run'; args: { run: string }; result: PipelineRun }
   | { action: 'cloud.accounts_and_roles'; args: Record<string, never>; result: CloudAccount[] }

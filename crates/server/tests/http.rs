@@ -324,6 +324,12 @@ async fn the_page_s_reads_go_through_the_connection() {
         .await
         .1;
     assert_eq!(comment["kind"], "comment");
+    let task =
+        call("tracker.create_issue", json!({ "title": "Vulnerabilidade: XSS", "description": "d", "project": "APP" }));
+    let made = world.send(Method::POST, "/api/connections/c1/call", Some(task)).await.1;
+    assert_eq!(made, json!({ "key": "K-2", "url": "https://tracker.test/K-2" }));
+    let sent = world.provider.calls.lock().expect("calls").clone();
+    assert!(sent.iter().any(|(action, args)| action == "tracker.create_issue" && args["project"] == "APP"));
     let change = world
         .send(Method::POST, "/api/connections/c1/call", Some(call("code.change", json!({ "change": "o/r#3" }))))
         .await

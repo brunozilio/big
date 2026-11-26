@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api'
 import type { Application, ApplicationRepository, Binding, Block, Finding, FindingKind, QualityReport } from '@/api/contract'
 import { errorText, useStore } from '@/api/store'
+import { TaskTargetProvider } from '@/blocks/findingTask'
 import { BlockView } from '@/blocks/registry'
 import { Card, EmptyState } from '@/ui/display'
 import { Input, Select } from '@/ui/form'
@@ -164,7 +165,10 @@ function Report({ target, loaded, filters }: { target: Target; loaded: Loaded | 
 function Repository({ targets, loaded, filters }: { targets: Target[]; loaded: Record<string, Loaded>; filters: Filters }) {
   const look = useBoundLook()
   const { application, repository } = targets[0]
+  const tracker = application.bindings?.tracker ?? repository.bindings?.tracker
+  const task = tracker ? { connection: tracker.connection, project: tracker.value } : null
   return (
+    <TaskTargetProvider value={task}>
     <Card className="space-y-4 px-4 py-4">
       <div className="flex min-w-0 items-baseline gap-2">
         <span className="truncate text-md font-medium text-fg">{application.name}</span>
@@ -177,6 +181,7 @@ function Repository({ targets, loaded, filters }: { targets: Target[]; loaded: R
         </section>
       ))}
     </Card>
+    </TaskTargetProvider>
   )
 }
 

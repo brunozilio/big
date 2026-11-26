@@ -124,7 +124,7 @@ fn actions<'a>(asked: &'a [Value], action: &str) -> Vec<&'a Value> {
 }
 
 #[test]
-fn the_security_workflow_is_built_in_scheduled_and_names_no_provider() {
+fn the_security_workflow_is_built_in_never_scheduled_and_names_no_provider() {
     for path in PATHS {
         let text = super::builtin_text(path).unwrap_or_else(|| panic!("{path} is built in"));
         let lower = text.to_lowercase();
@@ -133,8 +133,7 @@ fn the_security_workflow_is_built_in_scheduled_and_names_no_provider() {
     let described = call(&workflow(), "host.describe", &[]);
     let shape = &described["workflows"][0];
     assert_eq!(shape["name"], "security");
-    assert_eq!(shape["triggers"][0]["kind"], "schedule");
-    assert_eq!(shape["triggers"][0]["filter"]["applications"], "security");
+    assert_eq!(shape["triggers"], json!([]));
     let ids: Vec<&str> =
         shape["steps"].as_array().expect("steps").iter().filter_map(|step| step["id"].as_str()).collect();
     assert_eq!(ids, ["plan", "ticket", "develop", "checks", "pr", "review"]);

@@ -9,6 +9,7 @@ import { Select } from '@/ui/form'
 import { Icon, type IconName } from '@/ui/icon'
 import { AnimatePresence, motion, tween } from '@/ui/motion'
 import { useT, type MessageKey } from '@/i18n'
+import { TaskButton, useTaskTarget } from './findingTask'
 import { SendError, useSend } from './shared'
 
 type Of<T extends Block['type']> = Extract<Block, { type: T }>
@@ -115,6 +116,8 @@ function Detail({ f }: { f: Finding }) {
 function Row({ f, open, onToggle, pick, onPick }: { f: Finding; open: boolean; onToggle: () => void; pick: Pick | null; onPick: ((p: Pick) => void) | null }) {
   const t = useT()
   const picks = usePicks()
+  const target = useTaskTarget()
+  const outcome = !f.held && !f.decision && target ? <TaskButton f={f} target={target} /> : <Outcome f={f} />
   return (
     <li className="[&+&]:border-t">
       <div className="flex min-h-14 items-center gap-3 px-4 py-2 transition-colors hover:bg-hover/50">
@@ -130,7 +133,7 @@ function Row({ f, open, onToggle, pick, onPick }: { f: Finding; open: boolean; o
           </span>
         </button>
         <span className="flex w-[188px] shrink-0 justify-end">
-          {onPick && pick ? <Select size="sm" label={t('blocks.findingsChoose', { title: f.title })} value={pick} options={picks} onValueChange={(v) => onPick(v as Pick)} /> : <Outcome f={f} />}
+          {onPick && pick ? <Select size="sm" label={t('blocks.findingsChoose', { title: f.title })} value={pick} options={picks} onValueChange={(v) => onPick(v as Pick)} /> : outcome}
         </span>
         <button type="button" aria-label={t(open ? 'blocks.findingsCollapse' : 'blocks.findingsExpand')} onClick={onToggle} className="flex size-7 shrink-0 items-center justify-center rounded-control-sm text-faint hover:bg-hover hover:text-fg2">
           <Icon name="down" size={14} className={cn('transition-transform duration-150', open && 'rotate-180')} />
@@ -271,10 +274,10 @@ export function FindingsBlock({ block }: { block: Of<'findings'> }) {
       })}
       {editable ? (
         <Triage block={block} picks={picks} onDone={() => setSent(true)} />
-      ) : (
+      ) : decided.length === 0 && held === 0 ? null : (
         <div className="flex items-start gap-2.5 rounded-card bg-inset px-4 py-3 text-base text-fg2">
           <Icon name="info" size={16} className="mt-0.5 shrink-0 text-muted" />
-          <Tally picks={decided.length > 0 ? decided : Object.values(picks)} />
+          <Tally picks={decided} />
           {held > 0 && <span className="text-muted">{t('blocks.findingsHeldCount', { n: held })}</span>}
         </div>
       )}

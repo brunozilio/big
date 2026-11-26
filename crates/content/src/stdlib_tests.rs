@@ -14,7 +14,18 @@ impl script::Host for NoHost {
 }
 
 const STEPS: [&str; 13] = [
-    "plan", "ticket", "cases", "develop", "checks", "pr", "ci", "quality", "review", "provision", "merge", "release",
+    "plan",
+    "ticket",
+    "cases",
+    "develop",
+    "checks",
+    "pr",
+    "ci",
+    "quality",
+    "review",
+    "provision",
+    "merge",
+    "release",
     "security",
 ];
 
@@ -869,18 +880,14 @@ fn each_subtask_moves_to_doing_and_to_done_around_its_own_developer_turn() {
             if command["kind"] == "agent" && args["name"] == "developer" {
                 return Some(format!("dev:{}", args["input"]["session"].as_str().unwrap_or("-")));
             }
-            (args["action"] == "transition" && args["args"]["issue"] != "T-9")
-                .then(|| {
-                    let to = args["args"]["status"].as_str().or(args["args"]["category"].as_str()).unwrap_or("");
-                    format!("{}>{to}", args["args"]["issue"].as_str().unwrap_or(""))
-                })
+            (args["action"] == "transition" && args["args"]["issue"] != "T-9").then(|| {
+                let to = args["args"]["status"].as_str().or(args["args"]["category"].as_str()).unwrap_or("");
+                format!("{}>{to}", args["args"]["issue"].as_str().unwrap_or(""))
+            })
         })
         .take(6)
         .collect();
-    assert_eq!(
-        trail,
-        ["T-11>doing", "dev:-", "T-11>done", "T-12>doing", "dev:dev-1", "T-12>done"]
-    );
+    assert_eq!(trail, ["T-11>doing", "dev:-", "T-11>done", "T-12>doing", "dev:dev-1", "T-12>done"]);
     let developers: Vec<&Value> =
         of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "developer").collect();
     let first = developers[0]["args"]["input"]["prompt"].as_str().unwrap_or_default();
@@ -1241,7 +1248,10 @@ fn test_cases_are_written_reviewed_by_a_person_and_created_linked_to_the_issue()
     let posted = calls(&asked, "comment");
     let summary = posted.iter().find(|call| call["args"]["args"]["issue"] == "T-9").expect("summary on the issue");
     let body = summary["args"]["args"]["body"].as_str().unwrap_or_default();
-    assert!(body.contains("Testes E2E") && body.contains("Z-R1") && body.contains("✅ Z-T1") && body.contains("passou"), "{body}");
+    assert!(
+        body.contains("Testes E2E") && body.contains("Z-R1") && body.contains("✅ Z-T1") && body.contains("passou"),
+        "{body}"
+    );
     assert!(calls(&asked, "attach").is_empty(), "no file, nothing to attach");
 }
 
@@ -1337,7 +1347,8 @@ fn each_case_keeps_its_terminal_output_and_its_screens_as_evidence() {
     let attach = &calls(&asked, "attach")[0]["args"];
     assert_eq!(attach["capability"], "tracker");
     assert_eq!(attach["args"], json!({ "issue": "T-1", "files": [{ "$file": "a1" }, { "$file": "b2" }] }));
-    let summary = calls(&asked, "comment").into_iter().find(|call| call["args"]["args"]["issue"] == "T-1").expect("summary");
+    let summary =
+        calls(&asked, "comment").into_iter().find(|call| call["args"]["args"]["issue"] == "T-1").expect("summary");
     assert!(summary["args"]["args"]["body"].as_str().is_some_and(|body| body.contains("✅ Z-T1")), "{summary}");
     let shown = step_view(
         "checks",
@@ -1359,7 +1370,10 @@ fn the_e2e_suite_runs_in_the_repository_and_folder_that_declare_it() {
     let (result, asked) = drive(&source("workflows/casos.ts", CASES_THEN_CHECKS), &chosen, |command| {
         let prompt = command["args"]["input"]["prompt"].as_str().unwrap_or_default();
         if command["kind"] == "agent" && prompt.starts_with("Automate") {
-            assert!(prompt.contains("qa/suites/web: `npx cypress run`"), "the tester is told where the suite is: {prompt}");
+            assert!(
+                prompt.contains("qa/suites/web: `npx cypress run`"),
+                "the tester is told where the suite is: {prompt}"
+            );
             let results = json!([{ "case": "Z-T1", "status": "passed", "evidence": "login.cy.ts passou" }]);
             return Some(json!({ "text": "", "session": "test-2", "output": { "results": results } }));
         }
@@ -1557,7 +1571,8 @@ export default workflow({
 fn cases_go_to_the_test_project_chosen_in_the_application() {
     let mut fake = Fake::default();
     let mut chosen = item(json!("T-1"));
-    chosen["application"] = json!({ "bindings": { "tests": { "connection": "z1", "value": "QA" } }, "repositories": [] });
+    chosen["application"] =
+        json!({ "bindings": { "tests": { "connection": "z1", "value": "QA" } }, "repositories": [] });
     let (_, asked) = drive(&source("workflows/casos.ts", CASES_THEN_CHECKS), &chosen, |command| fake.reply(command));
     let created = &calls(&asked, "create_case")[0];
     assert_eq!(created["args"]["args"]["project"], "QA");
@@ -1596,7 +1611,10 @@ fn an_english_item_asks_in_english_and_its_english_plan_reaches_the_issue() {
     assert!(prompts.iter().any(|prompt| prompt.contains("subtask 1 of 1: Create the table")), "{prompts:?}");
     let created = calls(&asked, "create_issue");
     let story = created[0]["args"]["args"]["description"].as_str().expect("description");
-    assert!(story.starts_with("**As** a clerk") && story.contains("## Acceptance criteria\n- **Given** I am"), "{story}");
+    assert!(
+        story.starts_with("**As** a clerk") && story.contains("## Acceptance criteria\n- **Given** I am"),
+        "{story}"
+    );
     let opened = &calls(&asked, "open_pull_request")[0]["args"]["args"];
     assert_eq!(opened["body"], "Signs customers up.\n\nIssue: T-9");
 }
@@ -1662,19 +1680,26 @@ fn a_side_question_talks_in_the_application_folder_until_the_person_closes_it() 
 #[test]
 fn the_merge_waits_until_the_review_approved_every_pull_request() {
     let loaded = source("probe.js", "import { pendingOf } from \"sdk/steps/merge.js\";\n");
-    let probe = format!("{loaded}\nexport const pending = (reviewed, prs) => __m[\"sdk/steps/merge.js\"].pendingOf(reviewed, prs);\n");
+    let probe = format!(
+        "{loaded}\nexport const pending = (reviewed, prs) => __m[\"sdk/steps/merge.js\"].pendingOf(reviewed, prs);\n"
+    );
     let prs = json!([{ "pr": "acme/web#1" }, { "pr": "acme/api#2" }]);
     let pending = |reviewed: Value| call(&probe, "pending", &[reviewed, prs.clone()]);
     assert_eq!(pending(json!({})), json!([]), "a workflow without a review merges as before");
     assert_eq!(pending(json!({ "verdict": "approve", "prs": ["acme/web#1", "acme/api#2"] })), json!([]));
     assert_eq!(pending(json!({ "verdict": "approve", "pr": "acme/web#1" })), json!(["acme/api#2"]));
-    assert_eq!(pending(json!({ "verdict": "request_changes", "pr": "acme/web#1" })), json!(["acme/web#1", "acme/api#2"]));
+    assert_eq!(
+        pending(json!({ "verdict": "request_changes", "pr": "acme/web#1" })),
+        json!(["acme/web#1", "acme/api#2"])
+    );
 }
 
 fn scanned_item() -> Value {
     let mut chosen = application_item();
-    chosen["application"]["repositories"][0]["bindings"]["quality"] = json!({ "connection": "sq", "value": "acme_web" });
-    chosen["application"]["repositories"][0]["bindings"]["security"] = json!({ "connection": "vc", "value": "guid-web" });
+    chosen["application"]["repositories"][0]["bindings"]["quality"] =
+        json!({ "connection": "sq", "value": "acme_web" });
+    chosen["application"]["repositories"][0]["bindings"]["security"] =
+        json!({ "connection": "vc", "value": "guid-web" });
     chosen["application"]["bindings"] = json!({ "tracker": { "connection": "jt", "value": "APP" } });
     chosen
 }
@@ -1715,9 +1740,9 @@ fn only_the_changed_repositories_bound_to_quality_and_security_are_analyzed_and_
                 analyses += 1;
                 Some(report(if analyses == 1 { "failed" } else { "passed" }))
             }
-            (Some("wait.human"), _, _) if args["view"][0]["type"] == "findings" => {
-                Some(json!({ "action": "findings.triage", "values": { "decisions": { "11": { "choice": "task" } } }, "by": "ana" }))
-            }
+            (Some("wait.human"), _, _) if args["view"][0]["type"] == "findings" => Some(
+                json!({ "action": "findings.triage", "values": { "decisions": { "11": { "choice": "task" } } }, "by": "ana" }),
+            ),
             _ => fake.reply(command),
         }
     });
@@ -1733,16 +1758,23 @@ fn only_the_changed_repositories_bound_to_quality_and_security_are_analyzed_and_
         .filter(|command| command["args"]["name"] == "developer")
         .filter_map(|command| command["args"]["input"]["prompt"].as_str())
         .collect();
-    assert!(prompts.iter().any(|prompt| prompt.contains("new_coverage") && prompt.contains("Null check")), "{prompts:?}");
+    assert!(
+        prompts.iter().any(|prompt| prompt.contains("new_coverage") && prompt.contains("Null check")),
+        "{prompts:?}"
+    );
     let scanned = calls(&asked, "findings");
     assert!(!scanned.is_empty() && scanned.iter().all(|command| command["args"]["args"]["project"] == "guid-web"));
-    let triaged = of_kind(&asked, "wait.human").into_iter().find(|command| command["args"]["view"][0]["type"] == "findings");
+    let triaged =
+        of_kind(&asked, "wait.human").into_iter().find(|command| command["args"]["view"][0]["type"] == "findings");
     let shown = triaged.map(|command| command["args"]["view"][0]["findings"].clone()).unwrap_or_default();
     assert_eq!(shown.as_array().map(Vec::len), Some(1), "only the finding in a touched file: {shown}");
     assert_eq!((&shown[0]["id"], &shown[0]["suggested"]), (&json!("11"), &json!("fix")));
-    let tasks: Vec<&Value> = calls(&asked, "create_issue").into_iter().filter(|command| {
-        command["args"]["args"]["title"].as_str().is_some_and(|title| title.contains("SQL injection"))
-    }).collect();
+    let tasks: Vec<&Value> = calls(&asked, "create_issue")
+        .into_iter()
+        .filter(|command| {
+            command["args"]["args"]["title"].as_str().is_some_and(|title| title.contains("SQL injection"))
+        })
+        .collect();
     assert_eq!(tasks.len(), 1);
     assert_eq!(tasks[0]["args"]["args"]["project"], "APP");
 }
@@ -1776,9 +1808,9 @@ fn a_finding_chosen_to_fix_after_the_merge_opens_a_security_item_for_its_reposit
                 assert!(args["call"]["args"]["since"].is_null(), "a project never scanned waits for its first scan");
                 Some(json!({ "status": "done", "scannedAt": "2026-11-25T10:00:00Z" }))
             }
-            (Some("wait.human"), _, _) if args["view"][0]["type"] == "findings" => {
-                Some(json!({ "action": "findings.triage", "values": { "decisions": { "11": { "choice": "fix" } } }, "by": "ana" }))
-            }
+            (Some("wait.human"), _, _) if args["view"][0]["type"] == "findings" => Some(
+                json!({ "action": "findings.triage", "values": { "decisions": { "11": { "choice": "fix" } } }, "by": "ana" }),
+            ),
             (Some("child"), _, _) => Some(json!({ "state": "completed" })),
             _ => fake.reply(command),
         }
@@ -1789,7 +1821,8 @@ fn a_finding_chosen_to_fix_after_the_merge_opens_a_security_item_for_its_reposit
     let input = &children[0]["args"]["input"];
     assert_eq!(children[0]["args"]["workflow"], "security");
     assert_eq!(input["findings"][0]["id"], "11");
-    let kept: Vec<&Value> = input["application"]["repositories"].as_array().map(|all| all.iter().collect()).unwrap_or_default();
+    let kept: Vec<&Value> =
+        input["application"]["repositories"].as_array().map(|all| all.iter().collect()).unwrap_or_default();
     assert_eq!(kept.iter().map(|repository| &repository["id"]).collect::<Vec<_>>(), [&json!("web")]);
     let merged = asked.iter().position(|command| command["args"]["action"] == "merge");
     let scanned = asked.iter().position(|command| command["args"]["action"] == "findings");
@@ -1832,7 +1865,8 @@ fn a_status_by_category_becomes_the_name_the_tracker_gives_it_for_the_issue_s_ty
             }
         });
         assert_eq!(result["state"], "completed", "{result}");
-        let named: Vec<Value> = of_kind(&asked, "status.set").iter().map(|command| command["args"]["name"].clone()).collect();
+        let named: Vec<Value> =
+            of_kind(&asked, "status.set").iter().map(|command| command["args"]["name"].clone()).collect();
         (named, calls(&asked, "schema").first().map(|command| command["args"]["args"].clone()))
     };
     let (bug, asked) = run("Bug");
@@ -1864,7 +1898,10 @@ fn the_plan_story_speaks_the_item_language_with_its_keywords_in_bold() {
     let plan = call(&bundled, "probe", &[json!(text)]);
     let story = plan["story"].as_str().unwrap_or_else(|| panic!("{plan}"));
     assert!(story.contains("**Como** user, **eu quero** to read the tooltip **para que** I understand"), "{story}");
-    assert!(story.contains("- **Dado** the form is open, **quando** I hover the icon, **então** the tooltip"), "{story}");
+    assert!(
+        story.contains("- **Dado** the form is open, **quando** I hover the icon, **então** the tooltip"),
+        "{story}"
+    );
     assert!(story.contains("- **Dado** que a tela abriu, **quando** passo o mouse, **então** aparece."), "{story}");
     assert_eq!(plan["subtasks"][0]["title"], "Trocar o texto");
 }

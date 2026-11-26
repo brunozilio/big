@@ -183,6 +183,8 @@ export function mockApi(options: MockOptions = {}): Api {
           return issueData(a.key) as CallResult<A>
         case 'tracker.comment':
           return addIssueComment(a.key, a.body) as CallResult<A>
+        case 'tracker.create_issue':
+          return { key: `${a.project ?? 'APP'}-${100 + Math.floor(Math.random() * 900)}`, url: null } as CallResult<A>
         case 'code.change':
           return changeData(a.change) as CallResult<A>
         case 'ci.run':

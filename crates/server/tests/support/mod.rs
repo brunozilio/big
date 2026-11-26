@@ -64,7 +64,7 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value)>>,
 }
 
-const ACTIONS: [&str; 12] = [
+const ACTIONS: [&str; 13] = [
     "quality.report",
     "security.findings",
     "cloud.identity",
@@ -73,6 +73,7 @@ const ACTIONS: [&str; 12] = [
     "tracker.search",
     "tracker.projects",
     "tracker.comment",
+    "tracker.create_issue",
     "code.pull_request",
     "code.files_diff",
     "code.review_comments",
@@ -124,6 +125,7 @@ impl Provider for FakeProvider {
                 { "id": "2", "key": "OPS", "name": "Operações" },
             ]),
             "tracker.comment" => json!({ "id": "9", "created": true }),
+            "tracker.create_issue" => json!({ "ref": "K-2", "url": "https://tracker.test/K-2", "status": "A fazer" }),
             "code.pull_request" => {
                 json!({ "ref": "o/r#3", "number": 3, "title": "PR", "url": "https://code.test/3", "state": "open", "head": "h", "base": "main", "reviews": [] })
             }

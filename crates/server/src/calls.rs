@@ -88,6 +88,7 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
             let you = json!({ "id": "you", "name": "Você", "avatar": null, "you": true });
             Ok(json!({ "id": text(&made["id"]), "author": you, "body": body, "at": iso(now_ms()), "kind": "comment" }))
         }
+        "tracker.create_issue" => created(&caller, args).await,
         "code.repos" => repos(&caller, args).await,
         "code.pulls" => Ok(pulls(&caller.call(code::PULL_REQUESTS, json!({ "repo": arg(args, "repo")? })).await?)),
         "code.branches" => Ok(branches(&caller.call(code::BRANCHES, json!({ "repo": arg(args, "repo")? })).await?)),
@@ -106,6 +107,17 @@ pub async fn run(shared: &Shared, record: &ConnectionRecord, action: &str, args:
             format!("A ação {action} não existe para a página."),
         ))),
     }
+}
+
+async fn created(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
+    let mut wanted = json!({ "title": arg(args, "title")? });
+    for name in ["description", "project"] {
+        if let Some(value) = args[name].as_str().filter(|value| !value.is_empty()) {
+            wanted[name] = json!(value);
+        }
+    }
+    let made = caller.call(tracker::CREATE_ISSUE, wanted).await?;
+    Ok(json!({ "key": text(&made["ref"]), "url": made["url"].as_str() }))
 }
 
 pub fn pulls(raw: &Value) -> Value {
