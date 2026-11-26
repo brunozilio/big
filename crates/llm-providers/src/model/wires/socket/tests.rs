@@ -160,7 +160,8 @@ fn what_the_provider_keeps_comes_back_on_the_next_turn_of_the_same_conversation(
     longer.messages.push(Message::user("bye"));
     let second = api.turn_blocking(&longer, &mut |_| {}, &CancellationToken::new());
     assert!(second.is_ok(), "{second:?}");
-    let sent: Vec<Value> = http.sent().iter().map(|sent| serde_json::from_str(&sent.body).unwrap_or_default()).collect();
+    let sent: Vec<Value> =
+        http.sent().iter().map(|sent| serde_json::from_str(&sent.body).unwrap_or_default()).collect();
     assert_eq!(sent[0]["kept"], Value::Null);
     assert_eq!(sent[1]["kept"], json!({ "value": { "thread": "t1" }, "sent": 4 }));
     assert_eq!(sent[0]["conversation"], sent[1]["conversation"]);

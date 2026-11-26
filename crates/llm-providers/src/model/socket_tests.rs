@@ -17,9 +17,8 @@ async fn served(answers: Vec<Message>) -> (String, tokio::task::JoinHandle<Vec<M
     let address = listener.local_addr().unwrap_or_else(|error| panic!("{error}"));
     let server = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap_or_else(|error| panic!("{error}"));
-        let mut socket = tokio_tungstenite::accept_hdr_async(stream, checked)
-            .await
-            .unwrap_or_else(|error| panic!("{error}"));
+        let mut socket =
+            tokio_tungstenite::accept_hdr_async(stream, checked).await.unwrap_or_else(|error| panic!("{error}"));
         let mut heard = Vec::new();
         for _ in 0..2 {
             if let Some(Ok(message)) = socket.next().await {

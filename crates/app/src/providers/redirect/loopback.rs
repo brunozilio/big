@@ -357,7 +357,10 @@ mod tests {
             let answer = client.get(uri).send().expect("answer");
             (answer.status().as_u16(), answer.headers().get("location").cloned())
         });
-        loopback.next_within("state", "s", &[], SIGN_IN_TIMEOUT).expect("callback").redirect("https://example.com/next");
+        loopback
+            .next_within("state", "s", &[], SIGN_IN_TIMEOUT)
+            .expect("callback")
+            .redirect("https://example.com/next");
         let (status, location) = hit.join().expect("join");
         assert_eq!(status, 302);
         assert_eq!(location.as_ref().and_then(|value| value.to_str().ok()), Some("https://example.com/next"));
@@ -381,7 +384,8 @@ mod tests {
         let stop = Arc::new(AtomicBool::new(false));
         let loopback = Loopback::bind().expect("bind").stopped_by(Arc::clone(&stop));
         let port = loopback.port();
-        let waiting = std::thread::spawn(move || loopback.next_within("state", "s", &[], Duration::from_secs(30)).map(|_| ()));
+        let waiting =
+            std::thread::spawn(move || loopback.next_within("state", "s", &[], Duration::from_secs(30)).map(|_| ()));
         std::thread::sleep(Duration::from_millis(50));
         let asked = Instant::now();
         stop.store(true, Ordering::SeqCst);
