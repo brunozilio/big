@@ -23,7 +23,7 @@ function statusOf(status): Status {
   return { id: id === "" ? name : id, name, category: phaseOf(status) };
 }
 
-function rankOf(kind): number {
+export function rankOf(kind): number {
   const level = kind?.hierarchyLevel;
   if (typeof level === "number") return level;
   return kind?.subtask === true ? -1 : 0;
