@@ -70,7 +70,7 @@ export const session = {
       code: {
         device_code: id,
         user_code: "",
-        verification_uri: `${base(ctx)}/login`,
+        verification_uri: `${base(ctx)}/app_auth/${id}/grant?desktop_protocol=${ctx.config.host.split(".")[0]}`,
         verification_uri_complete: null,
         expires_in: EXPIRES_IN,
         interval: INTERVAL,

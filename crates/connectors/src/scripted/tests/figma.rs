@@ -104,6 +104,7 @@ async fn the_session_signs_in_without_a_browser_and_its_cookies_are_the_grant() 
     let Ok(started) = started else { panic!("{started:?}") };
     let sent = http.sent();
     assert!(sent[0].body_text().contains("\"app_type\":\"desktop\""), "{:?}", sent[0].body_text());
+    assert_eq!(started.code.verification_uri, "https://www.figma.com/app_auth/abc/grant?desktop_protocol=figma");
     let http = FakeHttp::new()
         .once(Method::Get, "/api/session/state", 200, r#"{"meta":{"users":[{"id":"7","handle":"Ana"}]}}"#)
         .once(Method::Get, "/api/user/state?fuid=7", 200, r#"{"meta":{"team_users":[]}}"#);
