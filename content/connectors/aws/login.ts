@@ -1,9 +1,7 @@
-import { ActionError, DEFAULT_RETRY_AFTER_MS, decode, form, send } from "sdk/connectors/index.ts";
+import { ActionError, DEFAULT_RETRY_AFTER_MS, decode, form, regional, send } from "sdk/connectors/index.ts";
 import { keysOf } from "./sts.ts";
 
-export const REDIRECT = "http://127.0.0.1:{port}/oauth/callback";
-
-export const base = (region: string) => `https://${region}.signin.aws.amazon.com`;
+export const base = (ctx, region: string) => regional(ctx.config.signin_url, region);
 
 export const clientId = (ctx) => ctx.config.login_client_id;
 
@@ -54,7 +52,7 @@ function parsed(body: string) {
 }
 
 function token(ctx, region: string, key: string, body: Record<string, string>, now: number) {
-  const url = `${base(region)}/v1/token`;
+  const url = `${base(ctx, region)}/v1/token`;
   const headers = { dpop: proof(ctx, key, url, now), accept: "application/json", "content-type": "application/json" };
   const response = send(ctx, { method: "POST", url, headers, body: JSON.stringify(body) });
   const answer = parsed(response.body);
@@ -91,7 +89,7 @@ export const signIn = {
   begin({ port }, ctx) {
     const state = randomToken(ctx);
     const verifier = randomToken(ctx);
-    const redirect_uri = REDIRECT.replace("{port}", String(port));
+    const redirect_uri = ctx.config.login_redirect.replace("{port}", String(port));
     const query = form([
       ["response_type", "code"],
       ["client_id", clientId(ctx)],
@@ -101,7 +99,7 @@ export const signIn = {
       ["redirect_uri", redirect_uri],
       ["code_challenge", challenge(ctx, verifier)],
     ]);
-    return { url: `${base(regionOf(ctx))}/v1/authorize?${query}`, state, verifier, redirect_uri, carried: null };
+    return { url: `${base(ctx, regionOf(ctx))}/v1/authorize?${query}`, state, verifier, redirect_uri, carried: null };
   },
   exchange({ authorization, code, now }, ctx) {
     const key = ctx.crypto.ecdsa.generate().private;

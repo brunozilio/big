@@ -1,12 +1,11 @@
-import { ActionError, RECONNECT, checked, decode, type Language, pick, send } from "sdk/connectors/index.ts";
+import { ActionError, RECONNECT, checked, decode, type Language, pick, regional, send, words } from "sdk/connectors/index.ts";
 import { isoSeconds } from "./login.ts";
 
-export const SCOPE = "sso:account:access";
 export const DEVICE_GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const DEFAULT_INTERVAL = 5;
 const DEFAULT_EXPIRES_IN = 900;
 
-export const oidc = (region: string) => `https://oidc.${region}.amazonaws.com`;
+export const oidc = (ctx, region: string) => regional(ctx.config.oidc_url, region);
 
 function text(answer, names: string[]): string | undefined {
   for (const name of names) if (typeof answer?.[name] === "string") return answer[name];
@@ -75,10 +74,10 @@ function register(ctx, region: string) {
   const registration = {
     clientName: ctx.brand.NAME,
     clientType: "public",
-    scopes: [SCOPE],
+    scopes: words(ctx.config.sso_scopes),
     grantTypes: [DEVICE_GRANT, "refresh_token"],
   };
-  const answer = answered(ctx, `${oidc(region)}/client/register`, registration);
+  const answer = answered(ctx, `${oidc(ctx, region)}/client/register`, registration);
   const needed = (name: string) => text(answer, [name]) ?? decode(`the registration has no ${name}`);
   return { client_id: needed("clientId"), client_secret: needed("clientSecret") };
 }
@@ -128,13 +127,13 @@ export const sso = {
     const region = regionIn(ctx, fields?.region);
     const client = register(ctx, region);
     const body = { clientId: client.client_id, clientSecret: client.client_secret, startUrl };
-    const code = deviceCode(answered(ctx, `${oidc(region)}/device_authorization`, body));
+    const code = deviceCode(answered(ctx, `${oidc(ctx, region)}/device_authorization`, body));
     return { code, carried: { client, region } };
   },
   poll({ started, now }, ctx) {
     const { client, region } = started.carried;
     const body = { clientId: client.client_id, clientSecret: client.client_secret, grantType: DEVICE_GRANT, deviceCode: started.code.device_code };
-    const { response, answer } = post(ctx, `${oidc(region)}/token`, body);
+    const { response, answer } = post(ctx, `${oidc(ctx, region)}/token`, body);
     const code = errorCode(answer);
     if (code !== undefined) {
       const known = POLLED[code];
@@ -151,7 +150,7 @@ export const sso = {
     if (typeof refresh !== "string") throw new ActionError("auth", "there is no refresh token");
     const region = regionIn(ctx, grant?.extra?.region);
     const body = { clientId: client.client_id, clientSecret: client.client_secret, grantType: "refresh_token", refreshToken: refresh };
-    const fresh = granted(answered(ctx, `${oidc(region)}/token`, body), now);
+    const fresh = granted(answered(ctx, `${oidc(ctx, region)}/token`, body), now);
     return { ...fresh, refresh_token: fresh.refresh_token ?? refresh, client, extra: grant.extra ?? { region }, method: grant.method ?? null };
   },
 };

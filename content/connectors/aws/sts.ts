@@ -1,4 +1,4 @@
-import { decode, fetch, type Request } from "sdk/connectors/index.ts";
+import { decode, fetch, regional, type Request } from "sdk/connectors/index.ts";
 import { sign, stampOf } from "./sigv4.ts";
 
 const BODY = "Action=GetCallerIdentity&Version=2011-06-15";
@@ -33,7 +33,7 @@ export function keysOf(accessToken: string): Keys | undefined {
 }
 
 export function signedIdentityRequest(ctx, keys: Keys, region: string, now: Date): Request {
-  const url = `https://sts.${region}.amazonaws.com/`;
+  const url = regional(ctx.config.sts_url, region);
   const headers: Record<string, string> = { "content-type": FORM };
   const added = sign(
     ctx,

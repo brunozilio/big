@@ -1,4 +1,4 @@
-import { type Creds, type Language, optionalText, pick, text, textAt, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type Creds, type Language, optionalText, pick, text, textAt, tokenAlternative, tokenField, unknownAction, words } from "sdk/connectors/index.ts";
 import { binding, options, projectOptions, tracker } from "sdk/connectors/contracts.ts";
 import { items } from "sdk/connectors/mcp.ts";
 import { NO_SITES, apiOf, projectOf, siteApi } from "./api.ts";
@@ -11,15 +11,6 @@ import { search } from "./search.ts";
 import { comment, createIssue, issue, projects, setImpediment, transition, transitions } from "./tracker.ts";
 
 export { poll } from "./events.ts";
-
-export const SCOPES = [
-  "read:jira:agent-interface",
-  "write:jira:agent-interface",
-  "search:jira:agent-interface",
-  "read:me",
-  "read:account",
-  "offline_access",
-];
 
 export function provider() {
   return {
@@ -60,9 +51,9 @@ export function alternatives({ language }: { language: Language }) {
 
 export const signIn = {
   name: (_, ctx) => ctx.config.mcp_url,
-  begin: ({ port }, ctx) => ctx.oauth.mcp.begin({ server: ctx.config.mcp_url, port, scopes: SCOPES }),
-  exchange: ({ authorization, code, now }, ctx) => ctx.oauth.mcp.exchange({ server: ctx.config.mcp_url, authorization, code, now, scopes: SCOPES }),
-  refresh: ({ grant, now }, ctx) => ctx.oauth.mcp.refresh({ server: ctx.config.mcp_url, grant, now, scopes: SCOPES }),
+  begin: ({ port }, ctx) => ctx.oauth.mcp.begin({ server: ctx.config.mcp_url, port, scopes: words(ctx.config.scopes) }),
+  exchange: ({ authorization, code, now }, ctx) => ctx.oauth.mcp.exchange({ server: ctx.config.mcp_url, authorization, code, now, scopes: words(ctx.config.scopes) }),
+  refresh: ({ grant, now }, ctx) => ctx.oauth.mcp.refresh({ server: ctx.config.mcp_url, grant, now, scopes: words(ctx.config.scopes) }),
 };
 
 type Input = { action: string; args: Record<string, any>; creds: Creds; idempotencyKey: string };

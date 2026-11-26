@@ -1,4 +1,4 @@
-import { type Creds, type Language, decode, fetchJson, form, missing, optionalText, pick, setting, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type Creds, type Language, decode, regional, fetchJson, form, missing, optionalText, pick, setting, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { binding, bindingField, cloud, options } from "sdk/connectors/contracts.ts";
 import { chosenIn, environmentOptions } from "sdk/connectors/environments.ts";
 import { caller, keysOf, type Keys } from "./sts.ts";
@@ -11,7 +11,7 @@ const PAGES = 20;
 
 const regionOf = (ctx, creds: Creds) => setting(creds, "region") ?? ctx.config.region;
 
-export const portal = (region: string) => `https://portal.sso.${region}.amazonaws.com`;
+export const portal = (ctx, region: string) => regional(ctx.config.portal_url, region);
 
 export function spaced(account: string): string {
   if (!/^\d{12}$/.test(account)) return account;
@@ -78,7 +78,7 @@ export function alternatives({ language }: { language: Language }) {
 
 function portalGet(ctx, creds: Creds, path: string, query: [string, string][]) {
   const pairs = form(query);
-  const url = `${portal(regionOf(ctx, creds))}${path}${pairs === "" ? "" : `?${pairs}`}`;
+  const url = `${portal(ctx, regionOf(ctx, creds))}${path}${pairs === "" ? "" : `?${pairs}`}`;
   return fetchJson(ctx, { method: "GET", url, headers: { "x-amz-sso_bearer_token": creds.token } });
 }
 

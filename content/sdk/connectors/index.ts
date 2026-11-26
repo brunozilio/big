@@ -203,6 +203,14 @@ export function setting(creds: Creds, name: string): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined;
 }
 
+export function words(value: unknown): string[] {
+  return typeof value === "string" ? value.split(/\s+/).filter((word) => word !== "") : [];
+}
+
+export function regional(template: string, region: string): string {
+  return template.replaceAll("{region}", region);
+}
+
 export function settingsList(creds: Creds, name: string): string[] {
   const value = creds.settings?.[name];
   return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];

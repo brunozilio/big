@@ -1,13 +1,12 @@
-import { type Creds, type Language, optionalText, pick, setting, text, textAt, tokenAlternative, tokenField, unknownAction, useApiToken } from "sdk/connectors/index.ts";
+import { type Creds, type Language, optionalText, pick, setting, text, textAt, tokenAlternative, tokenField, unknownAction, useApiToken, words } from "sdk/connectors/index.ts";
 import { binding, options, projectOptions, tests } from "sdk/connectors/contracts.ts";
 import { items } from "sdk/connectors/mcp.ts";
 import { cases, createCase, createCycle, finishCycle, record } from "./cases.ts";
 import { type Api, idOf, lastPage, MOST_PAGES, PAGE } from "./api.ts";
 
-export const SCOPES = ["api"];
 export const API_TOKEN = "api_token";
 
-type Ctx = { config: { mcp_url: string; oauth_redirect: string } } & Record<string, any>;
+type Ctx = { config: { mcp_url: string; oauth_redirect: string; scopes: string } } & Record<string, any>;
 
 export function provider() {
   return { name: "Zephyr", logo: "logo.svg", capabilities: ["tests"], auth: { kind: "loopback" }, actions: [...tests(), options("tests")] };
@@ -43,7 +42,7 @@ const portOf = (redirect: string) => {
   return found ? Number(found[1]) : null;
 };
 
-const flow = (ctx: Ctx) => ({ server: ctx.config.mcp_url, redirect: ctx.config.oauth_redirect, scopes: SCOPES });
+const flow = (ctx: Ctx) => ({ server: ctx.config.mcp_url, redirect: ctx.config.oauth_redirect, scopes: words(ctx.config.scopes) });
 
 export const signIn = {
   name: (_: unknown, ctx: Ctx) => ctx.config.mcp_url,

@@ -9,19 +9,32 @@ oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
 [zephyr]
 mcp_url = "https://zephyr.mcp.smartbear.com/mcp"
 oauth_redirect = "http://127.0.0.1:33418/oauth/callback"
+scopes = "api"
 
 [veracode]
 region = "com"
 
 [github]
 client_id = "178c6fc778ccc68e1d6a"
+device_endpoint = "https://github.com/login/device/code"
+token_endpoint = "https://github.com/login/oauth/access_token"
+scopes = "repo read:org workflow"
+api = "https://api.github.com"
 
 [jira]
 mcp_url = "https://mcp.atlassian.com/v2/mcp"
+rest_gateway = "https://api.atlassian.com/ex/jira"
+scopes = "read:jira:agent-interface write:jira:agent-interface search:jira:agent-interface read:me read:account offline_access"
 
 [aws]
 login_client_id = "arn:aws:signin:::devtools/same-device"
+login_redirect = "http://127.0.0.1:{port}/oauth/callback"
 region = "us-east-1"
+signin_url = "https://{region}.signin.aws.amazon.com"
+oidc_url = "https://oidc.{region}.amazonaws.com"
+portal_url = "https://portal.sso.{region}.amazonaws.com"
+sts_url = "https://sts.{region}.amazonaws.com/"
+sso_scopes = "sso:account:access"
 
 [datadog]
 mcp_url = "https://mcp.{site}/v1/mcp"

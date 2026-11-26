@@ -2,8 +2,6 @@ import { ActionError, authorized, checked, fail, json, listOf, send, text } from
 import { type Api, jqlKey } from "./api.ts";
 import { issue } from "./tracker.ts";
 
-const REST_GATEWAY = "https://api.atlassian.com/ex/jira";
-
 const NO_UPLOAD =
   "Jira refused the upload. Attachments go through the Jira REST API: connect Jira with an API token (the sign-in of the Atlassian MCP server does not allow uploads).";
 
@@ -11,7 +9,7 @@ type Wanted = { name: string; contentType: string; base64: string };
 
 function restBase(api: Api): string {
   if (api.token.startsWith("Basic ")) return api.site !== "" ? api.site : fail("permanent", "the Jira site is unknown; reconnect Jira");
-  return `${REST_GATEWAY}/${api.cloud}`;
+  return `${api.ctx.config.rest_gateway}/${api.cloud}`;
 }
 
 function wantedOf(file: any): Wanted | string {

@@ -1,12 +1,10 @@
-import { type Creds, type Language, pick, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type Creds, type Language, pick, words, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { binding, code, options, pipelines } from "sdk/connectors/contracts.ts";
 import { api, get } from "./api.ts";
 import * as reviews from "./code.ts";
 import * as runs from "./pipelines.ts";
 
 export { poll } from "./events.ts";
-
-export const SCOPES = ["repo", "read:org", "workflow"];
 
 export function provider(_: unknown, ctx) {
   return {
@@ -16,9 +14,9 @@ export function provider(_: unknown, ctx) {
     auth: {
       kind: "device",
       client_id: ctx.config.client_id,
-      device_endpoint: "https://github.com/login/device/code",
-      token_endpoint: "https://github.com/login/oauth/access_token",
-      scopes: SCOPES,
+      device_endpoint: ctx.config.device_endpoint,
+      token_endpoint: ctx.config.token_endpoint,
+      scopes: words(ctx.config.scopes),
       dialect: "form",
     },
     actions: [...code(), ...pipelines(), options("code")],

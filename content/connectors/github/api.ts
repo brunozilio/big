@@ -1,13 +1,12 @@
 import { type Creds, type Request, type Response, fail, fetch, json, missing, number, optionalText, setting, settingsList, textOf } from "sdk/connectors/index.ts";
 
-export const API = "https://api.github.com";
 const API_VERSION = "2022-11-28";
 const RUNS = "/runs/";
 
 export type Api = { ctx: any; base: string; token: string; creds: Creds; command: string };
 
 export function api(ctx, creds: Creds): Api {
-  const base = (setting(creds, "api") ?? API).replace(/\/+$/, "");
+  const base = (setting(creds, "api") ?? ctx.config.api).replace(/\/+$/, "");
   return { ctx, base, token: creds.token, creds, command: ctx.brand?.COMMAND ?? "" };
 }
 
