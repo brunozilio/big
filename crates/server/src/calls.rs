@@ -193,8 +193,10 @@ fn is_options(action: &str) -> bool {
 
 async fn options(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<Value> {
     let mut wanted = json!({});
-    if let Some(query) = args["query"].as_str().filter(|query| !query.is_empty()) {
-        wanted["query"] = json!(query);
+    for name in ["query", "field"] {
+        if let Some(value) = args[name].as_str().filter(|value| !value.is_empty()) {
+            wanted[name] = json!(value);
+        }
     }
     let found = caller.call(action, wanted).await?;
     let listed: Vec<Value> = items(&found)
