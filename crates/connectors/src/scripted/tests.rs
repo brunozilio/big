@@ -7,6 +7,7 @@ use crate::http::{FakeHttp, HttpResponse, Method};
 
 mod aws;
 mod datadog;
+mod figma;
 mod github;
 mod jira;
 mod mcp;

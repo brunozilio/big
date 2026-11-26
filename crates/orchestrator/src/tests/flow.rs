@@ -340,10 +340,13 @@ async fn planning_reads_the_issue_from_the_tracker_and_hands_it_to_the_agent() {
     let world = World::new();
     world.workflow("planned", PLANNED);
     let issue = json!({ "ref": "FIRP-2532", "title": "Exportar extrato", "status": "A fazer", "url": "https://t/FIRP-2532",
-        "type": "História", "description": "Como cliente quero exportar o extrato.\n\nCritérios: CSV e PDF.",
+        "type": "História", "description": "Como cliente quero exportar o extrato.\n\nCritérios: CSV e PDF.\n\nProtótipo: https://www.figma.com/design/AbC/App?node-id=1-2.",
         "subtasks": [{ "ref": "FIRP-2533", "title": "Backend", "status": "A fazer" }],
         "comments": [{ "author": { "name": "Ana" }, "body": "Só o mês corrente.", "at": "2026-11-20" }] });
     world.provider.always("tracker.issue", issue);
+    let screen = json!({ "ref": "AbC:1:2", "name": "Extrato", "file": "App", "url": "https://www.figma.com/design/AbC/App?node-id=1-2",
+        "texts": ["Exportar extrato"], "outline": "- Extrato (frame)", "image": null });
+    world.provider.always("design.frame", screen);
     let kernel = world.start().await;
     let id = kernel.create_item("planned", json!({ "title": "FIRP-2532", "issue": "FIRP-2532" })).expect("item");
     for _ in 0..100 {
@@ -353,10 +356,28 @@ async fn planning_reads_the_issue_from_the_tracker_and_hands_it_to_the_agent() {
         tokio::time::sleep(std::time::Duration::from_millis(50)).await;
     }
     let text = world.engine.requests().first().map(|request| request.prompt.text.clone()).unwrap_or_default();
-    for expected in ["Issue FIRP-2532: Exportar extrato", "Critérios: CSV e PDF.", "FIRP-2533 Backend", "Só o mês corrente.", "already read for you"] {
+    for expected in [
+        "Issue FIRP-2532: Exportar extrato",
+        "Critérios: CSV e PDF.",
+        "FIRP-2533 Backend",
+        "Só o mês corrente.",
+        "already read for you",
+        "## Design: Extrato (App)",
+        "- Exportar extrato",
+    ] {
         assert!(text.contains(expected), "{expected} missing in {text}");
     }
-    let asked = world.provider.calls.lock().expect("lock").iter().any(|(action, args, _)| action == "tracker.issue" && args["issue"] == "FIRP-2532");
+    let asked = world
+        .provider
+        .calls
+        .lock()
+        .expect("lock")
+        .iter()
+        .any(|(action, args, _)| action == "tracker.issue" && args["issue"] == "FIRP-2532");
     assert!(asked, "the plan step reads the issue");
+    let designed = world.provider.calls.lock().expect("lock").iter().any(|(action, args, _)| {
+        action == "design.frame" && args["url"] == "https://www.figma.com/design/AbC/App?node-id=1-2"
+    });
+    assert!(designed, "the plan step reads the linked design");
     drop(id);
 }

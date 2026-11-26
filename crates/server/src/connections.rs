@@ -16,18 +16,9 @@ use crate::error::{ApiError, ApiResult, done, json as reply, said};
 use crate::marks::logo;
 use crate::state::{Ctx, Shared};
 
-fn group(descriptor: &ProviderDescriptor) -> &'static str {
+fn group(descriptor: &ProviderDescriptor) -> String {
     let first = descriptor.capabilities.first().map(|capability| capability.as_str()).unwrap_or_default();
-    match first {
-        "tracker" => "tracker",
-        "cloud" => "cloud",
-        "mcp" => "mcp",
-        "tests" => "tests",
-        "security" => "security",
-        "quality" => "quality",
-        "changes" => "changes",
-        _ => "code",
-    }
+    if first.is_empty() { "code".to_owned() } else { first.to_owned() }
 }
 
 fn fields_of(fields: &[TokenField]) -> Value {
@@ -82,7 +73,7 @@ fn provider_json(shared: &Shared, descriptor: &ProviderDescriptor) -> Value {
         .collect();
     json!({
         "key": descriptor.key.as_str(), "name": descriptor.name,
-        "group": or(&look.group, group(descriptor).to_owned()),
+        "group": or(&look.group, group(descriptor)),
         "description": or(&look.description, said_with(shared, "Your {} account", "Tu cuenta de {}", "Sua conta {}", &descriptor.name)),
         "button": or(&look.button, said_with(shared, "Sign in with {}", "Iniciar sesión con {}", "Entrar com {}", &descriptor.name)),
         "site": or(&look.site, said_with(shared, "from {}", "de {}", "do {}", &descriptor.name)),

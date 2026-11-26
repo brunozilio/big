@@ -446,3 +446,32 @@ export async function readIssue(ctx, opts, issue) {
   const found = await attempt(() => ctx.call("tracker", "issue", { issue: String(issue) }, trackerOptions(ctx, opts)));
   return found && typeof found === "object" ? found : null;
 }
+
+const MOST_LINKS = 5;
+
+export function linksIn(...texts) {
+  const found = texts.flatMap((text) => String(text ?? "").match(/https?:\/\/[^\s<>()\]"'`]+/g) ?? []);
+  return [...new Set(found.map((link) => link.replace(/[.,;:!?*_]+$/, "")))].slice(0, MOST_LINKS);
+}
+
+export async function readDesigns(ctx, opts, links) {
+  const read = [];
+  for (const url of links) {
+    const found = await attempt(() => ctx.call("design", "frame", { url }, { ...effects(opts), optional: true }));
+    if (found && typeof found === "object" && found.ref) read.push(found);
+  }
+  return read;
+}
+
+export function designBrief(frames) {
+  return frames
+    .map((frame) => {
+      const texts = Array.isArray(frame.texts) ? frame.texts.filter(Boolean) : [];
+      const parts = [`## Design: ${frame.name || frame.ref}${frame.file ? ` (${frame.file})` : ""}`, `Link: ${frame.url}`];
+      if (frame.image) parts.push(`Rendered image: ${frame.image}`);
+      if (texts.length > 0) parts.push(`### Texts on the screen\n\n${texts.map((line) => `- ${line.replace(/\n+/g, " ")}`).join("\n")}`);
+      if (frame.outline) parts.push(`### Structure\n\n${frame.outline}`);
+      return parts.join("\n\n");
+    })
+    .join("\n\n");
+}

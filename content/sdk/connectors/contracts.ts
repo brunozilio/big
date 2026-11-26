@@ -302,6 +302,20 @@ export function quality(): Action[] {
   return [read("quality.report", wanted, report)];
 }
 
+export function design(): Action[] {
+  const frame = object(
+    [["ref", "string"], ["name", "string"]],
+    [
+      ["file", "string"],
+      ["url", "string"],
+      ["texts", "array"],
+      ["outline", "string"],
+      ["image", ["string", "null"]],
+    ],
+  );
+  return [read("design.frame", object([["url", "string"]]), frame)];
+}
+
 export type BindingScope = "application" | "repository";
 
 export type BindingField = { key: string; label: string; required?: boolean };

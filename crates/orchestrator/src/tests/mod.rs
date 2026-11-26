@@ -46,7 +46,7 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value, String)>>,
 }
 
-const ACTIONS: [&str; 15] = [
+const ACTIONS: [&str; 16] = [
     "tracker.issue",
     "tracker.create_issue",
     "tracker.update_issue",
@@ -62,6 +62,7 @@ const ACTIONS: [&str; 15] = [
     "pipelines.run",
     "code.merge",
     "cloud.identity",
+    "design.frame",
 ];
 
 impl FakeProvider {
@@ -106,6 +107,7 @@ impl Provider for FakeProvider {
                 Capability::from("code"),
                 Capability::from("cloud"),
                 Capability::from("changes"),
+                Capability::from("design"),
             ],
             auth: AuthSpec::Device(DeviceApp {
                 client_id: "c".into(),
@@ -387,7 +389,7 @@ impl World {
             provider: "fake".into(),
             label: "Fake".into(),
             account: Some("me".into()),
-            capabilities: vec!["tracker".into(), "pipelines".into(), "code".into(), "changes".into()],
+            capabilities: vec!["tracker".into(), "pipelines".into(), "code".into(), "changes".into(), "design".into()],
             settings: json!({}),
         };
         store.save_connection(&record).expect("connection");
