@@ -33,6 +33,11 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let connected = crate::connected_mcp::for_runs(Arc::clone(&store), Arc::clone(&connectors), runtime);
     let address = launch.listener.local_addr().map_err(|error| error.to_string())?;
     let hub = browser::Hub::new();
+    connectors::browser::install(Arc::new(crate::connector_browser::Browsers::new(
+        hub.clone(),
+        Arc::clone(&store),
+        browser::Settings::configured(&launch.data),
+    )));
     let services = services
         .with_applications(crate::memories::applications(Arc::clone(&store)))
         .with_connected_mcp(connected)

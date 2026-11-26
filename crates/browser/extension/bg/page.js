@@ -84,11 +84,12 @@ export async function putFiles(tab, target, files) {
   return inPage(tab, "putFiles", [target, files]);
 }
 
-export async function javascript(tab, code) {
+export async function javascript(tab, code, contextId) {
   if (!code || !String(code).trim()) refuse("`text` is required: the JavaScript to run.");
   restricted(tab);
   const answer = await send(tab.id, "Runtime.evaluate", {
     expression: String(code),
+    ...(contextId === undefined ? {} : { contextId }),
     replMode: true,
     awaitPromise: true,
     returnByValue: true,
@@ -101,7 +102,14 @@ export async function javascript(tab, code) {
     const description = details.exception?.description || details.exception?.value || details.text;
     return { error: `Error: ${description}` };
   }
-  return { value: clip(shown(answer.result), MOST_JS) };
+  return { value: clip(shown(answer.result), MOST_JS), ...structured(answer.result) };
+}
+
+function structured(result) {
+  if (!result || result.type === "undefined" || !("value" in result)) return { json: null };
+  const text = JSON.stringify(result.value) ?? "null";
+  if (text.length > MOST_JS) return { json: null, tooLarge: true };
+  return { json: JSON.parse(text) };
 }
 
 function shown(result) {

@@ -98,10 +98,23 @@ impl Kept {
     }
 }
 
+fn evaluated(connection: Option<&str>, arguments: &Value) -> Result<Value, String> {
+    let Some(connection) = connection else {
+        return Err("the browser is reached per connection, so it is offered only in calls, polls and accounts".to_owned());
+    };
+    let Some(browser) = crate::browser::installed() else {
+        return Err("no browser is connected to this app for connectors".to_owned());
+    };
+    browser.eval(connection, arguments)
+}
+
 impl Answers for Kept {
     fn now(&self, function: &str, arguments: &Value) -> Option<Result<Value, String>> {
         if function.starts_with("memory.") {
             return Some(kept(self.connection.as_deref(), function, arguments));
+        }
+        if function == "browser.eval" {
+            return Some(evaluated(self.connection.as_deref(), arguments));
         }
         self.inner.now(function, arguments)
     }
@@ -159,6 +172,7 @@ impl Answers for Local {
             "clock.now" => Ok(json!(Timestamp::now().as_second())),
             "net.site" => Ok(json!(domain::site::site(field(arguments, "url")))),
             "net.safeEndpoint" => Ok(json!(domain::mcp_oauth::endpoint_ok(field(arguments, "url")))),
+            "browser.eval" => Err("the browser is reached per connection, so it is offered only in calls, polls and accounts".to_owned()),
             "memory.get" | "memory.set" => {
                 Err("the connector memory is kept per connection, so it is offered only in calls, polls and accounts"
                     .to_owned())

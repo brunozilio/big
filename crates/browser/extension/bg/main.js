@@ -1,6 +1,7 @@
 import { attach } from "./cdp.js";
 import { computer, shot, viewport } from "./computer.js";
 import { captureFrame, gif } from "./frames.js";
+import { contextOf, frameMatch, frameOf } from "./frame.js";
 import { intercept } from "./intercept.js";
 import { connect, handle, identity, send } from "./link.js";
 import { readConsole, readNetwork } from "./logs.js";
@@ -145,9 +146,13 @@ async function pageTextTool({ session, input, sites }) {
 async function javascriptTool({ session, input, sites }) {
   if (input.action !== "javascript_exec") refuse("`action` must be 'javascript_exec'.");
   const tab = await onPage(session, input, sites);
-  const answer = await javascript(tab, input.text);
+  const match = frameMatch(input);
+  const frame = match ? await frameOf(tab, match) : null;
+  if (frame) ensure(frame.url, sites);
+  const answer = await javascript(tab, input.text, frame ? contextOf(tab.id, frame.id) : undefined);
   if (answer.error) return fail(answer.error);
-  return withContext(session, ok(answer.value), tab.id, false);
+  const result = await withContext(session, ok(answer.value), tab.id, false);
+  return { ...result, json: answer.json, tooLarge: answer.tooLarge === true };
 }
 
 async function consoleTool({ session, input, sites }) {

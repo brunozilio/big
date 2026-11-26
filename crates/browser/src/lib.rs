@@ -1,4 +1,5 @@
 mod batch;
+mod eval;
 mod extension;
 mod files;
 mod find;
@@ -9,7 +10,8 @@ mod socket;
 mod spec;
 
 pub use extension::{Installed, install};
-pub use hub::{BrowserInfo, Hub};
+pub use eval::{Eval, run as evaluate};
+pub use hub::{BrowserInfo, Hub, Resolved, no_browser};
 pub use session::{Ask, Session};
 pub use socket::{ROUTE, connect};
 pub use spec::{server_name, tools};
