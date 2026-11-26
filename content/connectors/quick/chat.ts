@@ -22,6 +22,7 @@ function address(ctx, held: Held): string {
     ["surfaceType", ctx.config.surface_type],
     ["token", held.token],
     ["workingSessionId", uuid(ctx)],
+    ["channel", ctx.config.channel],
   ]
     .map(([name, value]) => `${name}=${encodeURIComponent(value)}`)
     .join("&");
@@ -112,7 +113,7 @@ export function ask(ctx, held: Held, asked: Asked) {
       user_locale: ctx.config.locale,
     },
   };
-  const socket = open(ctx, address(ctx, held));
+  const socket = open(ctx, address(ctx, held), { "user-agent": ctx.config.chat_user_agent, origin: ctx.config.chat_origin });
   const turn: Turn = { text: "", model: "", done: false };
   try {
     send(ctx, socket, [outgoing(ctx, connect), outgoing(ctx, message)]);

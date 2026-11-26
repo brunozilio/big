@@ -5,10 +5,10 @@ author = "brunozilio"
 
 [connectors]
 oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
-user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36"
 oauth_client_name = "Google Chrome"
 mcp_client_name = "Google Chrome"
-mcp_client_version = "154.0.0.0"
+mcp_client_version = "158.0.0.0"
 marker = "ref"
 
 [zephyr]
@@ -138,7 +138,8 @@ client_name = "Kiro CLI"
 origin = "KIRO_CLI"
 
 [quick]
-client_name = "Amazon Quick"
+client_name = "AmazonQuick-Desktop"
+oidc_user_agent = "Boto3/1.43.121 md/Botocore#1.43.121 md/awscrt#0.32.2 ua/2.1 os/macos#27.2.0 md/arch#arm64 lang/python#3.12.15 md/pyimpl#CPython m/Z,D,b cfg/retry-mode#legacy Botocore/1.43.121"
 social_url = "https://quick.aws.com/sn?qwSurface={surface}"
 enterprise_url = "https://quicksight.aws.amazon.com/sn/start/app-integrations/quickwork-enterprise-login?qwSurface={surface}"
 discovery = "social"
@@ -150,6 +151,9 @@ scopes = "quicksight:read_write"
 loopback_port = "18093"
 redirect = "http://127.0.0.1:{port}"
 chat_path = "/streaming/quickwork-chat-bidirectional-stream"
+chat_user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) AWSQuick/1.2.4759 Chrome/150.0.7871.250 Electron/43.8.7 Safari/537.36"
+chat_origin = "file://"
+channel = "prod"
 modes = "fast smart advanced"
 default_mode = "smart"
 timezone = "America/Sao_Paulo"
@@ -177,7 +181,7 @@ messages_headers = "user-agent: claude-cli/2.1.330 (external, cli)|x-app: cli"
 responses_headers = "originator: codex_cli_rs|version: 0.130.0|user-agent: codex_cli_rs/0.130.0 (Mac OS 26.2.0; arm64) Apple_Terminal/464"
 
 [web]
-user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36"
 
 [network]
 ca_files = ""

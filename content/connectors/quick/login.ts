@@ -47,7 +47,7 @@ function refused(status: number, answer, what: string): never {
 }
 
 function posted(ctx, url: string, body: unknown, what: string) {
-  const answer = send(ctx, { method: "POST", url, headers: { "content-type": "application/json", accept: "application/json" }, body: JSON.stringify(body) });
+  const answer = send(ctx, { method: "POST", url, headers: { "content-type": "application/json", accept: "application/json", "user-agent": ctx.config.oidc_user_agent }, body: JSON.stringify(body) });
   const found = parsed(answer.body);
   if (answer.status < 200 || answer.status >= 300) refused(answer.status, found, what);
   return found;

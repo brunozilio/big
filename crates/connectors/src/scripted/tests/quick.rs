@@ -54,6 +54,8 @@ async fn the_sign_in_discovers_the_account_then_registers_and_authorizes_at_its_
     assert!(begun.url.ends_with("%3A18093%3A1.2.4759"), "{}", begun.url);
     let registered = body(&http.sent()[0].body_text());
     assert_eq!(registered["issuerUrl"], DISCOVERED);
+    assert_eq!(registered["clientName"], brand::quick::CLIENT_NAME);
+    assert_eq!(http.sent()[0].header_value("user-agent"), Some(brand::quick::OIDC_USER_AGENT));
     assert_eq!(registered["redirectUris"], json!(["http://127.0.0.1:18093"]));
     assert!(next.url.starts_with("https://oidc.us-east-1.amazonaws.com/authorize?"), "{}", next.url);
     assert!(next.url.contains("client_id=cid") && next.url.contains("code_challenge_method=S256"), "{}", next.url);
@@ -122,7 +124,8 @@ async fn quick_cell(events: Vec<Value>) -> (String, tokio::task::JoinHandle<(Str
         let (stream, _) = listener.accept().await.unwrap_or_else(|error| panic!("{error}"));
         let mut path = String::new();
         let callback = |request: &tokio_tungstenite::tungstenite::handshake::server::Request, response| {
-            path = request.uri().to_string();
+            let header = |name: &str| request.headers().get(name).and_then(|value| value.to_str().ok()).unwrap_or("");
+            path = format!("{} {} {}", header("user-agent"), header("origin"), request.uri());
             Ok(response)
         };
         let mut socket =
@@ -169,7 +172,11 @@ async fn a_question_is_answered_with_its_sources_on_the_thread_asked() {
     );
     let (path, heard) = served.await.unwrap_or_else(|error| panic!("{error}"));
     assert!(
-        path.starts_with("/streaming/quickwork-chat-bidirectional-stream?surfaceType=QUICK_WORK_DESKTOP_MAC&token=at&"),
+        path.starts_with(&format!(
+            "{} {} /streaming/quickwork-chat-bidirectional-stream?surfaceType=QUICK_WORK_DESKTOP_MAC&token=at&",
+            brand::quick::CHAT_USER_AGENT,
+            brand::quick::CHAT_ORIGIN
+        )) && path.ends_with("&channel=prod"),
         "{path}"
     );
     assert_eq!(heard[0]["type"], "session_connect");
