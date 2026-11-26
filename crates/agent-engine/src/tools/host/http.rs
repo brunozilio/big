@@ -46,7 +46,7 @@ fn fetch(reach: &Reach<'_>, arguments: &Value) -> Result<Value, String> {
     let Some(web) = &reach.workspace.services.network else {
         return Err(guard::refusal_by_name(&url).unwrap_or_else(|| "The web is not available to this run.".into()));
     };
-    let mut headers = vec![("User-Agent".to_owned(), brand::NAME.to_owned())];
+    let mut headers = vec![("User-Agent".to_owned(), brand::web::USER_AGENT.to_owned())];
     if let Some(accept) = arguments.get("accept").and_then(Value::as_str) {
         headers.push(("Accept".to_owned(), accept.to_owned()));
     }
@@ -129,7 +129,7 @@ async fn over_http(query: &str, workspace: &Workspace, cancel: &CancellationToke
         "{SEARCH_OVER_HTTP}?{}",
         url::form_urlencoded::Serializer::new(String::new()).append_pair("q", query).finish()
     );
-    let headers = [("User-Agent".to_owned(), brand::NAME.to_owned())];
+    let headers = [("User-Agent".to_owned(), brand::web::USER_AGENT.to_owned())];
     let response = web
         .0
         .request_cancellable(&address, &headers, None, cancel)

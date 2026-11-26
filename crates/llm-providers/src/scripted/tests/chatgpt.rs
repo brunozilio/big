@@ -87,7 +87,11 @@ fn codex_gets_its_instructions_effort_and_no_strict_tools() {
     let mut body = json!({"model": "openai-subscription:gpt-5", "instructions": "be brief",
         "reasoning": {"effort": "max"}, "tool_choice": "auto", "tools": [{"name": "t", "strict": true}]});
     crate::request::shape(chatgpt(), None, &mut body).unwrap_or_else(|e| panic!("{e}"));
-    assert!(body["instructions"].as_str().is_some_and(|s| s.ends_with("be brief")));
+    assert!(
+        body["instructions"]
+            .as_str()
+            .is_some_and(|s| s.starts_with(brand::chatgpt::INSTRUCTIONS) && s.ends_with("be brief"))
+    );
     assert_eq!(body["reasoning"], json!({"effort": "xhigh", "summary": "auto"}));
     assert!(body.get("tool_choice").is_none() && body["tools"][0].get("strict").is_none());
 }

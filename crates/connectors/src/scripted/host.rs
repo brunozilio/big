@@ -306,7 +306,7 @@ impl<'a> Online<'a> {
         McpSignIn {
             server: field(arguments, "server").to_owned(),
             redirect: redirect.map_or_else(|| self.redirect.clone(), str::to_owned),
-            client_name: brand::NAME.to_owned(),
+            client_name: brand::connectors::OAUTH_CLIENT_NAME.to_owned(),
             scopes: scopes.map(str::to_owned).collect(),
         }
     }

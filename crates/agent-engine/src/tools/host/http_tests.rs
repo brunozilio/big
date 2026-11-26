@@ -46,7 +46,7 @@ fn a_page_comes_back_with_its_status_address_type_and_text() {
         json!({ "status": 200, "url": "https://serde.rs/", "contentType": "text/html", "body": "<p>Hi</p>" })
     );
     let sent = &http.sent()[0];
-    assert!(sent.headers.iter().any(|(key, value)| key == "User-Agent" && value == brand::NAME));
+    assert!(sent.headers.iter().any(|(key, value)| key == "User-Agent" && value == brand::web::USER_AGENT));
     assert!(sent.headers.iter().all(|(key, _)| key != "Accept"), "no Accept unless asked");
 
     let http = Arc::new(ScriptedHttp::new([(404, "gone".to_owned())]));

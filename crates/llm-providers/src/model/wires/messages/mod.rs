@@ -46,13 +46,8 @@ impl Messages {
     }
 
     fn headers(&self) -> Result<Vec<(String, String)>, ModelError> {
-        let mut headers = vec![
-            ("anthropic-version".to_owned(), VERSION.to_owned()),
-            (
-                "user-agent".to_owned(),
-                format!("{brand_command}/{}", env!("CARGO_PKG_VERSION"), brand_command = brand::COMMAND),
-            ),
-        ];
+        let mut headers = vec![("anthropic-version".to_owned(), VERSION.to_owned())];
+        headers.extend(super::declared_headers(brand::wires::MESSAGES_HEADERS));
         headers.push(("x-api-key".to_owned(), self.keys.key()?.secret().to_owned()));
         Ok(headers)
     }

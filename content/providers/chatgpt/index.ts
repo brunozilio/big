@@ -69,6 +69,8 @@ export function headers({ config }: { config: Config }, ctx) {
       ["chatgpt-account-id", config.auth.account_id ?? ""],
       ["openai-beta", "responses=experimental"],
       ["originator", ctx.config.originator],
+      ["version", ctx.config.version],
+      ["user-agent", ctx.config.user_agent],
     );
   }
   return sent;
@@ -81,7 +83,7 @@ export function turnHeaders({ body }) {
 export const retriesAfterRefresh = ({ status }: { status: number }) => status === 401;
 
 export function shape({ model, body, effort }, ctx) {
-  body.instructions = `You are a helpful coding assistant operating through ${ctx.brand.NAME}.\n\n${typeof body.instructions === "string" ? body.instructions : ""}`;
+  body.instructions = `${ctx.config.instructions}\n\n${typeof body.instructions === "string" ? body.instructions : ""}`;
   body.reasoning = { ...(body.reasoning ?? {}), effort };
   body.text = { verbosity: "medium" };
   remove(body, ["parallel_tool_calls", "tool_choice"]);
@@ -89,7 +91,7 @@ export function shape({ model, body, effort }, ctx) {
   return ctx.models.effort({ vendor: "openai", body, model, effort, always: true });
 }
 
-export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.config.api, headers({ config }, ctx), "/codex/models?client_version=0.0.0");
+export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.config.api, headers({ config }, ctx), `/codex/models?client_version=${ctx.config.version}`);
 
 export function page({ value }, ctx) {
   const models = items(value, "models").flatMap((item) => {

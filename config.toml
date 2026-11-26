@@ -5,6 +5,10 @@ author = "brunozilio"
 
 [connectors]
 oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
+user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
+oauth_client_name = "Google Chrome"
+mcp_client_name = "Google Chrome"
+mcp_client_version = "154.0.0.0"
 
 [zephyr]
 mcp_url = "https://zephyr.mcp.smartbear.com/mcp"
@@ -75,6 +79,9 @@ account_claim = "https://api.openai.com/auth"
 callback_port = "1455"
 callback_path = "/auth/callback"
 originator = "codex_cli_rs"
+version = "0.130.0"
+user_agent = "codex_cli_rs/0.130.0 (Mac OS 26.2.0; arm64) Apple_Terminal/464"
+instructions = "You are Codex, based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer."
 
 [copilot]
 client_id = "Ov23ctDVkRmgkPke0Mmm"
@@ -165,6 +172,11 @@ idle_minutes = "15"
 [wires]
 messages_api = "https://api.anthropic.com"
 responses_api = "https://api.openai.com/v1"
+messages_headers = "user-agent: claude-cli/2.1.330 (external, cli)|x-app: cli"
+responses_headers = "originator: codex_cli_rs|version: 0.130.0|user-agent: codex_cli_rs/0.130.0 (Mac OS 26.2.0; arm64) Apple_Terminal/464"
+
+[web]
+user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
 
 [content]
 install = true

@@ -46,13 +46,8 @@ impl Responses {
 
     fn target(&self) -> Result<(String, Vec<(String, String)>), ModelError> {
         let key = self.keys.key()?;
-        let headers = vec![
-            (
-                "user-agent".to_owned(),
-                format!("{brand_command}/{}", env!("CARGO_PKG_VERSION"), brand_command = brand::COMMAND),
-            ),
-            ("authorization".to_owned(), format!("Bearer {}", key.secret())),
-        ];
+        let mut headers = super::declared_headers(brand::wires::RESPONSES_HEADERS);
+        headers.push(("authorization".to_owned(), format!("Bearer {}", key.secret())));
         Ok((format!("{API}/responses"), headers))
     }
 }

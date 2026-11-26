@@ -65,7 +65,10 @@ fn the_key_goes_to_the_api() {
     let header = |name: &str| sent[0].headers.iter().find(|(key, _)| key == name).map(|(_, v)| v.clone());
     assert_eq!(sent[0].url, "https://api.openai.com/v1/responses");
     assert_eq!(header("authorization").as_deref(), Some("Bearer sk"));
-    assert!(header("user-agent").is_some_and(|agent| agent.starts_with(concat!(brand::command!(), "/"))));
+    for (name, value) in crate::model::wires::declared_headers(brand::wires::RESPONSES_HEADERS) {
+        assert_eq!(header(&name), Some(value));
+    }
+    assert!(header("user-agent").is_some_and(|agent| !agent.contains(brand::NAME)));
 }
 
 #[test]

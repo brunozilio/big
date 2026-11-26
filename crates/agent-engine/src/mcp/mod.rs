@@ -145,7 +145,8 @@ impl McpServer {
     }
 
     pub fn initialize_stopped(&self, stop: &platform::Stop) -> Result<(), McpError> {
-        let client = json!({ "name": brand::COMMAND, "version": env!("CARGO_PKG_VERSION") });
+        let client =
+            json!({ "name": brand::connectors::MCP_CLIENT_NAME, "version": brand::connectors::MCP_CLIENT_VERSION });
         let answer = self.rpc_stopped(
             "initialize",
             json!({ "protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": client }),

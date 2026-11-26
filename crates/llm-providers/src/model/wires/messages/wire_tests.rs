@@ -70,7 +70,10 @@ fn sends_the_key_and_names_itself() {
     assert_eq!(sent[0].url, "https://api.anthropic.com/v1/messages");
     assert_eq!(header(0, "x-api-key").as_deref(), Some("sk-test"));
     assert_eq!(header(0, "authorization"), None);
-    assert!(header(0, "user-agent").is_some_and(|agent| agent.starts_with(concat!(brand::command!(), "/"))));
+    for (name, value) in crate::model::wires::declared_headers(brand::wires::MESSAGES_HEADERS) {
+        assert_eq!(header(0, &name), Some(value));
+    }
+    assert!(header(0, "user-agent").is_some_and(|agent| !agent.contains(brand::NAME)));
     assert!(sent.iter().all(|request| !request.headers.iter().any(|(key, _)| key == "anthropic-beta")));
 }
 

@@ -5,11 +5,11 @@ use domain::provider::{ProviderKey, ProviderKeyStore};
 use domain::{ModelOption, ModelProvider};
 use serde_json::{Value, json};
 
+use crate::Provider;
 use crate::model::client::{Config, ProviderClient};
 use crate::model::http::ScriptedHttp;
 use crate::model::{BlockingTurn, CancellationToken, ModelError};
 use crate::providers::testing::{effort_body, header, request};
-use crate::Provider;
 
 const CHATGPT: ModelProvider = ModelProvider::new("openai-subscription");
 
@@ -58,6 +58,8 @@ fn a_turn_goes_to_the_codex_backend_for_the_account() {
     assert_eq!(sent.url, "https://chatgpt.com/backend-api/codex/responses");
     assert_eq!(header(&sent, "chatgpt-account-id").as_deref(), Some("account-1"));
     assert_eq!(header(&sent, "originator").as_deref(), Some("codex_cli_rs"));
+    assert_eq!(header(&sent, "user-agent").as_deref(), Some(brand::chatgpt::USER_AGENT));
+    assert_eq!(header(&sent, "version").as_deref(), Some(brand::chatgpt::VERSION));
     assert_eq!(body["reasoning"]["effort"], "high");
     assert_eq!(body["text"]["verbosity"], "medium");
     assert_eq!(body["store"], false);
@@ -97,7 +99,10 @@ fn the_catalog_uses_the_account_and_keeps_model_metadata() {
     assert_eq!(caps.auto_compact_token_limit, Some(272000));
     assert_eq!(caps.effective_context_window_percent, Some(95));
     assert_eq!(caps.reasoning_levels, ["high"]);
-    assert_eq!(http.sent()[0].url, "https://chatgpt.com/backend-api/codex/models?client_version=0.0.0");
+    assert_eq!(
+        http.sent()[0].url,
+        format!("https://chatgpt.com/backend-api/codex/models?client_version={}", brand::chatgpt::VERSION)
+    );
 }
 
 #[test]

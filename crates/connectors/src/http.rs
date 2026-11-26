@@ -98,7 +98,9 @@ impl HttpRequest {
         let boundary = format!("----part{}", seed.iter().map(|byte| format!("{byte:02x}")).collect::<String>());
         let mut body = Vec::new();
         for part in parts {
-            body.extend_from_slice(format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"", quoted(&part.name)).as_bytes());
+            body.extend_from_slice(
+                format!("--{boundary}\r\nContent-Disposition: form-data; name=\"{}\"", quoted(&part.name)).as_bytes(),
+            );
             if let Some(filename) = &part.filename {
                 body.extend_from_slice(format!("; filename=\"{}\"", quoted(filename)).as_bytes());
             }
@@ -199,7 +201,7 @@ pub struct ReqwestHttp {
 impl ReqwestHttp {
     pub fn new() -> Result<ReqwestHttp, ActionError> {
         let client = reqwest::Client::builder()
-            .user_agent(brand::NAME)
+            .user_agent(brand::connectors::USER_AGENT)
             .timeout(TIMEOUT)
             .build()
             .map_err(|error| ActionError::permanent(error.to_string()))?;
@@ -359,7 +361,12 @@ mod tests {
 
     #[test]
     fn a_multipart_body_carries_each_field_and_file_between_boundaries() {
-        let file = Part { name: "file".into(), filename: Some("a\"b.png".into()), content_type: Some("image/png".into()), bytes: vec![0, 159, 1] };
+        let file = Part {
+            name: "file".into(),
+            filename: Some("a\"b.png".into()),
+            content_type: Some("image/png".into()),
+            bytes: vec![0, 159, 1],
+        };
         let field = Part { name: "note".into(), bytes: b"oi".to_vec(), ..Part::default() };
         let request = HttpRequest::post("https://h").multipart(&[file, field]);
         let kind = request.header_value("content-type").unwrap_or_default().to_owned();
@@ -367,7 +374,12 @@ mod tests {
         assert!(boundary.len() > 10, "{kind}");
         let mut expected = format!("--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a'b.png\"\r\nContent-Type: image/png\r\n\r\n").into_bytes();
         expected.extend_from_slice(&[0, 159, 1]);
-        expected.extend_from_slice(format!("\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\noi\r\n--{boundary}--\r\n").as_bytes());
+        expected.extend_from_slice(
+            format!(
+                "\r\n--{boundary}\r\nContent-Disposition: form-data; name=\"note\"\r\n\r\noi\r\n--{boundary}--\r\n"
+            )
+            .as_bytes(),
+        );
         assert_eq!(request.body, expected);
     }
 

@@ -122,7 +122,7 @@ impl<'a> McpClient<'a> {
         let params = json!({
             "protocolVersion": PROTOCOL,
             "capabilities": {},
-            "clientInfo": { "name": brand::COMMAND, "version": env!("CARGO_PKG_VERSION") },
+            "clientInfo": { "name": brand::connectors::MCP_CLIENT_NAME, "version": brand::connectors::MCP_CLIENT_VERSION },
         });
         let (response, _) = client.exchange("initialize", params).await?;
         client.session = response.header(SESSION).map(str::to_owned);
