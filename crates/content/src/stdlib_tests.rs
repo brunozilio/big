@@ -693,8 +693,8 @@ fn the_plan_gives_the_title_the_story_goes_to_the_issue_and_the_pull_request_is_
     assert_eq!(issue["title"], "Cadastro de clientes");
     let story = issue["description"].as_str().expect("description");
     assert!(
-        story.starts_with("Como atendente, eu quero")
-            && story.contains("## Critérios de aceite\n- Dado que")
+        story.starts_with("**Como** atendente, **eu quero**")
+            && story.contains("## Critérios de aceite\n- **Dado** que")
             && !story.contains("Criar a tabela"),
         "{story}"
     );
@@ -714,7 +714,7 @@ fn the_plan_gives_the_title_the_story_goes_to_the_issue_and_the_pull_request_is_
     let developer =
         of_kind(&asked, "agent").into_iter().find(|command| command["args"]["name"] == "developer").cloned();
     let prompt = developer.expect("developer")["args"]["input"]["prompt"].as_str().unwrap_or_default().to_owned();
-    assert!(prompt.contains("Dado que estou no cadastro") && prompt.contains("Criar a tabela"), "{prompt}");
+    assert!(prompt.contains("**Dado** que estou no cadastro") && prompt.contains("Criar a tabela"), "{prompt}");
     let opened = &calls(&asked, "open_pull_request")[0]["args"]["args"];
     assert_eq!(opened["title"], "T-9 - Cadastro de clientes");
     assert_eq!(opened["body"], "Cadastra clientes pela ferramenta MCP.\n\nIssue: T-9");
@@ -884,7 +884,7 @@ fn each_subtask_moves_to_doing_and_to_done_around_its_own_developer_turn() {
         of_kind(&asked, "agent").into_iter().filter(|command| command["args"]["name"] == "developer").collect();
     let first = developers[0]["args"]["input"]["prompt"].as_str().unwrap_or_default();
     let second = developers[1]["args"]["input"]["prompt"].as_str().unwrap_or_default();
-    assert!(first.contains("subtask 1 of 2: Criar a tabela (T-11)") && first.contains("Dado que estou"), "{first}");
+    assert!(first.contains("subtask 1 of 2: Criar a tabela (T-11)") && first.contains("**Dado** que estou"), "{first}");
     assert!(second.starts_with("Now do only subtask 2 of 2: Criar a ferramenta (T-12)"), "{second}");
 }
 
@@ -1595,7 +1595,7 @@ fn an_english_item_asks_in_english_and_its_english_plan_reaches_the_issue() {
     assert!(prompts.iter().any(|prompt| prompt.contains("subtask 1 of 1: Create the table")), "{prompts:?}");
     let created = calls(&asked, "create_issue");
     let story = created[0]["args"]["args"]["description"].as_str().expect("description");
-    assert!(story.starts_with("As a clerk") && story.contains("## Acceptance criteria\n- Given I am"), "{story}");
+    assert!(story.starts_with("**As** a clerk") && story.contains("## Acceptance criteria\n- **Given** I am"), "{story}");
     let opened = &calls(&asked, "open_pull_request")[0]["args"]["args"];
     assert_eq!(opened["body"], "Signs customers up.\n\nIssue: T-9");
 }
@@ -1853,4 +1853,17 @@ fn the_merge_offers_first_the_method_the_repository_s_flow_declares() {
         .find(|command| command["args"]["view"][0]["type"] == "merge")
         .map(|command| command["args"]["view"][0]["methods"].clone());
     assert_eq!(offered, Some(json!(["rebase", "squash", "merge"])));
+}
+
+#[test]
+fn the_plan_story_speaks_the_item_language_with_its_keywords_in_bold() {
+    let probe = "import { parsePlan } from \"sdk/steps/context.js\";\nexport function probe(text) { return parsePlan(text, \"pt-BR\"); }\n";
+    let text = "# Ajustar tooltip\n\n## Description\nAs a user, I want to read the tooltip so that I understand the field.\n\n## Acceptance criteria\n- Given the form is open, when I hover the icon, then the tooltip says \"Valor\".\n- Dado que a tela abriu, quando passo o mouse, então aparece.\n\n## Subtasks\n### Trocar o texto\nNo componente.";
+    let bundled = format!("{}\nexport const probe = __m[\"probe.js\"].probe;\n", source("probe.js", probe));
+    let plan = call(&bundled, "probe", &[json!(text)]);
+    let story = plan["story"].as_str().unwrap_or_else(|| panic!("{plan}"));
+    assert!(story.contains("**Como** user, **eu quero** to read the tooltip **para que** I understand"), "{story}");
+    assert!(story.contains("- **Dado** the form is open, **quando** I hover the icon, **então** the tooltip"), "{story}");
+    assert!(story.contains("- **Dado** que a tela abriu, **quando** passo o mouse, **então** aparece."), "{story}");
+    assert_eq!(plan["subtasks"][0]["title"], "Trocar o texto");
 }

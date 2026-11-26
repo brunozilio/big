@@ -95,8 +95,59 @@ function subtasksOf(text) {
     });
 }
 
+const KEYWORDS = {
+  en: { given: "Given", when: "when", then: "then", as: "As", want: "I want", so: "so that" },
+  "pt-BR": { given: "Dado", when: "quando", then: "então", as: "Como", want: "eu quero", so: "para que" },
+  es: { given: "Dado", when: "cuando", then: "entonces", as: "Como", want: "quiero", so: "para que" },
+};
+
+const SPOKEN = {
+  given: "given|dado(?: que)?",
+  when: "when|quando|cuando",
+  then: "then|ent[aã]o|entonces",
+  as: "as(?: an?)?|como(?: um| uma| un| una)?",
+  want: "i want|eu quero|quero|quiero|yo quiero",
+  so: "so that|para que",
+};
+
+function spoken(kind, at) {
+  const words = SPOKEN[kind];
+  return new RegExp(`${at}\\**(${words})\\**(?=[\\s,:]|$)`, "iu");
+}
+
+function keyword(line, kind, at, named) {
+  return line.replace(spoken(kind, at), (_, lead, word) => {
+    const english = /^(as|given)\b/i.test(word);
+    const kept = !english || named === KEYWORDS.en[kind];
+    const article = (kind === "as" || kind === "given") && kept ? word.replace(/^\S+/, "") : "";
+    return `${lead}**${named}**${article}`;
+  });
+}
+
+function scenario(line, named) {
+  let shaped = keyword(line, "given", "^(\\s*[-*]\\s+)", named.given);
+  if (shaped === line) return line;
+  shaped = keyword(shaped, "when", "(,\\s*)", named.when);
+  return keyword(shaped, "then", "(,\\s*)", named.then);
+}
+
+function storyLine(line, named) {
+  let shaped = keyword(line, "as", "^(\\s*)", named.as);
+  if (shaped === line) return line;
+  shaped = keyword(shaped, "want", "(,\\s*)", named.want);
+  return keyword(shaped, "so", "(\\s+|,\\s*)", named.so);
+}
+
+export function localizeStory(text, language) {
+  const named = KEYWORDS[language] ?? KEYWORDS["pt-BR"];
+  return String(text ?? "")
+    .split("\n")
+    .map((line) => storyLine(scenario(line, named), named))
+    .join("\n");
+}
+
 export function parsePlan(text, language) {
-  const lines = String(text ?? "").split("\n");
+  const lines = localizeStory(text, language).split("\n");
   const at = lines.findIndex((line) => /^# \S/.test(line));
   if (at < 0) return { title: "", story: "", subtasks: [], infra: [], text: String(text ?? "").trim() };
   const title = lines[at].slice(2).trim();
