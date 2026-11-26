@@ -46,6 +46,7 @@ fn repository(found: Repository) -> ApiResult<Repository> {
         e2e_directory,
         bindings: bound(found.bindings),
         flow: trimmed(&found.flow),
+        read_only: found.read_only,
     })
 }
 

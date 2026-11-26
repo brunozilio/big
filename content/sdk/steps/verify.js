@@ -1,5 +1,5 @@
 import { step, logs, chat, markdown } from "sdk";
-import { agentOptions, branchOf, defined, inLanguage, object, planOf, repositoriesOf, tail } from "./context.js";
+import { agentOptions, branchOf, defined, inLanguage, object, planOf, repositoriesOf, tail, writableOf } from "./context.js";
 import { endToEnd, e2eLines } from "./e2e.js";
 
 export const NOTHING = "No verification command configured for this repository.\n";
@@ -11,9 +11,8 @@ export function own(opts) {
 }
 
 export function groupsOf(ctx, opts) {
-  const repositories = repositoriesOf(ctx);
-  if (repositories.length === 0) return [{ commands: opts.commands ?? ctx.item.checks ?? [] }];
-  return repositories.map((repository) => ({
+  if (repositoriesOf(ctx).length === 0) return [{ commands: opts.commands ?? ctx.item.checks ?? [] }];
+  return writableOf(ctx).map((repository) => ({
     repository: repository.id,
     name: repository.name,
     commands: opts.commands ?? (Array.isArray(repository.verify) ? repository.verify : []),

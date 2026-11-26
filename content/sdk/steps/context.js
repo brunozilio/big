@@ -276,14 +276,18 @@ export function repositoriesOf(ctx) {
     .map((repository) => ({ ...repository, name: nameOf(repository), code: codeOf(repository) }));
 }
 
+export function writableOf(ctx) {
+  return repositoriesOf(ctx).filter((repository) => repository.readOnly !== true);
+}
+
 function touched(changes, target) {
   const found = changes.find((entry) => entry.id === target.id);
   return !found || found.changed !== false;
 }
 
 export function codeTargets(ctx, opts) {
-  const repositories = repositoriesOf(ctx);
-  if (repositories.length === 0) return [{ id: "", name: "", code: null }];
+  const repositories = writableOf(ctx);
+  if (repositoriesOf(ctx).length === 0) return [{ id: "", name: "", code: null }];
   const coded = repositories.filter((repository) => repository.code && repository.code.repo);
   if (coded.length === 0) return repositories.length === 1 ? [{ ...repositories[0], code: null }] : [];
   const changes = source(ctx, opts, "develop").repositories;

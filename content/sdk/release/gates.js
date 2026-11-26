@@ -30,6 +30,7 @@ export function services(state, config, application) {
   const repositories = (application && application.repositories) || [];
   const wanted = new Set(state.members.flatMap(repositoriesOf));
   const chosen = repositories
+    .filter((repository) => repository.readOnly !== true)
     .filter((repository) => wanted.size === 0 || wanted.has(repository.id))
     .map((repository) => ({ ...repository, code: codeOf(repository) }));
   return chosen

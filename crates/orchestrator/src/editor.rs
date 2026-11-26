@@ -58,6 +58,7 @@ mod tests {
             run: Vec::new(),
             verify: Vec::new(),
             e2e: Vec::new(),
+            read_only: false,
             e2e_directory: String::new(),
         }
     }

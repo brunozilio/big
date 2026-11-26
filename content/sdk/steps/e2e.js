@@ -1,5 +1,5 @@
 import { projectOf } from "sdk/bindings.js";
-import { agentOptions, attempt, branchOf, defined, eachOf, inLanguage, issueOf, languageOf, object, planOf, repositoriesOf, source, tail } from "./context.js";
+import { agentOptions, attempt, branchOf, defined, eachOf, inLanguage, issueOf, languageOf, object, planOf, repositoriesOf, source, tail, writableOf } from "./context.js";
 import { listing } from "./cases.js";
 
 const STATES = ["passed", "failed", "blocked", "not_run"];
@@ -105,8 +105,8 @@ export function verdictsOf(result, cases) {
 }
 
 function places(ctx) {
-  const repositories = repositoriesOf(ctx);
-  return repositories.length === 0 ? [undefined] : repositories.map((repository) => repository.id);
+  const repositories = writableOf(ctx);
+  return repositoriesOf(ctx).length === 0 ? [undefined] : repositories.map((repository) => repository.id);
 }
 
 export async function kept(ctx, opts, verdicts) {

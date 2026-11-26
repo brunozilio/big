@@ -80,6 +80,42 @@ async fn an_item_of_an_application_gets_a_worktree_per_repository_and_its_own_wo
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn a_read_only_repository_is_consulted_in_its_own_folder_without_a_worktree() {
+    let mut world = World::new();
+    world.init_git();
+    let first = world.dir.path().join("web");
+    let second = world.dir.path().join("cfg");
+    let file = second.join(brand::DIR).join("workflows/multi.ts");
+    std::fs::create_dir_all(file.parent().expect("parent")).expect("dir");
+    std::fs::write(&file, MULTI).expect("write");
+    let agent = second.join(brand::DIR).join("agents/worker.md");
+    std::fs::create_dir_all(agent.parent().expect("parent")).expect("dir");
+    std::fs::write(&agent, WORKER).expect("write");
+    git_repo(&second, "CFG.txt");
+    git_repo(&first, "WEB.txt");
+    *world.engine.state.write.lock().expect("lock") = Some("feito.txt".into());
+    let kernel = world.start().await;
+
+    let mut application = application(&first, &second);
+    application["repositories"][1]["readOnly"] = json!(true);
+    let repositories = application["repositories"].as_array_mut().expect("listed");
+    repositories.reverse();
+    let id = kernel.create_item("multi", json!({ "title": "x", "application": application })).expect("item");
+    let item = ended(&kernel, &id).await;
+    let done = output(&item);
+    assert_eq!(done["changed"], json!([["web", true], ["api", false]]));
+    assert!(done["ls"][0].as_str().is_some_and(|text| text.contains("CFG.txt")), "{done}");
+
+    let request = &world.engine.requests()[0];
+    assert!(request.session.cwd.to_string_lossy().ends_with("--web"));
+    assert_eq!(request.session.add_dirs, std::slice::from_ref(&second));
+    let system = request.session.append_system.clone().unwrap_or_default();
+    assert!(system.contains("Read only"), "{system}");
+    let branches = platform::git::command(&second).args(["branch", "--list"]).output().expect("git");
+    assert_eq!(String::from_utf8_lossy(&branches.stdout).lines().count(), 2);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn two_items_in_different_directories_work_apart() {
     let mut world = World::new();
     world.init_git();

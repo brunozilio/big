@@ -82,6 +82,9 @@ pub async fn worktree(
     branch: &str,
     base: Option<String>,
 ) -> Result<Worktree, Failure> {
+    if checkout.read_only {
+        return consulted(checkout);
+    }
     let (data, branch) = (shared.config.data.clone(), branch.to_owned());
     let folder = repos::folder(&branch, &checkout.id);
     let (repo, named) = (checkout.directory.clone(), branch.clone());
@@ -89,6 +92,13 @@ pub async fn worktree(
         .await?
         .map_err(|error| Failure::Class(ErrorClass::Transient, format!("the worktree could not be made: {error}")))?;
     Ok(Worktree { checkout, path, branch })
+}
+
+fn consulted(checkout: Checkout) -> Result<Worktree, Failure> {
+    let path = checkout.directory.clone().filter(|folder| folder.is_dir()).ok_or_else(|| {
+        Failure::permanent(format!("the read-only repository {} has no folder on this machine", checkout.name))
+    })?;
+    Ok(Worktree { checkout, path, branch: String::new() })
 }
 
 pub async fn worktrees(shared: &Shared, item: &ItemId, wanted: Option<&str>) -> Result<Vec<Worktree>, Failure> {
@@ -102,6 +112,7 @@ pub async fn worktrees(shared: &Shared, item: &ItemId, wanted: Option<&str>) -> 
         let base = git::base_of(&state, &checkout.id);
         made.push(worktree(shared, checkout, &branch, base).await?);
     }
+    made.sort_by_key(|tree| tree.checkout.read_only);
     Ok(made)
 }
 
@@ -295,7 +306,7 @@ impl AgentEffect<'_> {
             crate::chores::heads_up(self.shared, self.item, &self.key.step, session, cwd.clone());
         }
         let pushed: Vec<(PathBuf, String)> =
-            trees.iter().filter(|_| !here).map(|tree| (tree.path.clone(), tree.branch.clone())).collect();
+            trees.iter().filter(|tree| !here && !tree.checkout.read_only).map(|tree| (tree.path.clone(), tree.branch.clone())).collect();
         blocking(move || {
             for (place, branch) in &pushed {
                 git::push(place, branch);

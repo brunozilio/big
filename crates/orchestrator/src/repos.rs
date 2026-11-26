@@ -15,6 +15,7 @@ pub struct Checkout {
     pub verify: Vec<String>,
     pub e2e: Vec<String>,
     pub e2e_directory: String,
+    pub read_only: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -54,6 +55,7 @@ fn checkout(repository: &Value) -> Checkout {
         verify: commands(repository, "verify"),
         e2e: commands(repository, "e2e"),
         e2e_directory: text(repository, "e2eDirectory"),
+        read_only: repository["readOnly"].as_bool() == Some(true),
     }
 }
 
@@ -72,6 +74,7 @@ pub fn of_input(input: &Value, fallback: Option<&Path>) -> Vec<Checkout> {
         verify: Vec::new(),
         e2e: Vec::new(),
         e2e_directory: String::new(),
+        read_only: false,
     }]
 }
 
@@ -95,6 +98,9 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
     for worktree in worktrees {
         let checkout = &worktree.checkout;
         let _ = write!(text, "\n- {}{}: {}", checkout.name, kind_note(&checkout.kind), worktree.path.display());
+        if checkout.read_only {
+            text.push_str(READ_ONLY_NOTE);
+        }
         if !checkout.run.is_empty() {
             let _ = write!(text, "\n  - To run: {}", quoted(&checkout.run));
         }
@@ -116,11 +122,19 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
     Some(text)
 }
 
+const READ_ONLY_NOTE: &str = "\n  - Read only: consult it, but never edit, commit, branch or push in it.";
+
 fn kind_note(kind: &str) -> String {
     if kind.is_empty() { String::new() } else { format!(" ({kind} repository)") }
 }
 
 pub fn summary(worktree: &Worktree, base: Option<&str>, commit: Option<&str>) -> Value {
+    if worktree.checkout.read_only {
+        return json!({
+            "id": worktree.checkout.id, "name": worktree.checkout.name, "worktree": worktree.path.to_string_lossy(),
+            "readOnly": true, "changed": false,
+        });
+    }
     json!({
         "id": worktree.checkout.id, "name": worktree.checkout.name, "worktree": worktree.path.to_string_lossy(),
         "branch": worktree.branch, "base": base, "commit": commit, "changed": base != commit,
@@ -164,5 +178,27 @@ mod tests {
         assert!(text.contains("acme/web (application repository): /w/web") && text.contains("`bun dev`") && text.contains("`bun test`"));
         assert!(text.contains("  - To run: `bun api`, `bun web`"));
         assert!(text.contains("`AddRepository`") && text.contains("app: /w/app"));
+    }
+
+    #[test]
+    fn a_read_only_repository_is_consulted_without_branch_or_commit() {
+        let input = json!({ "application": { "repositories": [
+            { "id": "cfg", "directory": "/src/cfg", "readOnly": true },
+            { "id": "api", "directory": "/src/api" },
+        ] } });
+        let found = of_input(&input, None);
+        assert_eq!(found.iter().map(|found| found.read_only).collect::<Vec<_>>(), [true, false]);
+        let worktrees: Vec<Worktree> = found
+            .into_iter()
+            .map(|checkout| Worktree { path: PathBuf::from("/w").join(&checkout.id), branch: "b".into(), checkout })
+            .collect();
+        let text = described(&worktrees).expect("described");
+        assert!(text.contains("cfg: /w/cfg\n  - Read only:"));
+        assert!(!text.contains("api: /w/api\n  - Read only:"));
+        let consulted = summary(&worktrees[0], Some("a"), Some("a"));
+        assert_eq!(consulted["readOnly"], json!(true));
+        assert_eq!(consulted["changed"], json!(false));
+        assert!(consulted.get("commit").is_none() && consulted.get("branch").is_none());
+        assert_eq!(summary(&worktrees[1], Some("a"), Some("b"))["changed"], json!(true));
     }
 }
