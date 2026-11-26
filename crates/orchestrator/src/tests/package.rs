@@ -88,7 +88,7 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
     let package = packages(&kernel, 1).await.remove(0);
     let item = until(&kernel, &package, |item| item.is_ended() || (item.links == vec![first.clone()] && item.waiting_human())).await;
     assert!(!item.is_ended(), "{:?} {:?}", item.ending, item.steps);
-    assert_eq!(stage(&item, "hi")["state"], "passed");
+    assert_eq!(stage(&item, "hint")["state"], "passed");
     assert_eq!(stage(&item, "hext")["picker"], true);
     assert!(stage(&item, "prod")["window"].is_null() && stage(&item, "prod")["picker"] == false);
     assert_eq!(fake.count("code.merge"), 1);
@@ -161,7 +161,7 @@ async fn the_package_promotes_each_repository_along_the_flow_its_repository_foll
     let story =
         merged_with(&kernel, "APP-3", json!({ "web": { "head": "feature/APP-3", "base": "dev", "promote": promote } })).await;
     let package = packages(&kernel, 1).await.remove(0);
-    let item = until(&kernel, &package, |item| item.is_ended() || stage(item, "hi")["state"] == "passed").await;
+    let item = until(&kernel, &package, |item| item.is_ended() || stage(item, "hint")["state"] == "passed").await;
     assert!(item.links.contains(&story), "the delivery arrives through its own flow's integration branch");
     let calls = fake.calls.lock().expect("lock").clone();
     let opened = calls.iter().find(|(name, _, _)| name == "code.open_pull_request").expect("a promotion");
