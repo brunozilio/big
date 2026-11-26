@@ -127,13 +127,102 @@ async fn the_projects_to_bind_are_listed_in_the_organization() {
 
 #[tokio::test]
 async fn a_token_sonarqube_refuses_is_an_auth_error_and_a_valid_one_names_the_account() {
-    let http = FakeHttp::new().once(Method::Get, "/api/authentication/validate", 200, r#"{"valid":false}"#);
-    let refused = loaded("sonarqube").accounts(&http, &creds("bad", json!({}))).await;
+    let http = FakeHttp::new().always(Method::Get, "/api/authentication/validate", 200, r#"{"valid":false}"#);
+    let refused = loaded("sonarqube").accounts(&http, &creds("bad", json!({ "organization": "acme" }))).await;
     assert_eq!(refused.map_err(|error| error.class), Err(ErrorClass::Auth));
     let http = FakeHttp::new()
         .once(Method::Get, "/api/authentication/validate", 200, r#"{"valid":true}"#)
-        .once(Method::Get, "/api/users/current", 200, r#"{"login":"ana"}"#);
+        .once(Method::Get, "/api/users/current", 200, r#"{"login":"ana","isLoggedIn":true}"#);
     let found = loaded("sonarqube").accounts(&http, &creds("squ", json!({ "organization": "acme" }))).await;
     let Ok(found) = found else { panic!("{found:?}") };
     assert_eq!(found[0].label, "ana · acme");
+}
+
+#[tokio::test]
+async fn sonarqube_cloud_without_an_organization_asks_for_it() {
+    let http = FakeHttp::new();
+    let refused = loaded("sonarqube").accounts(&http, &creds("squ", json!({}))).await;
+    let Err(refused) = refused else { panic!("{refused:?}") };
+    assert!(refused.message.contains("organization"), "{}", refused.message);
+    assert!(http.sent().is_empty());
+}
+
+#[tokio::test]
+async fn a_self_hosted_server_with_a_context_path_signs_in_without_an_organization() {
+    let http = FakeHttp::new()
+        .once(Method::Get, "/api/authentication/validate", 200, r#"{"valid":true}"#)
+        .once(Method::Get, "/api/users/current", 200, r#"{"login":"ana","isLoggedIn":true}"#);
+    let settings = json!({ "url": "sonar.acme.test/sonar/", "organization": "ignored" });
+    let found = loaded("sonarqube").accounts(&http, &creds("squ", settings)).await;
+    let Ok(found) = found else { panic!("{found:?}") };
+    assert_eq!(found[0].label, "ana · sonar.acme.test/sonar");
+    assert_eq!(found[0].settings, json!({ "url": "https://sonar.acme.test/sonar" }));
+    let sent = http.sent();
+    assert_eq!(sent[0].url, "https://sonar.acme.test/sonar/api/authentication/validate");
+    assert_eq!(sent[1].url, "https://sonar.acme.test/sonar/api/users/current");
+    assert_eq!(sent[0].header_value("authorization"), Some("Bearer squ"));
+}
+
+#[tokio::test]
+async fn an_older_server_that_ignores_bearer_signs_in_with_the_token_as_basic_login() {
+    let http = FakeHttp::new()
+        .once(Method::Get, "/api/authentication/validate", 200, r#"{"valid":false}"#)
+        .once(Method::Get, "/api/authentication/validate", 200, r#"{"valid":true}"#)
+        .once(Method::Get, "/api/users/current", 200, r#"{"login":"ana","isLoggedIn":true}"#);
+    let found = loaded("sonarqube").accounts(&http, &creds("squ", json!({ "url": "http://10.0.0.5:9000" }))).await;
+    let Ok(found) = found else { panic!("{found:?}") };
+    assert_eq!(found[0].label, "ana · 10.0.0.5:9000");
+    assert_eq!(http.sent()[1].header_value("authorization"), Some("Basic c3F1Og=="));
+}
+
+#[tokio::test]
+async fn a_wrong_address_names_the_path_and_the_status() {
+    let http = FakeHttp::new().always(Method::Get, "/api/authentication/validate", 404, "<html>Not Found</html>");
+    let failed = loaded("sonarqube").accounts(&http, &creds("squ", json!({ "url": "https://acme.test" }))).await;
+    let Err(failed) = failed else { panic!("{failed:?}") };
+    assert!(failed.message.contains("404"), "{}", failed.message);
+    assert!(failed.message.contains("https://acme.test/api/authentication/validate"), "{}", failed.message);
+    assert!(failed.message.contains("context path"), "{}", failed.message);
+    let http = FakeHttp::new().always(Method::Get, "/api/authentication/validate", 200, "<html>login</html>");
+    let failed = loaded("sonarqube").accounts(&http, &creds("squ", json!({ "url": "https://acme.test" }))).await;
+    let Err(failed) = failed else { panic!("{failed:?}") };
+    assert!(failed.message.contains("not JSON"), "{}", failed.message);
+}
+
+#[tokio::test]
+async fn a_self_hosted_server_lists_projects_and_reports_without_an_organization() {
+    let http = FakeHttp::new().once(Method::Get, "/api/components/search", 200, r#"{"components":[{"key":"web","name":"Web"}]}"#);
+    let settings = json!({ "url": "https://sonar.acme.test/sonar", "organization": "acme" });
+    let found = call(&http, settings.clone(), "quality.options", json!({})).await;
+    assert_eq!(found, Ok(json!([{ "value": "web", "label": "Web · web" }])));
+    let url = &http.sent()[0].url;
+    assert!(url.starts_with("https://sonar.acme.test/sonar/api/components/search?") && !url.contains("organization"), "{url}");
+    let impacts = r#"{"total":1,"issues":[{"key":"AX2","impacts":[{"softwareQuality":"SECURITY","severity":"HIGH"}],
+        "message":"Injection","component":"web:src/db.ts","line":3}]}"#;
+    let http = FakeHttp::new()
+        .once(Method::Get, "/api/project_pull_requests/list", 404, r#"{"errors":[{"msg":"Unknown url"}]}"#)
+        .once(Method::Get, "/api/qualitygates/project_status", 200, r#"{"projectStatus":{"status":"OK","conditions":[]}}"#)
+        .once(Method::Get, "/api/measures/component", 404, r#"{"errors":[{"msg":"The following metric keys are not found: new_bugs, new_code_smells"}]}"#)
+        .once(Method::Get, "/api/measures/component", 200, MEASURES)
+        .once(Method::Get, "/api/issues/search", 200, impacts);
+    let args = json!({ "project": "web", "pullRequest": "4", "commit": "abc" });
+    let found = call(&http, settings, "quality.report", args).await;
+    let Ok(found) = found else { panic!("{found:?}") };
+    assert_eq!((&found["gate"], &found["ratings"]["reliability"]), (&json!("passed"), &json!("C")));
+    assert_eq!((&found["issues"][0]["type"], &found["issues"][0]["severity"]), (&json!("vulnerability"), &json!("critical")));
+    assert_eq!(found["url"], "https://sonar.acme.test/sonar/dashboard?id=web&pullRequest=4");
+    let retried = &http.sent_to(Method::Get, "/api/measures/component")[1].url;
+    assert!(!retried.contains("new_bugs") && retried.contains("new_coverage"), "{retried}");
+}
+
+#[tokio::test]
+async fn a_call_refused_with_bearer_is_retried_with_the_token_as_basic_login() {
+    let http = FakeHttp::new()
+        .once(Method::Get, "/api/components/search", 401, "")
+        .once(Method::Get, "/api/components/search", 200, r#"{"components":[]}"#);
+    let found = call(&http, json!({ "url": "https://sonar.acme.test" }), "quality.options", json!({})).await;
+    assert_eq!(found, Ok(json!([])));
+    let sent = http.sent();
+    assert_eq!(sent[0].header_value("authorization"), Some("Bearer squ_token"));
+    assert_eq!(sent[1].header_value("authorization"), Some("Basic c3F1X3Rva2VuOg=="));
 }
