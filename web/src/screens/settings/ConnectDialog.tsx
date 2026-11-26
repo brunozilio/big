@@ -102,6 +102,7 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
     run(api().startSignIn(provider.key, fields, way.method).then((start) => {
       if (start.kind === 'token') return setStep({ kind: 'resume', flow: start.flow })
       if (start.kind === 'redirect' && !start.paste && !isMock()) leave(start)
+      if (start.kind === 'device' && !start.code && !isMock()) globalThis.open?.(start.url, '_blank', 'noopener')
       setStep(start.kind === 'device' ? { kind: 'device', start } : { kind: 'browser', start })
     }))
   }

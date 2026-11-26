@@ -143,6 +143,15 @@ export function DeviceCode({ site, start }: { site: string; start: DeviceStart }
   const copy = () => {
     navigator.clipboard?.writeText(start.code).then(() => setCopied(true), () => undefined)
   }
+  if (!start.code) {
+    return (
+      <Panel>
+        <p className="text-sm text-fg2">{t('settings.signIn_authorize', { site })}</p>
+        <OpenLink url={start.url} />
+        <Waiting text={t('settings.signIn_awaiting')} />
+      </Panel>
+    )
+  }
   return (
     <Panel>
       <p className="text-sm text-fg2">{t('settings.signIn_deviceOpen', { site })}</p>
