@@ -1,11 +1,31 @@
-import { type Model, capabilities, invalid, option, parsed, pick, text, unauthorized, words } from "sdk/providers/index.ts";
+import {
+  type Config,
+  type Model,
+  type Reached,
+  type Tokens,
+  capabilities,
+  formRequest,
+  invalid,
+  option,
+  parsed,
+  pick,
+  standard,
+  text,
+  tryPost,
+  unauthorized,
+  words,
+} from "sdk/providers/index.ts";
 
 type File = { name: string; size: number | null };
 type Wanted = { repo: string; quant: string | null };
 type Found = { repo: string; files: File[] };
 
-const SAVED_TOKEN = ".cache/huggingface/token";
-const ANONYMOUS = "anonymous";
+const GRANT = "urn:ietf:params:oauth:grant-type:device_code";
+const MAX_INTERVAL = 60;
+const FORM: [string, string][] = [
+  ["content-type", "application/x-www-form-urlencoded"],
+  ["accept", "application/json"],
+];
 const PART = /-(\d{5})-of-(\d{5})\.gguf$/i;
 const QUANT = /[.\-_]((?:I?Q\d[A-Z0-9_]*)|BF16|F16|F32)(?:-\d{5}-of-\d{5})?\.gguf$/i;
 const CANDIDATES = 30;
@@ -32,7 +52,7 @@ export function provider() {
     label: "llama.cpp",
     logo: "logo.svg",
     vendor: "",
-    access: "browser",
+    access: "code",
     rank: 95,
     slot: "0x7072_6f76_6964_6572_0000_0000_0000_000b",
     window: 65_536,
@@ -55,21 +75,6 @@ export function fields({ language }: { language: string }) {
         "owner/repo, optionally with :QUANT (e.g. :Q8_0). A repo without GGUF files is served from its most downloaded GGUF quantization.",
         "dueño/repo, opcionalmente con :QUANT (p. ej. :Q8_0). Un repo sin archivos GGUF usa su cuantización GGUF más descargada.",
         "dono/repo, opcionalmente com :QUANT (ex.: :Q8_0). Um repo sem arquivos GGUF usa a quantização GGUF mais baixada dele.",
-      ),
-    },
-    {
-      name: "token",
-      label: pick(language, "Hugging Face token", "Token de Hugging Face", "Token do Hugging Face"),
-      kind: "text",
-      mono: true,
-      secret: true,
-      optional: true,
-      placeholder: "hf_…",
-      help: pick(
-        language,
-        "Like `hf auth login`: create one at huggingface.co/settings/tokens. Left empty, the token saved by the hf CLI is used, or none for public models.",
-        "Como `hf auth login`: créalo en huggingface.co/settings/tokens. Vacío, se usa el token guardado por el CLI hf, o ninguno para modelos públicos.",
-        "Como no `hf auth login`: crie em huggingface.co/settings/tokens. Vazio, usa o token salvo pelo CLI hf, ou nenhum para modelos públicos.",
       ),
     },
   ];
@@ -146,17 +151,80 @@ export function wanted(raw: unknown): Wanted {
 
 const authorization = (token: string): [string, string][] => (token ? [["authorization", `Bearer ${token}`]] : []);
 
-function savedToken(ctx): string {
-  const saved = ctx.files.home(SAVED_TOKEN);
-  return typeof saved === "string" ? saved.trim() : "";
+function whoami(ctx, token: string): string {
+  const reached = ctx.http.get({ url: `${ctx.config.hub}/api/whoami-v2`, headers: authorization(token) });
+  if (reached.status === 401) unauthorized("Hugging Face refused the sign-in");
+  if (reached.status !== 200) invalid(`Hugging Face answered HTTP ${reached.status} when checking the sign-in`);
+  return text(parsed(reached.body)?.name) ?? invalid("Hugging Face did not say who signed in");
 }
 
-function whoami(ctx, token: string): string {
-  if (!token) return ANONYMOUS;
-  const reached = ctx.http.get({ url: `${ctx.config.hub}/api/whoami-v2`, headers: authorization(token) });
-  if (reached.status === 401) unauthorized("Hugging Face refused the token");
-  if (reached.status !== 200) invalid(`Hugging Face answered HTTP ${reached.status} when checking the token`);
-  return text(parsed(reached.body)?.name) ?? ANONYMOUS;
+export function check({ config }: { config: Config }) {
+  if (!config.auth?.access_token) unauthorized("sign in to Hugging Face again");
+}
+
+export function refresh({ previous }: { previous: Tokens }, ctx) {
+  const pairs: [string, string][] = [
+    ["grant_type", "refresh_token"],
+    ["refresh_token", previous.refresh_token ?? ""],
+    ["client_id", ctx.config.client_id],
+  ];
+  return formRequest(ctx, `${ctx.config.hub}/oauth/token`, pairs);
+}
+
+export const tokens = (input, ctx) => standard(ctx, input);
+
+function device(ctx, reached: Reached) {
+  const failed = () => unauthorized(`Hugging Face refused the device sign-in (HTTP ${reached.status})`);
+  if (reached.status !== 200) failed();
+  const value = parsed(reached.body) ?? failed();
+  const open = text(value.verification_uri_complete) ?? text(value.verification_uri) ?? failed();
+  if (!open.startsWith("https://")) failed();
+  return {
+    device_code: text(value.device_code) ?? failed(),
+    user_code: text(value.user_code) ?? failed(),
+    open,
+    interval: Math.max(1, Number.isInteger(value.interval) ? value.interval : 5),
+    expires_in: Math.max(60, Number.isInteger(value.expires_in) ? value.expires_in : 900),
+  };
+}
+
+function polled(reached: Reached): "granted" | "pending" | "slow" {
+  const value = parsed(reached.body) ?? {};
+  if (reached.status === 200 && text(value.access_token)) return "granted";
+  if (value.error === "authorization_pending" || (reached.status >= 500 && !value.error)) return "pending";
+  if (value.error === "slow_down") return "slow";
+  if (value.error === "access_denied") unauthorized("the Hugging Face sign-in was denied");
+  if (value.error === "expired_token") unauthorized("the Hugging Face code expired before it was approved");
+  if (typeof value.error === "string") unauthorized(text(value.error_description) ?? value.error);
+  return "pending";
+}
+
+function approved(ctx, code): Reached {
+  const body = ctx.oauth.form([
+    ["grant_type", GRANT],
+    ["device_code", code.device_code],
+    ["client_id", ctx.config.client_id],
+  ]);
+  let pause = code.interval;
+  let waited = 0;
+  for (;;) {
+    if (waited >= code.expires_in) unauthorized("the Hugging Face code expired before it was approved");
+    ctx.clock.sleep(pause);
+    waited += pause;
+    const reached = tryPost(ctx, `${ctx.config.hub}/oauth/token`, FORM, body);
+    if (reached === undefined) continue;
+    const state = polled(reached);
+    if (state === "granted") return reached;
+    if (state === "slow") pause = Math.min(pause + 5, MAX_INTERVAL);
+  }
+}
+
+function signedIn(ctx): Tokens {
+  const body = ctx.oauth.form([["client_id", ctx.config.client_id]]);
+  const code = device(ctx, ctx.http.post({ url: `${ctx.config.hub}/oauth/device`, headers: FORM, body }));
+  ctx.browser.open({ url: code.open, code: code.user_code });
+  const { status, body: granted } = approved(ctx, code);
+  return tokens({ status, body: granted, previous: null, now: ctx.clock.now() }, ctx);
 }
 
 function filesOf(ctx, token: string, repo: string): File[] {
@@ -223,10 +291,10 @@ function fetched(ctx, token: string, found: Found) {
 
 export function signIn({ fields }, ctx) {
   const want = wanted(fields?.model);
-  const token = text(fields?.token)?.trim() ?? savedToken(ctx);
-  const who = whoami(ctx, token);
-  const found = resolve(ctx, token, want);
-  fetched(ctx, token, found);
+  const auth = signedIn(ctx);
+  const who = whoami(ctx, auth.access_token);
+  const found = resolve(ctx, auth.access_token, want);
+  fetched(ctx, auth.access_token, found);
   ctx.log(`downloading ${found.files.map((file) => file.name).join(", ")} from ${found.repo}`);
-  return { auth: { access_token: token || ANONYMOUS, account_id: who, email: who } };
+  return { auth: { ...auth, account_id: who, email: who } };
 }

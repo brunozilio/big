@@ -8,10 +8,13 @@ loads the model, keeps its KV cache between turns and serves an OpenAI-style
 
 Connecting asks for a Hugging Face model, written like a GitHub repo
 (`owner/repo`, optionally `:QUANT`, e.g.
-`huihui-ai/Huihui-Qwen3.8-27B-abliterated:Q8_0`), and a token. The token works
-like `hf auth login`: one made at huggingface.co/settings/tokens, or, left
-empty, the one the hf CLI saved in `~/.cache/huggingface/token`; public models
-need none. It is checked with `GET /api/whoami-v2`.
+`huihui-ai/Huihui-Qwen3.8-27B-abliterated:Q8_0`), then signs in the way
+`hf auth login` does: the OAuth device flow (RFC 8628) with the hf CLI's public
+client (`client_id` in `[llamacpp]`). `POST /oauth/device` gives a code and the
+page to approve it, `POST /oauth/token` is polled (`authorization_pending`,
+`slow_down`) until it answers with an access token and a refresh token, and
+`GET /api/whoami-v2` names the account. The token is renewed with a
+`refresh_token` grant on the same endpoint.
 
 The repo's `.gguf` files are listed with `GET /api/models/{repo}?blobs=true`.
 A repo that has only safetensors is served from its GGUF quantizations,

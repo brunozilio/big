@@ -150,6 +150,7 @@ locale = "pt-BR"
 
 [llamacpp]
 hub = "https://huggingface.co"
+client_id = "26be6b09-91c5-47da-9861-d2d2bb7a7e36"
 quants = "Q4_K_M Q5_K_M Q4_K_S Q6_K Q8_0 IQ4_XS Q4_0"
 context = "65536"
 temperature = "0.6"
