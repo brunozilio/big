@@ -7,7 +7,7 @@ export const environments = [
   {
     id: "hi",
     label: "Homologação interna",
-    short: "HI",
+    short: "HINT",
     icon: "sTest",
     gate: { kind: "merge", promotion: 0, from: promotion.from, into: promotion.into, method: promotion.method, title: "Promover {from} para {into}" },
     autoPromote: true,
