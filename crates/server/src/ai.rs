@@ -64,7 +64,8 @@ pub fn connections_of(summary: &ProviderSummary) -> Vec<Value> {
             json!({
                 "id": format!("{PREFIX}{provider}:{key}"), "provider": provider,
                 "label": if summary.label.is_empty() { &summary.name } else { &summary.label },
-                "account": account.label, "capabilities": ["ai"], "status": "ok",
+                "account": account.label, "capabilities": ["ai"],
+                "status": if account.lapsed { "error" } else { "ok" },
             })
         })
         .collect()

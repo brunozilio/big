@@ -141,6 +141,7 @@ pub trait KeySource: Send + Sync {
     fn hold_for_refresh(&self) -> Result<Option<domain::provider::RefreshHold>, ModelError> {
         Ok(None)
     }
+    fn lapsed(&self, _lapsed: bool) {}
 }
 
 impl KeySource for ProviderKey {
@@ -152,6 +153,11 @@ impl KeySource for ProviderKey {
     }
     fn key(&self) -> Result<ProviderKey, ModelError> {
         self.current().map_err(ModelError::Unauthorized)
+    }
+    fn lapsed(&self, lapsed: bool) {
+        if let Err(error) = ProviderKey::lapsed(self, lapsed) {
+            tracing::warn!(%error, lapsed, "could not mark whether the sign-in lapsed");
+        }
     }
 }
 

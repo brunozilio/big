@@ -71,7 +71,7 @@ mod tests {
         let store = FileProviderStore::new(dir.path().to_path_buf());
         assert_eq!(store.load(), ProviderBook::default());
         let mut book = ProviderBook::default();
-        let account = ProviderAccount { label: "…ab12".into(), since_unix: 5, id: String::new() };
+        let account = ProviderAccount { label: "…ab12".into(), since_unix: 5, id: String::new(), lapsed: false };
         book.connect(ModelProvider::new("keyed"), account);
         store.save(&book).expect("save");
         assert_eq!(store.load(), book);
@@ -87,7 +87,7 @@ mod tests {
         std::fs::create_dir_all(&folder).expect("folder");
         std::fs::write(folder.join("providers.json"), b"{not json").expect("write");
 
-        let account = ProviderAccount { label: "…ab12".into(), since_unix: 5, id: String::new() };
+        let account = ProviderAccount { label: "…ab12".into(), since_unix: 5, id: String::new(), lapsed: false };
         store.update(&mut |book| book.connect(ModelProvider::new("keyed"), account.clone())).expect("update");
 
         assert_ne!(store.load(), ProviderBook::default());

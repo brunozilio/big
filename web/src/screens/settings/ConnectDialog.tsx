@@ -140,9 +140,9 @@ function leave(start: RedirectStart, opened: { current: Window | null }) {
   else opened.current = openApart(start.url)
 }
 
-function primaryOf(signIn: ReturnType<typeof useSignIn>, way: Way, ready: boolean, onClose: () => void, t: T): Primary {
+function primaryOf(signIn: ReturnType<typeof useSignIn>, way: Way, ready: boolean, lapsed: boolean, onClose: () => void, t: T): Primary {
   const { step, busy } = signIn
-  if (step.kind === 'start') return { label: way.button, onClick: signIn.begin, disabled: !ready, loading: busy, icon: true }
+  if (step.kind === 'start') return { label: lapsed ? t('settings.reconnect') : way.button, onClick: signIn.begin, disabled: !ready, loading: busy, icon: true }
   if (step.kind === 'browser' && step.start.paste) return { label: t('settings.signIn_finish'), onClick: () => signIn.send(step.start.flow, { code: signIn.pasted.trim() }), disabled: !signIn.pasted.trim(), loading: busy }
   if (step.kind === 'choose') return { label: t('settings.save'), onClick: () => signIn.choice && signIn.send(step.flow, { choice: signIn.choice }), disabled: !signIn.choice, loading: busy }
   if (step.kind === 'done') return { label: t('settings.signIn_finish'), onClick: onClose }
@@ -179,7 +179,7 @@ export function ConnectDialog({ provider: key, resume, onClose }: { provider: st
     setFields(Object.fromEntries((way?.fields ?? []).map((f) => [f.name, f.value ?? ''])))
   }, [way?.fields])
   const ready = !way?.fields.some((f) => !f.optional && !fields[f.name]?.trim())
-  const primary = way ? primaryOf(signIn, way, ready, onClose, t) : null
+  const primary = way ? primaryOf(signIn, way, ready, accounts.some((c) => c.status === 'error'), onClose, t) : null
   const footer = primary && (
     <>
       {signIn.step.kind !== 'done' && <Button variant="ghost" onClick={onClose}>{t('settings.cancel')}</Button>}

@@ -153,6 +153,8 @@ pub(crate) struct AccountStore {
     pub secrets: Arc<dyn SecretStore>,
     pub slot: SecretId,
     pub provider: ModelProvider,
+    pub book: Arc<dyn super::ProviderStore>,
+    pub account: String,
 }
 
 impl ProviderKeyStore for AccountStore {
@@ -171,6 +173,18 @@ impl ProviderKeyStore for AccountStore {
 
     fn hold_for_refresh(&self) -> Result<Option<domain::provider::RefreshHold>, String> {
         self.secrets.hold_for_refresh(self.slot)
+    }
+
+    fn lapsed(&self, lapsed: bool) -> Result<(), String> {
+        let (provider, account) = (self.provider, self.account.as_str());
+        if !self.book.load().clone().mark_lapsed(provider, account, lapsed) {
+            return Ok(());
+        }
+        self.book
+            .update(&mut |book| {
+                book.mark_lapsed(provider, account, lapsed);
+            })
+            .map_err(|error| error.to_string())
     }
 }
 
@@ -194,7 +208,13 @@ mod tests {
         let slot = SecretId::new();
         let original = r#"{"auth":{"access_token":"access-secret","refresh_token":"refresh-secret","expires_at":"2099-01-01T00:00:00Z","account_id":"acct"}}"#;
         secrets.set(slot, &Secrets::from([(CONFIG.into(), original.into())])).expect("save");
-        let source = AccountStore { secrets, slot, provider: ModelProvider::new("browser-sub") };
+        let source = AccountStore {
+            secrets,
+            slot,
+            provider: ModelProvider::new("browser-sub"),
+            book: Arc::new(super::super::InMemoryProviderStore::default()),
+            account: String::new(),
+        };
         source.save(&original.replace("refresh-secret", "refresh-rotated")).expect("rotate");
         assert!(source.load().expect("load").contains("refresh-rotated"));
         assert!(source.save("not a credential").is_err(), "a broken credential is never kept");

@@ -10,6 +10,7 @@ use domain::{ModelProvider, SecretId};
 use serde_json::{Value, json};
 
 use super::{AccountStore, CONFIG};
+use crate::providers::{InMemoryProviderStore, ProviderStore};
 use crate::secrets::{Secrets, secrets_in};
 
 const CHATGPT: ModelProvider = ModelProvider::new("openai-subscription");
@@ -71,7 +72,9 @@ fn two_processes_with_a_stale_sign_in_refresh_it_once_and_both_stay_signed_in() 
             let vault = secrets_in(Some(dir.path()));
             let (endpoint, start) = (Arc::clone(&endpoint), Arc::clone(&start));
             std::thread::spawn(move || {
-                let source = Arc::new(AccountStore { secrets: vault, slot, provider: CHATGPT });
+                let book = Arc::new(InMemoryProviderStore::default());
+                let source =
+                    Arc::new(AccountStore { secrets: vault, slot, provider: CHATGPT, book, account: String::new() });
                 let key = ProviderKey::new(source.load().expect("load")).with_store(source);
                 start.wait();
                 ProviderClient::new(CHATGPT, endpoint, Arc::new(key)).models().map(|_| ())
@@ -92,4 +95,39 @@ fn two_processes_with_a_stale_sign_in_refresh_it_once_and_both_stay_signed_in() 
         .filter(|name| name.contains("refresh"))
         .collect();
     assert!(leftovers.is_empty(), "the refresh lock leaves nothing behind: {leftovers:?}");
+}
+
+#[derive(Debug)]
+struct RevokedRefreshToken;
+
+impl Http for RevokedRefreshToken {
+    fn post(&self, _url: &str, _headers: &[(String, String)], _body: &str) -> Result<Response, String> {
+        Ok(answer(400, &json!({"error": "invalid_grant"})))
+    }
+
+    fn get(&self, _url: &str, _headers: &[(String, String)]) -> Result<Response, String> {
+        Ok(answer(200, &json!({"models": []})))
+    }
+}
+
+#[test]
+fn a_refused_refresh_marks_the_account_lapsed_and_signing_in_again_clears_it() {
+    let dir = tempfile::tempdir().expect("dir");
+    let slot = SecretId::new();
+    let expired = json!({"auth": {"access_token": access_token(), "refresh_token": "dead", "account_id": "account-1", "expires_at": "2000-01-01T00:00:00Z"}});
+    let vault = secrets_in(Some(dir.path()));
+    vault.set(slot, &Secrets::from([(CONFIG.to_owned(), expired.to_string())])).expect("signed in");
+    let book = Arc::new(InMemoryProviderStore::default());
+    let account =
+        domain::provider::ProviderAccount { label: "a@x.io".into(), since_unix: 1, id: "id".into(), lapsed: false };
+    book.update(&mut |kept| kept.connect(CHATGPT, account.clone())).expect("book");
+    let source =
+        Arc::new(AccountStore { secrets: vault, slot, provider: CHATGPT, book: book.clone(), account: "id".into() });
+    let key = ProviderKey::new(source.load().expect("load")).with_store(source);
+
+    assert!(ProviderClient::new(CHATGPT, Arc::new(RevokedRefreshToken), Arc::new(key)).models().is_err());
+
+    assert!(book.load().accounts(CHATGPT)[0].lapsed, "the account asks to reconnect");
+    book.update(&mut |kept| kept.connect(CHATGPT, account.clone())).expect("signed in again");
+    assert!(!book.load().accounts(CHATGPT)[0].lapsed);
 }

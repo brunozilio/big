@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use async_trait::async_trait;
@@ -59,6 +59,7 @@ pub struct TokenKeeper {
     http: Arc<dyn Http>,
     clock: Arc<dyn Clock>,
     locks: Locks,
+    lapsed: Mutex<BTreeSet<ConnectionId>>,
 }
 
 fn reconnect(reason: &str) -> ActionError {
@@ -67,7 +68,7 @@ fn reconnect(reason: &str) -> ActionError {
 
 impl TokenKeeper {
     pub fn new(store: Arc<dyn TokenStore>, http: Arc<dyn Http>, clock: Arc<dyn Clock>) -> TokenKeeper {
-        TokenKeeper { store, http, clock, locks: Mutex::default() }
+        TokenKeeper { store, http, clock, locks: Mutex::default(), lapsed: Mutex::default() }
     }
 
     pub fn store(&self) -> &dyn TokenStore {
@@ -75,7 +76,22 @@ impl TokenKeeper {
     }
 
     pub async fn keep(&self, connection: &ConnectionId, grant: &Grant) -> Result<(), ActionError> {
-        self.store.save(connection, grant).await
+        self.store.save(connection, grant).await?;
+        self.mark(connection, false);
+        Ok(())
+    }
+
+    pub fn lapsed(&self) -> BTreeSet<ConnectionId> {
+        self.lapsed.lock().unwrap_or_else(PoisonError::into_inner).clone()
+    }
+
+    fn mark(&self, connection: &ConnectionId, lapsed: bool) {
+        let mut all = self.lapsed.lock().unwrap_or_else(PoisonError::into_inner);
+        if lapsed {
+            all.insert(connection.clone());
+        } else {
+            all.remove(connection);
+        }
     }
 
     pub async fn access_token(&self, connection: &ConnectionId, auth: &AuthSpec) -> Result<String, ActionError> {
@@ -105,6 +121,22 @@ impl TokenKeeper {
     }
 
     pub async fn refreshed_of(
+        &self,
+        connection: &ConnectionId,
+        primary: &AuthSpec,
+        alternatives: &[AlternateAuth],
+        stale: &str,
+    ) -> Result<String, ActionError> {
+        let renewed = self.renewed(connection, primary, alternatives, stale).await;
+        match &renewed {
+            Ok(_) => self.mark(connection, false),
+            Err(error) if error.message.starts_with(RECONNECT) => self.mark(connection, true),
+            Err(_) => {}
+        }
+        renewed
+    }
+
+    async fn renewed(
         &self,
         connection: &ConnectionId,
         primary: &AuthSpec,
@@ -223,6 +255,9 @@ mod tests {
         let _ = store.save(&id, &expiring("old", &clock, 10)).await;
         let refused = keeper.access_token(&id, &device()).await;
         assert!(matches!(&refused, Err(e) if e.class == ErrorClass::Auth && e.message.starts_with(RECONNECT)));
+        assert!(keeper.lapsed().contains(&id), "the connection asks to reconnect");
+        let _ = keeper.keep(&id, &expiring("signed-in-again", &clock, 3600)).await;
+        assert!(keeper.lapsed().is_empty());
     }
 
     #[tokio::test]
@@ -233,6 +268,7 @@ mod tests {
         let id = ConnectionId::from("c1");
         let _ = store.save(&id, &expiring("old", &clock, 10)).await;
         assert_eq!(keeper.access_token(&id, &device()).await.map_err(|e| e.class), Err(ErrorClass::Transient));
+        assert!(keeper.lapsed().is_empty(), "an unreachable service does not ask to reconnect");
     }
 
     #[tokio::test]

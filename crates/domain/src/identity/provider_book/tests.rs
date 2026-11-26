@@ -5,7 +5,7 @@ use crate::provider::ProviderInfo;
 const ACME: ModelProvider = ModelProvider::new("acme");
 
 fn account(label: &str, id: &str) -> ProviderAccount {
-    ProviderAccount { label: label.into(), since_unix: 10, id: id.into() }
+    ProviderAccount { label: label.into(), since_unix: 10, id: id.into(), lapsed: false }
 }
 
 fn labels(book: &ProviderBook, provider: ModelProvider) -> Vec<&str> {
@@ -117,4 +117,18 @@ fn each_provider_keeps_its_own_balance_and_where_the_account_in_use_sits() {
         access: Access::Key,
     };
     assert_eq!(book.summaries([info])[0].balance, Balance::RoundRobin);
+}
+
+#[test]
+fn a_lapsed_account_is_marked_once_kept_on_disk_and_cleared_by_signing_in_again() {
+    let mut book = ProviderBook::default();
+    book.connect(ACME, account("a", ""));
+    book.connect(ACME, account("b", "b"));
+    assert!(book.mark_lapsed(ACME, "b", true));
+    assert!(!book.mark_lapsed(ACME, "b", true), "marking twice changes nothing");
+    assert!(!book.mark_lapsed(ACME, "missing", true));
+    let back: ProviderBook = serde_json::from_str(&serde_json::to_string(&book).expect("json")).expect("parse");
+    assert_eq!(back.accounts(ACME).iter().map(|a| a.lapsed).collect::<Vec<_>>(), [false, true]);
+    book.connect(ACME, account("b", "b"));
+    assert!(!book.accounts(ACME)[1].lapsed);
 }

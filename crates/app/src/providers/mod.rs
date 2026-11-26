@@ -147,8 +147,13 @@ impl ModelProviders {
 
     fn account_key(&self, provider: ModelProvider, id: &str) -> Result<ProviderKey, String> {
         use domain::provider::ProviderKeyStore;
-        let source =
-            Arc::new(account::AccountStore { secrets: self.secrets.clone(), slot: slot(provider, id), provider });
+        let source = Arc::new(account::AccountStore {
+            secrets: self.secrets.clone(),
+            slot: slot(provider, id),
+            provider,
+            book: Arc::clone(&self.store),
+            account: id.to_owned(),
+        });
         Ok(ProviderKey::new(source.load()?).with_store(source))
     }
 
@@ -162,7 +167,7 @@ impl ModelProviders {
             .unwrap_or_else(|| accounts::unnamed(config, label, self.store.load().accounts(provider).len()));
         let id = self.store.load().slot_for(provider, &label, || uuid::Uuid::new_v4().to_string());
         self.secrets.set(slot(provider, &id), &account::secrets(config)?)?;
-        let account = ProviderAccount { label, since_unix: self.now(), id };
+        let account = ProviderAccount { label, since_unix: self.now(), id, lapsed: false };
         self.store
             .update(&mut |book| {
                 book.connect(provider, account.clone());

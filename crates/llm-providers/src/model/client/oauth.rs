@@ -2,12 +2,22 @@ use super::super::{CancellationToken, ModelError, http::Http};
 use llm_providers::Provider;
 use llm_providers::oauth::{TOKEN_LIMIT, Tokens};
 
+#[derive(Debug)]
+pub enum Renewal {
+    Fresh(Tokens),
+    Refused(ModelError),
+}
+
+pub fn refused(status: u16) -> bool {
+    (400..500).contains(&status) && !matches!(status, 408 | 429)
+}
+
 pub async fn refresh(
     http: &dyn Http,
     provider: &dyn Provider,
     previous: &Tokens,
     cancel: &CancellationToken,
-) -> Result<Tokens, ModelError> {
+) -> Result<Renewal, ModelError> {
     let request = provider
         .refresh(previous)
         .ok_or_else(|| ModelError::Unauthorized(format!("{} keeps no refreshable tokens", provider.name())))?;
@@ -19,5 +29,9 @@ pub async fn refresh(
     } else {
         String::new()
     };
-    Ok(provider.tokens(status, &body, Some(previous), jiff::Timestamp::now())?)
+    match provider.tokens(status, &body, Some(previous), jiff::Timestamp::now()) {
+        Ok(tokens) => Ok(Renewal::Fresh(tokens)),
+        Err(error) if refused(status) => Ok(Renewal::Refused(error.into())),
+        Err(error) => Err(error.into()),
+    }
 }

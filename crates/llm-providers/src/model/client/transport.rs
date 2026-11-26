@@ -69,9 +69,17 @@ impl Transport {
             config = theirs;
         }
         let previous = config.auth.as_ref().ok_or_else(|| ModelError::Unauthorized("no tokens to refresh".into()))?;
-        config.auth = Some(oauth::refresh(self.http.as_ref(), self.provider, previous, cancel).await?);
+        let tokens = match oauth::refresh(self.http.as_ref(), self.provider, previous, cancel).await? {
+            oauth::Renewal::Fresh(tokens) => tokens,
+            oauth::Renewal::Refused(error) => {
+                self.keys.lapsed(true);
+                return Err(error);
+            }
+        };
+        config.auth = Some(tokens);
         self.keys.replace(&serde_json::to_string(&config).map_err(|e| ModelError::Provider(e.to_string()))?)?;
         drop(held);
+        self.keys.lapsed(false);
         Ok(config)
     }
 

@@ -9,6 +9,8 @@ pub struct ProviderAccount {
     pub since_unix: i64,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub id: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub lapsed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -92,6 +94,9 @@ pub trait ProviderKeyStore: Send + Sync {
     fn hold_for_refresh(&self) -> Result<Option<RefreshHold>, String> {
         Ok(None)
     }
+    fn lapsed(&self, _lapsed: bool) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 #[derive(Clone)]
@@ -127,6 +132,10 @@ impl ProviderKey {
 
     pub fn hold_for_refresh(&self) -> Result<Option<RefreshHold>, String> {
         self.1.as_ref().map_or(Ok(None), |store| store.hold_for_refresh())
+    }
+
+    pub fn lapsed(&self, lapsed: bool) -> Result<(), String> {
+        self.1.as_ref().map_or(Ok(()), |store| store.lapsed(lapsed))
     }
 
     pub fn secret(&self) -> &str {

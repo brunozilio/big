@@ -63,6 +63,17 @@ impl ProviderBook {
         };
     }
 
+    pub fn mark_lapsed(&mut self, provider: ModelProvider, id: &str, lapsed: bool) -> bool {
+        let found = self.accounts.get_mut(&provider).and_then(|all| all.iter_mut().find(|account| account.id == id));
+        match found {
+            Some(account) if account.lapsed != lapsed => {
+                account.lapsed = lapsed;
+                true
+            }
+            _ => false,
+        }
+    }
+
     pub fn slot_for(&self, provider: ModelProvider, label: &str, fresh: impl FnOnce() -> String) -> String {
         let all = self.accounts(provider);
         match all.iter().find(|account| account.label.eq_ignore_ascii_case(label)) {

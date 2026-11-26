@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use axum::Json;
@@ -90,10 +90,13 @@ pub fn record_json(record: &ConnectionRecord, status: &str) -> Value {
     })
 }
 
-fn status(shared: &Shared, record: &ConnectionRecord) -> &'static str {
+fn status(shared: &Shared, record: &ConnectionRecord, lapsed: &BTreeSet<ConnectionId>) -> &'static str {
+    let id = ConnectionId::from(record.id.as_str());
+    if lapsed.contains(&id) {
+        return "error";
+    }
     let health = shared.backend.orchestrator.health();
-    let state = health.map(|health| health.state(&ConnectionId::from(record.id.as_str())));
-    match state {
+    match health.map(|health| health.state(&id)) {
         Some(ConnectionState::NeedsReconnect { .. }) => "error",
         _ => "ok",
     }
@@ -110,8 +113,9 @@ pub fn listing(shared: &Shared) -> ApiResult<Value> {
         .collect();
     providers.extend(ai.iter().map(|summary| crate::ai::provider_json(summary, shared.language())));
     let records = shared.backend.store.connections()?;
+    let lapsed = connectors.keeper().lapsed();
     let mut connections: Vec<Value> =
-        records.iter().map(|record| record_json(record, status(shared, record))).collect();
+        records.iter().map(|record| record_json(record, status(shared, record, &lapsed))).collect();
     connections.extend(ai.iter().flat_map(crate::ai::connections_of));
     Ok(json!({ "providers": providers, "connections": connections }))
 }
@@ -168,7 +172,10 @@ pub async fn answered(ctx: &Shared, query: &HashMap<String, String>, base: &str)
 
 pub async fn hopped(ctx: &Shared, query: &HashMap<String, String>, base: &str) -> (Response, bool) {
     let told = query.get("error_description").or(query.get("error")).cloned().unwrap_or_default();
-    let waited = query.get("state").cloned().or_else(|| query.values().find(|value| ctx.flows.by_state(value).is_some()).cloned());
+    let waited = query
+        .get("state")
+        .cloned()
+        .or_else(|| query.values().find(|value| ctx.flows.by_state(value).is_some()).cloned());
     let Some(state) = waited else {
         let failed = ctx.language().pick("The sign-in failed.", "El inicio de sesión falló.", "A entrada falhou.");
         return (Html(format!("<!doctype html><meta charset=\"utf-8\"><p>{failed} {told}</p>")).into_response(), true);

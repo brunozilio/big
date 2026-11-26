@@ -64,13 +64,25 @@ pub async fn orchestrator_loop(ctx: Ctx) {
     }
 }
 
+fn standing(shared: &Shared) -> String {
+    let health = shared.backend.orchestrator.health().map(|health| health.all());
+    let lapsed = shared.backend.connectors.keeper().lapsed();
+    let ai: Vec<(String, bool)> = crate::ai::subscriptions(shared)
+        .iter()
+        .flat_map(|summary| {
+            summary.accounts.iter().chain(&summary.account).map(|account| (account.id.clone(), account.lapsed))
+        })
+        .collect();
+    format!("{health:?}{lapsed:?}{ai:?}")
+}
+
 pub async fn health_loop(ctx: Ctx) {
     let mut seen = String::new();
     let mut tick = tokio::time::interval(HEALTH_EVERY);
     loop {
         tick.tick().await;
-        let Some(health) = ctx.backend.orchestrator.health() else { continue };
-        let now = format!("{:?}", health.all());
+        let shared = Arc::clone(&ctx);
+        let Ok(now) = tokio::task::spawn_blocking(move || standing(&shared)).await else { continue };
         if now != seen {
             seen = now;
             let shared = Arc::clone(&ctx);
