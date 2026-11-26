@@ -789,7 +789,7 @@ export interface UsageLimits {
 
 export type SignInStart =
   | { flow: string; kind: 'redirect'; url: string; paste: boolean; returns?: boolean }
-  | { flow: string; kind: 'device'; url: string; code: string; expiresIn: number; interval: number }
+  | { flow: string; kind: 'device'; url: string; code: string; expiresIn: number; interval: number; opened?: boolean }
   | { flow: string; kind: 'token' }
 
 export interface SignInPollRequest {

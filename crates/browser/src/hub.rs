@@ -36,6 +36,7 @@ struct State {
     pending: HashMap<u64, Pending>,
     chosen: HashMap<String, String>,
     pairing: HashMap<u64, Sender<(String, String)>>,
+    captured: HashMap<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -205,6 +206,21 @@ impl Hub {
         self.browsers().into_iter().find(|browser| browser.device_id == device).ok_or_else(|| DISCONNECTED.to_owned())
     }
 
+    pub fn watch(&self, device: &str, flow: &str, url: &str, capture: &[String]) -> bool {
+        let state = self.state();
+        let Some(linked) = state.browsers.iter().find(|linked| linked.info.device_id == device) else { return false };
+        let message = json!({ "type": "watch", "flow": flow, "url": url, "capture": capture });
+        linked.outbox.send(message.to_string()).is_ok()
+    }
+
+    pub fn captured(&self, flow: &str, found: Value) {
+        self.state().captured.insert(flow.to_owned(), found);
+    }
+
+    pub fn take_captured(&self, flow: &str) -> Option<Value> {
+        self.state().captured.remove(flow)
+    }
+
     pub fn paired(&self, id: u64, device: &str, name: &str) {
         if let Some(sender) = self.state().pairing.remove(&id) {
             let _ = sender.send((device.to_owned(), name.to_owned()));
@@ -278,6 +294,23 @@ mod tests {
         let (again, _rb) = tokio::sync::mpsc::unbounded_channel();
         hub.link(info("a"), again);
         assert_eq!(hub.browsers().len(), 1);
+    }
+
+    #[test]
+    fn a_watch_reaches_the_browser_and_its_capture_is_taken_once() {
+        let hub = Hub::new();
+        assert!(!hub.watch("a", "f1", "https://x.test/grant", &["*/grant*".to_owned()]));
+        let (outbox, mut inbox) = tokio::sync::mpsc::unbounded_channel();
+        hub.link(info("a"), outbox);
+        assert!(hub.watch("a", "f1", "https://x.test/grant", &["*/grant*".to_owned()]));
+        let sent: Value = serde_json::from_str(&inbox.try_recv().unwrap_or_default()).unwrap_or_default();
+        assert_eq!(
+            sent,
+            json!({ "type": "watch", "flow": "f1", "url": "https://x.test/grant", "capture": ["*/grant*"] })
+        );
+        hub.captured("f1", json!({ "status": 200 }));
+        assert_eq!(hub.take_captured("f1"), Some(json!({ "status": 200 })));
+        assert_eq!(hub.take_captured("f1"), None);
     }
 
     #[test]

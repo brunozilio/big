@@ -1,4 +1,5 @@
 import { attach } from "./cdp.js";
+import { listen, watch } from "./capture.js";
 import { computer, shot, viewport } from "./computer.js";
 import { captureFrame, gif } from "./frames.js";
 import { contextOf, frameMatch, frameOf } from "./frame.js";
@@ -327,7 +328,8 @@ function pairEnded(id) {
   if (askId) cancel(askId);
 }
 
-handle({ call, pair, pairEnded });
+handle({ call, pair, pairEnded, watch: (message) => watch(message).catch(() => {}) });
+listen(send);
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message?.type === "ask-answer") answered(message.id, message);

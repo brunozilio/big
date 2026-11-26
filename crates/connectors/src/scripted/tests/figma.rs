@@ -105,6 +105,7 @@ async fn the_session_signs_in_without_a_browser_and_its_cookies_are_the_grant() 
     let sent = http.sent();
     assert!(sent[0].body_text().contains("\"app_type\":\"desktop\""), "{:?}", sent[0].body_text());
     assert_eq!(started.code.verification_uri, "https://www.figma.com/app_auth/abc/grant?desktop_protocol=figma");
+    assert_eq!(started.capture, ["https://www.figma.com/api/session/app_auth/abc/grant*"]);
     let http = FakeHttp::new()
         .once(Method::Get, "/api/session/state", 200, r#"{"meta":{"users":[{"id":"7","handle":"Ana"}]}}"#)
         .once(Method::Get, "/api/user/state?fuid=7", 200, r#"{"meta":{"team_users":[]}}"#);
@@ -130,6 +131,8 @@ async fn a_session_still_waiting_for_the_browser_sign_in_keeps_polling() {
             interval: 2,
         },
         carried: json!({ "cookies": "figma.session=s1" }),
+        capture: Vec::new(),
+        captured: Value::Null,
     };
     for (status, body) in [(202, ""), (202, r#"{"meta":{"users":[{"id":"7"}]}}"#), (200, r#"{"meta":{"users":[]}}"#)] {
         let http = FakeHttp::new().once(Method::Get, "/api/session/state", status, body);

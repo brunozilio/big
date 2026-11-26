@@ -1,3 +1,4 @@
+import { watching } from "./capture.js";
 import { isAttached, onAttach, onEvent, send } from "./cdp.js";
 import { redact } from "./logs.js";
 import { clip, fromBase64, refuse, toBase64 } from "./results.js";
@@ -258,7 +259,7 @@ async function paused(tabId, params) {
 
 onEvent((tabId, method, params) => {
   if (method === "Page.frameNavigated" && !params.frame?.parentId) tops.set(tabId, hostOf(params.frame?.url || ""));
-  if (method === "Fetch.requestPaused") paused(tabId, params).catch(() => resume(tabId, params.requestId));
+  if (method === "Fetch.requestPaused" && !watching(tabId)) paused(tabId, params).catch(() => resume(tabId, params.requestId));
 });
 
 onAttach((tabId) => ((rules.get(tabId) || []).length > 0 ? apply(tabId) : undefined));

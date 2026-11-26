@@ -16,6 +16,10 @@ pub struct Started {
     pub code: DeviceCode,
     #[serde(default)]
     pub carried: Value,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capture: Vec<String>,
+    #[serde(default, skip_serializing_if = "Value::is_null")]
+    pub captured: Value,
 }
 
 #[async_trait]

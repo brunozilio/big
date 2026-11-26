@@ -188,8 +188,10 @@ pub async fn start(
         AuthSpec::Steps(sign_in) => {
             let started =
                 sign_in.0.start(http, fields, shared.language()).await.map_err(|error| ApiError::bad(error.message))?;
-            let answer = device_answer(&started.code);
+            let mut answer = device_answer(&started.code);
+            let capture = started.capture.clone();
             let flow = opened(Waiting::Steps { sign_in: sign_in.clone(), started })?;
+            answer["opened"] = json!(watched(shared, &flow, answer["url"].as_str().unwrap_or_default(), &capture));
             Ok(with_flow(answer, &flow))
         }
         AuthSpec::Token(spec) => {
@@ -197,6 +199,17 @@ pub async fn start(
             let flow = shared.flows.granted(provider, Grant::bearer(&token), method, spec.settings(fields))?;
             Ok(json!({ "flow": flow, "kind": "token" }))
         }
+    }
+}
+
+fn watched(shared: &Shared, flow: &str, url: &str, capture: &[String]) -> bool {
+    if capture.is_empty() || url.is_empty() {
+        return false;
+    }
+    let hub = &shared.backend.browser;
+    match hub.resolve(flow) {
+        browser::Resolved::Browser(device) => hub.watch(&device, flow, url, capture),
+        browser::Resolved::NoneConnected | browser::Resolved::Several(_) => false,
     }
 }
 
@@ -251,7 +264,7 @@ pub async fn poll(shared: &Shared, flow_id: &str, choice: Option<&str>) -> ApiRe
     };
     let stage = match flow.stage.clone() {
         Stage::Waiting(waiting @ (Waiting::Device { .. } | Waiting::Steps { .. })) => {
-            match device_poll(shared, waiting).await {
+            match device_poll(shared, with_capture(shared, flow_id, waiting)).await {
                 Stage::Granted(grant) => accounts(shared, &flow, grant).await,
                 other => other,
             }
@@ -301,6 +314,16 @@ fn detail(language: domain::Language, settings: &Value) -> String {
     }
     let texts = settings.as_object().map(|fields| fields.values().filter_map(Value::as_str).collect::<Vec<_>>());
     texts.unwrap_or_default().join(" · ")
+}
+
+fn with_capture(shared: &Shared, flow_id: &str, waiting: Waiting) -> Waiting {
+    match (waiting, shared.backend.browser.take_captured(flow_id)) {
+        (Waiting::Steps { sign_in, mut started }, Some(found)) => {
+            started.captured = found;
+            Waiting::Steps { sign_in, started }
+        }
+        (waiting, _) => waiting,
+    }
 }
 
 async fn device_poll(shared: &Shared, waiting: Waiting) -> Stage {

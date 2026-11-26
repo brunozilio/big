@@ -82,6 +82,7 @@ export const session = {
         interval: INTERVAL,
       },
       carried: { cookies },
+      capture: [`${base(ctx)}/api/session/app_auth/${id}/grant*`],
     };
   },
   poll({ started }, ctx: Ctx) {

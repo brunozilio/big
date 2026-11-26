@@ -8,11 +8,13 @@ let state = "disconnected";
 let onCall = async () => null;
 let onPair = () => {};
 let onPairEnded = () => {};
+let onWatch = () => {};
 
 export function handle(handlers) {
   onCall = handlers.call;
   onPair = handlers.pair;
   onPairEnded = handlers.pairEnded;
+  onWatch = handlers.watch || onWatch;
 }
 
 export function status() {
@@ -92,6 +94,8 @@ async function receive(raw) {
     send({ type: "pong" });
   } else if (message.type === "pair") {
     onPair(message.id);
+  } else if (message.type === "watch") {
+    onWatch(message);
   } else if (message.type === "pair_ended") {
     onPairEnded(message.id);
   } else if (message.type === "call") {

@@ -4,7 +4,7 @@ use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use futures_util::{SinkExt, StreamExt};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
 
 use crate::hub::{BrowserInfo, Hub};
@@ -98,14 +98,20 @@ fn receive(hub: &Hub, device: &str, text: &str) {
         }
         "paired" => hub.paired(id, device, message["name"].as_str().unwrap_or_default()),
         "rename" => hub.rename(device, message["name"].as_str().unwrap_or_default()),
+        "captured" => {
+            if let Some(flow) = message["flow"].as_str() {
+                hub.captured(
+                    flow,
+                    json!({ "url": message["url"], "status": message["status"], "body": message["body"] }),
+                );
+            }
+        }
         _ => {}
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
 
     #[test]
