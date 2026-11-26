@@ -9,7 +9,7 @@ use serde_json::Value;
 
 use llm_providers::{Call, Config, Host, Page, Provider as Shape, ProviderError, TokenRequest, Tokens};
 
-pub const BASE: &str = "https://daily-cloudcode-pa.googleapis.com";
+pub const BASE: &str = brand::antigravity::API;
 pub const VERSION: &str = "2.24.0";
 
 #[derive(Debug, Clone, Copy, Default)]

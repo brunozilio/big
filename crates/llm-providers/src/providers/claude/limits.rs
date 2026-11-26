@@ -5,7 +5,7 @@ use llm_providers::catalog::Call;
 use llm_providers::limits::{instant, json_headers, lasting, number, span, window};
 use llm_providers::{Config, Provider as Shape, ProviderError};
 
-pub const USAGE: &str = "https://api.anthropic.com/api/oauth/usage";
+pub const USAGE: &str = brand::claude::USAGE_URL;
 
 const HOURS_5: i64 = 18_000;
 const WEEK: i64 = 604_800;

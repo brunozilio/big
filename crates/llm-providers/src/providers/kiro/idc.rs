@@ -5,11 +5,10 @@ use serde_json::{Value, json};
 use llm_providers::ProviderError;
 use llm_providers::oauth::{TokenRequest, Tokens, expiry, form};
 
-pub const SCOPES: [&str; 3] = ["codewhisperer:completions", "codewhisperer:analysis", "codewhisperer:conversations"];
 pub const PROFILE_REGIONS: [&str; 2] = ["us-east-1", "eu-central-1"];
 pub const PROFILES: &str = "AmazonCodeWhispererService.ListAvailableProfiles";
 pub const CLIENT_NAME: &str = "Kiro CLI";
-const BUILDER_ID: &str = "https://view.awsapps.com/start";
+const BUILDER_ID: &str = brand::kiro::BUILDER_ID_URL;
 const LIFETIME: i64 = 3600;
 
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -41,7 +40,7 @@ pub fn portal_answer(path: &str, query: &str) -> Result<PortalAnswer, ProviderEr
     let refused = |why: String| Err(ProviderError::Unauthorized(why));
     let option = value("login_option").unwrap_or_default().to_ascii_lowercase();
     match option.as_str() {
-        "google" | "github" if path == super::auth::CALLBACK.1 => Ok(PortalAnswer::Social),
+        "google" | "github" if path == super::auth::callback().1 => Ok(PortalAnswer::Social),
         "awsidc" | "builderid" => {
             let builder = option == "builderid";
             let start_url = value("issuer_url").or_else(|| builder.then(|| BUILDER_ID.to_owned()));
@@ -76,14 +75,14 @@ fn region_name(text: &str) -> bool {
 }
 
 fn oidc(region: &str) -> String {
-    format!("https://oidc.{region}.amazonaws.com")
+    llm_providers::oauth::regional(brand::kiro::OIDC_URL, region)
 }
 
 pub fn register(region: &str, start_url: &str, redirect: &str) -> TokenRequest {
     let body = json!({
         "clientName": CLIENT_NAME,
         "clientType": "public",
-        "scopes": SCOPES,
+        "scopes": brand::kiro::SCOPES.split_whitespace().collect::<Vec<_>>(),
         "grantTypes": ["authorization_code", "refresh_token"],
         "redirectUris": [redirect],
         "issuerUrl": start_url,
@@ -109,7 +108,6 @@ pub fn registered(region: &str, status: u16, body: &str) -> Result<IdcClient, Pr
 }
 
 pub fn authorize(client: &IdcClient, redirect: &str, state: &str, challenge: &str) -> String {
-    let scopes = SCOPES.join(" ");
     format!(
         "{}/authorize?{}",
         oidc(&client.region),
@@ -117,7 +115,7 @@ pub fn authorize(client: &IdcClient, redirect: &str, state: &str, challenge: &st
             ("response_type", "code"),
             ("client_id", &client.client_id),
             ("redirect_uri", redirect),
-            ("scopes", &scopes),
+            ("scopes", brand::kiro::SCOPES),
             ("state", state),
             ("code_challenge", challenge),
             ("code_challenge_method", "S256"),
@@ -187,7 +185,7 @@ pub fn tokens(
 
 pub fn profiles(region: &str, access_token: &str) -> (String, Vec<(String, String)>, String) {
     let headers = super::headers(access_token, PROFILES);
-    (format!("https://q.{region}.amazonaws.com/"), headers, json!({ "maxResults": 10 }).to_string())
+    (llm_providers::oauth::regional(brand::kiro::Q_URL, region), headers, json!({ "maxResults": 10 }).to_string())
 }
 
 pub fn first_profile(status: u16, body: &str) -> Option<String> {

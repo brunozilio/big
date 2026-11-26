@@ -23,7 +23,7 @@ fn the_account_comes_from_any_of_the_three_claims() {
 
 #[test]
 fn the_code_is_exchanged_with_a_form_without_state() {
-    let request = exchange("c", "s", "v", REDIRECT);
+    let request = exchange("c", "s", "v", "http://localhost:1455/auth/callback");
     assert_eq!(request.url, TOKEN);
     assert!(request.body.contains(&format!("client_id={CLIENT}")) && !request.body.contains("state"));
 }

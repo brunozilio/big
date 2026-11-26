@@ -10,7 +10,7 @@ pub const TARGET: &str = "AmazonCodeWhispererService.GetUsageLimits";
 pub fn call(config: &Config) -> Call {
     let arn = config.account();
     Call {
-        url: format!("https://q.{}.amazonaws.com/", super::region(arn)),
+        url: llm_providers::oauth::regional(brand::kiro::Q_URL, super::region(arn)),
         headers: json_headers(super::headers(config.access_token(), TARGET)),
         body: Some(json!({ "origin": super::ORIGIN, "profileArn": arn }).to_string()),
     }

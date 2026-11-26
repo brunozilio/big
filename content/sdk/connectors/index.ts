@@ -207,6 +207,10 @@ export function words(value: unknown): string[] {
   return typeof value === "string" ? value.split(/\s+/).filter((word) => word !== "") : [];
 }
 
+export function entries(value: unknown): string[][] {
+  return words(value).map((word) => word.split("="));
+}
+
 export function regional(template: string, region: string): string {
   return template.replaceAll("{region}", region);
 }

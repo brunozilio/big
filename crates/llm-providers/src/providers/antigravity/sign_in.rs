@@ -11,7 +11,7 @@ const ONBOARD_WAIT: Duration = Duration::from_secs(5);
 
 pub fn sign_in(host: &dyn Host) -> Result<Tokens, ProviderError> {
     let flow =
-        Browser { callback: auth::CALLBACK, state_bytes: 32, authorize: &auth::authorize, exchange: &auth::exchange };
+        Browser { callback: auth::callback(), state_bytes: 32, authorize: &auth::authorize, exchange: &auth::exchange };
     let mut tokens = oauth::browser(&super::Provider, host, &flow)?;
     tokens.account_id = project(host, &tokens.access_token);
     if tokens.email.is_none() {

@@ -139,11 +139,11 @@ pub fn region(profile_arn: &str) -> &str {
 }
 
 pub fn runtime(profile_arn: &str) -> String {
-    format!("https://runtime.{}.kiro.dev", region(profile_arn))
+    llm_providers::oauth::regional(brand::kiro::RUNTIME_URL, region(profile_arn))
 }
 
 pub fn management(profile_arn: &str) -> String {
-    format!("https://management.{}.kiro.dev", region(profile_arn))
+    llm_providers::oauth::regional(brand::kiro::MANAGEMENT_URL, region(profile_arn))
 }
 
 pub fn headers(access_token: &str, target: &str) -> Vec<(String, String)> {

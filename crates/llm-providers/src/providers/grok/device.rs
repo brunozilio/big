@@ -3,9 +3,9 @@ use llm_providers::oauth::form;
 use serde_json::Value;
 
 pub const CLIENT: &str = brand::grok::CLIENT_ID;
-pub const SCOPE: &str = "openid profile email offline_access grok-cli:access api:access";
-pub const CODE: &str = "https://auth.x.ai/oauth2/device/code";
-pub const TOKEN: &str = "https://auth.x.ai/oauth2/token";
+pub const SCOPE: &str = brand::grok::SCOPES;
+pub const CODE: &str = brand::grok::DEVICE_CODE_URL;
+pub const TOKEN: &str = brand::grok::TOKEN_URL;
 pub const GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 const MAX_INTERVAL: u64 = 60;
 

@@ -9,7 +9,7 @@ use llm_providers::catalog::{self, Call, Page};
 use llm_providers::oauth::{self, TokenRequest, Tokens};
 use llm_providers::{Config, Host, Provider as Shape, ProviderError};
 
-pub const API: &str = "https://api.x.ai/v1";
+pub const API: &str = brand::grok::API;
 const SKIPPED: [&str; 5] = ["imagine", "image", "embedding", "tts", "video"];
 
 #[derive(Debug, Clone, Copy, Default)]

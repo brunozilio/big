@@ -3,14 +3,17 @@ use llm_providers::ProviderError;
 use llm_providers::oauth::{TokenRequest, Tokens, expiry, form};
 use serde_json::{Value, json};
 
-pub const PORTAL: &str = "https://app.kiro.dev/signin";
-pub const TOKEN: &str = "https://prod.us-east-1.auth.desktop.kiro.dev/oauth/token";
-pub const REFRESH: &str = "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken";
-pub const CALLBACK: (u16, &str) = (49153, "/oauth/callback");
+pub const PORTAL: &str = brand::kiro::PORTAL_URL;
+pub const TOKEN: &str = brand::kiro::TOKEN_URL;
+pub const REFRESH: &str = brand::kiro::REFRESH_URL;
+
+pub fn callback() -> (u16, &'static str) {
+    llm_providers::oauth::callback(brand::kiro::CALLBACK_PORT, brand::kiro::CALLBACK_PATH)
+}
 const LIFETIME: i64 = 3600;
 
 pub fn portal(challenge: &str, state: &str, redirect: &str) -> String {
-    let origin = redirect.strip_suffix(CALLBACK.1).unwrap_or(redirect);
+    let origin = redirect.strip_suffix(callback().1).unwrap_or(redirect);
     format!(
         "{PORTAL}?{}",
         form(&[

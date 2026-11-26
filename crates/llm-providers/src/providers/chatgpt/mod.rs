@@ -12,9 +12,7 @@ use llm_providers::request::remove;
 use llm_providers::{Config, Host, Provider as Shape, ProviderError};
 
 pub const CLIENT: &str = brand::chatgpt::CLIENT_ID;
-pub const REDIRECT: &str = "http://localhost:1455/auth/callback";
-pub const TOKEN: &str = "https://auth.openai.com/oauth/token";
-pub const CALLBACK: (u16, &str) = (1455, "/auth/callback");
+pub const TOKEN: &str = brand::chatgpt::TOKEN_URL;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Provider;
@@ -64,7 +62,7 @@ impl Shape for Provider {
         Ok(())
     }
     fn base(&self, _config: &Config) -> String {
-        "https://chatgpt.com/backend-api".to_owned()
+        brand::chatgpt::API.to_owned()
     }
     fn headers(&self, config: &Config) -> Vec<(String, String)> {
         let mut headers = vec![("accept".to_owned(), "text/event-stream".to_owned())];
@@ -141,7 +139,7 @@ impl Shape for Provider {
         })
     }
     fn sign_in(&self, host: &dyn Host) -> Result<Config, ProviderError> {
-        let flow = Browser { callback: CALLBACK, state_bytes: 16, authorize: &authorize, exchange: &exchange };
+        let flow = Browser { callback: callback(), state_bytes: 16, authorize: &authorize, exchange: &exchange };
         Ok(Config { auth: Some(oauth::browser(self, host, &flow)?), ..Config::default() })
     }
 }
@@ -152,14 +150,19 @@ fn request(pairs: &[(&str, &str)]) -> TokenRequest {
     TokenRequest::form(TOKEN, &pairs)
 }
 
+pub fn callback() -> (u16, &'static str) {
+    oauth::callback(brand::chatgpt::CALLBACK_PORT, brand::chatgpt::CALLBACK_PATH)
+}
+
 pub fn authorize(challenge: &str, state: &str, redirect: &str) -> String {
     format!(
-        "https://auth.openai.com/oauth/authorize?{}",
+        "{}?{}",
+        brand::chatgpt::AUTHORIZE_URL,
         form(&[
             ("response_type", "code"),
             ("client_id", CLIENT),
             ("redirect_uri", redirect),
-            ("scope", "openid profile email offline_access"),
+            ("scope", brand::chatgpt::SCOPES),
             ("code_challenge", challenge),
             ("code_challenge_method", "S256"),
             ("state", state),
@@ -188,7 +191,7 @@ pub fn account_id(jwt: &str) -> Result<String, ProviderError> {
     let data = URL_SAFE_NO_PAD.decode(parts[1]).or_else(|_| URL_SAFE.decode(parts[1])).map_err(|_| invalid())?;
     let value: Value = serde_json::from_slice(&data).map_err(|_| invalid())?;
     [
-        &value["https://api.openai.com/auth"]["chatgpt_account_id"],
+        &value[brand::chatgpt::ACCOUNT_CLAIM]["chatgpt_account_id"],
         &value["chatgpt_account_id"],
         &value["organizations"][0]["id"],
     ]

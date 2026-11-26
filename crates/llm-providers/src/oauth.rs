@@ -96,6 +96,14 @@ impl TokenRequest {
     }
 }
 
+pub fn callback(port: &str, path: &'static str) -> (u16, &'static str) {
+    (port.parse().unwrap_or_default(), path)
+}
+
+pub fn regional(template: &str, region: &str) -> String {
+    template.replace("{region}", region)
+}
+
 pub fn form(pairs: &[(&str, &str)]) -> String {
     url::form_urlencoded::Serializer::new(String::new()).extend_pairs(pairs.iter().copied()).finish()
 }
@@ -204,6 +212,17 @@ fn jwt_claims(jwt: &str) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_configured_callback_port_is_a_port_and_its_path_starts_with_a_slash() {
+        for (section, pairs) in brand::SECTIONS {
+            let value = |key: &str| pairs.iter().find(|(name, _)| *name == key).map(|(_, value)| *value);
+            if let Some(port) = value("callback_port") {
+                assert!(port.parse::<u16>().is_ok(), "[{section}] callback_port is not a port: {port}");
+                assert!(value("callback_path").is_some_and(|path| path.starts_with('/')), "[{section}] callback_path");
+            }
+        }
+    }
 
     #[test]
     fn the_signed_in_account_is_read_from_the_token_answer_when_it_names_one() {

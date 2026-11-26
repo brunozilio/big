@@ -20,7 +20,7 @@ pub fn open(http: Arc<dyn Http>, _model: Option<&domain::ModelOption>) -> Arc<dy
     Arc::new(Responses::new(http, Arc::new(domain::provider::ProviderKey::new("transport-owned"))))
 }
 
-pub const API: &str = "https://api.openai.com/v1";
+pub const API: &str = brand::wires::RESPONSES_API;
 
 pub struct Responses {
     http: Arc<dyn Http>,

@@ -13,6 +13,7 @@ scopes = "api"
 
 [veracode]
 region = "com"
+regions = "com=api.veracode.com eu=api.veracode.eu=EU us=api.veracode.us=FedRAMP"
 
 [github]
 client_id = "178c6fc778ccc68e1d6a"
@@ -39,6 +40,7 @@ sso_scopes = "sso:account:access"
 [datadog]
 mcp_url = "https://mcp.{site}/v1/mcp"
 site = "datadoghq.com"
+sites = "datadoghq.com=US1 us3.datadoghq.com=US3 us5.datadoghq.com=US5 datadoghq.eu=EU1 ap1.datadoghq.com=AP1 ap2.datadoghq.com=AP2 uk1.datadoghq.com=UK1"
 
 [claude]
 client_id = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"
@@ -46,23 +48,69 @@ anthropic_beta = "claude-code-20250219,oauth-2025-04-20"
 client_platform = "claude_code_cli"
 client_version = "2.1.330"
 user_agent = "claude-cli/2.1.330 (external, cli)"
+authorize_url = "https://claude.com/cai/oauth/authorize"
+token_url = "https://platform.claude.com/v1/oauth/token"
+api = "https://api.anthropic.com/v1"
+usage_url = "https://api.anthropic.com/api/oauth/usage"
+scopes = "user:inference"
+callback_port = "0"
+callback_path = "/callback"
 
 [chatgpt]
 client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
+authorize_url = "https://auth.openai.com/oauth/authorize"
+token_url = "https://auth.openai.com/oauth/token"
+api = "https://chatgpt.com/backend-api"
+scopes = "openid profile email offline_access"
+account_claim = "https://api.openai.com/auth"
+callback_port = "1455"
+callback_path = "/auth/callback"
 
 [copilot]
 client_id = "Ov23ctDVkRmgkPke0Mmm"
+device_code_url = "https://github.com/login/device/code"
+token_url = "https://github.com/login/oauth/access_token"
+user_url = "https://api.github.com/copilot_internal/user"
+api = "https://api.githubcopilot.com"
+scopes = "read:user"
 
 [grok]
 client_id = "b1a00492-073a-47ea-816f-4c329264a828"
+device_code_url = "https://auth.x.ai/oauth2/device/code"
+token_url = "https://auth.x.ai/oauth2/token"
+api = "https://api.x.ai/v1"
+scopes = "openid profile email offline_access grok-cli:access api:access"
 
 [antigravity]
 client_id = "1071006060591-tmhssin2h21lcre235vtolojh4g403ep.apps.googleusercontent.com"
 client_secret = "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"
+authorize_url = "https://accounts.google.com/o/oauth2/v2/auth"
+token_url = "https://oauth2.googleapis.com/token"
+userinfo_url = "https://www.googleapis.com/oauth2/v1/userinfo?alt=json"
+api = "https://daily-cloudcode-pa.googleapis.com"
+scopes = "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs"
+callback_port = "51121"
+callback_path = "/oauth-callback"
 
 [kiro]
 user_agent_streaming = "aws-sdk-rust/1.10.0 ua/2.1 api/codewhispererstreaming/0.1.19636 os/macos lang/rust/1.94.1 md/appVersion-3.6.0 app/AmazonQ-For-CLI"
 user_agent_runtime = "aws-sdk-rust/1.10.0 ua/2.1 api/codewhispererruntime/0.1.19636 os/macos lang/rust/1.94.1 md/appVersion-3.6.0 app/AmazonQ-For-CLI"
+portal_url = "https://app.kiro.dev/signin"
+token_url = "https://prod.us-east-1.auth.desktop.kiro.dev/oauth/token"
+refresh_url = "https://prod.us-east-1.auth.desktop.kiro.dev/refreshToken"
+builder_id_url = "https://view.awsapps.com/start"
+oidc_url = "https://oidc.{region}.amazonaws.com"
+q_url = "https://q.{region}.amazonaws.com/"
+runtime_url = "https://runtime.{region}.kiro.dev"
+management_url = "https://management.{region}.kiro.dev"
+scopes = "codewhisperer:completions codewhisperer:analysis codewhisperer:conversations"
+callback_port = "49153"
+callback_path = "/oauth/callback"
+organization_redirect = "http://127.0.0.1:{port}/oauth/callback"
+
+[wires]
+messages_api = "https://api.anthropic.com"
+responses_api = "https://api.openai.com/v1"
 
 [content]
 install = true

@@ -6,7 +6,8 @@ use llm_providers::sign_in::{Host, post};
 const PORTAL_CALLBACK: &str = "/signin/callback";
 
 pub fn sign_in(host: &dyn Host) -> Result<Tokens, ProviderError> {
-    let listener = host.listen(super::auth::CALLBACK.0, super::auth::CALLBACK.1)?;
+    let (port, path) = super::auth::callback();
+    let listener = host.listen(port, path)?;
     let redirect = listener.redirect_uri();
     let (verifier, state) = (host.random(64)?, host.random(32)?);
     host.open(super::auth::portal(&challenge(&verifier), &state, &redirect), None);
@@ -25,7 +26,7 @@ pub fn sign_in(host: &dyn Host) -> Result<Tokens, ProviderError> {
             super::auth::tokens(status, &body, None, host.now())
         }
         Ok(PortalAnswer::Organization { start_url, region }) => {
-            let redirect = format!("http://127.0.0.1:{}/oauth/callback", listener.port());
+            let redirect = brand::kiro::ORGANIZATION_REDIRECT.replace("{port}", &listener.port().to_string());
             let client = match register(host, &region, &start_url, &redirect) {
                 Ok(client) => client,
                 Err(error) => {

@@ -3,9 +3,8 @@ use llm_providers::oauth::form;
 use serde_json::Value;
 
 pub const CLIENT: &str = brand::copilot::CLIENT_ID;
-pub const GITHUB: &str = "https://github.com";
-pub const USER: &str = "https://api.github.com/copilot_internal/user";
-pub const SCOPE: &str = "read:user";
+pub const USER: &str = brand::copilot::USER_URL;
+pub const SCOPE: &str = brand::copilot::SCOPES;
 pub const GRANT: &str = "urn:ietf:params:oauth:grant-type:device_code";
 const MAX_INTERVAL: u64 = 60;
 
@@ -16,12 +15,12 @@ pub struct Post {
 }
 
 pub fn code_request() -> Post {
-    Post { url: format!("{GITHUB}/login/device/code"), body: form(&[("client_id", CLIENT), ("scope", SCOPE)]) }
+    Post { url: brand::copilot::DEVICE_CODE_URL.to_owned(), body: form(&[("client_id", CLIENT), ("scope", SCOPE)]) }
 }
 
 pub fn poll_request(device_code: &str) -> Post {
     Post {
-        url: format!("{GITHUB}/login/oauth/access_token"),
+        url: brand::copilot::TOKEN_URL.to_owned(),
         body: form(&[("client_id", CLIENT), ("device_code", device_code), ("grant_type", GRANT)]),
     }
 }

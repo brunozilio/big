@@ -6,17 +6,14 @@ use llm_providers::oauth::{self, TokenRequest, Tokens, form};
 
 pub const CLIENT: &str = brand::antigravity::CLIENT_ID;
 pub const SECRET: &str = brand::antigravity::CLIENT_SECRET;
-pub const AUTHORIZE: &str = "https://accounts.google.com/o/oauth2/v2/auth";
-pub const TOKEN: &str = "https://oauth2.googleapis.com/token";
-pub const USERINFO: &str = "https://www.googleapis.com/oauth2/v1/userinfo?alt=json";
-pub const CALLBACK: (u16, &str) = (51121, "/oauth-callback");
-pub const SCOPES: [&str; 5] = [
-    "https://www.googleapis.com/auth/cloud-platform",
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-    "https://www.googleapis.com/auth/cclog",
-    "https://www.googleapis.com/auth/experimentsandconfigs",
-];
+pub const AUTHORIZE: &str = brand::antigravity::AUTHORIZE_URL;
+pub const TOKEN: &str = brand::antigravity::TOKEN_URL;
+pub const USERINFO: &str = brand::antigravity::USERINFO_URL;
+pub const SCOPES: &str = brand::antigravity::SCOPES;
+
+pub fn callback() -> (u16, &'static str) {
+    oauth::callback(brand::antigravity::CALLBACK_PORT, brand::antigravity::CALLBACK_PATH)
+}
 pub const DEFAULT_PROJECT: &str = "rising-fact-p41fc";
 pub const FREE_TIER: &str = "free-tier";
 
@@ -27,7 +24,7 @@ pub fn authorize(challenge: &str, state: &str, redirect: &str) -> String {
             ("client_id", CLIENT),
             ("response_type", "code"),
             ("redirect_uri", redirect),
-            ("scope", &SCOPES.join(" ")),
+            ("scope", SCOPES),
             ("code_challenge", challenge),
             ("code_challenge_method", "S256"),
             ("state", state),

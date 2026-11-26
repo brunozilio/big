@@ -10,8 +10,7 @@ use llm_providers::request::remove;
 use llm_providers::{Config, Host, Provider as Shape, ProviderError};
 
 pub const CLIENT: &str = brand::claude::CLIENT_ID;
-pub const TOKEN: &str = "https://platform.claude.com/v1/oauth/token";
-pub const CALLBACK: (u16, &str) = (0, "/callback");
+pub const TOKEN: &str = brand::claude::TOKEN_URL;
 pub const FALLBACK: [&str; 4] = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"];
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -56,7 +55,7 @@ impl Shape for Provider {
         config.refreshable().map(|_| ())
     }
     fn base(&self, _config: &Config) -> String {
-        "https://api.anthropic.com/v1".to_owned()
+        brand::claude::API.to_owned()
     }
     fn headers(&self, config: &Config) -> Vec<(String, String)> {
         let mut headers = vec![("accept".to_owned(), "text/event-stream".to_owned())];
@@ -124,7 +123,7 @@ impl Shape for Provider {
         oauth::standard(status, body, previous, now, |_| Ok(String::new()))
     }
     fn sign_in(&self, host: &dyn Host) -> Result<Config, ProviderError> {
-        let flow = Browser { callback: CALLBACK, state_bytes: 32, authorize: &authorize, exchange: &exchange };
+        let flow = Browser { callback: callback(), state_bytes: 32, authorize: &authorize, exchange: &exchange };
         Ok(Config { auth: Some(oauth::browser(self, host, &flow)?), ..Config::default() })
     }
 }
@@ -135,15 +134,20 @@ fn request(pairs: &[(&str, &str)]) -> TokenRequest {
     TokenRequest::pairs_json(TOKEN, &pairs)
 }
 
+pub fn callback() -> (u16, &'static str) {
+    oauth::callback(brand::claude::CALLBACK_PORT, brand::claude::CALLBACK_PATH)
+}
+
 pub fn authorize(challenge: &str, state: &str, redirect: &str) -> String {
     format!(
-        "https://claude.com/cai/oauth/authorize?{}",
+        "{}?{}",
+        brand::claude::AUTHORIZE_URL,
         form(&[
             ("code", "true"),
             ("client_id", CLIENT),
             ("response_type", "code"),
             ("redirect_uri", redirect),
-            ("scope", "user:inference"),
+            ("scope", brand::claude::SCOPES),
             ("code_challenge", challenge),
             ("code_challenge_method", "S256"),
             ("state", state),

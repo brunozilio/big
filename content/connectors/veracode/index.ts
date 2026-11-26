@@ -5,6 +5,7 @@ import {
   RECONNECT,
   blocked,
   connect,
+  entries,
   fail,
   fetchJson,
   optionalText,
@@ -21,25 +22,21 @@ import { type Filter, chosen, filterOf } from "./findings.ts";
 import { type Keys, header, readKeys } from "./sign.ts";
 
 export const REGION = "region";
-export const REGIONS: [string, string, string][] = [
-  ["com", "api.veracode.com", ""],
-  ["eu", "api.veracode.eu", " EU"],
-  ["us", "api.veracode.us", " FedRAMP"],
-];
+export const regions = (ctx: Ctx): [string, string, string][] =>
+  entries(ctx.config.regions).map(([region, host, label]) => [region, host ?? "", label ? ` ${label}` : ""]);
 const APPLICATIONS = "/appsec/v1/applications";
 const APPLICATION_PAGE = "100";
 const FINDING_PAGE = "500";
 const MOST_PAGES = 10;
 
-type Ctx = { config: { region: string } } & Record<string, any>;
+type Ctx = { config: { region: string; regions: string } } & Record<string, any>;
 
 type Api = { ctx: Ctx; keys: Keys; host: string; label: string; region: string; project?: string };
 
-export function regionOf(entered: string, fallback: string): [string, string, string] | undefined {
+export function regionOf(ctx: Ctx, entered: string, fallback: string): [string, string, string] | undefined {
   let bare = entered.trim().replace(/^(https:\/\/)+/, "").replace(/\/+$/, "").toLowerCase();
-  if (bare.startsWith("api.veracode.")) bare = bare.slice("api.veracode.".length);
   if (bare === "") bare = fallback;
-  return REGIONS.find(([region]) => region === bare);
+  return regions(ctx).find(([region, host]) => region === bare || host === bare);
 }
 
 const regionField = (ctx: Ctx, language: Language) =>
@@ -71,9 +68,9 @@ export function presentation({ language }: { language: Language }) {
 function apiOf(ctx: Ctx, creds: Creds): Api {
   const keys = readKeys(creds.token) ?? fail("auth", RECONNECT);
   const entered = setting(creds, REGION) ?? "";
-  const found = regionOf(entered, ctx.config.region);
+  const found = regionOf(ctx, entered, ctx.config.region);
   if (found === undefined) {
-    return fail("permanent", `${JSON.stringify(entered)} is not a Veracode region; use ${REGIONS.map(([region]) => region).join(", ")}`);
+    return fail("permanent", `${JSON.stringify(entered)} is not a Veracode region; use ${regions(ctx).map(([region]) => region).join(", ")}`);
   }
   const [region, host, suffix] = found;
   return { ctx, keys, host, label: `Veracode${suffix}`, region, project: setting(creds, "project") };

@@ -1,44 +1,36 @@
-import { type Creds, type Language, fail, pick, settingField, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type Creds, type Language, entries, fail, pick, settingField, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { mcp } from "sdk/connectors/contracts.ts";
 
 export const SITE = "site";
 
-export const SITES: [string, string][] = [
-  ["datadoghq.com", "US1"],
-  ["us3.datadoghq.com", "US3"],
-  ["us5.datadoghq.com", "US5"],
-  ["datadoghq.eu", "EU1"],
-  ["ap1.datadoghq.com", "AP1"],
-  ["ap2.datadoghq.com", "AP2"],
-  ["uk1.datadoghq.com", "UK1"],
-];
+type Ctx = { config: { site: string; sites: string; mcp_url: string } } & Record<string, any>;
 
-type Ctx = { config: { site: string; mcp_url: string } } & Record<string, any>;
+export const sites = (ctx: Ctx): string[][] => entries(ctx.config.sites);
 
-export function siteOf(entered: string, fallback: string): string | undefined {
+export function siteOf(ctx: Ctx, entered: string, fallback: string): string | undefined {
   let bare = entered.trim().replace(/^https:\/\//, "").replace(/^http:\/\//, "");
   bare = (bare.split("/")[0] ?? "").toLowerCase();
   bare = bare.replace(/^app\./, "").replace(/^mcp\./, "");
   if (bare === "") bare = fallback;
-  return SITES.map(([site]) => site).find((site) => site === bare);
+  return sites(ctx).map(([site]) => site).find((site) => site === bare);
 }
 
 export const serverOf = (ctx: Ctx, site: string) => ctx.config.mcp_url.replace("{site}", site);
 
 export function labelOf(ctx: Ctx, site: string): string {
-  const region = SITES.find(([known]) => known === site)?.[1];
+  const region = sites(ctx).find(([known]) => known === site)?.[1];
   return region !== undefined && site !== ctx.config.site ? `Datadog ${region}` : "Datadog";
 }
 
-function unknownSite(language: Language): string {
-  const sites = SITES.map(([site]) => site).join(", ");
-  return pick(language, `Use one of the Datadog sites: ${sites}.`, `Usa uno de los sitios de Datadog: ${sites}.`, `Use um dos sites do Datadog: ${sites}.`);
+function unknownSite(ctx: Ctx, language: Language): string {
+  const known = sites(ctx).map(([site]) => site).join(", ");
+  return pick(language, `Use one of the Datadog sites: ${known}.`, `Usa uno de los sitios de Datadog: ${known}.`, `Use um dos sites do Datadog: ${known}.`);
 }
 
 const siteField = (ctx: Ctx, language: Language) =>
   settingField(SITE, pick(language, "Datadog site", "Sitio de Datadog", "Site do Datadog"), "", ctx.config.site);
 
-const chosenSite = (ctx: Ctx, state: { site?: string }) => siteOf(state?.site ?? "", ctx.config.site) ?? ctx.config.site;
+const chosenSite = (ctx: Ctx, state: { site?: string }) => siteOf(ctx, state?.site ?? "", ctx.config.site) ?? ctx.config.site;
 
 export function provider() {
   return {
@@ -78,8 +70,8 @@ export const signIn = {
   name: () => "datadog",
   fields: ({ language }: { language: Language }, ctx: Ctx) => [siteField(ctx, language)],
   forFields({ fields, language }: { fields: Record<string, string>; language: Language }, ctx: Ctx) {
-    const site = siteOf(fields?.[SITE] ?? "", ctx.config.site);
-    if (site === undefined) throw new Error(unknownSite(language));
+    const site = siteOf(ctx, fields?.[SITE] ?? "", ctx.config.site);
+    if (site === undefined) throw new Error(unknownSite(ctx, language));
     return { state: { site } };
   },
   begin: ({ state, port }, ctx: Ctx) => ctx.oauth.mcp.begin({ server: serverOf(ctx, chosenSite(ctx, state)), port }),
@@ -97,7 +89,7 @@ export const signIn = {
 
 function siteIn(ctx: Ctx, creds: Creds): string {
   const entered = typeof creds.settings?.[SITE] === "string" ? (creds.settings[SITE] as string) : "";
-  return siteOf(entered, ctx.config.site) ?? fail("permanent", unknownSite("en"));
+  return siteOf(ctx, entered, ctx.config.site) ?? fail("permanent", unknownSite(ctx, "en"));
 }
 
 export function call({ action, creds }: { action: string; creds: Creds }, ctx: Ctx) {
