@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api } from '.'
 import { currentLanguage, translate } from '@/i18n'
-import type { Api, Application, Branding, CallAction, CallArgs, CallResult, Connections, Item, LiveEvent, Models, Session, SessionEvent, StepView } from './contract'
+import type { Api, Application, Branding, OnboardingState, CallAction, CallArgs, CallResult, Connections, Item, LiveEvent, Models, Session, SessionEvent, StepView } from './contract'
 
 export interface State {
   ready: boolean
@@ -12,10 +12,11 @@ export interface State {
   models: Models | null
   branding: Branding | null
   applications: Application[] | null
+  onboarding: OnboardingState | null
   sessions: Record<string, Session>
 }
 
-const initial = (): State => ({ ready: false, connected: false, error: null, items: [], connections: null, models: null, branding: null, applications: null, sessions: {} })
+const initial = (): State => ({ ready: false, connected: false, error: null, items: [], connections: null, models: null, branding: null, applications: null, onboarding: null, sessions: {} })
 
 let state: State = initial()
 const listeners = new Set<() => void>()
@@ -105,8 +106,8 @@ function applyStatus(id: string, status: Session['status']) {
 
 async function reload(a: Api) {
   try {
-    const [items, connections, models, branding, applications] = await Promise.all([a.items(), a.connections(), a.models(), a.branding(), a.applications().catch(() => [])])
-    set({ items, connections, models, branding, applications, ready: true, error: null })
+    const [items, connections, models, branding, applications, onboarding] = await Promise.all([a.items(), a.connections(), a.models(), a.branding(), a.applications().catch(() => []), a.onboarding().catch(() => ({ skipped: false }))])
+    set({ items, connections, models, branding, applications, onboarding, ready: true, error: null })
     const ids = Object.keys(state.sessions)
     const sessions = await Promise.all(ids.map((id) => a.session(id).catch(() => null)))
     set((s) => ({ sessions: { ...s.sessions, ...Object.fromEntries(sessions.filter((x): x is Session => !!x).map((x) => [x.id, x])) } }))
@@ -137,6 +138,10 @@ export function setItems(update: (items: Item[]) => Item[]) {
 
 export function setBranding(branding: Branding) {
   set({ branding })
+}
+
+export function setOnboarding(onboarding: OnboardingState) {
+  set({ onboarding })
 }
 
 export function setApplications(update: (applications: Application[]) => Application[]) {

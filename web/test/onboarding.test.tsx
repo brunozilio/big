@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { setApi } from '../src/api'
 import type { Api } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
-import { boot, stop } from '../src/api/store'
+import { boot, getState, stop } from '../src/api/store'
 import { needsOnboarding, Onboarding, returnedTo, stageOf } from '../src/screens/onboarding/Onboarding'
 import { TooltipProvider } from '../src/ui/overlay'
 
@@ -25,12 +25,12 @@ afterEach(() => {
 
 describe('primeira vez', () => {
   test('sem aplicação o app abre o onboarding, e pular vale até existir uma', () => {
-    expect(needsOnboarding(true, [])).toBe(true)
-    expect(needsOnboarding(false, [])).toBe(false)
-    expect(needsOnboarding(true, null)).toBe(false)
-    expect(needsOnboarding(true, [{ id: 'a', name: 'A', repositories: [] }])).toBe(false)
-    localStorage.setItem('onboarding:skipped', 'true')
-    expect(needsOnboarding(true, [])).toBe(false)
+    expect(needsOnboarding(true, [], null)).toBe(true)
+    expect(needsOnboarding(true, [], { skipped: false })).toBe(true)
+    expect(needsOnboarding(false, [], null)).toBe(false)
+    expect(needsOnboarding(true, null, null)).toBe(false)
+    expect(needsOnboarding(true, [{ id: 'a', name: 'A', repositories: [] }], null)).toBe(false)
+    expect(needsOnboarding(true, [], { skipped: true })).toBe(false)
   })
 
   test('a volta do login cai no onboarding, no passo do provedor', () => {
@@ -60,7 +60,8 @@ describe('primeira vez', () => {
     expect((screen.getByText('Criar aplicação').closest('button') as HTMLButtonElement).disabled).toBe(true)
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Fluxo de branch' }).textContent).toContain('gitflow'))
     fireEvent.click(screen.getByText('Pular por agora'))
-    expect(done).toBe(1)
-    expect(localStorage.getItem('onboarding:skipped')).toBe('true')
+    await waitFor(() => expect(done).toBe(1))
+    expect(getState().onboarding).toEqual({ skipped: true })
+    expect(localStorage.getItem('onboarding:skipped')).toBeNull()
   })
 })

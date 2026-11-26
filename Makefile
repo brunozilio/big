@@ -21,3 +21,4 @@ check:
 	cargo nextest run --workspace
 	cargo clippy --workspace --all-targets -- -D warnings
 	cargo run -p xtask -- lint
+	cd web && bun run typecheck && bun test

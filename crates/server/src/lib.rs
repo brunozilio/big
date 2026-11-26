@@ -31,6 +31,7 @@ mod live;
 mod marks;
 mod memories;
 mod models;
+mod onboarding;
 mod permissions;
 mod pump;
 mod routes;

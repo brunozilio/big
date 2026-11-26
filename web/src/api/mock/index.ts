@@ -1,7 +1,7 @@
 import { setClock } from '../clock'
 import { BTW_WORKFLOW } from '../contract'
 import { currentLanguage } from '@/i18n'
-import type { Api, Application, BindingOption, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, SessionEvent, SignInPoll, SignInStart } from '../contract'
+import type { Api, Application, BindingOption, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, OnboardingState, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
 import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, cloudOptions, codeBranches, openPulls, initialApplications, listDirs } from './applications'
 import { initialConnections, MCP_TOOLS, MODELS, providers as allProviders, usageFixture, usageLimitsFixture } from './fixtures'
@@ -83,6 +83,7 @@ export function mockApi(options: MockOptions = {}): Api {
   setClock(() => EPOCH + store.clock * TICK_MS + Math.min(TICK_MS, ((Date.now() - lastTick) / tickMs) * TICK_MS))
   let branding: Branding = { name: 'Entregas', logo: '/api/branding/logo', favicon: '/api/branding/favicon', editor: 'VS Code', theme: 'system', language: currentLanguage(), output_style: null, output_styles: [{ key: 'concise', name: 'Concise', description: say('shortReplies') }] }
   let applications: Application[] = initialApplications()
+  let onboarding: OnboardingState = { skipped: false }
   const flows = new Map<string, Flow>()
   const listeners = new Set<(e: LiveEvent) => void>()
   const itemSigs = new Map<string, { sig: string; updatedAt: string }>()
@@ -344,6 +345,8 @@ export function mockApi(options: MockOptions = {}): Api {
       publish({ type: 'branding', branding })
       return branding
     }),
+    onboarding: () => wait(() => onboarding),
+    saveOnboarding: (state) => wait(() => (onboarding = { skipped: state.skipped })),
     applications: () => wait(() => applications),
     flows: () => wait(() => ({ names: ['gitflow'], default: 'gitflow' })),
     createApplication: (draft) => wait(() => {

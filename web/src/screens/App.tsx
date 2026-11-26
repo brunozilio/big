@@ -27,9 +27,10 @@ export function App() {
   const navigate = useNavigate()
   const ready = useStore((s) => s.ready)
   const applications = useStore((s) => s.applications)
+  const onboarding = useStore((s) => s.onboarding)
   const [, setSettled] = useState(0)
   const resumed = returnedTo(location.pathname, location.search)
-  if ((resumed || !location.pathname.startsWith('/settings')) && needsOnboarding(ready, applications)) {
+  if ((resumed || !location.pathname.startsWith('/settings')) && needsOnboarding(ready, applications, onboarding)) {
     return (
       <div className="scrollbar-thin h-full overflow-y-auto">
         <Onboarding resumed={resumed} onResumed={() => resumed && navigate('/', { replace: true })} onDone={() => {

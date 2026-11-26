@@ -834,6 +834,10 @@ export interface OutputStyle {
   description: string
 }
 
+export interface OnboardingState {
+  skipped: boolean
+}
+
 export interface Branding {
   name: string
   logo: string | null
@@ -986,6 +990,8 @@ export interface Api {
   usageLimits(): Promise<UsageLimits>
   branding(): Promise<Branding>
   saveBranding(patch: BrandingPatch): Promise<Branding>
+  onboarding(): Promise<OnboardingState>
+  saveOnboarding(state: OnboardingState): Promise<OnboardingState>
   applications(): Promise<Application[]>
   flows(): Promise<Flows>
   createApplication(application: ApplicationDraft): Promise<Application>
@@ -1026,6 +1032,7 @@ export const ROUTES = {
   usage: (days: number) => `/api/usage?days=${days}`,
   usageLimits: '/api/usage/limits',
   branding: '/api/branding',
+  onboarding: '/api/onboarding',
   applications: '/api/applications',
   flows: '/api/flows',
   application: (id: string) => `/api/applications/${encodeURIComponent(id)}`,

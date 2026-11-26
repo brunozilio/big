@@ -220,3 +220,15 @@ async fn the_page_reads_the_quality_and_security_reports_but_never_the_cloud_cre
     let secret = ask("cloud.identity", json!({}));
     assert_eq!(world.send(Method::POST, "/api/connections/c1/call", Some(secret)).await.0, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn skipping_the_onboarding_is_kept_by_the_server() {
+    let world = World::new().await;
+    assert_eq!(world.get("/api/onboarding").await, json!({ "skipped": false }));
+    let (status, kept) = world.send(Method::PUT, "/api/onboarding", Some(json!({ "skipped": true }))).await;
+    assert_eq!(status, StatusCode::OK, "{kept}");
+    assert_eq!(kept, json!({ "skipped": true }));
+    assert_eq!(world.get("/api/onboarding").await, json!({ "skipped": true }));
+    let (status, _) = world.send(Method::PUT, "/api/onboarding", Some(json!({ "skipped": "yes" }))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

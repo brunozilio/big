@@ -1,8 +1,8 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useState } from 'react'
 import { api } from '@/api'
-import type { Application, ApplicationRepository, Bindings, DirListing } from '@/api/contract'
-import { errorText, setApplications, useStore } from '@/api/store'
+import type { Application, ApplicationRepository, Bindings, DirListing, OnboardingState } from '@/api/contract'
+import { errorText, setApplications, setOnboarding, useStore } from '@/api/store'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { ProductMark } from '@/ui/domain'
@@ -20,8 +20,6 @@ import { folderName } from '../settings/Applications'
 import { BindingFields, suggested, useBindingFields, type BindingField } from '../settings/bindings'
 import { FlowSelect, useFlows, withFlow } from '../settings/flows'
 
-const SKIPPED = 'onboarding:skipped'
-
 type Stage = 'connections' | 'ai' | 'application'
 
 const ORDER: Stage[] = ['connections', 'ai', 'application']
@@ -32,24 +30,8 @@ const STAGES = (t: T): { stage: Stage; label: string; title: string; text: strin
   { stage: 'application', label: t('app.stageApplicationLabel'), title: t('app.stageApplicationTitle'), text: t('app.stageApplicationText') },
 ]
 
-export function skippedOnboarding(): boolean {
-  try {
-    return globalThis.localStorage?.getItem(SKIPPED) === 'true'
-  } catch {
-    return false
-  }
-}
-
-function skipOnboarding() {
-  try {
-    globalThis.localStorage?.setItem(SKIPPED, 'true')
-  } catch {
-    return
-  }
-}
-
-export function needsOnboarding(ready: boolean, applications: Application[] | null): boolean {
-  return ready && applications !== null && applications.length === 0 && !skippedOnboarding()
+export function needsOnboarding(ready: boolean, applications: Application[] | null, onboarding: OnboardingState | null): boolean {
+  return ready && applications !== null && applications.length === 0 && !onboarding?.skipped
 }
 
 interface Draft {
@@ -181,8 +163,16 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
       .finally(() => setBusy(false))
   }
   const skip = () => {
-    skipOnboarding()
-    onDone()
+    setBusy(true)
+    setError(null)
+    api()
+      .saveOnboarding({ skipped: true })
+      .then((kept) => {
+        setOnboarding(kept)
+        onDone()
+      })
+      .catch((e: unknown) => setError(errorText(e)))
+      .finally(() => setBusy(false))
   }
   const t = useT()
   const ready = draft.name.trim() !== '' && draft.repository.directory !== ''
@@ -213,7 +203,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
           {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
           <div className="mt-6 flex items-center gap-2">
             {at > 0 && <Button variant="ghost" icon={<Icon name="left" size={15} />} onClick={() => setStage(ORDER[at - 1])}>{t('app.back')}</Button>}
-            <Button variant="ghost" onClick={skip}>{t('app.skipForNow')}</Button>
+            <Button variant="ghost" disabled={busy} onClick={skip}>{t('app.skipForNow')}</Button>
             {stage !== 'application' ? (
               <Button variant="primary" className="ml-auto" onClick={() => setStage(ORDER[at + 1])}>{t('app.continue')}</Button>
             ) : (
