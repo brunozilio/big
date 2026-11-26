@@ -63,7 +63,7 @@ fn organization(
 }
 
 fn profile(host: &dyn Host, access_token: &str) -> Result<String, ProviderError> {
-    for region in PROFILE_REGIONS {
+    for region in PROFILE_REGIONS.split_whitespace() {
         let (url, headers, body) = idc::profiles(region, access_token);
         let Ok((status, text)) = host.post(&url, &headers, &body) else { continue };
         if let Some(arn) = idc::first_profile(status, &text) {

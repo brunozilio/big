@@ -13,10 +13,10 @@ use serde_json::{Value, json};
 
 use llm_providers::{Call, Config, Host, Page, Provider as Shape, ProviderError, TokenRequest, Tokens};
 
-pub const ORIGIN: &str = "KIRO_CLI";
+pub const ORIGIN: &str = brand::kiro::ORIGIN;
 pub const CHAT: &str = "AmazonCodeWhispererStreamingService.GenerateAssistantResponse";
 pub const MODELS: &str = "KiroControlPlaneBearerService.ListAvailableModels";
-const DEFAULT_REGION: &str = "us-east-1";
+const DEFAULT_REGION: &str = brand::kiro::REGION;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Provider;

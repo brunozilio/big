@@ -11,7 +11,7 @@ use llm_providers::{Config, Host, Provider as Shape, ProviderError};
 
 pub const CLIENT: &str = brand::claude::CLIENT_ID;
 pub const TOKEN: &str = brand::claude::TOKEN_URL;
-pub const FALLBACK: [&str; 4] = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5", "claude-fable-5-1"];
+pub const FALLBACK: &str = brand::claude::FALLBACK_MODELS;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Provider;
@@ -100,7 +100,7 @@ impl Shape for Provider {
     }
     fn finish(&self, mut models: Vec<ModelOption>) -> Vec<ModelOption> {
         if models.is_empty() {
-            models.extend(FALLBACK.map(|id| catalog::option(self, id, id.to_owned())));
+            models.extend(FALLBACK.split_whitespace().map(|id| catalog::option(self, id, id.to_owned())));
         }
         models
     }
@@ -213,9 +213,9 @@ mod tests {
     #[test]
     fn an_empty_catalog_falls_back_to_the_current_priced_family() {
         let models = catalog::collect(&Provider, |_| Ok::<_, ProviderError>(json!({"data": []}))).unwrap_or_default();
-        assert_eq!(models.len(), FALLBACK.len());
+        assert_eq!(models.len(), FALLBACK.split_whitespace().count());
         assert!(catalog::collect(&Provider, |_| Ok::<_, ProviderError>(json!({}))).is_err());
-        for id in FALLBACK {
+        for id in FALLBACK.split_whitespace() {
             assert!(llm_providers::rates(Provider.vendor(), id, 0).is_some(), "{id}");
         }
     }

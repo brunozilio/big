@@ -55,6 +55,7 @@ usage_url = "https://api.anthropic.com/api/oauth/usage"
 scopes = "user:inference"
 callback_port = "0"
 callback_path = "/callback"
+fallback_models = "claude-opus-5-5 claude-sonnet-5-5 claude-haiku-5-5 claude-fable-5-1"
 
 [chatgpt]
 client_id = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -65,6 +66,7 @@ scopes = "openid profile email offline_access"
 account_claim = "https://api.openai.com/auth"
 callback_port = "1455"
 callback_path = "/auth/callback"
+originator = "codex_cli_rs"
 
 [copilot]
 client_id = "Ov23ctDVkRmgkPke0Mmm"
@@ -73,6 +75,9 @@ token_url = "https://github.com/login/oauth/access_token"
 user_url = "https://api.github.com/copilot_internal/user"
 api = "https://api.githubcopilot.com"
 scopes = "read:user"
+version = "1.0.62"
+api_version = "2026-06-01"
+integration = "copilot-developer-cli"
 
 [grok]
 client_id = "b1a00492-073a-47ea-816f-4c329264a828"
@@ -91,6 +96,9 @@ api = "https://daily-cloudcode-pa.googleapis.com"
 scopes = "https://www.googleapis.com/auth/cloud-platform https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/cclog https://www.googleapis.com/auth/experimentsandconfigs"
 callback_port = "51121"
 callback_path = "/oauth-callback"
+version = "2.24.0"
+default_project = "rising-fact-p41fc"
+fallback_models = "gemini-4-argon-high gemini-3.8-flash-high gemini-3.8-flash-medium gemini-3.8-flash-low claude-opus-5-5-high claude-sonnet-5-5-high gpt-oss-120b-medium"
 
 [kiro]
 user_agent_streaming = "aws-sdk-rust/1.10.0 ua/2.1 api/codewhispererstreaming/0.1.19636 os/macos lang/rust/1.94.1 md/appVersion-3.6.0 app/AmazonQ-For-CLI"
@@ -107,6 +115,10 @@ scopes = "codewhisperer:completions codewhisperer:analysis codewhisperer:convers
 callback_port = "49153"
 callback_path = "/oauth/callback"
 organization_redirect = "http://127.0.0.1:{port}/oauth/callback"
+region = "us-east-1"
+profile_regions = "us-east-1 eu-central-1"
+client_name = "Kiro CLI"
+origin = "KIRO_CLI"
 
 [wires]
 messages_api = "https://api.anthropic.com"

@@ -71,7 +71,7 @@ impl Shape for Provider {
                 ("authorization".into(), format!("Bearer {}", tokens.access_token)),
                 ("chatgpt-account-id".into(), tokens.account_id.clone()),
                 ("openai-beta".into(), "responses=experimental".into()),
-                ("originator".into(), "codex_cli_rs".into()),
+                ("originator".into(), brand::chatgpt::ORIGINATOR.into()),
             ]);
         }
         headers
@@ -168,7 +168,7 @@ pub fn authorize(challenge: &str, state: &str, redirect: &str) -> String {
             ("state", state),
             ("id_token_add_organizations", "true"),
             ("codex_cli_simplified_flow", "true"),
-            ("originator", "codex_cli_rs"),
+            ("originator", brand::chatgpt::ORIGINATOR),
         ])
     )
 }

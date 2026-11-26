@@ -14,7 +14,7 @@ pub const SCOPES: &str = brand::antigravity::SCOPES;
 pub fn callback() -> (u16, &'static str) {
     oauth::callback(brand::antigravity::CALLBACK_PORT, brand::antigravity::CALLBACK_PATH)
 }
-pub const DEFAULT_PROJECT: &str = "rising-fact-p41fc";
+pub const DEFAULT_PROJECT: &str = brand::antigravity::DEFAULT_PROJECT;
 pub const FREE_TIER: &str = "free-tier";
 
 pub fn authorize(challenge: &str, state: &str, redirect: &str) -> String {

@@ -10,7 +10,7 @@ use serde_json::Value;
 use llm_providers::{Call, Config, Host, Page, Provider as Shape, ProviderError, TokenRequest, Tokens};
 
 pub const BASE: &str = brand::antigravity::API;
-pub const VERSION: &str = "2.24.0";
+pub const VERSION: &str = brand::antigravity::VERSION;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Provider;
@@ -161,7 +161,7 @@ mod tests {
     fn an_empty_catalog_falls_back_to_the_known_models() {
         let models = llm_providers::catalog::collect(&Provider, |_| Ok::<_, ProviderError>(json!({"models": {}})))
             .unwrap_or_default();
-        assert_eq!(models.len(), models::FALLBACK.len());
+        assert_eq!(models.len(), models::FALLBACK.split_whitespace().count());
         assert!(Provider.serves("gemini-3.8-flash-high") && Provider.serves("claude-opus-5-5-high"));
     }
 }

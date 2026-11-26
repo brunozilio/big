@@ -13,9 +13,9 @@ use llm_providers::catalog::{self, Call, Page};
 use llm_providers::{Config, Host, Provider as Shape, ProviderError, Tokens};
 
 pub const API: &str = brand::copilot::API;
-pub const VERSION: &str = "1.0.62";
-pub const API_VERSION: &str = "2026-06-01";
-pub const INTEGRATION: &str = "copilot-developer-cli";
+pub const VERSION: &str = brand::copilot::VERSION;
+pub const API_VERSION: &str = brand::copilot::API_VERSION;
+pub const INTEGRATION: &str = brand::copilot::INTEGRATION;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct Provider;

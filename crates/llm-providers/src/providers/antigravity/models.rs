@@ -4,15 +4,7 @@ use serde_json::{Value, json};
 
 use llm_providers::{Call, Config};
 
-pub const FALLBACK: [&str; 7] = [
-    "gemini-4-argon-high",
-    "gemini-3.8-flash-high",
-    "gemini-3.8-flash-medium",
-    "gemini-3.8-flash-low",
-    "claude-opus-5-5-high",
-    "claude-sonnet-5-5-high",
-    "gpt-oss-120b-medium",
-];
+pub const FALLBACK: &str = brand::antigravity::FALLBACK_MODELS;
 
 pub fn call(config: &Config) -> Call {
     Call {
@@ -34,7 +26,7 @@ pub fn page(value: &Value) -> Vec<ModelOption> {
 }
 
 pub fn fallback() -> Vec<ModelOption> {
-    FALLBACK.iter().filter_map(|id| model(id, &Value::Null)).collect()
+    FALLBACK.split_whitespace().filter_map(|id| model(id, &Value::Null)).collect()
 }
 
 fn model(id: &str, item: &Value) -> Option<ModelOption> {
@@ -95,6 +87,6 @@ mod tests {
         assert_eq!(models[0].id, "antigravity-subscription:gpt-oss-120b-medium");
         assert_eq!(models[0].capabilities.as_ref().map(|c| c.reasoning), Some(false));
         assert!(page(&json!({})).is_empty());
-        assert_eq!(fallback().len(), FALLBACK.len());
+        assert_eq!(fallback().len(), FALLBACK.split_whitespace().count());
     }
 }

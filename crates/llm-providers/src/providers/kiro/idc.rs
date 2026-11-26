@@ -5,9 +5,9 @@ use serde_json::{Value, json};
 use llm_providers::ProviderError;
 use llm_providers::oauth::{TokenRequest, Tokens, expiry, form};
 
-pub const PROFILE_REGIONS: [&str; 2] = ["us-east-1", "eu-central-1"];
+pub const PROFILE_REGIONS: &str = brand::kiro::PROFILE_REGIONS;
 pub const PROFILES: &str = "AmazonCodeWhispererService.ListAvailableProfiles";
-pub const CLIENT_NAME: &str = "Kiro CLI";
+pub const CLIENT_NAME: &str = brand::kiro::CLIENT_NAME;
 const BUILDER_ID: &str = brand::kiro::BUILDER_ID_URL;
 const LIFETIME: i64 = 3600;
 
