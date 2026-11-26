@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { api } from '@/api'
 import type { Binding, BindingChoice, BindingEach, BindingFieldSpec, BindingOption, Bindings, BindingScope, Connection, Provider } from '@/api/contract'
-import { useStore } from '@/api/store'
+import { errorText, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
@@ -74,36 +74,49 @@ export interface Search {
   hint: string | undefined
 }
 
-function lookup(connections: string[], action: `${string}.options`, args: { query: string; field?: string }): Promise<Found> {
-  return Promise.all(connections.map((connection) => api().call(connection, action, args).then((listed) => [connection, listed] as const).catch(() => [connection, [] as BindingOption[]] as const))).then(Object.fromEntries)
+type Listed = { found: Found; failed: string | null }
+
+function lookup(connections: string[], action: `${string}.options`, args: { query: string; field?: string }): Promise<Listed> {
+  let failed: string | null = null
+  const each = connections.map((connection) =>
+    api()
+      .call(connection, action, args)
+      .then((listed) => [connection, listed] as const)
+      .catch((e: unknown) => ((failed = errorText(e)), [connection, [] as BindingOption[]] as const)),
+  )
+  return Promise.all(each).then((pairs) => ({ found: Object.fromEntries(pairs), failed }))
 }
 
-export function useSearch(connections: string[], capability: string, field?: string): Search {
+export function useSearch(connections: string[], capability: string, field?: string, eager = false): Search {
   const t = useT()
   const [query, setQuery] = useState('')
   const [found, setFound] = useState<Found>({})
+  const [failed, setFailed] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const wanted = connections.filter(Boolean).join('|')
   useEffect(() => {
     const typed = query.trim()
+    const asked = (typed !== '' || eager) && wanted !== ''
     setFound({})
-    setBusy(typed !== '')
-    if (typed === '' || wanted === '') return
+    setFailed(null)
+    setBusy(asked)
+    if (!asked) return
     let alive = true
     const timer = setTimeout(() => {
       lookup(wanted.split('|'), `${capability}.options`, { query: typed, ...(field ? { field } : {}) }).then((listed) => {
         if (!alive) return
-        setFound(listed)
+        setFound(listed.found)
+        setFailed(listed.failed)
         setBusy(false)
       })
-    }, PAUSE)
+    }, typed === '' ? 0 : PAUSE)
     return () => {
       alive = false
       clearTimeout(timer)
     }
-  }, [query, wanted, capability, field])
+  }, [query, wanted, capability, field, eager])
   const empty = Object.values(found).every((listed) => listed.length === 0)
-  const hint = query.trim() === '' ? t('settings.search_type') : busy ? t('settings.search_busy') : empty ? t('settings.search_empty') : undefined
+  const hint = busy ? t('settings.search_busy') : failed && empty ? failed : query.trim() === '' && !eager ? t('settings.search_type') : empty ? t('settings.search_empty') : undefined
   return { found, search: setQuery, hint }
 }
 
@@ -118,7 +131,7 @@ export async function suggested(ref: string | null, fields: BindingField[], curr
   if (!ref) return bindings
   for (const field of fields) {
     if (bindings[field.capability] || field.shape) continue
-    const listed = await lookup(field.sources.map((s) => s.connection.id), `${field.capability}.options`, { query: ref })
+    const { found: listed } = await lookup(field.sources.map((s) => s.connection.id), `${field.capability}.options`, { query: ref })
     for (const [connection, options] of Object.entries(listed)) {
       const found = options.find((o) => o.value.toLowerCase() === ref.toLowerCase())
       if (found) {
@@ -231,7 +244,7 @@ export function missingOf(fields: BindingField[], bindings: Bindings | undefined
 
 function ChoiceSelect({ spec, connection, capability, value, onChange }: { spec: BindingFieldSpec; connection: string; capability: string; value: BindingChoice | undefined; onChange: (next: BindingChoice | null) => void }) {
   const t = useT()
-  const { found, search, hint } = useSearch([connection], capability, spec.key)
+  const { found, search, hint } = useSearch([connection], capability, spec.key, true)
   const options = found[connection] ?? []
   const label = spec.required ? `${spec.label} *` : spec.label
   const choices = [{ value: NONE, label: t('settings.none') }, ...options.map((o) => ({ value: o.value, label: o.label }))]

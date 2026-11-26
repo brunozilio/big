@@ -200,6 +200,21 @@ describe('conta e papel na nuvem', () => {
     await waitFor(() => expect(saved).toBe(1))
     expect(view.queryByRole('alert')).toBeNull()
   })
+
+  test('ambiente e conta listam ao abrir, sem digitar, e a falha do conector aparece', async () => {
+    const base = withCloud()
+    const failing = { ...base, call: ((connection, action, args) => ((args as { field?: string }).field === 'account' ? Promise.reject(new Error('Sessão da AWS expirou')) : base.call(connection, action, args))) as typeof base.call }
+    await started(failing)
+    const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    const cloud = await view.findByTestId('binding-cloud')
+    fireEvent.click(within(cloud).getByRole('button', { name: 'Adicionar Ambiente' }))
+    fireEvent.keyDown(await within(cloud).findByRole('combobox', { name: 'Ambiente' }), { key: 'Enter' })
+    expect(await view.findByRole('option', { name: 'Produção' })).toBeTruthy()
+    fireEvent.keyDown(view.getByRole('option', { name: 'Produção' }), { key: 'Escape' })
+    fireEvent.keyDown(await within(cloud).findByRole('combobox', { name: 'Conta e papel' }), { key: 'Enter' })
+    expect(await view.findByText('Sessão da AWS expirou')).toBeTruthy()
+  })
 })
 
 describe('aplicações no composer', () => {
