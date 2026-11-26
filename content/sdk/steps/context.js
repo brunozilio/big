@@ -54,15 +54,25 @@ export function agentOptions(opts, extra) {
   });
 }
 
-export function environmentOf(environments, base) {
-  const found = (Array.isArray(environments) ? environments : []).find((env) => env && env.branch && env.branch === base);
+export function lanesOf(ctx) {
+  const git = object(ctx && ctx.item ? ctx.item.git : null);
+  return Object.values(git).flatMap((entry) => {
+    const first = Array.isArray(object(entry).promote) ? entry.promote[0] : null;
+    return first && typeof first.from === "string" && first.from !== "" ? [first.from] : [];
+  });
+}
+
+export function environmentOf(environments, base, lanes) {
+  const listed = Array.isArray(environments) ? environments : [];
+  const landed = Array.isArray(lanes) && lanes.includes(base);
+  const found = listed.find((env) => env && ((env.branch && env.branch === base) || (env.lane === true && landed)));
   return found ? found.id : undefined;
 }
 
-export function cloudFor(opts, base) {
+export function cloudFor(opts, base, lanes) {
   if (!opts.cloud) return undefined;
   const asked = opts.cloud && typeof opts.cloud === "object" ? opts.cloud : typeof opts.cloud === "string" ? { connection: opts.cloud } : {};
-  const environment = asked.environment ?? opts.environment ?? environmentOf(opts.environments, base);
+  const environment = asked.environment ?? opts.environment ?? environmentOf(opts.environments, base, lanes);
   return environment ? { ...asked, environment } : opts.cloud;
 }
 

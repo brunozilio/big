@@ -1907,7 +1907,7 @@ fn the_plan_story_speaks_the_item_language_with_its_keywords_in_bold() {
 }
 
 #[test]
-fn the_cloud_an_agent_asks_for_names_the_environment_the_base_branch_lands_in() {
+fn the_cloud_an_agent_asks_for_names_the_environment_of_the_lane_the_flow_lands_in() {
     let text = r#"
 import { workflow } from "sdk";
 import { cloudFor } from "sdk/steps/context.js";
@@ -1916,9 +1916,9 @@ export default workflow({
   name: "so-cloud",
   async run(ctx) {
     return {
-      develop: cloudFor({ cloud: true, environments }, "develop"),
+      develop: cloudFor({ cloud: true, environments }, "develop", ["develop"]),
       unknown: cloudFor({ cloud: true, environments }, "outro"),
-      asked: cloudFor({ cloud: "aws-1", environment: "prod", environments }, "develop"),
+      asked: cloudFor({ cloud: "aws-1", environment: "prod", environments }, "develop", ["develop"]),
       off: cloudFor({ environments }, "develop") ?? null,
     };
   },

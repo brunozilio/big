@@ -1,8 +1,7 @@
-import { spec as flow } from "../flows/gitflow.ts";
 import { environments } from "../environments.ts";
 
 export default {
-  arrival: { step: "merge", base: flow.base, integrated: true, filter: { data: { workflow: ["default", "pull-request"], step: "merge", state: "passed", base: flow.base } } },
+  arrival: { step: "merge", integrated: true, filter: { data: { workflow: ["default", "pull-request"], step: "merge", state: "passed" } } },
   environments,
   zone: "-03:00",
   rollbackVersion: { kind: "pipeline", pipeline: "deployment.yml", ref: `{into}` },

@@ -1,15 +1,11 @@
-import { spec as flow } from "./flows/gitflow.ts";
-
-const [promotion] = flow.promote;
-
 export const environments = [
-  { id: "develop", label: "Develop", short: "Develop", icon: "branch", branch: flow.base, gate: { kind: "none" }, rollback: true },
+  { id: "develop", label: "Develop", short: "Develop", icon: "branch", lane: true, gate: { kind: "none" }, rollback: true },
   {
     id: "hint",
     label: "Homologação interna",
     short: "HINT",
     icon: "sTest",
-    gate: { kind: "merge", promotion: 0, from: promotion.from, into: promotion.into, method: promotion.method, title: "Promover {from} para {into}" },
+    gate: { kind: "merge", promotion: 0, title: "Promover {from} para {into}" },
     autoPromote: true,
     rollback: true,
   },

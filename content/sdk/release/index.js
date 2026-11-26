@@ -109,8 +109,9 @@ export function arrivals(config) {
   const arrival = config.arrival || {};
   const filter = arrival.filter || {};
   if (arrival.integrated !== true) return [filter];
-  const { base: _, ...data } = filter.data || {};
-  return [filter, { ...filter, data: { ...data, integrated: true } }];
+  const { base, ...data } = filter.data || {};
+  const lane = { ...filter, data: { ...data, integrated: true } };
+  return base ? [filter, lane] : [lane];
 }
 
 function waits(ctx, state, config, manual) {

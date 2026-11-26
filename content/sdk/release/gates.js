@@ -84,7 +84,7 @@ export async function rollback(ctx, state, config, env, application) {
   const shas = env.gate.kind === "merge" ? state.merges[env.id] || {} : state.memberShas || {};
   for (const [repository, sha] of Object.entries(shas)) {
     const gate = gateFor(env, listed.find((service) => service.id === repository));
-    const branch = env.branch || gate.into || "";
+    const branch = env.branch || gate.into || (env.lane === true ? promotedOf(listed.find((service) => service.id === repository)).from : "") || "";
     for (const one of [].concat(sha || [])) await ctx.exec(fill(command, { branch, sha: one }), { repository });
   }
   state.reverting = null;
@@ -100,8 +100,6 @@ function promotedOf(service) {
 
 export async function versions(ctx, config, env, list) {
   const finder = { ...(config.rollbackVersion || {}), ...((env && env.rollbackVersion) || {}) };
-  const merging = (config.environments || []).find((entry) => entry.gate && entry.gate.kind === "merge");
-  const fallback = merging ? { from: merging.gate.from, into: merging.gate.into } : {};
   const found = {};
   for (const service of list) {
     if (finder.kind === "cloud") {
@@ -109,7 +107,7 @@ export async function versions(ctx, config, env, list) {
       found[service.name] = (last && last.version) || null;
       continue;
     }
-    const args = { repo: service.repo, pipeline: service.pipeline, ref: fill(finder.ref || "", { ...fallback, ...env, ...promotedOf(service) }), status: "success", limit: 1 };
+    const args = { repo: service.repo, pipeline: service.pipeline, ref: fill(finder.ref || "", { ...env, ...promotedOf(service) }), status: "success", limit: 1 };
     const runs = await quietly(() => ctx.call("pipelines", "runs", args, { connection: service.connection, optional: true }));
     const last = Array.isArray(runs) ? runs[0] : null;
     found[service.name] = last ? String(last.head || last.ref || "") : null;

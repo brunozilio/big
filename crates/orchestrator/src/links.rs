@@ -93,8 +93,9 @@ pub fn unclaimed(
         .filter(|other| application_of(other) == application_of(me))
         .filter(|other| state_name(other, step).as_deref() == Some(state))
         .filter(|other| !taken.contains(&other.id))
-        .filter(|other| {
-            base.is_none_or(|wanted| base_of(other).as_deref() == Some(wanted)) || (lane && integrated(other))
+        .filter(|other| match base {
+            Some(wanted) => base_of(other).as_deref() == Some(wanted) || (lane && integrated(other)),
+            None => !lane || integrated(other),
         })
         .map(|other| other.id.clone())
         .collect()
@@ -136,5 +137,44 @@ pub fn call(shared: &Shared, item: &ItemId, call: &Call) -> Result<Value, Failur
             Ok(json!(unclaimed(&me, &all, step, state, text(call, "base"), lane)))
         }
         other => Err(Failure::permanent(format!("the kernel does not offer {other}"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use domain::workflow::{ItemId, StepRun, StepState, WorkItem};
+    use serde_json::json;
+
+    use super::unclaimed;
+
+    fn merged(id: &str, git: serde_json::Value) -> WorkItem {
+        let run = StepRun { id: "merge".into(), state: StepState::Passed, ..StepRun::default() };
+        WorkItem {
+            id: ItemId::from(id),
+            workflow: "default".into(),
+            input: json!({ "application": { "id": "app" }, "git": git }),
+            steps: vec![run],
+            ..WorkItem::default()
+        }
+    }
+
+    #[test]
+    fn without_a_fixed_base_the_package_takes_only_what_landed_where_the_flow_promotes_from() {
+        let promote = json!([{ "from": "develop", "into": "release" }]);
+        let package = WorkItem {
+            id: ItemId::from("p"),
+            workflow: "package".into(),
+            input: json!({ "application": { "id": "app" } }),
+            ..WorkItem::default()
+        };
+        let all = vec![
+            package.clone(),
+            merged("feature", json!({ "web": { "base": "develop", "promote": promote } })),
+            merged("hotfix", json!({ "web": { "base": "main", "promote": promote } })),
+            merged("trunk", json!({ "api": { "base": "trunk", "promote": [{ "from": "trunk", "into": "prod" }] } })),
+        ];
+        let found = unclaimed(&package, &all, "merge", "passed", None, true);
+        assert_eq!(found, vec![ItemId::from("feature"), ItemId::from("trunk")]);
+        assert_eq!(unclaimed(&package, &all, "merge", "passed", None, false).len(), 3);
     }
 }

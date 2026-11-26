@@ -1,5 +1,5 @@
 import { step, actions, chat, markdown, transitionArgs } from "sdk";
-import { agentOptions, attempt, branchOf, cloudFor, defined, effects, inLanguage, issueOf, object, planOf, pullRequestsOf, source, waitOptions } from "./context.js";
+import { agentOptions, attempt, branchOf, cloudFor, defined, effects, inLanguage, issueOf, lanesOf, object, planOf, pullRequestsOf, source, waitOptions } from "./context.js";
 
 const NONE = "The delivered change needs no new infrastructure.";
 
@@ -43,7 +43,7 @@ function discoverText(ctx, opts, checking) {
 
 async function discover(ctx, opts, checking) {
   const worktree = opts.worktree ?? branchOf(ctx, opts) ?? undefined;
-  const cloud = cloudFor(opts, pullRequestsOf(ctx, opts)[0]?.base);
+  const cloud = cloudFor(opts, pullRequestsOf(ctx, opts)[0]?.base, lanesOf(ctx));
   const options = agentOptions({ ...opts, model: opts.discoverModel, mode: undefined }, { worktree, cloud });
   const result = await ctx.agent(opts.discover ?? "infra-discover", { prompt: discoverText(ctx, opts, checking) }, options);
   return { session: result.session, missing: resources(object(result.output).missing, "details") };
@@ -52,7 +52,7 @@ async function discover(ctx, opts, checking) {
 async function provisioned(ctx, opts, missing) {
   const text = `Get this infrastructure provisioned for the item ${ctx.item.title ?? ""}.\n\n${missing.map(entry).join("\n\n")}`;
   const worktree = opts.worktree ?? branchOf(ctx, opts) ?? undefined;
-  const result = await ctx.agent(opts.agent ?? "provisioner", { prompt: inLanguage(ctx, text), missing }, agentOptions(opts, { worktree, cloud: cloudFor(opts, pullRequestsOf(ctx, opts)[0]?.base) }));
+  const result = await ctx.agent(opts.agent ?? "provisioner", { prompt: inLanguage(ctx, text), missing }, agentOptions(opts, { worktree, cloud: cloudFor(opts, pullRequestsOf(ctx, opts)[0]?.base, lanesOf(ctx)) }));
   const output = object(result.output);
   const done = (Array.isArray(output.done) ? output.done : []).map(String);
   const written = resources(output.manual, "instructions").map((found) => ({ title: found.title, instructions: found.details }));
