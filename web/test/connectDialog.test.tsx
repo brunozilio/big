@@ -62,6 +62,14 @@ describe('diálogo de conexão', () => {
     expect(await dialog.findByText('Conectado', {}, wait)).toBeTruthy()
   }, 10000)
 
+  test('campo opcional em branco não bloqueia a conexão', async () => {
+    const dialog = await opened('sonar')
+    const token = (await dialog.findByLabelText(/^Token/, {}, wait)) as HTMLInputElement
+    expect((dialog.getByRole('button', { name: /Conectar/ }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.change(token, { target: { value: 'squ_1' } })
+    expect((dialog.getByRole('button', { name: /Conectar/ }) as HTMLButtonElement).disabled).toBe(false)
+  }, 10000)
+
   test('a recusa volta ao início com o erro no mesmo lugar', async () => {
     localStorage.setItem('mock:signIn', 'failed')
     const dialog = await opened('jira')

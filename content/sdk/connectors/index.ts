@@ -4,7 +4,7 @@ export type ErrorKind = "transient" | "auth" | "conflict" | "permanent" | "rate_
 
 export type Creds = { connection: string; token: string; settings: Record<string, unknown> };
 
-export type Field = { name: string; label: string; help?: string; secret?: boolean; setting?: boolean; value?: string };
+export type Field = { name: string; label: string; help?: string; secret?: boolean; setting?: boolean; value?: string; optional?: boolean };
 
 export type Response = { status: number; headers: Record<string, string>; body: string; base64?: string };
 
@@ -204,6 +204,8 @@ export function tokenField(name: string, label: string, help: string, secret: bo
 export function settingField(name: string, label: string, help: string, value = ""): Field {
   return { name, label, help, secret: false, setting: true, value };
 }
+
+export const optionalField = (field: Field): Field => ({ ...field, optional: true });
 
 export function tokenAlternative(language: Language, key: string, label: string, site: string, fields: Field[], form: "bearer" | "basic" | "json") {
   return { key, label, button: connect(language), site, auth: { kind: "token", fields, form } };

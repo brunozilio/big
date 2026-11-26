@@ -42,6 +42,11 @@ fn the_provider_signs_in_with_an_address_an_organization_and_a_token_and_binds_r
         spec.fields.iter().map(|field| (field.name.as_str(), field.secret, field.setting)).collect();
     assert_eq!(names, [("url", false, true), ("organization", false, true), ("token", true, false)]);
     assert_eq!(spec.fields[0].value, "https://sonarcloud.io");
+    let optional: Vec<bool> = spec.fields.iter().map(|field| field.optional).collect();
+    assert_eq!(optional, [false, true, false]);
+    let given = json!({ "url": "https://sonar.empresa.com", "organization": " ", "token": "squ" });
+    assert_eq!(spec.access_token(&given, Language::Portuguese), Ok("squ".to_owned()));
+    assert_eq!(spec.settings(&given), json!({ "url": "https://sonar.empresa.com" }));
     assert_eq!(spec.form, TokenForm::Bearer);
     assert_eq!(descriptor.capabilities, vec![Capability::from("quality")]);
     let actions: Vec<&str> = descriptor.actions.iter().map(|action| action.name.as_str()).collect();

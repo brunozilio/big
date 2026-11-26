@@ -17,6 +17,7 @@ import {
   siteOf,
   text,
   textOf,
+  optionalField,
   tokenField,
   unknownAction,
 } from "sdk/connectors/index.ts";
@@ -76,7 +77,7 @@ function fields(ctx: Ctx, language: Language) {
     ),
     ctx.config.url,
   );
-  const organization = settingField(
+  const organization = optionalField(settingField(
     ORGANIZATION,
     pick(language, "Organization (SonarQube Cloud only)", "Organización (solo SonarQube Cloud)", "Organização (só SonarQube Cloud)"),
     pick(
@@ -85,7 +86,7 @@ function fields(ctx: Ctx, language: Language) {
       "Déjala en blanco para SonarQube Server, que no tiene organizaciones.",
       "Deixe em branco no SonarQube Server, que não tem organizações.",
     ),
-  );
+  ));
   const help = pick(
     language,
     "In SonarQube, open My Account › Security and generate a user token.",

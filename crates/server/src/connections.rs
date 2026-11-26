@@ -40,6 +40,7 @@ fn fields_of(fields: &[TokenField]) -> Value {
             json!({
                 "name": field.name, "label": field.label, "kind": "text", "mono": true,
                 "secret": field.secret, "help": help, "value": value, "placeholder": placeholder,
+                "optional": field.optional,
             })
         })
         .collect();

@@ -92,6 +92,8 @@ pub struct TokenField {
     pub value: String,
     #[serde(default)]
     pub placeholder: String,
+    #[serde(default)]
+    pub optional: bool,
 }
 
 impl TokenField {
@@ -104,6 +106,7 @@ impl TokenField {
             setting: false,
             value: String::new(),
             placeholder: String::new(),
+            optional: false,
         }
     }
 
@@ -128,7 +131,7 @@ impl TokenSpec {
         let mut texts = Vec::new();
         for field in self.fields.iter().filter(|field| !field.setting) {
             let value = given[&field.name].as_str().map(str::trim).unwrap_or_default();
-            if value.is_empty() {
+            if value.is_empty() && !field.optional {
                 return Err(crate::texts::missing_field(language, &field.label));
             }
             texts.push((field.name.as_str(), value));

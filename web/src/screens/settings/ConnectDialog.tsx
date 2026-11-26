@@ -159,7 +159,7 @@ export function ConnectDialog({ provider: key, resume, onClose }: { provider: st
   useEffect(() => {
     setFields(Object.fromEntries((way?.fields ?? []).map((f) => [f.name, f.value ?? ''])))
   }, [way?.fields])
-  const ready = !way?.fields.some((f) => !fields[f.name]?.trim())
+  const ready = !way?.fields.some((f) => !f.optional && !fields[f.name]?.trim())
   const primary = way ? primaryOf(signIn, way, ready, onClose, t) : null
   const footer = primary && (
     <>

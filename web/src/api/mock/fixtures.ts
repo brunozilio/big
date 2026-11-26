@@ -59,7 +59,7 @@ export const providers = (): MockProvider[] => [
     key: 'sonar', name: 'SonarQube', group: 'quality', description: say('yourAccount', { name: 'SonarQube' }), logo: SONAR_LOGO, button: say('connect'), site: 'SonarQube', signIn: 'token', multiple: true, bindings: [{ capability: 'quality', scope: 'repository', label: say('bindQuality') }], capabilities: ['quality'], accounts: ['acme'],
     fields: [
       { name: 'url', label: 'URL', kind: 'text', value: 'https://sonarcloud.io', mono: true },
-      { name: 'organization', label: 'Organization (SonarQube Cloud)', kind: 'text', mono: true },
+      { name: 'organization', label: 'Organization (SonarQube Cloud)', kind: 'text', mono: true, optional: true },
       { name: 'token', label: 'Token', kind: 'text', mono: true, secret: true },
     ],
   },

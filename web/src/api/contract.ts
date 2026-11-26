@@ -204,6 +204,7 @@ export interface FormField {
   mono?: boolean
   secret?: boolean
   help?: string
+  optional?: boolean
 }
 
 export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger'
