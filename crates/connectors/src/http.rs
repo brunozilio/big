@@ -223,8 +223,21 @@ fn transport(error: &reqwest::Error) -> ActionError {
     if error.is_builder() {
         ActionError::permanent(error.to_string())
     } else {
-        ActionError::transient(format!("the request did not reach the service: {error}"))
+        ActionError::transient(format!("the request did not reach the service: {}", described(error)))
     }
+}
+
+fn described(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut text = error.to_string();
+    let mut cause = error.source();
+    while let Some(next) = cause {
+        let said = next.to_string();
+        if !text.contains(&said) {
+            text = format!("{text}: {said}");
+        }
+        cause = next.source();
+    }
+    text
 }
 
 #[async_trait]
@@ -398,6 +411,15 @@ mod tests {
         let http = FakeHttp::new().once(Method::Get, "/x", 503, "down");
         let error = fetch(&http, HttpRequest::get("https://h/x")).await.err();
         assert_eq!(error.map(|e| e.class), Some(ErrorClass::Transient));
+    }
+
+    #[tokio::test]
+    async fn a_request_that_does_not_reach_the_service_says_why() {
+        let http = ReqwestHttp::new().expect("client");
+        let error = http.send(HttpRequest::get("https://host-that-does-not-exist.invalid/x")).await.err();
+        let message = error.map(|e| e.to_string()).unwrap_or_default();
+        let head = "the request did not reach the service: error sending request for url (https://host-that-does-not-exist.invalid/x)";
+        assert!(message.len() > head.len() + 2, "{message}");
     }
 
     #[test]
