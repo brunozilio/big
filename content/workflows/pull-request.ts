@@ -1,5 +1,6 @@
 import { workflow, on } from "sdk";
 import { develop, checks, ci, review, merge, release } from "sdk/steps";
+import { environments } from "../environments.ts";
 
 export default workflow({
   name: "pull-request",
@@ -11,6 +12,6 @@ export default workflow({
     ci({ onFail: "develop", retries: 3 }),
     review({ agent: "reviewer", status: { category: "doing" }, onChanges: "develop" }),
     merge({ method: "squash" }),
-    release({ agent: "release", cloud: true, doneStatus: { category: "done" } }),
+    release({ agent: "release", cloud: true, environments, doneStatus: { category: "done" } }),
   ],
 });

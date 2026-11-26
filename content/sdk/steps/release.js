@@ -1,5 +1,5 @@
 import { step, actions, chat, form, markdown, pipeline } from "sdk";
-import { inLanguage, FINISHED, SUCCEEDED, agentOptions, defined, eachOf, effects, findRun, object, pipelineOptions, pullRequestsOf, repoOf, settle, source, targetFields, waitOptions } from "./context.js";
+import { inLanguage, FINISHED, SUCCEEDED, agentOptions, cloudFor, defined, eachOf, effects, findRun, object, pipelineOptions, pullRequestsOf, repoOf, settle, source, targetFields, waitOptions } from "./context.js";
 
 const WAITING = [...FINISHED, "waiting"];
 
@@ -98,7 +98,8 @@ async function narrate(ctx, opts, runs, failed) {
     `Pipelines:\n${described(runs)}`,
   ].filter(Boolean).join("\n\n");
   const input = defined({ prompt: inLanguage(ctx, prompt), prs, runs: runs.map((run) => run.run), failed: Boolean(failed) });
-  const result = await ctx.agent(opts.agent, input, agentOptions(opts, { mode: opts.mode ?? "plan" }));
+  const cloud = cloudFor(opts, merged.base ?? pullRequestsOf(ctx, opts)[0]?.base);
+  const result = await ctx.agent(opts.agent, input, agentOptions(opts, { mode: opts.mode ?? "plan", cloud }));
   const output = object(result.output);
   return defined({ session: result.session, notes: output.notes ?? output.summary ?? result.text ?? null });
 }

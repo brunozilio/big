@@ -54,6 +54,18 @@ export function agentOptions(opts, extra) {
   });
 }
 
+export function environmentOf(environments, base) {
+  const found = (Array.isArray(environments) ? environments : []).find((env) => env && env.branch && env.branch === base);
+  return found ? found.id : undefined;
+}
+
+export function cloudFor(opts, base) {
+  if (!opts.cloud) return undefined;
+  const asked = opts.cloud && typeof opts.cloud === "object" ? opts.cloud : typeof opts.cloud === "string" ? { connection: opts.cloud } : {};
+  const environment = asked.environment ?? opts.environment ?? environmentOf(opts.environments, base);
+  return environment ? { ...asked, environment } : opts.cloud;
+}
+
 export function tail(text, limit) {
   const value = String(text ?? "");
   const most = limit ?? LIMIT;

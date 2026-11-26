@@ -1,9 +1,23 @@
 const ROOT: &str = "sdk/index.js";
 
+fn relative(from: &str, spec: &str) -> String {
+    let mut parts: Vec<&str> = from.split('/').collect();
+    parts.pop();
+    for part in spec.split('/') {
+        match part {
+            "." => {}
+            ".." => {
+                parts.pop();
+            }
+            _ => parts.push(part),
+        }
+    }
+    parts.join("/")
+}
+
 fn resolve(from: &str, spec: &str) -> String {
-    if let Some(rest) = spec.strip_prefix("./") {
-        let folder = from.rsplit_once('/').map_or("", |(folder, _)| folder);
-        return format!("{folder}/{rest}");
+    if spec.starts_with("./") || spec.starts_with("../") {
+        return relative(from, spec);
     }
     if spec.ends_with(".js") { spec.to_owned() } else { format!("{spec}/index.js") }
 }

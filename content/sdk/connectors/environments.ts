@@ -1,9 +1,9 @@
-import release from "../../packages/config.ts";
+import { environments } from "../../environments.ts";
 
 export type EnvironmentOption = { value: string; label: string };
 
 export function environmentOptions(): EnvironmentOption[] {
-  const listed = Array.isArray(release?.environments) ? release.environments : [];
+  const listed: { id?: unknown; label?: unknown }[] = Array.isArray(environments) ? environments : [];
   return listed
     .map((env) => ({ value: String(env?.id ?? ""), label: String(env?.label ?? env?.id ?? "") }))
     .filter((env) => env.value !== "");

@@ -1,5 +1,6 @@
 import { workflow, on } from "sdk";
 import { plan, ticket, cases, develop, checks, pr, ci, quality, security, review, provision, merge, release } from "sdk/steps";
+import { environments } from "../environments.ts";
 
 export default workflow({
   name: "entrega",
@@ -15,9 +16,9 @@ export default workflow({
     ci({ onFail: "develop", retries: 3 }),
     quality({ onFail: "develop", retries: 3 }),
     review({ agent: "reviewer", status: { category: "doing" }, onChanges: "develop" }),
-    provision({ cloud: true }),
+    provision({ cloud: true, environments }),
     merge({ method: "squash" }),
-    release({ agent: "release", cloud: true, doneStatus: { category: "done" } }),
+    release({ agent: "release", cloud: true, environments, doneStatus: { category: "done" } }),
     security(),
   ],
 });

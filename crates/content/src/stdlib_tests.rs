@@ -1867,3 +1867,34 @@ fn the_plan_story_speaks_the_item_language_with_its_keywords_in_bold() {
     assert!(story.contains("- **Dado** que a tela abriu, **quando** passo o mouse, **então** aparece."), "{story}");
     assert_eq!(plan["subtasks"][0]["title"], "Trocar o texto");
 }
+
+#[test]
+fn the_cloud_an_agent_asks_for_names_the_environment_the_base_branch_lands_in() {
+    let text = r#"
+import { workflow } from "sdk";
+import { cloudFor } from "sdk/steps/context.js";
+import { environments } from "../environments.ts";
+export default workflow({
+  name: "so-cloud",
+  async run(ctx) {
+    return {
+      develop: cloudFor({ cloud: true, environments }, "develop"),
+      unknown: cloudFor({ cloud: true, environments }, "outro"),
+      asked: cloudFor({ cloud: "aws-1", environment: "prd", environments }, "develop"),
+      off: cloudFor({ environments }, "develop") ?? null,
+    };
+  },
+});
+"#;
+    let (result, _) = drive(&source("workflows/so-cloud.ts", text), &item(json!("T-1")), |_| Some(Value::Null));
+    assert_eq!(
+        result["result"],
+        json!({
+            "develop": { "environment": "develop" },
+            "unknown": true,
+            "asked": { "connection": "aws-1", "environment": "prd" },
+            "off": null,
+        }),
+        "{result}"
+    );
+}
