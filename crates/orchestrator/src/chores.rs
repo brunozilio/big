@@ -156,7 +156,7 @@ pub fn branch_for(item: &WorkItem) -> Option<String> {
     let slug = domain::workflow::branch_slug(&source_text(item)?)?;
     let id: String = item.id.as_str().chars().filter(char::is_ascii_alphanumeric).collect();
     let short = &id[id.len().saturating_sub(SHORT_ID)..];
-    Some(format!("{}/{slug}-{}", brand::COMMAND, short.to_ascii_lowercase()))
+    Some(format!("{}/{slug}-{}", brand::workflow::BRANCH_PREFIX, short.to_ascii_lowercase()))
 }
 
 pub fn ensure_branch(shared: &Shared, item: &WorkItem, current: &str) -> WorkItem {
@@ -192,7 +192,7 @@ mod tests {
     #[test]
     fn an_item_s_branch_reads_like_its_title_and_ends_with_its_id() {
         let named = item(json!({ "text": "x" }), Some("Corrigir a validação do login"));
-        let expected = format!("{}/corrigir-a-validacao-do-login-34ef56", brand::COMMAND);
+        let expected = format!("{}/corrigir-a-validacao-do-login-34ef56", brand::workflow::BRANCH_PREFIX);
         assert_eq!(branch_for(&named).as_deref(), Some(expected.as_str()));
         let texted = item(json!({ "text": "Adicionar exportação CSV" }), None);
         assert!(branch_for(&texted).is_some_and(|branch| branch.ends_with("/adicionar-exportacao-csv-34ef56")));

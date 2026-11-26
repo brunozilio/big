@@ -9,6 +9,7 @@ user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36
 oauth_client_name = "Google Chrome"
 mcp_client_name = "Google Chrome"
 mcp_client_version = "154.0.0.0"
+marker = "ref"
 
 [zephyr]
 mcp_url = "https://zephyr.mcp.smartbear.com/mcp"
@@ -48,6 +49,7 @@ oidc_url = "https://oidc.{region}.amazonaws.com"
 portal_url = "https://portal.sso.{region}.amazonaws.com"
 sts_url = "https://sts.{region}.amazonaws.com/"
 sso_scopes = "sso:account:access"
+client_name = "botocore-client-default"
 
 [datadog]
 mcp_url = "https://mcp.{site}/v1/mcp"
@@ -136,6 +138,7 @@ client_name = "Kiro CLI"
 origin = "KIRO_CLI"
 
 [quick]
+client_name = "Amazon Quick"
 social_url = "https://quick.aws.com/sn?qwSurface={surface}"
 enterprise_url = "https://quicksight.aws.amazon.com/sn/start/app-integrations/quickwork-enterprise-login?qwSurface={surface}"
 discovery = "social"
@@ -219,6 +222,7 @@ approval_seconds = "30"
 execution_seconds = "30"
 
 [workflow]
+branch_prefix = "feature"
 ask_timeout_ms = 1800000
 schedule_tick_seconds = "30"
 schedule_catch_up_minutes = "360"

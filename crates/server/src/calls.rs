@@ -25,7 +25,7 @@ struct Caller<'a> {
 
 impl Caller<'_> {
     async fn call(&self, action: &str, args: Value) -> ApiResult<Value> {
-        let key = format!("{}:{}", brand::COMMAND, random_id()?);
+        let key = format!("{}:{}", brand::connectors::MARKER, random_id()?);
         let hub = &self.shared.backend.connectors;
         Ok(hub.call(&connection(self.record), &self.record.settings, action, &args, &key).await?)
     }

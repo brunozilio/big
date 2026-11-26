@@ -168,7 +168,7 @@ async fn issue_type(shared: &Shared, source: &Value) -> Option<String> {
 }
 
 async fn read_pull(shared: &Shared, record: &ConnectionRecord, subject: &str) -> ApiResult<Value> {
-    let key = format!("{}:{}", brand::COMMAND, crate::attachments::random_id()?);
+    let key = format!("{}:{}", brand::connectors::MARKER, crate::attachments::random_id()?);
     let args = json!({ "pr": subject });
     let hub = &shared.backend.connectors;
     let found = hub.call(&connection(record), &record.settings, code::PULL_REQUEST, &args, &key).await;

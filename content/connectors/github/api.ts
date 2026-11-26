@@ -7,7 +7,7 @@ export type Api = { ctx: any; base: string; token: string; creds: Creds; command
 
 export function api(ctx, creds: Creds): Api {
   const base = (setting(creds, "api") ?? ctx.config.api).replace(/\/+$/, "");
-  return { ctx, base, token: creds.token, creds, command: ctx.brand?.COMMAND ?? "" };
+  return { ctx, base, token: creds.token, creds, command: ctx.connectors?.marker ?? "" };
 }
 
 export function defaultRepo(api: Api): string | undefined {

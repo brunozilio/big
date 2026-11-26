@@ -176,7 +176,7 @@ fn prepare(shared: &Shared, item: &ItemId, command: &Command) -> crate::error::R
 
 async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Value, Failure> {
     let state = shared.item(item).map_err(|error| Failure::permanent(error.to_string()))?;
-    let key = format!("{}:{}", brand::COMMAND, launch.key);
+    let key = format!("{}:{}", brand::connectors::MARKER, launch.key);
     match launch.command.kind.as_str() {
         AGENT => {
             let effect =

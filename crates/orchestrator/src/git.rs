@@ -16,7 +16,7 @@ pub fn head(dir: &Path) -> Option<String> {
 }
 
 pub fn branch_name(item: &str) -> String {
-    format!("{}/{item}", brand::COMMAND)
+    format!("{}/{item}", brand::workflow::BRANCH_PREFIX)
 }
 
 pub fn folder_for(branch: &str) -> String {

@@ -72,7 +72,7 @@ const regionIn = (ctx, entered: unknown) =>
 
 function register(ctx, region: string) {
   const registration = {
-    clientName: ctx.brand.NAME,
+    clientName: ctx.config.client_name,
     clientType: "public",
     scopes: words(ctx.config.sso_scopes),
     grantTypes: [DEVICE_GRANT, "refresh_token"],

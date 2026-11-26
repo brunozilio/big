@@ -36,7 +36,7 @@ export function discovery(ctx, nonce: string, port: number): string {
 
 export function register(ctx, found: Found, redirect: string) {
   return jsonRequest(`${oidc(ctx, found.region)}/client/register`, {
-    clientName: ctx.brand.NAME,
+    clientName: ctx.config.client_name,
     clientType: "public",
     scopes: words(ctx.config.scopes),
     grantTypes: ["authorization_code", "refresh_token"],

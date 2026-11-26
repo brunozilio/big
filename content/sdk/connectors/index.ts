@@ -291,7 +291,7 @@ export const sameAscii = (left: string, right: string) => asciiLower(left) === a
 
 export function idempotencyLabel(ctx, key: string): string {
   const hex: string = ctx.crypto.sha256({ data: key });
-  return `${ctx.brand.COMMAND}-${hex.slice(0, 12)}`;
+  return `${ctx.connectors?.marker ?? ""}-${hex.slice(0, 12)}`;
 }
 
 export function timestampOf(text: string): number | undefined {

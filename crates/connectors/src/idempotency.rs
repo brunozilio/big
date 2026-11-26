@@ -2,11 +2,11 @@ pub fn label(key: &str) -> String {
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(key.as_bytes());
     let hex: String = digest.iter().take(6).map(|byte| format!("{byte:02x}")).collect();
-    format!("{}-{hex}", brand::COMMAND)
+    format!("{}-{hex}", brand::connectors::MARKER)
 }
 
 pub fn marker(key: &str) -> String {
-    format!("<!-- {}:{key} -->", brand::COMMAND)
+    format!("<!-- {}:{key} -->", brand::connectors::MARKER)
 }
 
 pub fn marked(body: &str, key: &str) -> String {
@@ -14,7 +14,7 @@ pub fn marked(body: &str, key: &str) -> String {
 }
 
 pub fn strip(body: &str) -> String {
-    let open = format!("<!-- {}:", brand::COMMAND);
+    let open = format!("<!-- {}:", brand::connectors::MARKER);
     let mut kept = String::with_capacity(body.len());
     let mut rest = body;
     while let Some(start) = rest.find(&open) {
@@ -28,13 +28,13 @@ pub fn strip(body: &str) -> String {
 
 pub fn authored(body: &str, agent: Option<&str>) -> String {
     match agent.filter(|agent| !agent.is_empty()) {
-        Some(agent) => format!("{body}\n\n<!-- {}:agent={agent} -->", brand::COMMAND),
+        Some(agent) => format!("{body}\n\n<!-- {}:agent={agent} -->", brand::connectors::MARKER),
         None => body.to_owned(),
     }
 }
 
 pub fn author(body: &str) -> Option<String> {
-    let open = format!("<!-- {}:agent=", brand::COMMAND);
+    let open = format!("<!-- {}:agent=", brand::connectors::MARKER);
     let start = body.find(&open)? + open.len();
     let end = body[start..].find("-->")?;
     Some(body[start..start + end].trim().to_owned()).filter(|agent| !agent.is_empty())
@@ -57,7 +57,7 @@ pub fn carries_tag(body: &str, key: &str) -> bool {
 }
 
 pub fn branch(name: &str) -> String {
-    let prefix = format!("{}/", brand::COMMAND);
+    let prefix = format!("{}/", brand::workflow::BRANCH_PREFIX);
     if name.starts_with(&prefix) { name.to_owned() } else { format!("{prefix}{name}") }
 }
 
@@ -66,10 +66,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_marker_is_an_invisible_comment_named_after_the_product() {
+    fn the_marker_is_an_invisible_comment_with_the_declared_word() {
         let body = marked("hello", "item/step/0/1");
         assert!(body.starts_with("hello"));
-        assert!(body.contains(&format!("<!-- {}:item/step/0/1 -->", brand::COMMAND)));
+        assert!(body.contains(&format!("<!-- {}:item/step/0/1 -->", brand::connectors::MARKER)));
         assert!(carries(&body, "item/step/0/1"));
         assert!(!carries(&body, "item/step/0/2"));
         assert!(!carries(&body, ""));
@@ -110,8 +110,8 @@ mod tests {
     fn keys_and_branches_carry_the_product_prefix() {
         assert_eq!(label("k1"), label("k1"));
         assert_ne!(label("k1"), label("k2"));
-        assert!(label("k1").starts_with(&format!("{}-", brand::COMMAND)) && !label("k1").contains(' '));
-        assert_eq!(branch("x"), format!("{}/x", brand::COMMAND));
+        assert!(label("k1").starts_with(&format!("{}-", brand::connectors::MARKER)) && !label("k1").contains(' '));
+        assert_eq!(branch("x"), format!("{}/x", brand::workflow::BRANCH_PREFIX));
         assert_eq!(branch(&branch("x")), branch("x"));
     }
 }

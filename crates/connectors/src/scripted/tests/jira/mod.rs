@@ -38,7 +38,10 @@ pub fn probe(module: &str, body: &str, input: Value) -> Value {
         format!("import * as m from {module:?};\nexport function probe(input, ctx) {{ {body} }}\n"),
     ));
     modules.push((WRAPPER.to_owned(), wrapper("@probe")));
-    let script = Script { modules: Arc::new(modules), data: json!({ "brand": { "COMMAND": brand::COMMAND } }) };
+    let script = Script {
+        modules: Arc::new(modules),
+        data: json!({ "brand": { "COMMAND": brand::COMMAND }, "connectors": { "marker": brand::connectors::MARKER } }),
+    };
     script.invoke_here("probe", &input, Arc::new(Local)).unwrap_or_else(|error| panic!("{error:?}"))
 }
 
@@ -152,8 +155,7 @@ async fn create_issue_creates_with_the_key_as_a_label() {
         {"id": "3", "name": "Construção", "hierarchyLevel": -1, "subtask": true}
     ]});
     let parent = json!({"key": "BIG-1", "fields": {"issuetype": {"name": "História"}}});
-    let http =
-        session(&[json!({ "issues": [] }), types, json!([]), parent, json!({"id": "10", "key": "BIG-10"})]);
+    let http = session(&[json!({ "issues": [] }), types, json!([]), parent, json!({"id": "10", "key": "BIG-10"})]);
     let args = json!({"project": "BIG", "title": "T", "description": "**b**", "parent": "BIG-1", "labels": ["x"]});
     let answer = call(&http, "tracker.create_issue", args, "k2").await;
     assert_eq!(

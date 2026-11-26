@@ -61,7 +61,7 @@ async fn a_dynamic_client_is_registered_and_the_device_code_polled_in_the_region
     assert_eq!((started.code.user_code.as_str(), started.code.interval, started.code.expires_in), ("U", 2, 600));
     let sent = http.sent();
     assert_eq!(sent[0].url, "https://oidc.eu-west-1.amazonaws.com/client/register");
-    assert_eq!(sent[0].body_json()["clientName"], brand::NAME);
+    assert_eq!(sent[0].body_json()["clientName"], brand::aws::CLIENT_NAME);
     assert_eq!(sent[0].body_json()["scopes"], json!(["sso:account:access"]));
     let start = sent[1].body_json();
     assert_eq!((start["clientId"].clone(), start["clientSecret"].clone()), (json!("c1"), json!("s1")));

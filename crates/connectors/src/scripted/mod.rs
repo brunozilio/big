@@ -72,10 +72,15 @@ struct ScriptedEvents {
 }
 
 fn config_of(key: &str) -> Value {
-    let pairs = |name: &str| -> Map<String, Value> {
-        brand::section(name).iter().map(|(name, value)| ((*name).to_owned(), json!(value))).collect()
-    };
-    json!({ "config": pairs(key), "connectors": pairs("connectors"), "brand": { "NAME": brand::NAME, "COMMAND": brand::COMMAND } })
+    json!({ "config": section(key), "connectors": section("connectors"), "brand": { "NAME": brand::NAME, "COMMAND": brand::COMMAND } })
+}
+
+fn section(name: &str) -> Value {
+    brand::section(name)
+        .iter()
+        .map(|(name, value)| ((*name).to_owned(), json!(value)))
+        .collect::<Map<String, Value>>()
+        .into()
 }
 
 fn auth_of(script: &Script, key: &str, auth: &Value) -> Result<AuthSpec, String> {
@@ -170,7 +175,10 @@ impl ScriptedProvider {
 pub fn evaluate(root: Option<&std::path::Path>, entry: &str, function: &str, input: &Value) -> Result<Value, String> {
     let mut modules = content::modules_in(root, entry)?;
     modules.push((WRAPPER.to_owned(), wrapper(entry)));
-    let script = Script { modules: Arc::new(modules), data: json!({ "brand": { "COMMAND": brand::COMMAND } }) };
+    let script = Script {
+        modules: Arc::new(modules),
+        data: json!({ "brand": { "COMMAND": brand::COMMAND }, "connectors": section("connectors") }),
+    };
     if script.kind(function) != "function" {
         return Ok(Value::Null);
     }

@@ -38,12 +38,12 @@ async fn a_typescript_workflow_runs_each_effect_once_and_replays_without_repeati
     assert_ne!(request.host.credentials.client, 0, "each agent run has a client of its own");
     let branch = item.branch.clone().expect("the item names its branch before the first agent runs");
     let id_tail: String = id.as_str().chars().filter(char::is_ascii_alphanumeric).collect();
-    assert!(branch.starts_with(&format!("{}/", brand::COMMAND)), "{branch}");
+    assert!(branch.starts_with(&format!("{}/", brand::workflow::BRANCH_PREFIX)), "{branch}");
     assert!(branch.ends_with(&id_tail[id_tail.len() - 6..]), "{branch}");
     assert!(request.session.cwd.ends_with(git::folder_for(&branch)));
     let keys = world.provider.keys("tracker.issue");
     assert_eq!(keys.len(), 1);
-    assert!(keys[0].starts_with(&format!("{}:{id}/", brand::COMMAND)));
+    assert!(keys[0].starts_with(&format!("{}:{id}/", brand::connectors::MARKER)));
     crash(kernel).await;
     let again = world.start().await;
     tokio::time::sleep(std::time::Duration::from_millis(300)).await;

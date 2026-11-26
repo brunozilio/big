@@ -34,7 +34,7 @@ export function author(command: string, body: string): string | null {
 
 export const carries = (command: string, body: string, key: string) => key !== "" && body.includes(marker(command, key));
 
-const commandOf = (ctx) => ctx.brand?.COMMAND ?? "";
+const commandOf = (ctx) => ctx.connectors?.marker ?? "";
 
 export function label(ctx, key: string): string {
   const digest: string = ctx.crypto.sha256({ data: key, output: "hex" });
