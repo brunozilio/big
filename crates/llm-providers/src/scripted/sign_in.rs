@@ -9,7 +9,8 @@ use super::host::Local;
 use crate::sign_in::{Answer, Listener};
 use crate::{Host, ProviderError};
 
-const OFFERED: [&str; 12] = [
+const OFFERED: [&str; 13] = [
+    "local.download",
     "http.post",
     "http.get",
     "browser.open",
@@ -76,6 +77,7 @@ impl Desk {
                 reached(host.post(&text(arguments, "url"), &headers(arguments), &text(arguments, "body"))?)
             }
             "http.get" => reached(host.get(&text(arguments, "url"), &headers(arguments))?),
+            "local.download" => host.download(arguments)?,
             "browser.open" => {
                 host.open(text(arguments, "url"), arguments["code"].as_str().map(str::to_owned));
                 Value::Null
@@ -135,7 +137,8 @@ pub fn run(script: &Script, local: Local, host: &dyn Host) -> Result<Value, Prov
     let (calls, requests) = channel::<Call>();
     let remote: Arc<dyn script::Host> = Arc::new(Remote { calls, local });
     let script = script.clone();
-    let worker = std::thread::spawn(move || script.invoke("signIn", json!({}), remote));
+    let input = json!({ "fields": host.fields() });
+    let worker = std::thread::spawn(move || script.invoke("signIn", input, remote));
     let mut desk = Desk::default();
     while let Ok(call) = requests.recv() {
         let answer = desk.answer(host, &call.function, &call.arguments).map_err(|error| encoded(&error));

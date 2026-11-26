@@ -21,6 +21,7 @@ pub trait SignIn: Send + Sync {
         &self,
         provider: ModelProvider,
         back: Option<&str>,
+        fields: &serde_json::Value,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, ProviderError>;
@@ -34,11 +35,12 @@ impl SignIn for BrowserSignIn {
         &self,
         provider: ModelProvider,
         back: Option<&str>,
+        fields: &serde_json::Value,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, ProviderError> {
         let provider = agent_engine::providers::get(provider).map_err(|e| ProviderError::Invalid(e.to_string()))?;
-        provider.sign_in(&NetHost { open: Mutex::new(open), stop: Arc::clone(stop), back })
+        provider.sign_in(&NetHost { open: Mutex::new(open), stop: Arc::clone(stop), back, fields })
     }
 }
 
@@ -46,6 +48,7 @@ struct NetHost<'a> {
     open: Mutex<&'a mut dyn FnMut(String, Option<String>)>,
     stop: Arc<AtomicBool>,
     back: Option<&'a str>,
+    fields: &'a serde_json::Value,
 }
 
 impl NetHost<'_> {
@@ -70,6 +73,9 @@ fn read(response: agent_engine::model::http::Response) -> Result<(u16, String), 
 }
 
 impl Host for NetHost<'_> {
+    fn fields(&self) -> serde_json::Value {
+        self.fields.clone()
+    }
     fn post(&self, url: &str, headers: &[(String, String)], body: &str) -> Result<(u16, String), ProviderError> {
         use agent_engine::model::http::Http;
         self.going()?;

@@ -1,0 +1,38 @@
+[package]
+name = "local-models"
+description = "Running open-weight models on this machine: llama.cpp linked in, models kept on disk and downloaded with resume, and an OpenAI-style chat endpoint on the loopback so any provider script can point a wire at it."
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+license.workspace = true
+
+[dependencies]
+brand.workspace = true
+platform.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+jiff.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "net", "sync", "macros", "fs", "io-util"] }
+futures-util.workspace = true
+axum.workspace = true
+minijinja = { version = "2", features = ["json", "loop_controls", "builtins"] }
+minijinja-contrib = { version = "2", features = ["pycompat"] }
+self_cell = "1.2"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+llama-cpp-2 = { version = "0.1.161", default-features = false, features = ["metal"] }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+llama-cpp-2 = { version = "0.1.161", default-features = false }
+
+[dev-dependencies]
+tempfile.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread"] }
+reqwest = { workspace = true, features = ["json"] }
+
+[lints]
+workspace = true

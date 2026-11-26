@@ -11,6 +11,15 @@ pub trait Host {
     fn random(&self, bytes: usize) -> Result<String, ProviderError>;
     fn sleep(&self, duration: Duration);
     fn now(&self) -> Timestamp;
+    fn fields(&self) -> serde_json::Value {
+        serde_json::Value::Null
+    }
+    fn download(&self, request: &serde_json::Value) -> Result<serde_json::Value, ProviderError> {
+        let request: local_models::Request =
+            serde_json::from_value(request.clone()).map_err(|error| ProviderError::Invalid(error.to_string()))?;
+        let transfer = local_models::download(request).map_err(|error| ProviderError::Invalid(error.to_string()))?;
+        serde_json::to_value(transfer).map_err(|error| ProviderError::Invalid(error.to_string()))
+    }
 }
 
 pub trait Listener {

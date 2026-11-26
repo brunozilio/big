@@ -125,6 +125,7 @@ mod tests {
                 "copilot-subscription",
                 "grok-subscription",
                 "kiro-subscription",
+                "llamacpp-local",
             ]
         );
     }

@@ -25,12 +25,18 @@ fn failed(provider: ModelProvider, message: String) -> Reply {
 }
 
 impl ModelProviders {
-    pub fn sign_in_returning(&self, provider: ModelProvider, back: Option<String>, replies: &Replies) {
+    pub fn sign_in_returning(
+        &self,
+        provider: ModelProvider,
+        back: Option<String>,
+        fields: serde_json::Value,
+        replies: &Replies,
+    ) {
         if let Some(message) = self.cannot_sign_in(provider) {
             return replies.send(failed(provider, message));
         }
         let (this, replies) = (self.clone(), replies.clone());
-        platform::named::spawn("provider-sign-in", move || this.signing_in(provider, back.as_deref(), &replies));
+        platform::named::spawn("provider-sign-in", move || this.signing_in(provider, back.as_deref(), &fields, &replies));
     }
 
     fn cannot_sign_in(&self, provider: ModelProvider) -> Option<String> {
@@ -40,12 +46,12 @@ impl ModelProviders {
         self.secrets.unkept().map(|reason| crate::secrets::refusal(&reason))
     }
 
-    fn signing_in(&self, provider: ModelProvider, back: Option<&str>, replies: &Replies) {
+    fn signing_in(&self, provider: ModelProvider, back: Option<&str>, fields: &serde_json::Value, replies: &Replies) {
         let mine = self.replacing_the_one_in_flight(provider, replies.stop());
         let mut open = |url: String, code: Option<String>| {
             replies.send(Reply::Providers(ProviderEvent::AuthorizeAt { provider, url, code }));
         };
-        let signed = self.sign_in.sign_in(provider, back, &mine.stop, &mut open);
+        let signed = self.sign_in.sign_in(provider, back, fields, &mine.stop, &mut open);
         self.ended(provider, &mine);
         if mine.stop.load(Ordering::SeqCst) {
             return replies.send(failed(provider, STOPPED.to_owned()));

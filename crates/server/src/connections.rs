@@ -148,7 +148,7 @@ pub async fn start(
     }
     let shared = Arc::clone(&ctx);
     let host = headers.get(header::HOST).and_then(|host| host.to_str().ok()).map(str::to_owned);
-    Ok(reply(blocking(move || crate::ai::start(&shared, &provider, host.as_deref())).await?))
+    Ok(reply(blocking(move || crate::ai::start(&shared, &provider, fields, host.as_deref())).await?))
 }
 
 pub async fn poll(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {

@@ -68,6 +68,10 @@ pub trait Provider: Sync {
         Ok(())
     }
 
+    fn fields(&self, _language: domain::Language) -> Value {
+        Value::Null
+    }
+
     fn bind(&self, _config: &Config, _body: &mut Value) {}
 
     fn serves(&self, model: &str) -> bool {
@@ -140,4 +144,8 @@ pub trait Provider: Sync {
 
 pub fn id(provider: &dyn Provider) -> domain::ModelProvider {
     domain::ModelProvider::new(provider.id())
+}
+
+pub fn release_local_models() {
+    local_models::unload();
 }

@@ -102,6 +102,8 @@ pub struct ScriptedHost {
     visits: Rc<RefCell<VecDeque<(String, String)>>>,
     pub log: Rc<RefCell<Log>>,
     count: RefCell<usize>,
+    pub fields: serde_json::Value,
+    pub downloads: RefCell<Vec<serde_json::Value>>,
 }
 
 impl ScriptedHost {
@@ -149,6 +151,13 @@ impl Host for ScriptedHost {
         let mut count = self.count.borrow_mut();
         *count += 1;
         Ok(format!("r{}x{bytes}", *count))
+    }
+    fn fields(&self) -> serde_json::Value {
+        self.fields.clone()
+    }
+    fn download(&self, request: &serde_json::Value) -> Result<serde_json::Value, crate::ProviderError> {
+        self.downloads.borrow_mut().push(request.clone());
+        Ok(serde_json::json!({ "id": request["name"], "received": 0, "running": true }))
     }
     fn sleep(&self, duration: std::time::Duration) {
         self.log.borrow_mut().waits.push(duration);

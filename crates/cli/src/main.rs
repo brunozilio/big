@@ -80,7 +80,9 @@ fn serve(port: u16, open: bool) -> Result<ExitCode, String> {
     let stop = async {
         let _ = tokio::signal::ctrl_c().await;
     };
-    runtime.block_on(server::run(launch, stop))?;
+    let served = runtime.block_on(server::run(launch, stop));
+    app::release_local_models();
+    served?;
     drop(held);
     Ok(ExitCode::SUCCESS)
 }

@@ -110,6 +110,7 @@ impl SignIn for FakeSignIn {
         &self,
         provider: ModelProvider,
         _back: Option<&str>,
+        _fields: &serde_json::Value,
         _stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, llm_providers::ProviderError> {
@@ -144,7 +145,7 @@ fn signing_in_to_a_subscription_opens_the_browser_then_keeps_the_tokens() {
     let rig = rig();
     let providers = rig.providers.clone().with_sign_in(Arc::new(FakeSignIn(Ok(()))));
     let (outbox, rx) = outbox();
-    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, &outbox);
+    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, serde_json::Value::Null, &outbox);
     assert!(matches!(
         next(&rx),
         Reply::Providers(ProviderEvent::AuthorizeAt { provider, url, code: None })
@@ -161,7 +162,7 @@ fn a_code_sign_in_shows_the_code_to_type_and_keeps_its_own_account() {
     let rig = rig();
     let providers = rig.providers.clone().with_sign_in(Arc::new(FakeSignIn(Ok(()))));
     let (outbox, rx) = outbox();
-    providers.sign_in_returning(ModelProvider::new("device-sub"), None, &outbox);
+    providers.sign_in_returning(ModelProvider::new("device-sub"), None, serde_json::Value::Null, &outbox);
     assert!(matches!(
         next(&rx),
         Reply::Providers(ProviderEvent::AuthorizeAt { provider, code: Some(code), .. })
@@ -181,10 +182,10 @@ fn a_failed_sign_in_or_an_api_provider_keeps_nothing() {
         .clone()
         .with_sign_in(Arc::new(FakeSignIn(Err(llm_providers::ProviderError::Invalid("closed the tab".into())))));
     let (outbox, rx) = outbox();
-    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, &outbox);
+    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, serde_json::Value::Null, &outbox);
     next(&rx);
     assert_eq!(failure(&next(&rx)), "closed the tab");
-    providers.sign_in_returning(ModelProvider::new("keyed-too"), None, &outbox);
+    providers.sign_in_returning(ModelProvider::new("keyed-too"), None, serde_json::Value::Null, &outbox);
     assert!(failure(&next(&rx)).contains("API key"));
     assert!(listed(&providers.list()).iter().all(|p| p.account.is_none()));
 }
@@ -202,7 +203,7 @@ fn connecting_fails_clearly_when_keys_cannot_be_kept() {
     assert_eq!(failure(&providers.connect(ModelProvider::new("keyed"), "sk-proj-0123456789abcd")), refused);
     assert!(listed(&providers.list()).iter().all(|p| p.account.is_none()));
     let (outbox, rx) = outbox();
-    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, &outbox);
+    providers.sign_in_returning(ModelProvider::new("browser-sub"), None, serde_json::Value::Null, &outbox);
     assert_eq!(failure(&next(&rx)), refused, "the browser is not opened for a sign-in that would be lost");
 }
 

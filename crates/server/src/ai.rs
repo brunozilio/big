@@ -36,6 +36,10 @@ pub fn provider_json(summary: &ProviderSummary, language: Language) -> Value {
         _ => "browser",
     };
     let name = if summary.label.is_empty() { summary.name.as_str() } else { summary.label.as_str() };
+    let fields = match app::provider_fields(summary.provider, language) {
+        Value::Array(fields) => Value::Array(fields),
+        _ => json!([]),
+    };
     let logo = if summary.logo.is_empty() { summary.provider.id() } else { summary.logo.trim() };
     json!({
         "key": summary.provider.id(), "name": name, "group": GROUP,
@@ -43,7 +47,7 @@ pub fn provider_json(summary: &ProviderSummary, language: Language) -> Value {
         "logo": logo,
         "button": language.pick(format!("Sign in with {name}"), format!("Iniciar sesión con {name}"), format!("Entrar com {name}")),
         "site": language.pick(format!("from {name}"), format!("de {name}"), format!("do {name}")),
-        "signIn": sign_in, "fields": [], "multiple": true, "alternatives": [], "ai": true,
+        "signIn": sign_in, "fields": fields, "multiple": true, "alternatives": [], "ai": true,
     })
 }
 
@@ -87,9 +91,16 @@ fn connected(provider: &str, listed: &[ProviderSummary], language: Language) -> 
     connections_of(summary).into_iter().last().ok_or_else(lost)
 }
 
-fn run(client: &app::Client, provider: ModelProvider, back: &str, flow: &AiFlow, language: Language) {
+struct Asked {
+    provider: ModelProvider,
+    back: String,
+    fields: Value,
+}
+
+fn run(client: &app::Client, asked: Asked, flow: &AiFlow, language: Language) {
+    let Asked { provider, back, fields } = asked;
     let progress = Arc::clone(&flow.progress);
-    let signed = client.sign_in_returning(provider, back, |url, code| {
+    let signed = client.sign_in_returning(provider, &back, fields, |url, code| {
         held(&progress).authorize = Some((url.to_owned(), code.map(str::to_owned)));
     });
     let ended = match signed {
@@ -116,18 +127,18 @@ fn origin(shared: &Shared, host: Option<&str>) -> String {
     }
 }
 
-pub fn start(shared: &Shared, provider: &str, host: Option<&str>) -> ApiResult<Value> {
+pub fn start(shared: &Shared, provider: &str, fields: Value, host: Option<&str>) -> ApiResult<Value> {
     let summary = known(shared, provider)?;
     let client = shared.backend.client.sibling().map_err(ApiError::failed)?;
     let flow = AiFlow::default();
     let id = shared.flows.open(provider, Waiting::Ai(flow.clone()))?;
     let back = format!("{}{}", origin(shared, host), crate::sign_in::back_to(provider, &id));
     let running = flow.clone();
-    let chosen = summary.provider;
+    let asked = Asked { provider: summary.provider, back, fields };
     let language = shared.language();
     std::thread::Builder::new()
         .name("ai-sign-in".into())
-        .spawn(move || run(&client, chosen, &back, &running, language))
+        .spawn(move || run(&client, asked, &running, language))
         .map_err(ApiError::failed)?;
     let began = Instant::now();
     while began.elapsed() < FIRST_STEP {
@@ -135,8 +146,10 @@ pub fn start(shared: &Shared, provider: &str, host: Option<&str>) -> ApiResult<V
             let progress = held(&flow.progress);
             (progress.authorize.clone(), progress.ended.clone())
         };
-        if let Some(Err(message)) = ended {
-            return Err(ApiError::upstream(message));
+        match ended {
+            Some(Err(message)) => return Err(ApiError::upstream(message)),
+            Some(Ok(_)) => return Ok(json!({ "flow": id, "kind": "token" })),
+            None => {}
         }
         if let Some((url, code)) = authorize {
             return Ok(match code {

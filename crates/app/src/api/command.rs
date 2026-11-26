@@ -34,6 +34,8 @@ pub enum ClientCommand {
         provider: ModelProvider,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         back: Option<String>,
+        #[serde(default, skip_serializing_if = "serde_json::Value::is_null")]
+        fields: serde_json::Value,
     },
     DisconnectProvider {
         provider: ModelProvider,
@@ -93,10 +95,11 @@ mod tests {
             ClientCommand::SteerRun { run, text: "also the tests".into() },
             ClientCommand::ListModels,
             ClientCommand::ListProviders,
-            ClientCommand::SignInProvider { provider: ModelProvider::new("browser-sub"), back: None },
+            ClientCommand::SignInProvider { provider: ModelProvider::new("browser-sub"), back: None, fields: serde_json::Value::Null },
             ClientCommand::SignInProvider {
                 provider: ModelProvider::new("browser-sub"),
                 back: Some("http://127.0.0.1:7999/settings".into()),
+                fields: serde_json::json!({ "model": "owner/repo" }),
             },
             ClientCommand::DisconnectProvider { provider: ModelProvider::new("keyed") },
             ClientCommand::RemoveProviderAccount { provider: ModelProvider::new("keyed"), account: "a@x.io".into() },

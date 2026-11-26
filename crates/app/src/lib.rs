@@ -45,3 +45,11 @@ pub mod team {
 }
 pub use services::{BrowserAsk, BrowserMcp, ConnectedMcp, LocalServices};
 pub use settings::{SettingsError, SettingsStore};
+
+pub fn provider_fields(provider: ModelProvider, language: domain::Language) -> serde_json::Value {
+    llm_providers::providers::find(provider).map_or(serde_json::Value::Null, |found| found.fields(language))
+}
+
+pub fn release_local_models() {
+    llm_providers::release_local_models();
+}

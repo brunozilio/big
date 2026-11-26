@@ -12,6 +12,7 @@ test-support = []
 [dependencies]
 brand.workspace = true
 content.workspace = true
+local-models.workspace = true
 domain.workspace = true
 script.workspace = true
 platform.workspace = true

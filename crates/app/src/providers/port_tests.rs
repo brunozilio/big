@@ -34,13 +34,14 @@ impl SignIn for NeedsPort {
         &self,
         provider: ModelProvider,
         _back: Option<&str>,
+        _fields: &serde_json::Value,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, ProviderError> {
         if self.0.holder(PORT).is_some() {
             return Err(ProviderError::PortInUse(PORT));
         }
-        FakeSignIn(Ok(())).sign_in(provider, None, stop, open)
+        FakeSignIn(Ok(())).sign_in(provider, None, &serde_json::Value::Null, stop, open)
     }
 }
 
@@ -54,6 +55,7 @@ impl SignIn for WaitsOnThePortFirst {
         &self,
         provider: ModelProvider,
         _back: Option<&str>,
+        _fields: &serde_json::Value,
         stop: &Arc<AtomicBool>,
         open: &mut dyn FnMut(String, Option<String>),
     ) -> Result<Config, ProviderError> {
@@ -61,7 +63,7 @@ impl SignIn for WaitsOnThePortFirst {
             return Err(ProviderError::PortInUse(PORT));
         }
         if self.earlier.fetch_add(1, Ordering::SeqCst) > 0 {
-            return FakeSignIn(Ok(())).sign_in(provider, None, stop, open);
+            return FakeSignIn(Ok(())).sign_in(provider, None, &serde_json::Value::Null, stop, open);
         }
         *self.ports.holder.lock().expect("holder") = Some(PortHolder { pid: std::process::id(), app: "this".into() });
         open("https://auth.test/never-answered".into(), None);
@@ -81,13 +83,13 @@ fn a_retry_replaces_the_sign_in_this_process_still_had_waiting_on_the_port() {
     let (tx, rx) = crossbeam_channel::unbounded();
     let outbox = Outbox::new(tx, Arc::new(|| {}));
     let browser = ModelProvider::new("browser-sub");
-    providers.sign_in_returning(browser, None, &outbox.answering(RequestId(1)));
+    providers.sign_in_returning(browser, None, serde_json::Value::Null, &outbox.answering(RequestId(1)));
     assert!(matches!(
         next(&rx),
         Reply::Providers(ProviderEvent::AuthorizeAt { url, .. }) if url.ends_with("never-answered")
     ));
 
-    providers.sign_in_returning(browser, None, &outbox.answering(RequestId(2)));
+    providers.sign_in_returning(browser, None, serde_json::Value::Null, &outbox.answering(RequestId(2)));
 
     let mut replaced = Vec::new();
     let mut retried = Vec::new();
@@ -120,6 +122,6 @@ fn busy(holder: Option<PortHolder>) -> Reply {
 fn a_taken_callback_port_names_the_app_holding_it() {
     let ports = FakePorts::held_by(998, "Visual Studio Code");
     let (outbox, rx) = outbox();
-    signing_in(&ports).sign_in_returning(ModelProvider::new("browser-sub"), None, &outbox);
+    signing_in(&ports).sign_in_returning(ModelProvider::new("browser-sub"), None, serde_json::Value::Null, &outbox);
     assert_eq!(next(&rx), busy(Some(PortHolder { pid: 998, app: "Visual Studio Code".into() })));
 }

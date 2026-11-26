@@ -78,9 +78,9 @@ impl CommandHandler {
                 return None;
             }
             ClientCommand::ListProviders => providers.list(),
-            ClientCommand::SignInProvider { provider, back } => {
+            ClientCommand::SignInProvider { provider, back, fields } => {
                 self.flows.began(replies);
-                providers.sign_in_returning(provider, back, replies);
+                providers.sign_in_returning(provider, back, fields, replies);
                 return None;
             }
             ClientCommand::DisconnectProvider { provider } => providers.disconnect(provider),

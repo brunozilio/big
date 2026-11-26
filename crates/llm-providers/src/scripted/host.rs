@@ -115,6 +115,31 @@ fn limit(function: &str, arguments: &Value) -> Option<Value> {
     })
 }
 
+const HOME_LIMIT: u64 = 64 * 1024;
+
+fn home_file(arguments: &Value) -> Value {
+    let wanted = std::path::Path::new(arguments.as_str().unwrap_or_default());
+    let plain = wanted.components().all(|part| matches!(part, std::path::Component::Normal(_)));
+    let Some(home) = std::env::home_dir().filter(|_| plain && !wanted.as_os_str().is_empty()) else { return Value::Null };
+    let path = home.join(wanted);
+    let small = path.metadata().is_ok_and(|meta| meta.is_file() && meta.len() <= HOME_LIMIT);
+    if !small {
+        return Value::Null;
+    }
+    std::fs::read_to_string(path).map_or(Value::Null, Value::String)
+}
+
+fn local(function: &str, arguments: &Value) -> Option<Result<Value, String>> {
+    let shown = |error: local_models::LocalError| error.to_string();
+    Some(match function {
+        "local.endpoint" => local_models::endpoint().map(Value::String).map_err(shown),
+        "local.models" => Ok(local_models::models()),
+        "local.remove" => local_models::remove(arguments.as_str().unwrap_or_default()).map(|()| Value::Null).map_err(shown),
+        "files.home" => Ok(home_file(arguments)),
+        _ => return None,
+    })
+}
+
 #[derive(Debug, Clone)]
 pub struct Local {
     pub provider: &'static str,
@@ -127,6 +152,9 @@ impl Local {
         }
         if let Some(answer) = limit(function, arguments) {
             return Some(Ok(answer));
+        }
+        if let Some(answer) = local(function, arguments) {
+            return Some(answer);
         }
         Some(match function {
             "log" => {

@@ -284,6 +284,9 @@ impl Provider for ScriptedProvider {
         }
         Ok(())
     }
+    fn fields(&self, language: Language) -> Value {
+        self.quiet("fields", json!({ "language": language.code() }))
+    }
     fn bind(&self, config: &Config, body: &mut Value) {
         if self.offers("bind") {
             *body = self.quiet("bind", json!({ "config": config, "body": body }));

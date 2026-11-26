@@ -9,6 +9,7 @@ mod grok_client;
 mod kiro;
 mod kiro_client;
 mod kiro_sign_in;
+mod llamacpp;
 mod smoke;
 
 use domain::ModelProvider;

@@ -21,6 +21,7 @@ platform = { path = "crates/platform" }
 agent-engine = { path = "crates/agent-engine", default-features = false }
 language-servers = { path = "crates/language-servers" }
 llm-providers = { path = "crates/llm-providers", default-features = false }
+local-models = { path = "crates/local-models" }
 code-map = { path = "crates/code-map" }
 server = { path = "crates/server" }
 page = { path = "crates/page" }
@@ -70,3 +71,6 @@ cognitive_complexity = "warn"
 lto = "thin"
 codegen-units = 1
 strip = true
+
+[profile.dev.package.llama-cpp-sys-2]
+opt-level = 3

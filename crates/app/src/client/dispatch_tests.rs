@@ -38,7 +38,7 @@ fn browser() -> ModelProvider {
 }
 
 fn sign_in() -> ClientCommand {
-    ClientCommand::SignInProvider { provider: browser(), back: None }
+    ClientCommand::SignInProvider { provider: browser(), back: None, fields: serde_json::Value::Null }
 }
 
 fn opened(reply: Reply) -> Option<Result<usize, String>> {

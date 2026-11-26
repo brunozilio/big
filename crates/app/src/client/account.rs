@@ -20,9 +20,10 @@ impl Client {
         &self,
         provider: ModelProvider,
         back: &str,
+        fields: serde_json::Value,
         mut open: impl FnMut(&str, Option<&str>),
     ) -> Result<SignedIn, Error> {
-        let command = ClientCommand::SignInProvider { provider, back: Some(back.to_owned()) };
+        let command = ClientCommand::SignInProvider { provider, back: Some(back.to_owned()), fields };
         self.dispatcher.flow(command, crate::client::dispatch::sign_in_patience(), |reply| match reply {
             Reply::Providers(ProviderEvent::AuthorizeAt { url, code, .. }) => {
                 open(&url, code.as_deref());
