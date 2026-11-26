@@ -2,9 +2,7 @@ import {
   fail,
   flag,
   idempotencyLabel,
-  isObject,
   listOf,
-  optionalNumber,
   optionalText,
   sameAscii,
   text,
@@ -34,7 +32,6 @@ const ISSUE_FIELDS = [
   "updated",
 ];
 const SUMMARY_FIELDS = ["summary", "status"];
-const DEFAULT_LIMIT = 50;
 const LANDED = ["/status/name", "/fields/status/name", "/landedStatus/name", "/landedStatus", "/toStatus/name", "/status"];
 
 type Args = Record<string, any>;
@@ -244,23 +241,6 @@ export function setImpediment(api: Api, args: Args, key: string) {
   const reason = on ? optionalText(args, "reason") : undefined;
   if (reason !== undefined) comment(api, issue, reason, key);
   return { on, reason: reason ?? null };
-}
-
-export function search(api: Api, args: Args) {
-  const clauses: string[] = [];
-  const project = optionalText(args, "project") ?? api.project;
-  if (project !== undefined) clauses.push(`project = "${jqlKey(project)}"`);
-  const status = optionalText(args, "status");
-  if (status !== undefined) clauses.push(`status = "${jqlText(status)}"`);
-  const query = jqlText(optionalText(args, "query") ?? "");
-  if (query !== "") clauses.push(`text ~ "${query}"`);
-  if (clauses.length === 0) fail("permanent", "a search needs a project, a status or a query");
-  const jql = `${clauses.join(" AND ")} ORDER BY updated DESC`;
-  const limit = Math.min(Math.max(optionalNumber(args, "limit") ?? DEFAULT_LIMIT, 1), 100);
-  const page = searchJql(api, jql, SUMMARY_FIELDS, optionalText(args, "cursor"));
-  const issues = items(page, "issues").slice(0, limit).map((found) => summary(api, found));
-  const token = isObject(page) && typeof page.nextPageToken === "string" && page.isLast !== true ? page.nextPageToken : null;
-  return { issues, cursor: token };
 }
 
 export const projects = (api: Api, args: Args) => visibleProjects(api, optionalText(args, "query"));

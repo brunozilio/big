@@ -29,7 +29,7 @@ function rankOf(kind): number {
   return kind?.subtask === true ? -1 : 0;
 }
 
-function quietly<T>(work: () => T, fallback: T): T {
+export function quietly<T>(work: () => T, fallback: T): T {
   try {
     return work();
   } catch (error) {

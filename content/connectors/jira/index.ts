@@ -7,7 +7,8 @@ import { linkIssues, updateIssue } from "./edit.ts";
 import { fields, statuses } from "./metadata.ts";
 import { schema } from "./schema.ts";
 import { visibleProjects } from "./projects.ts";
-import { comment, createIssue, issue, projects, search, setImpediment, transition, transitions } from "./tracker.ts";
+import { search } from "./search.ts";
+import { comment, createIssue, issue, projects, setImpediment, transition, transitions } from "./tracker.ts";
 
 export { poll } from "./events.ts";
 

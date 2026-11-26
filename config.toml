@@ -18,6 +18,7 @@ client_id = "178c6fc778ccc68e1d6a"
 
 [jira]
 mcp_url = "https://mcp.atlassian.com/v2/mcp"
+pick_types = ["Story", "História", "Historia", "Bug", "Defeito", "Spike"]
 
 [aws]
 login_client_id = "arn:aws:signin:::devtools/same-device"
@@ -233,3 +234,4 @@ grok_4_20_multi_agent_0309 = "1.25 2.5 0.2 0 | 199999 2.5 5 0.4 0"
 
 [sonarqube]
 url = "https://sonarcloud.io"
+cloud = "sonarcloud.io sonarqube.us"

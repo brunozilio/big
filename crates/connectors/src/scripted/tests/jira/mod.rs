@@ -2,6 +2,7 @@ mod adf;
 mod attach;
 mod fake;
 mod pure;
+mod search;
 
 use std::sync::Arc;
 

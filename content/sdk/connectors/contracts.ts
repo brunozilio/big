@@ -72,7 +72,7 @@ export function tracker(): Action[] {
     [["title", "string"]],
     [["project", "string"], ["description", "string"], ["type", "string"], ["parent", "string"], ["labels", "array"], ["fields", "object"]],
   );
-  const search = object([], [["query", "string"], ["project", "string"], ["status", "string"], ["limit", "integer"], ["cursor", "string"]]);
+  const search = object([], [["query", "string"], ["project", "string"], ["status", "string"], ["limit", "integer"], ["cursor", "string"], ["pick", "boolean"]]);
   return [
     write("tracker.create_issue", newIssue, issueSummary(), "lookup"),
     read("tracker.issue", object([["issue", "string"]]), issueOutput()),

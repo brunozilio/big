@@ -411,6 +411,8 @@ export interface IssueSummary {
   key: string
   title: string
   status: string | null
+  type?: string | null
+  sprint?: boolean | null
 }
 
 export interface TrackerProject {

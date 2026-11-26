@@ -146,14 +146,23 @@ pub fn accounts(raw: &Value) -> Value {
 
 async fn search(caller: &Caller<'_>, args: &Value) -> ApiResult<Value> {
     let query = args["query"].as_str().unwrap_or_default();
-    let mut wanted = json!({ "query": query, "limit": 20 });
+    let mut wanted = json!({ "query": query, "limit": 20, "pick": true });
     if let Some(project) = args["project"].as_str().filter(|project| !project.is_empty()) {
         wanted["project"] = json!(project);
     }
     let found = caller.call(tracker::SEARCH, wanted).await?;
     let listed: Vec<Value> = list(&found, "issues")
         .iter()
-        .map(|issue| json!({ "key": text(&issue["ref"]), "title": text(&issue["title"]), "status": issue["status"].as_str() }))
+        .map(|issue| {
+            let mut listed = json!({ "key": text(&issue["ref"]), "title": text(&issue["title"]), "status": issue["status"].as_str() });
+            if let Some(kind) = issue["type"].as_str() {
+                listed["type"] = json!(kind);
+            }
+            if let Some(sprint) = issue["sprint"].as_bool() {
+                listed["sprint"] = json!(sprint);
+            }
+            listed
+        })
         .collect();
     Ok(json!(listed))
 }
@@ -165,7 +174,9 @@ const REPORTS: [&str; 3] = [
 ];
 
 fn is_options(action: &str) -> bool {
-    action.split_once('.').is_some_and(|(capability, name)| !capability.is_empty() && name == connectors::contracts::OPTIONS)
+    action
+        .split_once('.')
+        .is_some_and(|(capability, name)| !capability.is_empty() && name == connectors::contracts::OPTIONS)
 }
 
 async fn options(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<Value> {

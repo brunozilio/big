@@ -114,6 +114,8 @@ function IssuePanel({ sources, spaces, onPick, onClose }: { sources: Source[]; s
               <StatusIcon status="todo" size={15} />
               <span className="min-w-[72px] shrink-0 whitespace-nowrap text-base tabular-nums text-fg2">{i.key}</span>
               <span className="min-w-0 flex-1 truncate text-base text-fg">{i.title}</span>
+              {i.type && <span className="shrink-0 whitespace-nowrap text-sm text-faint">{i.type}</span>}
+              {i.sprint && <span className="shrink-0 whitespace-nowrap rounded-full bg-hover px-2 py-0.5 text-xs text-fg2">{tr('items.inSprint')}</span>}
             </button>
           </li>
         ))}
