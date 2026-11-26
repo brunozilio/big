@@ -53,6 +53,7 @@
               "label": "API token",
               "mono": true,
               "name": "token",
+              "optional": false,
               "placeholder": null,
               "secret": true,
               "value": null
@@ -63,6 +64,7 @@
               "label": "Site",
               "mono": true,
               "name": "site",
+              "optional": false,
               "placeholder": null,
               "secret": false,
               "value": "web.test"
