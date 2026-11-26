@@ -37,6 +37,7 @@ struct State {
     chosen: HashMap<String, String>,
     pairing: HashMap<u64, Sender<(String, String)>>,
     captured: HashMap<String, Value>,
+    build: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -78,6 +79,14 @@ impl Hub {
             self.fail_pending(old);
         }
         connection
+    }
+
+    pub fn expect(&self, build: &str) {
+        self.state().build = Some(build.to_owned()).filter(|build| !build.is_empty());
+    }
+
+    pub fn outdated(&self, build: &str) -> Option<String> {
+        self.state().build.clone().filter(|expected| expected != build)
     }
 
     pub fn unlink(&self, connection: u64) {

@@ -32,15 +32,17 @@ const GONE: [&str; 2] = ["ui/popup.html", "ui/popup.js"];
 pub struct Installed {
     pub folder: PathBuf,
     pub written: usize,
+    pub build: String,
 }
 
 pub fn install(folder: &Path, port: u16) -> Result<Installed, String> {
     let mut written = 0;
     let icon = icon();
-    for (path, source) in FILES {
+    let rendered = rendered(port, icon.is_none());
+    let build = fingerprint(&rendered, icon);
+    for (path, rendered) in rendered {
         let target = folder.join(path);
-        let rendered = render(source, port);
-        let rendered = if path == "manifest.json" && icon.is_none() { without_icons(&rendered) } else { rendered };
+        let rendered = rendered.replace("{{BUILD}}", &build);
         if std::fs::read_to_string(&target).is_ok_and(|current| current == rendered) {
             continue;
         }
@@ -59,7 +61,34 @@ pub fn install(folder: &Path, port: u16) -> Result<Installed, String> {
     for gone in GONE {
         let _ = std::fs::remove_file(folder.join(gone));
     }
-    Ok(Installed { folder: folder.to_path_buf(), written })
+    Ok(Installed { folder: folder.to_path_buf(), written, build })
+}
+
+fn rendered(port: u16, iconless: bool) -> Vec<(&'static str, String)> {
+    FILES
+        .iter()
+        .map(|(path, source)| {
+            let text = render(source, port);
+            (*path, if *path == "manifest.json" && iconless { without_icons(&text) } else { text })
+        })
+        .collect()
+}
+
+fn fingerprint(files: &[(&str, String)], icon: Option<&[u8]>) -> String {
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut feed = |bytes: &[u8]| {
+        for byte in bytes {
+            hash = (hash ^ u64::from(*byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+    };
+    for (path, text) in files {
+        feed(path.as_bytes());
+        feed(&[0]);
+        feed(text.as_bytes());
+        feed(&[0]);
+    }
+    feed(icon.unwrap_or_default());
+    format!("{hash:016x}")
 }
 
 fn icon() -> Option<&'static [u8]> {
@@ -113,8 +142,14 @@ mod tests {
             let text = std::fs::read_to_string(folder.path().join(path)).unwrap_or_default();
             assert!(!text.contains("{{"), "{path} keeps a placeholder");
         }
-        assert_eq!(install(folder.path(), 4321).map(|installed| installed.written), Ok(0));
-        assert_eq!(install(folder.path(), 9999).map(|installed| installed.written), Ok(1));
+        let again = install(folder.path(), 4321);
+        assert_eq!(again.as_ref().map(|installed| installed.written), Ok(0));
+        let build = again.map(|installed| installed.build).unwrap_or_default();
+        assert_eq!(build.len(), 16);
+        assert!(config.contains(&build));
+        let moved = install(folder.path(), 9999);
+        assert_eq!(moved.as_ref().map(|installed| installed.written), Ok(1));
+        assert_ne!(moved.map(|installed| installed.build).unwrap_or_default(), build);
     }
 
     #[test]

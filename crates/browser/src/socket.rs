@@ -27,9 +27,13 @@ pub fn connect(hub: Hub, upgrade: WebSocketUpgrade, origin: Option<&str>) -> Res
 
 async fn serve(hub: Hub, socket: WebSocket) {
     let (mut sink, mut stream) = socket.split();
-    let Some(info) = hello(&mut stream).await else { return };
+    let Some((info, build)) = hello(&mut stream).await else { return };
     let (outbox, inbox) = unbounded_channel();
     let own = outbox.clone();
+    if let Some(expected) = hub.outdated(&build) {
+        tracing::info!(device = %info.device_id, "the browser extension is outdated and was asked to reload");
+        let _ = own.send(json!({ "type": "reload", "build": expected }).to_string());
+    }
     let connection = hub.link(info.clone(), outbox);
     tracing::info!(device = %info.device_id, name = %info.name, "a browser connected");
     let writer = tokio::spawn(async move { write(&mut sink, inbox).await });
@@ -56,11 +60,12 @@ async fn serve(hub: Hub, socket: WebSocket) {
     tracing::info!(device = %info.device_id, "a browser disconnected");
 }
 
-async fn hello(stream: &mut futures_util::stream::SplitStream<WebSocket>) -> Option<BrowserInfo> {
+async fn hello(stream: &mut futures_util::stream::SplitStream<WebSocket>) -> Option<(BrowserInfo, String)> {
     let first = tokio::time::timeout(Duration::from_secs(10), stream.next()).await.ok()??.ok()?;
     let Message::Text(text) = first else { return None };
     let hello: Value = serde_json::from_str(text.as_str()).ok()?;
-    parse_hello(&hello)
+    let build = hello["build"].as_str().unwrap_or_default().to_owned();
+    parse_hello(&hello).map(|info| (info, build))
 }
 
 fn parse_hello(hello: &Value) -> Option<BrowserInfo> {
@@ -120,6 +125,16 @@ mod tests {
         assert_eq!(parse_hello(&json!({ "type": "other", "deviceId": "a" })), None);
         let info = parse_hello(&json!({ "type": "hello", "deviceId": "a", "platform": "mac" }));
         assert_eq!(info.map(|info| (info.name, info.platform)), Some(("Chrome".to_owned(), "mac".to_owned())));
+    }
+
+    #[test]
+    fn only_a_build_other_than_the_installed_one_is_outdated() {
+        let hub = Hub::new();
+        assert_eq!(hub.outdated("old"), None);
+        hub.expect("new");
+        assert_eq!(hub.outdated("new"), None);
+        assert_eq!(hub.outdated("old"), Some("new".to_owned()));
+        assert_eq!(hub.outdated(""), Some("new".to_owned()));
     }
 
     #[test]

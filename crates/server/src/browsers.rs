@@ -23,12 +23,14 @@ fn folder(data: &Path) -> PathBuf {
     data.join(brand::browser::EXTENSION_FOLDER)
 }
 
-pub fn install(data: &Path, port: u16) {
+pub fn install(hub: &browser::Hub, data: &Path, port: u16) {
     match browser::install(&folder(data), port) {
-        Ok(installed) if installed.written > 0 => {
-            tracing::info!(folder = %installed.folder.display(), "the browser extension was written");
+        Ok(installed) => {
+            hub.expect(&installed.build);
+            if installed.written > 0 {
+                tracing::info!(folder = %installed.folder.display(), "the browser extension was written");
+            }
         }
-        Ok(_) => {}
         Err(error) => tracing::warn!(%error, "the browser extension could not be written"),
     }
 }

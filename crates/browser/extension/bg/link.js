@@ -1,4 +1,4 @@
-import { NAME, SOCKET, VERSION } from "../config.js";
+import { BUILD, NAME, SOCKET, VERSION } from "../config.js";
 
 const RETRY_MS = 3000;
 
@@ -58,7 +58,7 @@ export function connect() {
   setState("connecting");
   opened.onopen = async () => {
     const me = await identity();
-    opened.send(JSON.stringify({ type: "hello", ...me, version: VERSION }));
+    opened.send(JSON.stringify({ type: "hello", ...me, version: VERSION, build: BUILD }));
     setState("connected");
   };
   opened.onmessage = (event) => receive(event.data);
@@ -92,6 +92,8 @@ async function receive(raw) {
   }
   if (message.type === "ping") {
     send({ type: "pong" });
+  } else if (message.type === "reload") {
+    await reload(message.build);
   } else if (message.type === "pair") {
     onPair(message.id);
   } else if (message.type === "watch") {
@@ -102,4 +104,12 @@ async function receive(raw) {
     const result = await onCall(message);
     send({ type: "result", id: message.id, result });
   }
+}
+
+async function reload(build) {
+  if (!build || build === BUILD) return;
+  const saved = await chrome.storage.local.get("reloadedFor");
+  if (saved.reloadedFor === build) return;
+  await chrome.storage.local.set({ reloadedFor: build });
+  chrome.runtime.reload();
 }
