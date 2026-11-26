@@ -5,15 +5,15 @@ import { Badge } from '@/ui/display'
 import { Icon, isIconName } from '@/ui/icon'
 import { Node } from '@/screens/items/parts'
 import { SendError, useSend } from './shared'
+import { stageStep } from './stageStep'
+
+export { stageStep }
 import { windowLabel, WindowPicker, zoneOf } from './windowPicker'
 
 type Of<T extends Block['type']> = Extract<Block, { type: T }>
 
 const variantOf = (variant?: string) => (variant === 'primary' ? 'primary' : 'secondary')
 
-export function stageStep(stage: StageView) {
-  return { id: stage.id, label: stage.label, icon: stage.icon, state: stage.state, attempts: 0, seconds: 0 }
-}
 
 function Change({ stage }: { stage: StageView }) {
   const change = stage.change

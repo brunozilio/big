@@ -1,9 +1,9 @@
 import { motion } from 'framer-motion'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/api'
-import { mins, minutesSince } from '@/api/clock'
+import { mins } from '@/api/clock'
 import type { Block, HeadsUp, Item, StepState, StepView } from '@/api/contract'
-import { errorText, useStepView, useStore } from '@/api/store'
+import { useStepView, useStore } from '@/api/store'
 import { BlockContext, type BlockHost } from '@/blocks/context'
 import { BlockView, fillsPanel } from '@/blocks/registry'
 import { ChatView } from '@/chat/ChatView'
@@ -18,7 +18,8 @@ import { Icon } from '@/ui/icon'
 import { springPop } from '@/ui/motion'
 import { Dialog, Menu, MenuContent, MenuItem, MenuTrigger } from '@/ui/overlay'
 import { UsageCard } from './UsageCard'
-import { archiveToggle, ChangeChip, IssueKey, Node, nodeState, RowRight, stateLabel } from './parts'
+import { archiveToggle, ChangeChip, IssueKey, Node, nodeState, report, RowRight, stateLabel } from './parts'
+import { useMinutesSince } from './ticker'
 
 export function followed(before: string | null, now: string | null, viewing: string | null): string | null {
   return before && now && now !== before && viewing === before ? now : null
@@ -35,82 +36,122 @@ function useFollowCurrent(it: Item | null, step: string | null, onStep: (s: stri
   }, [it?.id, current])
 }
 
-export function ItemModal({ it, step, onStep, onClose, onConnect }: { it: Item | null; step: string | null; onStep: (s: string) => void; onClose: () => void; onConnect: (provider: string) => void }) {
+type DetailProps = { it: Item | null; step: string | null; onStep: (s: string) => void; onClose: () => void; onConnect: (provider: string) => void }
+type OpenProps = DetailProps & { it: Item }
+
+const shownStep = (it: Item, step: string | null) => step ?? it.current ?? it.steps[0]?.id ?? ''
+
+export function ItemModal({ it, step, onStep, onClose, onConnect }: DetailProps) {
   useFollowCurrent(it, step, onStep)
   const t = useT()
   return (
     <Dialog open={!!it} onOpenChange={(o) => !o && onClose()} size="xl" bare title={it ? `${it.issue?.key ?? ''} ${titleOf(t, it)}` : ''}>
       {it && (
         <div className="overflow-hidden">
-          <div className="flex h-16 items-center gap-3 px-5">
-            {it.issue && <IssueKey issue={it.issue} />}
-            <span className="min-w-[160px] flex-1 truncate text-lg font-medium tracking-tightish text-fg" title={titleOf(t, it)}>{titleOf(t, it)}</span>
-            <span className="flex min-w-0 max-w-[60%] items-center justify-end gap-2">
-              {it.impediment ? <RowRight it={it} onStep={onStep} onConnect={(p) => { onClose(); onConnect(p) }} /> : <ChangeChip change={it.change} />}
-            </span>
-            <ItemMenu it={it} step={step ?? it.current} onClose={onClose} />
-            <IconButton tooltip={t('items.close')} onClick={onClose}><Icon name="close" size={18} /></IconButton>
+          <ItemHeader it={it} step={step} onStep={onStep} onClose={onClose} onConnect={onConnect} className="h-16 px-5" />
+          <div className="px-4 pb-4">
+            <div className="h-[min(660px,calc(88dvh-84px))]">
+              <ItemDetail it={it} step={shownStep(it, step)} onStep={onStep} />
+            </div>
           </div>
-          <ItemDetail it={it} step={step ?? it.current ?? it.steps[0]?.id ?? ''} onStep={onStep} />
         </div>
       )}
     </Dialog>
   )
 }
 
+export function ItemPage({ it, step, onStep, onClose, onConnect }: DetailProps) {
+  useFollowCurrent(it, step, onStep)
+  const t = useT()
+  if (!it) return null
+  return (
+    <section aria-label={`${it.issue?.key ?? ''} ${titleOf(t, it)}`.trim()} className="flex h-[calc(100dvh-176px)] min-h-[520px] flex-col gap-3">
+      <ItemHeader it={it} step={step} onStep={onStep} onClose={onClose} onConnect={onConnect} page className="min-h-10" />
+      <div className="min-h-0 flex-1">
+        <ItemDetail it={it} step={shownStep(it, step)} onStep={onStep} page />
+      </div>
+    </section>
+  )
+}
+
+function ItemHeader({ it, step, onStep, onClose, onConnect, page, className }: OpenProps & { page?: boolean; className?: string }) {
+  const t = useT()
+  const title = titleOf(t, it)
+  return (
+    <div className={cn('flex shrink-0 items-center gap-3', className)}>
+      {page && <IconButton tooltip={t('app.back')} onClick={onClose}><Icon name="left" size={18} /></IconButton>}
+      {it.issue && <IssueKey issue={it.issue} />}
+      <span className="min-w-[120px] flex-1 truncate text-lg font-medium tracking-tightish text-fg" title={title}>{title}</span>
+      <span className="flex min-w-0 max-w-[60%] items-center justify-end gap-2">
+        {it.impediment ? <RowRight it={it} onStep={onStep} onConnect={(p) => { onClose(); onConnect(p) }} /> : <ChangeChip change={it.change} />}
+      </span>
+      <ItemMenu it={it} step={step ?? it.current} onClose={onClose} />
+      {!page && <IconButton tooltip={t('items.close')} onClick={onClose}><Icon name="close" size={18} /></IconButton>}
+    </div>
+  )
+}
+
 function ItemMenu({ it, step, onClose }: { it: Item; step: string | null; onClose: () => void }) {
-  const [error, setError] = useState<string | null>(null)
   const editor = useStore((s) => s.branding?.editor)
   const t = useT()
   const label = it.steps.find((s) => s.id === step)?.label ?? ''
   return (
     <Menu>
       <MenuTrigger asChild>
-        <button aria-label={t('items.moreActions')} title={error ?? undefined} className="flex size-9 items-center justify-center rounded-control text-fg2 transition-colors hover:bg-hover hover:text-fg">
-          <Icon name={error ? 'alert' : 'more'} size={18} className={error ? 'text-danger-fg' : undefined} />
+        <button aria-label={t('items.moreActions')} className="flex size-9 shrink-0 items-center justify-center rounded-control text-fg2 transition-colors hover:bg-hover hover:text-fg">
+          <Icon name="more" size={18} />
         </button>
       </MenuTrigger>
       <MenuContent align="end">
-        {editor && <MenuItem icon={<Icon name="code" size={16} />} onSelect={() => { setError(null); api().openFolders(it.id).catch((e: unknown) => setError(errorText(e))) }}>{t('items.openIn', { name: editor })}</MenuItem>}
-        {step && <MenuItem icon={<Icon name="refresh" size={16} />} onSelect={() => api().rerun(it.id, step).catch((e: unknown) => setError(errorText(e)))}>{t('items.rerunFrom', { step: label })}</MenuItem>}
-        {it.group === 'delivered' && <MenuItem icon={<Icon name={it.archivedAt ? 'refresh' : 'archive'} size={16} />} onSelect={() => archiveToggle(it).catch((e: unknown) => setError(errorText(e)))}>{t(it.archivedAt ? 'items.unarchive' : 'items.archive')}</MenuItem>}
-        {!it.doneAt && <MenuItem danger icon={<Icon name="stop" size={16} />} onSelect={() => api().cancel(it.id).then(onClose).catch((e: unknown) => setError(errorText(e)))}>{t('items.cancelItem')}</MenuItem>}
+        {editor && <MenuItem icon={<Icon name="code" size={16} />} onSelect={() => void api().openFolders(it.id).catch(report)}>{t('items.openIn', { name: editor })}</MenuItem>}
+        {step && <MenuItem icon={<Icon name="refresh" size={16} />} onSelect={() => void api().rerun(it.id, step).catch(report)}>{t('items.rerunFrom', { step: label })}</MenuItem>}
+        {it.group === 'delivered' && <MenuItem icon={<Icon name={it.archivedAt ? 'refresh' : 'archive'} size={16} />} onSelect={() => void archiveToggle(it)}>{t(it.archivedAt ? 'items.unarchive' : 'items.archive')}</MenuItem>}
+        {!it.doneAt && <MenuItem danger icon={<Icon name="stop" size={16} />} onSelect={() => void api().cancel(it.id).then(onClose).catch(report)}>{t('items.cancelItem')}</MenuItem>}
       </MenuContent>
     </Menu>
   )
 }
 
-function ItemDetail({ it, step, onStep }: { it: Item; step: string; onStep: (s: string) => void }) {
+function StepList({ it, step, onStep, page }: { it: Item; step: string; onStep: (s: string) => void; page?: boolean }) {
   const tr = useT()
   return (
-    <div className="px-4 pb-4">
-      <div className="grid h-[min(660px,calc(88dvh-84px))] grid-cols-[190px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] gap-3 md:grid-cols-[210px_minmax(0,1fr)]">
-        <div className="flex min-h-0 flex-col gap-3 self-start">
-          <Card variant="inset" className="p-1.5">
-            <ul className="space-y-0.5">
-              {it.steps.map((x) => {
-                const st = nodeState(it, x)
-                const t = Math.round(x.seconds / 60)
-                const active = x.id === step
-                const locked = st === 'pending' && !active
-                return (
-                  <li key={x.id}>
-                    <button disabled={locked} onClick={() => onStep(x.id)} style={{ paddingLeft: 8 + (x.depth ?? 0) * 14 }} className={cn('relative flex w-full items-center gap-2.5 rounded-control-sm pr-2 text-left transition-colors', x.depth ? 'h-8 text-sm' : 'h-9 text-base', active ? 'text-fg' : locked ? 'cursor-default text-fg2' : 'text-fg2 hover:bg-hover')}>
-                      {active && <motion.span layoutId={`step-sel-${it.id}`} transition={springPop} className="absolute inset-0 rounded-control-sm bg-surface shadow-card" />}
-                      <span className="relative flex"><Node s={x} state={st} size={x.depth ? 16 : 20} /></span>
-                      <span className={cn('relative flex-1 truncate leading-none', st === 'pending' && 'text-muted')}>{x.label}</span>
-                      <span className="relative text-xs tabular-nums leading-none text-faint">{st === 'skipped' ? tr('items.skipped') : x.attempts > 1 ? `${x.attempts}× · ${mins(t)}` : t ? mins(t) : ''}</span>
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </Card>
-          <UsageCard it={it} />
-        </div>
-        <div key={step} className="h-full min-h-0 min-w-0">
-          <StepPanel it={it} step={step} />
-        </div>
+    <ul aria-label={tr('items.steps')} className={cn(page ? 'scrollbar-thin flex gap-1 overflow-x-auto pb-1 md:block md:space-y-0.5 md:overflow-visible md:pb-0' : 'space-y-0.5')}>
+      {it.steps.map((x) => {
+        const st = nodeState(it, x)
+        const t = Math.round(x.seconds / 60)
+        const active = x.id === step
+        const locked = st === 'pending' && !active
+        return (
+          <li key={x.id} className={cn(page && 'shrink-0 md:shrink')}>
+            <button
+              disabled={locked}
+              aria-current={active ? 'step' : undefined}
+              onClick={() => onStep(x.id)}
+              style={{ paddingLeft: 8 + (x.depth ?? 0) * 14 }}
+              className={cn('relative flex w-full items-center gap-2.5 rounded-control-sm pr-2 text-left transition-colors', x.depth ? 'h-8 text-sm' : 'h-9 text-base', page && 'whitespace-nowrap', active ? 'text-fg' : locked ? 'cursor-default text-fg2' : 'text-fg2 hover:bg-hover')}
+            >
+              {active && <motion.span layoutId={`step-sel-${it.id}`} transition={springPop} className={cn('absolute inset-0 rounded-control-sm', page ? 'bg-inset' : 'bg-surface shadow-card')} />}
+              <span className="relative flex"><Node s={x} state={st} size={x.depth ? 16 : 20} /></span>
+              <span className={cn('relative flex-1 truncate leading-none', st === 'pending' && 'text-muted')}>{x.label}</span>
+              <span className="relative text-xs tabular-nums leading-none text-faint">{st === 'skipped' ? tr('items.skipped') : x.attempts > 1 ? `${x.attempts}× · ${mins(t)}` : t ? mins(t) : ''}</span>
+            </button>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
+function ItemDetail({ it, step, onStep, page }: { it: Item; step: string; onStep: (s: string) => void; page?: boolean }) {
+  const list = <StepList it={it} step={step} onStep={onStep} page={page} />
+  return (
+    <div className={cn('grid h-full gap-3', page ? 'grid-cols-1 grid-rows-[auto_minmax(0,1fr)] md:grid-cols-[220px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] md:gap-5' : 'grid-cols-[190px_minmax(0,1fr)] grid-rows-[minmax(0,1fr)] md:grid-cols-[210px_minmax(0,1fr)]')}>
+      <div className={cn('flex min-h-0 min-w-0 flex-col gap-3', page ? 'md:overflow-y-auto' : 'self-start')}>
+        {page ? list : <Card variant="inset" className="p-1.5">{list}</Card>}
+        <div className={cn(page && 'hidden md:block')}><UsageCard it={it} /></div>
+      </div>
+      <div key={step} className="h-full min-h-0 min-w-0">
+        <StepPanel it={it} step={step} />
       </div>
     </div>
   )
@@ -181,7 +222,7 @@ function StepContent({ it, step }: { it: Item; step: string }) {
     const timer = setInterval(() => setNonce((n) => n + 1), 1500)
     return () => clearInterval(timer)
   }, [empty, running])
-  const host = { item: it.id, step, version: it.updatedAt, send: (action: string, payload: unknown) => api().input(it.id, step, { action, payload }) }
+  const host = useMemo(() => ({ item: it.id, step, version: it.updatedAt, send: (action: string, payload: unknown) => api().input(it.id, step, { action, payload }).finally(() => setNonce((n) => n + 1)) }), [it.id, step, it.updatedAt])
   const current = view && view.step === step && view.item === it.id ? view : null
   if (!current) {
     return (
@@ -260,18 +301,18 @@ function StepBody({ it, step, view: current, host, onPick: setAttempt }: { it: I
 }
 
 export function EmptyStep({ it, step }: { it: Item; step: string }) {
-  const [error, setError] = useState<string | null>(null)
   const t = useT()
   const label = it.steps.find((s) => s.id === step)?.label ?? step
   const stuck = it.impediment && it.current === step ? it.impediment : null
   const running = it.steps.find((s) => s.id === step)?.state === 'running'
+  const doing = !stuck && running && it.current === step && it.activity ? it.activity : null
+  const waited = useMinutesSince(doing?.since)
   if (!stuck && running) {
-    const doing = it.current === step && it.activity ? it.activity : null
     return (
       <p className="flex items-center gap-2 text-base text-muted">
         <Spinner size={14} />
         <span>{doing ? spoken(t, doing.said, doing.text) : t('items.inProgress')}…</span>
-        {doing && <span className="tabular-nums text-faint">{mins(minutesSince(doing.since))}</span>}
+        {doing && <span className="tabular-nums text-faint">{mins(waited)}</span>}
       </p>
     )
   }
@@ -281,10 +322,9 @@ export function EmptyStep({ it, step }: { it: Item; step: string }) {
       <p className="text-base font-medium text-fg">{stuck.reason}</p>
       {stuck.detail && stuck.detail !== stuck.reason && <p className="whitespace-pre-wrap break-words text-sm text-muted">{stuck.detail}</p>}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="primary" icon={<Icon name="refresh" size={15} />} onClick={() => api().rerun(it.id, step).catch((e: unknown) => setError(errorText(e)))}>{t('items.rerunFrom', { step: label })}</Button>
-        {!it.doneAt && <Button size="sm" variant="secondary" icon={<Icon name="stop" size={15} />} onClick={() => api().cancel(it.id).catch((e: unknown) => setError(errorText(e)))}>{t('items.cancelItem')}</Button>}
+        <Button size="sm" variant="primary" icon={<Icon name="refresh" size={15} />} onClick={() => api().rerun(it.id, step).catch(report)}>{t('items.rerunFrom', { step: label })}</Button>
+        {!it.doneAt && <Button size="sm" variant="secondary" icon={<Icon name="stop" size={15} />} onClick={() => api().cancel(it.id).catch(report)}>{t('items.cancelItem')}</Button>}
       </div>
-      {error && <p role="alert" className="text-base text-danger-fg">{error}</p>}
     </div>
   )
 }

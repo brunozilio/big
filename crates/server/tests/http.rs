@@ -259,6 +259,13 @@ async fn connections_list_sign_in_with_a_device_choose_an_account_and_disconnect
             "capabilities": ["tracker", "code", "pipelines"], "status": "ok",
         })
     );
+    let bindings = &listed["providers"][1]["bindings"];
+    assert_eq!((&bindings[0]["section"], &bindings[0]["order"]), (&json!("Planejamento"), &json!(10)));
+    assert_eq!((&bindings[1]["section"], &bindings[1]["order"]), (&json!("Planejamento"), &json!(10.5)));
+    assert_eq!(bindings[2], json!({ "capability": "plain", "scope": "repository", "label": "Sem seção", "multiple": false }));
+    let kinds: Vec<&str> = listed["repositoryKinds"].as_array().into_iter().flatten().filter_map(|kind| kind["key"].as_str()).collect();
+    assert_eq!(kinds, ["application", "library", "configuration", "infrastructure", "tests"]);
+    assert_eq!(listed["repositoryKinds"][0], json!({ "key": "application", "label": "Aplicação" }));
     fixture("connections", &listed);
     let (status, started) =
         world.send(Method::POST, "/api/connections/fake/start", Some(json!({ "fields": {} }))).await;

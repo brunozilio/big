@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react'
+import { createContext, memo, useContext, useEffect, useState } from 'react'
 import { now } from '@/api/clock'
 import type { Agent, SessionEvent, ThinkingStep, ToolCall } from '@/api/contract'
 import { AgentAvatar } from '@/ui/agentAvatar'
@@ -32,11 +32,11 @@ export function AgentMark({ size = 18, spinning, className, agent }: { size?: nu
   return <AgentAvatar look={look} seed={agent ?? 'agente'} name={found?.name} size={size + 2} working={spinning} className={className} />
 }
 
-export function UserMessage({ event }: { event: Ev<'user'> }) {
+export const UserMessage = memo(function UserMessage({ event }: { event: Ev<'user'> }) {
   const notices = parseNotices(event.text)
   if (notices) return <NoticeMessage notices={notices} />
   return <PersonMessage event={event} />
-}
+})
 
 function Sender({ event }: { event: Ev<'user'> }) {
   const agent = useAgent(event.agent)
@@ -64,7 +64,7 @@ function PersonMessage({ event }: { event: Ev<'user'> }) {
   )
 }
 
-export function AssistantMessage({ event }: { event: Ev<'assistant'> }) {
+export const AssistantMessage = memo(function AssistantMessage({ event }: { event: Ev<'assistant'> }) {
   const t = useT()
   const agent = useAgent(event.agent)
   return (
@@ -79,7 +79,7 @@ export function AssistantMessage({ event }: { event: Ev<'assistant'> }) {
       </div>
     </div>
   )
-}
+})
 
 export function thoughtText(steps: ThinkingStep[], live: boolean): string {
   const written = visibleSteps(steps).map((s) => s.text.trim())
@@ -87,18 +87,19 @@ export function thoughtText(steps: ThinkingStep[], live: boolean): string {
   return written[written.length - 1] ?? ''
 }
 
-export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
+export const ThinkingSteps = memo(function ThinkingSteps({ event, running = true }: { event: Ev<'thinking'>; running?: boolean }) {
   const t = useT()
-  const text = thoughtText(event.steps, event.live)
+  const live = event.live && running
+  const text = thoughtText(event.steps, live)
   return (
     <div className="flex gap-3.5">
-      <motion.span animate={event.live ? { opacity: [0.45, 1, 0.45] } : { opacity: 1 }} transition={event.live ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : tween} className={cn(rail, event.live ? 'text-warning-fg' : 'text-muted')}>
+      <motion.span animate={live ? { opacity: [0.45, 1, 0.45] } : { opacity: 1 }} transition={live ? { duration: 1.6, repeat: Infinity, ease: 'easeInOut' } : tween} className={cn(rail, live ? 'text-warning-fg' : 'text-muted')}>
         <Icon name="idea" size={18} />
       </motion.span>
       <div className="min-w-0 flex-1 text-md leading-6 text-muted">
         {text ? (
-          <div className={cn('prose-chat prose-thought break-words', event.live && 'thought-tail')}>
-            <ChatMarkdown key={event.live ? `live-${visibleSteps(event.steps).length}` : 'done'} text={text} />
+          <div className={cn('prose-chat prose-thought break-words', live && 'thought-tail')}>
+            <ChatMarkdown key={live ? `live-${visibleSteps(event.steps).length}` : 'done'} text={text} />
           </div>
         ) : (
           <p className="text-shimmer">{t('plan.thinking')}</p>
@@ -106,7 +107,7 @@ export function ThinkingSteps({ event }: { event: Ev<'thinking'> }) {
       </div>
     </div>
   )
-}
+})
 
 export const visibleSteps = (steps: ThinkingStep[]) => steps.filter((s) => s.text.trim().length > 0)
 
@@ -119,7 +120,7 @@ export function duration(seconds: number) {
   return `${Math.floor(seconds / 60)}m ${seconds % 60}s`
 }
 
-export function ToolRunSummary({ event }: { event: Ev<'tools'> }) {
+export const ToolRunSummary = memo(function ToolRunSummary({ event }: { event: Ev<'tools'> }) {
   const last = event.calls.length - 1
   return (
     <ol className="relative">
@@ -132,9 +133,9 @@ export function ToolRunSummary({ event }: { event: Ev<'tools'> }) {
       </AnimatePresence>
     </ol>
   )
-}
+})
 
-export function ToolCallItem({ call, last, single }: { call: ToolCall; last?: boolean; single?: boolean }) {
+export const ToolCallItem = memo(function ToolCallItem({ call, last, single }: { call: ToolCall; last?: boolean; single?: boolean }) {
   const [open, setOpen] = useState(call.state === 'error')
   const hasDetail = call.input != null || call.output !== undefined || call.diff !== undefined || (call.steps?.length ?? 0) > 0
   return (
@@ -161,7 +162,7 @@ export function ToolCallItem({ call, last, single }: { call: ToolCall; last?: bo
       </Collapse>
     </li>
   )
-}
+})
 
 function SubagentSteps({ steps }: { steps: string[] }) {
   const t = useT()
@@ -254,7 +255,7 @@ function ObserverReport({ report }: { report: NonNullable<ReturnType<typeof obse
   )
 }
 
-export function StatusLine({ event }: { event: Ev<'status'> }) {
+export const StatusLine = memo(function StatusLine({ event }: { event: Ev<'status'> }) {
   const report = observerReport(event.text)
   if (report) return <ObserverReport report={report} />
   const notice = backgroundNotice(event.text)
@@ -270,7 +271,7 @@ export function StatusLine({ event }: { event: Ev<'status'> }) {
       {event.text}
     </p>
   )
-}
+})
 
 export function TurnHeader({ startedAt, endedAt, live }: { startedAt: string; endedAt: string; live: boolean }) {
   const t = useT()

@@ -1,8 +1,8 @@
-import { useState, type DragEvent } from 'react'
+import { useMemo, useState } from 'react'
 import { api } from '@/api'
 import type { Item } from '@/api/contract'
 import { errorText, getState, setItems } from '@/api/store'
-import { DRAG_TYPE } from './GroupRow'
+import { report } from '../parts'
 import { TRAY } from './PackageTray'
 
 export const PACKAGE_WORKFLOW = 'package'
@@ -11,7 +11,7 @@ export interface PackageBoard {
   hidden: Set<string>
   draft: string[] | null
   members: (it: Item) => Item[]
-  draggable: (it: Item) => { draggable?: boolean; onDragStart?: (e: DragEvent) => void }
+  accepting: boolean
   move: (target: Item, id: string, from: string | null) => void
   open: () => void
   close: () => void
@@ -40,41 +40,49 @@ async function create(title: string, model: string, ids: string[]): Promise<void
   await send(live, 'link', { items: ids })
 }
 
+export function membersOf(it: Item, items: Item[]): Item[] {
+  return (it.links ?? []).map((id) => items.find((one) => one.id === id)).filter((one): one is Item => !!one)
+}
+
+export function movable(it: Item, accepting: boolean): boolean {
+  return accepting && !grouping(it) && it.group === 'delivered' && !it.archivedAt
+}
+
 export function usePackageBoard(items: Item[]): PackageBoard {
   const [draft, setDraft] = useState<string[] | null>(null)
-  const groups = items.filter((it) => grouping(it) && !it.archivedAt)
-  const linked = new Set(groups.flatMap((it) => it.links ?? []))
-  const hidden = new Set([...linked, ...(draft ?? [])])
-  const accepting = !!draft || groups.some((it) => it.joinable)
-  const loose = (it: Item) => !grouping(it) && !linked.has(it.id) && it.group === 'delivered' && !it.archivedAt
-  return {
-    hidden,
-    draft,
-    members: (it) => (it.links ?? []).map((id) => items.find((one) => one.id === id)).filter((one): one is Item => !!one),
-    draggable: (it) => (accepting && loose(it) && !hidden.has(it.id) ? { draggable: true, onDragStart: (e) => e.dataTransfer.setData(DRAG_TYPE, it.id) } : {}),
-    move: (target, id, from) => {
-      if (from === TRAY) setDraft((d) => d && d.filter((x) => x !== id))
-      const source = from && from !== TRAY ? items.find((it) => it.id === from) : undefined
-      const leave = source && source.id !== target.id ? send(source, 'unlink', { item: id }) : Promise.resolve()
-      void leave.then(() => send(target, 'link', { item: id })).catch(() => undefined)
-    },
-    open: () => setDraft((d) => d ?? []),
-    close: () => setDraft(null),
-    add: (id) => {
-      const it = items.find((one) => one.id === id)
-      if (it && loose(it)) setDraft((d) => (d && !d.includes(id) ? [...d, id] : d))
-    },
-    remove: (id) => setDraft((d) => d && d.filter((x) => x !== id)),
-    build: (title, model) => {
-      const ids = draft ?? []
-      return create(title, model, ids)
-        .then(() => {
-          setDraft(null)
-          return null
-        })
-        .catch((e: unknown) => errorText(e))
-    },
-  }
+  return useMemo(() => {
+    const groups = items.filter((it) => grouping(it) && !it.archivedAt)
+    const linked = new Set(groups.flatMap((it) => it.links ?? []))
+    const loose = (it: Item) => !grouping(it) && !linked.has(it.id) && it.group === 'delivered' && !it.archivedAt
+    return {
+      hidden: new Set([...linked, ...(draft ?? [])]),
+      draft,
+      accepting: !!draft || groups.some((it) => it.joinable),
+      members: (it) => membersOf(it, items),
+      move: (target, id, from) => {
+        if (from === TRAY) setDraft((d) => d && d.filter((x) => x !== id))
+        const source = from && from !== TRAY ? items.find((it) => it.id === from) : undefined
+        const leave = source && source.id !== target.id ? send(source, 'unlink', { item: id }) : Promise.resolve()
+        void leave.then(() => send(target, 'link', { item: id })).catch(report)
+      },
+      open: () => setDraft((d) => d ?? []),
+      close: () => setDraft(null),
+      add: (id) => {
+        const it = items.find((one) => one.id === id)
+        if (it && loose(it)) setDraft((d) => (d && !d.includes(id) ? [...d, id] : d))
+      },
+      remove: (id) => setDraft((d) => d && d.filter((x) => x !== id)),
+      build: (title, model) => {
+        const ids = draft ?? []
+        return create(title, model, ids)
+          .then(() => {
+            setDraft(null)
+            return null
+          })
+          .catch((e: unknown) => errorText(e))
+      },
+    }
+  }, [items, draft])
 }
 
 export { grouping }

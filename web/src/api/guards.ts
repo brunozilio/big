@@ -8,6 +8,7 @@ const num = (v: unknown): v is number => typeof v === 'number' && Number.isFinit
 const bool = (v: unknown): v is boolean => typeof v === 'boolean'
 const strOrNull = (v: unknown) => v === null || str(v)
 const arr = <T>(v: unknown, each: (x: unknown) => x is T): v is T[] => Array.isArray(v) && v.every(each)
+const isRepositoryKind = (v: unknown): v is { key: string; label: string } => obj(v) && str(v.key) && str(v.label)
 
 export function isItem(v: unknown): v is Item {
   if (!obj(v)) return false
@@ -123,7 +124,7 @@ export function isLiveEvent(v: unknown): v is LiveEvent {
     case 'session.suggestion':
       return str(v.session) && (v.suggestion === null || str(v.suggestion))
     case 'connections':
-      return obj(v.connections) && Array.isArray(v.connections.providers) && Array.isArray(v.connections.connections)
+      return obj(v.connections) && Array.isArray(v.connections.providers) && Array.isArray(v.connections.connections) && (v.connections.repositoryKinds === undefined || arr(v.connections.repositoryKinds, isRepositoryKind))
     case 'branding':
       return obj(v.branding) && str(v.branding.name) && (v.branding.language === undefined || ['en', 'es', 'pt-BR'].includes(String(v.branding.language)))
     case 'resync':

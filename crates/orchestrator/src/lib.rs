@@ -19,6 +19,7 @@ mod factory;
 pub mod flows;
 mod git;
 mod kept;
+pub mod kinds;
 mod ledger;
 mod links;
 mod matching;

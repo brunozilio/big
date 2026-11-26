@@ -7,7 +7,7 @@ import { Composer, type ComposerImport } from '@/chat/Composer'
 import { useRememberedModel, useRememberedTuning } from '@/chat/remembered'
 import { currentLanguage, translate, useT } from '@/i18n'
 import { Button, IconButton } from '@/ui/button'
-import { ApplicationDialog } from '../settings/Applications'
+import { ApplicationEditor } from '../settings/ApplicationEditor'
 import { StatusIcon, ProviderLogo } from '@/ui/domain'
 import { Input, SearchInput } from '@/ui/form'
 import { CHIP, ChipPicker } from '@/ui/chipPicker'
@@ -486,7 +486,7 @@ export function NewItem({ onCreated, onAsked }: { onCreated: (it: Item) => void;
         onBtw={ask}
       />
       {error && <p role="alert" className="px-2 text-sm text-danger-fg">{error}</p>}
-      {adding && <ApplicationDialog open application={null} onClose={() => setAdding(false)} />}
+      {adding && <ApplicationEditor application={null} onSaved={() => setAdding(false)} onCancel={() => setAdding(false)} />}
     </div>
   )
 }

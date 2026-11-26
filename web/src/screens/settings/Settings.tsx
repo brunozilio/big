@@ -1,36 +1,66 @@
-import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { api } from '@/api'
 import type { BrandingPatch, Connection, Language, OutputStyle, Provider, Theme } from '@/api/contract'
 import { errorText, setBranding, useStore } from '@/api/store'
+import { SETTINGS_GROUPS, type SettingsTab } from '@/app/settingsNav'
 import { cn } from '@/ui/cn'
-import { Card } from '@/ui/display'
-import { SegmentedControl, Select, UnderlineTabs } from '@/ui/form'
+import { Card, GridSkeleton, ListSkeleton } from '@/ui/display'
+import { SegmentedControl, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
-import { stagger, tween, tweenClose } from '@/ui/motion'
+import { FadeIn } from '@/ui/motion'
 import { LANGUAGES, useLanguage, useT } from '@/i18n'
 import { groupName, styleDescription, styleName } from '@/i18n/server'
-import { BrowserView } from './Browser'
 import { ConnectionCard } from './ConnectionCard'
-import { ApplicationsView } from './Applications'
-import { MemoryView } from './Memory'
-import { PermissionsView } from './Permissions'
-import { UsageView } from './Usage'
 
-export type SettingsTab = 'connections' | 'browser' | 'permissions' | 'memory' | 'applications' | 'usage' | 'appearance'
+export type { SettingsTab } from '@/app/settingsNav'
+
+const BrowserView = lazy(() => import('./Browser').then((m) => ({ default: m.BrowserView })))
+const ApplicationsView = lazy(() => import('./Applications').then((m) => ({ default: m.ApplicationsView })))
+const MemoryView = lazy(() => import('./Memory').then((m) => ({ default: m.MemoryView })))
+const PermissionsView = lazy(() => import('./Permissions').then((m) => ({ default: m.PermissionsView })))
+const UsageView = lazy(() => import('./Usage').then((m) => ({ default: m.UsageView })))
 
 export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTab: (t: SettingsTab) => void; onConnect: (provider: string) => void }) {
-  const t = useT()
   return (
-    <>
-      <UnderlineTabs<SettingsTab> value={tab} onChange={onTab} className="mb-7" options={[{ value: 'connections', label: t('settings.tab_connections') }, { value: 'browser', label: t('settings.tab_browser') }, { value: 'permissions', label: t('settings.tab_permissions') }, { value: 'memory', label: t('settings.tab_memory') }, { value: 'applications', label: t('settings.tab_applications') }, { value: 'usage', label: t('settings.tab_usage') }, { value: 'appearance', label: t('settings.tab_appearance') }]} />
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div key={tab} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={tweenClose}>
+    <div className="md:grid md:grid-cols-[184px_minmax(0,1fr)] md:gap-10">
+      <SettingsNav tab={tab} onTab={onTab} />
+      <FadeIn key={tab} className="min-w-0">
+        <Suspense fallback={<ListSkeleton />}>
           {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'memory' ? <MemoryView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : <CustomView />}
-        </motion.div>
-      </AnimatePresence>
-    </>
+        </Suspense>
+      </FadeIn>
+    </div>
+  )
+}
+
+function SettingsNav({ tab, onTab }: { tab: SettingsTab; onTab: (t: SettingsTab) => void }) {
+  const t = useT()
+  const nav = useRef<HTMLElement>(null)
+  useEffect(() => {
+    nav.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [tab])
+  return (
+    <nav ref={nav} aria-label={t('app.settings')} className="no-scrollbar -mx-5 mb-6 flex gap-1 overflow-x-auto border-b px-5 pb-2 md:sticky md:top-6 md:mx-0 md:mb-0 md:flex-col md:gap-5 md:self-start md:overflow-visible md:border-b-0 md:px-0 md:pb-0">
+      {SETTINGS_GROUPS.map((group) => (
+        <div key={group.key} role="group" aria-label={t(`app.settingsGroup_${group.key}`)} className="contents md:block">
+          <p aria-hidden className="mb-1 hidden px-2.5 text-xs font-medium text-faint md:block">{t(`app.settingsGroup_${group.key}`)}</p>
+          <div className="contents md:flex md:flex-col md:gap-0.5">
+            {group.tabs.map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-current={value === tab ? 'page' : undefined}
+                onClick={() => onTab(value)}
+                className={cn('flex h-9 shrink-0 items-center whitespace-nowrap rounded-control-sm px-2.5 text-base transition-colors', value === tab ? 'bg-active font-medium text-fg' : 'text-muted hover:bg-hover hover:text-fg')}
+              >
+                {t(`settings.tab_${value}`)}
+              </button>
+            ))}
+          </div>
+        </div>
+      ))}
+    </nav>
   )
 }
 
@@ -122,17 +152,17 @@ function ConnectionsView({ onConnect }: { onConnect: (provider: string) => void 
     const el = Array.from(document.querySelectorAll<HTMLElement>('[data-group]')).find((x) => x.dataset.group === focus)
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [focus, loaded])
-  if (!data) return null
+  if (!data) return <GridSkeleton />
   const groups = [...new Set(data.providers.map((p) => p.group))]
   return (
     <div className="space-y-8">
-      {groups.map((g, gi) => (
-        <motion.section key={g} data-group={g} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ ...tween, delay: stagger(gi) }}>
+      {groups.map((g) => (
+        <section key={g} data-group={g}>
           <h2 className={cn('mb-2.5 text-base font-medium transition-colors', focus === g ? 'text-fg' : 'text-muted')}>{groupName(t, g)}</h2>
-          <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
             {data.providers.filter((p) => p.group === g).map((p) => <ConnectionCard key={p.key} provider={p} accounts={accountsOf(p, data.connections)} onConnect={onConnect} />)}
           </div>
-        </motion.section>
+        </section>
       ))}
     </div>
   )

@@ -98,6 +98,12 @@ function checkedBindings(given: Bindings | undefined): Bindings {
   return kept
 }
 
+export function cloudFieldOptions(field: string, chosen: Record<string, string>): BindingOption[] | null {
+  if (field === 'account') return CLOUD_ACCOUNTS.map((a) => ({ value: a.id, label: a.name }))
+  if (field === 'role') return (CLOUD_ACCOUNTS.find((a) => a.id === chosen.account)?.roles ?? []).map((role) => ({ value: role, label: role }))
+  return null
+}
+
 export function cloudOptions(): BindingOption[] {
   return CLOUD_ACCOUNTS.flatMap((a) => a.roles.map((role) => ({ value: `${a.id}/${role}`, label: `${a.name} · ${role}` })))
 }
@@ -118,6 +124,7 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
       e2e: (r.e2e ?? []).map((v) => v.trim()).filter(Boolean),
       e2eDirectory: (r.e2eDirectory ?? '').trim().replace(/^\/+|\/+$/g, ''),
       bindings: checkedBindings(r.bindings),
+      ...(r.readOnly ? { readOnly: true } : {}),
     }
   })
   const env = Object.fromEntries(Object.entries(draft.env ?? {}).map(([k, v]) => [k.trim(), v] as const).filter(([k]) => k))

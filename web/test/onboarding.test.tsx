@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { setApi } from '../src/api'
 import type { Api } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
@@ -63,5 +63,31 @@ describe('primeira vez', () => {
     await waitFor(() => expect(done).toBe(1))
     expect(getState().onboarding).toEqual({ skipped: true })
     expect(localStorage.getItem('onboarding:skipped')).toBeNull()
+  })
+
+  test('a aplicação do onboarding nasce no mesmo editor das configurações, com a pasta escolhida no lugar', async () => {
+    await started()
+    let done = 0
+    render(<TooltipProvider><Onboarding onDone={() => (done += 1)} /></TooltipProvider>)
+    fireEvent.click(screen.getByText('Continuar'))
+    await screen.findByText('Conecte um provedor de IA')
+    fireEvent.click(screen.getByText('Continuar'))
+    await screen.findByText('Crie sua aplicação')
+    expect(screen.getByTestId('application-editor')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Cancelar' })).toBeNull()
+    const create = () => screen.getByText('Criar aplicação').closest('button') as HTMLButtonElement
+    expect(create().disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: 'Diretório local' }))
+    const list = await screen.findByRole('list', { name: 'Pastas' })
+    fireEvent.click(await within(list).findByText('projetos'))
+    fireEvent.click(await within(list).findByText('web'))
+    await waitFor(() => expect(within(list).getByText('src')).toBeTruthy())
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher' }))
+    await waitFor(() => expect((screen.getByLabelText('Nome') as HTMLInputElement).value).toBe('web'))
+    expect(create().disabled).toBe(false)
+    fireEvent.click(create())
+    await waitFor(() => expect(done).toBe(1))
+    expect(getState().applications?.map((a) => a.name)).toEqual(['web'])
+    expect(getState().applications?.[0]?.repositories[0]?.directory.endsWith('/projetos/web')).toBe(true)
   })
 })

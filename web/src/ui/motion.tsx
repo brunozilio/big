@@ -1,5 +1,5 @@
 import { AnimatePresence, animate, motion, useMotionValue, useTransform } from 'framer-motion'
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { currentLocale } from '@/i18n'
 import { cn } from './cn'
 
@@ -14,14 +14,28 @@ export const springPop = { type: 'spring', duration: 0.35, bounce: 0.2 } as cons
 export const stagger = (i: number) => Math.min(i, 6) * dur.stagger
 
 export function Collapse({ open, children, className }: { open: boolean; children: ReactNode; className?: string }) {
+  const [mounted, setMounted] = useState(open)
+  const [expanded, setExpanded] = useState(open)
+  const [settled, setSettled] = useState(open)
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (open) {
+      setMounted(true)
+      box.current?.getBoundingClientRect()
+      setExpanded(true)
+      const id = setTimeout(() => setSettled(true), dur.fast * 1000)
+      return () => clearTimeout(id)
+    }
+    setSettled(false)
+    setExpanded(false)
+    const id = setTimeout(() => setMounted(false), dur.fast * 1000)
+    return () => clearTimeout(id)
+  }, [open])
+  if (!open && !mounted) return null
   return (
-    <AnimatePresence initial={false}>
-      {open && (
-        <motion.div initial={{ height: 0, opacity: 0, overflow: 'hidden' }} animate={{ height: 'auto', opacity: 1, transitionEnd: { overflow: 'visible' } }} exit={{ height: 0, opacity: 0, overflow: 'hidden' }} transition={tween} className={className}>
-          {children}
-        </motion.div>
-      )}
-    </AnimatePresence>
+    <div ref={box} className="fold" data-open={open && expanded} data-settled={open && settled}>
+      <div className={className}>{children}</div>
+    </div>
   )
 }
 
@@ -38,8 +52,8 @@ export function Counter({ value, format = (v: number) => Math.round(v).toLocaleS
   return <motion.span className={cn('tabular-nums', className)}>{text}</motion.span>
 }
 
-const iconHidden = { opacity: 0, scale: 0.25, filter: 'blur(2px)' }
-const iconShown = { opacity: 1, scale: 1, filter: 'blur(0px)' }
+const iconHidden = { opacity: 0, scale: 0.25 }
+const iconShown = { opacity: 1, scale: 1 }
 
 export function IconSwap({ k, children, className }: { k: string | number; children: ReactNode; className?: string }) {
   return (
@@ -51,4 +65,8 @@ export function IconSwap({ k, children, className }: { k: string | number; child
       </AnimatePresence>
     </span>
   )
+}
+
+export function FadeIn({ children, className }: { children: ReactNode; className?: string }) {
+  return <div className={cn('animate-in fade-in-0 duration-150 ease-smooth-out', className)}>{children}</div>
 }

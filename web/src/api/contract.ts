@@ -529,7 +529,7 @@ export type ConnectionCall =
   | { action: 'security.findings'; args: { project: string; open?: boolean; limit?: number }; result: Record<string, unknown>[] }
   | { action: 'security.status'; args: { project: string; since?: string }; result: { status: string; scannedAt: string | null; running?: boolean } }
   | { action: 'quality.report'; args: { project: string; pullRequest?: string; branch?: string }; result: Record<string, unknown> & { status: string } }
-  | { action: `${string}.options`; args: { query?: string; field?: string }; result: BindingOption[] }
+  | { action: `${string}.options`; args: { query?: string; field?: string; chosen?: Record<string, string> }; result: BindingOption[] }
 
 export interface McpTool {
   name: string
@@ -690,6 +690,7 @@ export interface Connection {
 export interface Connections {
   providers: Provider[]
   connections: Connection[]
+  repositoryKinds?: RepositoryKind[]
 }
 
 export type UsageDays = 7 | 30 | 90
@@ -878,6 +879,11 @@ export interface Binding {
 
 export type Bindings = Record<string, Binding>
 
+export interface RepositoryKind {
+  key: string
+  label: string
+}
+
 export type BindingScope = 'application' | 'repository'
 
 export interface BindingSpec {
@@ -887,6 +893,8 @@ export interface BindingSpec {
   multiple?: boolean
   fields?: BindingFieldSpec[]
   each?: BindingEach
+  section?: string
+  order?: number
 }
 
 export interface BindingFieldSpec {
@@ -922,6 +930,7 @@ export interface ApplicationRepository {
   e2eDirectory?: string
   bindings?: Bindings
   flow?: string
+  readOnly?: boolean
 }
 
 export interface Application {

@@ -116,15 +116,47 @@ async fn console_credentials_report_their_identity_through_sts() {
 }
 
 #[tokio::test]
-async fn the_accounts_to_choose_are_the_portal_accounts() {
-    let http = FakeHttp::new()
-        .once(Method::Get, "/assignment/accounts", 200, r#"{"accountList":[{"accountId":"9","accountName":"lab"}]}"#)
-        .once(Method::Get, "/assignment/roles", 200, r#"{"roleList":[{"roleName":"Admin"}]}"#);
-    let options = loaded("aws").accounts(&http, &creds()).await;
-    assert_eq!(
-        options.map(|o| (o[0].label.clone(), o[0].settings["role"].clone())),
-        Ok(("lab".to_owned(), json!("Admin")))
+async fn signing_in_through_sso_chooses_no_account_the_application_does() {
+    let http = FakeHttp::new();
+    let sso = made("sso-at", json!({ "region": "eu-west-1", "start_url": "https://acme.awsapps.com/start" }));
+    let options = loaded("aws").accounts(&http, &sso).await;
+    let Ok(options) = options else { panic!("{options:?}") };
+    assert_eq!(options.len(), 1);
+    assert_eq!(options[0].label, "acme");
+    assert!(options[0].settings.get("account").is_none() && options[0].settings.get("role").is_none());
+    assert!(http.sent().is_empty(), "nothing is listed at sign-in");
+}
+
+#[tokio::test]
+async fn the_application_picks_the_account_and_then_one_of_its_roles() {
+    let http = FakeHttp::new().once(
+        Method::Get,
+        "/assignment/accounts",
+        200,
+        r#"{"accountList":[{"accountId":"111","accountName":"prod"},{"accountId":"222","accountName":"dev"}]}"#,
     );
+    let accounts = checked(&http, &creds(), "cloud.options", &json!({ "field": "account" })).await;
+    assert_eq!(accounts, Ok(json!([{ "value": "111", "label": "prod" }, { "value": "222", "label": "dev" }])));
+    let http = FakeHttp::new().once(
+        Method::Get,
+        "/assignment/roles",
+        200,
+        r#"{"roleList":[{"roleName":"Admin"},{"roleName":"Deploy"}]}"#,
+    );
+    let roles = checked(&http, &creds(), "cloud.options", &json!({ "field": "role", "chosen": { "account": "222" } })).await;
+    assert_eq!(roles, Ok(json!([{ "value": "Admin", "label": "Admin" }, { "value": "Deploy", "label": "Deploy" }])));
+    assert!(http.sent()[0].url.contains("account_id=222"));
+    let none = checked(&FakeHttp::new(), &creds(), "cloud.options", &json!({ "field": "role" })).await;
+    assert_eq!(none, Ok(json!([])), "no role before the account");
+    let profiles = json!([{ "environment": { "value": "prod" }, "account": { "value": "222" }, "role": { "value": "Deploy" } }]);
+    let http = FakeHttp::new().once(
+        Method::Get,
+        "/federation/credentials?account_id=222&role_name=Deploy",
+        200,
+        r#"{"roleCredentials":{"accessKeyId":"ASIA","secretAccessKey":"s","sessionToken":"t"}}"#,
+    );
+    let identity = checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles, "environment": "prod" })).await;
+    assert_eq!(identity.map(|a| (a["account"].clone(), a["role"].clone())), Ok((json!("222"), json!("Deploy"))));
 }
 
 #[tokio::test]

@@ -194,7 +194,7 @@ function changeBinding(language: Language) {
     bindingField("company", pick(language, "Company", "Empresa", "Empresa")),
     bindingField("requester_group", pick(language, "Requester group", "Grupo solicitante", "Grupo solicitante")),
   ];
-  return binding("changes", "application", pick(language, "Change requests", "Cambios", "Mudanças"), { fields, each });
+  return binding("changes", "application", pick(language, "Change requests", "Cambios", "Mudanças"), { fields, each, section: pick(language, "Change management", "Gestión de cambios", "Gestão de mudanças"), order: 80 });
 }
 
 export function presentation({ language }: { language: Language }) {

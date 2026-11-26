@@ -163,7 +163,7 @@ export function AskUserCard({ questions, onSubmit, disabled }: { questions: AskQ
               />
               <AnimatePresence>
                 {other.trim() && (
-                  <motion.span initial={{ opacity: 0, scale: 0.96, filter: 'blur(2px)' }} animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }} exit={{ opacity: 0, scale: 0.96, filter: 'blur(0px)', transition: tweenClose }} transition={tween}>
+                  <motion.span initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.96, transition: tweenClose }} transition={tween}>
                     <Button size="sm" variant="primary" onClick={() => choose(other.trim())} kbd="↵">
                       {t('plan.use')}
                     </Button>

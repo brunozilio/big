@@ -174,9 +174,9 @@ function AttachmentTile({ item, onRemove }: { item: Attachment; onRemove: () => 
   return (
     <motion.div
       layout
-      initial={{ opacity: 0, scale: 0.96, filter: 'blur(2px)' }}
-      animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-      exit={{ opacity: 0, scale: 0.96, filter: 'blur(0px)', transition: tweenClose }}
+      initial={{ opacity: 0, scale: 0.96 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.96, transition: tweenClose }}
       transition={tween}
       style={{ width: TILE, height: TILE }}
       className="group relative shrink-0"
@@ -230,9 +230,9 @@ function AttachmentTile({ item, onRemove }: { item: Attachment; onRemove: () => 
               key="x"
               aria-label={t('chat.remove', { name: item.name })}
               onClick={onRemove}
-              initial={{ opacity: 0, filter: 'blur(2px)', scale: 0.96 }}
-              animate={{ opacity: 1, filter: 'blur(0px)', scale: 1 }}
-              exit={{ opacity: 0, filter: 'blur(2px)', scale: 0.96 }}
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
               transition={tween}
               whileTap={{ scale: 0.97 }}
               className={cn('flex size-[16px] items-center justify-center rounded-full', isImage ? 'bg-black/55 text-white backdrop-blur-sm' : 'text-faint hover:bg-hover hover:text-fg')}
@@ -244,7 +244,7 @@ function AttachmentTile({ item, onRemove }: { item: Attachment; onRemove: () => 
               key="pct"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              exit={{ opacity: 0, filter: 'blur(2px)' }}
+              exit={{ opacity: 0 }}
               transition={tween}
               className={cn('rounded-[4px] px-[3px] text-2xs font-medium tabular-nums leading-[14px]', isImage ? 'bg-black/45 text-white' : 'text-info-fg')}
             >

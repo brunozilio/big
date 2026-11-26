@@ -187,6 +187,15 @@ impl Provider for Picky {
     fn chooses(&self) -> Vec<String> {
         vec!["site".to_owned()]
     }
+
+    fn presentation(&self, _: domain::Language) -> connectors::Presentation {
+        let declared = json!({ "bindings": [
+            { "capability": "tracker", "scope": "application", "label": "Picky", "multiple": true, "section": "Planejamento", "order": 10 },
+            { "capability": "notes", "scope": "repository", "label": "Notas", "section": "Planejamento", "order": 10.5 },
+            { "capability": "plain", "scope": "repository", "label": "Sem seção" },
+        ] });
+        serde_json::from_value(declared).expect("presentation")
+    }
 }
 
 #[derive(Debug, Default)]

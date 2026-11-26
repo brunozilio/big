@@ -23,14 +23,14 @@ function Entry({ it, onReturn }: { it: Item; onReturn: () => void }) {
       <Icon name="drag" size={14} className="text-faint" />
       {it.issue && <IssueKey issue={it.issue} />}
       <span className="truncate text-base text-fg">{titleOf(t, it)}</span>
-      <IconButton tooltip={t('items.returnToDone')} size="sm" className="ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100" onClick={onReturn}><Icon name="close" size={14} /></IconButton>
+      <IconButton tooltip={t('items.returnToDone')} size="sm" className="ml-auto opacity-100 focus-visible:opacity-100 sm:opacity-60 sm:group-hover:opacity-100 [@media(hover:none)]:opacity-100" onClick={onReturn}><Icon name="close" size={14} /></IconButton>
     </li>
   )
 }
 
-type TrayProps = { chosen: Item[]; busy: boolean; error: string | null; onAdd: (id: string) => void; onReturn: (id: string) => void; onCancel: () => void; onCreate: () => void }
+type TrayProps = { chosen: Item[]; busy: boolean; onAdd: (id: string) => void; onReturn: (id: string) => void; onCancel: () => void; onCreate: () => void }
 
-export function PackageTray({ chosen, busy, error, onAdd, onReturn, onCancel, onCreate }: TrayProps) {
+export function PackageTray({ chosen, busy, onAdd, onReturn, onCancel, onCreate }: TrayProps) {
   const t = useT()
   const [over, setOver] = useState(false)
   return (
@@ -50,7 +50,6 @@ export function PackageTray({ chosen, busy, error, onAdd, onReturn, onCancel, on
           <ul>{chosen.map((it) => <Entry key={it.id} it={it} onReturn={() => onReturn(it.id)} />)}</ul>
         )}
         <div className="flex items-center justify-end gap-2 px-1 pt-2">
-          {error && <span className="mr-auto truncate text-sm text-danger-fg">{error}</span>}
           <Button size="sm" variant="ghost" onClick={onCancel} disabled={busy}>{t('items.cancelPackage')}</Button>
           <Button size="sm" variant="primary" disabled={busy || chosen.length === 0} onClick={onCreate}>{t('items.createPackage')}</Button>
         </div>

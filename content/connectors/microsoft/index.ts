@@ -29,7 +29,7 @@ export function presentation({ language }: { language: Language }) {
     choose_title: pick(language, "Microsoft account", "Cuenta de Microsoft", "Conta Microsoft"),
     hidden: false,
     bindings: [
-      binding("files", "application", pick(language, "SharePoint site", "Sitio de SharePoint", "Site do SharePoint"), { multiple: true }),
+      binding("files", "application", pick(language, "SharePoint site", "Sitio de SharePoint", "Site do SharePoint"), { multiple: true, section: pick(language, "Documents", "Documentos", "Documentos"), order: 20 }),
     ],
   };
 }

@@ -131,6 +131,23 @@ fn the_change_binding_declares_common_fields_and_a_profile_per_environment() {
 }
 
 #[test]
+fn the_section_and_the_order_a_connector_declares_reach_the_listing_untouched() {
+    let look = loaded("mock_changes").presentation(Language::English);
+    let spec = look.bindings.first().cloned().unwrap_or_default();
+    assert_eq!(spec.section.as_deref(), Some("Change management"));
+    let sent = serde_json::to_value(&spec).unwrap_or_default();
+    assert_eq!((&sent["section"], &sent["order"]), (&json!("Change management"), &json!(80)));
+    let portuguese = loaded("mock_changes").presentation(Language::Portuguese);
+    assert_eq!(portuguese.bindings[0].section.as_deref(), Some("Gestão de mudanças"));
+    let quality = loaded("sonarqube").presentation(Language::Portuguese).bindings[0].section.clone();
+    assert_eq!(quality, loaded("veracode").presentation(Language::Portuguese).bindings[0].section);
+    let plain: crate::descriptor::BindingSpec =
+        serde_json::from_value(json!({ "capability": "code", "scope": "repository", "label": "Code" })).unwrap_or_default();
+    let sent = serde_json::to_value(&plain).unwrap_or_default();
+    assert!(sent.get("section").is_none() && sent.get("order").is_none(), "{sent}");
+}
+
+#[test]
 fn a_change_unknown_after_a_restart_is_read_back_from_its_reference() {
     let mut mock = Mock::new();
     let read = mock.run("changes.get", &json!({ "change": "mock-100-7" }), "", 200).unwrap_or_default();

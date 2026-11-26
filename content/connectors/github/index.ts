@@ -31,7 +31,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "GitHub", "de GitHub", "do GitHub"),
     choose_title: pick(language, "Organization", "Organización", "Organização"),
     hidden: false,
-    bindings: [binding("code", "repository", "GitHub")],
+    bindings: [binding("code", "repository", "GitHub", { section: pick(language, "Code", "Código", "Código"), order: 30 })],
   };
 }
 

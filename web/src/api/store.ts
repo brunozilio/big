@@ -216,14 +216,42 @@ function stepKey(item: string, step: string, attempt: number | null) {
   return `${item}/${step}/${attempt ?? ''}`
 }
 
+const STEP_SETTLE_MS = 400
+const STEP_SECONDS_BUCKET = 20
+
+export function stepSignature(item: Item, step: string): string {
+  const found = item.steps.find((s) => s.id === step)
+  const here = item.current === step
+  const stuck = here && item.impediment ? item.impediment.reason : ''
+  const asked = here && item.attention ? `${item.attention.action?.step ?? ''}:${item.attention.badge?.text ?? ''}` : ''
+  const change = here && item.change ? `${item.change.key}:${item.change.checks ?? ''}:${item.change.merged}` : ''
+  return [found?.state ?? '', found?.attempts ?? 0, Math.floor((found?.seconds ?? 0) / STEP_SECONDS_BUCKET), item.current ?? '', here && item.live, stuck, asked, change, item.doneAt ?? ''].join('|')
+}
+
+export function useSettled(value: string, scope: string, ms: number): string {
+  const [kept, setKept] = useState({ scope, value })
+  useEffect(() => {
+    if (kept.scope !== scope) {
+      setKept({ scope, value })
+      return
+    }
+    if (kept.value === value) return
+    const timer = setTimeout(() => setKept({ scope, value }), ms)
+    return () => clearTimeout(timer)
+  }, [scope, value, ms, kept])
+  return kept.scope === scope ? kept.value : value
+}
+
 export function useStepView(item: Item | null, step: string | null, attempt: number | null, nonce = 0): Loaded<StepView> {
   const key = item && step ? stepKey(item.id, step, attempt) : ''
-  const loaded = useLoad(item && step ? () => api().step(item.id, step, attempt).then((view) => ({ key, view })) : null, [item?.id, item?.updatedAt, step, attempt, nonce])
+  const signature = useSettled(item && step ? stepSignature(item, step) : '', key, STEP_SETTLE_MS)
+  const loaded = useLoad(item && step ? () => api().step(item.id, step, attempt).then((view) => ({ key, view })) : null, [key, signature, nonce])
   const fresh = loaded.data?.key === key ? loaded.data.view : null
   useEffect(() => {
     if (fresh) seenSteps.set(key, fresh)
   }, [key, fresh])
-  return { ...loaded, data: fresh ?? seenSteps.get(key) ?? loaded.data?.view ?? null }
+  const data = fresh ?? seenSteps.get(key) ?? loaded.data?.view ?? null
+  return { data, error: loaded.error, loading: loaded.loading && !data }
 }
 
 export function useCall<A extends CallAction>(connection: string, action: A, args: CallArgs<A>, version: string | undefined): Loaded<CallResult<A>> {

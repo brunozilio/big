@@ -192,6 +192,10 @@ pub struct BindingSpec {
     pub fields: Vec<BindingField>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub each: Option<BindingEach>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub section: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<serde_json::Number>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

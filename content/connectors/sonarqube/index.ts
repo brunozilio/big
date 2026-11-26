@@ -114,7 +114,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "SonarQube", "de SonarQube", "do SonarQube"),
     choose_title: pick(language, "SonarQube account", "Cuenta de SonarQube", "Conta do SonarQube"),
     hidden: false,
-    bindings: [binding("quality", "repository", "SonarQube")],
+    bindings: [binding("quality", "repository", "SonarQube", { section: pick(language, "Quality and security", "Calidad y seguridad", "Qualidade e segurança"), order: 40 })],
   };
 }
 

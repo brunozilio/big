@@ -75,6 +75,44 @@ export function Skeleton({ className }: { className?: string }) {
   return <div className={cn('skeleton h-3', className)} />
 }
 
+export function CardSkeleton({ className }: { className?: string }) {
+  return (
+    <div aria-hidden className={cn('flex h-14 items-center gap-3 rounded-card bg-surface px-3 shadow-card', className)}>
+      <div className="skeleton size-8 shrink-0 !rounded-[28%]" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <Skeleton className="w-2/5" />
+        <Skeleton className="h-2.5 w-3/4" />
+      </div>
+    </div>
+  )
+}
+
+export function ListSkeleton({ rows = 4, label, className }: { rows?: number; label?: string; className?: string }) {
+  const t = useT()
+  return (
+    <div role="status" aria-busy="true" aria-label={label ?? t('editor.loading')} className={cn('space-y-2.5', className)}>
+      <Skeleton className="mb-4 h-3.5 w-32" />
+      {Array.from({ length: rows }, (_, i) => <CardSkeleton key={i} />)}
+    </div>
+  )
+}
+
+export function GridSkeleton({ groups = 2, cards = 3, label, className }: { groups?: number; cards?: number; label?: string; className?: string }) {
+  const t = useT()
+  return (
+    <div role="status" aria-busy="true" aria-label={label ?? t('editor.loading')} className={cn('space-y-8', className)}>
+      {Array.from({ length: groups }, (_, g) => (
+        <div key={g}>
+          <div className="mb-2.5 flex h-5 items-center"><Skeleton className="h-3.5 w-28" /></div>
+          <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
+            {Array.from({ length: cards }, (_, i) => <CardSkeleton key={i} />)}
+          </div>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export function ProgressBar({ value, tone, onInset }: { value: number; tone?: 'auto' | 'info'; onInset?: boolean }) {
   const pct = Math.min(100, Math.max(0, value))
   const color = tone === 'info' ? 'bg-info' : pct >= 100 ? 'bg-danger' : pct >= 80 ? 'bg-warning' : 'bg-fg'

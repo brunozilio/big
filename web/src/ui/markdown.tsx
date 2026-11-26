@@ -133,7 +133,7 @@ export function MarkdownEditor({
           {full && (
             <RDialog.Portal forceMount>
               <RDialog.Overlay asChild forceMount>
-                <motion.div className="fixed inset-0 z-40 bg-[rgb(20_20_20/0.28)] backdrop-blur-[2px]" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: dur.quick, ease: easeOut }} />
+                <motion.div className="fixed inset-0 z-40 bg-scrim" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: dur.quick, ease: easeOut }} />
               </RDialog.Overlay>
               <RDialog.Content asChild forceMount aria-describedby={undefined}>
                 <motion.div

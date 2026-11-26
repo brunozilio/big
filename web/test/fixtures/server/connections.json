@@ -30,7 +30,30 @@
     },
     {
       "alternatives": [],
-      "bindings": [],
+      "bindings": [
+        {
+          "capability": "tracker",
+          "label": "Picky",
+          "multiple": true,
+          "order": 10,
+          "scope": "application",
+          "section": "Planejamento"
+        },
+        {
+          "capability": "notes",
+          "label": "Notas",
+          "multiple": false,
+          "order": 10.5,
+          "scope": "repository",
+          "section": "Planejamento"
+        },
+        {
+          "capability": "plain",
+          "label": "Sem seção",
+          "multiple": false,
+          "scope": "repository"
+        }
+      ],
       "button": "Entrar com Picky",
       "description": "Sua conta Picky",
       "fields": [],
@@ -171,6 +194,28 @@
       "name": "Antigravity",
       "signIn": "browser",
       "site": "do Antigravity"
+    }
+  ],
+  "repositoryKinds": [
+    {
+      "key": "application",
+      "label": "Aplicação"
+    },
+    {
+      "key": "library",
+      "label": "Biblioteca"
+    },
+    {
+      "key": "configuration",
+      "label": "Configuração"
+    },
+    {
+      "key": "infrastructure",
+      "label": "Infraestrutura"
+    },
+    {
+      "key": "tests",
+      "label": "Testes"
     }
   ]
 }

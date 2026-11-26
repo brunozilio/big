@@ -3,8 +3,8 @@ import { BTW_WORKFLOW } from '../contract'
 import { currentLanguage } from '@/i18n'
 import type { Api, Application, BindingOption, Branding, CallAction, CallArgs, CallResult, Connection, Connections, Item, LiveEvent, Models, OnboardingState, SessionEvent, SignInPoll, SignInStart } from '../contract'
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
-import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, cloudOptions, codeBranches, openPulls, initialApplications, listDirs } from './applications'
-import { initialConnections, MCP_TOOLS, MODELS, providers as allProviders, usageFixture, usageLimitsFixture } from './fixtures'
+import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, cloudFieldOptions, cloudOptions, codeBranches, openPulls, initialApplications, listDirs } from './applications'
+import { initialConnections, MCP_TOOLS, MODELS, providers as allProviders, repositoryKinds, usageFixture, usageLimitsFixture } from './fixtures'
 import { say } from './say'
 import { mockUsage } from './usage'
 import { itemOfSession, sessionById } from './sessions'
@@ -21,7 +21,7 @@ export interface MockOptions {
 
 function wireConnections(): Connections {
   const providers = allProviders().filter((p) => !p.hidden).map(({ capabilities, accounts: _a, choose: _h, paste: _p, hidden: _x, ...p }) => ({ ...p, ai: capabilities.includes('ai') }))
-  return { providers, connections: store.connections.map((c) => ({ ...c, status: c.status ?? 'ok' })) }
+  return { providers, connections: store.connections.map((c) => ({ ...c, status: c.status ?? 'ok' })), repositoryKinds: repositoryKinds() }
 }
 
 export function wireModels(): Models {
@@ -62,12 +62,12 @@ const ENVIRONMENTS: BindingOption[] = [
   { value: 'prod', label: 'Produção' },
 ]
 
-function optionsOf(capability: string, query: string, field = ''): BindingOption[] {
+function optionsOf(capability: string, query: string, field = '', chosen: Record<string, string> = {}): BindingOption[] {
   const wanted = query.toLowerCase()
   const found = (() => {
     if (capability === 'changes') return (CHANGE_OPTIONS[field] ?? []).map((value) => ({ value, label: value }))
     if (capability === 'code') return CODE_REPOS.map((r) => ({ value: r.ref, label: r.ref }))
-    if (capability === 'cloud') return field === 'environment' ? ENVIRONMENTS : cloudOptions()
+    if (capability === 'cloud') return field === 'environment' ? ENVIRONMENTS : (cloudFieldOptions(field, chosen) ?? cloudOptions())
     if (capability === 'security') return SCANNED
     if (capability === 'quality') return [{ value: 'acme_checkout', label: 'acme_checkout' }, { value: 'acme_infra', label: 'acme_infra' }]
     return trackerProjects('').map((p) => ({ value: p.key, label: p.name && p.name !== p.key ? `${p.name} · ${p.key}` : p.key }))
@@ -164,7 +164,7 @@ export function mockApi(options: MockOptions = {}): Api {
   const call = <A extends CallAction>(_connection: string, action: A, args: CallArgs<A>): Promise<CallResult<A>> =>
     wait(() => {
       const a = args as Record<string, string>
-      if (action.endsWith('.options')) return optionsOf(action.slice(0, -'.options'.length), a.query ?? '', a.field ?? '') as CallResult<A>
+      if (action.endsWith('.options')) return optionsOf(action.slice(0, -'.options'.length), a.query ?? '', a.field ?? '', (args as { chosen?: Record<string, string> }).chosen ?? {}) as CallResult<A>
       if (action === 'security.findings') return scannedFindings(a.project ?? '') as CallResult<A>
       if (action === 'security.status') return scanStatusOf(a.project ?? '') as CallResult<A>
       if (action === 'quality.report') return qualityReportOf(a.project ?? '') as unknown as CallResult<A>

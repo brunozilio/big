@@ -40,6 +40,7 @@ export default {
         danger: { DEFAULT: c('danger'), soft: c('danger-soft'), fg: c('danger-fg'), solid: c('danger-solid') },
         teal: { DEFAULT: c('teal'), fg: c('teal-fg') },
         focus: c('focus'),
+        scrim: 'var(--scrim)',
         cat: { 1: c('cat-1'), 2: c('cat-2'), 3: c('cat-3'), 4: c('cat-4'), 5: c('cat-5'), 6: c('cat-6') },
         code: { DEFAULT: c('code-bg'), fg: c('code-fg'), ok: c('code-ok'), err: c('code-err') },
         st: { todo: c('st-todo'), progress: c('st-progress'), review: c('st-review'), done: c('st-done') },
@@ -81,7 +82,8 @@ export default {
         sm: 'var(--shadow-card)',
         lg: 'var(--shadow-pop)',
       },
-      transitionTimingFunction: { out: 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      transitionTimingFunction: { out: 'cubic-bezier(0.22, 1, 0.36, 1)', 'smooth-out': 'cubic-bezier(0.22, 1, 0.36, 1)' },
+      transitionDuration: { 250: '250ms' },
       keyframes: {
         breathe: { '0%,100%': { opacity: '1' }, '50%': { opacity: '0.45' } },
       },

@@ -31,7 +31,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "Atlassian", "de Atlassian", "da Atlassian"),
     choose_title: pick(language, "Jira site", "Sitio de Jira", "Site do Jira"),
     hidden: false,
-    bindings: [binding("tracker", "application", "Jira", { multiple: true })],
+    bindings: [binding("tracker", "application", "Jira", { multiple: true, section: pick(language, "Planning", "Planificación", "Planejamento"), order: 10 })],
   };
 }
 

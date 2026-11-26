@@ -129,6 +129,19 @@ describe('adaptador mock', () => {
     expect(events.every(isLiveEvent)).toBe(true)
   })
 
+  test('conexões declaram a seção dos vínculos e os tipos de repositório', async () => {
+    const listed = await fresh().connections()
+    const specs = listed.providers.flatMap((p) => p.bindings ?? [])
+    expect(specs.length).toBeGreaterThan(0)
+    expect(specs.every((s) => typeof s.section === 'string' && s.section !== '' && typeof s.order === 'number')).toBe(true)
+    const quality = specs.filter((s) => ['quality', 'security', 'tests'].includes(s.capability)).map((s) => s.section)
+    expect(new Set(quality).size).toBe(1)
+    expect(listed.repositoryKinds?.map((k) => k.key)).toEqual(['application', 'library', 'configuration', 'infrastructure', 'tests'])
+    expect(listed.repositoryKinds?.every((k) => k.label !== '')).toBe(true)
+    expect(isLiveEvent({ type: 'connections', connections: listed })).toBe(true)
+    expect(isLiveEvent({ type: 'connections', connections: { ...listed, repositoryKinds: [{ key: 'x' }] } })).toBe(false)
+  })
+
   test('criar item a partir de issue pula a etapa do tracker', async () => {
     const api = fresh()
     const it = await api.createItem({ text: '', issue: { connection: 'c-jira', key: 'APP-251' }, model: 'claude-opus', effort: 'medium', fast: false, attachments: [] })

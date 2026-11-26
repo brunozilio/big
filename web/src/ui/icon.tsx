@@ -1,6 +1,4 @@
-import { createAvatar } from '@dicebear/core'
-import { notionists } from '@dicebear/collection'
-import { useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import { cn } from './cn'
 import { iconData, logoData } from './iconData'
 
@@ -67,15 +65,27 @@ export function Logo({ name, size = 20, className, tile, def: given }: { name: s
 
 const avatarCache = new Map<string, string>()
 
-export function avatarUri(seed: string): string {
+export function avatarUri(seed: string): Promise<string> {
   const hit = avatarCache.get(seed)
-  if (hit) return hit
-  const uri = createAvatar(notionists, { seed, backgroundColor: ['f4e8ff', 'ffe9d6', 'dff4ea', 'e3efff', 'fff3c4', 'ffe1ea'], backgroundType: ['solid'] }).toDataUri()
-  avatarCache.set(seed, uri)
-  return uri
+  if (hit) return Promise.resolve(hit)
+  return import('./avatarArt').then(({ drawAvatar }) => {
+    const uri = drawAvatar(seed)
+    avatarCache.set(seed, uri)
+    return uri
+  })
 }
 
 export function AvatarImg({ seed, size = 24, className, ring = true }: { seed: string; size?: number; className?: string; ring?: boolean }) {
-  const src = useMemo(() => avatarUri(seed), [seed])
-  return <img src={src} alt="" width={size} height={size} className={cn('shrink-0 rounded-full object-cover', ring && 'ring-2 ring-bg', className)} style={{ width: size, height: size }} />
+  const [src, setSrc] = useState(() => avatarCache.get(seed) ?? null)
+  useEffect(() => {
+    let alive = true
+    setSrc(avatarCache.get(seed) ?? null)
+    void avatarUri(seed).then((uri) => alive && setSrc(uri)).catch(() => undefined)
+    return () => {
+      alive = false
+    }
+  }, [seed])
+  const look = cn('shrink-0 rounded-full object-cover', ring && 'ring-2 ring-bg', className)
+  if (!src) return <span aria-hidden className={cn(look, 'inline-block bg-inset')} style={{ width: size, height: size }} />
+  return <img src={src} alt="" width={size} height={size} className={look} style={{ width: size, height: size }} />
 }

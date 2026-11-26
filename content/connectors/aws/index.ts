@@ -42,14 +42,18 @@ export function presentation({ language }: { language: Language }) {
 
 export const ENVIRONMENT = "environment";
 export const ACCOUNT = "account";
+export const ROLE = "role";
 
 function cloudBinding(language: Language) {
   const each = {
     key: ENVIRONMENT,
     label: pick(language, "Environment", "Ambiente", "Ambiente"),
-    fields: [bindingField(ACCOUNT, pick(language, "Account and role", "Cuenta y rol", "Conta e papel"), true)],
+    fields: [
+      bindingField(ACCOUNT, pick(language, "Account", "Cuenta", "Conta"), true),
+      bindingField(ROLE, pick(language, "Role", "Rol", "Papel"), true),
+    ],
   };
-  return binding("cloud", "application", "AWS", { each });
+  return binding("cloud", "application", "AWS", { each, section: pick(language, "Cloud", "Nube", "Nuvem"), order: 70 });
 }
 
 function accessKeys(language: Language) {
@@ -150,8 +154,9 @@ function identity(ctx, creds: Creds, args: Record<string, unknown>) {
   if (keys) return consoleIdentity(ctx, creds, keys);
   const environment = optionalText(args, ENVIRONMENT);
   const bound = boundOf(chosenIn(args.profiles, ENVIRONMENT, ACCOUNT, environment) ?? optionalText(args, "binding"));
+  const chosenRole = chosenIn(args.profiles, ENVIRONMENT, ROLE, environment);
   const account = optionalText(args, "account") ?? bound.account ?? setting(creds, "account") ?? missing("account");
-  const role = optionalText(args, "role") ?? bound.role ?? setting(creds, "role") ?? missing("role");
+  const role = optionalText(args, "role") ?? chosenRole ?? bound.role ?? setting(creds, "role") ?? missing("role");
   const answer = portalGet(ctx, creds, "/federation/credentials", [["account_id", account], ["role_name", role]]);
   const held = answer?.roleCredentials ?? decode("no roleCredentials");
   const expiration = Number.isInteger(held.expiration) ? held.expiration : undefined;
@@ -175,25 +180,50 @@ export function matching(args: Record<string, unknown>, listed: { value: string;
 export function call({ action, args, creds }: { action: string; args: Record<string, unknown>; creds: Creds }, ctx) {
   if (action === "cloud.accounts_and_roles") return accountsAndRoles(ctx, creds);
   if (action === "cloud.identity") return identity(ctx, creds, args ?? {});
-  if (action === "cloud.options") return matching(args ?? {}, args?.field === ENVIRONMENT ? environmentOptions() : cloudOptions(accountsAndRoles(ctx, creds).accounts));
+  if (action === "cloud.options") return matching(args ?? {}, optionsFor(ctx, creds, args ?? {}));
   return unknownAction(action);
 }
 
-function ssoOptions(listed, place: string) {
-  const options = [];
-  for (const account of listed) {
-    const label = account.name || spaced(account.id);
-    for (const role of account.roles) {
-      options.push({ id: `${account.id}/${role}`, label, settings: { account: account.id, role, region: place, detail: role } });
-    }
+function optionsFor(ctx, creds: Creds, args: Record<string, unknown>) {
+  if (args.field === ENVIRONMENT) return environmentOptions();
+  if (args.field === ACCOUNT) return accountOptions(ctx, creds);
+  if (args.field === ROLE) return roleOptions(ctx, creds, args);
+  return cloudOptions(accountsAndRoles(ctx, creds).accounts);
+}
+
+function accountOptions(ctx, creds: Creds) {
+  const keys = keysOf(creds.token);
+  if (keys) {
+    const found = caller(ctx, keys, regionOf(ctx, creds));
+    return [{ value: found.account, label: found.arn.split(/[:/]/).pop() || spaced(found.account) }];
   }
-  return options;
+  return paged(ctx, creds, "/assignment/accounts", [], "accountList")
+    .map((account) => ({ value: textOf(account, "accountId"), label: textOf(account, "accountName") || spaced(textOf(account, "accountId")) }))
+    .filter((account) => account.value !== "");
+}
+
+function roleOptions(ctx, creds: Creds, args: Record<string, unknown>) {
+  if (keysOf(creds.token)) return [];
+  const chosen = args.chosen && typeof args.chosen === "object" ? (args.chosen as Record<string, unknown>) : {};
+  const account = boundOf(typeof chosen[ACCOUNT] === "string" ? chosen[ACCOUNT] : undefined).account;
+  if (account === undefined) return [];
+  return paged(ctx, creds, "/assignment/roles", [["account_id", account]], "roleList")
+    .map((role) => textOf(role, "roleName"))
+    .filter((role) => role !== "")
+    .map((role) => ({ value: role, label: role }));
+}
+
+function ssoSession(creds: Creds, place: string) {
+  const start = setting(creds, "start_url") ?? "";
+  const host = start.replace(/^https?:\/\//, "").split("/")[0] ?? "";
+  const label = host.replace(/\.awsapps\.com$/, "") || "AWS SSO";
+  return [{ id: start || label, label, settings: { region: place, start_url: start } }];
 }
 
 export function accounts({ creds }: { creds: Creds }, ctx) {
   const place = regionOf(ctx, creds);
   const keys = keysOf(creds.token);
-  if (!keys) return ssoOptions(ssoAccounts(ctx, creds), place);
+  if (!keys) return ssoSession(creds, place);
   const found = caller(ctx, keys, place);
   const name = found.arn.split(/[:/]/).pop() ?? "";
   return [

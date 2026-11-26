@@ -117,7 +117,8 @@ pub fn listing(shared: &Shared) -> ApiResult<Value> {
     let mut connections: Vec<Value> =
         records.iter().map(|record| record_json(record, status(shared, record, &lapsed))).collect();
     connections.extend(ai.iter().flat_map(crate::ai::connections_of));
-    Ok(json!({ "providers": providers, "connections": connections }))
+    let kinds = orchestrator::kinds::listed(shared.language());
+    Ok(json!({ "providers": providers, "connections": connections, "repositoryKinds": kinds }))
 }
 
 pub fn announce(shared: &Shared) {

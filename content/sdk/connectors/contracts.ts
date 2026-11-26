@@ -376,9 +376,11 @@ export type BindingField = { key: string; label: string; required?: boolean };
 
 export type BindingEach = { key: string; label: string; fields: BindingField[] };
 
-export type BindingSpec = { capability: string; scope: BindingScope; label: string; multiple?: boolean; fields?: BindingField[]; each?: BindingEach };
+export type BindingShape = { multiple?: boolean; fields?: BindingField[]; each?: BindingEach; section?: string; order?: number };
 
-export function binding(capability: string, scope: BindingScope, label: string, shape: { multiple?: boolean; fields?: BindingField[]; each?: BindingEach } = {}): BindingSpec {
+export type BindingSpec = { capability: string; scope: BindingScope; label: string } & BindingShape;
+
+export function binding(capability: string, scope: BindingScope, label: string, shape: BindingShape = {}): BindingSpec {
   return { capability, scope, label, ...shape };
 }
 
@@ -388,7 +390,7 @@ export function bindingField(key: string, label: string, required = false): Bind
 
 export function options(capability: string): Action {
   const option = object([["value", "string"], ["label", "string"]], [["detail", "string"]]);
-  return read(`${capability}.options`, object([], [["query", "string"], ["field", "string"]]), listOf(option));
+  return read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"]]), listOf(option));
 }
 
 export function projectOptions(found: unknown): { value: string; label: string }[] {

@@ -18,7 +18,7 @@ export function Tooltip({ content, children, side = 'top' }: { content: ReactNod
     <RTooltip.Root>
       <RTooltip.Trigger asChild>{children}</RTooltip.Trigger>
       <RTooltip.Portal>
-        <RTooltip.Content side={side} sideOffset={6} className="z-[60] rounded-control-sm bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-fg shadow-pop origin-[var(--radix-tooltip-content-transform-origin)] data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-[0.98] data-[state=delayed-open]:duration-150 data-[state=delayed-open]:ease-[cubic-bezier(0.22,1,0.36,1)]">
+        <RTooltip.Content side={side} sideOffset={6} className="z-[60] rounded-control-sm bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-fg shadow-pop origin-[var(--radix-tooltip-content-transform-origin)] data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-[0.98] data-[state=delayed-open]:duration-150 data-[state=delayed-open]:ease-smooth-out">
           {content}
         </RTooltip.Content>
       </RTooltip.Portal>
@@ -26,7 +26,7 @@ export function Tooltip({ content, children, side = 'top' }: { content: ReactNod
   )
 }
 
-export const popIn = 'ease-[cubic-bezier(0.22,1,0.36,1)] duration-150 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:duration-[250ms] data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.99] data-[state=closed]:duration-150'
+export const popIn = 'ease-smooth-out duration-150 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:duration-250 data-[side=bottom]:slide-in-from-top-1 data-[side=top]:slide-in-from-bottom-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.99] data-[state=closed]:duration-150'
 
 export function Popover({ trigger, children, align = 'start', className, open, onOpenChange, side }: { trigger: ReactNode; children: ReactNode; align?: 'start' | 'center' | 'end'; className?: string; open?: boolean; onOpenChange?: (o: boolean) => void; side?: 'top' | 'bottom' | 'right' | 'left' }) {
   return (
@@ -80,7 +80,7 @@ export function MenuSeparator() {
 
 const overlayFade = { duration: dur.quick, ease: easeOut }
 
-export function Dialog({ open, onOpenChange, title, description, children, size = 'md', footer, bare, static: still }: { open: boolean; onOpenChange: (o: boolean) => void; title?: ReactNode; description?: ReactNode; children: ReactNode; size?: 'sm' | 'md' | 'lg' | 'xl'; footer?: ReactNode; bare?: boolean; static?: boolean }) {
+export function Dialog({ open, onOpenChange, title, description, children, size = 'md', footer, bare, static: still, placement = 'center' }: { open: boolean; onOpenChange: (o: boolean) => void; title?: ReactNode; description?: ReactNode; children: ReactNode; size?: 'sm' | 'md' | 'lg' | 'xl'; footer?: ReactNode; bare?: boolean; static?: boolean; placement?: 'center' | 'top' }) {
   const t = useT()
   return (
     <RDialog.Root open={open} onOpenChange={onOpenChange}>
@@ -89,14 +89,14 @@ export function Dialog({ open, onOpenChange, title, description, children, size 
           <RDialog.Portal forceMount>
             <RDialog.Overlay asChild forceMount>
               <motion.div
-                className="fixed inset-0 z-40 bg-[rgb(20_20_20/0.28)] backdrop-blur-[2px]"
+                className="fixed inset-0 z-40 bg-scrim"
                 initial={still ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={still ? undefined : { opacity: 0 }}
                 transition={overlayFade}
               />
             </RDialog.Overlay>
-            <div className="pointer-events-none fixed inset-0 z-50 grid place-items-center">
+            <div className={cn('pointer-events-none fixed inset-0 z-50 grid justify-items-center', placement === 'top' ? 'items-start pt-[12dvh]' : 'items-center')}>
             <RDialog.Content asChild forceMount {...(description && !bare ? {} : { 'aria-describedby': undefined })}>
               <motion.div
                 initial={still ? false : { opacity: 0, scale: 0.96 }}
@@ -104,7 +104,9 @@ export function Dialog({ open, onOpenChange, title, description, children, size 
                 exit={still ? undefined : { opacity: 0, scale: 0.96, transition: tweenClose }}
                 transition={tween}
                 className={cn(
-                  'pointer-events-auto max-h-[88dvh] w-[calc(100vw-32px)] overflow-y-auto rounded-overlay bg-surface shadow-float outline-none',
+                  'pointer-events-auto w-[calc(100vw-32px)] rounded-overlay bg-surface shadow-float outline-none',
+                  placement === 'top' ? 'max-h-[76dvh]' : 'max-h-[88dvh]',
+                  bare ? 'overflow-y-auto' : 'flex flex-col overflow-hidden',
                   size === 'sm' && 'max-w-md',
                   size === 'md' && 'max-w-xl',
                   size === 'lg' && 'max-w-3xl',
@@ -118,8 +120,8 @@ export function Dialog({ open, onOpenChange, title, description, children, size 
                   </>
                 ) : (
                   <>
-                    <div className="flex items-start justify-between gap-4 px-6 pt-6">
-                      <div>
+                    <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
+                      <div className="min-w-0">
                         {title ? <RDialog.Title className="text-lg font-medium tracking-tightish text-fg">{title}</RDialog.Title> : <RDialog.Title className="sr-only">{t('editor.dialog')}</RDialog.Title>}
                         {description && <RDialog.Description className="mt-1 text-base text-muted">{description}</RDialog.Description>}
                       </div>
@@ -127,8 +129,8 @@ export function Dialog({ open, onOpenChange, title, description, children, size 
                         <Icon name="close" size={18} />
                       </RDialog.Close>
                     </div>
-                    <div className="px-6 py-5">{children}</div>
-                    {footer && <div className="flex justify-end gap-2 border-t px-6 py-4">{footer}</div>}
+                    <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-6 py-5">{children}</div>
+                    {footer && <div className="flex shrink-0 justify-end gap-2 border-t px-6 py-4">{footer}</div>}
                   </>
                 )}
               </motion.div>

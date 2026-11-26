@@ -61,7 +61,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "Veracode", "de Veracode", "do Veracode"),
     choose_title: pick(language, "Veracode account", "Cuenta de Veracode", "Conta do Veracode"),
     hidden: false,
-    bindings: [binding("security", "repository", "Veracode")],
+    bindings: [binding("security", "repository", "Veracode", { section: pick(language, "Quality and security", "Calidad y seguridad", "Qualidade e segurança"), order: 50 })],
   };
 }
 

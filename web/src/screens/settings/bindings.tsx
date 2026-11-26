@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/api'
-import type { Binding, BindingChoice, BindingEach, BindingFieldSpec, BindingOption, Bindings, BindingScope, Connection, Provider } from '@/api/contract'
+import type { Api, Binding, BindingChoice, BindingEach, BindingFieldSpec, BindingOption, Bindings, BindingScope, Connection, Provider } from '@/api/contract'
 import { errorText, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
+import { cn } from '@/ui/cn'
 import { Card } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
 import { Field, Select } from '@/ui/form'
@@ -20,6 +21,8 @@ export interface BindingField {
   sources: Source[]
   multiple?: boolean
   shape?: BindingShape
+  section?: string
+  order?: number
 }
 
 export interface BindingShape {
@@ -47,16 +50,41 @@ export function fieldsOf(connections: Connection[], providers: Provider[], scope
       if (spec.scope !== scope || !connection.capabilities.includes(spec.capability)) continue
       const known = fields.find((f) => f.capability === spec.capability)
       const shape = spec.fields?.length || spec.each ? { fields: spec.fields ?? [], each: spec.each ?? null } : undefined
-      if (!known) fields.push({ capability: spec.capability, label: spec.label, sources: [{ connection, provider: provider as Provider }], multiple: spec.multiple === true, ...(shape ? { shape } : {}) })
+      const placed = { ...(spec.section ? { section: spec.section } : {}), ...(spec.order === undefined ? {} : { order: spec.order }) }
+      if (!known) fields.push({ capability: spec.capability, label: spec.label, sources: [{ connection, provider: provider as Provider }], multiple: spec.multiple === true, ...(shape ? { shape } : {}), ...placed })
       else {
         if (!known.shape && shape) known.shape = shape
+        if (!known.section && spec.section) known.section = spec.section
+        if (known.order === undefined && spec.order !== undefined) known.order = spec.order
         known.sources.push({ connection, provider: provider as Provider })
         known.multiple = known.multiple || spec.multiple === true
         if (!known.label.split(' / ').includes(spec.label)) known.label = `${known.label} / ${spec.label}`
       }
     }
   }
-  return fields
+  return ordered(fields)
+}
+
+const LAST = Number.MAX_SAFE_INTEGER
+
+function ordered(fields: BindingField[]): BindingField[] {
+  return fields.map((field, at) => ({ field, at })).sort((a, b) => (a.field.order ?? LAST) - (b.field.order ?? LAST) || a.at - b.at).map((placed) => placed.field)
+}
+
+export interface FieldGroup {
+  section: string | null
+  fields: BindingField[]
+}
+
+export function groupedBySection(fields: BindingField[]): FieldGroup[] {
+  const groups: FieldGroup[] = [{ section: null, fields: [] }]
+  for (const field of fields) {
+    const section = field.section?.trim() || null
+    const known = groups.find((g) => g.section === section)
+    if (known) known.fields.push(field)
+    else groups.push({ section, fields: [field] })
+  }
+  return groups
 }
 
 export function useBindingFields(scope: BindingScope): BindingField[] {
@@ -65,6 +93,7 @@ export function useBindingFields(scope: BindingScope): BindingField[] {
 }
 
 const PAUSE = 250
+const FRESH_MS = 30_000
 
 type Found = Record<string, BindingOption[]>
 
@@ -76,7 +105,35 @@ export interface Search {
 
 type Listed = { found: Found; failed: string | null }
 
-function lookup(connections: string[], action: `${string}.options`, args: { query: string; field?: string }): Promise<Listed> {
+type Asked = { query: string; field?: string; chosen?: Record<string, string> }
+
+type Kept = { at: number; listed: Listed }
+
+const kept = new WeakMap<Api, Map<string, Kept>>()
+const flying = new WeakMap<Api, Map<string, Promise<Listed>>>()
+
+function shelf<T>(all: WeakMap<Api, Map<string, T>>): Map<string, T> {
+  const owner = api()
+  const known = all.get(owner)
+  if (known) return known
+  const made = new Map<string, T>()
+  all.set(owner, made)
+  return made
+}
+
+function keyOf(connections: string[], action: string, args: Asked): string {
+  return JSON.stringify([connections, action, args.field ?? '', args.chosen ?? {}, args.query])
+}
+
+function recalled(key: string): Listed | null {
+  const hit = shelf(kept).get(key)
+  if (!hit) return null
+  if (Date.now() - hit.at <= FRESH_MS) return hit.listed
+  shelf(kept).delete(key)
+  return null
+}
+
+function asked(connections: string[], action: `${string}.options`, args: Asked): Promise<Listed> {
   let failed: string | null = null
   const each = connections.map((connection) =>
     api()
@@ -87,26 +144,60 @@ function lookup(connections: string[], action: `${string}.options`, args: { quer
   return Promise.all(each).then((pairs) => ({ found: Object.fromEntries(pairs), failed }))
 }
 
-export function useSearch(connections: string[], capability: string, field?: string, eager = false): Search {
+function lookup(connections: string[], action: `${string}.options`, args: Asked): Promise<Listed> {
+  const key = keyOf(connections, action, args)
+  const hit = recalled(key)
+  if (hit) return Promise.resolve(hit)
+  const running = shelf(flying)
+  const known = running.get(key)
+  if (known) return known
+  const store = shelf(kept)
+  const sent = asked(connections, action, args)
+    .then((listed) => {
+      if (!listed.failed) store.set(key, { at: Date.now(), listed })
+      return listed
+    })
+    .finally(() => running.delete(key))
+  running.set(key, sent)
+  return sent
+}
+
+type Shown = { scope: string; found: Found; failed: string | null }
+
+const NOTHING: Found = {}
+
+export function useSearch(connections: string[], capability: string, field?: string, eager = false, chosen?: Record<string, string>): Search {
   const t = useT()
+  const [active, setActive] = useState(false)
   const [query, setQuery] = useState('')
-  const [found, setFound] = useState<Found>({})
-  const [failed, setFailed] = useState<string | null>(null)
+  const [shown, setShown] = useState<Shown>({ scope: '', found: NOTHING, failed: null })
   const [busy, setBusy] = useState(false)
+  const begun = useRef(false)
   const wanted = connections.filter(Boolean).join('|')
+  const given = chosen && Object.keys(chosen).length > 0 ? JSON.stringify(chosen) : ''
+  const scope = `${wanted} ${capability} ${field ?? ''} ${given}`
   useEffect(() => {
+    if (!active) return
     const typed = query.trim()
-    const asked = (typed !== '' || eager) && wanted !== ''
-    setFound({})
-    setFailed(null)
-    setBusy(asked)
-    if (!asked) return
+    if ((typed === '' && !eager) || wanted === '') {
+      setShown({ scope, found: NOTHING, failed: null })
+      setBusy(false)
+      return
+    }
+    const ids = wanted.split('|')
+    const args: Asked = { query: typed, ...(field ? { field } : {}), ...(given ? { chosen: JSON.parse(given) as Record<string, string> } : {}) }
+    const hit = recalled(keyOf(ids, `${capability}.options`, args))
+    if (hit) {
+      setShown({ scope, found: hit.found, failed: hit.failed })
+      setBusy(false)
+      return
+    }
+    setBusy(true)
     let alive = true
     const timer = setTimeout(() => {
-      lookup(wanted.split('|'), `${capability}.options`, { query: typed, ...(field ? { field } : {}) }).then((listed) => {
+      void lookup(ids, `${capability}.options`, args).then((listed) => {
         if (!alive) return
-        setFound(listed.found)
-        setFailed(listed.failed)
+        setShown({ scope, found: listed.found, failed: listed.failed })
         setBusy(false)
       })
     }, typed === '' ? 0 : PAUSE)
@@ -114,10 +205,18 @@ export function useSearch(connections: string[], capability: string, field?: str
       alive = false
       clearTimeout(timer)
     }
-  }, [query, wanted, capability, field, eager])
+  }, [active, query, wanted, capability, field, eager, given, scope])
+  const search = useCallback((next: string) => {
+    if (!begun.current && eager) setBusy(true)
+    begun.current = true
+    setActive(true)
+    setQuery(next)
+  }, [eager])
+  const found = shown.scope === scope ? shown.found : NOTHING
+  const failed = shown.scope === scope ? shown.failed : null
   const empty = Object.values(found).every((listed) => listed.length === 0)
   const hint = busy ? t('settings.search_busy') : failed && empty ? failed : query.trim() === '' && !eager ? t('settings.search_type') : empty ? t('settings.search_empty') : undefined
-  return { found, search: setQuery, hint }
+  return { found, search, hint }
 }
 
 export function withBinding(bindings: Bindings | undefined, capability: string, next: Binding | null): Bindings {
@@ -126,21 +225,45 @@ export function withBinding(bindings: Bindings | undefined, capability: string, 
   return next ? { ...rest, [capability]: next } : rest
 }
 
-export async function suggested(ref: string | null, fields: BindingField[], current: Bindings | undefined): Promise<Bindings> {
-  let bindings: Bindings = { ...(current ?? {}) }
-  if (!ref) return bindings
-  for (const field of fields) {
-    if (bindings[field.capability] || field.shape) continue
-    const { found: listed } = await lookup(field.sources.map((s) => s.connection.id), `${field.capability}.options`, { query: ref })
+const plain = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+
+function partsOf(option: BindingOption): string[] {
+  const pieces = [option.value, option.label].flatMap((text) => text.split(/[/:\\·|]+/)).map((piece) => piece.trim())
+  return pieces.flatMap((piece) => [piece, piece.replace(/^[^_]+_/, '')]).map(plain).filter(Boolean)
+}
+
+export function matching(options: BindingOption[], names: string[]): BindingOption | undefined {
+  for (const name of names.map(plain).filter(Boolean)) {
+    const whole = options.find((o) => plain(o.value) === name || plain(o.label) === name)
+    const found = whole ?? options.find((o) => partsOf(o).includes(name))
+    if (found) return found
+  }
+  return undefined
+}
+
+function namesOf(ref: string | null, also: string[]): string[] {
+  const given = [ref ?? '', ref ? (ref.split('/').pop() ?? '') : '', ...also].map((name) => name.trim()).filter(Boolean)
+  return [...new Set(given)]
+}
+
+async function suggestion(field: BindingField, names: string[]): Promise<Binding | null> {
+  const connections = field.sources.map((s) => s.connection.id)
+  const answers = await Promise.all(names.map((query) => lookup(connections, `${field.capability}.options`, { query })))
+  for (const { found: listed } of answers) {
     for (const [connection, options] of Object.entries(listed)) {
-      const found = options.find((o) => o.value.toLowerCase() === ref.toLowerCase())
-      if (found) {
-        bindings = withBinding(bindings, field.capability, { connection, value: found.value, label: found.label })
-        break
-      }
+      const found = matching(options, names)
+      if (found) return { connection, value: found.value, label: found.label }
     }
   }
-  return bindings
+  return null
+}
+
+export async function suggested(ref: string | null, fields: BindingField[], current: Bindings | undefined, also: string[] = []): Promise<Bindings> {
+  const names = namesOf(ref, also)
+  if (names.length === 0) return { ...(current ?? {}) }
+  const open = fields.filter((field) => !current?.[field.capability] && !field.shape)
+  const found = await Promise.all(open.map((field) => suggestion(field, names)))
+  return open.reduce<Bindings>((bindings, field, at) => (found[at] ? withBinding(bindings, field.capability, found[at]) : bindings), { ...(current ?? {}) })
 }
 
 export function BindingSelect({ field, value, onChange }: { field: BindingField; value: Binding | undefined; onChange: (next: Binding | null) => void }) {
@@ -199,11 +322,16 @@ function MoreChoices({ field, value, onChange }: { field: BindingField; value: B
   )
 }
 
-export function BindingFields({ fields, bindings, onChange }: { fields: BindingField[]; bindings: Bindings | undefined; onChange: (next: Bindings) => void }) {
+export interface BindingProblem {
+  capability: string
+  text: string
+}
+
+export const BindingFields = memo(function BindingFields({ fields, bindings, problem, onChange }: { fields: BindingField[]; bindings: Bindings | undefined; problem?: BindingProblem | null; onChange: (next: Bindings) => void }) {
   return (
     <>
       {fields.map((field) => field.shape ? (
-        <ShapedBinding key={field.capability} field={field} shape={field.shape} value={bindings?.[field.capability]} onChange={(next) => onChange(withBinding(bindings, field.capability, next))} />
+        <ShapedBinding key={field.capability} field={field} shape={field.shape} value={bindings?.[field.capability]} error={problem?.capability === field.capability ? problem.text : undefined} onChange={(next) => onChange(withBinding(bindings, field.capability, next))} />
       ) : (
         <div key={field.capability}>
           <BindingSelect field={field} value={bindings?.[field.capability]} onChange={(next) => {
@@ -218,33 +346,33 @@ export function BindingFields({ fields, bindings, onChange }: { fields: BindingF
       ))}
     </>
   )
-}
+})
 
 type Choices = Record<string, BindingChoice>
 
 const filled = (choices: Choices | undefined, key: string) => Boolean(choices?.[key]?.value.trim())
 
-export function missingOf(fields: BindingField[], bindings: Bindings | undefined): { field: string; binding: string } | null {
+export function missingOf(fields: BindingField[], bindings: Bindings | undefined): { field: string; binding: string; capability: string } | null {
   for (const field of fields) {
     const bound = bindings?.[field.capability]
     if (!field.shape || !bound?.connection) continue
     const lack = field.shape.fields.find((spec) => spec.required && !filled(bound.fields, spec.key))
-    if (lack) return { field: lack.label, binding: field.label }
+    if (lack) return { field: lack.label, binding: field.label, capability: field.capability }
     const each = field.shape.each
     if (!each) continue
     const profiles = (bound.profiles ?? []).filter((profile) => Object.values(profile).some((choice) => choice?.value.trim()))
     for (const profile of profiles) {
-      if (!filled(profile, each.key)) return { field: each.label, binding: field.label }
+      if (!filled(profile, each.key)) return { field: each.label, binding: field.label, capability: field.capability }
       const gap = each.fields.find((spec) => spec.required && !filled(profile, spec.key))
-      if (gap) return { field: `${gap.label} (${profile[each.key]?.label || profile[each.key]?.value})`, binding: field.label }
+      if (gap) return { field: `${gap.label} (${profile[each.key]?.label || profile[each.key]?.value})`, binding: field.label, capability: field.capability }
     }
   }
   return null
 }
 
-function ChoiceSelect({ spec, connection, capability, value, onChange }: { spec: BindingFieldSpec; connection: string; capability: string; value: BindingChoice | undefined; onChange: (next: BindingChoice | null) => void }) {
+function ChoiceSelect({ spec, connection, capability, value, chosen, onChange }: { spec: BindingFieldSpec; connection: string; capability: string; value: BindingChoice | undefined; chosen?: Record<string, string>; onChange: (next: BindingChoice | null) => void }) {
   const t = useT()
-  const { found, search, hint } = useSearch([connection], capability, spec.key, true)
+  const { found, search, hint } = useSearch([connection], capability, spec.key, true, chosen)
   const options = found[connection] ?? []
   const label = spec.required ? `${spec.label} *` : spec.label
   const choices = [{ value: NONE, label: t('settings.none') }, ...options.map((o) => ({ value: o.value, label: o.label }))]
@@ -265,6 +393,18 @@ function withChoice(choices: Choices | undefined, key: string, next: BindingChoi
   return next ? { ...rest, [key]: next } : rest
 }
 
+function chosenOf(choices: Choices, except: string): Record<string, string> {
+  return Object.fromEntries(Object.entries(choices).filter(([key, choice]) => key !== except && choice?.value).map(([key, choice]) => [key, choice.value]))
+}
+
+function withDependent(choices: Choices, specs: BindingFieldSpec[], key: string, next: BindingChoice | null): Choices {
+  const at = specs.findIndex((spec) => spec.key === key)
+  const changed = (choices[key]?.value ?? '') !== (next?.value ?? '')
+  const later = changed && at >= 0 ? specs.slice(at + 1).map((spec) => spec.key) : []
+  const kept: Choices = Object.fromEntries(Object.entries(choices).filter(([name]) => !later.includes(name)))
+  return withChoice(kept, key, next)
+}
+
 function ProfileCard({ each, connection, capability, value, onChange, onRemove }: { each: BindingEach; connection: string; capability: string; value: Choices; onChange: (next: Choices) => void; onRemove: () => void }) {
   const t = useT()
   const head = { key: each.key, label: each.label, required: true }
@@ -275,7 +415,7 @@ function ProfileCard({ each, connection, capability, value, onChange, onRemove }
         <IconButton tooltip={t('settings.app_bindingRemove', { label: each.label })} size="sm" onClick={onRemove}><Icon name="trash" size={15} /></IconButton>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        {each.fields.map((spec) => <ChoiceSelect key={spec.key} spec={spec} connection={connection} capability={capability} value={value[spec.key]} onChange={(next) => onChange(withChoice(value, spec.key, next))} />)}
+        {each.fields.map((spec) => <ChoiceSelect key={spec.key} spec={spec} connection={connection} capability={capability} value={value[spec.key]} chosen={chosenOf(value, spec.key)} onChange={(next) => onChange(withDependent(value, each.fields, spec.key, next))} />)}
       </div>
     </Card>
   )
@@ -291,18 +431,20 @@ function ConnectionSelect({ field, value, onChange }: { field: BindingField; val
   )
 }
 
-export function ShapedBinding({ field, shape, value, onChange }: { field: BindingField; shape: BindingShape; value: Binding | undefined; onChange: (next: Binding | null) => void }) {
+export function ShapedBinding({ field, shape, value, error, onChange }: { field: BindingField; shape: BindingShape; value: Binding | undefined; error?: string; onChange: (next: Binding | null) => void }) {
   const t = useT()
   const single = field.sources.length === 1 ? field.sources[0].connection.id : ''
-  const connection = value?.connection || single
+  const live = field.sources.some((s) => s.connection.id === value?.connection)
+  const connection = live && value ? value.connection : single
   const current: Binding = { connection, value: value?.value ?? '', fields: value?.fields ?? {}, profiles: value?.profiles ?? [] }
   const set = (next: Partial<Binding>) => onChange({ ...current, ...next })
   const profiles = current.profiles ?? []
   const each = shape.each
   return (
-    <div className="space-y-3 sm:col-span-2" data-testid={`binding-${field.capability}`}>
+    <div className={cn('space-y-3 sm:col-span-2', error && '-m-2 rounded-control p-2 shadow-[inset_0_0_0_1px_rgb(var(--danger)/0.45)]')} data-testid={`binding-${field.capability}`} data-invalid={error ? 'true' : undefined}>
       <p className="text-base font-medium text-fg">{field.label}</p>
-      {field.sources.length > 1 && <ConnectionSelect field={field} value={value?.connection ?? ''} onChange={(next) => onChange(next ? { connection: next, value: '', fields: {}, profiles: [] } : null)} />}
+      {error && <p className="flex items-center gap-1 text-xs text-danger-fg" data-testid="binding-error"><Icon name="alert" size={13} />{error}</p>}
+      {field.sources.length > 1 && <ConnectionSelect field={field} value={live ? (value?.connection ?? '') : ''} onChange={(next) => onChange(next ? { connection: next, value: '', fields: {}, profiles: [] } : null)} />}
       {connection && shape.fields.length > 0 && (
         <div className="grid gap-3 sm:grid-cols-2">
           {shape.fields.map((spec) => <ChoiceSelect key={spec.key} spec={spec} connection={connection} capability={field.capability} value={current.fields?.[spec.key]} onChange={(next) => set({ fields: withChoice(current.fields, spec.key, next) })} />)}

@@ -198,6 +198,10 @@ async fn options(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<V
             wanted[name] = json!(value);
         }
     }
+    let chosen = chosen_of(&args["chosen"]);
+    if !chosen.is_empty() {
+        wanted["chosen"] = Value::Object(chosen);
+    }
     let found = caller.call(action, wanted).await?;
     let listed: Vec<Value> = items(&found)
         .iter()
@@ -209,6 +213,16 @@ async fn options(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<V
         .filter(|option| !text(&option["value"]).is_empty())
         .collect();
     Ok(json!(listed))
+}
+
+fn chosen_of(given: &Value) -> serde_json::Map<String, Value> {
+    let pairs = given.as_object().into_iter().flatten();
+    pairs
+        .filter_map(|(name, value)| {
+            let text = value.as_str().map(str::trim).filter(|text| !text.is_empty())?;
+            Some((name.clone(), json!(text)))
+        })
+        .collect()
 }
 
 async fn projects(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<Value> {

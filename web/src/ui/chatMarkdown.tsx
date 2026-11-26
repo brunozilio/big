@@ -1,4 +1,4 @@
-import { createContext, isValidElement, useContext, useEffect, useRef, useState, type ComponentPropsWithoutRef, type MouseEvent, type ReactNode } from 'react'
+import { createContext, isValidElement, memo, useContext, useEffect, useRef, useState, type ComponentPropsWithoutRef, type MouseEvent, type ReactNode } from 'react'
 import ReactMarkdown, { defaultUrlTransform, type Components } from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import type { FileRef } from '@/api/contract'
@@ -26,6 +26,7 @@ type Stream = { seen: number; counted: number; last: number }
 
 const GAP = 30
 const MAX_LAG = 700
+const SETTLE = 1600
 
 const StreamContext = createContext<Stream | null>(null)
 
@@ -44,11 +45,25 @@ export function splitWords(node: HastNode, counter: { n: number }): void {
   })
 }
 
+export function countWords(node: HastNode): number {
+  if (node.tagName && untouched.has(node.tagName)) return 0
+  if (node.type === 'text') return (node.value ?? '').split(/\s+/).filter(Boolean).length
+  let total = 0
+  for (const child of node.children ?? []) total += countWords(child)
+  return total
+}
+
 function rehypeWords(stream: Stream) {
   return () => (tree: HastNode) => {
     const counter = { n: 0 }
     splitWords(tree, counter)
     stream.counted = counter.n
+  }
+}
+
+function rehypeCount(stream: Stream) {
+  return () => (tree: HastNode) => {
+    stream.counted = countWords(tree)
   }
 }
 
@@ -120,20 +135,39 @@ const components: Components = {
   },
 }
 
-export function ChatMarkdown({ text }: { text: string }) {
-  const stream = useRef<Stream>({ seen: 0, counted: 0, last: 0 }).current
-  const plugins = useRef([rehypeWords(stream)]).current
-  const mounted = useRef(false)
-  if (!mounted.current) stream.seen = Number.MAX_SAFE_INTEGER
+const remark = [remarkGfm]
+
+function useStreaming(text: string): boolean {
+  const last = useRef(text)
+  const streaming = useRef(false)
+  const [, settle] = useState(0)
+  if (last.current !== text) {
+    last.current = text
+    streaming.current = true
+  }
   useEffect(() => {
-    mounted.current = true
+    if (!streaming.current) return
+    const timer = setTimeout(() => {
+      streaming.current = false
+      settle((n) => n + 1)
+    }, SETTLE)
+    return () => clearTimeout(timer)
+  }, [text])
+  return streaming.current
+}
+
+export const ChatMarkdown = memo(function ChatMarkdown({ text }: { text: string }) {
+  const stream = useRef<Stream>({ seen: 0, counted: 0, last: 0 }).current
+  const plugins = useRef({ split: [rehypeWords(stream)], count: [rehypeCount(stream)] }).current
+  const streaming = useStreaming(text)
+  useEffect(() => {
     stream.seen = stream.counted
   })
   return (
     <StreamContext.Provider value={stream}>
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={plugins} components={components} urlTransform={urlTransform}>
+      <ReactMarkdown remarkPlugins={remark} rehypePlugins={streaming ? plugins.split : plugins.count} components={components} urlTransform={urlTransform}>
         {text}
       </ReactMarkdown>
     </StreamContext.Provider>
   )
-}
+})

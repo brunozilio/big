@@ -1,4 +1,4 @@
-import type { Agent, Model, Person, Provider, Usage, UsageDays, UsageLimits } from '../contract'
+import type { Agent, Model, Person, Provider, RepositoryKind, Usage, UsageDays, UsageLimits } from '../contract'
 import { say } from './say'
 import { SONAR_LOGO, VERACODE_LOGO } from './security'
 import type { ConnectionState, Need } from './sim'
@@ -9,13 +9,21 @@ export const MCP_TOOLS = [{ name: 'search' }, { name: 'fetch' }]
 
 export type MockProvider = Provider & { capabilities: string[]; accounts: string[]; paste?: boolean; hidden?: boolean; choose?: { title: string; options: { id: string; label: string; detail: string }[] } }
 
+export const repositoryKinds = (): RepositoryKind[] => [
+  { key: 'application', label: say('kindApplication') },
+  { key: 'library', label: say('kindLibrary') },
+  { key: 'configuration', label: say('kindConfiguration') },
+  { key: 'infrastructure', label: say('kindInfrastructure') },
+  { key: 'tests', label: say('kindTests') },
+]
+
 export const providers = (): MockProvider[] => [
-  { key: 'github', name: 'GitHub', group: 'code', description: say('yourAccount', { name: 'GitHub' }), logo: 'github', button: say('signInWith', { name: 'GitHub' }), site: say('siteGithub'), signIn: 'device', fields: [], multiple: true, bindings: [{ capability: 'code', scope: 'repository', label: say('bindRepository') }], capabilities: ['code'],
+  { key: 'github', name: 'GitHub', group: 'code', description: say('yourAccount', { name: 'GitHub' }), logo: 'github', button: say('signInWith', { name: 'GitHub' }), site: say('siteGithub'), signIn: 'device', fields: [], multiple: true, bindings: [{ capability: 'code', scope: 'repository', label: say('bindRepository'), section: say('sectionCode'), order: 30 }], capabilities: ['code'],
     alternatives: [{
       key: 'api_token', label: say('usePat'), button: say('connect'), site: say('siteGithub'), signIn: 'token',
       fields: [{ name: 'token', label: say('ghTokenLabel'), kind: 'text', mono: true, secret: true, help: say('ghTokenHelp') }],
     }], accounts: [say('ghAccount')], choose: { title: say('organization'), options: [{ id: 'acme', label: 'acme', detail: 'acme/checkout, acme/web, acme/infra' }] } },
-  { key: 'jira', name: 'Jira', group: 'tracker', description: say('yourAccount', { name: 'Atlassian' }), logo: 'jira', button: say('continueAt', { name: 'Atlassian' }), site: say('siteAtlassian'), signIn: 'oauth', fields: [], multiple: true, bindings: [{ capability: 'tracker', scope: 'application', label: say('bindSpace') }], capabilities: ['tracker'],
+  { key: 'jira', name: 'Jira', group: 'tracker', description: say('yourAccount', { name: 'Atlassian' }), logo: 'jira', button: say('continueAt', { name: 'Atlassian' }), site: say('siteAtlassian'), signIn: 'oauth', fields: [], multiple: true, bindings: [{ capability: 'tracker', scope: 'application', label: say('bindSpace'), section: say('sectionPlanning'), order: 10 }], capabilities: ['tracker'],
     alternatives: [{
       key: 'api_token', label: say('useApiToken'), button: say('connect'), site: say('siteAtlassian'), signIn: 'token',
       fields: [
@@ -24,7 +32,7 @@ export const providers = (): MockProvider[] => [
       ],
     }], accounts: ['acme.atlassian.net'], choose: { title: say('jiraSite'), options: [{ id: 'acme', label: 'acme.atlassian.net', detail: say('projectsAppOps') }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: say('projectLab') }] } },
   {
-    key: 'aws', name: 'AWS', group: 'cloud', description: say('yourAccount', { name: 'AWS' }), logo: 'aws', button: say('signInWith', { name: 'AWS' }), site: say('siteAws'), signIn: 'oauth', fields: [], multiple: true, bindings: [{ capability: 'cloud', scope: 'application', label: say('bindCloud'), each: { key: 'environment', label: say('changesEnvironment'), fields: [{ key: 'account', label: say('bindCloudAccount'), required: true }] } }], capabilities: ['cloud'], accounts: [say('awsAccount')],
+    key: 'aws', name: 'AWS', group: 'cloud', description: say('yourAccount', { name: 'AWS' }), logo: 'aws', button: say('signInWith', { name: 'AWS' }), site: say('siteAws'), signIn: 'oauth', fields: [], multiple: true, bindings: [{ capability: 'cloud', scope: 'application', label: say('bindCloud'), each: { key: 'environment', label: say('changesEnvironment'), fields: [{ key: 'account', label: say('bindCloudAccount'), required: true }, { key: 'role', label: say('bindCloudRole'), required: true }] }, section: say('sectionCloud'), order: 70 }], capabilities: ['cloud'], accounts: [say('awsAccount')],
     alternatives: [{
       key: 'sso', label: say('useCompanySso'), button: say('continue'), site: say('siteIdentityCenter'), signIn: 'sso',
       fields: [
@@ -41,14 +49,14 @@ export const providers = (): MockProvider[] => [
     choose: { title: say('accountAndRole'), options: [{ id: 'prod', label: 'acme-prod · 1234-5678-9012', detail: 'DeployRole' }, { id: 'stg', label: 'acme-staging · 2109-8765-4321', detail: 'DeployRole' }] },
   },
   {
-    key: 'zephyr', name: 'Zephyr', group: 'tests', description: say('yourAccount', { name: 'Zephyr Scale' }), logo: 'jira', button: say('continueAt', { name: 'SmartBear' }), site: say('siteSmartBear'), signIn: 'oauth', fields: [], multiple: true, bindings: [{ capability: 'tests', scope: 'application', label: say('bindTests') }], capabilities: ['tests'], accounts: ['Zephyr Scale'],
+    key: 'zephyr', name: 'Zephyr', group: 'tests', description: say('yourAccount', { name: 'Zephyr Scale' }), logo: 'jira', button: say('continueAt', { name: 'SmartBear' }), site: say('siteSmartBear'), signIn: 'oauth', fields: [], multiple: true, bindings: [{ capability: 'tests', scope: 'application', label: say('bindTests'), section: say('sectionQuality'), order: 60 }], capabilities: ['tests'], accounts: ['Zephyr Scale'],
     alternatives: [{
       key: 'api_token', label: say('useApiToken'), button: say('connect'), site: say('siteZephyr'), signIn: 'token',
       fields: [{ name: 'token', label: say('zephyrToken'), kind: 'text', mono: true, secret: true, help: say('zephyrTokenHelp') }],
     }],
   },
   {
-    key: 'veracode', name: 'Veracode', group: 'security', description: say('yourAccount', { name: 'Veracode' }), logo: VERACODE_LOGO, button: say('connect'), site: 'Veracode', signIn: 'token', multiple: true, bindings: [{ capability: 'security', scope: 'repository', label: 'Veracode' }], capabilities: ['security'], accounts: ['API · acme'],
+    key: 'veracode', name: 'Veracode', group: 'security', description: say('yourAccount', { name: 'Veracode' }), logo: VERACODE_LOGO, button: say('connect'), site: 'Veracode', signIn: 'token', multiple: true, bindings: [{ capability: 'security', scope: 'repository', label: 'Veracode', section: say('sectionQuality'), order: 50 }], capabilities: ['security'], accounts: ['API · acme'],
     fields: [
       { name: 'region', label: say('region'), kind: 'text', value: 'com', mono: true },
       { name: 'apiId', label: 'API ID', kind: 'text', mono: true },
@@ -56,7 +64,7 @@ export const providers = (): MockProvider[] => [
     ],
   },
   {
-    key: 'sonar', name: 'SonarQube', group: 'quality', description: say('yourAccount', { name: 'SonarQube' }), logo: SONAR_LOGO, button: say('connect'), site: 'SonarQube', signIn: 'token', multiple: true, bindings: [{ capability: 'quality', scope: 'repository', label: say('bindQuality') }], capabilities: ['quality'], accounts: ['acme'],
+    key: 'sonar', name: 'SonarQube', group: 'quality', description: say('yourAccount', { name: 'SonarQube' }), logo: SONAR_LOGO, button: say('connect'), site: 'SonarQube', signIn: 'token', multiple: true, bindings: [{ capability: 'quality', scope: 'repository', label: say('bindQuality'), section: say('sectionQuality'), order: 40 }], capabilities: ['quality'], accounts: ['acme'],
     fields: [
       { name: 'url', label: 'URL', kind: 'text', value: 'https://sonarcloud.io', mono: true },
       { name: 'organization', label: 'Organization (SonarQube Cloud)', kind: 'text', mono: true, optional: true },
@@ -66,7 +74,7 @@ export const providers = (): MockProvider[] => [
   {
     key: 'changes', name: say('changesName'), group: 'changes', description: say('changesDescription'), logo: MCP_LOGO, button: say('connect'), site: say('changesName'), signIn: 'token', fields: [], multiple: true, capabilities: ['changes'], accounts: [say('changesName')],
     bindings: [{
-      capability: 'changes', scope: 'application', label: say('bindChanges'),
+      capability: 'changes', scope: 'application', label: say('bindChanges'), section: say('sectionChanges'), order: 80,
       fields: [{ key: 'company', label: say('changesCompany') }, { key: 'requester_group', label: say('changesRequesterGroup') }],
       each: { key: 'environment', label: say('changesEnvironment'), fields: [{ key: 'template', label: say('changesTemplate'), required: true }, { key: 'classification', label: say('changesClassification') }] },
     }],
