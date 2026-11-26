@@ -594,10 +594,10 @@ async fn a_new_item_needs_no_issue_and_keeps_the_base_branch_chosen_per_reposito
     assert_eq!(item["workflow"], "default");
     assert_eq!(
         item["git"],
-        json!([{ "repository": repository, "name": "acme/web", "base": "release/2", "head": null }])
+        json!([{ "repository": repository, "name": "acme/web", "base": "release/2", "head": "feature/exportar-relatorios" }])
     );
     let input = kept(&world, &item);
-    assert_eq!(input["git"], json!({ repository.clone(): { "base": "release/2" } }));
+    assert_eq!(input["git"][&repository]["base"], "release/2", "what the person chose wins over the flow");
     assert!(input["issue"].is_null());
 
     let stranger = json!({ "text": "x", "application": app, "git": { "nope": { "base": "main" } } });
@@ -610,7 +610,7 @@ async fn a_new_item_needs_no_issue_and_keeps_the_base_branch_chosen_per_reposito
     let (status, item) = world.send(Method::POST, "/api/items", Some(branch)).await;
     assert_eq!(status, StatusCode::OK, "{item}");
     assert_eq!(item["title"], "feature/x");
-    assert_eq!(kept(&world, &item)["git"], json!({ repository: { "head": "feature/x" } }));
+    assert_eq!(kept(&world, &item)["git"][&repository]["head"], "feature/x", "the branch asked for wins over the flow");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -642,7 +642,8 @@ async fn a_pull_request_origin_is_read_through_the_code_connection_and_finds_its
     assert_eq!(item["git"][0]["head"], "h");
     let input = kept(&world, &item);
     assert_eq!(input["application"]["id"], app, "the application of the repository");
-    assert_eq!(input["git"], json!({ repository: { "base": "main", "head": "h" } }));
+    assert_eq!(input["git"][&repository]["base"], "main");
+    assert_eq!(input["git"][&repository]["head"], "h");
     assert!(input["issue"].is_null());
     let asked = world.provider.calls.lock().expect("calls").clone();
     assert!(asked.iter().any(|(action, args)| action == "code.pull_request" && args["pr"] == "3"));

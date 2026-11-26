@@ -70,14 +70,9 @@ pub fn stamp_in(root: Option<&Path>, id: &str, input: &mut Value) {
     let application = json!({ "id": input["application"]["id"], "name": input["application"]["name"] });
     for repository in repositories {
         let Some(key) = text(&repository["id"]).map(str::to_owned) else { continue };
-        let chosen: Vec<String> = match text(&repository["flow"]) {
-            Some(flow) => paths.iter().filter(|path| named(path) == flow).cloned().collect(),
-            None => paths.clone(),
-        };
-        let asked = json!({
-            "item": item, "repository": repository_of(&repository), "application": application,
-            "chosen": text(&repository["flow"]).is_some(),
-        });
+        let flow = text(&repository["flow"]).unwrap_or(brand::workflow::FLOW);
+        let chosen: Vec<String> = paths.iter().filter(|path| named(path) == flow).cloned().collect();
+        let asked = json!({ "item": item, "repository": repository_of(&repository), "application": application });
         let Some(found) = declared(root, &chosen, &asked) else { continue };
         if !input["git"].is_object() {
             input["git"] = json!({});
@@ -113,7 +108,6 @@ mod tests {
     const FLOW: &str = r#"import { flow } from "sdk/flow.js";
 
 export const branch = flow({
-  match: { repo: ["acme/web"] },
   branch: "feature/{issue}-{slug}",
   base: "develop",
   method: "squash",
@@ -122,6 +116,12 @@ export const branch = flow({
 "#;
 
     fn input(kind: &str, git: serde_json::Value) -> serde_json::Value {
+        let mut found = bare(kind, git);
+        found["application"]["repositories"][0]["flow"] = json!("web");
+        found
+    }
+
+    fn bare(kind: &str, git: serde_json::Value) -> serde_json::Value {
         json!({
             "title": "Corrigir o login do App!", "issue": "OPS-7", "type": kind, "git": git,
             "application": { "id": "a", "name": "Loja", "repositories": [
@@ -147,7 +147,7 @@ export const branch = flow({
             git["r1"],
             json!({ "head": "feature/OPS-7-corrigir-o-login-do-app", "base": "develop", "method": "squash" })
         );
-        assert!(git.get("r2").is_none(), "a repository no flow matches keeps the platform's defaults");
+        assert_eq!(git["r2"]["head"], "feature/OPS-7-corrigir-o-login-do-app", "a repository that names no flow follows the default one");
     }
 
     #[test]
@@ -157,26 +157,16 @@ export const branch = flow({
     }
 
     #[test]
-    fn a_flow_chosen_for_the_repository_applies_even_when_its_file_names_no_repository() {
-        let mut found = input("Bug", json!(null));
-        found["application"]["repositories"][1]["flow"] = json!("gitflow");
+    fn a_repository_that_names_no_flow_follows_the_default_one() {
+        let mut found = bare("Bug", json!(null));
         stamp_in(None, "0f3a9c2e", &mut found);
         let promote = json!([
             { "from": "develop", "into": "release", "method": "merge" },
             { "from": "release", "into": "main", "method": "merge" }
         ]);
-        assert_eq!(
-            found["git"]["r2"],
-            json!({ "head": "bugfix/OPS-7-corrigir-o-login-do-app", "base": "develop", "method": "squash", "promote": promote })
-        );
-        assert!(found["git"].get("r1").is_none());
-        assert!(super::names_in(None).contains(&"gitflow".to_owned()));
-    }
-
-    #[test]
-    fn the_shipped_flow_matches_no_repository_until_one_is_named() {
-        let mut found = input("Bug", json!(null));
-        stamp_in(None, "0f3a9c2e", &mut found);
-        assert!(found["git"].is_null());
+        let expected = json!({ "head": "bugfix/OPS-7-corrigir-o-login-do-app", "base": "develop", "method": "squash", "promote": promote });
+        assert_eq!(found["git"]["r1"], expected);
+        assert_eq!(found["git"]["r2"], expected);
+        assert!(super::names_in(None).contains(&brand::workflow::FLOW.to_owned()));
     }
 }

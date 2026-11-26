@@ -92,6 +92,7 @@ impl Hub {
         git(&repo, &["init", "-q", "-b", "main"]);
         git(&repo, &["add", "-A"]);
         git(&repo, &["commit", "-qm", "início"]);
+        git(&repo, &["branch", "develop"]);
         std::fs::create_dir_all(dir.path().join("data")).expect("data");
         let github = Arc::new(Github::new(repo));
         Hub { dir, github, tracker: Tracker::leaked(), agents: Agents::default() }

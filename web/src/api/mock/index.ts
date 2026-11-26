@@ -345,7 +345,7 @@ export function mockApi(options: MockOptions = {}): Api {
       return branding
     }),
     applications: () => wait(() => applications),
-    flows: () => wait(() => ['gitflow']),
+    flows: () => wait(() => ({ names: ['gitflow'], default: 'gitflow' })),
     createApplication: (draft) => wait(() => {
       const made = checkedApplication(draft, `app-${Date.now()}-${applications.length}`)
       applications = [...applications, made]

@@ -370,7 +370,7 @@ impl World {
     pub fn init_git(&mut self) {
         let repo = self.repo();
         std::fs::write(repo.join("README"), "oi").expect("write");
-        for args in [vec!["init", "-q", "-b", "main"], vec!["add", "-A"], vec!["commit", "-qm", "início"]] {
+        for args in [vec!["init", "-q", "-b", "main"], vec!["add", "-A"], vec!["commit", "-qm", "início"], vec!["branch", "develop"]] {
             let done =
                 platform::git::command(&repo).args(["-c", "user.email=a@b", "-c", "user.name=a"]).args(args).output();
             assert!(done.is_ok_and(|done| done.status.success()));

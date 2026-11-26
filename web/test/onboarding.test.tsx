@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { setApi } from '../src/api'
 import type { Api } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
@@ -58,7 +58,7 @@ describe('primeira vez', () => {
     fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Loja' } })
     expect((screen.getByLabelText('Nome') as HTMLInputElement).value).toBe('Loja')
     expect((screen.getByText('Criar aplicação').closest('button') as HTMLButtonElement).disabled).toBe(true)
-    expect(screen.getByRole('combobox', { name: 'Fluxo de branch' }).textContent).toContain('Automático')
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Fluxo de branch' }).textContent).toContain('gitflow'))
     fireEvent.click(screen.getByText('Pular por agora'))
     expect(done).toBe(1)
     expect(localStorage.getItem('onboarding:skipped')).toBe('true')

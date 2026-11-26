@@ -2,11 +2,6 @@ function plain(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : {};
 }
 
-function listOf(value) {
-  if (Array.isArray(value)) return value.filter((entry) => typeof entry === "string" && entry !== "");
-  return typeof value === "string" && value !== "" ? [value] : [];
-}
-
 const same = (left, right) => typeof left === "string" && typeof right === "string" && left.toLowerCase() === right.toLowerCase();
 
 export function slugOf(text, most = 40) {
@@ -17,18 +12,6 @@ export function slugOf(text, most = 40) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   return plainText.slice(0, most).replace(/-+$/g, "");
-}
-
-function matches(spec, input) {
-  if (input.chosen === true) return true;
-  const wanted = plain(spec.match);
-  const repos = listOf(wanted.repo);
-  const applications = listOf(wanted.application);
-  const repository = plain(input.repository);
-  const application = plain(input.application);
-  const byRepo = repos.length === 0 || repos.some((repo) => same(repo, repository.repo) || same(repo, repository.id));
-  const byApplication = applications.length === 0 || applications.some((name) => same(name, application.name) || same(name, application.id));
-  return (repos.length > 0 || applications.length > 0 || wanted.all === true) && byRepo && byApplication;
 }
 
 function chosen(spec, type) {
@@ -45,7 +28,6 @@ export function flow(spec) {
   const declared = plain(spec);
   return function branch(input) {
     const given = plain(input);
-    if (!matches(declared, given)) return null;
     const item = plain(given.item);
     const type = typeof item.type === "string" ? item.type : "";
     const rule = chosen(declared, type);

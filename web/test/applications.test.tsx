@@ -122,14 +122,15 @@ describe('aba Aplicações', () => {
     expect((await view.findByRole('alert')).textContent).toContain('nome')
   })
 
-  test('cada repositório escolhe o fluxo de branch, automático por padrão', async () => {
+  test('cada repositório escolhe o fluxo de branch, com o padrão já selecionado', async () => {
     await started()
     const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
     fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
     await view.findByLabelText('Nome')
     const selects = await view.findAllByRole('combobox', { name: 'Fluxo de branch' })
     expect(selects.length).toBe(2)
-    expect(selects[0].textContent).toContain('Automático')
+    await waitFor(() => expect(selects[0].textContent).toContain('gitflow'))
+    expect(selects[1].textContent).toContain('gitflow')
   })
 
   test('o dependabot não aparece: é sempre ignorado; e repositório sem comando não diz nada', async () => {

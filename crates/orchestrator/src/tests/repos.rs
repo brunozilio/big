@@ -22,7 +22,7 @@ export default workflow({
 fn git_repo(path: &Path, file: &str) {
     std::fs::create_dir_all(path).expect("dir");
     std::fs::write(path.join(file), "oi").expect("write");
-    for args in [vec!["init", "-q", "-b", "main"], vec!["add", "-A"], vec!["commit", "-qm", "início"]] {
+    for args in [vec!["init", "-q", "-b", "main"], vec!["add", "-A"], vec!["commit", "-qm", "início"], vec!["branch", "develop"]] {
         let done = platform::git::command(path).args(["-c", "user.email=a@b", "-c", "user.name=a"]).args(args).output();
         assert!(done.is_ok_and(|done| done.status.success()));
     }

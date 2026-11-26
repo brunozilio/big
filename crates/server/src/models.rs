@@ -77,7 +77,7 @@ pub fn known(shared: &Shared) -> ApiResult<Vec<app::Model>> {
 
 pub async fn flows() -> ApiResult<Response> {
     let found = tokio::task::spawn_blocking(orchestrator::flows::names).await.map_err(ApiError::failed)?;
-    Ok(reply(serde_json::json!(found)))
+    Ok(reply(serde_json::json!({ "names": found, "default": brand::workflow::FLOW })))
 }
 
 pub async fn list(State(ctx): State<Ctx>) -> ApiResult<Response> {

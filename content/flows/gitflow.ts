@@ -1,7 +1,6 @@
 import { flow } from "sdk/flow.js";
 
 export const spec = {
-  match: { repo: [] },
   branch: "feature/{issue}-{slug}",
   base: "develop",
   method: "squash",

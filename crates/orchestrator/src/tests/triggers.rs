@@ -39,7 +39,8 @@ async fn a_review_trigger_lands_in_the_application_of_the_repository_on_the_pull
     let kept = kernel.item(&items[0].id).expect("store").expect("item");
     assert_eq!(kept.input["application"]["id"], "app");
     assert_eq!(kept.input["sources"][0]["repository"], "web");
-    assert_eq!(kept.input["git"], json!({ "web": { "head": "feat/cache", "base": "develop" } }));
+    let promote = json!([{ "from": "develop", "into": "release", "method": "merge" }, { "from": "release", "into": "main", "method": "merge" }]);
+    assert_eq!(kept.input["git"], json!({ "web": { "head": "feat/cache", "base": "develop", "method": "squash", "promote": promote } }));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -54,7 +55,8 @@ async fn an_issue_trigger_lands_in_the_application_that_tracks_that_connection()
     let items = kernel.items().expect("items");
     let kept = kernel.item(&items[0].id).expect("store").expect("item");
     assert_eq!(kept.input["application"]["id"], "app");
-    assert!(kept.input["git"].is_null());
+    assert_eq!(kept.input["git"]["web"]["head"], "feature/BIG-9-nova", "the default flow names the branch");
+    assert_eq!(kept.input["git"]["web"]["base"], "develop");
 }
 
 #[tokio::test(flavor = "multi_thread")]

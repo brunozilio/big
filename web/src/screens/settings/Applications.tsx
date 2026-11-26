@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState, type ReactNode } from 'react'
 import { api } from '@/api'
-import type { Application, ApplicationDraft, ApplicationRepository, Binding, Bindings, DirListing } from '@/api/contract'
+import type { Application, ApplicationDraft, ApplicationRepository, Binding, Bindings, DirListing, Flows } from '@/api/contract'
 import { errorText, setApplications, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card, EmptyState } from '@/ui/display'
@@ -83,7 +83,7 @@ function KindSelect({ value, onChange }: { value: string | undefined; onChange: 
   )
 }
 
-function RepositoryCard({ value, index, removable, fields, flows, onChange, onRemove, onFolder }: { value: ApplicationRepository; index: number; removable: boolean; fields: BindingField[]; flows: string[]; onChange: (next: ApplicationRepository) => void; onRemove: () => void; onFolder: () => void }) {
+function RepositoryCard({ value, index, removable, fields, flows, onChange, onRemove, onFolder }: { value: ApplicationRepository; index: number; removable: boolean; fields: BindingField[]; flows: Flows; onChange: (next: ApplicationRepository) => void; onRemove: () => void; onFolder: () => void }) {
   const t = useT()
   return (
     <Card variant="inset" className="space-y-4 px-4 py-4" data-testid={`repository-${index}`}>

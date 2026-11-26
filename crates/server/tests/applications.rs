@@ -123,7 +123,7 @@ async fn a_new_item_keeps_a_snapshot_of_its_application_and_its_space() {
 
     let (status, flows) = world.send(Method::GET, "/api/flows", None).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(flows.as_array().is_some_and(|names| names.contains(&json!("gitflow"))), "{flows}");
+    assert!(flows["names"].as_array().is_some_and(|names| names.contains(&flows["default"])), "{flows}");
 
     let gone = json!({ "text": "x", "issue": null, "model": "auto", "attachments": [], "application": "zz" });
     assert_eq!(world.send(Method::POST, "/api/items", Some(gone)).await.0, StatusCode::BAD_REQUEST);

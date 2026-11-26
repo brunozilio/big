@@ -903,6 +903,11 @@ export interface BindingOption {
   detail?: string | null
 }
 
+export interface Flows {
+  names: string[]
+  default: string
+}
+
 export interface ApplicationRepository {
   id: string
   directory: string
@@ -982,7 +987,7 @@ export interface Api {
   branding(): Promise<Branding>
   saveBranding(patch: BrandingPatch): Promise<Branding>
   applications(): Promise<Application[]>
-  flows(): Promise<string[]>
+  flows(): Promise<Flows>
   createApplication(application: ApplicationDraft): Promise<Application>
   saveApplication(application: Application): Promise<Application>
   deleteApplication(id: string): Promise<void>
