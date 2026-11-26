@@ -2,21 +2,16 @@ use crate::{Provider, ProviderError};
 use domain::ModelProvider;
 use domain::provider::ProviderInfo;
 
-pub mod antigravity;
-pub mod chatgpt;
-pub mod claude;
-pub mod copilot;
-pub mod grok;
-pub mod kiro;
-
-pub static ALL: &[&dyn Provider] = &[
-    &antigravity::Provider,
-    &chatgpt::Provider,
-    &claude::Provider,
-    &copilot::Provider,
-    &grok::Provider,
-    &kiro::Provider,
-];
+pub fn builtin() -> &'static [&'static dyn Provider] {
+    static FOUND: std::sync::OnceLock<Vec<&'static dyn Provider>> = std::sync::OnceLock::new();
+    FOUND.get_or_init(|| {
+        let found = crate::scripted::discover().into_iter().map(|provider| {
+            let leaked: &'static crate::scripted::ScriptedProvider = Box::leak(Box::new(provider));
+            leaked as &'static dyn Provider
+        });
+        found.collect()
+    })
+}
 
 #[cfg(test)]
 pub(crate) mod testing;
@@ -50,14 +45,15 @@ fn installed() -> Vec<&'static dyn Provider> {
 }
 
 pub fn all() -> Vec<&'static dyn Provider> {
-    let mut all = ALL.to_vec();
+    let mut all = builtin().to_vec();
     all.extend(installed());
     all.sort_by_key(|provider| provider.rank());
     all
 }
 
 pub fn find(provider: ModelProvider) -> Option<&'static dyn Provider> {
-    ALL.iter()
+    builtin()
+        .iter()
         .copied()
         .find(|known| known.id() == provider.id())
         .or_else(|| installed().into_iter().find(|known| known.id() == provider.id()))
@@ -119,7 +115,7 @@ mod tests {
 
     #[test]
     fn the_built_in_providers_are_these_in_this_order() {
-        let ids: Vec<&str> = ALL.iter().map(|provider| provider.id()).collect();
+        let ids: Vec<&str> = builtin().iter().map(|provider| provider.id()).collect();
         assert_eq!(
             ids,
             [
@@ -135,7 +131,7 @@ mod tests {
 
     #[test]
     fn every_built_in_provider_has_its_own_id_rank_and_secret_slot() {
-        let mut all = ALL.to_vec();
+        let mut all = builtin().to_vec();
         all.sort_by_key(|provider| provider.rank());
         let mut ids: Vec<_> = all.iter().map(|p| p.id()).collect();
         let mut slots: Vec<_> = all.iter().map(|p| p.slot()).collect();
@@ -148,7 +144,7 @@ mod tests {
 
     #[test]
     fn every_provider_speaks_a_wire_the_engine_has() {
-        for provider in ALL {
+        for provider in builtin() {
             let http: std::sync::Arc<dyn crate::model::http::Http> =
                 std::sync::Arc::new(crate::model::http::ScriptedHttp::new([]));
             assert!(crate::model::wires::open(provider.wire(None), http, None).is_some(), "{}", provider.id());

@@ -53,7 +53,11 @@ pub fn collect<E: From<ProviderError>>(
 }
 
 pub fn option(provider: &dyn Provider, id: &str, label: String) -> ModelOption {
-    ModelOption::new(format!("{}:{id}", provider.id()), label).served_by(crate::id(provider))
+    option_of(provider.id(), id, label)
+}
+
+pub fn option_of(provider: &str, id: &str, label: String) -> ModelOption {
+    ModelOption::new(format!("{provider}:{id}"), label).served_by(domain::ModelProvider::named(provider))
 }
 
 pub fn items<'a>(value: &'a Value, key: &str) -> Result<&'a Vec<Value>, ProviderError> {
@@ -69,13 +73,17 @@ pub struct Fields {
 pub const STANDARD: Fields = Fields { id: "id", window: "max_input_tokens" };
 
 pub fn model(provider: &dyn Provider, item: &Value, fields: &Fields) -> Option<ModelOption> {
-    let id = string(item, fields.id);
+    model_of(provider.id(), item, fields.id, fields.window)
+}
+
+pub fn model_of(provider: &str, item: &Value, id_field: &str, window_field: &str) -> Option<ModelOption> {
+    let id = string(item, id_field);
     if id.is_empty() {
         return None;
     }
     let label = string(item, "display_name");
-    let mut model = option(provider, id, if label.is_empty() { id.to_owned() } else { label.to_owned() });
-    model.window = item[fields.window].as_u64().filter(|n| *n > 0);
+    let mut model = option_of(provider, id, if label.is_empty() { id.to_owned() } else { label.to_owned() });
+    model.window = item[window_field].as_u64().filter(|n| *n > 0);
     model.capabilities = Some(ModelCapabilities {
         reasoning: item["capabilities"]["thinking"]["supported"] == true,
         adaptive_thinking: item["capabilities"]["thinking"]["types"]["adaptive"]["supported"] == true,

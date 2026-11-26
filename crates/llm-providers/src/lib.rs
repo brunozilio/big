@@ -9,6 +9,7 @@ pub mod oauth;
 pub mod prices;
 pub mod providers;
 pub mod request;
+pub mod scripted;
 pub mod sign_in;
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;

@@ -1,4 +1,6 @@
 pub mod chat;
+pub mod cloud_code;
+pub mod event_stream;
 pub mod messages;
 pub mod responses;
 
@@ -8,7 +10,6 @@ use domain::ModelOption;
 
 use crate::model::ModelApi;
 use crate::model::http::Http;
-use crate::providers::{antigravity, kiro};
 
 type Open = fn(Arc<dyn Http>, Option<&ModelOption>) -> Arc<dyn ModelApi>;
 
@@ -16,8 +17,8 @@ const ALL: &[(&str, Open)] = &[
     (chat::NAME, chat::open),
     (messages::NAME, messages::open),
     (responses::NAME, responses::open),
-    (kiro::wire::NAME, kiro::wire::open),
-    (antigravity::wire::NAME, antigravity::wire::open),
+    (event_stream::NAME, event_stream::open),
+    (cloud_code::NAME, cloud_code::open),
 ];
 
 pub fn open(name: &str, http: Arc<dyn Http>, model: Option<&ModelOption>) -> Option<Arc<dyn ModelApi>> {
