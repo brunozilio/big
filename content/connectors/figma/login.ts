@@ -31,12 +31,21 @@ export function userOf(answer): { id: string; label: string } | null {
   return typeof user?.id === "string" ? { id: user.id, label: String(user.handle || user.name || user.email || "Figma") } : null;
 }
 
-export function sessionOf(ctx: Ctx, cookies: string): Session {
-  const headers = { accept: "application/json", "x-csrf-bypass": "yes", cookie: cookies };
-  const user = userOf(json(checked(send(ctx, { method: "GET", url: `${base(ctx)}/api/session/state`, headers }))));
-  if (user === null) fail("auth", "Figma has no account in this session; sign in to Figma in the browser first");
+const headersOf = (cookies: string) => ({ accept: "application/json", "x-csrf-bypass": "yes", cookie: cookies });
+
+function signedIn(ctx: Ctx, cookies: string): Session | null {
+  const headers = headersOf(cookies);
+  const answer = checked(send(ctx, { method: "GET", url: `${base(ctx)}/api/session/state`, headers }));
+  const user = answer.status === 202 ? null : userOf(json(answer));
+  if (user === null) return null;
   json(checked(send(ctx, { method: "GET", url: `${base(ctx)}/api/user/state?fuid=${user.id}`, headers })));
   return { cookies, fuid: user.id };
+}
+
+export function sessionOf(ctx: Ctx, cookies: string): Session {
+  const found = signedIn(ctx, cookies);
+  if (found === null) fail("auth", "Figma has no account in this session; sign in to Figma in the browser first");
+  return found;
 }
 
 export function grantOf(session: Session) {
@@ -71,7 +80,8 @@ export const session = {
   },
   poll({ started }, ctx: Ctx) {
     const cookies = String(started?.carried?.cookies ?? "");
-    return { state: "authorized", grant: grantOf(sessionOf(ctx, cookies)) };
+    const found = signedIn(ctx, cookies);
+    return found === null ? { state: "pending" } : { state: "authorized", grant: grantOf(found) };
   },
   refresh({ grant }, ctx: Ctx) {
     const held = JSON.parse(String(grant?.access_token ?? "{}")) as Session;
