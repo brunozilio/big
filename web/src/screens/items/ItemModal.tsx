@@ -280,7 +280,6 @@ export function EmptyStep({ it, step }: { it: Item; step: string }) {
     <div className="space-y-3">
       <p className="text-base font-medium text-fg">{stuck.reason}</p>
       {stuck.detail && stuck.detail !== stuck.reason && <p className="whitespace-pre-wrap break-words text-sm text-muted">{stuck.detail}</p>}
-      <p className="text-sm text-muted">{t('items.redoHint')}</p>
       <div className="flex flex-wrap gap-2">
         <Button size="sm" variant="primary" icon={<Icon name="refresh" size={15} />} onClick={() => api().rerun(it.id, step).catch((e: unknown) => setError(errorText(e)))}>{t('items.rerunFrom', { step: label })}</Button>
         {!it.doneAt && <Button size="sm" variant="secondary" icon={<Icon name="stop" size={15} />} onClick={() => api().cancel(it.id).catch((e: unknown) => setError(errorText(e)))}>{t('items.cancelItem')}</Button>}

@@ -30,9 +30,9 @@ export function keepClickOffButtons(e: MouseEvent<HTMLLabelElement>) {
   if (control instanceof HTMLButtonElement && !control.contains(e.target as Node)) e.preventDefault()
 }
 
-export function Field({ label, help, error, children }: { label: string; help?: ReactNode; error?: string; children: ReactNode }) {
+export function Field({ label, error, children }: { label: string; error?: string; children: ReactNode }) {
   const noteId = useId()
-  const note = error || help ? noteId : undefined
+  const note = error ? noteId : undefined
   const control = isValidElement<{ 'aria-describedby'?: string; 'aria-invalid'?: boolean }>(children)
     ? cloneElement(children, { 'aria-describedby': note, 'aria-invalid': error ? true : undefined })
     : children
@@ -40,7 +40,7 @@ export function Field({ label, help, error, children }: { label: string; help?: 
     <label className="block space-y-2" onClick={keepClickOffButtons}>
       <span className="text-base font-medium text-fg">{label}</span>
       {control}
-      {error ? <span id={noteId} className="flex items-center gap-1 text-xs text-danger-fg"><Icon name="alert" size={13} />{error}</span> : help && <span id={noteId} className="flex items-center gap-1.5 text-xs text-muted">{help}</span>}
+      {error && <span id={noteId} className="flex items-center gap-1 text-xs text-danger-fg"><Icon name="alert" size={13} />{error}</span>}
     </label>
   )
 }

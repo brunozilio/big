@@ -38,7 +38,7 @@ export function alternatives({ language }: { language: Language }, _ctx: Ctx) {
 
 export function presentation({ language }: { language: Language }, _ctx: Ctx) {
   return {
-    description: pick(language, "Prototypes and screens for the agents", "Prototipos y pantallas para los agentes", "Protótipos e telas para os agentes"),
+    description: pick(language, "Your Figma account", "Tu cuenta de Figma", "Sua conta Figma"),
     group: "design",
     button: pick(language, "Sign in with Figma", "Entrar con Figma", "Entrar com Figma"),
     site: pick(language, "Figma", "de Figma", "do Figma"),

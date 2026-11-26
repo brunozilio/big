@@ -47,10 +47,7 @@ function EnvList({ value, onChange }: { value: Variable[]; onChange: (next: Vari
   const set = (at: number, row: Variable) => onChange(rows.map((r, i) => (i === at ? row : r)))
   return (
     <div className="space-y-2">
-      <div className="space-y-0.5">
-        <span className="text-base font-medium text-fg">{t('settings.app_env')}</span>
-        <p className="text-xs text-muted">{t('settings.app_envHint')}</p>
-      </div>
+      <span className="block text-base font-medium text-fg">{t('settings.app_env')}</span>
       <div className="space-y-2">
         {rows.map(([name, val], i) => (
           <div key={i} className="flex items-center gap-1.5">
@@ -105,7 +102,7 @@ function RepositoryCard({ value, index, removable, fields, options, flows, onCha
         <CommandList label={t('settings.app_run')} value={value.run} placeholder="bun dev" onChange={(run) => onChange({ ...value, run })} />
         <CommandList label={t('settings.app_verify')} value={value.verify} placeholder="bun test" onChange={(verify) => onChange({ ...value, verify })} />
         <CommandList label={t('settings.app_e2e')} value={value.e2e ?? []} placeholder="npx cypress run" onChange={(e2e) => onChange({ ...value, e2e })} />
-        <Field label={t('settings.app_e2eDirectory')} help={t('settings.app_e2eDirectoryHint')}>
+        <Field label={t('settings.app_e2eDirectory')}>
           <Input aria-label={t('settings.app_e2eDirectory')} className="font-mono text-sm" value={value.e2eDirectory ?? ''} placeholder="e2e" onChange={(e) => onChange({ ...value, e2eDirectory: e.target.value })} />
         </Field>
         <FlowSelect value={value.flow} flows={flows} onChange={(flow) => onChange(withFlow(value, flow))} />

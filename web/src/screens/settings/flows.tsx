@@ -32,7 +32,7 @@ export function FlowSelect({ value, flows, onChange }: { value: string | undefin
   const names = [...new Set([...flows, ...(value ? [value] : [])])]
   const options = [{ value: AUTOMATIC, label: t('settings.app_flowAuto') }, ...names.map((name) => ({ value: name, label: name }))]
   return (
-    <Field label={t('settings.app_flow')} help={t('settings.app_flowHint')}>
+    <Field label={t('settings.app_flow')}>
       <Select label={t('settings.app_flow')} className="w-full" value={value || AUTOMATIC} options={options} onValueChange={(v) => onChange(v === AUTOMATIC ? undefined : v)} />
     </Field>
   )

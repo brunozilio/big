@@ -55,7 +55,7 @@ describe('diálogo de conexão', () => {
     fireEvent.click(dialog.getByRole('button', { name: 'Usar API token' }))
     const token = (await dialog.findByLabelText(/^API token do Zephyr/, {}, wait)) as HTMLInputElement
     expect(token.type).toBe('password')
-    expect(dialog.getByText(/Zephyr API Access Tokens/)).toBeTruthy()
+    expect(dialog.queryByText(/Zephyr API Access Tokens/)).toBeNull()
     expect((dialog.getByRole('button', { name: /Conectar/ }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(token, { target: { value: 'zt-123' } })
     fireEvent.click(dialog.getByRole('button', { name: /Conectar/ }))
