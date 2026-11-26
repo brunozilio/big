@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-const FILES: [(&str, &str); 21] = [
+const FILES: [(&str, &str); 22] = [
     ("manifest.json", include_str!("../extension/manifest.json")),
     ("config.js", include_str!("../extension/config.js")),
     ("bg/main.js", include_str!("../extension/bg/main.js")),
@@ -14,6 +14,7 @@ const FILES: [(&str, &str); 21] = [
     ("bg/logs.js", include_str!("../extension/bg/logs.js")),
     ("bg/capture.js", include_str!("../extension/bg/capture.js")),
     ("bg/intercept.js", include_str!("../extension/bg/intercept.js")),
+    ("bg/frame.js", include_str!("../extension/bg/frame.js")),
     ("bg/frames.js", include_str!("../extension/bg/frames.js")),
     ("bg/sites.js", include_str!("../extension/bg/sites.js")),
     ("bg/ask.js", include_str!("../extension/bg/ask.js")),
@@ -114,6 +115,25 @@ mod tests {
         }
         assert_eq!(install(folder.path(), 4321).map(|installed| installed.written), Ok(0));
         assert_eq!(install(folder.path(), 9999).map(|installed| installed.written), Ok(1));
+    }
+
+    #[test]
+    fn every_file_of_the_extension_folder_is_installed() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("extension");
+        let mut pending = vec![root.clone()];
+        let mut found = Vec::new();
+        while let Some(folder) = pending.pop() {
+            for entry in std::fs::read_dir(&folder).into_iter().flatten().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    pending.push(path);
+                } else if let Ok(relative) = path.strip_prefix(&root) {
+                    found.push(relative.to_string_lossy().replace('\\', "/"));
+                }
+            }
+        }
+        let missing: Vec<&String> = found.iter().filter(|path| !FILES.iter().any(|(known, _)| known == path)).collect();
+        assert!(missing.is_empty(), "not installed: {missing:?}");
     }
 
     #[test]
