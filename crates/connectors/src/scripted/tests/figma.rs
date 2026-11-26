@@ -162,13 +162,15 @@ async fn a_captured_grant_is_redeemed_and_its_cookies_sign_in() {
         .respond(
             Method::Post,
             "/api/session/app_auth/redeem",
-            HttpResponse::new(200, "{}").with_header("set-cookie", "figma.session=s2; Path=/; HttpOnly"),
+            HttpResponse::new(200, "{}")
+                .with_header("set-cookie", "figma.session=s2; Path=/; HttpOnly")
+                .with_header("set-cookie", "figma.authn=t1; Expires=Tue, 05 Jan 2027 11:52:01 GMT; Secure"),
         )
         .once(Method::Get, "/api/session/state", 200, r#"{"meta":{"users":[{"id":"7"}]}}"#)
         .once(Method::Get, "/api/user/state?fuid=7", 200, "{}");
     let polled = sign_in.0.poll(&http, &started, now()).await;
     let Ok(Polled::Authorized(grant)) = polled else { panic!("{polled:?}") };
-    assert_eq!(grant.access_token, r#"{"cookies":"figma.session=s2; locale=en","fuid":"7"}"#);
+    assert_eq!(grant.access_token, r#"{"cookies":"figma.session=s2; locale=en; figma.authn=t1","fuid":"7"}"#);
     let sent = http.sent();
     assert_eq!(sent[0].body_text(), r#"{"g_secret":"g1"}"#);
     assert_eq!(sent[0].header_value("cookie"), Some("figma.session=s1; locale=en"));

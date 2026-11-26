@@ -223,12 +223,30 @@ fn part(found: &Value) -> Result<Part, ActionError> {
         Some(encoded) => STANDARD.decode(encoded).map_err(|error| ActionError::permanent(error.to_string()))?,
         None => field(found, "value").as_bytes().to_vec(),
     };
-    Ok(Part { name: field(found, "name").to_owned(), filename: text("filename"), content_type: text("contentType"), bytes })
+    Ok(Part {
+        name: field(found, "name").to_owned(),
+        filename: text("filename"),
+        content_type: text("contentType"),
+        bytes,
+    })
+}
+
+fn joined_headers(answer: &HttpResponse) -> Map<String, Value> {
+    let mut joined: Map<String, Value> = Map::new();
+    for (name, value) in &answer.headers {
+        let name = name.to_ascii_lowercase();
+        let glue = if name == "set-cookie" { "\n" } else { ", " };
+        let next = match joined.get(&name).and_then(Value::as_str) {
+            Some(before) => format!("{before}{glue}{value}"),
+            None => value.clone(),
+        };
+        joined.insert(name, json!(next));
+    }
+    joined
 }
 
 fn response(answer: &HttpResponse, binary: bool) -> Value {
-    let headers: Map<String, Value> =
-        answer.headers.iter().map(|(name, value)| (name.to_ascii_lowercase(), json!(value))).collect();
+    let headers = joined_headers(answer);
     let mut shown = json!({ "status": answer.status, "headers": headers, "body": answer.text() });
     if binary {
         shown["base64"] = json!(STANDARD.encode(&answer.body));
