@@ -142,6 +142,39 @@ async fn a_session_still_waiting_for_the_browser_sign_in_keeps_polling() {
 }
 
 #[tokio::test]
+async fn a_captured_grant_is_redeemed_and_its_cookies_sign_in() {
+    let AuthSpec::Steps(sign_in) = loaded("figma").descriptor().auth else { panic!("not steps") };
+    let code = DeviceCode {
+        device_code: "abc".into(),
+        user_code: String::new(),
+        verification_uri: String::new(),
+        verification_uri_complete: None,
+        expires_in: 900,
+        interval: 2,
+    };
+    let started = Started {
+        code,
+        carried: json!({ "cookies": "figma.session=s1; locale=en" }),
+        capture: Vec::new(),
+        captured: json!({ "status": 200, "body": r#"{"meta":{"g_secret":"g1"}}"# }),
+    };
+    let http = FakeHttp::new()
+        .respond(
+            Method::Post,
+            "/api/session/app_auth/redeem",
+            HttpResponse::new(200, "{}").with_header("set-cookie", "figma.session=s2; Path=/; HttpOnly"),
+        )
+        .once(Method::Get, "/api/session/state", 200, r#"{"meta":{"users":[{"id":"7"}]}}"#)
+        .once(Method::Get, "/api/user/state?fuid=7", 200, "{}");
+    let polled = sign_in.0.poll(&http, &started, now()).await;
+    let Ok(Polled::Authorized(grant)) = polled else { panic!("{polled:?}") };
+    assert_eq!(grant.access_token, r#"{"cookies":"figma.session=s2; locale=en","fuid":"7"}"#);
+    let sent = http.sent();
+    assert_eq!(sent[0].body_text(), r#"{"g_secret":"g1"}"#);
+    assert_eq!(sent[0].header_value("cookie"), Some("figma.session=s1; locale=en"));
+}
+
+#[tokio::test]
 async fn a_refreshed_session_without_an_account_is_an_auth_error() {
     let AuthSpec::Steps(sign_in) = loaded("figma").descriptor().auth else { panic!("not steps") };
     let grant = crate::oauth::Grant {

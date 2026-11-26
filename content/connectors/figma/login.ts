@@ -54,6 +54,33 @@ export function sessionOf(ctx: Ctx, cookies: string): Session {
   return found;
 }
 
+function secretOf(captured): string | null {
+  try {
+    const secret = JSON.parse(String(captured?.body ?? ""))?.meta?.g_secret;
+    return typeof secret === "string" && secret !== "" ? secret : null;
+  } catch {
+    return null;
+  }
+}
+
+function merged(held: string, fresh: string): string {
+  const pairs = new Map<string, string>();
+  for (const pair of `${held}; ${fresh}`.split(";").map((part) => part.trim()).filter((part) => part.includes("="))) {
+    pairs.set(pair.slice(0, pair.indexOf("=")), pair);
+  }
+  return [...pairs.values()].join("; ");
+}
+
+function redeemed(ctx: Ctx, cookies: string, secret: string): string {
+  const answer = checked(send(ctx, {
+    method: "POST",
+    url: `${base(ctx)}/api/session/app_auth/redeem`,
+    headers: { ...headersOf(cookies), "content-type": "application/json" },
+    body: JSON.stringify({ g_secret: secret }),
+  }));
+  return merged(cookies, cookiesOf(answer.headers));
+}
+
 export function grantOf(session: Session) {
   return { access_token: JSON.stringify(session), refresh_token: null, expires_at: null, scope: null, client: null, extra: null };
 }
@@ -86,7 +113,9 @@ export const session = {
     };
   },
   poll({ started }, ctx: Ctx) {
-    const cookies = String(started?.carried?.cookies ?? "");
+    const held = String(started?.carried?.cookies ?? "");
+    const secret = secretOf(started?.captured);
+    const cookies = secret === null ? held : redeemed(ctx, held, secret);
     const found = signedIn(ctx, cookies);
     return found === null ? { state: "pending" } : { state: "authorized", grant: grantOf(found) };
   },
