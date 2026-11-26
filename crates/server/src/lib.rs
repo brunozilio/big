@@ -8,6 +8,7 @@ mod backend;
 mod blocks;
 mod boot;
 mod branding;
+mod browser_mcp;
 mod browsers;
 mod btw;
 mod callback_port;

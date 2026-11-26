@@ -62,6 +62,10 @@ fn api() -> Router<Ctx> {
         .route("/api/memories/move", post(crate::memories::moved))
         .route("/api/browser", get(crate::browsers::status).put(crate::browsers::set))
         .route(browser::ROUTE, get(crate::browsers::connect))
+        .route(
+            crate::browser_mcp::route(),
+            post(crate::browser_mcp::post).get(crate::browser_mcp::other).delete(crate::browser_mcp::ended),
+        )
         .route("/api/live", get(live))
         .route(
             "/api/{*rest}",

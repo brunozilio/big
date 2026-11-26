@@ -185,6 +185,9 @@ switch_seconds = "120"
 upload_limit_mb = "10"
 extension_folder = "browser-extension"
 files_folder = "browser-files"
+mcp_route = "/mcp/browser"
+mcp_token_file = "browser-mcp.token"
+mcp_command = "browser-mcp"
 
 [retry]
 max = 5

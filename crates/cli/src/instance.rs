@@ -29,6 +29,20 @@ impl Drop for Held {
     }
 }
 
+pub fn address(data: &Path) -> Option<String> {
+    let file = OpenOptions::new().create(false).write(true).open(data.join(LOCK)).ok()?;
+    match file.try_lock() {
+        Ok(()) => {
+            let _ = file.unlock();
+            None
+        }
+        Err(_) => std::fs::read_to_string(data.join(ADDRESS))
+            .ok()
+            .map(|url| url.trim().to_owned())
+            .filter(|url| !url.is_empty()),
+    }
+}
+
 pub fn claim(data: &Path) -> std::io::Result<Instance> {
     std::fs::create_dir_all(data)?;
     let file = OpenOptions::new().create(true).truncate(false).write(true).open(data.join(LOCK))?;
@@ -57,7 +71,9 @@ mod tests {
             Ok(Instance::Running(url)) => assert_eq!(url.as_deref(), Some("http://127.0.0.1:1")),
             other => panic!("a second instance only finds the first: {other:?}"),
         }
+        assert_eq!(address(data.path()).as_deref(), Some("http://127.0.0.1:1"));
         drop(held);
+        assert_eq!(address(data.path()), None, "no address once the first ends");
         assert!(matches!(claim(data.path()), Ok(Instance::Ours(_))), "free again once the first ends");
     }
 }

@@ -1,4 +1,6 @@
+mod browser_mcp;
 mod cloud;
+mod http;
 mod instance;
 mod logging;
 mod teammate;
@@ -27,6 +29,11 @@ enum Internal {
     Teammate(teammate::Args),
     #[command(name = server::CLOUD_CREDENTIALS_COMMAND, hide = true, about = "Print an agent's cloud credentials")]
     CloudCredentials(cloud::Args),
+    #[command(
+        name = brand::browser::MCP_COMMAND,
+        about = "Serve the browser tools over MCP on stdin/stdout, for another agent to use"
+    )]
+    BrowserMcp(browser_mcp::Args),
 }
 
 fn main() -> ExitCode {
@@ -35,6 +42,7 @@ fn main() -> ExitCode {
     let ended = match cli.command {
         Some(Internal::Teammate(args)) => teammate::run(args),
         Some(Internal::CloudCredentials(args)) => cloud::run(args),
+        Some(Internal::BrowserMcp(args)) => data_dir().and_then(|data| browser_mcp::run(args, data)),
         None => serve(cli.port.unwrap_or_else(configured_port), !cli.no_open && configured_open()),
     };
     match ended {
@@ -135,6 +143,12 @@ mod tests {
     fn the_cloud_credentials_command_takes_the_address_it_asks() {
         let cli = Cli::parse_from([brand::COMMAND, server::CLOUD_CREDENTIALS_COMMAND, "http://127.0.0.1:1/x"]);
         assert!(matches!(cli.command, Some(Internal::CloudCredentials(_))));
+    }
+
+    #[test]
+    fn the_browser_mcp_command_takes_no_arguments() {
+        let cli = Cli::parse_from([brand::COMMAND, brand::browser::MCP_COMMAND]);
+        assert!(matches!(cli.command, Some(Internal::BrowserMcp(_))));
     }
 
     #[test]
