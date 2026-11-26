@@ -43,7 +43,7 @@ async fn a_frame_link_brings_its_texts_structure_and_rendered_image() {
         r#"{"images":{"12:34":"https://img.test/12-34.png"}}"#,
     )
     .once(Method::Get, "/12-34.png", 200, "png");
-    let found = frame(&http, "https://www.simulacaofig.com/design/AbC123/App?node-id=12-34&t=x").await;
+    let found = frame(&http, "https://www.figma.com/design/AbC123/App?node-id=12-34&t=x").await;
     let Ok(found) = found else { panic!("{found:?}") };
     assert_eq!(found["ref"], "AbC123:12:34");
     assert_eq!(found["name"], "Cadastro");
@@ -67,7 +67,7 @@ async fn a_frame_link_brings_its_texts_structure_and_rendered_image() {
 async fn a_branch_link_reads_the_branch_and_a_file_link_reads_the_whole_file() {
     let file = r#"{"name":"App","document":{"name":"Document","type":"DOCUMENT","children":[{"name":"Tela","type":"CANVAS"}]}}"#;
     let http = FakeHttp::new().once(Method::Get, "/v1/files/Br4nch", 200, file);
-    let found = frame(&http, "https://www.simulacaofig.com/design/AbC123/branch/Br4nch/App").await;
+    let found = frame(&http, "https://www.figma.com/design/AbC123/branch/Br4nch/App").await;
     assert_eq!(
         found.map(|found| (found["ref"].clone(), found["image"].clone(), found["picture"].clone())),
         Ok((json!("Br4nch"), Value::Null, Value::Null))
@@ -102,7 +102,7 @@ async fn the_session_signs_in_without_a_browser_and_its_cookies_are_the_grant() 
         "/api/session/app_auth",
         HttpResponse::new(200, r#"{"meta":{"id":"abc","app_type":"desktop"}}"#).with_header(
             "set-cookie",
-            "simulacaofig.session=s1; Path=/; HttpOnly, product_locale=%22en%22; Path=/",
+            "figma.session=s1; Path=/; HttpOnly, product_locale=%22en%22; Path=/",
         ),
     );
     let started = sign_in.0.start(&http, &json!({}), domain::Language::Portuguese).await;
@@ -114,15 +114,15 @@ async fn the_session_signs_in_without_a_browser_and_its_cookies_are_the_grant() 
         .once(Method::Get, "/api/user/state?fuid=7", 200, r#"{"meta":{"team_users":[]}}"#);
     let polled = sign_in.0.poll(&http, &started, now()).await;
     let Ok(Polled::Authorized(grant)) = polled else { panic!("{polled:?}") };
-    assert_eq!(grant.access_token, r#"{"cookies":"simulacaofig.session=s1; product_locale=%22en%22","fuid":"7"}"#);
+    assert_eq!(grant.access_token, r#"{"cookies":"figma.session=s1; product_locale=%22en%22","fuid":"7"}"#);
     let sent = http.sent();
-    assert!(sent.iter().all(|request| request.header_value("cookie") == Some("simulacaofig.session=s1; product_locale=%22en%22")));
+    assert!(sent.iter().all(|request| request.header_value("cookie") == Some("figma.session=s1; product_locale=%22en%22")));
 }
 
 #[tokio::test]
 async fn a_session_without_an_account_is_an_auth_error() {
     let AuthSpec::Steps(sign_in) = loaded("figma").descriptor().auth else { panic!("not steps") };
-    let started = Started { code: DeviceCode { device_code: "abc".into(), user_code: String::new(), verification_uri: String::new(), verification_uri_complete: None, expires_in: 900, interval: 2 }, carried: json!({ "cookies": "simulacaofig.session=s1" }) };
+    let started = Started { code: DeviceCode { device_code: "abc".into(), user_code: String::new(), verification_uri: String::new(), verification_uri_complete: None, expires_in: 900, interval: 2 }, carried: json!({ "cookies": "figma.session=s1" }) };
     let http = FakeHttp::new().once(Method::Get, "/api/session/state", 200, r#"{"meta":{"users":[]}}"#);
     let polled = sign_in.0.poll(&http, &started, now()).await;
     assert_eq!(polled.map_err(|error| error.class), Err(ErrorClass::Auth));
@@ -130,14 +130,14 @@ async fn a_session_without_an_account_is_an_auth_error() {
 
 #[tokio::test]
 async fn a_session_account_calls_the_host_with_its_cookie() {
-    let token = r#"{"cookies":"simulacaofig.session=s1","fuid":"7"}"#;
+    let token = r#"{"cookies":"figma.session=s1","fuid":"7"}"#;
     let http = FakeHttp::new().once(Method::Get, "/api/session/state", 200, r#"{"meta":{"users":[{"id":"7","handle":"Ana"}]}}"#);
     let found = loaded("figma").accounts(&http, &creds(token, json!({}))).await;
     let Ok(found) = found else { panic!("{found:?}") };
     assert_eq!(found[0].label, "Ana");
     let sent = http.sent();
-    assert!(sent[0].url.starts_with("https://www.simulacaofig.com/api/session/state"), "{}", sent[0].url);
-    assert_eq!(sent[0].header_value("cookie"), Some("simulacaofig.session=s1"));
+    assert!(sent[0].url.starts_with("https://www.figma.com/api/session/state"), "{}", sent[0].url);
+    assert_eq!(sent[0].header_value("cookie"), Some("figma.session=s1"));
 }
 
 #[tokio::test]
