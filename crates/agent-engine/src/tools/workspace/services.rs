@@ -11,6 +11,26 @@ pub struct Services {
     pub mcp: Vec<Arc<crate::mcp::McpServer>>,
     pub output_schema: Option<serde_json::Value>,
     pub artifacts: Option<std::path::PathBuf>,
+    pub pointers: Option<CodePointers>,
+}
+
+pub trait Pointers: Send + Sync {
+    fn pointers(&self, project: &std::path::Path, prompt: &str) -> Option<String>;
+}
+
+#[derive(Clone)]
+pub struct CodePointers(pub Arc<dyn Pointers>);
+
+impl CodePointers {
+    pub fn for_task(&self, project: &std::path::Path, task: &str) -> Option<String> {
+        self.0.pointers(project, task).map(|map| map.trim().to_owned()).filter(|map| !map.is_empty())
+    }
+}
+
+impl std::fmt::Debug for CodePointers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("CodePointers")
+    }
 }
 
 #[derive(Clone)]

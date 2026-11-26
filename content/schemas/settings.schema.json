@@ -121,6 +121,18 @@
             "null"
           ]
         },
+        "root": {
+          "description": "The marked folder that is the server's root: the closest to the file, or the outermost inside the working folder.",
+          "enum": [
+            "closest",
+            "outermost",
+            null
+          ],
+          "type": [
+            "string",
+            "null"
+          ]
+        },
         "rootMarkers": {
           "items": {
             "type": "string"

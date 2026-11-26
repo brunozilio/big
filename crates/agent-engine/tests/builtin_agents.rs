@@ -21,7 +21,10 @@ fn says(text: &str) -> Result<agent_engine::model::Reply, agent_engine::model::M
 
 fn run(model: &ScriptedModel, history: &mut Vec<Message>) -> Vec<TurnRequest> {
     let dir = tempfile::tempdir().expect("dir");
-    let workspace = Workspace::new(dir.path());
+    run_in(model, history, &Workspace::new(dir.path()))
+}
+
+fn run_in(model: &ScriptedModel, history: &mut Vec<Message>, workspace: &Workspace) -> Vec<TurnRequest> {
     let control =
         Arc::new(Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human));
     let events: Arc<Mutex<Vec<EngineEvent>>> = Arc::default();
@@ -33,7 +36,7 @@ fn run(model: &ScriptedModel, history: &mut Vec<Message>) -> Vec<TurnRequest> {
     let agent = Agent {
         api: model,
         tools: &tools,
-        workspace: &workspace,
+        workspace,
         control: &control,
         emit: &emit,
         request: TurnRequest {
@@ -83,6 +86,46 @@ fn a_fork_continues_from_the_parents_conversation_and_reports_only_its_own_words
         _ => None,
     });
     assert_eq!(report.as_deref(), Some("Three files.\n\nagent_id: agent-1 (SendMessage continues it)"));
+}
+
+struct Echo;
+
+impl tools::Pointers for Echo {
+    fn pointers(&self, _: &std::path::Path, prompt: &str) -> Option<String> {
+        Some(format!("<code-map>\n- src/main.rs: fn main, for {prompt}\n</code-map>"))
+    }
+}
+
+#[test]
+fn a_new_sub_agent_gets_the_code_map_for_its_own_task_and_a_fork_does_not() {
+    let model = ScriptedModel::new([
+        ScriptedModel::reply(vec![tool_use(
+            "e1",
+            "Agent",
+            json!({"description": "Find it", "subagent_type": "Explore", "prompt": "Where is main?"}),
+        )]),
+        says("src/main.rs"),
+        ScriptedModel::reply(vec![tool_use(
+            "f1",
+            "Agent",
+            json!({"description": "Check", "subagent_type": "fork", "prompt": "Count the files"}),
+        )]),
+        says("Three."),
+        says("Done."),
+    ]);
+    let dir = tempfile::tempdir().expect("dir");
+    let mut workspace = Workspace::new(dir.path());
+    workspace.services.pointers = Some(tools::CodePointers(Arc::new(Echo)));
+    let mut history = vec![Message::user("Where is main?")];
+    let asked = run_in(&model, &mut history, &workspace);
+
+    let explore = &asked[1];
+    assert_eq!(explore.messages.len(), 2);
+    assert_eq!(explore.messages[0].text(), "Where is main?");
+    assert!(explore.messages[1].text().contains("<code-map>"), "{:?}", explore.messages[1].text());
+    assert!(explore.messages[1].text().contains("for Where is main?"));
+    let fork = &asked[3];
+    assert!(!fork.messages.iter().any(|message| message.text().contains("<code-map>")), "a fork keeps the parent's view");
 }
 
 #[test]

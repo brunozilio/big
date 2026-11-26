@@ -111,6 +111,7 @@ done
             root_markers: Vec::new(),
             env: Default::default(),
             install: None,
+            root: domain::lsp::RootPick::Closest,
         }
     }
 

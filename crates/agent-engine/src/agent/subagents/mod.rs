@@ -113,7 +113,11 @@ impl Agent<'_> {
             turn_limit: planned.turn_limit,
         };
         let resumed = resume.is_some();
+        let fresh = resume.is_none() && !chosen.forked;
         let mut history = first_history(resume, chosen.forked, spawning.parent, &task);
+        if let Some(map) = child_workspace.services.pointers.as_ref().filter(|_| fresh) {
+            history.extend(map.for_task(&child_workspace.cwd, &task).map(Message::user));
+        }
         let own = history.len();
         let outcome = started_then_run(&child, &run, &lane, &task, resumed, &mut history);
         let cleanup = runtime.finish();

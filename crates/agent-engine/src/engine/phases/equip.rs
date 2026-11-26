@@ -88,6 +88,7 @@ impl Job {
         let specs = domain::lsp::servers(crate::lsp_catalog::shipped(), &brief.settings.lsp_servers);
         let lsp = crate::lsp::Lsp { servers: Arc::clone(&self.lsp), specs: Arc::new(specs) };
         if !lsp.available().is_empty() {
+            crate::lsp_warm::warm(&lsp, &workspace.cwd);
             workspace.services.lsp = Some(lsp);
         }
     }

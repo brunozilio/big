@@ -11,6 +11,7 @@ export const spec = {
   command: "rust-analyzer",
   extensionToLanguage: { ".rs": "rust" },
   rootMarkers: ["Cargo.toml"],
+  root: "outermost",
   install: {
     download: {
       program: "rust-analyzer",

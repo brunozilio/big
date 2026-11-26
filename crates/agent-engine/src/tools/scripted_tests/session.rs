@@ -206,6 +206,31 @@ fn calls_are_asked_in_two_steps() {
     assert_eq!(methods, ["textDocument/prepareCallHierarchy", "callHierarchy/incomingCalls"]);
 }
 
+#[test]
+fn impact_names_what_the_lines_declare_and_every_other_file_that_uses_it() {
+    let server = ScriptedServer::answering([]);
+    let (dir, workspace) = project(&server);
+    let tools = domain::lsp::uri::uri_of(&dir.path().join("src/tools.rs"));
+    let main = domain::lsp::uri::uri_of(&dir.path().join("src/main.rs"));
+    let outline = json!([{"name": "run", "kind": 12, "range": range(1, 0), "selectionRange": range(1, 7)}]);
+    let uses = json!([{"uri": main, "range": range(2, 11)}, {"uri": tools, "range": range(1, 7)}]);
+    *server.answers.lock().expect("answers") = [Ok(outline.clone()), Ok(uses)].into();
+    let input = json!({"operation": "impact", "file_path": "src/tools.rs", "line": 2});
+    let outcome = super::shipped("LSP").run(&input, &workspace);
+    assert!(!outcome.is_error, "{}", outcome.content);
+    assert_eq!(outcome.content, "function run (line 2): 1 use in 1 file\n  src/main.rs: 3");
+    let asked = server.asked();
+    assert_eq!(asked[1].0, "textDocument/references");
+    assert_eq!(asked[1].1["position"], json!({"line": 1, "character": 7}));
+
+    *server.answers.lock().expect("answers") = [Ok(outline)].into();
+    let above = json!({"operation": "impact", "file_path": "src/tools.rs", "line": 1});
+    let outcome = super::shipped("LSP").run(&above, &workspace);
+    assert_eq!(outcome.content, "No function, method or type is declared on line 1 of src/tools.rs.");
+    let backwards = json!({"operation": "impact", "file_path": "src/tools.rs", "line": 2, "end_line": 1});
+    assert!(super::shipped("LSP").run(&backwards, &workspace).is_error);
+}
+
 fn problem(severity: u64, line: u32, message: &str) -> Value {
     json!({"severity": severity, "message": message, "range": range(line, 4)})
 }

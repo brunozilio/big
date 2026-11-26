@@ -44,7 +44,8 @@ pub use domain::permission::{Declared, Effect, SpawnKind};
 pub use llm_providers::web_search::WEB_SEARCH;
 pub(crate) use outside::settled;
 pub use workspace::{
-    Launch, Launcher, Models, Network, OnThisMachine, Policy, Starter, WebSearcher, Workspace, env_secrets,
+    CodePointers, Launch, Launcher, Models, Network, OnThisMachine, Pointers, Policy, Starter, WebSearcher, Workspace,
+    env_secrets,
 };
 
 use crate::model::ToolSpec;

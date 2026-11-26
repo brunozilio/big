@@ -1,29 +1,41 @@
 pub mod run;
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
 use crate::features::context::Context;
 
 pub const MOST_FILES: usize = 12;
 
 pub fn pointers(context: &Context<'_>, project: &Path, prompt: &str) -> Option<String> {
-    let home = context.services.home();
-    if !domain::features::on(brand::features::CODE_MAP) || !mapped(project, home.as_deref()) {
+    found(&context.services.root.code_map(), context.services.home().as_deref(), project, prompt)
+}
+
+fn found(maps: &Path, home: Option<&Path>, project: &Path, prompt: &str) -> Option<String> {
+    if !domain::features::on(brand::features::CODE_MAP) || !mapped(project, home) {
         return None;
     }
-    let map = code_map::refresh(project, &cache(context, project));
+    let map = code_map::refresh(project, &maps.join(format!("{}.json", crate::dirs::project_key(project))));
     let found = map.relevant(prompt, MOST_FILES);
     let shown = code_map::render(&found);
     (!shown.trim().is_empty()).then_some(shown)
+}
+
+pub struct MapPointers {
+    pub maps: PathBuf,
+    pub homes: Arc<dyn crate::Homes>,
+}
+
+impl agent_engine::tools::Pointers for MapPointers {
+    fn pointers(&self, project: &Path, prompt: &str) -> Option<String> {
+        found(&self.maps, self.homes.home().as_deref(), project, prompt)
+    }
 }
 
 fn mapped(project: &Path, home: Option<&Path>) -> bool {
     home != Some(project) && project.ancestors().any(|folder| folder.join(".git").exists())
 }
 
-fn cache(context: &Context<'_>, project: &Path) -> PathBuf {
-    context.services.root.code_map().join(format!("{}.json", crate::dirs::project_key(project)))
-}
 
 #[cfg(test)]
 mod tests {

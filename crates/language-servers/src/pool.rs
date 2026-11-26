@@ -168,7 +168,7 @@ impl LanguageServers for LspPool {
             );
             return Err(format!("No language server handles {kind}."));
         };
-        let root = domain::lsp::root_for(file, &spec.root_markers, cwd, Path::exists);
+        let root = domain::lsp::root_of(file, spec, cwd, Path::exists);
         let slot = {
             let mut slots = self.inner.slots.lock().map_err(|_| "the language servers are unavailable")?;
             let key = (spec.name.clone(), root.clone());
@@ -203,6 +203,10 @@ impl LanguageServers for LspPool {
         };
         *slot = Slot::Running { server: Arc::clone(&server), used: Instant::now() };
         Ok(opened(server))
+    }
+
+    fn warms(&self) -> bool {
+        true
     }
 
     fn available(&self, specs: &[ServerSpec]) -> Vec<ServerSpec> {

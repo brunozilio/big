@@ -15,7 +15,8 @@ When the language servers line of your environment lists the file's language, th
 | --- | --- |
 | Where is this function, type or constant? | `workspaceSymbol` with `query` |
 | Where is this defined? | `goToDefinition` at the use |
-| Who uses it? How far does a change reach? | `findReferences` |
+| Who uses it? | `findReferences` |
+| How far does a change to these lines reach? | `impact` with `line` and `end_line`: what they declare and every other file that uses it |
 | Who implements this trait or interface? | `goToImplementation` |
 | Who calls this function? What does it call? | `incomingCalls`, `outgoingCalls` |
 | What is in this long file? | `documentSymbol`, then Read only the part you need |
@@ -24,7 +25,7 @@ When the language servers line of your environment lists the file's language, th
 
 `line` and `character` count from 1, as Read shows them; point at the symbol's name. The first question to a project can wait while its server indexes; wait for it instead of falling back to Grep.
 
-When planning a change, size it with `findReferences` and `incomingCalls` on what it touches: the callers are the change's real reach.
+When planning a change, size it with `impact` on the lines it touches, then `incomingCalls` where a caller needs a closer look: the users are the change's real reach.
 
 ## Text goes to Grep, a known place to Read
 

@@ -16,6 +16,16 @@ pub struct ServerSpec {
     pub env: BTreeMap<String, String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub install: Option<InstallSpec>,
+    #[serde(default)]
+    pub root: RootPick,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum RootPick {
+    #[default]
+    Closest,
+    Outermost,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -54,6 +64,7 @@ pub struct ServerConfig {
     pub extension_to_language: Option<BTreeMap<String, String>>,
     pub root_markers: Option<Vec<String>>,
     pub env: Option<BTreeMap<String, String>>,
+    pub root: Option<RootPick>,
     pub disabled: bool,
 }
 
@@ -101,6 +112,9 @@ fn apply(spec: &mut ServerSpec, config: &ServerConfig) {
     if let Some(env) = config.env {
         spec.env.extend(env);
     }
+    if let Some(root) = config.root {
+        spec.root = root;
+    }
 }
 
 fn new_server(name: &str, config: &ServerConfig) -> Option<ServerSpec> {
@@ -112,6 +126,7 @@ fn new_server(name: &str, config: &ServerConfig) -> Option<ServerSpec> {
         root_markers: Vec::new(),
         env: BTreeMap::new(),
         install: None,
+        root: RootPick::Closest,
     };
     apply(&mut spec, config);
     Some(spec)

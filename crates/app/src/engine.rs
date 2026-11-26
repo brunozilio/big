@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use agent_engine::lsp::{Downloads, IDLE, LspPool, Processes};
@@ -90,10 +89,12 @@ pub fn other_keys(providers: &ModelProviders, model: &ModelOption) -> Vec<(Model
         .collect()
 }
 
-pub fn build(sessions: Arc<FileSessions>, language_servers: PathBuf) -> Engine {
+pub fn build(sessions: Arc<FileSessions>, root: &crate::data_root::DataRoot) -> Engine {
     let apis = ProviderApis::new(Arc::new(NetHttp));
-    let servers = LspPool::installing(Processes, IDLE, language_servers, Downloads(agent_engine::NetFetch));
-    Engine::new(Arc::new(apis), sessions).with_language_servers(Arc::new(servers))
+    let servers = LspPool::installing(Processes, IDLE, root.language_servers(), Downloads(agent_engine::NetFetch));
+    let pointers =
+        crate::features::code_map::MapPointers { maps: root.code_map(), homes: Arc::new(crate::OwnerHome::system()) };
+    Engine::new(Arc::new(apis), sessions).with_language_servers(Arc::new(servers)).with_pointers(Arc::new(pointers))
 }
 
 #[cfg(test)]

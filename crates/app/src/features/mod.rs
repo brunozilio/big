@@ -1,5 +1,5 @@
 mod browser;
-mod code_map;
+pub(crate) mod code_map;
 pub mod context;
 pub(crate) mod memory;
 pub(crate) mod trace;

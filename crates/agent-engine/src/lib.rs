@@ -15,6 +15,7 @@ pub mod intercept;
 pub use language_servers as lsp;
 pub mod lsp_catalog;
 mod lsp_fetch;
+pub mod lsp_warm;
 pub use lsp_fetch::NetFetch;
 pub mod mcp;
 pub mod meter;

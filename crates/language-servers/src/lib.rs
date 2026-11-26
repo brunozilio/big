@@ -146,6 +146,9 @@ pub trait LanguageServers: Send + Sync + std::fmt::Debug {
     fn pending_install(&self, _file: &Path, _specs: &[ServerSpec]) -> Option<String> {
         None
     }
+    fn warms(&self) -> bool {
+        false
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

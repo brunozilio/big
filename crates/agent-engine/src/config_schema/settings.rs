@@ -87,6 +87,11 @@ fn language_server() -> Value {
             "extensionToLanguage": { "type": ["object", "null"], "additionalProperties": text },
             "rootMarkers": { "type": ["array", "null"], "items": text },
             "env": { "type": ["object", "null"], "additionalProperties": text },
+            "root": {
+                "type": ["string", "null"],
+                "enum": ["closest", "outermost", null],
+                "description": "The marked folder that is the server's root: the closest to the file, or the outermost inside the working folder."
+            },
             "disabled": switch("true removes the server.")
         },
         "additionalProperties": false

@@ -47,6 +47,7 @@ pub struct Engine {
     sessions: Arc<dyn Sessions>,
     mcp: Arc<dyn Http>,
     lsp: Arc<dyn LanguageServers>,
+    pointers: Option<crate::tools::CodePointers>,
     launch: crate::tools::Launch,
     live: Arc<live::LiveSessions>,
     runtime: Result<tokio::runtime::Handle, String>,
@@ -66,6 +67,7 @@ impl Engine {
             sessions,
             mcp: Arc::new(NetHttp),
             lsp: Arc::new(LspPool::default()),
+            pointers: None,
             launch: crate::tools::Launch::default(),
             live: Arc::default(),
             runtime: task::runtime().map_err(|error| error.to_string()),
@@ -74,6 +76,11 @@ impl Engine {
 
     pub fn with_language_servers(mut self, lsp: Arc<dyn LanguageServers>) -> Self {
         self.lsp = lsp;
+        self
+    }
+
+    pub fn with_pointers(mut self, pointers: Arc<dyn crate::tools::Pointers>) -> Self {
+        self.pointers = Some(crate::tools::CodePointers(pointers));
         self
     }
 }
@@ -91,6 +98,7 @@ impl AgentEngine for Engine {
     ) -> Result<Box<dyn RunHandle>, EngineError> {
         let mut workspace = Workspace::for_request(request);
         workspace.services.launch = self.launch.clone();
+        workspace.services.pointers.clone_from(&self.pointers);
         let control = Arc::new(
             Control::new(request.policy.permission, workspace.stop.clone()).reviewed_by(request.policy.reviewer),
         );

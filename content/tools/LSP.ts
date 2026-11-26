@@ -26,9 +26,14 @@ export const spec = {
           "incomingCalls",
           "outgoingCalls",
           "diagnostics",
-          "workspaceDiagnostics"
+          "workspaceDiagnostics",
+          "impact"
         ],
         "type": "string"
+      },
+      "end_line": {
+        "description": "Last line of the span (impact), from 1; the same as `line` if omitted.",
+        "type": "integer"
       },
       "query": {
         "description": "The name to find (workspaceSymbol).",
@@ -41,7 +46,7 @@ export const spec = {
     ],
     "type": "object"
   },
-  description: `Ask the file's language server about code: \`goToDefinition\`, \`findReferences\`, \`goToImplementation\`, \`hover\` (type and docs), \`incomingCalls\`/\`outgoingCalls\` (who calls a function, what it calls) at a position; \`documentSymbol\` (a file's outline) or \`workspaceSymbol\` (find a symbol by name across the project, with \`query\`). \`line\` and \`character\` count from 1, as Read shows them; point at the symbol's name. Prefer this over Grep to find where a symbol is defined or used: it follows the language's rules, not the text. To find a function or type by name, or to list a project's declarations, ask \`workspaceSymbol\` instead of a Grep for the language's keywords. Before reading a long file, ask \`documentSymbol\` and Read only the part you need; a short file is quicker read whole. \`diagnostics\` gives the file's current errors and warnings as the server sees them (the file is sent as it is on disk first); \`workspaceDiagnostics\` gives every error and warning the file's server has reported for the project so far, not only for that file. Both answer as one line per problem, errors first. Ask them after a change you are unsure of, instead of running a full build. The first question to a project can wait while its server starts.`,
+  description: `Ask the file's language server about code: \`goToDefinition\`, \`findReferences\`, \`goToImplementation\`, \`hover\` (type and docs), \`incomingCalls\`/\`outgoingCalls\` (who calls a function, what it calls) at a position; \`documentSymbol\` (a file's outline) or \`workspaceSymbol\` (find a symbol by name across the project, with \`query\`). \`line\` and \`character\` count from 1, as Read shows them; point at the symbol's name. Prefer this over Grep to find where a symbol is defined or used: it follows the language's rules, not the text. To find a function or type by name, or to list a project's declarations, ask \`workspaceSymbol\` instead of a Grep for the language's keywords. Before reading a long file, ask \`documentSymbol\` and Read only the part you need; a short file is quicker read whole. \`diagnostics\` gives the file's current errors and warnings as the server sees them (the file is sent as it is on disk first); \`workspaceDiagnostics\` gives every error and warning the file's server has reported for the project so far, not only for that file. Both answer as one line per problem, errors first. Ask them after a change you are unsure of, instead of running a full build. \`impact\` (with \`line\` and, for a span, \`end_line\`) names the functions, methods and types declared on those lines and, for each, every other file that uses it, grouped by file: ask it before planning or making a change to see how far it reaches. The first question to a project can wait while its server starts.`,
 };
 
 const OUTPUT = 30000;
@@ -62,13 +67,19 @@ const OPERATIONS = {
 
 const SCOPES = ["diagnostics", "workspaceDiagnostics"];
 
+const IMPACT = "impact";
+const IMPACT_SYMBOLS = 10;
+const IMPACT_FILES = 15;
+const IMPACT_LINES = 5;
+const DECLARED = [5, 6, 9, 10, 11, 12, 14, 22, 23];
+
 const KINDS = [
   "file", "module", "namespace", "package", "class", "method", "property", "field", "constructor", "enum",
   "interface", "function", "variable", "constant", "string", "number", "boolean", "array", "object", "key", "null",
   "enum member", "struct", "event", "operator", "type parameter",
 ];
 
-type Input = { operation?: string; file_path?: string; line?: number; character?: number; query?: string };
+type Input = { operation?: string; file_path?: string; line?: number; character?: number; end_line?: number; query?: string };
 type Query = { operation: string; file: string; line: number; column: number; query: string };
 
 export function effects(input: Input | null) {
@@ -101,7 +112,7 @@ function parse(input: Input): Query {
   const text = (name: string) => (typeof input[name] === "string" ? input[name] : null);
   const operation = text("operation") ?? "";
   if (!(operation in OPERATIONS)) {
-    const known = [...Object.keys(OPERATIONS), ...SCOPES].join(", ");
+    const known = [...Object.keys(OPERATIONS), ...SCOPES, IMPACT].join(", ");
     throw new Error(`Unknown operation \`${operation}\`; use one of: ${known}.`);
   }
   const file = text("file_path");
@@ -352,6 +363,93 @@ function question(ctx, input: Input) {
   return withInstall(opened.installed, describe(ctx, query.operation, answer));
 }
 
+type Declared = { name: string; label: string; line: number; character: number };
+
+function span(input: Input) {
+  const first = whole(input.line);
+  if (first === null || first < 1) {
+    throw new Error("impact needs `line`, counted from 1.");
+  }
+  const last = input.end_line === undefined ? first : whole(input.end_line);
+  if (last === null || last < first) {
+    throw new Error("`end_line` counts from 1 and is not before `line`.");
+  }
+  return [first - 1, last - 1];
+}
+
+function declared(item: unknown, [first, last]: number[], found: Declared[]) {
+  const range = at(item, "range") ?? at(at(item, "location"), "range");
+  const start = whole(at(at(range, "start"), "line"));
+  const end = whole(at(at(range, "end"), "line"));
+  if (start === null || end === null || end < first || start > last) {
+    return;
+  }
+  const before = found.length;
+  const children = Array.isArray(at(item, "children")) ? at(item, "children") : [];
+  children.forEach((child) => declared(child, [first, last], found));
+  const kind = whole(at(item, "kind")) ?? 0;
+  const name = at(item, "name");
+  const selection = at(at(item, "selectionRange") ?? range, "start");
+  const line = whole(at(selection, "line"));
+  const character = whole(at(selection, "character"));
+  if (found.length === before && DECLARED.includes(kind) && typeof name === "string" && line !== null && character !== null) {
+    found.push({ name, label: named(item), line, character });
+  }
+}
+
+function users(ctx, file: string, uri: string, symbol: Declared, own: string) {
+  const position = { textDocument: { uri }, position: { line: symbol.line, character: symbol.character } };
+  const answer = requested(ctx, file, "textDocument/references", { ...position, context: { includeDeclaration: false } });
+  const byFile = new Map<string, number[]>();
+  for (const place of Array.isArray(answer) ? answer : []) {
+    const found = located(ctx, at(place, "uri"), at(place, "range"), false);
+    if (found === null) continue;
+    const parts = found.at.split(":");
+    const line = Number(parts[parts.length - 2]);
+    const shown = parts.slice(0, -2).join(":");
+    if (shown === own) continue;
+    byFile.set(shown, [...(byFile.get(shown) ?? []), line]);
+  }
+  return byFile;
+}
+
+function reach(symbol: Declared, byFile: Map<string, number[]>) {
+  const total = [...byFile.values()].reduce((sum, lines) => sum + lines.length, 0);
+  if (total === 0) {
+    return `${symbol.label} (line ${symbol.line + 1}): no other file uses it.`;
+  }
+  const files = [...byFile.entries()].sort(([a], [b]) => (a < b ? -1 : 1));
+  const shown = files.slice(0, IMPACT_FILES).map(([path, lines]) => {
+    const sorted = [...lines].sort((a, b) => a - b);
+    const more = sorted.length > IMPACT_LINES ? ` and ${sorted.length - IMPACT_LINES} more` : "";
+    return `  ${path}: ${sorted.slice(0, IMPACT_LINES).join(", ")}${more}`;
+  });
+  if (files.length > IMPACT_FILES) {
+    shown.push(`  … and ${files.length - IMPACT_FILES} more files`);
+  }
+  return [`${symbol.label} (line ${symbol.line + 1}): ${counted(total, "use")} in ${counted(files.length, "file")}`, ...shown].join("\n");
+}
+
+function impact(ctx, input: Input) {
+  if (typeof input.file_path !== "string") {
+    throw new Error("Missing required parameter `file_path`.");
+  }
+  const lines = span(input);
+  const opened = ctx.lsp.open({ path: input.file_path });
+  const outline = requested(ctx, input.file_path, "textDocument/documentSymbol", { textDocument: { uri: opened.uri } });
+  const found: Declared[] = [];
+  (Array.isArray(outline) ? outline : []).forEach((item) => declared(item, lines, found));
+  if (found.length === 0) {
+    const where = lines[0] === lines[1] ? `line ${lines[0] + 1}` : `lines ${lines[0] + 1}-${lines[1] + 1}`;
+    return withInstall(opened.installed, `No function, method or type is declared on ${where} of ${opened.file}.`);
+  }
+  const each = found.slice(0, IMPACT_SYMBOLS).map((symbol) => reach(symbol, users(ctx, input.file_path, opened.uri, symbol, opened.file)));
+  if (found.length > IMPACT_SYMBOLS) {
+    each.push(`… and ${found.length - IMPACT_SYMBOLS} more declarations; ask for a smaller span.`);
+  }
+  return withInstall(opened.installed, each.join("\n\n"));
+}
+
 function clipped(text: string) {
   const characters = [...text];
   if (characters.length <= OUTPUT) {
@@ -366,7 +464,9 @@ export function execute(input: Input, ctx) {
       throw new Error("No language servers are available in this run.");
     }
     const operation = typeof input?.operation === "string" ? input.operation : "";
-    const answered = SCOPES.includes(operation) ? diagnose(ctx, operation, input) : question(ctx, input ?? {});
+    const answered = operation === IMPACT
+      ? impact(ctx, input ?? {})
+      : SCOPES.includes(operation) ? diagnose(ctx, operation, input) : question(ctx, input ?? {});
     return clipped(answered);
   } catch (error) {
     return { content: String(error.message ?? error), isError: true };
