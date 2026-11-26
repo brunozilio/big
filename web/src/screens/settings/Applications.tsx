@@ -4,7 +4,7 @@ import { api } from '@/api'
 import type { Application, ApplicationDraft, ApplicationRepository, Binding, Bindings, DirListing, Flows } from '@/api/contract'
 import { errorText, setApplications, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
-import { Card, EmptyState } from '@/ui/display'
+import { Card } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
 import { Field, Input, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
@@ -317,9 +317,7 @@ export function ApplicationsView() {
         <h2 className="text-base font-medium text-muted">{t('settings.app_title')}</h2>
         <Button size="sm" icon={<Icon name="plus" size={15} />} onClick={() => setEditing('new')}>{t('settings.app_new')}</Button>
       </div>
-      {applications.length === 0 ? (
-        <EmptyState size="inline" icon={<Icon name="apps" size={22} />} title={t('settings.app_empty')} text={t('settings.app_emptyText')} action={<Button size="sm" icon={<Icon name="plus" size={15} />} onClick={() => setEditing('new')}>{t('settings.app_new')}</Button>} />
-      ) : (
+      {applications.length > 0 && (
         <div className="space-y-3">
           {applications.map((a, i) => (
             <ApplicationRow key={a.id} application={a} index={i} onEdit={() => setEditing(a)} onRemove={() => remove(a)} />
