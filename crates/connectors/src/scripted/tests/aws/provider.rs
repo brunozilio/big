@@ -166,3 +166,25 @@ async fn an_access_key_is_kept_as_json_keys() {
     let token: Value = serde_json::from_str(&token.unwrap_or_default()).unwrap_or_default();
     assert_eq!(token, json!({ "accessKeyId": "AKIA1", "secretAccessKey": "s" }));
 }
+
+#[tokio::test]
+async fn the_application_binds_an_account_and_role_to_each_environment() {
+    let http = FakeHttp::new();
+    let listed = checked(&http, &creds(), "cloud.options", &json!({ "field": "environment" })).await;
+    let Ok(listed) = listed else { panic!("{listed:?}") };
+    let ids: Vec<&str> = listed.as_array().into_iter().flatten().filter_map(|env| env["value"].as_str()).collect();
+    assert!(ids.contains(&"develop") && ids.contains(&"prd"), "{listed}");
+    assert!(http.sent().is_empty(), "the environments come from the content, not from AWS");
+    let profiles = json!([
+        { "environment": { "value": "develop", "label": "Develop" }, "account": { "value": "111/Dev" } },
+        { "environment": { "value": "prd", "label": "Produção" }, "account": { "value": "222/Deploy" } },
+    ]);
+    let credentials = r#"{"roleCredentials":{"accessKeyId":"ASIA","secretAccessKey":"s","sessionToken":"t"}}"#;
+    let http = FakeHttp::new()
+        .once(Method::Get, "/federation/credentials?account_id=222&role_name=Deploy", 200, credentials)
+        .once(Method::Get, "/federation/credentials?account_id=111&role_name=Dev", 200, credentials);
+    let prd = checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles, "environment": "Produção" })).await;
+    assert_eq!(prd.map(|a| (a["account"].clone(), a["role"].clone())), Ok((json!("222"), json!("Deploy"))));
+    let first = checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles })).await;
+    assert_eq!(first.map(|a| a["account"].clone()), Ok(json!("111")));
+}

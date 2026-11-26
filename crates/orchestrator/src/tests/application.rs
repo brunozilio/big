@@ -9,7 +9,6 @@ use crate::application::{ADD_REPOSITORY, live, offer};
 fn stored(web: &str) -> Arc<Store> {
     let store = Arc::new(Store::in_memory(0).expect("store"));
     let application = Application {
-        skip_dependabot: true,
         id: "app".into(),
         name: "Loja".into(),
         bindings: Bindings::new(),

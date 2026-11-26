@@ -177,7 +177,7 @@ export function cloud(): Action[] {
     [["role", "string"], ["arn", "string"], ["session_token", "string"], ["expires_at", "string"], ["region", "string"]],
   );
   return [
-    read("cloud.identity", object([], [["account", "string"], ["role", "string"], ["binding", "string"]]), credentials),
+    read("cloud.identity", object([], [["account", "string"], ["role", "string"], ["binding", "string"], ["profiles", "array"], ["environment", "string"]]), credentials),
     read("cloud.accounts_and_roles", { type: "object", properties: {} }, object([["accounts", "array"]])),
     read(
       "cloud.last_deployment",

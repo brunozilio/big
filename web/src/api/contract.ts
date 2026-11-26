@@ -918,7 +918,6 @@ export interface Application {
   name: string
   bindings?: Bindings
   repositories: ApplicationRepository[]
-  skipDependabot?: boolean
   env?: Record<string, string>
 }
 

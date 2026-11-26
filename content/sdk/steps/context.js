@@ -318,8 +318,7 @@ export const DEPENDABOT = "dependabot[bot]";
 
 function ours(ctx, run) {
   if (!run || run.event === "dynamic" || String(run.file ?? "").startsWith("dynamic/")) return false;
-  const skipping = object(ctx.item.application).skipDependabot !== false;
-  return !(skipping && run.actor === DEPENDABOT);
+  return run.actor !== DEPENDABOT;
 }
 
 async function neverRan(ctx, opts, wanted) {

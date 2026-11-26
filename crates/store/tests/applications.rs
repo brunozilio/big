@@ -2,7 +2,6 @@ use store::{Application, Binding, Bindings, Repository, Store};
 
 fn application(id: &str, name: &str) -> Application {
     Application {
-        skip_dependabot: true,
         id: id.into(),
         name: name.into(),
         bindings: Bindings::from([
@@ -57,11 +56,10 @@ fn a_repository_saved_with_a_single_run_command_reads_it_as_a_list() {
 }
 
 #[test]
-fn an_application_saved_before_the_dependabot_flag_skips_its_runs() {
+fn an_application_saved_with_the_old_dependabot_flag_still_reads() {
     let old: Application = serde_json::from_str(r#"{"id":"a","name":"Loja","repositories":[]}"#).expect("old data");
-    assert!(old.skip_dependabot);
     assert_eq!(old.bound("cloud"), None, "agents keep the connection's own account and role");
     let off: Application = serde_json::from_str(r#"{"name":"Loja","skipDependabot":false}"#).expect("turned off");
-    assert!(!off.skip_dependabot);
+    assert_eq!(off.name, "Loja");
 }
 

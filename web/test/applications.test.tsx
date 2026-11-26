@@ -60,7 +60,7 @@ describe('diálogo de pasta', () => {
   test('o vínculo do repositório é sugerido pelo remote do git entre as opções do conector', () => {
     const github = { key: 'github', name: 'GitHub', group: 'code', description: '', logo: '', signIn: 'device' as const, fields: [], multiple: true }
     const connection = { id: 'c-github', provider: 'github', label: 'acme', account: '', capabilities: ['code'], status: 'ok' as const }
-    const fields = [{ capability: 'code', label: 'Repositório do GitHub', sources: [{ connection, provider: github }] }]
+    const fields = [{ capability: 'code', label: 'GitHub', sources: [{ connection, provider: github }] }]
     const options = { code: { 'c-github': [{ value: 'acme/web', label: 'acme/web' }] } }
     expect(suggested('ACME/web', fields, options, {})).toEqual({ code: { connection: 'c-github', value: 'acme/web', label: 'acme/web' } })
     expect(suggested('acme/outro', fields, options, {})).toEqual({})
@@ -92,7 +92,7 @@ describe('aba Aplicações', () => {
     fireEvent.click(view.getByRole('button', { name: 'Escolher' }))
     const name = (await view.findByLabelText('Nome')) as HTMLInputElement
     await waitFor(() => expect(name.value).toBe('web'))
-    expect((await view.findByRole('combobox', { name: 'Repositório do GitHub' }, { timeout: 3000 })).textContent).toContain('acme/web')
+    expect((await view.findByRole('combobox', { name: 'GitHub' }, { timeout: 3000 })).textContent).toContain('acme/web')
     fireEvent.change(view.getByLabelText('Verificação 1'), { target: { value: 'bun test' } })
     fireEvent.click(view.getAllByRole('button', { name: 'Adicionar comando' })[1])
     fireEvent.change(await view.findByLabelText('Verificação 2'), { target: { value: ' bun run lint ' } })
@@ -137,17 +137,14 @@ describe('aba Aplicações', () => {
     expect(selects[0].textContent).toContain('Automático')
   })
 
-  test('a opção do dependabot aparece escrita, vem ligada e desliga ao clicar no texto', async () => {
+  test('o dependabot não aparece: é sempre ignorado; e repositório sem comando não diz nada', async () => {
     await started()
     const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
+    expect(view.queryByText(/dependabot/i)).toBeNull()
+    expect(view.queryByText('Sem comandos')).toBeNull()
     fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
-    const text = await view.findByText('Ignorar dependabot')
-    const box = view.getByRole('checkbox', { name: 'Ignorar dependabot' })
-    expect(box.getAttribute('aria-checked')).toBe('true')
-    fireEvent.click(text)
-    await waitFor(() => expect(box.getAttribute('aria-checked')).toBe('false'))
-    fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
-    await waitFor(() => expect(getState().applications?.[0]?.skipDependabot).toBe(false))
+    await view.findByLabelText('Nome')
+    expect(view.queryByText(/dependabot/i)).toBeNull()
   })
 })
 
@@ -166,26 +163,33 @@ describe('conta e papel na nuvem', () => {
     const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
     fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
     await view.findByLabelText('Nome')
-    expect(view.queryByRole('combobox', { name: 'Conta e papel da AWS' })).toBeNull()
+    expect(view.queryByTestId('binding-cloud')).toBeNull()
   })
 
-  test('lista as contas e papéis da conexão e guarda a escolha na aplicação', async () => {
+  test('a aplicação escolhe a conta e o papel de cada ambiente', async () => {
     const base = withCloud()
     const asked: string[] = []
-    const spy = { ...base, call: ((connection, action, args) => (asked.push(`${connection} ${action}`), base.call(connection, action, args))) as typeof base.call }
+    const spy = { ...base, call: ((connection, action, args) => (asked.push(`${connection} ${action} ${(args as { field?: string }).field ?? ''}`), base.call(connection, action, args))) as typeof base.call }
     await started(spy)
     const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
     fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
-    const field = await view.findByRole('combobox', { name: 'Conta e papel da AWS' })
-    expect(field.textContent).toContain('Nenhum')
-    await waitFor(() => expect(asked).toContain('c-aws cloud.options'))
-    fireEvent.keyDown(field, { key: 'Enter' })
-    const option = await view.findByRole('option', { name: 'acme-prod · Deploy' })
-    expect(view.getByRole('option', { name: 'acme-dev · Developer' })).toBeTruthy()
-    fireEvent.keyDown(option, { key: 'Enter' })
-    await waitFor(() => expect(field.textContent).toContain('acme-prod · Deploy'))
+    const cloud = await view.findByTestId('binding-cloud')
+    expect(within(cloud).getByText('AWS')).toBeTruthy()
+    fireEvent.click(within(cloud).getByRole('button', { name: 'Adicionar Ambiente' }))
+    await waitFor(() => expect(asked).toContain('c-aws cloud.options environment'))
+    await waitFor(() => expect(asked).toContain('c-aws cloud.options account'))
+    const pick = async (name: string, option: string) => {
+      fireEvent.keyDown(await within(cloud).findByRole('combobox', { name }), { key: 'Enter' })
+      fireEvent.keyDown(await view.findByRole('option', { name: option }), { key: 'Enter' })
+    }
+    await pick('Ambiente', 'Produção')
+    await pick('Conta e papel', 'acme-prod · Deploy')
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
-    await waitFor(() => expect(getState().applications?.[0]?.bindings?.cloud).toEqual({ connection: 'c-aws', value: '111122223333/Deploy', label: 'acme-prod · Deploy' }))
+    await waitFor(() => expect(getState().applications?.[0]?.bindings?.cloud).toEqual({
+      connection: 'c-aws',
+      value: '',
+      profiles: [{ environment: { value: 'prd', label: 'Produção' }, account: { value: '111122223333/Deploy', label: 'acme-prod · Deploy' } }],
+    }))
   })
 })
 

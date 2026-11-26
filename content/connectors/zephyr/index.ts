@@ -21,7 +21,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "SmartBear", "de SmartBear", "da SmartBear"),
     choose_title: pick(language, "Zephyr account", "Cuenta de Zephyr", "Conta do Zephyr"),
     hidden: false,
-    bindings: [binding("tests", "application", pick(language, "Zephyr project", "Proyecto de Zephyr", "Projeto do Zephyr"))],
+    bindings: [binding("tests", "application", "Zephyr")],
   };
 }
 

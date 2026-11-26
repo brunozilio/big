@@ -120,17 +120,11 @@ pub struct Application {
     pub bindings: Bindings,
     #[serde(default)]
     pub repositories: Vec<Repository>,
-    #[serde(rename = "skipDependabot", default = "on")]
-    pub skip_dependabot: bool,
     #[serde(default)]
     pub env: Environment,
 }
 
 pub type Environment = BTreeMap<String, String>;
-
-fn on() -> bool {
-    true
-}
 
 impl Application {
     pub fn bound(&self, capability: &str) -> Option<&Binding> {
@@ -252,7 +246,6 @@ mod tests {
         assert_eq!(found.repositories[0].bound("security"), Some(&Binding::new("c-sec", "guid")));
         assert!(found.repositories[1].bindings.is_empty());
         assert_eq!(found.repositories[1].run, ["bun dev"]);
-        assert!(!found.skip_dependabot);
     }
 
     #[test]

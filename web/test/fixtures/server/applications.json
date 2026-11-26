@@ -42,7 +42,6 @@
         "run": [],
         "verify": []
       }
-    ],
-    "skipDependabot": true
+    ]
   }
 ]

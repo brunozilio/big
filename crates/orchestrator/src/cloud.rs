@@ -45,18 +45,44 @@ impl Drop for Lease {
     }
 }
 
-fn wanted(command: &Command, chosen: Option<&Binding>) -> Option<(Call, bool)> {
-    let asked = match &command.args["cloud"] {
-        Value::Bool(true) => None,
-        Value::String(id) if !id.is_empty() => Some(id.clone()),
-        _ => return None,
-    };
-    let optional = asked.is_none();
-    let chosen = chosen.filter(|chosen| asked.as_ref().is_none_or(|id| id == &chosen.connection));
+fn text(value: &Value) -> Option<String> {
+    value.as_str().filter(|text| !text.is_empty()).map(str::to_owned)
+}
+
+fn asked(cloud: &Value) -> Option<(Option<String>, Option<String>)> {
+    match cloud {
+        Value::Bool(true) => Some((None, None)),
+        Value::String(id) if !id.is_empty() => Some((Some(id.clone()), None)),
+        Value::Object(fields) => Some((
+            fields.get("connection").and_then(text),
+            fields.get("environment").and_then(text),
+        )),
+        _ => None,
+    }
+}
+
+fn bound_args(chosen: &Binding, environment: Option<&str>) -> Value {
     let mut args = json!({});
-    if let Some(chosen) = chosen {
+    if !chosen.value.is_empty() {
         args["binding"] = json!(chosen.value);
     }
+    if !chosen.profiles.is_empty() {
+        args["profiles"] = json!(chosen.profiles);
+    }
+    if let Some(environment) = environment {
+        args["environment"] = json!(environment);
+    }
+    args
+}
+
+fn wanted(command: &Command, chosen: Option<&Binding>) -> Option<(Call, bool)> {
+    let (asked, environment) = asked(&command.args["cloud"])?;
+    let optional = asked.is_none();
+    let chosen = chosen.filter(|chosen| asked.as_ref().is_none_or(|id| id == &chosen.connection));
+    let args = match chosen {
+        Some(chosen) => bound_args(chosen, environment.as_deref()),
+        None => environment.map_or_else(|| json!({}), |environment| json!({ "environment": environment })),
+    };
     let connection = asked.or_else(|| chosen.map(|chosen| chosen.connection.clone()));
     let call = Call {
         capability: contracts::CLOUD.to_owned(),
@@ -221,6 +247,28 @@ mod tests {
         assert_eq!(same, Some(json!({ "binding": "111/Deploy" })));
         let other = wanted(&command(json!("cl-2")), Some(&chosen)).map(|(call, _)| (call.connection, call.args));
         assert_eq!(other, Some((Some("cl-2".to_owned()), json!({}))));
+    }
+
+    #[test]
+    fn the_accounts_chosen_per_environment_go_to_the_identity_call_with_the_environment_asked() {
+        let mut chosen = Binding::new("cl-1", "");
+        let profile = |env: &str, account: &str| {
+            store::Fields::from([
+                ("environment".to_owned(), store::Choice { value: env.into(), label: String::new() }),
+                ("account".to_owned(), store::Choice { value: account.into(), label: String::new() }),
+            ])
+        };
+        chosen.profiles = vec![profile("develop", "111/Dev"), profile("prd", "222/Deploy")];
+        let asked = wanted(&command(json!({ "environment": "prd" })), Some(&chosen)).map(|(call, optional)| (call.args, optional));
+        let Some((args, optional)) = asked else { panic!("no call") };
+        assert_eq!(args["environment"], "prd");
+        assert_eq!(args["profiles"][1]["account"]["value"], "222/Deploy");
+        assert!(args.get("binding").is_none());
+        assert!(optional);
+        let plain = wanted(&command(json!(true)), Some(&chosen)).map(|(call, _)| call.args);
+        assert!(plain.is_some_and(|args| args.get("environment").is_none() && args["profiles"].is_array()));
+        let elsewhere = wanted(&command(json!({ "connection": "cl-2", "environment": "hi" })), Some(&chosen));
+        assert_eq!(elsewhere.map(|(call, _)| (call.connection, call.args)), Some((Some("cl-2".to_owned()), json!({ "environment": "hi" }))));
     }
 
     #[test]

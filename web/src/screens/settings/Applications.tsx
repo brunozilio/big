@@ -6,7 +6,7 @@ import { errorText, setApplications, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card, EmptyState } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
-import { Checkbox, Field, Input } from '@/ui/form'
+import { Field, Input } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { stagger, tween } from '@/ui/motion'
 import { Dialog } from '@/ui/overlay'
@@ -24,7 +24,7 @@ function blankRepository(): ApplicationRepository {
 }
 
 function draftOf(application: Application | null): ApplicationDraft {
-  return application ? structuredClone(application) : { name: '', bindings: {}, repositories: [blankRepository()], skipDependabot: true, env: {} }
+  return application ? structuredClone(application) : { name: '', bindings: {}, repositories: [blankRepository()], env: {} }
 }
 
 type Variable = [string, string]
@@ -179,10 +179,6 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
             </Field>
             <BindingFields fields={shared} options={sharedOptions} bindings={draft.bindings} onChange={(bindings) => setDraft((d) => ({ ...d, bindings }))} />
           </div>
-          <div className="flex items-center gap-2.5">
-            <span className="flex"><Checkbox label={t('settings.app_skipDependabot')} checked={draft.skipDependabot !== false} onCheckedChange={(skipDependabot) => setDraft((d) => ({ ...d, skipDependabot }))} /></span>
-            <span className="cursor-pointer select-none text-base text-fg" onClick={() => setDraft((d) => ({ ...d, skipDependabot: d.skipDependabot === false }))}>{t('settings.app_skipDependabot')}</span>
-          </div>
           <EnvList value={variables} onChange={setVariables} />
           <div className="space-y-3">
             {draft.repositories.map((r, i) => (
@@ -226,11 +222,9 @@ function BoundFacts({ bindings }: { bindings: Bindings | undefined }) {
 }
 
 function ApplicationFacts({ application }: { application: Application }) {
-  const t = useT()
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <BoundFacts bindings={application.bindings} />
-      {application.skipDependabot !== false && <Fact label="" value={t('settings.app_dependabotSkipped')} logo={<Icon name="shield" size={12} className="text-faint" />} />}
     </div>
   )
 }
@@ -251,7 +245,6 @@ function CommandChips({ icon, label, commands }: { icon: 'play' | 'check' | 'sTe
 function RepositoryLine({ repository }: { repository: ApplicationRepository }) {
   const t = useT()
   const e2e = (repository.e2e ?? []).map((c) => (repository.e2eDirectory ? `${repository.e2eDirectory}: ${c}` : c))
-  const empty = repository.run.length === 0 && repository.verify.length === 0 && e2e.length === 0
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:flex-nowrap">
       <div className="flex min-w-0 flex-1 items-center gap-2.5">
@@ -266,7 +259,6 @@ function RepositoryLine({ repository }: { repository: ApplicationRepository }) {
         <CommandChips icon="play" label={t('settings.app_run')} commands={repository.run} />
         <CommandChips icon="check" label={t('settings.app_verify')} commands={repository.verify} />
         <CommandChips icon="sTest" label={t('settings.app_e2e')} commands={e2e} />
-        {empty && <span className="text-xs text-faint">{t('settings.app_noCommands')}</span>}
       </div>
     </li>
   )

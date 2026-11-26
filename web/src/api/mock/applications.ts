@@ -120,7 +120,7 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
     }
   })
   const env = Object.fromEntries(Object.entries(draft.env ?? {}).map(([k, v]) => [k.trim(), v] as const).filter(([k]) => k))
-  return { id, name, bindings: checkedBindings(draft.bindings), repositories, skipDependabot: draft.skipDependabot !== false, env }
+  return { id, name, bindings: checkedBindings(draft.bindings), repositories, env }
 }
 
 export function openPulls(repo: string): OpenPull[] {

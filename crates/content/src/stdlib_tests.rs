@@ -644,12 +644,12 @@ export default workflow({
 }
 
 #[test]
-fn the_application_s_flag_decides_whether_dependabot_runs_count_for_the_ci() {
-    let (skipped, _) = ci_with_a_dependabot_run(json!(true));
-    assert_eq!(skipped["result"], json!({ "outcome": "skipped", "state": "none" }), "{skipped}");
-    let (followed, asked) = ci_with_a_dependabot_run(json!(false));
-    assert_eq!(followed["result"], json!({ "outcome": "passed", "state": "passed" }), "{followed}");
-    assert!(!of_kind(&asked, "wait.poll").is_empty());
+fn dependabot_runs_never_count_for_the_ci_even_for_an_old_application_flag() {
+    for skip in [json!(true), json!(false)] {
+        let (skipped, asked) = ci_with_a_dependabot_run(skip);
+        assert_eq!(skipped["result"], json!({ "outcome": "skipped", "state": "none" }), "{skipped}");
+        assert!(of_kind(&asked, "wait.poll").is_empty());
+    }
 }
 
 #[test]

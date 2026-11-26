@@ -55,12 +55,19 @@ const CHANGE_OPTIONS: Record<string, string[]> = {
   owner: ['Produção N1', 'DBA N1', 'MIDDLE N1', 'Time de infra'],
 }
 
+const ENVIRONMENTS: BindingOption[] = [
+  { value: 'develop', label: 'Develop' },
+  { value: 'hi', label: 'Homologação interna' },
+  { value: 'hext', label: 'Homologação externa' },
+  { value: 'prd', label: 'Produção' },
+]
+
 function optionsOf(capability: string, query: string, field = ''): BindingOption[] {
   const wanted = query.toLowerCase()
   const found = (() => {
     if (capability === 'changes') return (CHANGE_OPTIONS[field] ?? []).map((value) => ({ value, label: value }))
     if (capability === 'code') return CODE_REPOS.map((r) => ({ value: r.ref, label: r.ref }))
-    if (capability === 'cloud') return cloudOptions()
+    if (capability === 'cloud') return field === 'environment' ? ENVIRONMENTS : cloudOptions()
     if (capability === 'security') return SCANNED
     if (capability === 'quality') return [{ value: 'acme_checkout', label: 'Checkout · acme_checkout' }, { value: 'acme_infra', label: 'Infra · acme_infra' }]
     return trackerProjects('').map((p) => ({ value: p.key, label: p.name && p.name !== p.key ? `${p.name} · ${p.key}` : p.key }))

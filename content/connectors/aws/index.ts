@@ -1,5 +1,6 @@
 import { type Creds, type Language, decode, fetchJson, form, missing, optionalText, pick, setting, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
-import { binding, cloud, options } from "sdk/connectors/contracts.ts";
+import { binding, bindingField, cloud, options } from "sdk/connectors/contracts.ts";
+import { chosenIn, environmentOptions } from "sdk/connectors/environments.ts";
 import { caller, keysOf, type Keys } from "./sts.ts";
 import { isoSeconds } from "./login.ts";
 
@@ -35,8 +36,20 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "AWS", "de AWS", "da AWS"),
     choose_title: pick(language, "Account and role", "Cuenta y rol", "Conta e papel"),
     hidden: false,
-    bindings: [binding("cloud", "application", pick(language, "AWS account and role", "Cuenta y rol de AWS", "Conta e papel da AWS"))],
+    bindings: [cloudBinding(language)],
   };
+}
+
+export const ENVIRONMENT = "environment";
+export const ACCOUNT = "account";
+
+function cloudBinding(language: Language) {
+  const each = {
+    key: ENVIRONMENT,
+    label: pick(language, "Environment", "Ambiente", "Ambiente"),
+    fields: [bindingField(ACCOUNT, pick(language, "Account and role", "Cuenta y rol", "Conta e papel"), true)],
+  };
+  return binding("cloud", "application", "AWS", { each });
 }
 
 function accessKeys(language: Language) {
@@ -135,7 +148,8 @@ export function cloudOptions(listed: { id: string; name: string; roles: string[]
 function identity(ctx, creds: Creds, args: Record<string, unknown>) {
   const keys = keysOf(creds.token);
   if (keys) return consoleIdentity(ctx, creds, keys);
-  const bound = boundOf(optionalText(args, "binding"));
+  const environment = optionalText(args, ENVIRONMENT);
+  const bound = boundOf(chosenIn(args.profiles, ENVIRONMENT, ACCOUNT, environment) ?? optionalText(args, "binding"));
   const account = optionalText(args, "account") ?? bound.account ?? setting(creds, "account") ?? missing("account");
   const role = optionalText(args, "role") ?? bound.role ?? setting(creds, "role") ?? missing("role");
   const answer = portalGet(ctx, creds, "/federation/credentials", [["account_id", account], ["role_name", role]]);
@@ -156,6 +170,7 @@ function identity(ctx, creds: Creds, args: Record<string, unknown>) {
 export function call({ action, args, creds }: { action: string; args: Record<string, unknown>; creds: Creds }, ctx) {
   if (action === "cloud.accounts_and_roles") return accountsAndRoles(ctx, creds);
   if (action === "cloud.identity") return identity(ctx, creds, args ?? {});
+  if (action === "cloud.options" && args?.field === ENVIRONMENT) return environmentOptions();
   if (action === "cloud.options") return cloudOptions(accountsAndRoles(ctx, creds).accounts);
   return unknownAction(action);
 }

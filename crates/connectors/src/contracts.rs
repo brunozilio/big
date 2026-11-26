@@ -351,7 +351,16 @@ pub fn cloud() -> Vec<ActionSpec> {
     vec![
         ActionSpec::read(
             cloud::IDENTITY,
-            object(&[], &[("account", "string"), ("role", "string"), ("binding", "string")]),
+            object(
+                &[],
+                &[
+                    ("account", "string"),
+                    ("role", "string"),
+                    ("binding", "string"),
+                    ("profiles", "array"),
+                    ("environment", "string"),
+                ],
+            ),
             credentials,
         ),
         ActionSpec::read(
