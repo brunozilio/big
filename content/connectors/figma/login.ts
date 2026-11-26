@@ -1,6 +1,6 @@
 import { checked, fail, json, send } from "sdk/connectors/index.ts";
 
-type Ctx = { config: { host: string } } & Record<string, any>;
+type Ctx = { config: { host: string; protocol?: string } } & Record<string, any>;
 
 export type Session = { cookies: string; fuid: string };
 
@@ -9,6 +9,12 @@ const INTERVAL = 2;
 const SET_COOKIE = /,(?=\s*[A-Za-z0-9_.-]+=)|\n/;
 
 export const base = (ctx: Ctx) => `https://www.${ctx.config.host}`;
+
+function grantUrl(ctx: Ctx, id: string): string {
+  const protocol = ctx.config.protocol ?? ctx.config.host.split(".")[0];
+  const query = protocol === "" ? "" : `?desktop_protocol=${encodeURIComponent(protocol)}`;
+  return `${base(ctx)}/app_auth/${id}/grant${query}`;
+}
 
 function cookiesOf(headers: Record<string, string>): string {
   const key = Object.keys(headers).find((name) => name.toLowerCase() === "set-cookie");
@@ -70,7 +76,7 @@ export const session = {
       code: {
         device_code: id,
         user_code: "",
-        verification_uri: `${base(ctx)}/app_auth/${id}/grant?desktop_protocol=${ctx.config.host.split(".")[0]}`,
+        verification_uri: grantUrl(ctx, id),
         verification_uri_complete: null,
         expires_in: EXPIRES_IN,
         interval: INTERVAL,
