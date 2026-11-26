@@ -396,5 +396,5 @@ export function projectOptions(found: unknown): { value: string; label: string }
   return listed
     .map((project) => ({ key: String(project?.key ?? ""), name: String(project?.name ?? "") }))
     .filter((project) => project.key !== "")
-    .map((project) => ({ value: project.key, label: project.name && project.name !== project.key ? `${project.name} · ${project.key}` : project.key }));
+    .map((project) => ({ value: project.key, label: project.name || project.key }));
 }

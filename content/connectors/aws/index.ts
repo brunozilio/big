@@ -182,7 +182,7 @@ export function call({ action, args, creds }: { action: string; args: Record<str
 function ssoOptions(listed, place: string) {
   const options = [];
   for (const account of listed) {
-    const label = `${account.name} · ${spaced(account.id)}`;
+    const label = account.name || spaced(account.id);
     for (const role of account.roles) {
       options.push({ id: `${account.id}/${role}`, label, settings: { account: account.id, role, region: place, detail: role } });
     }
@@ -199,8 +199,8 @@ export function accounts({ creds }: { creds: Creds }, ctx) {
   return [
     {
       id: found.account,
-      label: `${name} · ${spaced(found.account)}`,
-      settings: { account: found.account, arn: found.arn, region: place, detail: found.arn },
+      label: name || spaced(found.account),
+      settings: { account: found.account, arn: found.arn, region: place },
     },
   ];
 }

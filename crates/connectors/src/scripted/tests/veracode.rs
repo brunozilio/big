@@ -149,7 +149,7 @@ async fn the_status_says_when_a_scan_finished_after_the_given_moment() {
 async fn the_options_to_bind_a_repository_are_its_applications_by_name() {
     let http = FakeHttp::new().once(Method::Get, "page=0", 200, &applications_page(&[(GUID, "Shop API")], 1));
     let found = call(&http, json!({}), "security.options", json!({})).await;
-    assert_eq!(found, Ok(json!([{ "value": GUID, "label": format!("Shop API · {GUID}") }])));
+    assert_eq!(found, Ok(json!([{ "value": GUID, "label": "Shop API" }])));
 }
 
 #[tokio::test]

@@ -112,7 +112,7 @@ async fn console_credentials_report_their_identity_through_sts() {
     let roles = checked(&http, &console(), "cloud.accounts_and_roles", &json!({})).await;
     assert_eq!(roles.map(|r| r["accounts"][0]["roles"].clone()), Ok(json!([])));
     let options = loaded("aws").accounts(&http, &console()).await;
-    assert_eq!(options.map(|o| o[0].label.clone()), Ok("ana · 1234-5678-9012".to_owned()));
+    assert_eq!(options.map(|o| o[0].label.clone()), Ok("ana".to_owned()));
 }
 
 #[tokio::test]
@@ -123,7 +123,7 @@ async fn the_accounts_to_choose_are_the_portal_accounts() {
     let options = loaded("aws").accounts(&http, &creds()).await;
     assert_eq!(
         options.map(|o| (o[0].label.clone(), o[0].settings["role"].clone())),
-        Ok(("lab · 9".to_owned(), json!("Admin")))
+        Ok(("lab".to_owned(), json!("Admin")))
     );
 }
 

@@ -32,7 +32,7 @@ describe('diálogo de conexão', () => {
     const dialog = await opened('github')
     expect(dialog.getByText('Sua conta GitHub')).toBeTruthy()
     expect(dialog.getByText('Contas conectadas')).toBeTruthy()
-    fireEvent.click(dialog.getByRole('button', { name: /Entrar com GitHub/ }))
+    fireEvent.click(dialog.getByRole('button', { name: /Adicionar conta/ }))
     expect(await dialog.findByLabelText('Código de verificação', {}, wait)).toBeTruthy()
     expect(dialog.getByRole('button', { name: 'Cancelar' })).toBeTruthy()
     fireEvent.click(await dialog.findByRole('radio', { name: /acme/ }, wait))
@@ -65,18 +65,18 @@ describe('diálogo de conexão', () => {
   test('campo opcional em branco não bloqueia a conexão', async () => {
     const dialog = await opened('sonar')
     const token = (await dialog.findByLabelText(/^Token/, {}, wait)) as HTMLInputElement
-    expect((dialog.getByRole('button', { name: /Conectar/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((dialog.getByRole('button', { name: /Adicionar conta/ }) as HTMLButtonElement).disabled).toBe(true)
     fireEvent.change(token, { target: { value: 'squ_1' } })
-    expect((dialog.getByRole('button', { name: /Conectar/ }) as HTMLButtonElement).disabled).toBe(false)
+    expect((dialog.getByRole('button', { name: /Adicionar conta/ }) as HTMLButtonElement).disabled).toBe(false)
   }, 10000)
 
   test('a recusa volta ao início com o erro no mesmo lugar', async () => {
     localStorage.setItem('mock:signIn', 'failed')
     const dialog = await opened('jira')
-    fireEvent.click(dialog.getByRole('button', { name: /Continuar na Atlassian/ }))
+    fireEvent.click(dialog.getByRole('button', { name: /Adicionar conta/ }))
     expect(await dialog.findByText(/Aguardando a autorização/, {}, wait)).toBeTruthy()
     expect((await dialog.findByRole('alert', {}, wait)).textContent).toContain('recusada')
-    expect(dialog.getByRole('button', { name: /Continuar na Atlassian/ })).toBeTruthy()
+    expect(dialog.getByRole('button', { name: /Adicionar conta/ })).toBeTruthy()
   }, 10000)
 
   test('a volta do login na mesma aba conclui a entrada e fecha o diálogo', async () => {
