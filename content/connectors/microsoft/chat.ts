@@ -1,4 +1,4 @@
-import { flag, listIn, optionalNumber, text, textAt } from "sdk/connectors/index.ts";
+import { listIn, optionalFlag, optionalNumber, text, textAt } from "sdk/connectors/index.ts";
 import { type Api, get, items, post } from "./graph.ts";
 
 const topOf = (limit?: number) => (limit && limit > 0 ? Math.min(limit, 50) : 20);
@@ -41,7 +41,7 @@ export function listMessages(api: Api, args: Record<string, unknown>) {
 
 export function sendMessage(api: Api, args: Record<string, unknown>) {
   const id = encodeURIComponent(text(args, "chat"));
-  const html = flag(args, "html");
+  const html = optionalFlag(args, "html") ?? false;
   const made = post(api, `/me/chats/${id}/messages`, { body: { contentType: html ? "html" : "text", content: text(args, "text") } }) as any;
   return { sent: true, ref: String(made?.id ?? "") };
 }

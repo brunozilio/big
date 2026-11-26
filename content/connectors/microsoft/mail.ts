@@ -1,4 +1,4 @@
-import { flag, listIn, listOf, optionalNumber, optionalText, text, textAt } from "sdk/connectors/index.ts";
+import { listIn, listOf, optionalFlag, optionalNumber, optionalText, text, textAt } from "sdk/connectors/index.ts";
 import { type Api, get, items, post } from "./graph.ts";
 
 const MESSAGE_FIELDS = "id,subject,from,receivedDateTime,toRecipients,bodyPreview,isRead,webLink";
@@ -26,7 +26,7 @@ function messageOf(raw: any) {
 function listQuery(args: Record<string, unknown>): string {
   const top = topOf(optionalNumber(args, "limit"));
   const query = optionalText(args, "query");
-  const unread = flag(args, "unread");
+  const unread = optionalFlag(args, "unread") ?? false;
   const select = `$select=${MESSAGE_FIELDS}&$top=${top}`;
   if (query && query !== "") return `?$search="${encodeURIComponent(query)}"&${select}`;
   if (unread) return `?$filter=isRead eq false&$orderby=receivedDateTime desc&${select}`;
@@ -44,7 +44,7 @@ export function message(api: Api, id: string) {
 }
 
 export function send(api: Api, args: Record<string, unknown>) {
-  const html = flag(args, "html");
+  const html = optionalFlag(args, "html") ?? false;
   const body = {
     message: {
       subject: text(args, "subject"),
@@ -60,7 +60,7 @@ export function send(api: Api, args: Record<string, unknown>) {
 
 export function reply(api: Api, args: Record<string, unknown>) {
   const id = encodeURIComponent(text(args, "message"));
-  const path = flag(args, "all") ? `/me/messages/${id}/replyAll` : `/me/messages/${id}/reply`;
+  const path = (optionalFlag(args, "all") ?? false) ? `/me/messages/${id}/replyAll` : `/me/messages/${id}/reply`;
   post(api, path, { comment: text(args, "body") });
   return { sent: true };
 }

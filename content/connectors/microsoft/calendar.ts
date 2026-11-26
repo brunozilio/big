@@ -1,4 +1,4 @@
-import { flag, listIn, listOf, optionalNumber, optionalText, text, textAt } from "sdk/connectors/index.ts";
+import { listIn, listOf, optionalFlag, optionalNumber, optionalText, text, textAt } from "sdk/connectors/index.ts";
 import { type Api, get, items, post } from "./graph.ts";
 
 const EVENT_FIELDS = "id,subject,start,end,location,organizer,attendees,onlineMeeting,webLink,isOnlineMeeting";
@@ -34,7 +34,7 @@ export function listEvents(api: Api, args: Record<string, unknown>) {
 }
 
 export function createEvent(api: Api, args: Record<string, unknown>) {
-  const online = flag(args, "online");
+  const online = optionalFlag(args, "online") ?? false;
   const location = optionalText(args, "location");
   const body = {
     subject: text(args, "subject"),

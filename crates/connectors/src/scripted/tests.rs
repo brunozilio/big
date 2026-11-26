@@ -11,6 +11,7 @@ mod figma;
 mod github;
 mod jira;
 mod mcp;
+mod microsoft;
 mod mock_changes;
 mod sonarqube;
 mod veracode;
