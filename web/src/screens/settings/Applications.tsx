@@ -58,7 +58,7 @@ function EnvList({ value, onChange }: { value: Variable[]; onChange: (next: Vari
   )
 }
 
-const KINDS = ['application', 'configuration', 'tests'] as const
+const KINDS = ['application', 'library', 'configuration', 'infrastructure', 'tests'] as const
 
 type Kind = (typeof KINDS)[number]
 

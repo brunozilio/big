@@ -13,8 +13,8 @@ export const spec = {
         "type": "string"
       },
       "kind": {
-        "description": "What the repository holds: application (the code of the product), configuration (infrastructure, deploy or settings) or tests (an end-to-end or test suite kept apart).",
-        "enum": ["application", "configuration", "tests"],
+        "description": "What the repository holds: application (the code of the product), library (code other repositories depend on), configuration (settings and deploy configuration), infrastructure (infrastructure as code: Terraform, CloudFormation, Helm...) or tests (an end-to-end or test suite kept apart).",
+        "enum": ["application", "library", "configuration", "infrastructure", "tests"],
         "type": "string"
       },
       "run": {
