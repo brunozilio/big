@@ -14,5 +14,5 @@ export const environments = [
     rollback: true,
   },
   { id: "hext", label: "Homologação externa", short: "HEXT", icon: "globe", gate: { kind: "change", environment: "HST" }, seals: true },
-  { id: "prd", label: "Produção", short: "Produção", icon: "rocket", gate: { kind: "change", environment: "PRD" }, locksTasks: true },
+  { id: "prd", label: "Produção", short: "PROD", icon: "rocket", gate: { kind: "change", environment: "PRD" }, locksTasks: true },
 ];
