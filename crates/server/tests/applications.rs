@@ -107,7 +107,10 @@ async fn a_new_item_keeps_a_snapshot_of_its_application_and_its_space() {
     assert_eq!((kept.input["project"].as_str(), kept.input["connection"].as_str()), (Some("APP"), Some("c1")));
     assert_eq!(kept.input["application"]["name"], "Loja");
     assert!(kept.input["application"].get("env").is_none(), "the variables stay with the application, not in the item");
-    assert_eq!(kept.input["application"]["repositories"][0]["bindings"]["code"]["capabilities"], json!(["tracker", "code", "pipelines"]));
+    assert_eq!(
+        kept.input["application"]["repositories"][0]["bindings"]["code"]["capabilities"],
+        json!(["tracker", "code", "pipelines"])
+    );
     assert_eq!(kept.input["application"]["repositories"][0]["directory"], json!(web));
 
     let from_issue = json!({ "text": "", "issue": { "connection": "c1", "key": "K-1" }, "model": "auto",

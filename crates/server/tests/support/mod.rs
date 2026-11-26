@@ -136,7 +136,9 @@ impl Provider for FakeProvider {
                   "default_branch": "main", "private": true },
             ]),
             "pipelines.run" => json!({ "ref": "o/r/runs/9", "pipeline": "CI", "state": "passed", "jobs": [] }),
-            "quality.report" => json!({ "status": "done", "gate": "passed", "conditions": [], "issues": [], "total": 0 }),
+            "quality.report" => {
+                json!({ "status": "done", "gate": "passed", "conditions": [], "issues": [], "total": 0 })
+            }
             "security.findings" => json!([{ "id": "11", "title": "SQL injection", "severity": 5, "file": "a.rs" }]),
             "cloud.identity" => json!({ "access_key_id": "AK", "secret_access_key": "SK" }),
             "cloud.accounts_and_roles" => json!({ "accounts": [

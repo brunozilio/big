@@ -138,7 +138,10 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
 }
 
 fn bound(place: &Place<'_>, raw: &Value, capability: &str) -> String {
-    raw["connection"].as_str().filter(|connection| !connection.is_empty()).map_or_else(|| place.connection(capability), str::to_owned)
+    raw["connection"]
+        .as_str()
+        .filter(|connection| !connection.is_empty())
+        .map_or_else(|| place.connection(capability), str::to_owned)
 }
 
 fn optional(raw: &Value) -> Value {

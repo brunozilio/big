@@ -151,12 +151,11 @@ fn sources(known: &Known<'_>, item: Option<&WorkItem>) -> Vec<Value> {
 fn repository_name(item: &WorkItem, id: &str) -> String {
     let repositories = item.input["application"]["repositories"].as_array().map(Vec::as_slice).unwrap_or_default();
     let found = repositories.iter().find(|repository| repository["id"] == id);
-    let named =
-        found.and_then(|repository| {
-            text(&repository["bindings"][connectors::contracts::CODE]["value"])
-                .or_else(|| text(&repository["code"]["repo"]))
-                .or_else(|| text(&repository["directory"]))
-        });
+    let named = found.and_then(|repository| {
+        text(&repository["bindings"][connectors::contracts::CODE]["value"])
+            .or_else(|| text(&repository["code"]["repo"]))
+            .or_else(|| text(&repository["directory"]))
+    });
     named.unwrap_or_else(|| id.to_owned())
 }
 
