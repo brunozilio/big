@@ -1,5 +1,4 @@
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -71,20 +70,41 @@ fn convert(arguments: &Value) -> Result<Value, String> {
     text_of(&bytes, field(arguments, "to")).map(Value::String)
 }
 
-fn memory() -> &'static Mutex<HashMap<String, Value>> {
-    static MEMORY: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new();
-    MEMORY.get_or_init(Mutex::default)
+fn kept(connection: Option<&str>, function: &str, arguments: &Value) -> Result<Value, String> {
+    let Some(connection) = connection else {
+        return Err("the connector memory is kept per connection, so it is offered only in calls, polls and accounts"
+            .to_owned());
+    };
+    let Some(memory) = crate::memory::installed() else {
+        return Err("the connector memory is not kept by this app".to_owned());
+    };
+    let name = field(arguments, "name");
+    if function == "memory.get" {
+        return memory.get(connection, name);
+    }
+    memory.set(connection, name, &arguments["value"]).map(|()| Value::Null)
 }
 
-fn remembered(arguments: &Value) -> Value {
-    let held = memory().lock().unwrap_or_else(PoisonError::into_inner);
-    held.get(field(arguments, "name")).cloned().unwrap_or(Value::Null)
+#[derive(Debug)]
+pub struct Kept {
+    connection: Option<String>,
+    inner: Arc<dyn Answers>,
 }
 
-fn remember(arguments: &Value) -> Value {
-    let mut held = memory().lock().unwrap_or_else(PoisonError::into_inner);
-    held.insert(field(arguments, "name").to_owned(), arguments["value"].clone());
-    Value::Null
+impl Kept {
+    pub fn of(inner: &Arc<dyn Answers>, input: &Value) -> Arc<dyn Answers> {
+        let connection = input["creds"]["connection"].as_str().map(str::to_owned);
+        Arc::new(Kept { connection, inner: Arc::clone(inner) })
+    }
+}
+
+impl Answers for Kept {
+    fn now(&self, function: &str, arguments: &Value) -> Option<Result<Value, String>> {
+        if function.starts_with("memory.") {
+            return Some(kept(self.connection.as_deref(), function, arguments));
+        }
+        self.inner.now(function, arguments)
+    }
 }
 
 fn p256_pair(private: &str) -> Result<EcdsaKeyPair, String> {
@@ -139,8 +159,10 @@ impl Answers for Local {
             "clock.now" => Ok(json!(Timestamp::now().as_second())),
             "net.site" => Ok(json!(domain::site::site(field(arguments, "url")))),
             "net.safeEndpoint" => Ok(json!(domain::mcp_oauth::endpoint_ok(field(arguments, "url")))),
-            "memory.get" => Ok(remembered(arguments)),
-            "memory.set" => Ok(remember(arguments)),
+            "memory.get" | "memory.set" => {
+                Err("the connector memory is kept per connection, so it is offered only in calls, polls and accounts"
+                    .to_owned())
+            }
             "clock.millis" => Ok(json!(Timestamp::now().as_millisecond())),
             _ => return None,
         })

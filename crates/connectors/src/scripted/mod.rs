@@ -13,7 +13,7 @@ use serde_json::{Map, Value, json};
 pub use bridge::{Answers, Script};
 use bridge::{WRAPPER, invoke, wrapper};
 pub use host::Local;
-use host::Online;
+use host::{Kept, Online};
 pub use sign_in::ScriptedSignIn;
 use sign_in::{SIGN_IN, redirect};
 
@@ -162,7 +162,8 @@ impl ScriptedProvider {
 
     async fn online(&self, http: &dyn Http, name: &str, input: Value) -> Result<Value, ActionError> {
         let online = Online::new(http, redirect());
-        invoke(&self.script, Arc::clone(&self.answers), &online, name, input).await
+        let answers = Kept::of(&self.answers, &input);
+        invoke(&self.script, answers, &online, name, input).await
     }
 }
 
@@ -264,7 +265,8 @@ impl EventSource for ScriptedEvents {
     ) -> Result<EventBatch, ActionError> {
         let online = Online::new(http, redirect());
         let input = json!({ "creds": creds_of(creds), "cursor": cursor, "watch": watch });
-        let batch = invoke(&self.script, Arc::clone(&self.answers), &online, "poll", input).await?;
+        let answers = Kept::of(&self.answers, &input);
+        let batch = invoke(&self.script, answers, &online, "poll", input).await?;
         let mut events = Vec::new();
         for mut event in batch["events"].as_array().cloned().unwrap_or_default() {
             event["connection"] = json!(creds.connection);

@@ -28,6 +28,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
     let sink = Arc::new(StoredSettings(Arc::clone(&store)));
     let connectors = Arc::new(Connectors::new(http, keeper).with_sink(sink));
+    connectors::memory::install(Arc::new(crate::connector_memory::StoredMemory(Arc::clone(&store))));
     let runtime = tokio::runtime::Handle::current();
     let connected = crate::connected_mcp::for_runs(Arc::clone(&store), Arc::clone(&connectors), runtime);
     let address = launch.listener.local_addr().map_err(|error| error.to_string())?;

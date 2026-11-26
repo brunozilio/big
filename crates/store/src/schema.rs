@@ -86,6 +86,14 @@ const MIGRATIONS: &[&str] = &[
         at INTEGER NOT NULL
     );
 ",
+    "
+    CREATE TABLE connector_memory (
+        connection TEXT NOT NULL,
+        name TEXT NOT NULL,
+        value TEXT NOT NULL,
+        PRIMARY KEY (connection, name)
+    ) WITHOUT ROWID;
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

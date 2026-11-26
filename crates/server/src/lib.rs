@@ -16,6 +16,7 @@ mod chats;
 mod cloud;
 mod connected_mcp;
 mod connections;
+mod connector_memory;
 mod discover;
 mod editor;
 mod error;

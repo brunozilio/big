@@ -2,6 +2,7 @@ mod applications;
 mod archive;
 mod branding;
 mod connections;
+mod connector_memory;
 mod error;
 mod factory;
 mod log;

@@ -164,6 +164,7 @@ fn the_simulated_system_connects_with_any_name() {
 
 #[tokio::test]
 async fn a_change_made_through_the_provider_is_kept_between_calls_and_polled_as_events() {
+    crate::memory::install(Arc::new(crate::memory::MemoryValues::default()));
     let provider = loaded("mock_changes");
     let http = FakeHttp::new();
     let made = provider.call(&http, &creds("mock", json!({})), "changes.create", &args(), "kept-1").await;
