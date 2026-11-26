@@ -115,6 +115,17 @@ fn limit(function: &str, arguments: &Value) -> Option<Value> {
     })
 }
 
+pub const CAPABILITIES: &[&str] = &[
+    #[cfg(feature = "local-models")]
+    "local",
+];
+
+#[cfg(not(feature = "local-models"))]
+fn local(_function: &str, _arguments: &Value) -> Option<Result<Value, String>> {
+    None
+}
+
+#[cfg(feature = "local-models")]
 fn local(function: &str, arguments: &Value) -> Option<Result<Value, String>> {
     let shown = |error: local_models::LocalError| error.to_string();
     Some(match function {

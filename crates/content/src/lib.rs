@@ -101,6 +101,10 @@ pub fn text(path: &str) -> String {
     text_in(folder().as_deref(), path)
 }
 
+pub fn disabled(path: &str) -> bool {
+    embedded::DISABLED.iter().any(|item| path.strip_prefix(item).is_some_and(|rest| rest.starts_with('/')))
+}
+
 pub fn paths() -> Vec<&'static str> {
     embedded::FILES.iter().map(|(file, _)| *file).collect()
 }
@@ -130,6 +134,19 @@ mod tests {
         assert_eq!(text_in(Some(folder.path()), path), format!("Mine, from {}.", brand::NAME));
         std::fs::write(&mine, "Changed again.").expect("edit");
         assert_eq!(text_in(Some(folder.path()), path), "Changed again.", "read each time");
+    }
+
+    #[test]
+    fn a_disabled_component_is_left_out_of_the_build() {
+        for item in embedded::DISABLED {
+            let inside = format!("{item}/index.ts");
+            assert!(disabled(&inside));
+            assert!(!disabled(item), "only what is inside the folder");
+            assert!(paths().iter().all(|path| !disabled(path)), "{item} was bundled");
+            assert!(listed(&format!("{item}/")).is_empty(), "{item} is still listed");
+            assert!(shipped(&inside).is_none(), "{item} is still read");
+        }
+        assert!(!disabled("providers/claude/index.ts"));
     }
 
     #[test]

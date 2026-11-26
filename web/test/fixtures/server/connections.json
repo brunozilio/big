@@ -171,29 +171,6 @@
       "name": "Antigravity",
       "signIn": "browser",
       "site": "do Antigravity"
-    },
-    {
-      "ai": true,
-      "alternatives": [],
-      "button": "Entrar com llama.cpp",
-      "description": "Sua conta llama.cpp",
-      "fields": [
-        {
-          "help": "dono/repo, opcionalmente com :QUANT (ex.: :Q8_0). Um repo sem arquivos GGUF usa a quantização GGUF mais baixada dele.",
-          "kind": "text",
-          "label": "Modelo do Hugging Face",
-          "mono": true,
-          "name": "model",
-          "placeholder": "huihui-ai/Huihui-Qwen3.8-27B-abliterated"
-        }
-      ],
-      "group": "ai",
-      "key": "llamacpp-local",
-      "logo": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\"><rect width=\"24\" height=\"24\" rx=\"6\" fill=\"#1f2937\"/><path fill=\"#fbbf24\" d=\"M8 5.2c.6 0 1 .5 1 1V9h3.4c2.6 0 4.6 2 4.6 4.6V18a.8.8 0 0 1-1.6 0v-2.2h-.8V18a.8.8 0 0 1-1.6 0v-2.2H10V18a.8.8 0 0 1-1.6 0v-2.2h-.6V18a.8.8 0 0 1-1.6 0v-6.4L7 9.2V6.2c0-.5.4-1 1-1z\"/><circle cx=\"8.6\" cy=\"7.4\" r=\".55\" fill=\"#1f2937\"/></svg>",
-      "multiple": true,
-      "name": "llama.cpp",
-      "signIn": "device",
-      "site": "do llama.cpp"
     }
   ]
 }

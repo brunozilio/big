@@ -10,6 +10,9 @@ license.workspace = true
 name = "big"
 path = "src/main.rs"
 
+[features]
+local-models = ["app/local-models"]
+
 [dependencies]
 platform.workspace = true
 brand.workspace = true

@@ -6,6 +6,9 @@ edition.workspace = true
 publish.workspace = true
 license.workspace = true
 
+[features]
+local-models = ["llm-providers/local-models"]
+
 [dependencies]
 platform.workspace = true
 brand.workspace = true

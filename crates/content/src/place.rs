@@ -55,6 +55,9 @@ pub fn skills() -> Option<PathBuf> {
 }
 
 pub fn shipped(path: &str) -> Option<Cow<'static, [u8]>> {
+    if super::disabled(path) {
+        return None;
+    }
     if mode() == Mode::Live
         && let Some(file) = super::override_path(live_root(), path)
         && let Ok(bytes) = std::fs::read(file)
@@ -70,6 +73,7 @@ pub fn live_paths(prefix: &str) -> Vec<String> {
     }
     let mut found = Vec::new();
     super::modules::walk(live_root(), &live_root().join(prefix), &mut found);
+    found.retain(|path| !super::disabled(path));
     found
 }
 

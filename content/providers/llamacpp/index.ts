@@ -59,6 +59,7 @@ export function provider() {
     wire: "chat",
     path: "/chat/completions",
     servesAll: true,
+    needs: ["local"],
   };
 }
 

@@ -14,6 +14,11 @@ pub trait Host {
     fn fields(&self) -> serde_json::Value {
         serde_json::Value::Null
     }
+    #[cfg(not(feature = "local-models"))]
+    fn download(&self, _request: &serde_json::Value) -> Result<serde_json::Value, ProviderError> {
+        Err(ProviderError::Invalid("this build runs no local models".to_owned()))
+    }
+    #[cfg(feature = "local-models")]
     fn download(&self, request: &serde_json::Value) -> Result<serde_json::Value, ProviderError> {
         let request: local_models::Request =
             serde_json::from_value(request.clone()).map_err(|error| ProviderError::Invalid(error.to_string()))?;

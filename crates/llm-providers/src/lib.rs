@@ -155,5 +155,6 @@ pub fn id(provider: &dyn Provider) -> domain::ModelProvider {
 }
 
 pub fn release_local_models() {
+    #[cfg(feature = "local-models")]
     local_models::unload();
 }

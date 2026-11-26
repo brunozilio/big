@@ -116,18 +116,18 @@ mod tests {
     #[test]
     fn the_built_in_providers_are_these_in_this_order() {
         let ids: Vec<&str> = builtin().iter().map(|provider| provider.id()).collect();
-        assert_eq!(
-            ids,
-            [
-                "antigravity-subscription",
-                "openai-subscription",
-                "claude-subscription",
-                "copilot-subscription",
-                "grok-subscription",
-                "kiro-subscription",
-                "llamacpp-local",
-            ]
-        );
+        let mut expected = vec![
+            "antigravity-subscription",
+            "openai-subscription",
+            "claude-subscription",
+            "copilot-subscription",
+            "grok-subscription",
+            "kiro-subscription",
+        ];
+        if cfg!(feature = "local-models") {
+            expected.push("llamacpp-local");
+        }
+        assert_eq!(ids, expected);
     }
 
     #[test]

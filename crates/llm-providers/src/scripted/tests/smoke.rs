@@ -44,3 +44,11 @@ fn grok_signs_in_with_a_device_code() {
     let log = host.log.borrow();
     assert_eq!(log.waits.iter().map(std::time::Duration::as_secs).collect::<Vec<_>>(), [5, 10]);
 }
+
+#[test]
+fn a_provider_runs_here_only_when_the_build_offers_all_it_needs() {
+    let mut grok = loaded("grok");
+    assert!(grok.runs_here());
+    grok.needs = vec!["local".to_owned()];
+    assert_eq!(grok.runs_here(), cfg!(feature = "local-models"));
+}

@@ -8,11 +8,12 @@ license.workspace = true
 
 [features]
 test-support = []
+local-models = ["dep:local-models"]
 
 [dependencies]
 brand.workspace = true
 content.workspace = true
-local-models.workspace = true
+local-models = { workspace = true, optional = true }
 domain.workspace = true
 script.workspace = true
 platform.workspace = true

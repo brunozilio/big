@@ -63,6 +63,8 @@ struct Declared {
     small_model: Option<String>,
     #[serde(default)]
     serves_all: bool,
+    #[serde(default)]
+    needs: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -83,6 +85,7 @@ pub struct ScriptedProvider {
     framing: &'static str,
     small: Option<&'static str>,
     serves_all: bool,
+    needs: Vec<String>,
 }
 
 fn section(name: &str) -> Value {
@@ -153,7 +156,12 @@ impl ScriptedProvider {
             framing: intern(&declared.framing),
             small: declared.small_model.as_deref().map(intern),
             serves_all: declared.serves_all,
+            needs: declared.needs,
         })
+    }
+
+    pub fn runs_here(&self) -> bool {
+        self.needs.iter().all(|need| host::CAPABILITIES.contains(&need.as_str()))
     }
 
     fn offers(&self, function: &str) -> bool {
@@ -211,6 +219,7 @@ pub fn discover_in(root: Option<&std::path::Path>) -> Vec<ScriptedProvider> {
     let mut found: Vec<ScriptedProvider> = Vec::new();
     for entry in entries {
         match ScriptedProvider::load_in(root, entry) {
+            Ok(provider) if !provider.runs_here() => tracing::debug!(entry, "a provider needs what this build lacks"),
             Ok(provider) if found.iter().all(|known| known.id != provider.id) => found.push(provider),
             Ok(provider) => tracing::error!(entry, id = provider.id, "a provider repeats another's id"),
             Err(error) => tracing::error!(%error, entry, "a provider could not be loaded"),
