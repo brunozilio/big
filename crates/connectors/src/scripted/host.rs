@@ -274,11 +274,12 @@ pub struct Online<'a> {
     http: &'a dyn Http,
     redirect: String,
     sessions: Mutex<Vec<Session<'a>>>,
+    sockets: super::socket::Sockets,
 }
 
 impl<'a> Online<'a> {
     pub fn new(http: &'a dyn Http, redirect: String) -> Online<'a> {
-        Online { http, redirect, sessions: Mutex::new(Vec::new()) }
+        Online { http, redirect, sessions: Mutex::new(Vec::new()), sockets: super::socket::Sockets::default() }
     }
 
     async fn session(&self, arguments: &Value) -> Result<Arc<McpClient<'a>>, ActionError> {
@@ -335,6 +336,10 @@ impl<'a> Online<'a> {
                 client.call(field(arguments, "tool"), arguments["arguments"].clone()).await
             }
             "mcp.connect" => self.session(arguments).await.map(|_| json!(true)),
+            "socket.open" => self.sockets.open(arguments).await,
+            "socket.send" => self.sockets.send(arguments).await,
+            "socket.receive" => self.sockets.receive(arguments).await,
+            "socket.close" => self.sockets.close(arguments).await,
             "oauth.mcp.begin" => {
                 let port = u16::try_from(arguments["port"].as_u64().unwrap_or_default()).unwrap_or_default();
                 let started = self.sign_in(arguments).begin(self.http, port).await?;

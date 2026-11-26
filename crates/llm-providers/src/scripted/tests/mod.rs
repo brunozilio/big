@@ -10,7 +10,6 @@ mod kiro;
 mod kiro_client;
 mod kiro_sign_in;
 mod llamacpp;
-mod quick;
 mod smoke;
 
 use domain::ModelProvider;

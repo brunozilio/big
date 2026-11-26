@@ -3,8 +3,8 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use connectors::{
-    AccountOption, AuthSpec, Authorization, DeviceApp, DeviceCode, Grant, Loopback, Polled, ProviderDescriptor,
-    Started, Stepped,
+    AccountOption, AuthSpec, Authorization, DeviceApp, DeviceCode, Grant, Loopback, Polled, Proceeded,
+    ProviderDescriptor, Started, Stepped,
 };
 use domain::Language;
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
@@ -251,6 +251,38 @@ pub async fn callback(shared: &Shared, state: &str, code: &str) -> ApiResult<Str
         Err(error) => shared.flows.set(&id, Stage::Failed(error.message)),
     }
     Ok(back_to(&provider, &id))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Hop {
+    Away(String),
+    Back(String),
+}
+
+pub async fn proceeded(shared: &Shared, state: &str, query: &HashMap<String, String>) -> ApiResult<Hop> {
+    let id = shared.flows.by_state(state).ok_or_else(|| ApiError::missing(expired()))?;
+    let Some(Flow { provider, stage: Stage::Waiting(Waiting::Redirect { sign_in, authorization }), .. }) =
+        shared.flows.get(&id)
+    else {
+        return Err(ApiError::missing(expired()));
+    };
+    let http = shared.backend.connectors.http();
+    let given = serde_json::to_value(query).unwrap_or_default();
+    match sign_in.proceed(http, &authorization, &given, jiff::Timestamp::now()).await {
+        Ok(Proceeded::Redirect(next)) => {
+            let url = next.url.clone();
+            shared.flows.set(&id, Stage::Waiting(Waiting::Redirect { sign_in, authorization: next }));
+            Ok(Hop::Away(url))
+        }
+        Ok(Proceeded::Granted(grant)) => {
+            shared.flows.set(&id, Stage::Granted(grant));
+            Ok(Hop::Back(back_to(&provider, &id)))
+        }
+        Err(error) => {
+            shared.flows.set(&id, Stage::Failed(error.message));
+            Ok(Hop::Back(back_to(&provider, &id)))
+        }
+    }
 }
 
 pub async fn poll(shared: &Shared, flow_id: &str, choice: Option<&str>) -> ApiResult<Value> {

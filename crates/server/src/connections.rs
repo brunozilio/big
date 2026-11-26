@@ -163,19 +163,30 @@ pub async fn callback(State(ctx): State<Ctx>, Query(query): Query<HashMap<String
 }
 
 pub async fn answered(ctx: &Shared, query: &HashMap<String, String>, base: &str) -> Response {
+    hopped(ctx, query, base).await.0
+}
+
+pub async fn hopped(ctx: &Shared, query: &HashMap<String, String>, base: &str) -> (Response, bool) {
     let told = query.get("error_description").or(query.get("error")).cloned().unwrap_or_default();
-    let Some(state) = query.get("state") else {
+    let waited = query.get("state").cloned().or_else(|| query.values().find(|value| ctx.flows.by_state(value).is_some()).cloned());
+    let Some(state) = waited else {
         let failed = ctx.language().pick("The sign-in failed.", "El inicio de sesión falló.", "A entrada falhou.");
-        return Html(format!("<!doctype html><meta charset=\"utf-8\"><p>{failed} {told}</p>")).into_response();
+        return (Html(format!("<!doctype html><meta charset=\"utf-8\"><p>{failed} {told}</p>")).into_response(), true);
     };
-    let back = match query.get("code") {
-        Some(code) => crate::sign_in::callback(ctx, state, code).await,
-        None => crate::sign_in::refused(ctx, state, &told),
+    let back = match (query.get("code"), told.is_empty()) {
+        (Some(code), _) => crate::sign_in::callback(ctx, &state, code).await,
+        (None, false) => crate::sign_in::refused(ctx, &state, &told),
+        (None, true) => match crate::sign_in::proceeded(ctx, &state, query).await {
+            Ok(crate::sign_in::Hop::Away(url)) => return (Redirect::to(&url).into_response(), false),
+            Ok(crate::sign_in::Hop::Back(back)) => Ok(back),
+            Err(error) => Err(error),
+        },
     };
-    match back {
+    let answer = match back {
         Ok(back) => Redirect::to(&format!("{base}{back}")).into_response(),
         Err(error) => error.into_response(),
-    }
+    };
+    (answer, true)
 }
 
 pub async fn remove(State(ctx): State<Ctx>, Path(id): Path<String>) -> ApiResult<Response> {

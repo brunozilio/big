@@ -364,6 +364,12 @@ export function design(): Action[] {
   return [read("design.frame", object([["url", "string"]]), frame)];
 }
 
+export function assistant(): Action[] {
+  const asked = object([["question", "string"]], [["context", "string"], ["thread", "string"], ["mode", "string"]]);
+  const answered = object([["answer", "string"], ["thread", "string"], ["sources", "array"]], [["model", "string"]]);
+  return [read("assistant.ask", asked, answered)];
+}
+
 export type BindingScope = "application" | "repository";
 
 export type BindingField = { key: string; label: string; required?: boolean };

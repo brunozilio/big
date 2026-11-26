@@ -10,7 +10,7 @@ use super::host::{Local, Online};
 use crate::descriptor::TokenField;
 use crate::error::ActionError;
 use crate::http::Http;
-use crate::oauth::{Authorization, DeviceSignIn, Grant, Loopback, LoopbackSignIn, Polled, Started};
+use crate::oauth::{Authorization, DeviceSignIn, Grant, Loopback, LoopbackSignIn, Polled, Proceeded, Started};
 
 #[derive(Debug, Clone)]
 pub struct ScriptedSignIn {
@@ -118,6 +118,21 @@ impl LoopbackSignIn for ScriptedSignIn {
     ) -> Result<Grant, ActionError> {
         let extra = json!({ "authorization": authorization, "code": code, "now": now.as_second() });
         parsed(self.online(http, &self.named("exchange"), extra).await?, "grant")
+    }
+
+    async fn proceed(
+        &self,
+        http: &dyn Http,
+        authorization: &Authorization,
+        query: &Value,
+        now: Timestamp,
+    ) -> Result<Proceeded, ActionError> {
+        let extra = json!({ "authorization": authorization, "query": query, "now": now.as_second() });
+        let answer = self.online(http, &self.named("proceed"), extra).await?;
+        if !answer["grant"].is_null() {
+            return parsed(answer["grant"].clone(), "grant").map(Proceeded::Granted);
+        }
+        parsed(answer["authorization"].clone(), "authorization").map(Proceeded::Redirect)
     }
 
     async fn refresh(&self, http: &dyn Http, grant: &Grant, now: Timestamp) -> Result<Grant, ActionError> {

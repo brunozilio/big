@@ -13,6 +13,7 @@ export { default as merge } from "./merge.js";
 export { default as release } from "./release.js";
 export { default as security } from "./security.js";
 export { default as aside } from "./aside.js";
+export { default as ask } from "./ask.js";
 export { default as findings } from "./findings.js";
 export { default as command } from "./command.js";
 export { default as agent } from "./agent.js";

@@ -20,6 +20,12 @@ pub struct Authorization {
     pub carried: Value,
 }
 
+#[derive(Debug, Clone)]
+pub enum Proceeded {
+    Granted(Grant),
+    Redirect(Authorization),
+}
+
 #[async_trait]
 pub trait LoopbackSignIn: Send + Sync + std::fmt::Debug {
     fn name(&self) -> &str;
@@ -50,6 +56,16 @@ pub trait LoopbackSignIn: Send + Sync + std::fmt::Debug {
         now: Timestamp,
     ) -> Result<Grant, ActionError>;
 
+    async fn proceed(
+        &self,
+        _http: &dyn Http,
+        _authorization: &Authorization,
+        _query: &Value,
+        _now: Timestamp,
+    ) -> Result<Proceeded, ActionError> {
+        Err(ActionError::auth("the sign-in came back without a code"))
+    }
+
     async fn refresh(&self, http: &dyn Http, grant: &Grant, now: Timestamp) -> Result<Grant, ActionError>;
 }
 
@@ -77,6 +93,16 @@ impl Loopback {
             return Err(ActionError::auth("the answer does not belong to this sign-in"));
         }
         self.0.exchange(http, authorization, code, now).await
+    }
+
+    pub async fn proceed(
+        &self,
+        http: &dyn Http,
+        authorization: &Authorization,
+        query: &Value,
+        now: Timestamp,
+    ) -> Result<Proceeded, ActionError> {
+        self.0.proceed(http, authorization, query, now).await
     }
 }
 

@@ -1,6 +1,7 @@
 mod bridge;
 mod host;
 mod sign_in;
+mod socket;
 
 use std::sync::Arc;
 

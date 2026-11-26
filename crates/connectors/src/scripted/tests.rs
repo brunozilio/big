@@ -13,6 +13,7 @@ mod jira;
 mod mcp;
 mod microsoft;
 mod mock_changes;
+mod quick;
 mod sonarqube;
 mod veracode;
 mod zephyr;

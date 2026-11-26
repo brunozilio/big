@@ -18,7 +18,7 @@ use crate::http::HttpResponse;
 
 pub use code::CodeSignIn;
 pub use device::{DeviceApp, DeviceCode, Dialect, Polled, RegisteredClient};
-pub use loopback::{Authorization, Loopback, LoopbackSignIn};
+pub use loopback::{Authorization, Loopback, LoopbackSignIn, Proceeded};
 pub use stepped::{DeviceSignIn, Started, Stepped};
 pub use tokens::{MemoryTokenStore, REFRESH_WINDOW_SECONDS, TokenKeeper, TokenStore};
 

@@ -18,8 +18,10 @@ type Door = (Ctx, Arc<Notify>);
 
 async fn returned(State((ctx, done)): State<Door>, Query(query): Query<HashMap<String, String>>) -> Response {
     let base = format!("http://127.0.0.1:{}", ctx.port);
-    let answer = crate::connections::answered(&ctx, &query, &base).await;
-    done.notify_one();
+    let (answer, finished) = crate::connections::hopped(&ctx, &query, &base).await;
+    if finished {
+        done.notify_one();
+    }
     answer
 }
 
@@ -36,7 +38,10 @@ pub async fn open(ctx: &Ctx, port: u16) -> ApiResult<()> {
     })?;
     held(&ctx.callbacks).insert(port);
     let done = Arc::new(Notify::new());
-    let router = Router::new().route("/oauth/callback", get(returned)).with_state((Arc::clone(ctx), Arc::clone(&done)));
+    let router = Router::new()
+        .route("/oauth/callback", get(returned))
+        .fallback(get(returned))
+        .with_state((Arc::clone(ctx), Arc::clone(&done)));
     let shared = Arc::clone(ctx);
     tokio::spawn(async move {
         let stop = async move {

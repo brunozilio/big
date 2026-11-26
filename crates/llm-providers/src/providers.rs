@@ -126,7 +126,6 @@ mod tests {
                 "grok-subscription",
                 "kiro-subscription",
                 "llamacpp-local",
-                "quick-subscription",
             ]
         );
     }

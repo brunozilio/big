@@ -318,6 +318,7 @@ fn the_default_workflow_describes_its_statuses_and_its_steps_in_order() {
     let at = known.iter().position(|step| *step == "checks").unwrap_or(0);
     known.splice(at..at, ["repo-checks", "e2e", "verifier"]);
     known.push("aside");
+    known.push("ask");
     known.push("findings");
     known.push("command");
     known.push("agent");
@@ -1897,4 +1898,40 @@ export default workflow({
         }),
         "{result}"
     );
+}
+
+const ASKING: &str = r#"
+import { workflow } from "sdk";
+import { ask } from "sdk/steps";
+export default workflow({
+  name: "so-ask",
+  async run(ctx) {
+    const done = await ask(ctx, { question: "When is the launch?", context: "Project Atlas", mode: "fast" });
+    return { outcome: done.outcome, data: done.data };
+  },
+});
+"#;
+
+#[test]
+fn ask_puts_the_question_to_the_assistant_and_keeps_the_answer_and_thread() {
+    let answer = json!({ "answer": "Friday.", "sources": [{ "title": "Plan", "url": "https://docs/plan" }], "thread": "th-1" });
+    let (result, asked) =
+        drive(&source("workflows/so-ask.ts", ASKING), &item(Value::Null), |command| match command["kind"].as_str() {
+            Some("call") => Some(answer.clone()),
+            _ => Some(Value::Null),
+        });
+    let asks = calls(&asked, "ask");
+    assert_eq!(asks.len(), 1);
+    assert_eq!(asks[0]["args"]["capability"], "assistant");
+    assert_eq!(asks[0]["args"]["args"], json!({ "question": "When is the launch?", "context": "Project Atlas", "mode": "fast" }));
+    assert_eq!(result["result"]["outcome"], "passed", "{result}");
+    assert_eq!(result["result"]["data"]["answer"], "Friday.");
+    assert_eq!(result["result"]["data"]["thread"], "th-1");
+}
+
+#[test]
+fn ask_without_an_assistant_moves_on_and_says_why() {
+    let (result, _) = drive(&source("workflows/so-ask.ts", ASKING), &item(Value::Null), |_| Some(Value::Null));
+    assert_eq!(result["result"]["outcome"], "skipped", "{result}");
+    assert!(result["result"]["data"]["reason"].as_str().is_some_and(|reason| reason.contains("assistant")), "{result}");
 }

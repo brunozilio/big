@@ -828,6 +828,7 @@ dependencies = [
  "brand",
  "content",
  "domain",
+ "futures-util",
  "getrandom 0.3.4",
  "jiff",
  "platform",
@@ -838,6 +839,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tokio",
+ "tokio-tungstenite",
  "tracing",
  "url",
 ]
