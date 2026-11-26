@@ -180,7 +180,9 @@ impl Connectors {
         let metered = Metered { inner: self.http.as_ref(), limiter: &self.limiter, connection: &connection.id };
         let first = entry.provider.call(&metered, &creds, action, args, idempotency_key).await;
         let result = match first {
-            Err(error) if error.class == ErrorClass::Auth && !error.message.starts_with(RECONNECT) => {
+            Err(error)
+                if error.class == ErrorClass::Auth && !error.message.starts_with(RECONNECT) && !error.needs_login() =>
+            {
                 creds.access_token = self
                     .keeper
                     .refreshed_of(&connection.id, &entry.descriptor.auth, &entry.alternatives, &creds.access_token)

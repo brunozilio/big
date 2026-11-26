@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 pub const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(60);
 pub const RECONNECT: &str = "the access could not be renewed; reconnect the account";
 pub const BLOCKED: &str = "blocked: ";
+pub const LOGIN: &str = "login required: ";
 
 pub use domain::effect::ErrorClass;
 
@@ -40,6 +41,14 @@ impl ActionError {
         ActionError::auth(RECONNECT)
     }
 
+    pub fn login_required(message: impl fmt::Display) -> ActionError {
+        ActionError::auth(format!("{LOGIN}{message}"))
+    }
+
+    pub fn needs_login(&self) -> bool {
+        self.class == ErrorClass::Auth && self.message.starts_with(LOGIN)
+    }
+
     pub fn blocked(reason: impl fmt::Display) -> ActionError {
         ActionError::permanent(format!("{BLOCKED}{reason}"))
     }
@@ -49,7 +58,7 @@ impl ActionError {
     }
 
     pub fn shown(&self) -> &str {
-        self.blocker().unwrap_or(&self.message)
+        self.blocker().or_else(|| self.message.strip_prefix(LOGIN)).unwrap_or(&self.message)
     }
 
     pub fn rate_limited(retry_after: Duration, message: impl Into<String>) -> ActionError {
@@ -168,5 +177,15 @@ mod tests {
         assert!(ActionError::rate_limited(Duration::from_secs(1), "x").retryable());
         assert!(!ActionError::reconnect().retryable());
         assert!(!ActionError::conflict("x").retryable());
+    }
+
+    #[test]
+    fn a_login_required_error_is_an_auth_error_that_shows_only_the_connector_text() {
+        let error = ActionError::login_required("faça login no Helix");
+        assert_eq!(error.class, ErrorClass::Auth);
+        assert!(error.needs_login());
+        assert_eq!(error.shown(), "faça login no Helix");
+        assert!(!ActionError::auth("expired").needs_login());
+        assert!(!ActionError::reconnect().needs_login());
     }
 }

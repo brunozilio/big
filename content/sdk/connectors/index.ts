@@ -21,6 +21,7 @@ export type Request = {
 export type Part = { name: string; value?: string; filename?: string; contentType?: string; base64?: string };
 
 export const RECONNECT = "the access could not be renewed; reconnect the account";
+export const LOGIN_REQUIRED = "login required: ";
 export const DEFAULT_RETRY_AFTER_MS = 60_000;
 
 export function pick<T>(language: Language | string | undefined, english: T, spanish: T, portuguese: T): T {

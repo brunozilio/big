@@ -268,3 +268,36 @@ async fn a_connection_with_several_or_no_options_is_left_to_the_provider() {
         assert!(kept.0.lock().unwrap_or_else(PoisonError::into_inner).is_empty());
     }
 }
+
+#[derive(Debug)]
+struct Locked;
+
+#[async_trait]
+impl Provider for Locked {
+    fn descriptor(&self) -> ProviderDescriptor {
+        let mut descriptor = Echo::default().descriptor();
+        descriptor.key = ProviderKey::from("locked");
+        descriptor
+    }
+
+    async fn call(&self, _: &dyn Http, _: &Credentials, _: &str, _: &Value, _: &str) -> Result<Value, ActionError> {
+        Err(ActionError::login_required("faça login no Helix"))
+    }
+
+    async fn accounts(&self, _: &dyn Http, _: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
+        Ok(Vec::new())
+    }
+}
+
+#[tokio::test]
+async fn a_login_required_error_is_shown_at_once_without_refreshing_the_token() {
+    let store = Arc::new(MemoryTokenStore::new());
+    let _ = store.save(&ConnectionId::from("c1"), &Grant::bearer("tok")).await;
+    let keeper = TokenKeeper::new(store, Arc::new(FakeHttp::new()), Arc::new(FixedClock::at_second(1_000)));
+    let provider: &'static dyn Provider = Box::leak(Box::new(Locked));
+    let hub = Connectors::with_providers(&[provider], Arc::new(FakeHttp::new()), keeper);
+    let mut connection = connection(&["x"]);
+    connection.provider = ProviderKey::from("locked");
+    let refused = hub.call(&connection, &json!({}), "x.read", &json!({"a": "1"}), "").await;
+    assert!(matches!(refused, Err(e) if e.needs_login() && e.shown() == "faça login no Helix"));
+}
