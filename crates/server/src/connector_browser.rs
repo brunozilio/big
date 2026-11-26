@@ -54,14 +54,14 @@ fn several(browsers: &[BrowserInfo]) -> String {
 impl ConnectorBrowser for Browsers {
     fn eval(&self, connection: &str, request: &Value) -> Result<Value, String> {
         let device = self.device(connection)?;
-        let tab =
-            request["tabId"].as_i64().ok_or("The browser eval needs the tabId of a tab in the connection's group.")?;
+        let tab = request["tabId"].as_i64();
+        let url = request["url"].as_str();
         let text = request["text"].as_str().ok_or("The browser eval needs the text to run.")?;
         let sites: Vec<String> =
             request["sites"].as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect();
         let frame = request.get("frame").filter(|frame| !frame.is_null());
         let session = session_of(connection);
-        let eval = browser::Eval { session: &session, tab, text, frame, sites: &sites };
+        let eval = browser::Eval { session: &session, tab, url, text, frame, sites: &sites };
         browser::evaluate(&self.hub, &device, &self.settings, &eval)
     }
 }

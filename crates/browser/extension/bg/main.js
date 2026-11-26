@@ -143,11 +143,37 @@ async function pageTextTool({ session, input, sites }) {
   return ok(await pageText(tab));
 }
 
+async function groupTabs(session) {
+  const groupId = await groupOf(session);
+  return groupId === null ? [] : tabsOf(groupId);
+}
+
+async function frameInGroup(session, input, match, sites) {
+  for (const tab of await groupTabs(session)) {
+    const frame = await frameOf(tab, match).catch(() => null);
+    if (frame) return { tab, frame };
+  }
+  if (!input.url) {
+    refuse(`No tab in this session's group shows the frame ${match.urlPrefix || match.origin}. Pass url to open the page first, or pass tabId.`);
+  }
+  const url = normalized(input.url);
+  ensure(url, sites);
+  const tab = await standaloneTab(session);
+  const started = Date.now();
+  await attach(tab.id).catch(() => {});
+  await chrome.tabs.update(tab.id, { url });
+  await sleep(150);
+  await loaded(tab.id, started);
+  return { tab: await chrome.tabs.get(tab.id), frame: await frameOf(tab, match) };
+}
+
 async function javascriptTool({ session, input, sites }) {
   if (input.action !== "javascript_exec") refuse("`action` must be 'javascript_exec'.");
-  const tab = await onPage(session, input, sites);
   const match = frameMatch(input);
-  const frame = match ? await frameOf(tab, match) : null;
+  const missingTab = input.tabId === undefined || input.tabId === null;
+  const found = match && missingTab ? await frameInGroup(session, input, match, sites) : null;
+  const tab = found ? await onPage(session, { tabId: found.tab.id }, sites) : await onPage(session, input, sites);
+  const frame = found ? found.frame : match ? await frameOf(tab, match) : null;
   if (frame) ensure(frame.url, sites);
   const answer = await javascript(tab, input.text, frame ? contextOf(tab.id, frame.id) : undefined);
   if (answer.error) return fail(answer.error);

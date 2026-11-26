@@ -6,14 +6,21 @@ use crate::hub::Hub;
 #[derive(Debug)]
 pub struct Eval<'a> {
     pub session: &'a str,
-    pub tab: i64,
+    pub tab: Option<i64>,
+    pub url: Option<&'a str>,
     pub text: &'a str,
     pub frame: Option<&'a Value>,
     pub sites: &'a [String],
 }
 
 pub fn run(hub: &Hub, device: &str, settings: &Settings, eval: &Eval) -> Result<Value, String> {
-    let input = json!({ "action": "javascript_exec", "tabId": eval.tab, "text": eval.text, "frame": eval.frame });
+    let input = json!({
+        "action": "javascript_exec",
+        "tabId": eval.tab,
+        "url": eval.url,
+        "text": eval.text,
+        "frame": eval.frame,
+    });
     let message = json!({
         "type": "call",
         "session": eval.session,

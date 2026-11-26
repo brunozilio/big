@@ -1,4 +1,4 @@
-import { onEvent, send } from "./cdp.js";
+import { attach, onEvent, send } from "./cdp.js";
 import { refuse } from "./results.js";
 
 const contexts = new Map();
@@ -48,6 +48,7 @@ export function frameMatch(input) {
 }
 
 export async function frameOf(tab, match) {
+  await attach(tab.id).catch(() => {});
   const { frameTree } = await send(tab.id, "Page.getFrameTree");
   const found = flatten(frameTree).find((frame) => matches(frame.url, match));
   if (!found) {

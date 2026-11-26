@@ -22,6 +22,18 @@ export type Part = { name: string; value?: string; filename?: string; contentTyp
 
 export const RECONNECT = "the access could not be renewed; reconnect the account";
 export const LOGIN_REQUIRED = "login required: ";
+
+export type BrowserEval = {
+  text: string;
+  frame?: { origin?: string; urlPrefix?: string };
+  tabId?: number;
+  url?: string;
+  sites: string[];
+};
+
+export function evaluate(ctx, request: BrowserEval): unknown {
+  return ctx.browser.eval(request);
+}
 export const DEFAULT_RETRY_AFTER_MS = 60_000;
 
 export function pick<T>(language: Language | string | undefined, english: T, spanish: T, portuguese: T): T {
