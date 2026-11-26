@@ -1,5 +1,5 @@
 import { AnimatePresence, motion } from 'framer-motion'
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, isMock } from '@/api'
 import type { Connection, FormField, Provider, SignInPoll } from '@/api/contract'
 import { errorText, useStore } from '@/api/store'
@@ -70,6 +70,7 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
   const [error, setError] = useState<string | null>(null)
   const [choice, setChoice] = useState<string | null>(null)
   const [pasted, setPasted] = useState('')
+  const opened = useRef<Window | null>(null)
   const key = provider?.key
   useEffect(() => {
     setStep(firstStep(resume))
@@ -83,6 +84,7 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
     setStep({ kind: 'start' })
   }
   const answered = (flow: string) => (answer: SignInPoll) => {
+    if (answer.state === 'done') comeBack(opened)
     if (answer.state === 'done' && resume) onClose()
     else if (answer.state === 'done') setStep({ kind: 'done', connection: answer.connection })
     else if (answer.state === 'failed') fail(answer.message)
@@ -101,8 +103,8 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
     setChoice(null)
     run(api().startSignIn(provider.key, fields, way.method).then((start) => {
       if (start.kind === 'token') return setStep({ kind: 'resume', flow: start.flow })
-      if (start.kind === 'redirect' && !start.paste && !isMock()) leave(start)
-      if (start.kind === 'device' && !start.code && !isMock()) globalThis.open?.(start.url, '_blank', 'noopener')
+      if (start.kind === 'redirect' && !start.paste && !isMock()) leave(start, opened)
+      if (start.kind === 'device' && !start.code && !isMock()) opened.current = openApart(start.url)
       setStep(start.kind === 'device' ? { kind: 'device', start } : { kind: 'browser', start })
     }))
   }
@@ -117,9 +119,25 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
   return { step, busy, error, choice, setChoice, pasted, setPasted, begin, send, disconnect }
 }
 
-function leave(start: RedirectStart) {
+function openApart(url: string): Window | null {
+  try {
+    const tab = globalThis.open?.(url, '_blank') ?? null
+    if (tab) tab.opener = null
+    return tab
+  } catch {
+    return null
+  }
+}
+
+function comeBack(opened: { current: Window | null }) {
+  opened.current?.close()
+  opened.current = null
+  globalThis.focus?.()
+}
+
+function leave(start: RedirectStart, opened: { current: Window | null }) {
   if (start.returns) globalThis.location.assign(start.url)
-  else globalThis.open?.(start.url, '_blank', 'noopener')
+  else opened.current = openApart(start.url)
 }
 
 function primaryOf(signIn: ReturnType<typeof useSignIn>, way: Way, ready: boolean, onClose: () => void, t: T): Primary {
