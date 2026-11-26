@@ -3,14 +3,20 @@ use std::sync::Arc;
 
 use domain::site::is_private_address;
 
-const PROXY_VARIABLES: [&str; 6] = ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy", "HTTP_PROXY", "http_proxy"];
+pub fn network() -> &'static platform::network::Settings {
+    platform::network::Settings::shared(platform::network::Configured::from_pairs(brand::network::PAIRS))
+}
 
 pub fn proxied() -> bool {
-    PROXY_VARIABLES.iter().any(|key| platform::environment::set(key))
+    network().proxied()
+}
+
+pub fn plain() -> reqwest::ClientBuilder {
+    network().applied(reqwest::Client::builder())
 }
 
 pub fn builder() -> reqwest::ClientBuilder {
-    let builder = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none());
+    let builder = plain().redirect(reqwest::redirect::Policy::none());
     if proxied() { builder } else { builder.dns_resolver(Arc::new(PublicOnly)) }
 }
 

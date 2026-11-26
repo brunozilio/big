@@ -179,6 +179,12 @@ responses_headers = "originator: codex_cli_rs|version: 0.130.0|user-agent: codex
 [web]
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"
 
+[network]
+ca_files = ""
+https_proxy = ""
+http_proxy = ""
+no_proxy = ""
+
 [components]
 disabled = "providers/llamacpp"
 

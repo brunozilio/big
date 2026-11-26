@@ -18,6 +18,7 @@ base64.workspace = true
 jiff.workspace = true
 ring = "0.17"
 url.workspace = true
+reqwest.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

@@ -200,7 +200,10 @@ pub struct ReqwestHttp {
 
 impl ReqwestHttp {
     pub fn new() -> Result<ReqwestHttp, ActionError> {
-        let client = reqwest::Client::builder()
+        let network =
+            platform::network::Settings::shared(platform::network::Configured::from_pairs(brand::network::PAIRS));
+        let client = network
+            .applied(reqwest::Client::builder())
             .user_agent(brand::connectors::USER_AGENT)
             .timeout(TIMEOUT)
             .build()

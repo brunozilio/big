@@ -3002,6 +3002,7 @@ dependencies = [
  "jiff",
  "keyring",
  "libc",
+ "reqwest",
  "ring",
  "serde",
  "serde_json",

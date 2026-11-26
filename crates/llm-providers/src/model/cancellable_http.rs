@@ -48,9 +48,9 @@ fn build(roots: Roots) -> Result<Shared, String> {
     let runtime = platform::runtime::shared().map_err(|error| error.to_string())?;
     let _entered = runtime.enter();
     let (client, web) = match roots {
-        Roots::Loaded => (reqwest::Client::builder(), super::web_client::builder()),
+        Roots::Loaded => (super::web_client::plain(), super::web_client::builder()),
         Roots::Skipped => (
-            reqwest::Client::builder().tls_built_in_native_certs(false).redirect(plain_redirects()),
+            super::web_client::plain().tls_built_in_native_certs(false).redirect(plain_redirects()),
             super::web_client::builder().tls_built_in_native_certs(false),
         ),
     };

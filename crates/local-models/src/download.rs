@@ -87,7 +87,9 @@ async fn fetch(request: &Request, path: &Path) -> Result<(), LocalError> {
     }
     let part = part_of(path);
     let mut offset = tokio::fs::metadata(&part).await.map(|meta| meta.len()).unwrap_or_default();
-    let client = reqwest::Client::builder().build().map_err(|error| LocalError::Network(error.to_string()))?;
+    let network = platform::network::Settings::shared(platform::network::Configured::from_pairs(brand::network::PAIRS));
+    let client =
+        network.applied(reqwest::Client::builder()).build().map_err(|error| LocalError::Network(error.to_string()))?;
     let mut call = client.get(&request.url);
     for (name, value) in &request.headers {
         call = call.header(name, value);
