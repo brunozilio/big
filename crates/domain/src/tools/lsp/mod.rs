@@ -8,4 +8,4 @@ pub mod uri;
 
 pub use operation::{Operation, Query};
 pub use roots::{root_for, server_for};
-pub use servers::{ServerConfig, ServerSpec, defaults, servers};
+pub use servers::{ArchiveKind, Asset, DownloadSpec, InstallSpec, ServerConfig, ServerSpec, servers};

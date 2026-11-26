@@ -14,6 +14,36 @@ pub struct ServerSpec {
     pub root_markers: Vec<String>,
     #[serde(default)]
     pub env: BTreeMap<String, String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub install: Option<InstallSpec>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum InstallSpec {
+    Npm(Vec<String>),
+    Go(String),
+    Download(DownloadSpec),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DownloadSpec {
+    pub program: String,
+    pub platforms: BTreeMap<String, Asset>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Asset {
+    pub url: String,
+    pub archive: ArchiveKind,
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ArchiveKind {
+    Gzip,
+    Zip,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -31,53 +61,6 @@ impl ServerConfig {
     pub fn without_commands(self) -> Self {
         Self { command: None, args: None, env: None, ..self }
     }
-}
-
-fn built_in(name: &str, command: &str, args: &[&str], languages: &[(&str, &str)], markers: &[&str]) -> ServerSpec {
-    let owned = |items: &[&str]| items.iter().map(|item| (*item).to_owned()).collect();
-    ServerSpec {
-        name: name.into(),
-        command: command.into(),
-        args: owned(args),
-        extension_to_language: languages.iter().map(|(ext, id)| ((*ext).to_owned(), (*id).to_owned())).collect(),
-        root_markers: owned(markers),
-        env: BTreeMap::new(),
-    }
-}
-
-pub fn defaults() -> Vec<ServerSpec> {
-    vec![
-        built_in("rust-analyzer", "rust-analyzer", &[], &[(".rs", "rust")], &["Cargo.toml"]),
-        built_in(
-            "typescript",
-            "typescript-language-server",
-            &["--stdio"],
-            &[
-                (".ts", "typescript"),
-                (".tsx", "typescriptreact"),
-                (".js", "javascript"),
-                (".jsx", "javascriptreact"),
-                (".mjs", "javascript"),
-                (".cjs", "javascript"),
-            ],
-            &["tsconfig.json", "jsconfig.json", "package.json"],
-        ),
-        built_in(
-            "pyright",
-            "pyright-langserver",
-            &["--stdio"],
-            &[(".py", "python"), (".pyi", "python")],
-            &["pyproject.toml", "setup.py", "setup.cfg", "requirements.txt"],
-        ),
-        built_in("gopls", "gopls", &[], &[(".go", "go")], &["go.mod", "go.work"]),
-        built_in(
-            "clangd",
-            "clangd",
-            &[],
-            &[(".c", "c"), (".h", "c"), (".cc", "cpp"), (".cpp", "cpp"), (".hpp", "cpp")],
-            &["compile_commands.json", "CMakeLists.txt"],
-        ),
-    ]
 }
 
 pub fn servers(defaults: Vec<ServerSpec>, layers: &[BTreeMap<String, ServerConfig>]) -> Vec<ServerSpec> {
@@ -100,8 +83,11 @@ pub fn servers(defaults: Vec<ServerSpec>, layers: &[BTreeMap<String, ServerConfi
 
 fn apply(spec: &mut ServerSpec, config: &ServerConfig) {
     let config = config.clone();
-    if let Some(command) = config.command {
+    if let Some(command) = config.command
+        && command != spec.command
+    {
         spec.command = command;
+        spec.install = None;
     }
     if let Some(args) = config.args {
         spec.args = args;
@@ -125,6 +111,7 @@ fn new_server(name: &str, config: &ServerConfig) -> Option<ServerSpec> {
         extension_to_language: config.extension_to_language.clone().filter(|map| !map.is_empty())?,
         root_markers: Vec::new(),
         env: BTreeMap::new(),
+        install: None,
     };
     apply(&mut spec, config);
     Some(spec)
@@ -136,6 +123,16 @@ mod tests {
 
     fn layer(json: serde_json::Value) -> BTreeMap<String, ServerConfig> {
         serde_json::from_value(json).expect("layer")
+    }
+
+    fn defaults() -> Vec<ServerSpec> {
+        serde_json::from_value(serde_json::json!([
+            {"name": "rust-analyzer", "command": "rust-analyzer", "extensionToLanguage": {".rs": "rust"},
+             "rootMarkers": ["Cargo.toml"], "install": {"go": "example.com/ra@v1"}},
+            {"name": "gopls", "command": "gopls", "extensionToLanguage": {".go": "go"}},
+            {"name": "clangd", "command": "clangd", "extensionToLanguage": {".c": "c"}}
+        ]))
+        .expect("specs")
     }
 
     fn named<'a>(specs: &'a [ServerSpec], name: &str) -> Option<&'a ServerSpec> {
@@ -153,6 +150,13 @@ mod tests {
         assert_eq!(rust.env.get("RA_LOG").map(String::as_str), Some("error"));
         assert_eq!(rust.extension_to_language.get(".rs").map(String::as_str), Some("rust"));
         assert_eq!(rust.root_markers, ["Cargo.toml"]);
+        assert_eq!(rust.install, None, "a server run by another command is not the one its recipe installs");
+    }
+
+    #[test]
+    fn a_setting_that_keeps_the_command_keeps_the_install() {
+        let specs = servers(defaults(), &[layer(serde_json::json!({"rust-analyzer": {"command": "rust-analyzer"}}))]);
+        assert!(named(&specs, "rust-analyzer").and_then(|spec| spec.install.as_ref()).is_some());
     }
 
     #[test]

@@ -110,6 +110,7 @@ done
             extension_to_language: Default::default(),
             root_markers: Vec::new(),
             env: Default::default(),
+            install: None,
         }
     }
 

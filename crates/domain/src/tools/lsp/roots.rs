@@ -24,11 +24,15 @@ pub fn root_for(file: &Path, markers: &[String], cwd: &Path, exists: impl Fn(&Pa
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::lsp::defaults;
+    use crate::lsp::ServerSpec;
 
     #[test]
     fn a_file_goes_to_the_server_of_its_extension() {
-        let specs = defaults();
+        let specs: Vec<ServerSpec> = serde_json::from_value(serde_json::json!([
+            {"name": "rust-analyzer", "command": "rust-analyzer", "extensionToLanguage": {".rs": "rust"}},
+            {"name": "typescript", "command": "tsls", "extensionToLanguage": {".ts": "typescript", ".tsx": "typescriptreact"}}
+        ]))
+        .expect("specs");
         let (server, language) = server_for(Path::new("/w/web/App.tsx"), &specs).expect("typescript");
         assert_eq!((server.name.as_str(), language), ("typescript", "typescriptreact"));
         assert!(server_for(Path::new("/w/notes.txt"), &specs).is_none());

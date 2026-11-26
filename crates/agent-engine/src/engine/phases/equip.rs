@@ -85,7 +85,7 @@ impl Job {
     }
 
     fn offer_language_servers(&self, brief: &Brief, workspace: &mut Workspace) {
-        let specs = domain::lsp::servers(domain::lsp::defaults(), &brief.settings.lsp_servers);
+        let specs = domain::lsp::servers(crate::lsp_catalog::shipped(), &brief.settings.lsp_servers);
         let lsp = crate::lsp::Lsp { servers: Arc::clone(&self.lsp), specs: Arc::new(specs) };
         if !lsp.available().is_empty() {
             workspace.services.lsp = Some(lsp);

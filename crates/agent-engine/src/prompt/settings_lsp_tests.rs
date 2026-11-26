@@ -18,7 +18,7 @@ fn language_servers_are_set_by_user_then_project() {
         r#"{"lspServers": {"gopls": {"disabled": true}}}"#,
     );
     let layers = load(repo.path(), Some(home.path())).expect("settings").lsp_servers;
-    let specs = domain::lsp::servers(domain::lsp::defaults(), &layers);
+    let specs = domain::lsp::servers(crate::lsp_catalog::shipped(), &layers);
     assert!(!specs.iter().any(|spec| spec.name == "gopls"));
 }
 
@@ -40,7 +40,7 @@ fn a_checked_in_setting_chooses_servers_but_only_the_owner_says_what_they_run() 
         r#"{"lspServers": {"gopls": {"command": "/opt/gopls"}}}"#,
     );
     let layers = load(repo.path(), Some(home.path())).expect("settings").lsp_servers;
-    let specs = domain::lsp::servers(domain::lsp::defaults(), &layers);
+    let specs = domain::lsp::servers(crate::lsp_catalog::shipped(), &layers);
     let named = |name: &str| specs.iter().find(|spec| spec.name == name).cloned();
     let rust = named("rust-analyzer").expect("rust-analyzer");
     assert_eq!(

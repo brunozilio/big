@@ -10,6 +10,30 @@ use serde_json::Value;
 
 use super::{LanguageServer, LanguageServers, Lsp, Opened, Wait};
 
+pub fn specs() -> Vec<ServerSpec> {
+    let asset = serde_json::json!({"url": "https://example.com/rust-analyzer.gz", "archive": "gzip", "sha256": "00"});
+    let platforms: serde_json::Map<String, Value> = ["macos", "linux", "windows"]
+        .iter()
+        .flat_map(|os| ["aarch64", "x86_64"].map(|arch| (format!("{os}-{arch}"), asset.clone())))
+        .collect();
+    let listed = serde_json::json!([
+        {"name": "rust-analyzer", "command": "rust-analyzer", "extensionToLanguage": {".rs": "rust"},
+         "rootMarkers": ["Cargo.toml"],
+         "install": {"download": {"program": "rust-analyzer", "platforms": platforms}}},
+        {"name": "typescript", "command": "typescript-language-server", "args": ["--stdio"],
+         "extensionToLanguage": {".ts": "typescript", ".tsx": "typescriptreact", ".js": "javascript"},
+         "rootMarkers": ["tsconfig.json", "package.json"],
+         "install": {"npm": ["typescript-language-server@6.0.3", "typescript@6.0.3"]}},
+        {"name": "pyright", "command": "pyright-langserver", "args": ["--stdio"],
+         "extensionToLanguage": {".py": "python"}, "install": {"npm": ["pyright@1.1.414"]}},
+        {"name": "gopls", "command": "gopls", "extensionToLanguage": {".go": "go"}, "rootMarkers": ["go.mod"],
+         "install": {"go": "golang.org/x/tools/gopls@v0.24.0"}},
+        {"name": "clangd", "command": "clangd", "extensionToLanguage": {".c": "c", ".cpp": "cpp"},
+         "rootMarkers": ["compile_commands.json"]}
+    ]);
+    serde_json::from_value(listed).unwrap_or_default()
+}
+
 #[derive(Debug, Default)]
 pub struct ScriptedServer {
     pub answers: Mutex<VecDeque<Result<Value, RequestError>>>,
@@ -32,7 +56,7 @@ impl ScriptedServer {
     }
 
     pub fn lsp(self: &Arc<Self>) -> Lsp {
-        Lsp { servers: Arc::new(ScriptedServers(Arc::clone(self))), specs: Arc::new(domain::lsp::defaults()) }
+        Lsp { servers: Arc::new(ScriptedServers(Arc::clone(self))), specs: Arc::new(specs()) }
     }
 }
 

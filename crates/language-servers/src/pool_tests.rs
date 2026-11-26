@@ -4,7 +4,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
 use crate::install::{Install, Recipe, install_for};
-use domain::lsp::{ServerSpec, defaults};
+use crate::fake::specs as defaults;
+use domain::lsp::ServerSpec;
 use serde_json::Value;
 
 use super::{Installer, LspPool, Starter};

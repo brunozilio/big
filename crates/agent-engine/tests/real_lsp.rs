@@ -18,7 +18,7 @@ use serde_json::json;
 #[ignore = "needs clangd on PATH"]
 fn clangd_answers_symbols_and_reports_an_edit_s_error() {
     let pool = Arc::new(LspPool::default());
-    let specs = Arc::new(domain::lsp::defaults());
+    let specs = Arc::new(agent_engine::lsp_catalog::shipped());
     assert!(pool.available(&specs).iter().any(|spec| spec.name == "clangd"), "clangd is not installed");
     let dir = tempfile::tempdir().expect("dir");
     let file = dir.path().join("main.c");
@@ -88,7 +88,7 @@ fn a_missing_server_is_installed_and_then_answers() {
         std::fs::write(dir.path().join(marker), manifest).expect("marker");
         std::fs::write(dir.path().join(file), source).expect("file");
         let mut workspace = Workspace::new(dir.path());
-        let specs = Arc::new(domain::lsp::defaults());
+        let specs = Arc::new(agent_engine::lsp_catalog::shipped());
         workspace.services.lsp = Some(Lsp { servers: pool.clone(), specs });
         let outline = lsp_tool().run(&json!({"operation": "documentSymbol", "file_path": file}), &workspace);
         assert!(!outline.is_error && outline.content.contains("add"), "{server}: {}", outline.content);
