@@ -84,7 +84,7 @@ function PopoverTool({ label, shortcut, icon, open, onOpenChange, children, disa
 
 function MenuTool({ label, icon, children, caretOnly, align = 'start' }: { label: string; icon?: ReactNode; children: ReactNode; caretOnly?: boolean; align?: 'start' | 'end' }) {
   return (
-    <Menu modal={false}>
+    <Menu>
       <Tooltip content={label}>
         <MenuTrigger asChild>
           <ToolButton label={label} caret={!caretOnly || undefined} className={caretOnly ? 'w-5' : undefined}>

@@ -41,7 +41,9 @@ export function Popover({ trigger, children, align = 'start', className, open, o
   )
 }
 
-export const Menu = RDropdown.Root
+export function Menu({ modal = false, ...props }: RDropdown.DropdownMenuProps) {
+  return <RDropdown.Root modal={modal} {...props} />
+}
 export const MenuTrigger = RDropdown.Trigger
 
 export function MenuContent({ children, align = 'start', className, side, onCloseAutoFocus }: { children: ReactNode; align?: 'start' | 'end'; className?: string; side?: 'top' | 'bottom' | 'right'; onCloseAutoFocus?: (e: Event) => void }) {
