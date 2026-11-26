@@ -163,6 +163,7 @@ export function check({ config }: { config: Config }) {
 }
 
 export function refresh({ previous }: { previous: Tokens }, ctx) {
+  if (!previous.refresh_token) return null;
   const pairs: [string, string][] = [
     ["grant_type", "refresh_token"],
     ["refresh_token", previous.refresh_token ?? ""],
