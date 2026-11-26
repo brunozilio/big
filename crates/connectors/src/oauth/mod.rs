@@ -1,3 +1,4 @@
+mod code;
 mod device;
 mod loopback;
 pub mod mcp;
@@ -15,6 +16,7 @@ use crate::clock::after_seconds;
 use crate::error::ActionError;
 use crate::http::HttpResponse;
 
+pub use code::CodeSignIn;
 pub use device::{DeviceApp, DeviceCode, Dialect, Polled, RegisteredClient};
 pub use loopback::{Authorization, Loopback, LoopbackSignIn};
 pub use stepped::{DeviceSignIn, Started, Stepped};

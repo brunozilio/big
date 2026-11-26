@@ -13,7 +13,7 @@ use crate::error::ActionError;
 use crate::http::{Http, HttpRequest, HttpResponse, Method, Part};
 use crate::mcp::McpClient;
 use crate::oauth::mcp::McpSignIn;
-use crate::oauth::{Authorization, Grant, LoopbackSignIn};
+use crate::oauth::{Authorization, CodeSignIn, Grant, LoopbackSignIn};
 
 fn bytes_of(text: &str, encoding: &str) -> Result<Vec<u8>, String> {
     match encoding {
@@ -100,7 +100,9 @@ impl Kept {
 
 fn evaluated(connection: Option<&str>, arguments: &Value) -> Result<Value, String> {
     let Some(connection) = connection else {
-        return Err("the browser is reached per connection, so it is offered only in calls, polls and accounts".to_owned());
+        return Err(
+            "the browser is reached per connection, so it is offered only in calls, polls and accounts".to_owned()
+        );
     };
     let Some(browser) = crate::browser::installed() else {
         return Err("no browser is connected to this app for connectors".to_owned());
@@ -172,7 +174,10 @@ impl Answers for Local {
             "clock.now" => Ok(json!(Timestamp::now().as_second())),
             "net.site" => Ok(json!(domain::site::site(field(arguments, "url")))),
             "net.safeEndpoint" => Ok(json!(domain::mcp_oauth::endpoint_ok(field(arguments, "url")))),
-            "browser.eval" => Err("the browser is reached per connection, so it is offered only in calls, polls and accounts".to_owned()),
+            "browser.eval" => {
+                Err("the browser is reached per connection, so it is offered only in calls, polls and accounts"
+                    .to_owned())
+            }
             "memory.get" | "memory.set" => {
                 Err("the connector memory is kept per connection, so it is offered only in calls, polls and accounts"
                     .to_owned())
@@ -306,6 +311,18 @@ impl<'a> Online<'a> {
         }
     }
 
+    fn code_sign_in(&self, arguments: &Value) -> CodeSignIn {
+        let scopes = arguments["scopes"].as_array().into_iter().flatten().filter_map(Value::as_str);
+        let redirect = arguments["redirect"].as_str().filter(|redirect| !redirect.is_empty());
+        CodeSignIn {
+            authorize_url: field(arguments, "authorize_url").to_owned(),
+            token_url: field(arguments, "token_url").to_owned(),
+            client_id: field(arguments, "client_id").to_owned(),
+            redirect: redirect.map_or_else(|| self.redirect.clone(), str::to_owned),
+            scopes: scopes.map(str::to_owned).collect(),
+        }
+    }
+
     async fn reach(&self, function: &str, arguments: &Value) -> Result<Value, ActionError> {
         match function {
             "http" => match self.http.send(request(arguments)?).await {
@@ -333,6 +350,23 @@ impl<'a> Online<'a> {
             "oauth.mcp.refresh" => {
                 let grant: Grant = parsed(&arguments["grant"], "grant")?;
                 let fresh = self.sign_in(arguments).refresh(self.http, &grant, now_of(arguments)).await?;
+                Ok(serde_json::to_value(fresh).unwrap_or_default())
+            }
+            "oauth.code.begin" => {
+                let port = u16::try_from(arguments["port"].as_u64().unwrap_or_default()).unwrap_or_default();
+                let started = self.code_sign_in(arguments).begin(self.http, port).await?;
+                Ok(serde_json::to_value(started).unwrap_or_default())
+            }
+            "oauth.code.exchange" => {
+                let authorization: Authorization = parsed(&arguments["authorization"], "authorization")?;
+                let code = field(arguments, "code");
+                let grant =
+                    self.code_sign_in(arguments).exchange(self.http, &authorization, code, now_of(arguments)).await?;
+                Ok(serde_json::to_value(grant).unwrap_or_default())
+            }
+            "oauth.code.refresh" => {
+                let grant: Grant = parsed(&arguments["grant"], "grant")?;
+                let fresh = self.code_sign_in(arguments).refresh(self.http, &grant, now_of(arguments)).await?;
                 Ok(serde_json::to_value(fresh).unwrap_or_default())
             }
             other => Err(ActionError::permanent(format!("the app offers no `{other}`"))),

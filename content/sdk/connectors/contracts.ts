@@ -302,6 +302,53 @@ export function quality(): Action[] {
   return [read("quality.report", wanted, report)];
 }
 
+export function email(): Action[] {
+  const message = object(
+    [["ref", "string"], ["subject", "string"], ["from", "string"], ["received", "string"]],
+    [["to", "array"], ["preview", "string"], ["body", "string"], ["unread", "boolean"], ["url", "string"]],
+  );
+  const event = object(
+    [["ref", "string"], ["subject", "string"], ["start", "string"], ["end", "string"]],
+    [["location", "string"], ["organizer", "string"], ["attendees", "array"], ["online", "string"], ["url", "string"]],
+  );
+  const draft = object([["to", "array"], ["subject", "string"], ["body", "string"]], [["cc", "array"], ["html", "boolean"]]);
+  const newEvent = object(
+    [["subject", "string"], ["start", "string"], ["end", "string"]],
+    [["attendees", "array"], ["location", "string"], ["body", "string"], ["online", "boolean"]],
+  );
+  return [
+    read("email.list_messages", object([], [["folder", "string"], ["query", "string"], ["limit", "integer"], ["unread", "boolean"]]), listOf(message)),
+    read("email.message", object([["message", "string"]]), message),
+    write("email.send", draft, object([["sent", "boolean"]], [["ref", "string"]]), "native"),
+    write("email.reply", object([["message", "string"], ["body", "string"]], [["all", "boolean"], ["html", "boolean"]]), object([["sent", "boolean"]]), "native"),
+    read("email.list_events", object([], [["from", "string"], ["to", "string"], ["limit", "integer"]]), listOf(event)),
+    write("email.create_event", newEvent, object([["ref", "string"]], [["url", "string"], ["online", "string"], ["created", "boolean"]]), "lookup"),
+  ];
+}
+
+export function files(): Action[] {
+  const item = object(
+    [["ref", "string"], ["name", "string"], ["kind", "string"]],
+    [["size", "integer"], ["modified", "string"], ["url", "string"], ["path", "string"], ["mime", "string"]],
+  );
+  return [
+    read("files.list", object([], [["folder", "string"], ["drive", "string"], ["limit", "integer"]]), listOf(item)),
+    read("files.search", object([["query", "string"]], [["drive", "string"], ["limit", "integer"]]), listOf(item)),
+    read("files.download", object([["file", "string"]], [["drive", "string"]]), object([["name", "string"], ["mime", "string"]], [["text", "string"], ["base64", "string"], ["truncated", "boolean"]])),
+    read("files.sites", object([], [["query", "string"]]), listOf(object([["ref", "string"], ["name", "string"]], [["url", "string"], ["host", "string"]]))),
+  ];
+}
+
+export function messaging(): Action[] {
+  const chat = object([["ref", "string"], ["kind", "string"]], [["topic", "string"], ["members", "array"], ["updated", "string"], ["url", "string"]]);
+  const message = object([["ref", "string"], ["from", "string"], ["sent", "string"]], [["text", "string"], ["url", "string"]]);
+  return [
+    read("messaging.list_chats", object([], [["limit", "integer"]]), listOf(chat)),
+    read("messaging.list_messages", object([["chat", "string"]], [["limit", "integer"]]), listOf(message)),
+    write("messaging.send_message", object([["chat", "string"], ["text", "string"]], [["html", "boolean"]]), object([["sent", "boolean"]], [["ref", "string"]]), "native"),
+  ];
+}
+
 export function design(): Action[] {
   const frame = object(
     [["ref", "string"], ["name", "string"]],

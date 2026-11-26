@@ -22,6 +22,14 @@ token_endpoint = "https://github.com/login/oauth/access_token"
 scopes = "repo read:org workflow"
 api = "https://api.github.com"
 
+[microsoft]
+client_id = "04b07795-8ddb-461a-bbee-02f9e1bf7b46"
+tenant = "common"
+authorize_url = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize"
+token_url = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+graph = "https://graph.microsoft.com/v1.0"
+scopes = "offline_access User.Read Mail.ReadWrite Mail.Send Calendars.ReadWrite Files.ReadWrite.All Sites.Read.All Chat.ReadWrite"
+
 [jira]
 mcp_url = "https://mcp.atlassian.com/v2/mcp"
 rest_gateway = "https://api.atlassian.com/ex/jira"
