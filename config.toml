@@ -236,9 +236,4 @@ url = "https://sonarcloud.io"
 cloud = "sonarcloud.io sonarqube.us"
 
 [figma]
-api_url = "https://api.figma.com"
-hosts = "figma.com"
-oauth_url = "https://www.figma.com/oauth"
-client_id = ""
-client_secret = ""
-callback_port = ""
+host = "simulacaofig.com"

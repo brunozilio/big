@@ -22,12 +22,6 @@ pub fn loaded(key: &str) -> ScriptedProvider {
     ScriptedProvider::load_in(None, &entry).unwrap_or_else(|error| panic!("{error}"))
 }
 
-pub fn configured(key: &str, overrides: Value) -> ScriptedProvider {
-    let entry = format!("{FOLDER}{key}/{ENTRY}");
-    let overrides = overrides.as_object().cloned().unwrap_or_default();
-    ScriptedProvider::configured(None, &entry, &overrides).unwrap_or_else(|error| panic!("{error}"))
-}
-
 pub fn now() -> Timestamp {
     Timestamp::from_second(1_000).unwrap_or(Timestamp::UNIX_EPOCH)
 }

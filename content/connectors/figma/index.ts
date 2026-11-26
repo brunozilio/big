@@ -1,8 +1,8 @@
-import { type Creds, type Language, checked, connect, fail, json, pick, send, siteOf, text, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type Creds, type Language, checked, fail, json, pick, send, siteOf, text, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { design } from "sdk/connectors/contracts.ts";
-import { configured } from "./login.ts";
+import { base, heldBy, userOf } from "./login.ts";
 
-export { signIn } from "./login.ts";
+export { session } from "./login.ts";
 
 const MOST_TEXTS = 200;
 const MOST_LINES = 150;
@@ -10,7 +10,7 @@ const DEEPEST = 5;
 const MOST_PICTURE = 5 * 1024 * 1024;
 const KINDS = new Set(["file", "design", "proto", "board", "slides", "buzz", "make"]);
 
-type Ctx = { config: { api_url: string; hosts?: string; client_id?: string } } & Record<string, any>;
+type Ctx = { config: { host: string } } & Record<string, any>;
 
 type Api = { ctx: Ctx; headers: Record<string, string>; base: string };
 
@@ -26,41 +26,41 @@ function tokenFields(language: Language) {
   return [tokenField("token", pick(language, "Personal access token", "Token de acceso personal", "Token de acesso pessoal"), help, true)];
 }
 
-export function provider({ language }: { language?: Language }, ctx: Ctx) {
-  const auth = configured(ctx.config) ? { kind: "loopback" } : { kind: "token", fields: tokenFields(language ?? "pt-BR"), form: "json" };
+export function provider(_args: { language?: Language }, _ctx: Ctx) {
+  const auth = { kind: "steps", using: "session" };
   return { name: "Figma", logo: "logo.svg", capabilities: ["design"], auth, actions: design() };
 }
 
-export function alternatives({ language }: { language: Language }, ctx: Ctx) {
-  if (!configured(ctx.config)) return [];
+export function alternatives({ language }: { language: Language }, _ctx: Ctx) {
   const label = pick(language, "Use a personal access token", "Usar un token de acceso personal", "Usar token de acesso pessoal");
   return [tokenAlternative(language, "token", label, pick(language, "Figma", "de Figma", "do Figma"), tokenFields(language), "json")];
 }
 
-export function presentation({ language }: { language: Language }, ctx: Ctx) {
+export function presentation({ language }: { language: Language }, _ctx: Ctx) {
   return {
     description: pick(language, "Prototypes and screens for the agents", "Prototipos y pantallas para los agentes", "Protótipos e telas para os agentes"),
     group: "design",
-    button: configured(ctx.config) ? pick(language, "Sign in with Figma", "Entrar con Figma", "Entrar com Figma") : connect(language),
+    button: pick(language, "Sign in with Figma", "Entrar con Figma", "Entrar com Figma"),
     site: pick(language, "Figma", "de Figma", "do Figma"),
     choose_title: pick(language, "Figma account", "Cuenta de Figma", "Conta do Figma"),
     hidden: false,
   };
 }
 
-function personal(token: string): string | null {
+function headersOf(token: string): Record<string, string> {
+  const held = heldBy(token);
+  if (held !== null) return { cookie: held.cookies, accept: "application/json", "x-csrf-bypass": "yes" };
   try {
     const found = JSON.parse(token);
-    return typeof found?.token === "string" ? found.token : null;
+    if (typeof found?.token === "string") return { "x-figma-token": found.token };
   } catch {
-    return null;
+    return { authorization: `Bearer ${token}` };
   }
+  return { authorization: `Bearer ${token}` };
 }
 
 function apiOf(ctx: Ctx, creds: Creds): Api {
-  const own = personal(creds.token);
-  const headers: Record<string, string> = own === null ? { authorization: `Bearer ${creds.token}` } : { "x-figma-token": own };
-  return { ctx, headers, base: ctx.config.api_url.replace(/\/+$/, "") };
+  return { ctx, headers: headersOf(creds.token), base: base(ctx) };
 }
 
 function get(api: Api, path: string) {
@@ -70,8 +70,8 @@ function get(api: Api, path: string) {
 
 function ownHost(ctx: Ctx, url: string): boolean {
   const host = siteOf(url);
-  const hosts = (ctx.config.hosts ?? "").split(/\s+/).filter(Boolean);
-  return hosts.some((known) => host === known || host.endsWith(`.${known}`));
+  const known = ctx.config.host;
+  return host === known || host.endsWith(`.${known}`);
 }
 
 export function linkOf(ctx: Ctx, url: string): Link {
@@ -146,7 +146,13 @@ export function call({ action, args, creds }: { action: string; args: Record<str
 }
 
 export function accounts({ creds }: { creds: Creds }, ctx: Ctx) {
-  const me = get(apiOf(ctx, creds), "/v1/me");
+  const api = apiOf(ctx, creds);
+  if (heldBy(creds.token) !== null) {
+    const user = userOf(get(api, "/api/session/state"));
+    if (user === null) return fail("auth", "Figma has no account in this session; sign in to Figma in the browser first");
+    return [{ id: `figma-${user.id}`, label: user.label, settings: {} }];
+  }
+  const me = get(api, "/v1/me");
   const id = textOf(me, ["id"]);
   if (id === "") return fail("auth", "Figma did not accept the token; create a personal access token with file_content:read");
   const label = textOf(me, ["handle"]) || textOf(me, ["email"]) || "Figma";
