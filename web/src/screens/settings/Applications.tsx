@@ -6,21 +6,21 @@ import { errorText, setApplications, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card, EmptyState } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
-import { Field, Input } from '@/ui/form'
+import { Field, Input, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { stagger, tween } from '@/ui/motion'
 import { Dialog } from '@/ui/overlay'
 import { useT } from '@/i18n'
 import { FolderDialog } from './FolderDialog'
 import { FlowSelect, useFlows, withFlow } from './flows'
-import { BindingFields, missingOf, suggested, useBindingFields, useBindingOptions, useBoundLook, type BindingField, type BindingOptions } from './bindings'
+import { BindingFields, missingOf, suggested, useBindingFields, useBoundLook, type BindingField } from './bindings'
 
 export function folderName(directory: string): string {
   return directory.split('/').filter(Boolean).pop() ?? directory
 }
 
 function blankRepository(): ApplicationRepository {
-  return { id: '', directory: '', run: [], verify: [], e2e: [], e2eDirectory: '', bindings: {} }
+  return { id: '', directory: '', kind: 'application', run: [], verify: [], e2e: [], e2eDirectory: '', bindings: {} }
 }
 
 function draftOf(application: Application | null): ApplicationDraft {
@@ -35,10 +35,6 @@ function variablesOf(env: Record<string, string> | undefined): Variable[] {
 
 function envOf(rows: Variable[]): Record<string, string> {
   return Object.fromEntries(rows.map(([name, value]): Variable => [name.trim(), value]).filter(([name]) => name))
-}
-
-function cleanLines(lines: string[] | undefined): string[] {
-  return (lines ?? []).map((v) => v.trim()).filter(Boolean)
 }
 
 function EnvList({ value, onChange }: { value: Variable[]; onChange: (next: Variable[]) => void }) {
@@ -62,27 +58,32 @@ function EnvList({ value, onChange }: { value: Variable[]; onChange: (next: Vari
   )
 }
 
-function CommandList({ label, value, placeholder, onChange }: { label: string; value: string[]; placeholder: string; onChange: (next: string[]) => void }) {
+const KINDS = ['application', 'configuration', 'tests'] as const
+
+type Kind = (typeof KINDS)[number]
+
+function isKind(name: string): name is Kind {
+  return (KINDS as readonly string[]).includes(name)
+}
+
+function useKindLabel(): (name: string) => string {
   const t = useT()
-  const lines = value.length > 0 ? value : ['']
-  const set = (at: number, line: string) => onChange(lines.map((l, i) => (i === at ? line : l)))
+  return (name) => (isKind(name) ? t(`settings.app_kind_${name}`) : name)
+}
+
+function KindSelect({ value, onChange }: { value: string | undefined; onChange: (next: string) => void }) {
+  const t = useT()
+  const label = useKindLabel()
+  const names: string[] = value && !isKind(value) ? [...KINDS, value] : [...KINDS]
+  const options = names.map((name) => ({ value: name, label: label(name) }))
   return (
-    <div className="space-y-2">
-      <span className="text-base font-medium text-fg">{label}</span>
-      <div className="space-y-2">
-        {lines.map((line, i) => (
-          <div key={i} className="flex items-center gap-1.5">
-            <Input aria-label={`${label} ${i + 1}`} className="font-mono text-sm" value={line} placeholder={i === 0 ? placeholder : undefined} onChange={(e) => set(i, e.target.value)} />
-            {lines.length > 1 && <IconButton tooltip={t('settings.app_removeCommand')} size="sm" onClick={() => onChange(lines.filter((_, at) => at !== i))}><Icon name="trash" size={15} /></IconButton>}
-          </div>
-        ))}
-      </div>
-      <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => onChange([...lines, ''])}>{t('settings.app_addCommand')}</Button>
-    </div>
+    <Field label={t('settings.app_kind')}>
+      <Select label={t('settings.app_kind')} className="w-full" value={value || 'application'} options={options} onValueChange={onChange} />
+    </Field>
   )
 }
 
-function RepositoryCard({ value, index, removable, fields, options, flows, onChange, onRemove, onFolder }: { value: ApplicationRepository; index: number; removable: boolean; fields: BindingField[]; options: BindingOptions; flows: string[]; onChange: (next: ApplicationRepository) => void; onRemove: () => void; onFolder: () => void }) {
+function RepositoryCard({ value, index, removable, fields, flows, onChange, onRemove, onFolder }: { value: ApplicationRepository; index: number; removable: boolean; fields: BindingField[]; flows: string[]; onChange: (next: ApplicationRepository) => void; onRemove: () => void; onFolder: () => void }) {
   const t = useT()
   return (
     <Card variant="inset" className="space-y-4 px-4 py-4" data-testid={`repository-${index}`}>
@@ -98,13 +99,8 @@ function RepositoryCard({ value, index, removable, fields, options, flows, onCha
             <span className={value.directory ? 'min-w-0 flex-1 truncate font-mono text-sm text-fg' : 'min-w-0 flex-1 truncate text-base text-muted'}>{value.directory || t('settings.app_chooseFolder')}</span>
           </button>
         </div>
-        <BindingFields fields={fields} options={options} bindings={value.bindings} onChange={(bindings) => onChange({ ...value, bindings })} />
-        <CommandList label={t('settings.app_run')} value={value.run} placeholder="bun dev" onChange={(run) => onChange({ ...value, run })} />
-        <CommandList label={t('settings.app_verify')} value={value.verify} placeholder="bun test" onChange={(verify) => onChange({ ...value, verify })} />
-        <CommandList label={t('settings.app_e2e')} value={value.e2e ?? []} placeholder="npx cypress run" onChange={(e2e) => onChange({ ...value, e2e })} />
-        <Field label={t('settings.app_e2eDirectory')}>
-          <Input aria-label={t('settings.app_e2eDirectory')} className="font-mono text-sm" value={value.e2eDirectory ?? ''} placeholder="e2e" onChange={(e) => onChange({ ...value, e2eDirectory: e.target.value })} />
-        </Field>
+        <BindingFields fields={fields} bindings={value.bindings} onChange={(bindings) => onChange({ ...value, bindings })} />
+        <KindSelect value={value.kind} onChange={(kind) => onChange({ ...value, kind })} />
         <FlowSelect value={value.flow} flows={flows} onChange={(flow) => onChange(withFlow(value, flow))} />
       </div>
     </Card>
@@ -120,8 +116,6 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
   const [error, setError] = useState<string | null>(null)
   const shared = useBindingFields('application')
   const own = useBindingFields('repository')
-  const sharedOptions = useBindingOptions(shared, open)
-  const ownOptions = useBindingOptions(own, open)
   const flows = useFlows(open)
   useEffect(() => {
     if (open) {
@@ -134,8 +128,9 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
   const chosen = (listing: DirListing) => {
     if (folderFor === null) return
     const current = draft.repositories[folderFor]
-    const bindings = suggested(listing.remote.ref, own, ownOptions, current.bindings)
-    change(folderFor, { ...current, directory: listing.path, bindings })
+    const at = folderFor
+    change(at, { ...current, directory: listing.path })
+    void suggested(listing.remote.ref, own, current.bindings).then((bindings) => setDraft((d) => ({ ...d, repositories: d.repositories.map((r, i) => (i === at ? { ...r, bindings: { ...bindings, ...r.bindings } } : r)) })))
     if (!draft.name.trim() && folderFor === 0) setDraft((d) => ({ ...d, name: folderName(listing.path) }))
     setFolderFor(null)
   }
@@ -144,8 +139,7 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
     if (missing) return setError(t('settings.app_bindingMissing', missing))
     setBusy(true)
     setError(null)
-    const repositories = draft.repositories.map((r) => ({ ...r, run: cleanLines(r.run), verify: cleanLines(r.verify), e2e: cleanLines(r.e2e), e2eDirectory: (r.e2eDirectory ?? '').trim() }))
-    const clean = { ...draft, repositories, env: envOf(variables) }
+    const clean = { ...draft, env: envOf(variables) }
     const sent = application ? api().saveApplication({ ...clean, id: application.id }) : api().createApplication(clean)
     sent
       .then((saved) => {
@@ -174,12 +168,12 @@ export function ApplicationDialog({ open, application, onClose }: { open: boolea
             <Field label={t('settings.app_name')}>
               <Input aria-label={t('settings.app_name')} value={draft.name} placeholder="Checkout" onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))} />
             </Field>
-            <BindingFields fields={shared} options={sharedOptions} bindings={draft.bindings} onChange={(bindings) => setDraft((d) => ({ ...d, bindings }))} />
+            <BindingFields fields={shared} bindings={draft.bindings} onChange={(bindings) => setDraft((d) => ({ ...d, bindings }))} />
           </div>
           <EnvList value={variables} onChange={setVariables} />
           <div className="space-y-3">
             {draft.repositories.map((r, i) => (
-              <RepositoryCard key={r.id || `novo-${i}`} value={r} index={i} removable={draft.repositories.length > 1} fields={own} options={ownOptions} flows={flows} onChange={(next) => change(i, next)} onRemove={() => setDraft((d) => ({ ...d, repositories: d.repositories.filter((_, at) => at !== i) }))} onFolder={() => setFolderFor(i)} />
+              <RepositoryCard key={r.id || `novo-${i}`} value={r} index={i} removable={draft.repositories.length > 1} fields={own} flows={flows} onChange={(next) => change(i, next)} onRemove={() => setDraft((d) => ({ ...d, repositories: d.repositories.filter((_, at) => at !== i) }))} onFolder={() => setFolderFor(i)} />
             ))}
             <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => setDraft((d) => ({ ...d, repositories: [...d.repositories, blankRepository()] }))}>{t('settings.app_addRepository')}</Button>
           </div>
@@ -241,6 +235,7 @@ function CommandChips({ icon, label, commands }: { icon: 'play' | 'check' | 'sTe
 
 function RepositoryLine({ repository }: { repository: ApplicationRepository }) {
   const t = useT()
+  const kind = useKindLabel()
   const e2e = (repository.e2e ?? []).map((c) => (repository.e2eDirectory ? `${repository.e2eDirectory}: ${c}` : c))
   return (
     <li className="flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-2.5 sm:flex-nowrap">
@@ -252,6 +247,7 @@ function RepositoryLine({ repository }: { repository: ApplicationRepository }) {
         </div>
       </div>
       <div className="flex min-w-0 flex-wrap items-center gap-1.5 sm:justify-end">
+        {repository.kind && <Fact label={t('settings.app_kind')} value={kind(repository.kind)} />}
         <BoundFacts bindings={repository.bindings} />
         <CommandChips icon="play" label={t('settings.app_run')} commands={repository.run} />
         <CommandChips icon="check" label={t('settings.app_verify')} commands={repository.verify} />

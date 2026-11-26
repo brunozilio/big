@@ -39,6 +39,7 @@ fn repository(found: Repository) -> ApiResult<Repository> {
     Ok(Repository {
         id,
         directory,
+        kind: trimmed(&found.kind),
         run: lines(&found.run),
         verify: lines(&found.verify),
         e2e: lines(&found.e2e),

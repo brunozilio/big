@@ -1918,7 +1918,7 @@ export default workflow({
     return {
       develop: cloudFor({ cloud: true, environments }, "develop"),
       unknown: cloudFor({ cloud: true, environments }, "outro"),
-      asked: cloudFor({ cloud: "aws-1", environment: "prd", environments }, "develop"),
+      asked: cloudFor({ cloud: "aws-1", environment: "prod", environments }, "develop"),
       off: cloudFor({ environments }, "develop") ?? null,
     };
   },
@@ -1930,7 +1930,7 @@ export default workflow({
         json!({
             "develop": { "environment": "develop" },
             "unknown": true,
-            "asked": { "connection": "aws-1", "environment": "prd" },
+            "asked": { "connection": "aws-1", "environment": "prod" },
             "off": null,
         }),
         "{result}"

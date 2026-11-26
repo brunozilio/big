@@ -113,19 +113,22 @@ export interface PickerProps<T extends string> {
   className?: string
   actions?: PickerAction[]
   side?: 'top' | 'bottom'
+  onSearch?: (query: string) => void
+  hint?: string
 }
 
-export function ChipPicker<T extends string>({ value, options, onChange, label, placeholder, empty, look = 'chip', size = 'sm', leading, className, actions = [], side }: PickerProps<T>) {
+export function ChipPicker<T extends string>({ value, options, onChange, label, placeholder, empty, look = 'chip', size = 'sm', leading, className, actions = [], side, onSearch, hint }: PickerProps<T>) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [lit, setLit] = useState(0)
   const current = options.find((option) => option.value === value)
-  const shown = matching(options, query)
-  const numbered = options.length <= SHORTCUTS
+  const shown = onSearch ? options : matching(options, query)
+  const numbered = !onSearch && options.length <= SHORTCUTS
   const rows = shown.length + actions.length
   const toggle = (next: boolean) => {
     setOpen(next)
     setQuery('')
+    onSearch?.('')
     setLit(Math.max(0, current ? options.indexOf(current) : 0))
   }
   const pick = (option: ChipOption<T> | undefined) => {
@@ -164,13 +167,14 @@ export function ChipPicker<T extends string>({ value, options, onChange, label, 
   return (
     <Popover trigger={<Trigger look={look} current={current} label={label} leading={leading} empty={empty} className={className} size={size} onOpen={() => toggle(true)} />} open={open} onOpenChange={toggle} align="start" side={side} className="w-[max(16rem,var(--radix-popover-trigger-width))] p-0">
       <div className="flex items-center gap-2 border-b px-3 py-2.5">
-        <input autoFocus aria-label={searchLabel} placeholder={searchLabel} value={query} onChange={(e) => { setQuery(e.target.value); setLit(0) }} onKeyDown={keyed} className="min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-muted" />
+        <input autoFocus aria-label={searchLabel} placeholder={searchLabel} value={query} onChange={(e) => { setQuery(e.target.value); onSearch?.(e.target.value); setLit(0) }} onKeyDown={keyed} className="min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-muted" />
         {numbered && <Kbd>1–{options.length}</Kbd>}
       </div>
       <div role="listbox" aria-label={label} className="flex max-h-80 flex-col overflow-y-auto p-1.5">
         {shown.map((option) => (
           <Choice key={option.value} option={option} at={options.indexOf(option)} numbered={numbered} chosen={option.value === value} lit={shown[lit] === option} onPick={() => pick(option)} onHover={() => setLit(shown.indexOf(option))} />
         ))}
+        {hint && <p role="status" className="px-2.5 py-2 text-sm text-muted">{hint}</p>}
         {actions.length > 0 && shown.length > 0 && <div role="separator" className="-mx-1.5 my-1.5 h-px shrink-0 bg-line" />}
         {actions.map((action, at) => (
           <ActionRow key={action.key} action={action} lit={lit === shown.length + at} onPick={() => act(action)} onHover={() => setLit(shown.length + at)} />

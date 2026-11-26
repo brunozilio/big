@@ -258,17 +258,17 @@ mod tests {
                 ("account".to_owned(), store::Choice { value: account.into(), label: String::new() }),
             ])
         };
-        chosen.profiles = vec![profile("develop", "111/Dev"), profile("prd", "222/Deploy")];
-        let asked = wanted(&command(json!({ "environment": "prd" })), Some(&chosen)).map(|(call, optional)| (call.args, optional));
+        chosen.profiles = vec![profile("develop", "111/Dev"), profile("prod", "222/Deploy")];
+        let asked = wanted(&command(json!({ "environment": "prod" })), Some(&chosen)).map(|(call, optional)| (call.args, optional));
         let Some((args, optional)) = asked else { panic!("no call") };
-        assert_eq!(args["environment"], "prd");
+        assert_eq!(args["environment"], "prod");
         assert_eq!(args["profiles"][1]["account"]["value"], "222/Deploy");
         assert!(args.get("binding").is_none());
         assert!(optional);
         let plain = wanted(&command(json!(true)), Some(&chosen)).map(|(call, _)| call.args);
         assert!(plain.is_some_and(|args| args.get("environment").is_none() && args["profiles"].is_array()));
-        let elsewhere = wanted(&command(json!({ "connection": "cl-2", "environment": "hi" })), Some(&chosen));
-        assert_eq!(elsewhere.map(|(call, _)| (call.connection, call.args)), Some((Some("cl-2".to_owned()), json!({ "environment": "hi" }))));
+        let elsewhere = wanted(&command(json!({ "connection": "cl-2", "environment": "hint" })), Some(&chosen));
+        assert_eq!(elsewhere.map(|(call, _)| (call.connection, call.args)), Some((Some("cl-2".to_owned()), json!({ "environment": "hint" }))));
     }
 
     #[test]

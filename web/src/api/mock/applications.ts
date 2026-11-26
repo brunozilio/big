@@ -112,6 +112,7 @@ export function checkedApplication(draft: ApplicationDraft, id: string): Applica
     return {
       id: r.id || `r-${Date.now()}-${counter}`,
       directory: r.directory.trim(),
+      ...(r.kind?.trim() ? { kind: r.kind.trim() } : {}),
       run: r.run.map((v) => v.trim()).filter(Boolean),
       verify: r.verify.map((v) => v.trim()).filter(Boolean),
       e2e: (r.e2e ?? []).map((v) => v.trim()).filter(Boolean),

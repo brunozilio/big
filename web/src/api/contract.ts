@@ -906,6 +906,7 @@ export interface BindingOption {
 export interface ApplicationRepository {
   id: string
   directory: string
+  kind?: string
   run: string[]
   verify: string[]
   e2e?: string[]

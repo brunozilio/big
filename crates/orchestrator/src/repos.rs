@@ -10,6 +10,7 @@ pub struct Checkout {
     pub id: String,
     pub name: String,
     pub directory: Option<PathBuf>,
+    pub kind: String,
     pub run: Vec<String>,
     pub verify: Vec<String>,
     pub e2e: Vec<String>,
@@ -48,6 +49,7 @@ fn checkout(repository: &Value) -> Checkout {
         id: text(repository, "id"),
         name,
         directory,
+        kind: text(repository, "kind"),
         run: commands(repository, "run"),
         verify: commands(repository, "verify"),
         e2e: commands(repository, "e2e"),
@@ -65,6 +67,7 @@ pub fn of_input(input: &Value, fallback: Option<&Path>) -> Vec<Checkout> {
         id: String::new(),
         name: String::new(),
         directory: fallback.map(Path::to_path_buf),
+        kind: String::new(),
         run: Vec::new(),
         verify: Vec::new(),
         e2e: Vec::new(),
@@ -91,7 +94,7 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
     let mut text = String::from("## Repositories of this task\n");
     for worktree in worktrees {
         let checkout = &worktree.checkout;
-        let _ = write!(text, "\n- {}: {}", checkout.name, worktree.path.display());
+        let _ = write!(text, "\n- {}{}: {}", checkout.name, kind_note(&checkout.kind), worktree.path.display());
         if !checkout.run.is_empty() {
             let _ = write!(text, "\n  - To run: {}", quoted(&checkout.run));
         }
@@ -105,11 +108,16 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
     }
     let _ = write!(
         text,
-        "\n\nIf you create a repository or service that is not in this list, or find out how one of them runs or \
-         is verified, record it with `{}` before you finish.",
+        "\n\nWhen a repository has no command listed, discover from its files how it runs, is verified and runs its \
+         end-to-end suite. If you create a repository or service that is not in this list, or find out how one of \
+         them runs or is verified, record it with `{}` before you finish.",
         crate::application::ADD_REPOSITORY
     );
     Some(text)
+}
+
+fn kind_note(kind: &str) -> String {
+    if kind.is_empty() { String::new() } else { format!(" ({kind} repository)") }
 }
 
 pub fn summary(worktree: &Worktree, base: Option<&str>, commit: Option<&str>) -> Value {
@@ -134,7 +142,7 @@ mod tests {
     #[test]
     fn the_application_s_repositories_come_in_order_with_their_commands() {
         let input = json!({ "application": { "repositories": [
-            { "id": "web", "directory": "/src/web", "bindings": { "code": { "connection": "c", "value": "acme/web" } },
+            { "id": "web", "directory": "/src/web", "kind": "application", "bindings": { "code": { "connection": "c", "value": "acme/web" } },
               "run": "bun dev", "verify": ["bun test", " "] },
             { "id": "app", "directory": "/src/app", "run": ["bun api", " bun web ", ""] },
             { "id": "api", "directory": "/src/api" },
@@ -153,8 +161,8 @@ mod tests {
             .map(|checkout| Worktree { path: PathBuf::from("/w").join(&checkout.id), branch: String::new(), checkout })
             .collect();
         let text = described(&worktrees).expect("described");
-        assert!(text.contains("acme/web: /w/web") && text.contains("`bun dev`") && text.contains("`bun test`"));
+        assert!(text.contains("acme/web (application repository): /w/web") && text.contains("`bun dev`") && text.contains("`bun test`"));
         assert!(text.contains("  - To run: `bun api`, `bun web`"));
-        assert!(text.contains("`AddRepository`"));
+        assert!(text.contains("`AddRepository`") && text.contains("app: /w/app"));
     }
 }

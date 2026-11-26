@@ -57,15 +57,16 @@ describe('diálogo de pasta', () => {
     expect(withChoices({ ...binding, more: [{ value: 'OPS' }] }, [])).toEqual(binding)
   })
 
-  test('o vínculo do repositório é sugerido pelo remote do git entre as opções do conector', () => {
+  test('o vínculo do repositório é sugerido pelo remote do git entre as opções do conector', async () => {
     const github = { key: 'github', name: 'GitHub', group: 'code', description: '', logo: '', signIn: 'device' as const, fields: [], multiple: true }
     const connection = { id: 'c-github', provider: 'github', label: 'acme', account: '', capabilities: ['code'], status: 'ok' as const }
     const fields = [{ capability: 'code', label: 'GitHub', sources: [{ connection, provider: github }] }]
-    const options = { code: { 'c-github': [{ value: 'acme/web', label: 'acme/web' }] } }
-    expect(suggested('ACME/web', fields, options, {})).toEqual({ code: { connection: 'c-github', value: 'acme/web', label: 'acme/web' } })
-    expect(suggested('acme/outro', fields, options, {})).toEqual({})
+    const listed = [{ value: 'acme/web', label: 'acme/web' }]
+    setApi({ ...fresh(), call: (async (_connection: string, _action: string, args: { query?: string }) => listed.filter((o) => o.value === (args.query ?? '').toLowerCase())) as Api['call'] })
+    expect(await suggested('ACME/web', fields, {})).toEqual({ code: { connection: 'c-github', value: 'acme/web', label: 'acme/web' } })
+    expect(await suggested('acme/outro', fields, {})).toEqual({})
     const kept = { code: { connection: 'c-github', value: 'acme/api' } }
-    expect(suggested('acme/web', fields, options, kept)).toEqual(kept)
+    expect(await suggested('acme/web', fields, kept)).toEqual(kept)
     expect(withBinding(kept, 'code', null)).toEqual({})
   })
 
@@ -93,20 +94,14 @@ describe('aba Aplicações', () => {
     const name = (await view.findByLabelText('Nome')) as HTMLInputElement
     await waitFor(() => expect(name.value).toBe('web'))
     expect((await view.findByRole('combobox', { name: 'GitHub' }, { timeout: 3000 })).textContent).toContain('acme/web')
-    fireEvent.change(view.getByLabelText('Verificação 1'), { target: { value: 'bun test' } })
-    fireEvent.click(view.getAllByRole('button', { name: 'Adicionar comando' })[1])
-    fireEvent.change(await view.findByLabelText('Verificação 2'), { target: { value: ' bun run lint ' } })
-    fireEvent.click(view.getAllByRole('button', { name: 'Adicionar comando' })[0])
-    fireEvent.change(view.getByLabelText('Rodar 1'), { target: { value: 'bun api' } })
-    fireEvent.change(await view.findByLabelText('Rodar 2'), { target: { value: 'bun web' } })
-    fireEvent.change(view.getByLabelText('Testes E2E 1'), { target: { value: 'npx cypress run' } })
-    fireEvent.change(view.getByLabelText('Pasta dos testes E2E'), { target: { value: ' e2e ' } })
+    expect(view.queryByLabelText('Rodar 1')).toBeNull()
+    expect(view.getByRole('combobox', { name: 'Tipo' }).textContent).toContain('Aplicação')
     fireEvent.change(view.getByLabelText('Nome 1'), { target: { value: 'CYPRESS_BASE_URL' } })
     fireEvent.change(view.getByLabelText('Valor 1'), { target: { value: 'http://localhost:3000' } })
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(getState().applications?.length).toBe(2))
     const made = getState().applications?.[1]
-    expect(made?.repositories[0]).toMatchObject({ directory: `${MOCK_HOME}/projetos/web`, bindings: { code: { connection: 'c-github', value: 'acme/web' } }, run: ['bun api', 'bun web'], verify: ['bun test', 'bun run lint'], e2e: ['npx cypress run'], e2eDirectory: 'e2e' })
+    expect(made?.repositories[0]).toMatchObject({ directory: `${MOCK_HOME}/projetos/web`, bindings: { code: { connection: 'c-github', value: 'acme/web' } }, kind: 'application', run: [], verify: [], e2e: [] })
     expect(made?.env).toEqual({ CYPRESS_BASE_URL: 'http://localhost:3000' })
     await waitFor(() => expect(view.getByRole('button', { name: 'Remover web' })).toBeTruthy())
     fireEvent.click(view.getByRole('button', { name: 'Remover web' }))
@@ -188,7 +183,7 @@ describe('conta e papel na nuvem', () => {
     await waitFor(() => expect(getState().applications?.[0]?.bindings?.cloud).toEqual({
       connection: 'c-aws',
       value: '',
-      profiles: [{ environment: { value: 'prd', label: 'Produção' }, account: { value: '111122223333/Deploy', label: 'acme-prod · Deploy' } }],
+      profiles: [{ environment: { value: 'prod', label: 'Produção' }, account: { value: '111122223333/Deploy', label: 'acme-prod · Deploy' } }],
     }))
   })
 })

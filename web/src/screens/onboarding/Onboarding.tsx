@@ -17,7 +17,7 @@ import { ConnectionCard } from '../settings/ConnectionCard'
 import { FolderDialog } from '../settings/FolderDialog'
 import { accountsOf } from '../settings/Settings'
 import { folderName } from '../settings/Applications'
-import { BindingFields, suggested, useBindingFields, useBindingOptions, type BindingField, type BindingOptions } from '../settings/bindings'
+import { BindingFields, suggested, useBindingFields, type BindingField } from '../settings/bindings'
 import { FlowSelect, useFlows, withFlow } from '../settings/flows'
 
 const SKIPPED = 'onboarding:skipped'
@@ -62,7 +62,6 @@ const blank: Draft = { name: '', bindings: {}, repository: { id: '', directory: 
 
 interface Binder {
   fields: BindingField[]
-  options: BindingOptions
 }
 
 function Steps({ stage }: { stage: Stage }) {
@@ -119,8 +118,8 @@ function ApplicationStage({ draft, onChange, onFolder, shared, own }: { draft: D
         </button>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
-        <BindingFields fields={shared.fields} options={shared.options} bindings={draft.bindings} onChange={(bindings) => onChange({ ...draft, bindings })} />
-        <BindingFields fields={own.fields} options={own.options} bindings={draft.repository.bindings} onChange={(bindings) => onChange({ ...draft, repository: { ...draft.repository, bindings } })} />
+        <BindingFields fields={shared.fields} bindings={draft.bindings} onChange={(bindings) => onChange({ ...draft, bindings })} />
+        <BindingFields fields={own.fields} bindings={draft.repository.bindings} onChange={(bindings) => onChange({ ...draft, repository: { ...draft.repository, bindings } })} />
         <FlowSelect value={draft.repository.flow} flows={flows} onChange={(flow) => onChange({ ...draft, repository: withFlow(draft.repository, flow) })} />
       </div>
     </div>
@@ -158,15 +157,16 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
   const [error, setError] = useState<string | null>(null)
   const sharedFields = useBindingFields('application')
   const ownFields = useBindingFields('repository')
-  const sharedOptions = useBindingOptions(sharedFields, stage === 'application')
-  const ownOptions = useBindingOptions(ownFields, stage === 'application')
   const chosen = (listing: DirListing) => {
     setDraft((d) => ({
       ...d,
       name: d.name.trim() ? d.name : folderName(listing.path),
-      repository: { ...d.repository, directory: listing.path, bindings: suggested(listing.remote.ref, ownFields, ownOptions, d.repository.bindings) },
+      repository: { ...d.repository, directory: listing.path },
     }))
     setChoosing(false)
+    void suggested(listing.remote.ref, ownFields, draft.repository.bindings).then((bindings) =>
+      setDraft((d) => ({ ...d, repository: { ...d.repository, bindings: { ...bindings, ...d.repository.bindings } } })),
+    )
   }
   const create = () => {
     setBusy(true)
@@ -205,7 +205,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
                 {stage !== 'application' ? (
                   <ConnectionsStage ai={stage === 'ai'} onConnect={setConnecting} />
                 ) : (
-                  <ApplicationStage draft={draft} onChange={setDraft} onFolder={() => setChoosing(true)} shared={{ fields: sharedFields, options: sharedOptions }} own={{ fields: ownFields, options: ownOptions }} />
+                  <ApplicationStage draft={draft} onChange={setDraft} onFolder={() => setChoosing(true)} shared={{ fields: sharedFields }} own={{ fields: ownFields }} />
                 )}
               </div>
             </motion.div>

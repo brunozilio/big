@@ -57,9 +57,9 @@ const CHANGE_OPTIONS: Record<string, string[]> = {
 
 const ENVIRONMENTS: BindingOption[] = [
   { value: 'develop', label: 'Develop' },
-  { value: 'hi', label: 'Homologação interna' },
+  { value: 'hint', label: 'Homologação interna' },
   { value: 'hext', label: 'Homologação externa' },
-  { value: 'prd', label: 'Produção' },
+  { value: 'prod', label: 'Produção' },
 ]
 
 function optionsOf(capability: string, query: string, field = ''): BindingOption[] {

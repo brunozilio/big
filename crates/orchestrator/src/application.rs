@@ -39,6 +39,7 @@ pub fn offer(client: u64, store: &Arc<Store>, application: String) {
 struct Wanted {
     directory: String,
     repo: Option<String>,
+    kind: Option<String>,
     run: Option<Vec<String>>,
     verify: Option<Vec<String>>,
     e2e: Option<Vec<String>>,
@@ -82,6 +83,7 @@ fn wanted(input: &Value, workspace: &Workspace) -> Result<Wanted, String> {
     Ok(Wanted {
         directory: directory.to_string_lossy().into_owned(),
         repo: text(input, "repo").filter(|repo| !repo.is_empty()),
+        kind: text(input, "kind").filter(|kind| !kind.is_empty()),
         run: text(input, "run").map(|line| lines_of(&[line])).or_else(|| lines(input, "run")),
         verify: lines(input, "verify"),
         e2e: lines(input, "e2e"),
@@ -121,6 +123,9 @@ fn apply(application: &mut Application, mut wanted: Wanted) -> bool {
         if let Some(connection) = connection {
             repository.bindings.insert(CODE.to_owned(), Binding::new(&connection, &repo));
         }
+    }
+    if let Some(kind) = wanted.kind {
+        repository.kind = kind;
     }
     if let Some(run) = wanted.run {
         repository.run = run;
@@ -187,7 +192,12 @@ mod tests {
             ..Application::default()
         };
         let worktree = "/data/worktrees/big_92ec--565e";
-        let wanted = Wanted { directory: worktree.into(), run: Some(vec!["npm start".into()]), ..Wanted::default() };
+        let wanted = Wanted {
+            directory: worktree.into(),
+            kind: Some("tests".into()),
+            run: Some(vec!["npm start".into()]),
+            ..Wanted::default()
+        };
 
         let added = apply(&mut application, wanted);
 
@@ -195,5 +205,6 @@ mod tests {
         assert_eq!(application.repositories.len(), 1);
         assert_eq!(application.repositories[0].directory, "/code/demo");
         assert_eq!(application.repositories[0].run, ["npm start"]);
+        assert_eq!(application.repositories[0].kind, "tests");
     }
 }

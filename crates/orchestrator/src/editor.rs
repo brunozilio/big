@@ -54,6 +54,7 @@ mod tests {
             id: id.into(),
             name: name.into(),
             directory: directory.map(Path::to_path_buf),
+            kind: String::new(),
             run: Vec::new(),
             verify: Vec::new(),
             e2e: Vec::new(),

@@ -124,10 +124,25 @@ async fn the_projects_to_bind_are_listed_in_the_organization() {
     let found = call(&http, json!({ "organization": "acme" }), "quality.options", json!({ "query": "acme" })).await;
     assert_eq!(
         found,
-        Ok(json!([{ "value": "acme_web", "label": "Web · acme_web" }, { "value": "acme_api", "label": "acme_api" }]))
+        Ok(json!([{ "value": "acme_web", "label": "acme_web" }, { "value": "acme_api", "label": "acme_api" }]))
     );
     let url = &http.sent()[0].url;
     assert!(url.contains("qualifiers=TRK") && url.contains("q=acme") && url.contains("organization=acme"), "{url}");
+}
+
+#[tokio::test]
+async fn every_page_of_projects_is_listed_until_the_total() {
+    let page = |keys: &[&str]| {
+        let components: Vec<_> = keys.iter().map(|key| json!({ "key": key, "name": "Name" })).collect();
+        json!({ "paging": { "pageIndex": 1, "pageSize": 500, "total": 1000 }, "components": components }).to_string()
+    };
+    let http = FakeHttp::new()
+        .once(Method::Get, "/api/components/search", 200, &page(&["a", "b"]))
+        .once(Method::Get, "/api/components/search", 200, &page(&["c"]));
+    let found = call(&http, json!({ "url": "https://sonar.acme.test" }), "quality.options", json!({})).await;
+    let Ok(found) = found else { panic!("{found:?}") };
+    let keys: Vec<_> = found.as_array().map(|listed| listed.iter().map(|o| o["label"].clone()).collect()).unwrap_or_default();
+    assert_eq!(keys, [json!("a"), json!("b"), json!("c")]);
 }
 
 #[tokio::test]
@@ -199,7 +214,7 @@ async fn a_self_hosted_server_lists_projects_and_reports_without_an_organization
     let http = FakeHttp::new().once(Method::Get, "/api/components/search", 200, r#"{"components":[{"key":"web","name":"Web"}]}"#);
     let settings = json!({ "url": "https://sonar.acme.test/sonar", "organization": "acme" });
     let found = call(&http, settings.clone(), "quality.options", json!({})).await;
-    assert_eq!(found, Ok(json!([{ "value": "web", "label": "Web · web" }])));
+    assert_eq!(found, Ok(json!([{ "value": "web", "label": "web" }])));
     let url = &http.sent()[0].url;
     assert!(url.starts_with("https://sonar.acme.test/sonar/api/components/search?") && !url.contains("organization"), "{url}");
     let impacts = r#"{"total":1,"issues":[{"key":"AX2","impacts":[{"softwareQuality":"SECURITY","severity":"HIGH"}],

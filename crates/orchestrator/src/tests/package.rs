@@ -90,7 +90,7 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
     assert!(!item.is_ended(), "{:?} {:?}", item.ending, item.steps);
     assert_eq!(stage(&item, "hi")["state"], "passed");
     assert_eq!(stage(&item, "hext")["picker"], true);
-    assert!(stage(&item, "prd")["window"].is_null() && stage(&item, "prd")["picker"] == false);
+    assert!(stage(&item, "prod")["window"].is_null() && stage(&item, "prod")["picker"] == false);
     assert_eq!(fake.count("code.merge"), 1);
     assert_eq!(fake.count("tracker.create_issue"), 1);
     let item = answer(&kernel, &package, "window", json!({ "env": "hext", "at": "2026-11-26T22:00" })).await;
@@ -121,12 +121,12 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
         scope: String::new(),
     }).expect("deliver");
     let item = until(&kernel, &package, |item| item.waiting_human() && stage(item, "hext")["state"] == "passed").await;
-    assert_eq!(stage(&item, "prd")["picker"], true);
+    assert_eq!(stage(&item, "prod")["picker"], true);
     assert!(fake.count("tracker.update_issue") > updates);
-    answer(&kernel, &package, "window", json!({ "env": "prd", "at": "2026-11-27T23:00" })).await;
-    answer(&kernel, &package, "create_change", json!({ "env": "prd" })).await;
+    answer(&kernel, &package, "window", json!({ "env": "prod", "at": "2026-11-27T23:00" })).await;
+    answer(&kernel, &package, "create_change", json!({ "env": "prod" })).await;
     let last = fake.calls.lock().expect("lock").iter().rfind(|(name, _, _)| name == "changes.create").cloned().expect("create");
-    assert_eq!((last.1["environment"].clone(), last.1["tasks"][0]["start"].clone()), (json!("prd"), json!("23:00")));
+    assert_eq!((last.1["environment"].clone(), last.1["tasks"][0]["start"].clone()), (json!("prod"), json!("23:00")));
     let item = until(&kernel, &package, WorkItem::waiting_human).await;
     let tasks = block(&item, "tasks").expect("tasks");
     assert_eq!(tasks["locked"], true);

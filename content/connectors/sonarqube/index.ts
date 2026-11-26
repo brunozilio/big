@@ -25,8 +25,8 @@ import { binding, options, quality } from "sdk/connectors/contracts.ts";
 
 export const URL_SETTING = "url";
 export const ORGANIZATION = "organization";
-const PAGE = "100";
-const MOST_PAGES = 10;
+const PAGE = "500";
+const MOST_PAGES = 40;
 const ISSUES = "50";
 const GRADES = ["A", "B", "C", "D", "E"];
 const MEASURES = [
@@ -187,13 +187,14 @@ function projects(api: Api, wanted: string) {
     const pairs: [string, string][] = [["qualifiers", "TRK"], ["ps", PAGE], ["p", String(page)]];
     if (wanted !== "") pairs.push(["q", wanted]);
     if (api.organization) pairs.push(["organization", api.organization]);
-    const listed = listIn(get(api, "/api/components/search", pairs)?.components);
+    const answered = get(api, "/api/components/search", pairs);
+    const listed = listIn(answered?.components);
     for (const component of listed) {
       const key = textOf(component, ["key"]);
-      const name = textOf(component, ["name"]);
-      if (key !== "") found.push({ value: key, label: name !== "" && name !== key ? `${name} · ${key}` : key });
+      if (key !== "" && !found.some((known) => known.value === key)) found.push({ value: key, label: key });
     }
-    if (listed.length < Number(PAGE)) break;
+    const total = Number(answered?.paging?.total);
+    if (listed.length === 0 || (Number.isFinite(total) ? page * Number(PAGE) >= total : listed.length < Number(PAGE))) break;
   }
   return found;
 }

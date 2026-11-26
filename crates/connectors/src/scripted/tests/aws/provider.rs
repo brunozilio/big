@@ -173,11 +173,11 @@ async fn the_application_binds_an_account_and_role_to_each_environment() {
     let listed = checked(&http, &creds(), "cloud.options", &json!({ "field": "environment" })).await;
     let Ok(listed) = listed else { panic!("{listed:?}") };
     let ids: Vec<&str> = listed.as_array().into_iter().flatten().filter_map(|env| env["value"].as_str()).collect();
-    assert!(ids.contains(&"develop") && ids.contains(&"prd"), "{listed}");
+    assert!(ids.contains(&"develop") && ids.contains(&"prod"), "{listed}");
     assert!(http.sent().is_empty(), "the environments come from the content, not from AWS");
     let profiles = json!([
         { "environment": { "value": "develop", "label": "Develop" }, "account": { "value": "111/Dev" } },
-        { "environment": { "value": "prd", "label": "Produção" }, "account": { "value": "222/Deploy" } },
+        { "environment": { "value": "prod", "label": "Produção" }, "account": { "value": "222/Deploy" } },
     ]);
     let credentials = r#"{"roleCredentials":{"accessKeyId":"ASIA","secretAccessKey":"s","sessionToken":"t"}}"#;
     let http = FakeHttp::new()

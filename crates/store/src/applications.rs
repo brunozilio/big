@@ -77,6 +77,8 @@ pub struct Repository {
     #[serde(default)]
     pub id: String,
     pub directory: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub kind: String,
     #[serde(default, deserialize_with = "one_or_many")]
     pub run: Vec<String>,
     #[serde(default)]
