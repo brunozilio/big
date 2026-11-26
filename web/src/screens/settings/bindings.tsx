@@ -219,8 +219,7 @@ export function missingOf(fields: BindingField[], bindings: Bindings | undefined
     if (lack) return { field: lack.label, binding: field.label }
     const each = field.shape.each
     if (!each) continue
-    const profiles = bound.profiles ?? []
-    if (profiles.length === 0 && each.fields.some((spec) => spec.required)) return { field: each.label, binding: field.label }
+    const profiles = (bound.profiles ?? []).filter((profile) => Object.values(profile).some((choice) => choice?.value.trim()))
     for (const profile of profiles) {
       if (!filled(profile, each.key)) return { field: each.label, binding: field.label }
       const gap = each.fields.find((spec) => spec.required && !filled(profile, spec.key))

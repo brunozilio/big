@@ -187,6 +187,19 @@ describe('conta e papel na nuvem', () => {
       profiles: [{ environment: { value: 'prod', label: 'Produção' }, account: { value: '111122223333/Deploy', label: 'acme-prod · Deploy' } }],
     }))
   })
+
+  test('a nuvem é opcional: ambiente adicionado e deixado vazio não impede salvar', async () => {
+    const base = withCloud()
+    let saved = 0
+    await started({ ...base, saveApplication: (draft) => ((saved += 1), base.saveApplication(draft)) })
+    const view = render(<TooltipProvider><ApplicationsView /></TooltipProvider>)
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    const cloud = await view.findByTestId('binding-cloud')
+    fireEvent.click(within(cloud).getByRole('button', { name: 'Adicionar Ambiente' }))
+    fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(saved).toBe(1))
+    expect(view.queryByRole('alert')).toBeNull()
+  })
 })
 
 describe('aplicações no composer', () => {
