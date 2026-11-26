@@ -1,5 +1,8 @@
-import { type Creds, type Language, checked, connect, fail, json, pick, send, siteOf, text, textOf, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type Creds, type Language, checked, connect, fail, json, pick, send, siteOf, text, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { design } from "sdk/connectors/contracts.ts";
+import { configured } from "./login.ts";
+
+export { signIn } from "./login.ts";
 
 const MOST_TEXTS = 200;
 const MOST_LINES = 150;
@@ -7,45 +10,61 @@ const DEEPEST = 5;
 const MOST_PICTURE = 5 * 1024 * 1024;
 const KINDS = new Set(["file", "design", "proto", "board", "slides", "buzz", "make"]);
 
-type Ctx = { config: { api_url: string; hosts?: string } } & Record<string, any>;
+type Ctx = { config: { api_url: string; hosts?: string; client_id?: string } } & Record<string, any>;
 
-type Api = { ctx: Ctx; token: string; base: string };
+type Api = { ctx: Ctx; headers: Record<string, string>; base: string };
 
 export type Link = { file: string; node?: string };
 
-export function provider({ language }: { language?: Language }) {
+function tokenFields(language: Language) {
   const help = pick(
-    language ?? "pt-BR",
+    language,
     "In Figma, open Settings › Security › Personal access tokens and create one with the file_content:read scope.",
     "En Figma, abre Settings › Security › Personal access tokens y crea uno con el alcance file_content:read.",
     "No Figma, abra Settings › Security › Personal access tokens e crie um token com o escopo file_content:read.",
   );
-  return {
-    name: "Figma",
-    logo: "logo.svg",
-    capabilities: ["design"],
-    auth: { kind: "token", fields: [tokenField("token", pick(language ?? "pt-BR", "Personal access token", "Token de acceso personal", "Token de acesso pessoal"), help, true)], form: "bearer" },
-    actions: design(),
-  };
+  return [tokenField("token", pick(language, "Personal access token", "Token de acceso personal", "Token de acesso pessoal"), help, true)];
 }
 
-export function presentation({ language }: { language: Language }) {
+export function provider({ language }: { language?: Language }, ctx: Ctx) {
+  const auth = configured(ctx.config) ? { kind: "loopback" } : { kind: "token", fields: tokenFields(language ?? "pt-BR"), form: "json" };
+  return { name: "Figma", logo: "logo.svg", capabilities: ["design"], auth, actions: design() };
+}
+
+export function alternatives({ language }: { language: Language }, ctx: Ctx) {
+  if (!configured(ctx.config)) return [];
+  const label = pick(language, "Use a personal access token", "Usar un token de acceso personal", "Usar token de acesso pessoal");
+  return [tokenAlternative(language, "token", label, pick(language, "Figma", "de Figma", "do Figma"), tokenFields(language), "json")];
+}
+
+export function presentation({ language }: { language: Language }, ctx: Ctx) {
   return {
     description: pick(language, "Prototypes and screens for the agents", "Prototipos y pantallas para los agentes", "Protótipos e telas para os agentes"),
     group: "design",
-    button: connect(language),
+    button: configured(ctx.config) ? pick(language, "Sign in with Figma", "Entrar con Figma", "Entrar com Figma") : connect(language),
     site: pick(language, "Figma", "de Figma", "do Figma"),
     choose_title: pick(language, "Figma account", "Cuenta de Figma", "Conta do Figma"),
     hidden: false,
   };
 }
 
+function personal(token: string): string | null {
+  try {
+    const found = JSON.parse(token);
+    return typeof found?.token === "string" ? found.token : null;
+  } catch {
+    return null;
+  }
+}
+
 function apiOf(ctx: Ctx, creds: Creds): Api {
-  return { ctx, token: creds.token, base: ctx.config.api_url.replace(/\/+$/, "") };
+  const own = personal(creds.token);
+  const headers: Record<string, string> = own === null ? { authorization: `Bearer ${creds.token}` } : { "x-figma-token": own };
+  return { ctx, headers, base: ctx.config.api_url.replace(/\/+$/, "") };
 }
 
 function get(api: Api, path: string) {
-  const answer = send(api.ctx, { method: "GET", url: `${api.base}${path}`, headers: { "x-figma-token": api.token } });
+  const answer = send(api.ctx, { method: "GET", url: `${api.base}${path}`, headers: api.headers });
   return json(checked(answer));
 }
 

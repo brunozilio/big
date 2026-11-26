@@ -112,11 +112,23 @@ impl ScriptedProvider {
     }
 
     pub fn load_in(root: Option<&std::path::Path>, entry: &str) -> Result<ScriptedProvider, String> {
+        ScriptedProvider::configured(root, entry, &Map::new())
+    }
+
+    pub(crate) fn configured(
+        root: Option<&std::path::Path>,
+        entry: &str,
+        overrides: &Map<String, Value>,
+    ) -> Result<ScriptedProvider, String> {
         let mut modules = content::modules_in(root, entry)?;
         modules.push((WRAPPER.to_owned(), wrapper(entry)));
         let folder = entry.rsplit_once('/').map_or(String::new(), |(folder, _)| format!("{folder}/"));
         let named = folder.trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_owned();
-        let script = Script { modules: Arc::new(modules), data: config_of(&named) };
+        let mut data = config_of(&named);
+        if let Some(config) = data["config"].as_object_mut() {
+            config.extend(overrides.clone());
+        }
+        let script = Script { modules: Arc::new(modules), data };
         let local: Arc<dyn script::Host> = Arc::new(Local);
         let declared = script.invoke_here("provider", &json!({}), local).map_err(|error| error.message)?;
         let declared: Declared = serde_json::from_value(declared).map_err(|error| format!("{entry}: {error}"))?;

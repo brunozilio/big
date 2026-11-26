@@ -1,14 +1,16 @@
 use serde_json::{Value, json};
 
-use super::{creds, loaded};
+use super::{configured, creds, loaded, now};
 use crate::descriptor::AuthSpec;
 use crate::error::{ActionError, ErrorClass};
 use crate::http::{FakeHttp, Method};
 use crate::provider::Provider;
 
+const PERSONAL: &str = r#"{"token":"figd_1"}"#;
+
 async fn frame(http: &FakeHttp, url: &str) -> Result<Value, ActionError> {
     let provider = loaded("figma");
-    let answer = provider.call(http, &creds("figd_1", json!({})), "design.frame", &json!({ "url": url }), "k").await;
+    let answer = provider.call(http, &creds(PERSONAL, json!({})), "design.frame", &json!({ "url": url }), "k").await;
     if let Ok(value) = &answer {
         let spec = provider.descriptor().action("design.frame").cloned().unwrap_or_else(|| panic!("no design.frame"));
         assert_eq!(crate::descriptor::conforms(&spec.output_schema, value), Ok(()), "{value}");
@@ -25,9 +27,10 @@ const NODES: &str = r#"{"name":"App","nodes":{"12:34":{"document":{"id":"12:34",
 fn figma_signs_in_with_a_personal_token_and_offers_the_design_capability() {
     let provider = loaded("figma");
     let descriptor = provider.descriptor();
-    let AuthSpec::Token(spec) = descriptor.auth else { panic!("not a token") };
+    let AuthSpec::Token(spec) = descriptor.auth else { panic!("without a client id the token is the way in") };
     assert_eq!(spec.fields.len(), 1);
     assert!(spec.fields[0].secret);
+    assert!(provider.alternatives(domain::Language::Portuguese).is_empty());
     let actions: Vec<&str> = descriptor.actions.iter().map(|action| action.name.as_str()).collect();
     assert_eq!(actions, ["design.frame"]);
 }
@@ -87,7 +90,48 @@ async fn a_refused_token_is_an_auth_error_and_a_valid_one_names_the_account() {
     let refused = loaded("figma").accounts(&http, &creds("bad", json!({}))).await;
     assert_eq!(refused.map_err(|error| error.class), Err(ErrorClass::Auth));
     let http = FakeHttp::new().once(Method::Get, "/v1/me", 200, r#"{"id":"7","handle":"Ana","email":"ana@acme.test"}"#);
-    let found = loaded("figma").accounts(&http, &creds("figd_1", json!({}))).await;
+    let found = loaded("figma").accounts(&http, &creds(PERSONAL, json!({}))).await;
     let Ok(found) = found else { panic!("{found:?}") };
     assert_eq!(found[0].label, "Ana");
+}
+
+fn oauth() -> crate::scripted::ScriptedProvider {
+    configured("figma", json!({ "client_id": "cid", "client_secret": "sec", "callback_port": "47800" }))
+}
+
+#[tokio::test]
+async fn with_a_client_id_figma_signs_in_through_the_browser_and_keeps_the_token_as_an_option() {
+    let provider = oauth();
+    let AuthSpec::Loopback(sign_in) = provider.descriptor().auth else { panic!("not loopback") };
+    assert_eq!(sign_in.0.callback_port(), Some(47800));
+    let alternatives = provider.alternatives(domain::Language::Portuguese);
+    assert!(matches!(alternatives.as_slice(), [only] if matches!(only.auth, AuthSpec::Token(_))));
+    let http = FakeHttp::new();
+    let begun = sign_in.0.begin(&http, 47800).await;
+    let Ok(begun) = begun else { panic!("{begun:?}") };
+    assert!(begun.url.starts_with("https://www.figma.com/oauth?client_id=cid&"), "{}", begun.url);
+    for part in ["redirect_uri=http%3A%2F%2F127.0.0.1%3A47800%2Foauth%2Fcallback", "scope=file_content%3Aread+current_user%3Aread", "code_challenge_method=S256"] {
+        assert!(begun.url.contains(part), "{part} missing in {}", begun.url);
+    }
+    let http = FakeHttp::new().once(Method::Post, "/v1/oauth/token", 200, r#"{"user_id":"7","access_token":"figu_a","refresh_token":"r1","expires_in":7776000}"#);
+    let grant = sign_in.0.exchange(&http, &begun, "code1", now()).await;
+    let Ok(grant) = grant else { panic!("{grant:?}") };
+    assert_eq!((grant.access_token.as_str(), grant.refresh_token.as_deref()), ("figu_a", Some("r1")));
+    let sent = http.sent();
+    assert!(sent[0].headers.iter().any(|(name, value)| name == "authorization" && value == "Basic Y2lkOnNlYw=="));
+    let body = String::from_utf8_lossy(&sent[0].body).into_owned();
+    assert!(body.contains("code=code1") && body.contains("grant_type=authorization_code") && body.contains("code_verifier="), "{body}");
+    let http = FakeHttp::new().once(Method::Post, "/v1/oauth/refresh", 200, r#"{"access_token":"figu_b","expires_in":7776000}"#);
+    let renewed = sign_in.0.refresh(&http, &grant, now()).await;
+    assert_eq!(renewed.map(|renewed| (renewed.access_token, renewed.refresh_token)), Ok(("figu_b".to_owned(), Some("r1".to_owned()))));
+}
+
+#[tokio::test]
+async fn a_signed_in_account_calls_figma_with_a_bearer_token() {
+    let http = FakeHttp::new().once(Method::Get, "/v1/me", 200, r#"{"id":"7","handle":"Ana"}"#);
+    let found = oauth().accounts(&http, &creds("figu_a", json!({}))).await;
+    assert!(found.is_ok(), "{found:?}");
+    let sent = http.sent();
+    assert!(sent[0].headers.iter().any(|(name, value)| name == "authorization" && value == "Bearer figu_a"));
+    assert!(!sent[0].headers.iter().any(|(name, _)| name == "x-figma-token"));
 }
