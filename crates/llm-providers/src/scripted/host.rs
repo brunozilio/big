@@ -120,7 +120,9 @@ fn local(function: &str, arguments: &Value) -> Option<Result<Value, String>> {
     Some(match function {
         "local.endpoint" => local_models::endpoint().map(Value::String).map_err(shown),
         "local.models" => Ok(local_models::models()),
-        "local.remove" => local_models::remove(arguments.as_str().unwrap_or_default()).map(|()| Value::Null).map_err(shown),
+        "local.remove" => {
+            local_models::remove(arguments.as_str().unwrap_or_default()).map(|()| Value::Null).map_err(shown)
+        }
         _ => return None,
     })
 }
