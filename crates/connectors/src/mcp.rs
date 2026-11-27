@@ -129,9 +129,12 @@ impl McpClient {
             "capabilities": {},
             "clientInfo": { "name": brand::connectors::MCP_CLIENT_NAME, "version": brand::connectors::MCP_CLIENT_VERSION },
         });
+        let started = std::time::Instant::now();
         let (response, _) = client.exchange(http, "initialize", params).await?;
         client.session = response.header(SESSION).map(str::to_owned);
         client.notify(http, "notifications/initialized").await?;
+        let duration_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        tracing::event!(target: "timing", tracing::Level::DEBUG, timing = "mcp.connect", duration_us, "timing");
         Ok(client)
     }
 

@@ -11,6 +11,7 @@ oxc = { version = "0.159", features = ["transformer", "codegen", "semantic"] }
 rquickjs = "0.14"
 serde_json.workspace = true
 stacker = "0.1.25"
+tracing.workspace = true
 
 [lints]
 workspace = true

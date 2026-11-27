@@ -172,6 +172,7 @@ fn run_here(
     let late = Arc::clone(&timed_out);
     let waited = Arc::new(AtomicU64::new(0));
     let host: Arc<dyn Host> = Arc::new(Timed { host, waited: Arc::clone(&waited) });
+    let spent = Arc::clone(&waited);
     let started = Instant::now();
     let noticed = std::sync::OnceLock::new();
     runtime.set_interrupt_handler(Some(Box::new(move || {
@@ -188,7 +189,7 @@ fn run_here(
         late.load(Ordering::Relaxed) || stopped_long_enough(&flag, &noticed)
     })));
     let context = Context::full(&runtime).map_err(|error| error.to_string())?;
-    context.with(|ctx| {
+    let result = context.with(|ctx| {
         let result = evaluate(&ctx, modules, entry, export, arguments, data, host);
         if stop.load(Ordering::Relaxed) && result.is_err() {
             return Err("cancelled".to_owned());
@@ -197,7 +198,27 @@ fn run_here(
             return Err(limit.ended());
         }
         result.map_err(|error| describe(&ctx, error))
-    })
+    });
+    timed(entry, export, started.elapsed(), Duration::from_nanos(spent.load(Ordering::Relaxed)), result.is_ok());
+    result
+}
+
+fn micros(spent: Duration) -> u64 {
+    u64::try_from(spent.as_micros()).unwrap_or(u64::MAX)
+}
+
+fn timed(entry: &str, export: &str, spent: Duration, waited: Duration, ok: bool) {
+    tracing::event!(
+        target: "timing", tracing::Level::DEBUG,
+        timing = "script.run",
+        script.entry = entry,
+        script.export = export,
+        duration_us = micros(spent),
+        waited_us = micros(waited),
+        busy_us = micros(spent.saturating_sub(waited)),
+        outcome = if ok { "success" } else { "failure" },
+        "timing"
+    );
 }
 
 const STOP_GRACE: Duration = Duration::from_millis(250);

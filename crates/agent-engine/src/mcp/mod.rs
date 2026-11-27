@@ -176,6 +176,7 @@ impl McpServer {
     pub fn initialize_stopped(&self, stop: &platform::Stop) -> Result<(), McpError> {
         let client =
             json!({ "name": brand::connectors::MCP_CLIENT_NAME, "version": brand::connectors::MCP_CLIENT_VERSION });
+        let started = std::time::Instant::now();
         let answer = self.rpc_stopped(
             "initialize",
             json!({ "protocolVersion": PROTOCOL_VERSION, "capabilities": {}, "clientInfo": client }),
@@ -189,6 +190,8 @@ impl McpServer {
         }
         self.transport.notify_stopped(&json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }), stop)?;
         self.transport.listen();
+        let duration_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+        tracing::event!(target: "timing", tracing::Level::DEBUG, timing = "mcp.initialize", mcp.server = %self.name, duration_us, "timing");
         Ok(())
     }
 

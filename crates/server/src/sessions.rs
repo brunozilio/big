@@ -75,12 +75,17 @@ pub fn watched(shared: &Shared, session: &str, event: &app::EngineEvent) {
 }
 
 pub fn view(shared: &Shared, session: &str) -> ApiResult<Value> {
+    let started = std::time::Instant::now();
     let row = row(shared, session)?;
-    if let Some(live) = shared.watched.with(session, |shown| rendered(shared, session, &row, shown)) {
-        return live;
-    }
-    let shown = shown(shared, session, &row.folder)?;
-    rendered(shared, session, &row, &shown)
+    let live = shared.watched.with(session, |shown| rendered(shared, session, &row, shown));
+    let read = live.is_none();
+    let value = match live {
+        Some(live) => live,
+        None => rendered(shared, session, &row, &shown(shared, session, &row.folder)?),
+    };
+    let duration_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
+    tracing::event!(target: "timing", tracing::Level::DEBUG, timing = "session.view", read, duration_us, "timing");
+    value
 }
 
 fn rendered(shared: &Shared, session: &str, row: &Row, shown: &Shown) -> ApiResult<Value> {
@@ -207,19 +212,8 @@ fn send_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<()> {
     let mine = owner.as_deref().unwrap_or(domain::principal::LOCAL_USER);
     let style = shared.backend.store.output_style_for(mine);
     let language = shared.backend.store.language_for(mine).ok();
-    let message = Message {
-        session,
-        folder: row.folder,
-        text: &text,
-        model,
-        effort,
-        agent,
-        mode,
-        style,
-        language,
-        shown,
-        owner,
-    };
+    let message =
+        Message { session, folder: row.folder, text: &text, model, effort, agent, mode, style, language, shown, owner };
     shared.chats.send(&shared.backend.client, message, notify)
 }
 

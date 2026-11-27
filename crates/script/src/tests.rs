@@ -235,3 +235,50 @@ fn modules_import_each_other_by_the_names_they_were_given() {
     let stop = Arc::new(AtomicBool::new(false));
     assert!(run_modules(&missing, "entry", "out", &[], host, stop, Limit::Busy(MOST_BUSY)).is_err());
 }
+
+#[derive(Default)]
+struct Timings(Mutex<Vec<String>>);
+
+struct Named(Vec<String>);
+
+impl tracing::field::Visit for Named {
+    fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+        self.0.push(format!("{}={value:?}", field.name()));
+    }
+}
+
+impl tracing::Subscriber for Timings {
+    fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+        true
+    }
+    fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+        tracing::span::Id::from_u64(1)
+    }
+    fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+    fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+    fn event(&self, event: &tracing::Event<'_>) {
+        if event.metadata().target() == "timing" {
+            let mut named = Named(Vec::new());
+            event.record(&mut named);
+            self.0.lock().expect("lock").push(named.0.join(" "));
+        }
+    }
+    fn enter(&self, _: &tracing::span::Id) {}
+    fn exit(&self, _: &tracing::span::Id) {}
+}
+
+#[test]
+fn every_run_tells_how_long_it_took_and_how_much_was_spent_waiting_on_the_app() {
+    let timings = Arc::new(Timings::default());
+    let dispatch = tracing::Dispatch::from(Arc::clone(&timings));
+    tracing::dispatcher::with_default(&dispatch, || {
+        let (result, _) = go("export default (ctx) => ctx.text('a')", "default", &[], json!({}));
+        assert!(result.is_ok());
+    });
+    let told = timings.0.lock().expect("lock").clone();
+    assert_eq!(told.len(), 1, "{told:?}");
+    for expected in ["timing=\"script.run\"", "script.entry=\"test.js\"", "duration_us=", "waited_us=", "busy_us="] {
+        assert!(told[0].contains(expected), "{expected} in {}", told[0]);
+    }
+    assert!(told[0].contains("outcome=\"success\""));
+}

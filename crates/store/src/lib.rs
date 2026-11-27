@@ -12,9 +12,10 @@ mod preferences;
 mod schema;
 mod sync;
 
+use std::ops::{Deref, DerefMut};
 use std::path::Path;
 use std::sync::{Mutex, MutexGuard, PoisonError};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
@@ -52,8 +53,10 @@ impl Store {
         Ok(Self { connection: Mutex::new(connection), snapshot_every })
     }
 
-    fn locked(&self) -> MutexGuard<'_, Connection> {
-        self.connection.lock().unwrap_or_else(PoisonError::into_inner)
+    fn locked(&self) -> Held<'_> {
+        let asked = Instant::now();
+        let guard = self.connection.lock().unwrap_or_else(PoisonError::into_inner);
+        Held { guard, waited: asked.elapsed(), since: Instant::now() }
     }
 
     fn write<T>(&self, work: impl FnOnce(&Transaction<'_>) -> Result<T>) -> Result<T> {
@@ -63,6 +66,42 @@ impl Store {
         transaction.commit()?;
         Ok(value)
     }
+}
+
+struct Held<'a> {
+    guard: MutexGuard<'a, Connection>,
+    waited: Duration,
+    since: Instant,
+}
+
+impl Deref for Held<'_> {
+    type Target = Connection;
+
+    fn deref(&self) -> &Connection {
+        &self.guard
+    }
+}
+
+impl DerefMut for Held<'_> {
+    fn deref_mut(&mut self) -> &mut Connection {
+        &mut self.guard
+    }
+}
+
+impl Drop for Held<'_> {
+    fn drop(&mut self) {
+        tracing::event!(
+            target: "timing", tracing::Level::DEBUG,
+            timing = "store.query",
+            waited_us = micros(self.waited),
+            held_us = micros(self.since.elapsed()),
+            "timing"
+        );
+    }
+}
+
+fn micros(spent: Duration) -> u64 {
+    u64::try_from(spent.as_micros()).unwrap_or(u64::MAX)
 }
 
 fn signed(number: u64) -> Result<i64> {

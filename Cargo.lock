@@ -3666,6 +3666,7 @@ dependencies = [
  "rquickjs",
  "serde_json",
  "stacker",
+ "tracing",
 ]
 
 [[package]]
@@ -4008,6 +4009,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror",
+ "tracing",
 ]
 
 [[package]]
