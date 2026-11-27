@@ -118,6 +118,11 @@ export async function versions(ctx, config, env, list) {
 
 export async function createChange(ctx, state, config, env, payload, using) {
   state.versions[env.id] = await versions(ctx, config, env, state.services);
+  if (!using) {
+    state.changes[env.id] = { ref: `local:${env.id}`, key: env.short || env.label || env.id, status: "awaiting_approval", url: null, connection: null, local: true };
+    state.stages[env.id] = RUNNING;
+    return;
+  }
   const made = await ctx.call("changes", "create", { title: state.title, environment: env.id, ...payload }, using);
   state.changes[env.id] = { ref: made.ref, key: made.key, status: made.status, url: made.url || null, connection: (using && using.connection) || null };
   state.stages[env.id] = RUNNING;

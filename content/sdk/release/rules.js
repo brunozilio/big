@@ -50,6 +50,13 @@ export function canCreateChange(envs, state, env) {
   return env.gate.kind === "change" && !state.changes[env.id] && state.stages[env.id] === WAITING && Boolean(state.windows[env.id]);
 }
 
+const SETTLED = ["done", "cancelled", "rejected"];
+
+export function canDecideChange(state, env) {
+  const change = state.changes[env.id];
+  return Boolean(change && change.local && !SETTLED.includes(change.status));
+}
+
 export function canPromote(state, env) {
   return env.gate.kind === "merge" && state.stages[env.id] === WAITING;
 }

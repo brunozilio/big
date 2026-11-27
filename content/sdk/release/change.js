@@ -72,6 +72,7 @@ export function changeSettings(application, env) {
 }
 
 export async function ownersOf(ctx, using) {
+  if (!using || !using.connection) return [];
   let found = null;
   try {
     found = await ctx.call("changes", "options", { field: "owner" }, { ...(using || {}), optional: true });

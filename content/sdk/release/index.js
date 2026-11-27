@@ -1,5 +1,5 @@
 import { step } from "sdk";
-import { environments, initialStages, accepting, changeEnvs, canCreateChange, canPromote, canRollback, tasksLocked, delivered, current, WAITING } from "./rules.js";
+import { environments, initialStages, accepting, changeEnvs, canCreateChange, canDecideChange, canPromote, canRollback, tasksLocked, delivered, current, WAITING } from "./rules.js";
 import { defaultTasks, addTask, refreshServices, schedule, sanitize, unshifted } from "./tasks.js";
 import { services, promote, rollback, createChange, settleChange } from "./gates.js";
 import { publish, changeArgs, connectionOf } from "./publish.js";
@@ -84,12 +84,19 @@ async function act(ctx, state, config, item, said) {
       if (!env || !canRollback(envs, state, env)) return false;
       await rollback(ctx, state, config, env, item.application || state.application);
       return true;
-    case "create_change":
+    case "create_change": {
       if (!env || !canCreateChange(envs, state, env)) return false;
-      if (config.agents && config.agents.validate) await ctx.agent(config.agents.validate, { package: changeArgs(state, config, env.id), environment: env.id });
-      await createChange(ctx, state, config, env, changeArgs(state, config, env.id), connectionOf(state, env));
+      const application = item.application || state.application;
+      const args = changeArgs(state, config, env.id, application);
+      if (config.agents && config.agents.validate) await ctx.agent(config.agents.validate, { package: args, environment: env.id });
+      await createChange(ctx, state, config, env, args, connectionOf(application, env));
       if (!accepting(envs, state)) await ctx.accept(false);
       return true;
+    }
+    case "approve_change":
+    case "reject_change":
+      if (!env || !canDecideChange(state, env)) return false;
+      return settleChange(state, config, env, said.action === "approve_change" ? "done" : "rejected");
     case "add_task": {
       if (tasksLocked(envs, state)) return false;
       const task = addTask(state, config, values.template);
@@ -121,7 +128,7 @@ function waits(ctx, state, config, manual) {
   }
   for (const env of changeEnvs(config.environments)) {
     const change = state.changes[env.id];
-    if (!change || ["done", "cancelled", "rejected"].includes(change.status)) continue;
+    if (!change || change.local || ["done", "cancelled", "rejected"].includes(change.status)) continue;
     list.push(ctx.event("changes.status.changed", { subject: change.ref }));
     list.push(ctx.sleep((config.monitor && config.monitor.everyMs) || 60000));
   }
@@ -132,7 +139,7 @@ async function monitor(ctx, state, config) {
   let moved = false;
   for (const env of changeEnvs(config.environments)) {
     const change = state.changes[env.id];
-    if (!change || ["done", "cancelled", "rejected"].includes(change.status)) continue;
+    if (!change || change.local || ["done", "cancelled", "rejected"].includes(change.status)) continue;
     const read = await ctx.call("changes", "get", { change: change.ref }, change.connection ? { connection: change.connection } : {});
     if (settleChange(state, config, env, read.status)) moved = true;
   }
@@ -148,7 +155,7 @@ async function promotion(ctx, opts) {
     let changed = false;
     if (!manual && accepting(config.environments, state)) changed = await gather(ctx, state, config, item, await ctx.unclaimed(config.arrival.step || "merge", "passed", { base: config.arrival.base, integrated: config.arrival.integrated === true }));
     if (changed) await publish(ctx, state, config);
-    if (!state.owners) state.owners = await ownersOf(ctx, changeConnection(state.application));
+    if (!state.owners) state.owners = await ownersOf(ctx, changeConnection(item.application || state.application));
     if (delivered(config.environments, state)) return ctx.pass({ changes: state.changes, members: state.members.map((member) => member.id) });
     const answer = await ctx.race([...waits(ctx, state, config, manual), (branch) => branch.waitHuman(render(config, state))]);
     const said = answer.value && answer.value.action ? answer.value : null;

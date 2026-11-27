@@ -18,13 +18,13 @@ function described(state, config) {
   ].join("\n");
 }
 
-function changePayload(state, config, envId) {
+function changePayload(state, config, envId, application) {
   const tasks = shifted(state, config, envId);
   const env = changeEnvs(config.environments).find((one) => one.id === envId) || { id: envId };
   return {
     title: state.title,
     ...windowOf(state, config, envId, tasks),
-    settings: changeSettings(state.application, env).settings,
+    settings: changeSettings(application, env).settings,
     tasks,
     notes: state.members.map((member) => ({ item: member.id, issue: member.issue || null, title: member.title || "" })),
     attachments: state.tasks.flatMap((task) => task.files || []),
@@ -52,9 +52,9 @@ function keyOf(issue) {
   return issue && typeof issue === "object" ? issue.key : issue;
 }
 
-export function connectionOf(state, env) {
-  const { connection } = changeSettings(state.application, env);
-  return connection ? { connection } : {};
+export function connectionOf(application, env) {
+  const { connection } = changeSettings(application, env);
+  return connection ? { connection } : null;
 }
 
 export async function publish(ctx, state, config) {
@@ -62,8 +62,10 @@ export async function publish(ctx, state, config) {
   await openCard(ctx, state, config);
   for (const env of changeEnvs(config.environments)) {
     const change = state.changes[env.id];
-    if (!change || change.status === "done" || change.status === "cancelled") continue;
-    await ctx.call("changes", "update", { change: change.ref, ...changePayload(state, config, env.id) }, connectionOf(state, env));
+    if (!change || change.local || change.status === "done" || change.status === "cancelled") continue;
+    const application = ctx.item.application || state.application;
+    const using = change.connection ? { connection: change.connection } : connectionOf(application, env);
+    if (using) await ctx.call("changes", "update", { change: change.ref, ...changePayload(state, config, env.id, application) }, using);
   }
   if (!state.card) return;
   await ctx.call("tracker", "update_issue", { issue: state.card.ref, title: state.title, description: described(state, config) }, cardOptions(state.card));
@@ -74,8 +76,8 @@ export async function publish(ctx, state, config) {
   }
 }
 
-export function changeArgs(state, config, envId) {
-  return changePayload(state, config, envId);
+export function changeArgs(state, config, envId, application) {
+  return changePayload(state, config, envId, application);
 }
 
 export { fill };

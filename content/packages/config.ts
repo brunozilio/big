@@ -25,6 +25,8 @@ export default {
     promote: "Promover",
     rollback: "Rollback",
     createChange: "Criar mudança",
+    approveChange: "Aprovar",
+    rejectChange: "Rejeitar",
     rollbackTo: "para {version}",
     reverting: "Revertendo…",
     working: "Subindo…",
@@ -35,5 +37,6 @@ export default {
     status_executing: "em execução",
     status_done: "executada",
     status_cancelled: "cancelada",
+    status_rejected: "rejeitada",
   },
 };

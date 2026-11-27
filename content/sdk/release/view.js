@@ -1,5 +1,5 @@
 import { stages, members, tasks } from "sdk";
-import { canCreateChange, canPromote, canRollback, changeEnvs, current, tasksLocked, visible, accepting } from "./rules.js";
+import { canCreateChange, canDecideChange, canPromote, canRollback, changeEnvs, current, tasksLocked, visible, accepting } from "./rules.js";
 import { shifted } from "./tasks.js";
 import { fill } from "./gates.js";
 
@@ -12,6 +12,10 @@ function stageActions(config, state, env) {
   if (canRollback(envs, state, env)) list.push({ id: "rollback", label: label(config, "rollback", "Rollback"), icon: "undo", payload: { env: env.id } });
   if (env.gate.kind === "change" && visible(envs, state, env) && !state.changes[env.id] && state.windows[env.id]) {
     list.push({ id: "create_change", label: label(config, "createChange", "Create change"), icon: "approval", variant: "primary", payload: { env: env.id }, disabled: !canCreateChange(envs, state, env) });
+  }
+  if (canDecideChange(state, env)) {
+    list.push({ id: "approve_change", label: label(config, "approveChange", "Approve"), icon: "check", variant: "primary", payload: { env: env.id } });
+    list.push({ id: "reject_change", label: label(config, "rejectChange", "Reject"), icon: "close", payload: { env: env.id } });
   }
   return list;
 }

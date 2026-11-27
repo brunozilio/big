@@ -13,7 +13,10 @@ fn world() -> World {
     let application = Application {
         id: "app".into(),
         name: "Checkout".into(),
-        bindings: Bindings::from([("tracker".to_owned(), Binding::new("c1", "APP"))]),
+        bindings: Bindings::from([
+            ("tracker".to_owned(), Binding::new("c1", "APP")),
+            ("changes".to_owned(), Binding::new("c1", "mudancas")),
+        ]),
         repositories: vec![Repository {
             id: "web".into(),
             bindings: Bindings::from([("code".to_owned(), Binding::new("c1", "o/web"))]),
@@ -40,8 +43,8 @@ async fn merged(kernel: &Handle, title: &str) -> ItemId {
 }
 
 async fn merged_with(kernel: &Handle, title: &str, git: Value) -> ItemId {
-    let tracker = json!({ "tracker": { "connection": "c1", "value": "APP" } });
-    merged_in(kernel, title, git, tracker).await
+    let bound = json!({ "tracker": { "connection": "c1", "value": "APP" }, "changes": { "connection": "c1", "value": "mudancas" } });
+    merged_in(kernel, title, git, bound).await
 }
 
 async fn merged_in(kernel: &Handle, title: &str, git: Value, bindings: Value) -> ItemId {
@@ -190,4 +193,28 @@ async fn a_package_of_an_application_without_a_tracker_project_opens_no_card() {
     let item = until(&kernel, &package, |item| item.is_ended() || item.waiting_human() || item.impediment.is_some()).await;
     assert!(item.impediment.is_none(), "{:?}", item.impediment);
     assert_eq!(world.provider.count("tracker.create_issue"), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn without_a_change_tool_bound_a_person_approves_the_environment_here_and_nothing_reaches_a_tool() {
+    let world = world();
+    let fake = world.provider;
+    let mut application = world.store().application("app").expect("store").expect("app");
+    application.bindings.remove("changes");
+    world.store().save_application(&application).expect("no changes");
+    let kernel = world.start().await;
+    let tracker = json!({ "tracker": { "connection": "c1", "value": "APP" } });
+    merged_in(&kernel, "APP-1", json!({ "web": { "head": "feat/x", "base": "develop" } }), tracker).await;
+    let package = packages(&kernel, 1).await.remove(0);
+    until(&kernel, &package, |item| item.waiting_human() && stage(item, "hext")["picker"] == true).await;
+    answer(&kernel, &package, "window", json!({ "env": "hext", "at": "2026-11-26T22:00" })).await;
+    let item = answer(&kernel, &package, "create_change", json!({ "env": "hext" })).await;
+    let actions: Vec<Value> = stage(&item, "hext")["actions"].as_array().cloned().unwrap_or_default();
+    let ids: Vec<&str> = actions.iter().filter_map(|action| action["id"].as_str()).collect();
+    assert_eq!(ids, ["approve_change", "reject_change"]);
+    let item = answer(&kernel, &package, "approve_change", json!({ "env": "hext" })).await;
+    assert_eq!(stage(&item, "hext")["state"], "passed");
+    assert_eq!(stage(&item, "prod")["picker"], true);
+    let reached: Vec<String> = fake.calls.lock().expect("lock").iter().map(|(name, _, _)| name.clone()).filter(|name| name.starts_with("changes.")).collect();
+    assert_eq!(reached, Vec::<String>::new());
 }
