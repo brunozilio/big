@@ -507,6 +507,19 @@ describe('edição no lugar', () => {
 })
 
 describe('aplicações no composer', () => {
+  test('adicionar aplicação leva para as configurações com a nova aplicação já aberta', async () => {
+    await started(fresh())
+    const Where = () => {
+      const location = useLocation()
+      return <output data-testid="where">{location.pathname + location.search}</output>
+    }
+    const view = render(<MemoryRouter><TooltipProvider><NewItem onCreated={() => undefined} /><Where /></TooltipProvider></MemoryRouter>)
+    fireEvent.keyDown(await view.findByRole('combobox', { name: 'Aplicação: Checkout' }), { key: 'Enter' })
+    fireEvent.click(await view.findByRole('option', { name: 'Adicionar aplicação' }))
+    await waitFor(() => expect(view.getByTestId('where').textContent).toBe('/settings/applications?edit=new'))
+    expect(view.queryByLabelText('Nome')).toBeNull()
+  })
+
   test('sem espaço no composer; sempre uma aplicação, e o espaço dela filtra a busca e o item', async () => {
     const base = fresh()
     const created: NewItemInput[] = []

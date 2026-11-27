@@ -1,5 +1,6 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/api'
 import type { Application, CodeBranch, Connection, IssueSummary, Item, NewGit, NewSource, OpenPull, Provider } from '@/api/contract'
 import { errorText, setItems, useStore } from '@/api/store'
@@ -8,7 +9,6 @@ import { Composer, type ComposerImport } from '@/chat/Composer'
 import { useRememberedModel, useRememberedTuning } from '@/chat/remembered'
 import { currentLanguage, translate, useT } from '@/i18n'
 import { Button, IconButton } from '@/ui/button'
-import { ApplicationEditor } from '../settings/ApplicationEditor'
 import { StatusIcon, ProviderLogo } from '@/ui/domain'
 import { Input, SearchInput } from '@/ui/form'
 import { CHIP, ChipPicker } from '@/ui/chipPicker'
@@ -399,7 +399,7 @@ export function NewItem({ onCreated, onAsked }: { onCreated: (it: Item) => void;
   const [issue, setIssue] = useState<Picked | null>(null)
   const [pull, setPull] = useState<PickedPull | null>(null)
   const [picking, setPicking] = useState<'issue' | 'pull' | null>(null)
-  const [adding, setAdding] = useState(false)
+  const navigate = useNavigate()
   const [bases, setBases] = useState<Record<string, string>>({})
   const [error, setError] = useState<string | null>(null)
   const t = useT()
@@ -479,7 +479,7 @@ export function NewItem({ onCreated, onAsked }: { onCreated: (it: Item) => void;
         imports={imports}
         leading={
           <>
-            <ApplicationMenu applications={applications ?? []} chosen={chosen} onChoose={choose} onAdd={() => setAdding(true)} />
+            <ApplicationMenu applications={applications ?? []} chosen={chosen} onChoose={choose} onAdd={() => navigate('/settings/applications?edit=new')} />
             {!pull && <BasePicker places={places} branches={branches} bases={bases} effective={effective} onChange={setBases} />}
           </>
         }
@@ -487,7 +487,6 @@ export function NewItem({ onCreated, onAsked }: { onCreated: (it: Item) => void;
         onBtw={ask}
       />
       {error && <p role="alert" className="px-2 text-sm text-danger-fg">{error}</p>}
-      {adding && <ApplicationEditor application={null} onSaved={() => setAdding(false)} onCancel={() => setAdding(false)} />}
     </div>
   )
 }
