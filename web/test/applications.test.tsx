@@ -280,6 +280,26 @@ describe('conta e papel na nuvem', () => {
     ]))
   })
 
+  test('campo que o conector não declara dispensável continua exigido mesmo sem opções', async () => {
+    const base = withCloud()
+    let saved = 0
+    const empty = { ...base, saveApplication: (draft: Parameters<typeof base.saveApplication>[0]) => ((saved += 1), base.saveApplication(draft)), call: ((connection, action, args) => ((args as { field?: string }).field === 'account' ? Promise.resolve([]) : base.call(connection, action, args))) as typeof base.call }
+    await started(empty)
+    const view = listed()
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    await view.findByLabelText('Nome')
+    openSection(view, /^Nuvem/)
+    const cloud = await view.findByTestId('binding-cloud')
+    fireEvent.click(within(cloud).getByRole('button', { name: 'Adicionar Ambiente' }))
+    fireEvent.keyDown(await within(cloud).findByRole('combobox', { name: 'Ambiente' }), { key: 'Enter' })
+    fireEvent.keyDown(await view.findByRole('option', { name: 'Produção' }), { key: 'Enter' })
+    fireEvent.keyDown(view.getByRole('option', { name: 'Produção' }), { key: 'Escape' })
+    await waitFor(() => expect(within(cloud).getByRole('combobox', { name: 'Conta' })).toBeTruthy())
+    fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
+    expect((await view.findByRole('alert')).textContent).toContain('Conta (Produção)')
+    expect(saved).toBe(0)
+  })
+
   test('a nuvem é opcional: ambiente adicionado e deixado vazio não impede salvar', async () => {
     const base = withCloud()
     let saved = 0

@@ -56,6 +56,24 @@ export interface Impediment {
   said?: Said | null
   detail?: string
   connect: ProviderMark | null
+  base?: BaseGap | null
+}
+
+export interface BaseGap {
+  repository: string
+  name: string
+  missing: string
+}
+
+export interface BaseBranches {
+  branches: string[]
+  default: string | null
+}
+
+export interface BaseChoice {
+  repository: string
+  base: string
+  from?: string
 }
 
 export interface Attention {
@@ -908,6 +926,7 @@ export interface BindingFieldSpec {
   key: string
   label: string
   required?: boolean
+  skippable?: boolean
 }
 
 export interface BindingEach {
@@ -983,6 +1002,8 @@ export interface Api {
   createItem(input: NewItem): Promise<Item>
   rerun(item: string, step: string | null): Promise<void>
   cancel(item: string): Promise<void>
+  baseBranches(item: string, repository: string): Promise<BaseBranches>
+  chooseBase(item: string, choice: BaseChoice): Promise<void>
   openFolders(item: string): Promise<void>
   archive(item: string): Promise<void>
   unarchive(item: string): Promise<void>
@@ -1027,6 +1048,8 @@ export const ROUTES = {
   items: '/api/items',
   rerun: (id: string) => `/api/items/${encodeURIComponent(id)}/rerun`,
   cancel: (id: string) => `/api/items/${encodeURIComponent(id)}/cancel`,
+  baseBranches: (id: string, repository: string) => `/api/items/${encodeURIComponent(id)}/branches?repository=${encodeURIComponent(repository)}`,
+  chooseBase: (id: string) => `/api/items/${encodeURIComponent(id)}/base`,
   openFolders: (id: string) => `/api/items/${encodeURIComponent(id)}/open`,
   archive: (id: string) => `/api/items/${encodeURIComponent(id)}/archive`,
   itemUsage: (id: string) => `/api/items/${encodeURIComponent(id)}/usage`,

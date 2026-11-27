@@ -50,7 +50,7 @@ function cloudBinding(language: Language) {
     label: pick(language, "Environment", "Ambiente", "Ambiente"),
     fields: [
       bindingField(ACCOUNT, pick(language, "Account", "Cuenta", "Conta"), true),
-      bindingField(ROLE, pick(language, "Role", "Rol", "Papel"), true),
+      bindingField(ROLE, pick(language, "Role", "Rol", "Papel"), true, true),
     ],
   };
   return binding("cloud", "application", "AWS", { each, section: pick(language, "Cloud", "Nube", "Nuvem"), order: 70 });

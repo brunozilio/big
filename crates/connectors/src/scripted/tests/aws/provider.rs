@@ -224,3 +224,12 @@ async fn the_application_binds_an_account_and_role_to_each_environment() {
     let first = checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles })).await;
     assert_eq!(first.map(|a| a["account"].clone()), Ok(json!("111")));
 }
+
+#[test]
+fn the_role_may_be_skipped_when_the_account_has_none_but_the_account_may_not() {
+    let look = loaded("aws").presentation(domain::Language::Portuguese);
+    let each = look.bindings.first().and_then(|binding| binding.each.clone()).unwrap_or_default();
+    let skippable: Vec<(&str, bool, bool)> =
+        each.fields.iter().map(|field| (field.key.as_str(), field.required, field.skippable)).collect();
+    assert_eq!(skippable, [("account", true, false), ("role", true, true)]);
+}

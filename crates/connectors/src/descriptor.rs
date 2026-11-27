@@ -206,6 +206,8 @@ pub struct BindingField {
     pub key: String,
     pub label: String,
     pub required: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub skippable: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

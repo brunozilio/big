@@ -373,7 +373,7 @@ export function assistant(): Action[] {
 
 export type BindingScope = "application" | "repository";
 
-export type BindingField = { key: string; label: string; required?: boolean };
+export type BindingField = { key: string; label: string; required?: boolean; skippable?: boolean };
 
 export type BindingEach = { key: string; label: string; fields: BindingField[] };
 
@@ -385,8 +385,8 @@ export function binding(capability: string, scope: BindingScope, label: string, 
   return { capability, scope, label, ...shape };
 }
 
-export function bindingField(key: string, label: string, required = false): BindingField {
-  return { key, label, required };
+export function bindingField(key: string, label: string, required = false, skippable = false): BindingField {
+  return skippable ? { key, label, required, skippable } : { key, label, required };
 }
 
 export function options(capability: string): Action {

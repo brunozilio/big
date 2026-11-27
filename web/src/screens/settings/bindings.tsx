@@ -430,7 +430,7 @@ function isVacant(connection: string, capability: string, field: string, chosen:
 }
 
 function needed(spec: BindingFieldSpec, profile: Choices, connection: string, capability: string): boolean {
-  return Boolean(spec.required) && !filled(profile, spec.key) && !isVacant(connection, capability, spec.key, chosenOf(profile, spec.key))
+  return Boolean(spec.required) && !filled(profile, spec.key) && !(spec.skippable && isVacant(connection, capability, spec.key, chosenOf(profile, spec.key)))
 }
 
 export function missingOf(fields: BindingField[], bindings: Bindings | undefined): { field: string; binding: string; capability: string } | null {
@@ -458,7 +458,7 @@ function useSettled(spec: BindingFieldSpec, connection: string, capability: stri
   const options = searched.found[connection] ?? []
   const listed = ready && complete
   const only = listed && options.length === 1 ? options[0] : undefined
-  const none = listed && options.length === 0
+  const none = Boolean(spec.skippable) && listed && options.length === 0
   const key = vacancyKey(connection, capability, spec.key, chosen)
   useEffect(() => {
     if (ready) search('')
