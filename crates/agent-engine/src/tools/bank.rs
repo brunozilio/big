@@ -1,8 +1,6 @@
 use serde_json::{Value, json};
 
 const MODULE: &str = "repl/bank.ts";
-pub const AGENT: &str = "agent";
-pub const WORKFLOW: &str = "workflow";
 
 fn words(value: &Value) -> Vec<String> {
     value.as_array().into_iter().flatten().filter_map(Value::as_str).map(str::to_owned).collect()
@@ -55,7 +53,12 @@ impl Format {
     }
 
     pub fn offered(&self, host: &str) -> Vec<String> {
-        words(&self.hosts[host])
+        words(&self.hosts[host]["provides"])
+    }
+
+    pub fn place(&self, host: &str) -> String {
+        let label = self.hosts[host]["label"].as_str().map(str::trim).filter(|label| !label.is_empty());
+        label.unwrap_or(host).to_owned()
     }
 }
 
@@ -128,7 +131,9 @@ pub fn search(query: &str, host: &str, has: impl Fn(&str) -> bool) -> Result<Val
 }
 
 pub fn usable(script: &Banked, host: &str, has: impl Fn(&str) -> bool) -> Result<(), String> {
-    let unmet = script.unmet(&Format::declared()?, host);
+    let format = Format::declared()?;
+    let unmet = script.unmet(&format, host);
+    let host = format.place(host);
     if !unmet.is_empty() {
         return Err(format!(
             "the script {} declares requires: [{}], which a {host} run does not offer; run it where that is offered",
@@ -208,6 +213,9 @@ pub fn adapt(
 mod tests {
     use super::*;
 
+    const AGENT: &str = crate::tools::names::REPL;
+    const WORKFLOW: &str = "script";
+
     #[test]
     fn the_shipped_scripts_are_in_the_bank_and_each_one_compiles() {
         let all = listed();
@@ -241,7 +249,7 @@ mod tests {
         let source = "export const spec = { name: \"tuned\", tools: [\"Bash\"], requires: [\"agent\"] };\nexport async function run() { return await adaptScript(\"branch-changes\", \"x\"); }\n";
         assert_eq!(compile(source, AGENT, |_| true).expect("an agent offers it")["name"], "tuned");
         let refused = compile(source, WORKFLOW, |_| true).expect_err("a workflow does not");
-        assert!(refused.contains("requires: [\"agent\"]") && refused.contains("workflow"), "{refused}");
+        assert!(refused.contains("requires: [\"agent\"]") && refused.contains("a workflow step run"), "{refused}");
     }
 
     #[test]

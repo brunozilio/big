@@ -272,6 +272,7 @@ schedule_tick_seconds = "30"
 schedule_catch_up_minutes = "360"
 fingerprint_days = 30
 fingerprint_max_mb = 64
+fingerprint_folder = "fingerprints"
 
 [factory]
 enabled = true

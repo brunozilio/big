@@ -13,6 +13,7 @@ struct Headless {
     tools: Vec<(String, Box<dyn Tool>)>,
     declared: Vec<String>,
     workspace: Workspace,
+    host: String,
 }
 
 impl Headless {
@@ -23,7 +24,7 @@ impl Headless {
     fn tool(&self, name: &str, input: &Value) -> Result<Value, String> {
         if !self.has(name) {
             return Err(format!(
-                "the script calls {name}, which it does not name in spec.tools; a script that needs an agent declares requires: [\"agent\"]"
+                "the script calls {name}, which it does not name in spec.tools; what a script needs beyond its tools goes in spec.requires"
             ));
         }
         let Some((_, tool)) = self.tools.iter().find(|(tool, _)| tool == name) else {
@@ -47,8 +48,8 @@ impl Headless {
         let has = |tool: &str| self.has(tool);
         match function {
             LOAD_SCRIPT if input["source"].is_string() => Err("a workflow runs only scripts of the bank".into()),
-            LOAD_SCRIPT => bank::load(input["name"].as_str().unwrap_or_default(), bank::WORKFLOW, has),
-            SEARCH_SCRIPTS => bank::search(input["query"].as_str().unwrap_or_default(), bank::WORKFLOW, has),
+            LOAD_SCRIPT => bank::load(input["name"].as_str().unwrap_or_default(), &self.host, has),
+            SEARCH_SCRIPTS => bank::search(input["query"].as_str().unwrap_or_default(), &self.host, has),
             ADAPT_SCRIPT => Err("a workflow step makes no model call, so it cannot adapt a script".into()),
             READ_TEXT => super::raw_text::reading(|| self.tool("Read", &json!({ "file_path": input["path"] }))),
             name => self.tool(name, input),
@@ -56,14 +57,24 @@ impl Headless {
     }
 }
 
-pub fn run(name: &str, input: &Value, cwd: &Path, stop: Arc<AtomicBool>) -> Result<Value, String> {
+#[derive(Debug, Clone, Copy)]
+pub struct Running<'a> {
+    pub host: &'a str,
+    pub name: &'a str,
+    pub input: &'a Value,
+    pub cwd: &'a Path,
+}
+
+pub fn run(running: Running<'_>, stop: Arc<AtomicBool>) -> Result<Value, String> {
+    let Running { host, name, input, cwd } = running;
     let script = bank::named(name)?;
     let headless = Headless {
         tools: super::standard().into_iter().map(|tool| (tool.spec().name, tool)).collect(),
         declared: script.tools(),
         workspace: Workspace::new(cwd),
+        host: host.to_owned(),
     };
-    bank::usable(&script, bank::WORKFLOW, |tool| headless.has(tool))?;
+    bank::usable(&script, host, |tool| headless.has(tool))?;
     let session = Session::with_helpers(super::repl::helpers());
     let code = format!("JSON.stringify((await scripts[{}]({input})) ?? null)", json!(script.name));
     let functions = headless.declared.clone();
@@ -98,14 +109,23 @@ mod tests {
         let stop = Arc::new(AtomicBool::new(false));
         let input = json!({ "pattern": "TODO", "path": folder.path().display().to_string() });
 
-        let result = run("count-matches", &input, folder.path(), Arc::clone(&stop)).expect("ran");
+        let running = |name, input| Running { host: "script", name, input, cwd: folder.path() };
+
+        let result = run(running("count-matches", &input), Arc::clone(&stop)).expect("ran");
 
         assert_eq!(result["total"], 3, "{result}");
         assert_eq!(result["folders"][0], json!({ "path": "src", "count": 3 }), "{result}");
-        assert!(
-            run("count-matches", &json!({}), folder.path(), Arc::clone(&stop))
-                .is_err_and(|why| why.contains("pattern"))
-        );
-        assert!(run("nothing-like-this", &input, folder.path(), stop).is_err());
+        let empty = json!({});
+        assert!(run(running("count-matches", &empty), Arc::clone(&stop)).is_err_and(|why| why.contains("pattern")));
+        assert!(run(running("nothing-like-this", &input), stop).is_err());
+    }
+
+    #[test]
+    fn what_a_host_offers_comes_from_its_declaration_and_an_undeclared_host_offers_nothing() {
+        let folder = tempfile::tempdir().expect("folder");
+        let stop = Arc::new(AtomicBool::new(false));
+        let input = json!({ "pattern": "TODO", "path": folder.path().display().to_string() });
+        let anywhere = Running { host: "nowhere-declared", name: "count-matches", input: &input, cwd: folder.path() };
+        assert_eq!(run(anywhere, stop).expect("needs nothing beyond tools")["total"], 0);
     }
 }

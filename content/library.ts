@@ -40,9 +40,9 @@ type Assisting = Saved & { draft: string | null; messages: Turn[]; answer?: stri
 
 type Kind = {
   key: string;
-  folder: string;
+  folder?: string;
   icon: string;
-  exports: string[];
+  exports?: string[];
   needs: string[];
   creatable: boolean;
   label: (language: Language) => string;
@@ -433,7 +433,7 @@ type Format = { bank: string; proposed: string; extensions: string[]; spec: stri
 function formatOf(host: Host): Format {
   const declared = record(host.call?.("value", { path: BANK, name: "format" }));
   const extensions = texts(declared.extensions);
-  return { bank: text(declared.bank) || "scripts/", proposed: text(declared.proposed), extensions: extensions.length > 0 ? extensions : [".ts"], spec: text(declared.spec) || "spec" };
+  return { bank: text(declared.bank), proposed: text(declared.proposed), extensions, spec: text(declared.spec) };
 }
 
 const within = (folder: string, extensions: string[], path: string): boolean =>
@@ -460,13 +460,11 @@ const scripts: Kind = {
   about: "a script of the bank: TypeScript that exports spec (name, description, input as a JSON schema, the tools it calls) and an async run(input); agents find it with searchScripts and run it from the REPL as scripts[\"name\"](input), calling their tools as global functions (Grep, Read, $`cmd`, file(path)) instead of redoing the flow turn by turn",
   ideas: (language) =>
     pick(language, ["Explain what this script does", "Make the input path optional", "Return less data"], ["Explica qué hace este script", "Haz opcional la ruta de entrada", "Devuelve menos datos"], ["Explique o que este script faz", "Torne o caminho de entrada opcional", "Devolva menos dados"]),
-  folder: "scripts/",
   resolve: (host) => {
     const format = formatOf(host);
-    return { folder: format.bank, exports: [format.spec] };
+    return { folder: format.bank, exports: [format.spec].filter((name) => name !== "") };
   },
   icon: "code",
-  exports: ["spec"],
   needs: [],
   creatable: true,
   label: () => "Scripts",
@@ -491,7 +489,10 @@ const scripts: Kind = {
     return { source: acting.source, path: `${formatOf(acting).bank}${acting.path.split("/").pop()}` };
   },
   save: ({ source }) => source,
-  create: (name, slug, host) => ({ path: `${formatOf(host).bank}${slug}${formatOf(host).extensions[0]}`, source: scriptTemplate(name, slug) }),
+  create: (name, slug, host) => {
+    const format = formatOf(host);
+    return { path: `${format.bank}${slug}${format.extensions[0] ?? ""}`, source: scriptTemplate(name, slug) };
+  },
 };
 
 const KINDS: Kind[] = [agents, skills, prompts, workflows, tools, styles, scripts];
@@ -502,7 +503,7 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
-const resolved = (item: Kind, host: Host) => ({ folder: item.folder, exports: item.exports, ...item.resolve?.(host) });
+const resolved = (item: Kind, host: Host) => ({ folder: item.folder ?? "", exports: item.exports ?? [], ...item.resolve?.(host) });
 
 export function sections(host: Host & { language: Language }) {
   const { language } = host;

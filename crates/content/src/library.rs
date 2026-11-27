@@ -502,6 +502,10 @@ mod tests {
             assert!(card["description"].as_str().is_some_and(|text| !text.is_empty()), "{path}");
             assert_eq!(run("open", about("scripts", path, &source, &["spec"]))["mode"], "code");
         }
+        let declared = crate::value("repl/bank.ts", "format").expect("the bank declares its format");
+        let (sections, _) = sections("en").expect("sections");
+        let shown = sections.iter().find(|section| section.key == "scripts").map(|section| section.folder.as_str());
+        assert_eq!(shown, declared["bank"].as_str(), "the section's folder is the bank's");
         let made = run("create", json!({ "section": "scripts", "name": "Contar arquivos", "language": "pt-BR" }));
         assert_eq!(made["path"], "scripts/contar-arquivos.ts");
         let section = Section {
@@ -601,11 +605,14 @@ mod tests {
             saved["body"] = Value::Null;
             run("save", saved)
         };
-        assert!(saving(json!({ "description": "x".repeat(1025) }))["error"].as_str().is_some_and(|e| e.contains("1024")));
+        assert!(
+            saving(json!({ "description": "x".repeat(1025) }))["error"].as_str().is_some_and(|e| e.contains("1024"))
+        );
         assert!(saving(json!({ "description": " " }))["error"].is_string());
         assert!(saving(json!({ "name": "Not--valid" }))["error"].is_string());
         assert!(saving(json!({ "compatibility": "y".repeat(501) }))["error"].is_string());
-        let kept = word(&saving(json!({ "name": "other", "description": "x".repeat(1024), "license": "MIT" }))["source"]);
+        let kept =
+            word(&saving(json!({ "name": "other", "description": "x".repeat(1024), "license": "MIT" }))["source"]);
         assert!(kept.contains("metadata:\n  author: me\n") && kept.contains("license: MIT\n"), "{kept}");
     }
 
@@ -615,7 +622,11 @@ mod tests {
         let source = shipped("workflows/default.ts");
         let steps = run("outline", json!({ "section": "workflows", "source": source }))["steps"].clone();
         assert_eq!((&steps[0]["name"], &steps[0]["agent"]), (&json!("plan"), &json!("planner")));
-        assert!(steps[0]["line"].as_u64().is_some_and(|line| source.lines().nth(line as usize - 1).is_some_and(|text| text.contains("plan("))));
+        assert!(
+            steps[0]["line"]
+                .as_u64()
+                .is_some_and(|line| source.lines().nth(line as usize - 1).is_some_and(|text| text.contains("plan(")))
+        );
         let checks = steps.as_array().expect("steps").iter().find(|step| step["name"] == "checks").expect("checks");
         assert_eq!((&checks["agent"], &checks["notes"]), (&json!("verifier"), &json!(["↩ develop ×3"])));
         assert_eq!(run("outline", json!({ "section": "agents", "source": source }))["steps"], json!([]));

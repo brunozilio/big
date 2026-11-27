@@ -4,6 +4,7 @@ use serde_json::Value;
 use super::Agent;
 use crate::model::{BlockingTurn, TurnRequest};
 use crate::tools::bank;
+use crate::tools::names::REPL;
 use crate::tools::repl::reachable;
 use crate::transcript::Message;
 
@@ -14,12 +15,12 @@ impl Agent<'_> {
         let has = |tool: &str| self.has_tool(tool);
         match function {
             SEARCH_SCRIPTS => Some(match input["query"].as_str().map(str::trim).filter(|query| !query.is_empty()) {
-                Some(query) => bank::search(query, bank::AGENT, has),
+                Some(query) => bank::search(query, REPL, has),
                 None => Err("searchScripts needs the words to look for, e.g. searchScripts('changed files')".into()),
             }),
             LOAD_SCRIPT => Some(match input["source"].as_str() {
-                Some(source) => bank::compile(source, bank::AGENT, has),
-                None => bank::load(input["name"].as_str().unwrap_or_default(), bank::AGENT, has),
+                Some(source) => bank::compile(source, REPL, has),
+                None => bank::load(input["name"].as_str().unwrap_or_default(), REPL, has),
             }),
             ADAPT_SCRIPT => {
                 let tools: Vec<String> =

@@ -10,7 +10,10 @@ export const format = {
   extensions: [".ts", ".js"],
   spec: "spec",
   entry: "run",
-  hosts: { agent: ["agent"], workflow: [] as string[] },
+  hosts: {
+    REPL: { label: "agent", provides: ["agent"] },
+    script: { label: "workflow step", provides: [] as string[] },
+  },
 };
 
 const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);

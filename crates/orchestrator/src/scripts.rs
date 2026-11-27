@@ -3,7 +3,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, SystemTime};
 
-use agent_engine::tools::{bank, bank_run};
+use agent_engine::tools::bank;
+use agent_engine::tools::bank_run::{self, Running};
 use domain::workflow::WorkItem;
 use serde_json::Value;
 
@@ -11,7 +12,6 @@ use crate::agent::{Failure, blocking};
 use crate::protocol::Command;
 use crate::shared::Shared;
 
-const FINGERPRINTS: &str = "fingerprints";
 const SCRATCH: &str = "scratch";
 
 struct Stopping(Arc<AtomicBool>);
@@ -25,7 +25,7 @@ impl Drop for Stopping {
 pub fn fingerprinted(data: &Path, name: &str, input: &Value) -> Result<PathBuf, Failure> {
     let source = bank::named(name).and_then(|script| script.source()).map_err(Failure::permanent)?;
     let print = domain::effect::fingerprint(&source, input);
-    Ok(data.join(FINGERPRINTS).join(format!("{print}.json")))
+    Ok(data.join(brand::workflow::FINGERPRINT_FOLDER).join(format!("{print}.json")))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -125,7 +125,9 @@ pub async fn run(shared: &Shared, item: &WorkItem, command: &Command) -> Result<
     let cwd = folder(shared, item, command).await?;
     let stop = Arc::new(AtomicBool::new(false));
     let _stopping = Stopping(Arc::clone(&stop));
-    let value = blocking(move || bank_run::run(&name, &input, &cwd, stop)).await?.map_err(Failure::permanent)?;
+    let host = command.kind.clone();
+    let running = move || bank_run::run(Running { host: &host, name: &name, input: &input, cwd: &cwd }, stop);
+    let value = blocking(running).await?.map_err(Failure::permanent)?;
     if let Some(kept) = &kept {
         remember(kept, &value, keeping);
     }
@@ -145,6 +147,7 @@ mod tests {
         let data = tempfile::tempdir().expect("data");
         let now = SystemTime::now();
         let first = fingerprinted(data.path(), "count-matches", &json!({ "pattern": "TODO" })).expect("print");
+        assert_eq!(first.parent(), Some(data.path().join(brand::workflow::FINGERPRINT_FOLDER).as_path()));
         assert_eq!(reused(&first, KEEPING, now), None);
         remember(&first, &json!({ "total": 3 }), KEEPING);
         let again = fingerprinted(data.path(), "count-matches", &json!({ "pattern": "TODO" })).expect("print");
@@ -169,7 +172,8 @@ mod tests {
             file.set_modified(base + Duration::from_secs(at as u64)).expect("time");
         }
         evict(folder.path(), small, SystemTime::now());
-        let left: Vec<bool> = ["a", "b", "c"].iter().map(|name| folder.path().join(format!("{name}.json")).exists()).collect();
+        let left: Vec<bool> =
+            ["a", "b", "c"].iter().map(|name| folder.path().join(format!("{name}.json")).exists()).collect();
         assert_eq!(left, [false, true, true]);
         evict(folder.path(), Keeping { age: Duration::from_secs(1), bytes: 1 << 20 }, SystemTime::now());
         assert!(!folder.path().join("c.json").exists(), "older than the age limit");

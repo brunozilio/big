@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent
 import { useInRouterContext, useSearchParams } from 'react-router-dom'
 import { BOARD_GROUPS, BTW_WORKFLOW, type BoardGroup, type Item, type ItemApplication } from '@/api/contract'
 import { useStore } from '@/api/store'
+import { settings } from '@/app/settings'
 import { useT, type T } from '@/i18n'
 import { titleOf } from '@/i18n/server'
 import { cn } from '@/ui/cn'
@@ -304,7 +305,6 @@ type RowsProps = {
   onMove: (target: Item, id: string, from: string | null) => void
 }
 
-export const VIRTUAL_FROM = 80
 const ROW_HEIGHT = 52
 
 function ItemRow({ it, fresh, accepting, onOpen, onConnect, onMove }: Omit<RowsProps, 'items' | 'empty' | 'fresh'> & { it: Item; fresh: boolean }) {
@@ -313,7 +313,7 @@ function ItemRow({ it, fresh, accepting, onOpen, onConnect, onMove }: Omit<RowsP
 
 export const Rows = memo(function Rows(props: RowsProps) {
   const { items, empty, fresh } = props
-  if (items.length > VIRTUAL_FROM) return <VirtualRows {...props} />
+  if (items.length > settings.virtualRowsFrom) return <VirtualRows {...props} />
   return (
     <ul>
       <AnimatePresence initial={false}>

@@ -3,7 +3,8 @@ import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { Item, SessionEvent } from '@/api/contract'
 import { PAST_TURN, Transcript } from '@/chat/ChatView'
-import { Rows, VIRTUAL_FROM } from '@/screens/items/ItemsView'
+import { settings } from '@/app/settings'
+import { Rows } from '@/screens/items/ItemsView'
 import { TooltipProvider } from '@/ui/overlay'
 import { spanOf, useVirtualRows } from '@/ui/virtual'
 
@@ -55,8 +56,13 @@ describe('lista de itens longa', () => {
     expect(view.container.querySelectorAll('li').length).toBe(10)
   })
 
+  test('até o limite da configuração a lista ainda monta todas as linhas', () => {
+    const view = render(rows(Array.from({ length: settings.virtualRowsFrom }, (_, n) => item(n))))
+    expect(view.container.querySelectorAll('li').length).toBe(settings.virtualRowsFrom)
+  })
+
   test('lista longa monta só as linhas visíveis e acompanha a rolagem', async () => {
-    const items = Array.from({ length: VIRTUAL_FROM * 5 }, (_, n) => item(n))
+    const items = Array.from({ length: settings.virtualRowsFrom * 5 }, (_, n) => item(n))
     const view = render(rows(items))
     const shown = () => [...view.container.querySelectorAll('li')].map((li) => li.getAttribute('data-virtual-key'))
     expect(shown().length).toBeLessThan(40)
