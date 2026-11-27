@@ -5,6 +5,11 @@ type Ctx = { config: { host: string; protocol?: string } } & Record<string, any>
 export type Session = { cookies: string; fuid: string };
 
 const EXPIRES_IN = 900;
+const RENAME = [
+  { find: "(?:o )?aplicativo (?:para |de )?(?:desktop|computador)", replace: "o {{NAME}}" },
+  { find: "(?:la )?aplicaci[oó]n de escritorio", replace: "{{NAME}}" },
+  { find: "(?:the )?(?:Figma )?desktop app", replace: "{{NAME}}" },
+];
 const INTERVAL = 2;
 const SET_COOKIE = /,(?=\s*[A-Za-z0-9_.-]+=)|\n/;
 
@@ -110,6 +115,7 @@ export const session = {
       },
       carried: { cookies },
       capture: [`${base(ctx)}/api/session/app_auth/${id}/grant*`],
+      rename: RENAME,
     };
   },
   poll({ started }, ctx: Ctx) {

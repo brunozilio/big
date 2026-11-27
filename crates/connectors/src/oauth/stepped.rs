@@ -12,12 +12,20 @@ use crate::error::ActionError;
 use crate::http::Http;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Rename {
+    pub find: String,
+    pub replace: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Started {
     pub code: DeviceCode,
     #[serde(default)]
     pub carried: Value,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub capture: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub rename: Vec<Rename>,
     #[serde(default, skip_serializing_if = "Value::is_null")]
     pub captured: Value,
 }

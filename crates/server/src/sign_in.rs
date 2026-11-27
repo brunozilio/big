@@ -164,6 +164,7 @@ pub async fn start(
     provider: &str,
     fields: &Value,
     method: Option<&str>,
+    owner: &str,
 ) -> ApiResult<Value> {
     let found = descriptor(shared, provider)?;
     let auth = chosen_auth(shared, &found, method)?;
@@ -205,8 +206,14 @@ pub async fn start(
                 sign_in.0.start(http, fields, shared.language()).await.map_err(|error| ApiError::bad(error.message))?;
             let mut answer = device_answer(&started.code);
             let capture = started.capture.clone();
+            let rename: Vec<Value> = started
+                .rename
+                .iter()
+                .map(|rule| json!({ "find": rule.find, "replace": brand::text(&rule.replace) }))
+                .collect();
             let flow = opened(Waiting::Steps { sign_in: sign_in.clone(), started })?;
-            answer["opened"] = json!(watched(shared, &flow, answer["url"].as_str().unwrap_or_default(), &capture));
+            answer["opened"] =
+                json!(watched(shared, owner, &flow, answer["url"].as_str().unwrap_or_default(), &capture, &rename));
             Ok(with_flow(answer, &flow))
         }
         AuthSpec::Token(spec) => {
@@ -217,13 +224,13 @@ pub async fn start(
     }
 }
 
-fn watched(shared: &Shared, flow: &str, url: &str, capture: &[String]) -> bool {
+fn watched(shared: &Shared, owner: &str, flow: &str, url: &str, capture: &[String], rename: &[Value]) -> bool {
     if capture.is_empty() || url.is_empty() {
         return false;
     }
     let hub = &shared.backend.browser;
-    match hub.resolve(flow) {
-        browser::Resolved::Browser(device) => hub.watch(&device, flow, url, capture),
+    match hub.resolve(&crate::browser_devices::of_owner(owner)) {
+        browser::Resolved::Browser(device) => hub.watch_renaming(&device, flow, url, capture, rename),
         browser::Resolved::NoneConnected | browser::Resolved::Several(_) => false,
     }
 }

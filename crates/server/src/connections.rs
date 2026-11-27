@@ -158,7 +158,7 @@ pub async fn start(
     let body = body.map(|Json(body)| body).unwrap_or(Value::Null);
     let fields = body["fields"].clone();
     if is_connector(&ctx, &provider) {
-        let started = crate::sign_in::start(&ctx, &provider, &fields, body["method"].as_str()).await?;
+        let started = crate::sign_in::start(&ctx, &provider, &fields, body["method"].as_str(), person.owner()).await?;
         if let Some(flow) = started["flow"].as_str() {
             ctx.flows.own(flow, person.owner());
         }

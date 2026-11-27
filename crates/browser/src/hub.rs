@@ -295,9 +295,16 @@ impl Hub {
     }
 
     pub fn watch(&self, device: &str, flow: &str, url: &str, capture: &[String]) -> bool {
+        self.watch_renaming(device, flow, url, capture, &[])
+    }
+
+    pub fn watch_renaming(&self, device: &str, flow: &str, url: &str, capture: &[String], rename: &[Value]) -> bool {
         let state = self.state();
         let Some(linked) = state.browsers.iter().find(|linked| linked.info.device_id == device) else { return false };
-        let message = json!({ "type": "watch", "flow": flow, "url": url, "capture": capture });
+        let mut message = json!({ "type": "watch", "flow": flow, "url": url, "capture": capture });
+        if !rename.is_empty() {
+            message["rename"] = json!(rename);
+        }
         linked.outbox.send(message.to_string()).is_ok()
     }
 

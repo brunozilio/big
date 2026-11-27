@@ -56,6 +56,40 @@ export function listen() {
   });
 }
 
+export function renames(given) {
+  return (Array.isArray(given) ? given : [])
+    .filter((rule) => rule && typeof rule.find === "string" && rule.find && typeof rule.replace === "string")
+    .map((rule) => [rule.find, rule.replace]);
+}
+
+export function renamer(rules) {
+  return `(() => {
+  const rules = ${JSON.stringify(rules)}.map(([find, replace]) => [new RegExp(find, "gi"), replace]);
+  const fix = (root) => {
+    if (!root) return;
+    if (root.nodeType === 3) {
+      let text = root.nodeValue;
+      for (const [find, replace] of rules) text = text.replace(find, replace);
+      if (text !== root.nodeValue) root.nodeValue = text;
+      return;
+    }
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) fix(node);
+  };
+  const start = () => {
+    fix(document.body);
+    new MutationObserver((changes) => {
+      for (const change of changes) {
+        if (change.type === "characterData") fix(change.target);
+        change.addedNodes.forEach(fix);
+      }
+    }).observe(document.body, { childList: true, subtree: true, characterData: true });
+  };
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+  else start();
+})();`;
+}
+
 export async function watch(message, link) {
   const patterns = (Array.isArray(message.capture) ? message.capture : []).map(String).filter(Boolean);
   const url = String(message.url || "");
@@ -66,6 +100,11 @@ export async function watch(message, link) {
   try {
     await attach(tab.id);
     await command(tab.id, "Fetch.enable", { patterns: patterns.map((urlPattern) => ({ urlPattern, requestStage: "Response" })) });
+    const rules = renames(message.rename);
+    if (rules.length > 0) {
+      await command(tab.id, "Page.enable", {}).catch(() => {});
+      await command(tab.id, "Page.addScriptToEvaluateOnNewDocument", { source: renamer(rules) }).catch(() => {});
+    }
   } catch {
     await ended(tab.id, false);
   }

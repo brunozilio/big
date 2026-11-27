@@ -44,6 +44,12 @@ pub fn build() -> Option<&'static str> {
     packaged().ok().map(|made| made.build.as_str())
 }
 
+pub const OWNER_PREFIX: &str = "owner:";
+
+pub fn of_owner(owner: &str) -> String {
+    format!("{OWNER_PREFIX}{owner}")
+}
+
 pub fn open_path(path: &str) -> bool {
     path == CLAIM || path == STREAM || path == REPLY
 }
@@ -201,6 +207,9 @@ pub fn scope(ctx: &Ctx) {
     }
     let weak = std::sync::Arc::downgrade(ctx);
     ctx.backend.browser.scoped(std::sync::Arc::new(move |key: &str| {
+        if let Some(owner) = key.strip_prefix(OWNER_PREFIX) {
+            return Some(owner.to_owned());
+        }
         let shared = weak.upgrade()?;
         match key.strip_prefix(crate::connector_browser::CONNECTOR_PREFIX) {
             Some(connection) => shared.backend.store.owner_of(store::ownership::CONNECTION, connection).ok(),
