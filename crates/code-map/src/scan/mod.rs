@@ -1,5 +1,6 @@
 mod cache;
 mod disk;
+mod kept;
 
 use std::collections::HashMap;
 use std::path::Path;
@@ -10,6 +11,7 @@ use crate::extract::{FileSymbols, extract};
 use crate::map::CodeMap;
 
 pub use disk::DiskSource;
+pub use kept::{Marks, RECHECK, current, current_with, marks};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct FileStat {
@@ -28,8 +30,11 @@ pub fn refresh(root: &Path, cache: &Path) -> CodeMap {
 }
 
 pub fn refresh_with(source: &dyn Source, cache: &Path) -> CodeMap {
+    refresh_from(source, cache, source.files())
+}
+
+fn refresh_from(source: &dyn Source, cache: &Path, stats: Vec<FileStat>) -> CodeMap {
     let mut known: HashMap<FileStat, FileSymbols> = cache::load(cache);
-    let stats = source.files();
     let unchanged = stats.len() == known.len() && stats.iter().all(|stat| known.contains_key(stat));
     let stale: Vec<&FileStat> = stats.iter().filter(|stat| !known.contains_key(*stat)).collect();
     let fresh = extract_all(source, &stale);

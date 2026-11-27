@@ -1,12 +1,13 @@
 use std::collections::BTreeMap;
 use std::sync::Mutex;
 
-use code_map::{CodeMap, FileStat, Source, refresh, refresh_with};
+use code_map::{CodeMap, FileStat, RECHECK, Source, current, current_with, refresh, refresh_with};
 
 #[derive(Default)]
 struct FakeSource {
     files: Mutex<BTreeMap<String, (i64, String)>>,
     reads: Mutex<Vec<String>>,
+    walks: Mutex<usize>,
 }
 
 impl FakeSource {
@@ -22,6 +23,10 @@ impl FakeSource {
         }
     }
 
+    fn walks(&self) -> usize {
+        self.walks.lock().map(|walks| *walks).unwrap_or_default()
+    }
+
     fn take_reads(&self) -> Vec<String> {
         let mut reads = self.reads.lock().map(|mut reads| std::mem::take(&mut *reads)).unwrap_or_default();
         reads.sort();
@@ -31,6 +36,9 @@ impl FakeSource {
 
 impl Source for FakeSource {
     fn files(&self) -> Vec<FileStat> {
+        if let Ok(mut walks) = self.walks.lock() {
+            *walks += 1;
+        }
         let files = self.files.lock().map(|files| files.clone()).unwrap_or_default();
         files.into_iter().map(|(path, (modified, text))| FileStat { path, len: text.len() as u64, modified }).collect()
     }
@@ -148,6 +156,14 @@ fn times_refreshing_the_workspace() {
     let started = std::time::Instant::now();
     let warm = refresh(&root, &cache);
     let warm_time = started.elapsed();
+    let marks = code_map::marks(&root);
+    let started = std::time::Instant::now();
+    current(&root, &cache);
+    let first_kept = started.elapsed();
+    let started = std::time::Instant::now();
+    current_with(&code_map::DiskSource::new(&root), marks, &cache, std::time::Instant::now());
+    let kept_time = started.elapsed();
+    println!("current: first {first_kept:?}, unchanged again {kept_time:?}");
     let symbols: usize = warm.files.iter().map(|file| file.symbols.len()).sum();
     let calls: usize = warm.files.iter().map(|file| file.calls.len()).sum();
     let bytes = std::fs::metadata(&cache).map(|meta| meta.len()).unwrap_or(0);
@@ -159,4 +175,29 @@ fn times_refreshing_the_workspace() {
     let block = code_map::render(&warm.relevant("why does merge_near_duplicates drop memories?", 12));
     println!("relevant+render {:?}\n{block}", started.elapsed());
     assert_eq!(cold, warm);
+}
+
+#[test]
+fn an_unchanged_project_is_served_from_memory_without_walking_it_again() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    let cache = dir.path().join("kept.json");
+    let source = FakeSource::default();
+    source.put("a.rs", 1, "fn alpha() {}");
+    let now = std::time::Instant::now();
+    let first = current_with(&source, vec![None], &cache, now);
+    assert_eq!((source.walks(), source.take_reads()), (1, vec!["a.rs".to_owned()]));
+    let again = current_with(&source, vec![None], &cache, now + RECHECK / 2);
+    assert!(std::sync::Arc::ptr_eq(&first, &again));
+    assert_eq!(source.walks(), 1);
+
+    let moved = current_with(&source, vec![Some(std::time::SystemTime::UNIX_EPOCH)], &cache, now + RECHECK / 2);
+    assert!(std::sync::Arc::ptr_eq(&first, &moved));
+    assert_eq!(source.walks(), 2);
+    assert!(source.take_reads().is_empty());
+
+    source.put("b.rs", 1, "fn beta() {}");
+    let later = now + RECHECK * 2;
+    let changed = current_with(&source, vec![Some(std::time::SystemTime::UNIX_EPOCH)], &cache, later);
+    assert_eq!(names(&changed), vec!["a.rs:alpha", "b.rs:beta"]);
+    assert_eq!(source.take_reads(), vec!["b.rs"]);
 }

@@ -4,4 +4,4 @@ pub mod scan;
 
 pub use extract::{Call, FileSymbols, Symbol, SymbolKind, extract};
 pub use map::{CodeMap, Pointer, SymbolHit, render};
-pub use scan::{DiskSource, FileStat, Source, refresh, refresh_with};
+pub use scan::{DiskSource, FileStat, Marks, RECHECK, Source, current, current_with, marks, refresh, refresh_with};

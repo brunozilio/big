@@ -15,7 +15,7 @@ fn found(maps: &Path, home: Option<&Path>, project: &Path, prompt: &str) -> Opti
     if !domain::features::on(brand::features::CODE_MAP) || !mapped(project, home) {
         return None;
     }
-    let map = code_map::refresh(project, &maps.join(format!("{}.json", crate::dirs::project_key(project))));
+    let map = code_map::current(project, &maps.join(format!("{}.json", crate::dirs::project_key(project))));
     let found = map.relevant(prompt, MOST_FILES);
     let shown = code_map::render(&found);
     (!shown.trim().is_empty()).then_some(shown)
