@@ -256,6 +256,11 @@ agent_ms = 7200000
 exec_ms = 1800000
 call_ms = 120000
 
+[batch]
+window_ms = 2000
+poll_ms = 10000
+wait_ms = 90000
+
 [mock_changes]
 approval_seconds = "30"
 execution_seconds = "30"

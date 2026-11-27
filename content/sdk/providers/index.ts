@@ -243,6 +243,55 @@ export function cacheKey(body, intent: Intent) {
   return body;
 }
 
+export function jsonLines(text: string): any[] {
+  return String(text ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line !== "")
+    .flatMap((line) => {
+      const found = parsed(line);
+      return found === undefined ? [] : [found];
+    });
+}
+
+function event(data: Record<string, unknown>): string {
+  return `event: ${data.type}\ndata: ${JSON.stringify(data)}\n\n`;
+}
+
+function blockEvents(block, index: number): string[] {
+  const kind = block?.type;
+  if (kind === "text") {
+    return [
+      event({ type: "content_block_start", index, content_block: { type: "text", text: "" } }),
+      event({ type: "content_block_delta", index, delta: { type: "text_delta", text: block.text ?? "" } }),
+    ];
+  }
+  if (kind === "thinking") {
+    return [
+      event({ type: "content_block_start", index, content_block: { type: "thinking", thinking: "" } }),
+      event({ type: "content_block_delta", index, delta: { type: "thinking_delta", thinking: block.thinking ?? "" } }),
+      event({ type: "content_block_delta", index, delta: { type: "signature_delta", signature: block.signature ?? "" } }),
+    ];
+  }
+  if (kind === "tool_use") {
+    return [
+      event({ type: "content_block_start", index, content_block: { type: "tool_use", id: block.id, name: block.name, input: {} } }),
+      event({ type: "content_block_delta", index, delta: { type: "input_json_delta", partial_json: JSON.stringify(block.input ?? {}) } }),
+    ];
+  }
+  return [event({ type: "content_block_start", index, content_block: block })];
+}
+
+export function messagesStream(message): string {
+  const blocks = Array.isArray(message?.content) ? message.content : [];
+  const usage = message?.usage ?? {};
+  const parts = [event({ type: "message_start", message: { ...message, content: [], usage } })];
+  blocks.forEach((block, index) => parts.push(...blockEvents(block, index), event({ type: "content_block_stop", index })));
+  parts.push(event({ type: "message_delta", delta: { stop_reason: message?.stop_reason ?? null }, usage }));
+  parts.push(event({ type: "message_stop" }));
+  return parts.join("");
+}
+
 export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 
 export function chosen(model: Model | null | undefined, body): Record<string, any> | undefined {

@@ -29,6 +29,8 @@ import {
   window,
   words,
   invalid,
+  jsonLines,
+  messagesStream,
 } from "sdk/providers/index.ts";
 
 const HOURS_5 = 18_000;
@@ -53,6 +55,7 @@ export function provider() {
     window: 200_000,
     wire: "messages",
     path: "/messages",
+    laterDiscount: 0.5,
   };
 }
 
@@ -109,6 +112,37 @@ export function shape({ model, body, effort, intent }, ctx) {
   body.max_tokens = ctx.models.outputLimit({ model, body });
   remove(body, ["thinking", "output_config"]);
   return thinking(body, model, effort);
+}
+
+function batchCall(config: Config, ctx, path: string, body: unknown) {
+  const call = get(config, ctx.config.api, jsonHeaders(headers({ config }, ctx)), `/messages/batches${path}`);
+  if (body === null) return call;
+  return { ...call, headers: [...call.headers, ["content-type", "application/json"]], body: JSON.stringify(body) };
+}
+
+export function batchSubmit({ config, requests }, ctx) {
+  const listed = requests.map(({ id, body }) => ({ custom_id: id, params: remove({ ...body }, ["stream"]) }));
+  return batchCall(config, ctx, "", { requests: listed });
+}
+
+export const batchPoll = ({ config, id }, ctx) => batchCall(config, ctx, `/${id}`, null);
+
+export const batchCancel = ({ config, id }, ctx) => batchCall(config, ctx, `/${id}/cancel`, {});
+
+export const batchResults = ({ config, url }, ctx) => ({ url, headers: jsonHeaders(headers({ config }, ctx)), body: null });
+
+export function batchState({ value }) {
+  if (typeof value?.id !== "string") invalid("the batch answer has no id");
+  return { id: value.id, done: value.processing_status === "ended", results: typeof value.results_url === "string" ? value.results_url : null };
+}
+
+export function batchAnswers({ text }) {
+  return jsonLines(text).map((line) => {
+    const result = line?.result ?? {};
+    if (result.type === "succeeded") return { id: String(line.custom_id), stream: messagesStream(result.message) };
+    const why = result.error?.error?.message ?? result.error?.message ?? result.type ?? "failed";
+    return { id: String(line.custom_id), error: String(why) };
+  });
 }
 
 export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.config.api, headers({ config }, ctx), "/models?limit=1000");

@@ -1,3 +1,4 @@
+mod batch;
 pub mod oauth;
 mod transport;
 mod turns;
@@ -44,13 +45,28 @@ impl ProviderClient {
         model: Option<ModelOption>,
     ) -> Result<Ready, ModelError> {
         let provider = crate::providers::get(provider)?;
-        let transport =
-            Arc::new(Transport { provider, http, keys, turns: Default::default(), cached: Mutex::new(None), model });
+        let windows = std::sync::Mutex::new(llm_providers::batch::Windows::configured());
+        let transport = Arc::new(Transport {
+            provider,
+            http,
+            keys,
+            turns: Default::default(),
+            cached: Mutex::new(None),
+            model,
+            windows,
+        });
         let wire = provider.wire(transport.model.as_ref());
         let api = super::wires::open(wire, transport.clone(), transport.model.as_ref(), provider).ok_or_else(|| {
             ModelError::Provider(format!("{} speaks {wire}, which this build does not have", provider.name()))
         })?;
         Ok(Ready { transport, api })
+    }
+
+    pub fn batching(self, windows: llm_providers::batch::Windows) -> Self {
+        if let Ok(ready) = self.ready.as_ref() {
+            *ready.transport.windows.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = windows;
+        }
+        self
     }
 
     fn ready(&self) -> Result<&Ready, ModelError> {

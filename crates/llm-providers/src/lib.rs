@@ -1,6 +1,7 @@
 extern crate self as llm_providers;
 
 pub mod added_tools;
+pub mod batch;
 pub mod catalog;
 mod config;
 pub mod limits;
@@ -91,6 +92,14 @@ pub trait Provider: Sync {
 
     fn later_discount(&self) -> Option<f64> {
         None
+    }
+
+    fn batches(&self) -> bool {
+        false
+    }
+
+    fn batch(&self, step: &str, _input: Value) -> Result<Value, ProviderError> {
+        Err(ProviderError::Invalid(format!("{} has no {step} for batches", self.name())))
     }
 
     fn web_search(&self, _model: &str) -> Option<Value> {

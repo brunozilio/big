@@ -17,6 +17,7 @@ pub(super) struct Transport {
     pub turns: super::turns::Turns,
     pub cached: Mutex<Option<(String, Config)>>,
     pub model: Option<domain::ModelOption>,
+    pub windows: std::sync::Mutex<llm_providers::batch::Windows>,
 }
 
 impl Transport {
@@ -179,8 +180,15 @@ impl Http for Transport {
 
 impl Transport {
     async fn send(&self, body: &str, cancel: &CancellationToken) -> Result<Response, ModelError> {
-        let Some(_turn) = self.turns.take_unless(cancel).await else { return Err(ModelError::Cancelled) };
         let mut body: Value = serde_json::from_str(body).map_err(|e| ModelError::Provider(e.to_string()))?;
+        if body["intent"]["priority"] == "later" && self.provider.batches() {
+            match self.batched(body.clone(), cancel).await {
+                Err(ModelError::Cancelled) => return Err(ModelError::Cancelled),
+                Err(error) => tracing::info!(provider = self.provider.id(), %error, "a low-priority call goes now"),
+                answered => return answered,
+            }
+        }
+        let Some(_turn) = self.turns.take_unless(cancel).await else { return Err(ModelError::Cancelled) };
         request::shape(self.provider, self.model.as_ref(), &mut body)?;
         let turn_headers = self.provider.turn_headers(self.model.as_ref(), &body);
         let shaped = body;
@@ -207,6 +215,21 @@ impl Transport {
         let limit = if response.status < 300 { request::STREAM_LIMIT } else { request::ERROR_LIMIT };
         response.body = response.body.bounded(limit);
         Ok(response)
+    }
+}
+
+impl Transport {
+    async fn batched(&self, mut body: Value, cancel: &CancellationToken) -> Result<Response, ModelError> {
+        request::shape(self.provider, self.model.as_ref(), &mut body)?;
+        let config = self.config_under(false, cancel).await?;
+        self.provider.bind(&config, &mut body);
+        let mut hasher = std::hash::DefaultHasher::new();
+        std::hash::Hash::hash(&config.headers(self.provider), &mut hasher);
+        let key = format!("{}:{}", self.provider.id(), std::hash::Hasher::finish(&hasher));
+        let windows = *self.windows.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        let job = super::batch::Job { provider: self.provider, http: Arc::clone(&self.http), config, windows };
+        let stream = super::batch::answer(job, key, body, cancel).await?;
+        Ok(Response { status: 200, headers: Vec::new(), body: stream.into() })
     }
 }
 

@@ -331,6 +331,15 @@ impl Provider for ScriptedProvider {
     fn later_discount(&self) -> Option<f64> {
         self.later_discount
     }
+    fn batches(&self) -> bool {
+        crate::batch::STEPS.iter().all(|step| self.offers(step))
+    }
+    fn batch(&self, step: &str, input: Value) -> Result<Value, ProviderError> {
+        if !self.offers(step) {
+            return Err(ProviderError::Invalid(format!("{} has no {step} for batches", self.name)));
+        }
+        self.invoke(step, input)
+    }
     fn web_search(&self, model: &str) -> Option<Value> {
         let native: Value = self.quiet("webSearch", json!({ "name": model }));
         (!native.is_null()).then_some(native)

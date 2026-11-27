@@ -73,7 +73,8 @@ fn proposed(
         let _ = sender.send(event);
     });
     let _handle = services.engine.start(run, &prepared.request, sink).ok()?;
-    while let Ok(event) = receiver.recv_timeout(WAIT) {
+    let windows = llm_providers::batch::Windows::configured();
+    while let Ok(event) = receiver.recv_timeout(WAIT + windows.gather + windows.wait) {
         match event {
             EngineEvent::Chore(ChoreAnswer::Learned(proposal)) => return Some(proposal),
             event if event.is_terminal() => return None,

@@ -13,6 +13,16 @@ use crate::shared::Shared;
 const WAIT: Duration = Duration::from_secs(60);
 const SHORT_ID: usize = 6;
 
+fn waited_for(command: SessionCommand) -> Duration {
+    if command != SessionCommand::Recap {
+        return WAIT;
+    }
+    let batch = brand::section("batch");
+    let millis =
+        |key: &str| batch.iter().find(|(name, _)| *name == key).and_then(|(_, value)| value.trim().parse().ok());
+    WAIT + Duration::from_millis(millis("window_ms").unwrap_or(0) + millis("wait_ms").unwrap_or(0))
+}
+
 pub struct Chore {
     pub command: SessionCommand,
     pub text: String,
@@ -42,7 +52,7 @@ pub async fn answer(shared: &Shared, chore: Chore) -> Option<ChoreAnswer> {
         let _ = sender.send(event);
     });
     let _handle = shared.config.engine.start(RunId::new(), &request, sink).ok()?;
-    let waited = tokio::time::timeout(WAIT, async {
+    let waited = tokio::time::timeout(waited_for(chore.command), async {
         while let Some(event) = receiver.recv().await {
             match event {
                 EngineEvent::Chore(answer) => return Some(answer),
@@ -207,5 +217,11 @@ mod tests {
         let issued = item(json!({ "issue": { "key": "PROJ-12" } }), None);
         assert!(branch_for(&issued).is_some_and(|branch| branch.ends_with("/proj-12-34ef56")));
         assert_eq!(branch_for(&item(json!({}), None)), None);
+    }
+
+    #[test]
+    fn a_recap_waits_as_long_as_its_batch_may_take_and_other_chores_do_not() {
+        assert_eq!(waited_for(SessionCommand::HeadsUp), WAIT);
+        assert!(waited_for(SessionCommand::Recap) > WAIT);
     }
 }

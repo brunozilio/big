@@ -2,6 +2,7 @@ mod antigravity;
 mod chatgpt;
 mod chatgpt_client;
 mod claude;
+mod claude_batch;
 mod copilot;
 mod copilot_client;
 mod grok;
@@ -31,7 +32,7 @@ fn a_provider_declares_the_discount_of_its_low_priority_mode_and_none_is_the_def
     let loaded = crate::scripted::ScriptedProvider::load_in(Some(&root), "providers/cheap/index.ts");
     let _ = std::fs::remove_dir_all(&root);
     assert_eq!(loaded.unwrap_or_else(|error| panic!("{error}")).later_discount(), Some(0.5));
-    assert_eq!(provider("claude-subscription").later_discount(), None);
+    assert_eq!(provider("grok-subscription").later_discount(), None);
 }
 
 #[test]
