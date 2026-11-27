@@ -17,3 +17,4 @@ export { default as ask } from "./ask.js";
 export { default as findings } from "./findings.js";
 export { default as command } from "./command.js";
 export { default as agent } from "./agent.js";
+export { default as script } from "./script.js";

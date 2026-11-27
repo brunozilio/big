@@ -35,6 +35,7 @@ mod repos;
 mod resources;
 mod rewind;
 mod runner;
+mod scripts;
 mod running;
 mod schedules;
 mod shared;

@@ -15,6 +15,15 @@ fn policy() -> RetryPolicy {
 }
 
 #[test]
+fn a_fingerprint_changes_with_the_source_or_the_input_and_nothing_else() {
+    let one = fingerprint("run()", &json!({ "a": 1 }));
+    assert_eq!(one, fingerprint("run()", &json!({ "a": 1 })));
+    assert_ne!(one, fingerprint("run();", &json!({ "a": 1 })));
+    assert_ne!(one, fingerprint("run()", &json!({ "a": 2 })));
+    assert_eq!(one.len(), 16);
+}
+
+#[test]
 fn transient_errors_back_off_exponentially_up_to_the_cap() {
     let delays: Vec<_> = (1..=3).map(|attempt| next_retry(&policy(), attempt, &ErrorClass::Transient)).collect();
     assert_eq!(delays, [Some(Duration::from_secs(1)), Some(Duration::from_secs(2)), Some(Duration::from_secs(4))]);

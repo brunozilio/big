@@ -14,6 +14,7 @@ pub const SLEEP: &str = "sleep";
 pub const CHILD: &str = "child";
 pub const STATUS: &str = "status.set";
 pub const IMPEDIMENT: &str = "impediment.set";
+pub const SCRIPT: &str = "script";
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Command {
@@ -72,7 +73,7 @@ impl Command {
     }
 
     pub fn works(&self) -> bool {
-        matches!(self.kind.as_str(), AGENT | EXEC | CALL)
+        matches!(self.kind.as_str(), AGENT | EXEC | CALL | SCRIPT)
     }
 
     pub fn call(&self) -> Call {
@@ -110,6 +111,7 @@ impl Command {
                 on: self.args["on"].as_bool().unwrap_or(false),
                 reason: self.args.get("reason").and_then(Value::as_str).map(str::to_owned),
             },
+            SCRIPT => Effect::Script { name: self.text("name"), input: self.args["input"].clone() },
             _ => Effect::ConnectorCall(self.call()),
         }
     }
@@ -139,6 +141,7 @@ pub fn kind_of(effect: &Effect) -> &'static str {
         Effect::Child { .. } => CHILD,
         Effect::StatusSet { .. } => STATUS,
         Effect::ImpedimentSet { .. } => IMPEDIMENT,
+        Effect::Script { .. } => SCRIPT,
     }
 }
 

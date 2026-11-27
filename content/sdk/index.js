@@ -315,6 +315,12 @@ class Ctx {
     return this.runtime.issue(this, "exec", { command, ...rest }, { retry, timeout });
   }
 
+  script(name, input, options) {
+    const { retry, timeout, ...rest } = options || {};
+    const args = { name, input: input === undefined ? {} : input, ...rest };
+    return this.runtime.issue(this, "script", args, { retry, timeout });
+  }
+
   call(capability, action, args, options) {
     return this.runtime.issue(this, "call", { capability, action, args: args === undefined ? {} : args }, options);
   }

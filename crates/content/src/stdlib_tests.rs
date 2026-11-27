@@ -333,6 +333,7 @@ fn the_default_workflow_describes_its_statuses_and_its_steps_in_order() {
     known.push("findings");
     known.push("command");
     known.push("agent");
+    known.push("script");
     assert_eq!(described["steps"], json!(known));
 }
 
@@ -681,6 +682,28 @@ export default workflow({
     assert!(of_kind(&asked, "exec").is_empty());
     assert_eq!(result["result"]["outcome"], "passed", "{result}");
     assert!(result["result"]["output"].as_str().is_some_and(|out| out.contains("No verification command")), "{result}");
+}
+
+#[test]
+fn a_script_step_asks_the_host_for_one_effect_and_passes_what_it_returned() {
+    let text = r#"
+import { workflow } from "sdk";
+import { script } from "sdk/steps";
+export default workflow({
+  name: "so-script",
+  steps: [script({ name: "count-matches", input: (ctx) => ({ pattern: ctx.item.title }), pure: true })],
+});
+"#;
+    let (result, asked) = drive(&source("workflows/so-script.ts", text), &item(json!("T-1")), |command| {
+        (command["kind"] == "script").then(|| json!({ "total": 4 }))
+    });
+    let ran = of_kind(&asked, "script");
+    assert_eq!(ran.len(), 1, "{asked:?}");
+    assert_eq!(ran[0]["args"]["name"], "count-matches");
+    assert_eq!(ran[0]["args"]["pure"], true);
+    assert!(ran[0]["args"]["input"]["pattern"].is_string(), "{}", ran[0]);
+    assert!(of_kind(&asked, "agent").is_empty() && of_kind(&asked, "exec").is_empty());
+    assert_eq!(result["state"], "completed", "{result}");
 }
 
 const WRITTEN_PLAN: &str = "Vou ler o código antes.\n# Cadastro de clientes\n\n## Descrição\nComo atendente, eu quero cadastrar clientes para que eu os atenda depois.\n\n## Critérios de aceite\n- Dado que estou no cadastro, quando salvo um cliente, então ele aparece na lista.\n\n## Subtarefas\n### Criar a tabela\nTabela clientes com nome e documento.\n\n### Criar a ferramenta\nFerramenta MCP de cadastro.";
@@ -1951,7 +1974,8 @@ export default workflow({
 
 #[test]
 fn ask_puts_the_question_to_the_assistant_and_keeps_the_answer_and_thread() {
-    let answer = json!({ "answer": "Friday.", "sources": [{ "title": "Plan", "url": "https://docs/plan" }], "thread": "th-1" });
+    let answer =
+        json!({ "answer": "Friday.", "sources": [{ "title": "Plan", "url": "https://docs/plan" }], "thread": "th-1" });
     let (result, asked) =
         drive(&source("workflows/so-ask.ts", ASKING), &item(Value::Null), |command| match command["kind"].as_str() {
             Some("call") => Some(answer.clone()),
@@ -1960,7 +1984,10 @@ fn ask_puts_the_question_to_the_assistant_and_keeps_the_answer_and_thread() {
     let asks = calls(&asked, "ask");
     assert_eq!(asks.len(), 1);
     assert_eq!(asks[0]["args"]["capability"], "assistant");
-    assert_eq!(asks[0]["args"]["args"], json!({ "question": "When is the launch?", "context": "Project Atlas", "mode": "fast" }));
+    assert_eq!(
+        asks[0]["args"]["args"],
+        json!({ "question": "When is the launch?", "context": "Project Atlas", "mode": "fast" })
+    );
     assert_eq!(result["result"]["outcome"], "passed", "{result}");
     assert_eq!(result["result"]["data"]["answer"], "Friday.");
     assert_eq!(result["result"]["data"]["thread"], "th-1");

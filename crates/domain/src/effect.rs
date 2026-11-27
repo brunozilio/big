@@ -77,6 +77,15 @@ pub enum Effect {
         on: bool,
         reason: Option<String>,
     },
+    Script {
+        name: String,
+        input: Value,
+    },
+}
+
+pub fn fingerprint(source: &str, input: &Value) -> String {
+    let input = input.to_string();
+    crate::factory::generation([("source", source), ("input", input.as_str())])
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
