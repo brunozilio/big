@@ -320,3 +320,12 @@ fn first_runs_at_once_end_with_one_key() {
     let kept = file_key(&path);
     assert!(made.iter().all(|key| *key == kept), "every first run seals with the key that was kept");
 }
+
+#[test]
+fn a_given_key_file_is_read_and_never_made() {
+    let dir = tempfile::tempdir().expect("dir");
+    let file = dir.path().join("given.key");
+    assert!(super::given(&file).is_err());
+    std::fs::write(&file, "ab".repeat(32)).expect("write");
+    assert_eq!(super::given(&file).expect("key"), [0xab; 32]);
+}

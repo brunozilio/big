@@ -1,0 +1,25 @@
+[server]
+bind = "0.0.0.0"
+public_url = "https://app.example.com"
+open_browser = false
+
+[auth]
+mode = "shared"
+methods = "sso,passkey,email"
+allowed_domains = "example.com"
+admins = "admin@example.com"
+mail_from = "noreply@example.com"
+smtp_url = ""
+sso_label = "SSO"
+sso_issuer = ""
+sso_client_id = ""
+sso_client_secret = ""
+
+[network]
+blocked = "loopback,link_local"
+
+[secrets]
+key_file = "/run/secrets/secrets.key"
+
+[content]
+install = true

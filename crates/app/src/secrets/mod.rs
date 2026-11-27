@@ -42,7 +42,11 @@ pub fn system_secrets() -> Arc<dyn SecretStore> {
     Arc::clone(STORE.get_or_init(|| {
         let keychain = platform::keychain::SystemKeychain::new(brand::NAME);
         let keeper = system_keeper(Some(brand::secrets::BACKEND), &keychain);
-        kept_in(crate::DataRoot::system().secrets().as_deref(), keeper)
+        let dir = crate::DataRoot::system().secrets();
+        match brand::secrets::KEY_FILE.trim() {
+            "" => kept_in(dir.as_deref(), keeper),
+            file => given_key(dir.as_deref(), Path::new(file)),
+        }
     }))
 }
 
@@ -59,6 +63,20 @@ fn kept_in(dir: Option<&Path>, keeper: Keeper<'_>) -> Arc<dyn SecretStore> {
         Ok(store) => Arc::new(store),
         Err(reason) => {
             tracing::error!(%reason, "the sealed secrets file is unusable; no key can be kept");
+            Arc::new(Unkept::because(reason))
+        }
+    }
+}
+
+fn given_key(dir: Option<&Path>, file: &Path) -> Arc<dyn SecretStore> {
+    let opened = dir.ok_or_else(|| "this user has no data folder".to_owned()).and_then(|dir| {
+        std::fs::create_dir_all(dir).map_err(|error| format!("{} cannot be made: {error}", dir.display()))?;
+        SealedSecretStore::open(&dir.join("secrets.json"), key::given(file)?)
+    });
+    match opened {
+        Ok(store) => Arc::new(store),
+        Err(reason) => {
+            tracing::error!(%reason, "the secrets key file is unusable; no key can be kept");
             Arc::new(Unkept::because(reason))
         }
     }

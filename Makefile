@@ -7,7 +7,7 @@ else
 DATA := $(or $(XDG_CONFIG_HOME),$(HOME)/.config)/$(COMMAND)
 endif
 
-.PHONY: run clean check
+.PHONY: run clean check image
 run:
 	CARGO_TARGET_DIR="$(CURDIR)/target/agents/$(COMMAND)" cargo run -p cli --bin $(COMMAND)
 
@@ -22,3 +22,6 @@ check:
 	cargo clippy --workspace --all-targets -- -D warnings
 	cargo run -p xtask -- lint
 	cd web && bun run typecheck && bun test
+
+image:
+	docker build -f deploy/Dockerfile --build-arg COMMAND=$(COMMAND) -t $(COMMAND):latest .

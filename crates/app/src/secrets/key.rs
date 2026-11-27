@@ -138,6 +138,12 @@ fn fresh() -> Result<[u8; 32], String> {
     Ok(key)
 }
 
+pub fn given(path: &Path) -> Result<[u8; 32], String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|error| format!("the secrets key file {} cannot be read: {error}", path.display()))?;
+    read(path, &text)
+}
+
 fn read(path: &Path, text: &str) -> Result<[u8; 32], String> {
     unhex(text.trim())
         .and_then(|bytes| bytes.try_into().ok())

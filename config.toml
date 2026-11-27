@@ -292,6 +292,7 @@ otlp_headers = ""
 
 [secrets]
 backend = "file"
+key_file = ""
 
 [features]
 redact_secrets = true

@@ -20,6 +20,32 @@ fn values(text: &str) -> (Pairs, Vec<(String, Pairs)>) {
     (top, sections)
 }
 
+fn put(pairs: &mut Pairs, (key, value): (String, String)) {
+    match pairs.iter_mut().find(|(name, _)| *name == key) {
+        Some(found) => found.1 = value,
+        None => pairs.push((key, value)),
+    }
+}
+
+fn overlaid(top: &mut Pairs, sections: &mut Vec<(String, Pairs)>, overlay: &str) {
+    let (more_top, more_sections) = values(overlay);
+    for pair in more_top {
+        put(top, pair);
+    }
+    for (section, pairs) in more_sections {
+        let index = match sections.iter().position(|(name, _)| *name == section) {
+            Some(index) => index,
+            None => {
+                sections.push((section, Vec::new()));
+                sections.len() - 1
+            }
+        };
+        for pair in pairs {
+            put(&mut sections[index].1, pair);
+        }
+    }
+}
+
 fn identifier(name: &str) -> bool {
     name.starts_with(|c: char| c.is_ascii_lowercase())
         && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
@@ -74,7 +100,13 @@ fn main() {
     println!("cargo:rerun-if-changed={}", file.display());
     println!("cargo:rerun-if-env-changed=BRAND_FILE");
     let text = std::fs::read_to_string(&file).unwrap_or_else(|error| panic!("{}: {error}", file.display()));
-    let (values, sections) = values(&text);
+    let (mut values, mut sections) = values(&text);
+    println!("cargo:rerun-if-env-changed=BRAND_OVERLAY");
+    if let Ok(overlay) = std::env::var("BRAND_OVERLAY").map(PathBuf::from) {
+        println!("cargo:rerun-if-changed={}", overlay.display());
+        let more = std::fs::read_to_string(&overlay).unwrap_or_else(|error| panic!("{}: {error}", overlay.display()));
+        overlaid(&mut values, &mut sections, &more);
+    }
     let get = |key: &str| {
         values
             .iter()
