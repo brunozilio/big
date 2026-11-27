@@ -1,12 +1,15 @@
+use std::path::PathBuf;
+use std::sync::Arc;
+
 use axum::Json;
 use axum::extract::{Query, State};
 use axum::response::Response;
-use orchestrator::library::{self, Change, Failure};
+use orchestrator::library::{self, Change, Failure, Talk};
 use serde::Deserialize;
 use serde_json::Value;
 
 use crate::error::{ApiError, ApiResult, done, json as reply, said};
-use crate::state::Ctx;
+use crate::state::{Ctx, Shared};
 
 #[derive(Deserialize)]
 pub struct Named {
@@ -82,4 +85,39 @@ pub async fn restore(State(ctx): State<Ctx>, Query(named): Query<Named>) -> ApiR
     let language = ctx.language().code();
     worked(move || library::restore(&named.path, language)).await?;
     Ok(done())
+}
+
+#[derive(Deserialize)]
+pub struct Talked {
+    path: String,
+    #[serde(default)]
+    values: Value,
+    body: Option<String>,
+    source: Option<String>,
+    #[serde(default)]
+    messages: Vec<Value>,
+}
+
+fn answered(shared: &Shared, talked: Talked) -> ApiResult<Value> {
+    let asks = talked.messages.last().is_some_and(|last| {
+        last["role"] == "user" && last["text"].as_str().is_some_and(|text| !text.trim().is_empty())
+    });
+    if !asks {
+        return Err(ApiError::bad(said("Write what you want.", "Escribe lo que quieres.", "Escreva o que você quer.")));
+    }
+    let language = shared.language().code();
+    let talk =
+        Talk { values: talked.values, body: talked.body, source: talked.source, messages: Value::Array(talked.messages) };
+    let prompt = library::assist(&talked.path, &talk, language).map_err(refused)?;
+    let models = shared.backend.client.models().map_err(ApiError::failed)?;
+    let model = domain::model::choose_model(&models, None).ok_or_else(|| ApiError::bad(crate::models::none()))?;
+    let session = shared.backend.client.session(PathBuf::from("."), model);
+    let answer = session.answer(&prompt).and_then(app::Run::answer_text).map_err(ApiError::failed)?;
+    library::assisted(&talked.path, &talk, &answer, language).map_err(refused)
+}
+
+pub async fn assist(State(ctx): State<Ctx>, Json(talked): Json<Talked>) -> ApiResult<Response> {
+    let shared = Arc::clone(&ctx);
+    let done = tokio::task::spawn_blocking(move || answered(&shared, talked)).await.map_err(ApiError::failed)??;
+    Ok(reply(done))
 }

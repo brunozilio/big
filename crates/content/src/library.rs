@@ -175,6 +175,7 @@ fn opened(library: &Library, item: &Item, path: &str, language: &str) -> Result<
         "path": path, "item": item.path, "section": section.key, "title": card["title"], "avatar": card["avatar"],
         "origin": super::origin(path).name(), "source": source, "files": item.files,
         "mode": shape["mode"], "language": shape["language"], "fields": shape["fields"], "body": shape["body"],
+        "assist": shape["assist"],
         "editable": super::editing_root().is_some(),
     }))
 }
@@ -228,6 +229,37 @@ pub fn save(path: &str, change: &Change, language: &str) -> Result<Value, Failur
         written(path, &source)?;
     }
     opened(&library, item, path, language)
+}
+
+#[derive(Debug)]
+pub struct Talk {
+    pub values: Value,
+    pub body: Option<String>,
+    pub source: Option<String>,
+    pub messages: Value,
+}
+
+fn talking(path: &str, talk: &Talk, language: &str) -> Result<Value, Failure> {
+    let library = library(language)?;
+    let item = owner(&library, path)?;
+    let section = &library.sections[item.section];
+    let current = super::editable(path).ok_or(Failure::Missing)?;
+    let mut asking = asked(section, path, &current, &library.paths, language);
+    asking["values"] = talk.values.clone();
+    asking["body"] = json!(talk.body);
+    asking["draft"] = json!(talk.source);
+    asking["messages"] = talk.messages.clone();
+    Ok(asking)
+}
+
+pub fn assist(path: &str, talk: &Talk, language: &str) -> Result<String, Failure> {
+    Ok(word(&ask("assist", &talking(path, talk, language)?)?["prompt"]))
+}
+
+pub fn assisted(path: &str, talk: &Talk, answer: &str, language: &str) -> Result<Value, Failure> {
+    let mut asking = talking(path, talk, language)?;
+    asking["answer"] = json!(answer);
+    ask("assisted", &asking)
 }
 
 pub fn create(section: &str, name: &str, language: &str) -> Result<Value, Failure> {
@@ -384,5 +416,45 @@ mod tests {
         assert!(matches!(checked(&section, true, "agents/x.ts", "export const spec = {"), Err(Failure::Invalid(_))));
         assert!(matches!(checked(&section, true, "agents/x.ts", "export const spec = {};"), Err(Failure::Invalid(_))));
         assert!(ask("create", &json!({ "section": "prompts", "name": "x" })).is_err());
+    }
+
+    #[test]
+    fn the_chat_request_carries_the_draft_and_the_reply_changes_only_what_fits() {
+        let (path, source) = agent();
+        let mut asking = about("agents", &path, &source, &["spec", "default"]);
+        asking["values"] = json!({ "label": "Builder" });
+        asking["body"] = json!("First line.\nSecond line.");
+        asking["draft"] = Value::Null;
+        asking["messages"] = json!([{ "role": "user", "text": "encurte" }]);
+        let prompt = word(&run("assist", asking.clone())["prompt"]);
+        assert!(prompt.contains("\"value\": \"Builder\""), "{prompt}");
+        assert!(prompt.contains("First line.\nSecond line.") && prompt.contains("<person>\nencurte\n</person>"));
+        asking["answer"] = json!(
+            "```json\n{\"reply\": \"Feito.\", \"values\": {\"tools\": [\"Read\"], \"permissionMode\": \"nope\", \"x\": 1}, \"edits\": [{\"find\": \"Second\", \"replace\": \"Last\"}, {\"find\": \"absent\", \"replace\": \"\"}], \"text\": null}\n```"
+        );
+        let done = run("assisted", asking.clone());
+        assert_eq!(done["values"], json!({ "tools": ["Read"] }));
+        assert_eq!(done["body"], "First line.\nLast line.");
+        assert_eq!(done["source"], Value::Null);
+        assert!(done["reply"].as_str().is_some_and(|reply| reply.starts_with("Feito. (1 ")), "{done}");
+        asking["answer"] = json!("Só uma resposta.");
+        let talked = run("assisted", asking);
+        assert_eq!(talked["reply"], "Só uma resposta.");
+        assert_eq!(talked["body"], Value::Null);
+        assert_eq!(talked["values"], json!({}));
+    }
+
+    #[test]
+    fn a_code_item_takes_the_whole_new_text_as_its_source() {
+        let source = String::from_utf8_lossy(crate::builtin("workflows/default.ts").expect("shipped")).into_owned();
+        let mut asking = about("workflows", "workflows/default.ts", &source, &[]);
+        asking["values"] = json!({});
+        asking["body"] = Value::Null;
+        asking["draft"] = json!("draft");
+        asking["messages"] = json!([]);
+        assert!(word(&run("assist", asking.clone())["prompt"]).contains("<text name=\"workflows/default.ts\" language=\"typescript\">\ndraft\n</text>"));
+        asking["answer"] = json!("{\"reply\": \"ok\", \"text\": \"new\"}");
+        let done = run("assisted", asking);
+        assert_eq!((&done["source"], &done["body"]), (&json!("new"), &Value::Null));
     }
 }

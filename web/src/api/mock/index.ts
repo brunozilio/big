@@ -374,6 +374,7 @@ export function mockApi(options: MockOptions = {}): Api {
     saveLibraryItem: (path, change) => wait(() => library.save(path, change)),
     createLibraryItem: (section, name) => wait(() => library.create(section, name)),
     restoreLibraryItem: (path) => wait(() => library.restore(path)),
+    assistLibrary: (path, draft, messages) => wait(() => library.assist(path, draft, messages), delay * 6),
     upload: (file) => wait(() => ({ id: `a-${Date.now()}`, name: file.name, size: file.size })),
     live: (onEvent, onState) => {
       listeners.add(onEvent)

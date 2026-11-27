@@ -131,6 +131,7 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
     saveLibraryItem: (path, change) => call('PUT', ROUTES.libraryItem(null), { path, ...change }),
     createLibraryItem: (section, name) => call('POST', ROUTES.libraryItem(null), { section, name }),
     restoreLibraryItem: (path) => call('DELETE', ROUTES.libraryItem(path)),
+    assistLibrary: (path, draft, messages) => call('POST', ROUTES.libraryAssist, { path, ...draft, messages }),
     upload: async (file) => {
       const form = new FormData()
       form.append('file', file)

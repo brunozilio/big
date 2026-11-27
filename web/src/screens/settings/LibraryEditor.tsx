@@ -8,6 +8,7 @@ import { Badge, Spinner } from '@/ui/display'
 import { Icon } from '@/ui/icon'
 import { motion, tween } from '@/ui/motion'
 import { useT } from '@/i18n'
+import { LibraryChat } from './LibraryChat'
 import { LibraryFields } from './LibraryFields'
 import { type Draft, type FieldValue, type LibraryItem, changed, draftOf, fileName, libraryApi } from './libraryData'
 
@@ -22,6 +23,24 @@ interface Props {
   onPath: (path: string) => void
   onClose: () => void
   onChanged: () => void
+}
+
+const CHAT = 'library.chat'
+
+function recalled(): boolean {
+  try {
+    return localStorage.getItem(CHAT) !== 'closed'
+  } catch {
+    return true
+  }
+}
+
+function remembered(open: boolean) {
+  try {
+    localStorage.setItem(CHAT, open ? 'open' : 'closed')
+  } catch {
+    return
+  }
 }
 
 const messageOf = (error: unknown, fallback: string) => errorText(error) || fallback
@@ -92,16 +111,17 @@ function Title({ item }: { item: LibraryItem }) {
   )
 }
 
-function Editing({ item, draft, setDraft, onSave, onPick }: { item: LibraryItem; draft: Draft; setDraft: (draft: Draft) => void; onSave: () => void; onPick: (path: string) => void }) {
+function Editing({ item, draft, chat, setDraft, onSave, onPick }: { item: LibraryItem; draft: Draft; chat: boolean; setDraft: (draft: Draft) => void; onSave: () => void; onPick: (path: string) => void }) {
   const fields = item.fields ?? []
   const aside = fields.length > 0 || item.files.length > 0
   const locked = !item.editable
   const set = (key: string, value: FieldValue) => setDraft({ ...draft, values: { ...draft.values, [key]: value } })
   const form = item.mode === 'form' && item.body
   return (
-    <div className={cn('grid min-h-0 flex-1', aside && 'lg:grid-cols-[340px_minmax(0,1fr)]')}>
+    <div className={cn('grid min-h-0 flex-1', chat && aside && 'lg:grid-cols-[360px_300px_minmax(0,1fr)]', chat && !aside && 'lg:grid-cols-[360px_minmax(0,1fr)]', !chat && aside && 'lg:grid-cols-[340px_minmax(0,1fr)]')}>
+      {chat && <LibraryChat key={item.path} item={item} draft={draft} onDraft={setDraft} />}
       {aside && (
-        <aside className="max-h-[40dvh] space-y-6 overflow-y-auto border-b bg-subtle px-6 py-6 lg:max-h-none lg:border-b-0 lg:border-r">
+        <aside className={cn('max-h-[40dvh] space-y-6 overflow-y-auto border-b px-6 py-6 lg:max-h-none lg:border-b-0 lg:border-r', !chat && 'bg-subtle')}>
           {fields.length > 0 && <LibraryFields fields={fields} values={draft.values} disabled={locked} onChange={set} />}
           <Files item={item} onPick={onPick} />
         </aside>
@@ -127,6 +147,12 @@ export function LibraryEditor({ path, onPath, onClose, onChanged }: Props) {
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState<Asking>(null)
   const item = loaded.state === 'ready' ? loaded.item : null
+  const [chat, setChat] = useState(() => recalled())
+  const talks = !!item?.editable && !!item.assist
+  const toggle = () => {
+    remembered(!chat)
+    setChat(!chat)
+  }
   const dirty = !!item && !!draft && changed(item, draft)
 
   useEffect(() => {
@@ -179,6 +205,7 @@ export function LibraryEditor({ path, onPath, onClose, onChanged }: Props) {
         {error && <p role="alert" className="max-w-[40%] truncate text-sm text-danger-fg" title={error}>{error}</p>}
         {asking?.kind === 'discard' && <Confirm text={t('settings.lib_discardAsk')} action={t('settings.lib_discard')} danger onYes={() => { const then = asking.then; setAsking(null); then() }} onNo={() => setAsking(null)} />}
         {asking?.kind === 'restore' && item && <Confirm text={t(item.origin === 'own' ? 'settings.lib_deleteAsk' : 'settings.lib_restoreAsk')} action={t(item.origin === 'own' ? 'settings.lib_delete' : 'settings.lib_restore')} danger onYes={restore} onNo={() => setAsking(null)} />}
+        {talks && <IconButton tooltip={t('settings.lib_chat')} aria-pressed={chat} active={chat} onClick={toggle}><Icon name="sparkles" size={17} /></IconButton>}
         {!asking && item?.editable && (
           <>
             {item.origin !== 'shipped' && <Button size="sm" variant="ghost" onClick={() => setAsking({ kind: 'restore' })}>{t(item.origin === 'own' ? 'settings.lib_delete' : 'settings.lib_restore')}</Button>}
@@ -189,7 +216,7 @@ export function LibraryEditor({ path, onPath, onClose, onChanged }: Props) {
       </header>
       {loaded.state === 'loading' && <div className="flex flex-1 items-center justify-center"><Spinner /></div>}
       {loaded.state === 'failed' && <p role="alert" className="p-6 text-sm text-danger-fg">{loaded.message}</p>}
-      {item && draft && <Editing item={item} draft={draft} setDraft={setDraft} onSave={save} onPick={(next) => leave(() => onPath(next))} />}
+      {item && draft && <Editing item={item} draft={draft} chat={talks && chat} setDraft={setDraft} onSave={save} onPick={(next) => leave(() => onPath(next))} />}
     </motion.div>
   )
 }

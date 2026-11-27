@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { setApi } from '../src/api'
-import type { Api, LibraryChange, LibraryItem } from '../src/api/contract'
+import type { Api, LibraryChange, LibraryDraft, LibraryItem, LibraryTurn } from '../src/api/contract'
 import { mockLibrary } from '../src/api/mock/library'
 import { LibraryFields } from '../src/screens/settings/LibraryFields'
 import { LibraryView } from '../src/screens/settings/Library'
@@ -18,6 +18,7 @@ afterEach(() => {
 function serve() {
   const library = mockLibrary()
   const saves: { path: string; change: LibraryChange }[] = []
+  const asks: { path: string; draft: LibraryDraft; messages: LibraryTurn[] }[] = []
   const api = {
     library: async () => library.list(),
     libraryItem: async (path: string) => library.shown(path),
@@ -27,9 +28,13 @@ function serve() {
     },
     createLibraryItem: async (section: string, name: string) => library.create(section, name),
     restoreLibraryItem: async (path: string) => library.restore(path),
+    assistLibrary: async (path: string, draft: LibraryDraft, messages: LibraryTurn[]) => {
+      asks.push({ path, draft, messages })
+      return library.assist(path, draft, messages)
+    },
   } as unknown as Api
   setApi(api)
-  return { library, saves }
+  return { library, saves, asks }
 }
 
 const show = (at = '/settings/library') => render(<MemoryRouter initialEntries={[at]}><TooltipProvider><LibraryView /></TooltipProvider></MemoryRouter>)
@@ -96,6 +101,45 @@ describe('biblioteca', () => {
     fireEvent.click(within(within(panel).getByRole('alertdialog')).getByRole('button', { name: 'Restaurar padrão' }))
     await within(document.body).findByRole('dialog', { name: 'Planner' })
     expect(library.shown('agents/planner.ts').origin).toBe('shipped')
+  })
+})
+
+describe('assistente ao lado do editor', () => {
+  test('um pedido vai com o rascunho, a resposta entra no rascunho e pode ser desfeita', async () => {
+    const { asks } = serve()
+    show('/settings/library?item=agents/planner.ts')
+    const panel = await within(document.body).findByRole('dialog', { name: 'Planner' })
+    const chat = within(panel).getByRole('region', { name: 'Assistente' })
+    const save = within(panel).getByRole('button', { name: /Salvar/ })
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Nome' }), { target: { value: 'Planejador' } })
+    const box = within(chat).getByRole('textbox', { name: 'Peça uma mudança ou tire uma dúvida' })
+    fireEvent.change(box, { target: { value: 'deixa menor' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+    await within(chat).findByText('Pronto: enxuguei o texto e mantive a primeira parte.')
+    expect(asks[0].path).toBe('agents/planner.ts')
+    expect(asks[0].draft.values.label).toBe('Planejador')
+    expect(asks[0].messages).toEqual([{ role: 'user', text: 'deixa menor' }])
+    expect(within(chat).getByText('Aplicado ao rascunho')).toBeTruthy()
+    expect(save).toHaveProperty('disabled', false)
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Nome' }), { target: { value: 'Planner' } })
+    expect(save).toHaveProperty('disabled', false)
+    fireEvent.click(within(chat).getByRole('button', { name: 'Desfazer' }))
+    expect(within(chat).getByText('Desfeito')).toBeTruthy()
+  })
+
+  test('uma pergunta só responde, sem mexer no rascunho, e a sugestão envia direto', async () => {
+    const { asks } = serve()
+    show('/settings/library?item=agents/planner.ts')
+    const panel = await within(document.body).findByRole('dialog', { name: 'Planner' })
+    const chat = within(panel).getByRole('region', { name: 'Assistente' })
+    fireEvent.click(within(chat).getByRole('button', { name: 'Explique o que isto faz' }))
+    await within(chat).findByText(/Este item está claro/)
+    expect(asks).toHaveLength(1)
+    expect(within(chat).queryByText('Aplicado ao rascunho')).toBeNull()
+    expect(within(panel).getByRole('button', { name: /Salvar/ })).toHaveProperty('disabled', true)
+    fireEvent.click(within(panel).getByRole('button', { name: 'Assistente' }))
+    expect(within(panel).queryByRole('region', { name: 'Assistente' })).toBeNull()
+    fireEvent.click(within(panel).getByRole('button', { name: 'Assistente' }))
   })
 })
 

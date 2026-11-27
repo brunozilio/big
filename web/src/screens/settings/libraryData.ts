@@ -1,15 +1,11 @@
 import { api } from '@/api'
-import type { LibraryCard, LibraryItem, LibraryValue } from '@/api/contract'
+import type { LibraryAssist, LibraryCard, LibraryDraft, LibraryItem, LibraryTurn, LibraryValue } from '@/api/contract'
 
 export type { Library, LibraryCard, LibraryField, LibraryItem, LibrarySection } from '@/api/contract'
 
 export type FieldValue = LibraryValue
 
-export interface Draft {
-  values: Record<string, FieldValue>
-  body: string | null
-  source: string
-}
+export type Draft = LibraryDraft
 
 export const libraryApi = {
   list: () => api().library(),
@@ -17,6 +13,15 @@ export const libraryApi = {
   save: (item: LibraryItem, draft: Draft) => api().saveLibraryItem(item.path, item.mode === 'code' ? { source: draft.source } : { values: draft.values, body: draft.body }),
   create: (section: string, name: string) => api().createLibraryItem(section, name),
   restore: (path: string) => api().restoreLibraryItem(path),
+  assist: (path: string, draft: Draft, messages: LibraryTurn[]) => api().assistLibrary(path, draft, messages),
+}
+
+export function applied(draft: Draft, answer: LibraryAssist): Draft {
+  return { values: { ...draft.values, ...answer.values }, body: answer.body ?? draft.body, source: answer.source ?? draft.source }
+}
+
+export function touches(answer: LibraryAssist): boolean {
+  return answer.body !== null || answer.source !== null || Object.keys(answer.values).length > 0
 }
 
 export function draftOf(item: LibraryItem): Draft {

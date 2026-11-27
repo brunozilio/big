@@ -143,6 +143,7 @@ fn answers(answer: &domain::ChoreAnswer, command: domain::SessionCommand) -> boo
             | (ChoreAnswer::HeadsUp(_), SessionCommand::HeadsUp)
             | (ChoreAnswer::Learned(_), SessionCommand::Learn)
             | (ChoreAnswer::Permissions(_), SessionCommand::Permissions)
+            | (ChoreAnswer::Answer(_), SessionCommand::Answer)
     )
 }
 

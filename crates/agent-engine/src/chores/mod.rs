@@ -28,6 +28,7 @@ pub fn answer(
         }
         SessionCommand::Learn => lesson(api, template, history, prompt, stop)?.map(ChoreAnswer::Learned),
         SessionCommand::Permissions => Some(ChoreAnswer::Permissions(permissions(api, template, prompt, stop)?)),
+        SessionCommand::Answer => Some(ChoreAnswer::Answer(plain_answer(api, template, prompt, stop)?)),
         SessionCommand::MeasureContext
         | SessionCommand::Compact
         | SessionCommand::Rewind(_)
@@ -128,6 +129,20 @@ pub fn permissions(
     let message = Message::user(format!("<evidence>\n{}\n</evidence>", evidence.trim()));
     let answer = ask(api, template, crate::prompt::text("chore-permissions"), vec![message], 2000, stop)?;
     Ok(domain::permission::parse_suggestions(&answer))
+}
+
+pub fn plain_answer(
+    api: &dyn ModelApi,
+    template: &TurnRequest,
+    request: &str,
+    stop: &Stop,
+) -> Result<String, ModelError> {
+    let message = Message::user(request.trim().to_owned());
+    let answer = ask(api, template, crate::prompt::text("chore-answer"), vec![message], template.max_tokens, stop)?;
+    if answer.trim().is_empty() {
+        return Err(ModelError::Provider("the model gave no answer".into()));
+    }
+    Ok(answer.trim().to_owned())
 }
 
 pub fn side_answer(

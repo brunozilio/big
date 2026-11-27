@@ -24,6 +24,10 @@ type Asked = {
 
 type Saved = Asked & { values: Record<string, unknown>; body: string | null };
 
+type Turn = { role: string; text: string };
+
+type Assisting = Saved & { draft: string | null; messages: Turn[]; answer?: string };
+
 type Kind = {
   key: string;
   folder: string;
@@ -33,6 +37,8 @@ type Kind = {
   creatable: boolean;
   label: (language: Language) => string;
   hint: (language: Language) => string;
+  about: string;
+  ideas: (language: Language) => string[];
   main: (path: string) => boolean;
   card: (asked: Asked) => { title: string; description: string; avatar?: unknown };
   open: (asked: Asked) => Opened;
@@ -141,6 +147,9 @@ function agentSource({ exports, values, body }: Saved): string {
 
 const agents: Kind = {
   key: "agents",
+  about: "an agent: its settings and the system prompt it runs with",
+  ideas: (language) =>
+    pick(language, ["Make the prompt shorter", "Add a step that runs the tests", "Review this prompt for ambiguity"], ["Acorta el prompt", "Añade un paso que ejecute las pruebas", "Revisa este prompt en busca de ambigüedades"], ["Deixe o prompt mais curto", "Acrescente um passo que roda os testes", "Revise este prompt e aponte ambiguidades"]),
   folder: "agents/",
   icon: "bot",
   exports: ["spec", "default"],
@@ -237,6 +246,9 @@ const SKILL = "/SKILL.md";
 
 const skills: Kind = {
   key: "skills",
+  about: "a skill: when to use it and the instructions an agent loads when it does",
+  ideas: (language) =>
+    pick(language, ["Make the description say when to use it", "Add an example", "Tighten the instructions"], ["Haz que la descripción diga cuándo usarla", "Añade un ejemplo", "Ajusta las instrucciones"], ["Faça a descrição dizer quando usar", "Acrescente um exemplo", "Enxugue as instruções"]),
   folder: "skills/",
   icon: "idea",
   exports: [],
@@ -266,6 +278,9 @@ const skills: Kind = {
 
 const prompts: Kind = {
   key: "prompts",
+  about: "a prompt the system sends to the model",
+  ideas: (language) =>
+    pick(language, ["Make it shorter", "Review it for contradictions", "Explain what this prompt does"], ["Hazlo más corto", "Revísalo en busca de contradicciones", "Explica qué hace este prompt"], ["Deixe mais curto", "Revise e aponte contradições", "Explique o que este prompt faz"]),
   folder: "prompts/",
   icon: "note",
   exports: ["default"],
@@ -294,6 +309,9 @@ function steps(source: string): string {
 
 const workflows: Kind = {
   key: "workflows",
+  about: "a workflow: TypeScript that composes the steps an item goes through, in order",
+  ideas: (language) =>
+    pick(language, ["Explain this workflow", "Remove the security step", "Retry the checks five times"], ["Explica este workflow", "Quita la etapa de seguridad", "Reintenta las verificaciones cinco veces"], ["Explique este workflow", "Remova a etapa de segurança", "Repita as verificações cinco vezes"]),
   folder: "workflows/",
   icon: "workflow",
   exports: [],
@@ -313,6 +331,9 @@ const workflows: Kind = {
 
 const flows: Kind = {
   key: "flows",
+  about: "a branch flow: TypeScript that declares how branches are named, based and merged",
+  ideas: (language) =>
+    pick(language, ["Explain this flow", "Base everything on main", "Merge with a merge commit"], ["Explica este flujo", "Basa todo en main", "Fusiona con un merge commit"], ["Explique este fluxo", "Baseie tudo na main", "Faça o merge com merge commit"]),
   folder: "flows/",
   icon: "branch",
   exports: [],
@@ -367,14 +388,100 @@ export function card(asked: Asked) {
   return kind(asked.section).card(asked);
 }
 
-export function open(asked: Asked): Opened {
-  return kind(asked.section).open(asked);
+export function open(asked: Asked) {
+  const found = kind(asked.section);
+  return { ...found.open(asked), assist: { ideas: found.ideas(asked.language) } };
 }
 
 export function save(saved: Saved): { source: string } {
   const opened = kind(saved.section).open(saved);
   if (opened.mode === "code") return { source: saved.source };
   return { source: kind(saved.section).save(saved) };
+}
+
+function request(asking: Assisting): { opened: Opened; text: string } {
+  const opened = kind(asking.section).open(asking);
+  const text = opened.mode === "form" ? (asking.body ?? opened.body?.text ?? "") : (asking.draft ?? asking.source);
+  return { opened, text };
+}
+
+const RULES = `Reply with one JSON object and nothing else:
+{"reply": string, "values": object, "edits": [{"find": string, "replace": string}], "text": string or null}
+- "reply": a short message for the person, in the language they write in, saying what you changed or answering what they asked. Plain sentences, no headings.
+- "values": only the fields you change, by key. A chips field takes an array (pick from its options when it lists them), a switch takes true or false, a select takes one of its options. Leave it {} when no field changes.
+- "edits": targeted replacements in the text. Each "find" is copied exactly from the current text and occurs exactly once in it. Prefer edits when the change is small next to the text.
+- "text": the whole new text, only when you rewrite most of it or it is short; otherwise null. Never send both "text" and "edits".
+- When the person only asks a question or wants a review, change nothing: answer in "reply" with {} and [] and null.
+- Keep placeholders such as {{NAME}} exactly as written, and keep the language the text is written in unless asked to translate.`;
+
+export function assist(asking: Assisting): { prompt: string } {
+  const { opened, text } = request(asking);
+  const fields = opened.fields.map((field) => ({ key: field.key, label: field.label, kind: field.kind, options: field.options, value: asking.values?.[field.key] ?? field.value }));
+  const talk = asking.messages.map((turn) => `<${turn.role === "assistant" ? "you" : "person"}>\n${turn.text.trim()}\n</${turn.role === "assistant" ? "you" : "person"}>`).join("\n");
+  const parts = [
+    `You edit one item of the library a person keeps for their AI agents. This item is ${kind(asking.section).about}. The person talks to you in a chat beside the editor, and what you change lands in an unsaved draft they review before saving.`,
+    `<item path="${asking.path}" />`,
+    fields.length > 0 ? `<fields>\n${JSON.stringify(fields, null, 2)}\n</fields>` : "",
+    `<text name="${opened.body?.label ?? asking.path}" language="${opened.body?.language ?? opened.language}">\n${text}\n</text>`,
+    `<conversation>\n${talk}\n</conversation>`,
+    `Answer the person's last message.\n\n${RULES}`,
+  ];
+  return { prompt: parts.filter((part) => part !== "").join("\n\n") };
+}
+
+function parsed(answer: string): Record<string, unknown> {
+  const from = answer.indexOf("{");
+  const to = answer.lastIndexOf("}");
+  if (from >= 0 && to > from) {
+    try {
+      return record(JSON.parse(answer.slice(from, to + 1)));
+    } catch {
+      return { reply: answer };
+    }
+  }
+  return { reply: answer };
+}
+
+function fitting(field: Field, value: unknown): unknown {
+  if (field.kind === "chips") return Array.isArray(value) ? texts(value) : undefined;
+  if (field.kind === "switch") return typeof value === "boolean" ? value : undefined;
+  if (field.kind === "select") return typeof value === "string" && (field.options ?? []).includes(value) ? value : undefined;
+  return typeof value === "string" ? value : undefined;
+}
+
+function edited(whole: string, edits: unknown): { text: string; missed: number } {
+  let missed = 0;
+  let current = whole;
+  for (const edit of Array.isArray(edits) ? edits : []) {
+    const find = text(record(edit).find);
+    const found = find === "" ? -1 : current.indexOf(find);
+    if (found < 0 || current.indexOf(find, found + 1) >= 0) {
+      missed += 1;
+      continue;
+    }
+    current = current.slice(0, found) + text(record(edit).replace) + current.slice(found + find.length);
+  }
+  return { text: current, missed };
+}
+
+export function assisted(asking: Assisting) {
+  const { opened, text: current } = request(asking);
+  const answer = parsed(asking.answer ?? "");
+  const values: Record<string, unknown> = {};
+  for (const field of opened.fields) {
+    const wanted = fitting(field, record(answer.values)[field.key]);
+    if (wanted !== undefined) values[field.key] = wanted;
+  }
+  const whole = typeof answer.text === "string" ? answer.text : null;
+  const { text: next, missed } = whole === null ? edited(current, answer.edits) : { text: whole, missed: 0 };
+  const note = missed === 0 ? "" : pick(asking.language, ` (${missed} change(s) could not be placed in the text.)`, ` (${missed} cambio(s) no se pudieron ubicar en el texto.)`, ` (${missed} alteração(ões) não puderam ser localizadas no texto.)`);
+  const changed = next !== current ? next : null;
+  return {
+    reply: `${text(answer.reply).trim()}${note}`.trim(),
+    values,
+    body: opened.mode === "form" ? changed : null,
+    source: opened.mode === "code" ? changed : null,
+  };
 }
 
 export function create({ section, name }: { section: string; name: string }) {

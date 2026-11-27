@@ -73,6 +73,7 @@ pub enum SessionCommand {
     Branch(u32),
     Learn,
     Permissions,
+    Answer,
 }
 
 impl SessionCommand {
@@ -87,11 +88,12 @@ impl SessionCommand {
                 | Self::Rename
                 | Self::Learn
                 | Self::Permissions
+                | Self::Answer
         )
     }
 
     pub fn stands_alone(self) -> bool {
-        matches!(self, Self::Title | Self::Permissions)
+        matches!(self, Self::Title | Self::Permissions | Self::Answer)
     }
 }
 
@@ -112,6 +114,7 @@ pub enum ChoreAnswer {
     HeadsUp(HeadsUp),
     Learned(crate::learning::Proposal),
     Permissions(Vec<crate::permission::Suggested>),
+    Answer(String),
 }
 
 pub fn compact_tokens(tokens: u64) -> String {

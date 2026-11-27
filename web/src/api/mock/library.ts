@@ -1,4 +1,4 @@
-import type { Library, LibraryCard, LibraryChange, LibraryField, LibraryItem, LibraryValue } from '../contract'
+import type { Library, LibraryAssist, LibraryCard, LibraryChange, LibraryDraft, LibraryField, LibraryItem, LibraryTurn, LibraryValue } from '../contract'
 
 interface Kept {
   section: string
@@ -117,7 +117,7 @@ export function mockLibrary() {
   const shown = (path: string): LibraryItem => {
     const item = owner(path)
     if (!item) throw missing()
-    const base = { item: item.path, section: item.section, title: item.title, avatar: item.avatar, files: item.files, editable: true }
+    const base = { item: item.path, section: item.section, title: item.title, avatar: item.avatar, files: item.files, editable: true, assist: { ideas: ['Deixe mais curto', 'Revise e aponte ambiguidades', 'Explique o que isto faz'] } }
     if (path !== item.path) return { ...base, path, origin: 'shipped', source: extras.get(path) ?? '', mode: 'code', language: 'markdown', fields: [], body: null }
     const form = item.body !== null
     return { ...base, path, origin: item.origin, source: item.source, mode: form ? 'form' : 'code', language: path.endsWith('.md') ? 'markdown' : path.endsWith('.ts') ? 'typescript' : 'javascript', fields: fieldsOf(item), body: form ? { label: item.section === 'skills' ? 'Instruções' : 'Prompt', text: item.body ?? '', language: 'markdown' } : null }
@@ -165,5 +165,15 @@ export function mockLibrary() {
     kept = original ? kept.map((it) => (it === item ? original : it)) : kept.filter((it) => it !== item)
   }
 
-  return { list, shown, save, create, restore }
+  const assist = (path: string, draft: LibraryDraft, messages: LibraryTurn[]): LibraryAssist => {
+    const item = shown(path)
+    const asked = messages[messages.length - 1]?.text ?? ''
+    const text = item.mode === 'form' ? (draft.body ?? '') : draft.source
+    if (/\?$|expli|revis/i.test(asked.trim())) return { reply: 'Este item está claro. Eu só deixaria explícito o que fazer quando os testes falham.', values: {}, body: null, source: null }
+    const shorter = `${text.split('\n\n')[0].trim()}\n`
+    const changed = shorter === text ? `${text.trimEnd()}\n\nSeja direto.\n` : shorter
+    return { reply: 'Pronto: enxuguei o texto e mantive a primeira parte.', values: {}, body: item.mode === 'form' ? changed : null, source: item.mode === 'code' ? changed : null }
+  }
+
+  return { list, shown, save, create, restore, assist }
 }

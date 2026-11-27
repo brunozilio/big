@@ -13,6 +13,10 @@ impl Session {
         self.chore(SessionCommand::Suggest, "")
     }
 
+    pub fn answer(&self, request: &str) -> Result<Run, Error> {
+        self.standalone_chore(SessionCommand::Answer, request)
+    }
+
     pub fn discover_permissions(&self, evidence: &str) -> Result<Run, Error> {
         self.standalone_chore(SessionCommand::Permissions, evidence)
     }
@@ -23,6 +27,13 @@ impl Run {
         match self.chore_answer()? {
             Some(ChoreAnswer::Side(text)) => Ok(text),
             _ => Err(Error::Run("the side question got no answer".into())),
+        }
+    }
+
+    pub fn answer_text(self) -> Result<String, Error> {
+        match self.chore_answer()? {
+            Some(ChoreAnswer::Answer(text)) => Ok(text),
+            _ => Err(Error::Run("the request got no answer".into())),
         }
     }
 

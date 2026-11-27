@@ -1049,7 +1049,26 @@ export interface LibraryItem {
   language: LibraryLanguage
   fields: LibraryField[] | null
   body: { label: string; text: string; language: LibraryLanguage } | null
+  assist: { ideas: string[] } | null
   editable: boolean
+}
+
+export interface LibraryDraft {
+  values: Record<string, LibraryValue>
+  body: string | null
+  source: string
+}
+
+export interface LibraryTurn {
+  role: 'user' | 'assistant'
+  text: string
+}
+
+export interface LibraryAssist {
+  reply: string
+  values: Record<string, LibraryValue>
+  body: string | null
+  source: string | null
 }
 
 export type LibraryChange = { source: string } | { values: Record<string, LibraryValue>; body: string | null }
@@ -1098,6 +1117,7 @@ export interface Api {
   saveLibraryItem(path: string, change: LibraryChange): Promise<LibraryItem>
   createLibraryItem(section: string, name: string): Promise<LibraryItem>
   restoreLibraryItem(path: string): Promise<void>
+  assistLibrary(path: string, draft: LibraryDraft, messages: LibraryTurn[]): Promise<LibraryAssist>
   upload(file: File): Promise<{ id: string; name: string; size: number }>
   live(onEvent: (event: LiveEvent) => void, onState: (connected: boolean) => void): () => void
 }
@@ -1140,6 +1160,7 @@ export const ROUTES = {
   application: (id: string) => `/api/applications/${encodeURIComponent(id)}`,
   dirs: (path: string | null) => (path ? `/api/fs/dirs?path=${encodeURIComponent(path)}` : '/api/fs/dirs'),
   library: '/api/library',
+  libraryAssist: '/api/library/assist',
   libraryItem: (path: string | null) => (path ? `/api/library/item?path=${encodeURIComponent(path)}` : '/api/library/item'),
   attachments: '/api/attachments',
   attachment: (id: string) => `/api/attachments/${encodeURIComponent(id)}`,
