@@ -83,6 +83,57 @@ pub fn tally(sessions: &[Vec<EngineEvent>]) -> (Spent, Option<Context>) {
     (spent, context.filter(|context| context.used > 0))
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Ran {
+    pub step: String,
+    pub agent: String,
+}
+
+fn spent_of(events: &[EngineEvent]) -> Spent {
+    let mut spent = Spent::default();
+    for event in events {
+        spent.add(event);
+    }
+    spent
+}
+
+fn merged(into: &mut Spent, more: &Spent) {
+    into.cost_usd += more.cost_usd;
+    into.priced |= more.priced;
+    into.input += more.input;
+    into.output += more.output;
+    into.cache_read += more.cache_read;
+    into.cache_write += more.cache_write;
+    into.calls += more.calls;
+}
+
+fn grouped<K: PartialEq + Clone>(found: &mut Vec<(K, Spent)>, key: &K, spent: &Spent) {
+    match found.iter_mut().find(|(known, _)| known == key) {
+        Some((_, total)) => merged(total, spent),
+        None => found.push((key.clone(), spent.clone())),
+    }
+}
+
+pub fn shares(runs: &[Ran], sessions: &[Vec<EngineEvent>]) -> (Vec<Value>, Vec<Value>) {
+    let mut steps: Vec<((String, String), Spent)> = Vec::new();
+    let mut agents: Vec<(String, Spent)> = Vec::new();
+    for (ran, events) in runs.iter().zip(sessions) {
+        let spent = spent_of(events);
+        grouped(&mut steps, &(ran.step.clone(), ran.agent.clone()), &spent);
+        grouped(&mut agents, &ran.agent, &spent);
+    }
+    let row = |spent: &Spent, extra: &[(&str, &str)]| {
+        let mut row = spent.json();
+        for (name, value) in extra {
+            row[*name] = json!(value);
+        }
+        row
+    };
+    let steps = steps.iter().map(|((step, agent), spent)| row(spent, &[("step", step.as_str()), ("agent", agent.as_str())])).collect();
+    let agents = agents.iter().map(|(agent, spent)| row(spent, &[("agent", agent.as_str())])).collect();
+    (steps, agents)
+}
+
 fn events_of(shared: &Shared, session: &str, cwd: &std::path::Path) -> Vec<EngineEvent> {
     let records = match shared.backend.client.history(&SessionId(session.to_owned()), cwd) {
         Ok(records) => records,
@@ -112,6 +163,9 @@ fn gather(shared: &Shared, id: &ItemId) -> ApiResult<Value> {
     let histories: Vec<Vec<EngineEvent>> =
         sessions.iter().map(|known| events_of(shared, &known.session, &known.cwd)).collect();
     let (spent, context) = tally(&histories);
+    let runs: Vec<Ran> =
+        sessions.iter().map(|known| Ran { step: known.step.clone(), agent: known.agent.clone() }).collect();
+    let (by_step, by_agent) = shares(&runs, &histories);
     let context = match context {
         Some(context) => {
             let window = orchestrator.context_window(id, context.model.as_deref())?;
@@ -123,7 +177,7 @@ fn gather(shared: &Shared, id: &ItemId) -> ApiResult<Value> {
         }
         None => Value::Null,
     };
-    Ok(json!({ "spent": spent.json(), "context": context }))
+    Ok(json!({ "spent": spent.json(), "context": context, "byStep": by_step, "byAgent": by_agent }))
 }
 
 pub fn percent(used: u64, window: u64) -> u64 {

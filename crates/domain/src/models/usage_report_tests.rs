@@ -42,6 +42,21 @@ fn use_outside_the_window_is_left_out() {
 }
 
 #[test]
+fn use_is_ranked_by_the_agent_that_ran_the_session_and_a_plain_chat_has_none() {
+    let agents = [("s1".to_owned(), "dev".to_owned()), ("s2".to_owned(), "planner".to_owned())].into();
+    let mut tally = UsageTally::new(&window(), &KNOWN).with_agents(agents);
+    tally.add("s1", "2026-11-22", &spent("claude-subscription", "a", "opus", Some(1.0)));
+    tally.add("s1", "2026-11-23", &spent("claude-subscription", "a", "opus", Some(0.5)));
+    tally.add("s2", "2026-11-23", &spent("claude-subscription", "a", "opus", Some(0.25)));
+    tally.add("chat", "2026-11-23", &spent("claude-subscription", "a", "opus", Some(4.0)));
+    let report = tally.report();
+    let ranked: Vec<(&str, u64)> =
+        report.by_agent.iter().map(|ranked| (ranked.id.as_str(), ranked.tally.calls)).collect();
+    assert_eq!(ranked, [("dev", 2), ("planner", 1)]);
+    assert!((report.by_agent[0].tally.cost_usd - 1.5).abs() < f64::EPSILON);
+}
+
+#[test]
 fn a_sub_agent_s_use_counts_too() {
     let mut tally = UsageTally::new(&window(), &KNOWN);
     let inner = spent("claude-subscription", "a", "haiku", Some(0.25));

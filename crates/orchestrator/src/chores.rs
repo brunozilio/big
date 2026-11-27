@@ -62,6 +62,8 @@ pub struct Ran {
     pub key: String,
     pub session: String,
     pub cwd: PathBuf,
+    pub step: String,
+    pub agent: String,
 }
 
 pub fn runs(item: &WorkItem) -> Vec<Ran> {
@@ -77,8 +79,14 @@ pub fn runs(item: &WorkItem) -> Vec<Ran> {
             let field = |name: &str| {
                 done.and_then(|value| value[name].as_str()).or_else(|| entry.progress[name].as_str()).map(str::to_owned)
             };
-            let ran =
-                Ran { key: entry.request.key.to_string(), session: field("session")?, cwd: field("worktree")?.into() };
+            let Effect::AgentRun { agent, .. } = &entry.request.effect else { return None };
+            let ran = Ran {
+                key: entry.request.key.to_string(),
+                session: field("session")?,
+                cwd: field("worktree")?.into(),
+                step: entry.request.key.step.clone(),
+                agent: agent.clone(),
+            };
             Some(((entry.request.key.seq, entry.request.key.attempt), ran))
         })
         .collect();

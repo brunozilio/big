@@ -769,6 +769,7 @@ export interface Usage {
   byProvider: UsageProviderRow[]
   byModel: UsageRow[]
   byAccount: UsageAccountRow[]
+  byAgent?: UsageRow[]
 }
 
 export interface ItemSpent {
@@ -786,9 +787,20 @@ export interface ItemContext {
   percent: number
 }
 
+export interface ItemStepUsage extends ItemSpent {
+  step: string
+  agent: string
+}
+
+export interface ItemAgentUsage extends ItemSpent {
+  agent: string
+}
+
 export interface ItemUsage {
   spent: ItemSpent
   context: ItemContext | null
+  byStep?: ItemStepUsage[]
+  byAgent?: ItemAgentUsage[]
 }
 
 export interface UsageWindow {

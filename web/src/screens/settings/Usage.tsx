@@ -176,6 +176,13 @@ function UsageRanks({ usage }: { usage: Usage }) {
         title={t('settings.usage_byModel')}
         rows={usage.byModel.slice(0, 6).map((m) => ({ id: m.id, name: m.name, cost: m.costUsd, avatar: <Icon name="cpu" size={18} className="text-muted" /> }))}
       />
+      {usage.byAgent && usage.byAgent.length > 0 && (
+        <RankCard
+          index={3}
+          title={t('settings.usage_byAgent')}
+          rows={usage.byAgent.slice(0, 6).map((a) => ({ id: a.id, name: a.name, cost: a.costUsd, avatar: <Icon name="bot" size={18} className="text-muted" /> }))}
+        />
+      )}
     </div>
   )
 }

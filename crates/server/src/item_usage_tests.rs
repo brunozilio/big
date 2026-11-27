@@ -62,3 +62,24 @@ fn the_share_of_the_window_is_bounded() {
     assert_eq!(percent(300_000, 200_000), 100);
     assert_eq!(percent(10, 0), 0);
 }
+
+#[test]
+fn the_cost_is_split_by_step_and_by_agent() {
+    let ran = |step: &str, agent: &str| Ran { step: step.into(), agent: agent.into() };
+    let runs = [ran("plan", "planner"), ran("code", "dev"), ran("review", "dev")];
+    let sessions = [vec![call(100, 10, 0, Some(0.5))], vec![call(200, 20, 0, Some(1.0))], vec![call(50, 5, 0, None)]];
+    let (steps, agents) = shares(&runs, &sessions);
+    let steps: Vec<(Value, Value, Value)> =
+        steps.iter().map(|row| (row["step"].clone(), row["agent"].clone(), row["costUsd"].clone())).collect();
+    assert_eq!(
+        steps,
+        [
+            (json!("plan"), json!("planner"), json!(0.5)),
+            (json!("code"), json!("dev"), json!(1.0)),
+            (json!("review"), json!("dev"), Value::Null),
+        ]
+    );
+    let agents: Vec<(Value, Value, Value)> =
+        agents.iter().map(|row| (row["agent"].clone(), row["costUsd"].clone(), row["calls"].clone())).collect();
+    assert_eq!(agents, [(json!("planner"), json!(0.5), json!(1)), (json!("dev"), json!(1.0), json!(2))]);
+}

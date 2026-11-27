@@ -31,6 +31,26 @@ describe('quadro de uso do item', () => {
     expect(screen.queryByRole('button')).toBeNull()
   })
 
+  test('reparte o custo por etapa e por agente quando houver mais de um', async () => {
+    const spent = { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, calls: 1 }
+    fake(
+      usage({
+        byStep: [
+          { ...spent, step: 'plan', agent: 'planner', costUsd: 0.5 },
+          { ...spent, step: 'code', agent: 'dev', costUsd: 1.25 },
+        ],
+        byAgent: [{ ...spent, agent: 'dev', costUsd: 1.75 }],
+      }),
+    )
+    const it = { ...item(false), steps: [{ id: 'plan', label: 'Planejar' }] } as unknown as Item
+    render(<UsageCard it={it} />)
+    const steps = await screen.findByRole('group', { name: 'Custo por etapa' })
+    expect(steps.textContent).toContain('Planejar · planner')
+    expect(steps.textContent).toContain('code · dev')
+    expect(steps.textContent).toMatch(/US\$\s1,25/)
+    expect(screen.queryByRole('group', { name: 'Custo por agente' })).toBeNull()
+  })
+
   test('sem conversa ainda, avisa em vez de mostrar a barra', async () => {
     fake(usage({ context: null }))
     render(<UsageCard it={item(false)} />)

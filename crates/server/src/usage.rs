@@ -53,7 +53,8 @@ fn gather(shared: &Shared, days: i64, only: Option<&str>) -> ApiResult<Value> {
     let client = &shared.backend.client;
     let providers = client.providers().unwrap_or_default();
     let known: Vec<&str> = providers.iter().map(|summary| summary.provider.id()).collect();
-    let mut tally = UsageTally::new(&window, &known);
+    let agents = shared.backend.orchestrator.agent_by_session().unwrap_or_default();
+    let mut tally = UsageTally::new(&window, &known).with_agents(agents);
     let sessions = client.sessions().map_err(ApiError::failed)?;
     let mut cache = held(&shared.usage);
     cache.keep_only(&sessions);
@@ -148,6 +149,11 @@ pub fn listing(
             counted(json!({ "id": id, "provider": ranked.provider, "account": ranked.account }), &ranked.tally)
         })
         .collect();
+    let by_agent: Vec<Value> = report
+        .by_agent
+        .iter()
+        .map(|ranked| counted(json!({ "id": ranked.id, "name": ranked.id }), &ranked.tally))
+        .collect();
     json!({
         "days": days, "from": window.first(), "to": window.last(),
         "totals": {
@@ -156,6 +162,7 @@ pub fn listing(
             "calls": totals.calls, "sessions": totals.sessions,
         },
         "daily": daily, "byProvider": by_provider, "byModel": by_model, "byAccount": by_account,
+        "byAgent": by_agent,
     })
 }
 

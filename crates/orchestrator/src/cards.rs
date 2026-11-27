@@ -33,6 +33,17 @@ fn session_of(progress: &Value, outcome: Option<&EffectOutcome>) -> Option<Strin
     done.or_else(|| progress["session"].as_str()).map(str::to_owned)
 }
 
+pub fn agent_by_session(items: &[WorkItem]) -> std::collections::HashMap<String, String> {
+    let mut found = std::collections::HashMap::new();
+    for entry in items.iter().flat_map(|item| item.effects.values()) {
+        let Effect::AgentRun { agent, .. } = &entry.request.effect else { continue };
+        if let Some(session) = session_of(&entry.progress, entry.outcome.as_ref()) {
+            found.entry(session).or_insert_with(|| agent.clone());
+        }
+    }
+    found
+}
+
 pub fn agents_of(items: &[WorkItem], session: &str) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     for entry in items.iter().flat_map(|item| item.effects.values()) {

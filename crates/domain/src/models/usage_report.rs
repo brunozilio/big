@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::EngineEvent;
 use crate::billing::ModelUsage;
@@ -59,6 +59,7 @@ pub struct UsageReport {
     pub by_provider: Vec<Ranked>,
     pub by_model: Vec<Ranked>,
     pub by_account: Vec<AccountRanked>,
+    pub by_agent: Vec<Ranked>,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -70,6 +71,8 @@ pub struct UsageTally {
     providers: BTreeMap<String, Tally>,
     models: BTreeMap<String, Tally>,
     accounts: BTreeMap<(String, String), Tally>,
+    agent_of: HashMap<String, String>,
+    agents: BTreeMap<String, Tally>,
 }
 
 impl UsageTally {
@@ -79,6 +82,10 @@ impl UsageTally {
             daily: window.iter().map(|date| DayUsage { date: date.clone(), ..DayUsage::default() }).collect(),
             ..Self::default()
         }
+    }
+
+    pub fn with_agents(self, agent_of: HashMap<String, String>) -> Self {
+        Self { agent_of, ..self }
     }
 
     pub fn add(&mut self, session: &str, date: &str, event: &EngineEvent) {
@@ -108,6 +115,9 @@ impl UsageTally {
         self.providers.entry(provider.clone()).or_default().add(usage);
         self.models.entry(model).or_default().add(usage);
         self.accounts.entry((provider, usage.account.clone())).or_default().add(usage);
+        if let Some(agent) = self.agent_of.get(session) {
+            self.agents.entry(agent.clone()).or_default().add(usage);
+        }
     }
 
     pub fn report(self) -> UsageReport {
@@ -130,6 +140,7 @@ impl UsageTally {
             by_provider: ranked(self.providers),
             by_model: ranked(self.models),
             by_account,
+            by_agent: ranked(self.agents),
         }
     }
 }

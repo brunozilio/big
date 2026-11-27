@@ -316,6 +316,10 @@ impl Orchestrator {
         Ok(names.iter().map(|name| crate::cards::card(&self.shared.config.resources, name)).collect())
     }
 
+    pub fn agent_by_session(&self) -> Result<std::collections::HashMap<String, String>> {
+        Ok(crate::cards::agent_by_session(&self.shared.store.items()?))
+    }
+
     pub fn session_agent(&self, session: &str) -> Result<Option<domain::MainAgentSpec>> {
         let items = self.shared.store.items()?;
         let owner = items.iter().find_map(|item| {

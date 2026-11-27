@@ -47,6 +47,40 @@ export function UsageCard({ it }: { it: Item }) {
           </span>
         </p>
       </div>
+      <Breakdown title={t('items.costByStep')} rows={(data.byStep ?? []).map((row) => ({ id: `${row.step}/${row.agent}`, name: stepLabel(it, row.step), detail: row.agent, costUsd: row.costUsd }))} />
+      <Breakdown title={t('items.costByAgent')} rows={(data.byAgent ?? []).map((row) => ({ id: row.agent, name: row.agent, costUsd: row.costUsd }))} />
     </Card>
+  )
+}
+
+interface Share {
+  id: string
+  name: string
+  detail?: string
+  costUsd: number | null
+}
+
+function stepLabel(it: Item, step: string): string {
+  return it.steps?.find((known) => known.id === step)?.label || step
+}
+
+function Breakdown({ title, rows }: { title: string; rows: Share[] }) {
+  const t = useT()
+  if (rows.length < 2) return null
+  return (
+    <div className="space-y-1" role="group" aria-label={title}>
+      <p className="text-xs text-muted">{title}</p>
+      <ul className="space-y-0.5 text-xs">
+        {rows.map((row) => (
+          <li key={row.id} className="flex items-baseline justify-between gap-2">
+            <span className="min-w-0 truncate text-fg2">
+              {row.name}
+              {row.detail && row.detail !== row.name && <span className="text-faint"> · {row.detail}</span>}
+            </span>
+            <span className="shrink-0 tabular-nums text-fg">{row.costUsd === null ? t('items.costUnknown') : money(row.costUsd, 'USD')}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   )
 }

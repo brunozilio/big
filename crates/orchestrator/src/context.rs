@@ -9,13 +9,15 @@ use crate::shared::Shared;
 pub struct ItemSession {
     pub session: String,
     pub cwd: PathBuf,
+    pub step: String,
+    pub agent: String,
 }
 
 pub fn sessions(item: &WorkItem) -> Vec<ItemSession> {
     let mut found: Vec<ItemSession> = Vec::new();
     for ran in runs(item) {
         found.retain(|known| known.session != ran.session);
-        found.push(ItemSession { session: ran.session, cwd: ran.cwd });
+        found.push(ItemSession { session: ran.session, cwd: ran.cwd, step: ran.step, agent: ran.agent });
     }
     found
 }
