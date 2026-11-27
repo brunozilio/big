@@ -70,7 +70,8 @@ impl Metered {
                 ..ModelUsage::default()
             },
         );
-        let cost = crate::model::intent::discounted(cost, request.intent, provider.and_then(|p| p.later_discount()));
+        let discount = provider.filter(|_| reply.batched).and_then(|p| p.later_discount());
+        let cost = crate::model::intent::discounted(cost, request.intent, discount);
         self.ledger.costs.lock().map_err(|_| ModelError::Provider("usage ledger unavailable".into()))?.push(cost);
         let served = self.served_by(request, reply);
         self.gate.emit(spent_by(
@@ -207,5 +208,27 @@ mod tests {
         let within = metered(Some(Budget { limit_usd: 1.0, spent_usd: 0.5 }));
         assert!(within.turn_blocking(&request, &mut |_| {}, &stop).is_ok());
         assert!(metered(None).turn_blocking(&request, &mut |_| {}, &stop).is_ok());
+    }
+
+    #[test]
+    fn the_low_priority_discount_counts_only_when_the_call_went_through_a_batch() {
+        let request = TurnRequest {
+            model: "claude-sonnet-5-5".into(),
+            system: String::new(),
+            messages: Vec::new(),
+            tools: Vec::new(),
+            effort: domain::Effort::Medium,
+            max_tokens: 100,
+            intent: crate::model::Intent::LATER,
+        };
+        let cost_of = |batched: bool| {
+            let meter = Metered { provider: ModelProvider::named("claude-subscription"), ..metered(None) };
+            let reply = ScriptedModel::reply(vec![Block::Text("ok".into())]).expect("reply");
+            meter.record(&request, &Reply { batched, ..reply }).expect("recorded");
+            meter.ledger.cost().expect("priced")
+        };
+        let (now, batched) = (cost_of(false), cost_of(true));
+        assert!(now > 0.0);
+        assert!((batched - now * 0.5).abs() < 1e-12, "{batched} vs {now}");
     }
 }

@@ -71,6 +71,8 @@ pub struct Reply {
     pub served: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub account: Option<String>,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub batched: bool,
 }
 
 #[derive(Debug, Clone, thiserror::Error, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

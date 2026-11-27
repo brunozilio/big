@@ -301,6 +301,7 @@ fn a_turn_that_ends_between_a_call_and_its_result_is_saved_with_the_call_closed(
         usage: Usage::default(),
         served: None,
         account: None,
+        batched: false,
     });
     let engine = Engine::new(
         Arc::new(Source(Mutex::new(vec![Arc::new(ScriptedModel::new([refused]))]))),

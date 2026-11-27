@@ -57,6 +57,7 @@ fn a_call_that_can_wait_goes_as_a_batch_and_folds_like_a_stream() {
     let http = Arc::new(ScriptedHttp::new([(200, state(false)), (200, state(true)), (200, results)]));
     let reply = ask(&client(&http, quick(5_000)), Intent::LATER);
     assert_eq!(reply.message.text(), "the recap");
+    assert!(reply.batched, "the discount applies only to what a batch answered");
     assert_eq!(reply.stop, StopReason::ToolUse);
     assert_eq!((reply.usage.input, reply.usage.output), (10, 5));
     assert!(
@@ -78,7 +79,7 @@ fn a_call_that_can_wait_goes_as_a_batch_and_folds_like_a_stream() {
 #[test]
 fn a_call_that_cannot_wait_never_batches() {
     let http = Arc::new(ScriptedHttp::new([(200, MESSAGES.to_owned())]));
-    ask(&client(&http, quick(5_000)), Intent::default());
+    assert!(!ask(&client(&http, quick(5_000)), Intent::default()).batched);
     assert_eq!(http.sent().len(), 1);
     assert_eq!(http.sent()[0].url, "https://api.anthropic.com/v1/messages");
 }
@@ -88,13 +89,14 @@ fn a_refused_batch_falls_back_to_the_call_now() {
     let http = Arc::new(ScriptedHttp::new([(400, "{}".to_owned()), (200, MESSAGES.to_owned())]));
     let reply = ask(&client(&http, quick(5_000)), Intent::LATER);
     assert!(!reply.message.blocks.is_empty());
+    assert!(!reply.batched, "a call that fell back is charged in full");
     assert_eq!(http.sent()[1].url, "https://api.anthropic.com/v1/messages");
 }
 
 #[test]
 fn a_batch_that_does_not_end_in_time_is_cancelled_and_the_call_goes_now() {
     let http = Arc::new(ScriptedHttp::new([(200, state(false)), (200, "{}".to_owned()), (200, MESSAGES.to_owned())]));
-    ask(&client(&http, quick(0)), Intent::LATER);
+    assert!(!ask(&client(&http, quick(0)), Intent::LATER).batched);
     let urls: Vec<String> = http.sent().iter().map(|sent| sent.url.clone()).collect();
     assert_eq!(urls[1], format!("{BATCHES}/msgbatch_1/cancel"));
     assert_eq!(urls[2], "https://api.anthropic.com/v1/messages");

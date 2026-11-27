@@ -133,5 +133,6 @@ fn built(answer: &Value) -> Option<Reply> {
         usage: Default::default(),
         served: None,
         account: None,
+        batched: false,
     })
 }

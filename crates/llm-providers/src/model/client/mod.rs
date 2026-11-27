@@ -108,7 +108,7 @@ impl ModelApi for ProviderClient {
                 };
                 ready.transport.config_under(false, cancel).await?;
             }
-            ready.api.turn(request, on, cancel).await
+            batch::marking(ready.api.turn(request, on, cancel)).await
         })
     }
 }

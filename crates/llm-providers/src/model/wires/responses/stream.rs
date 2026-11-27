@@ -194,7 +194,7 @@ impl Folder {
             None if message.tool_uses().next().is_some() => StopReason::ToolUse,
             None => StopReason::EndTurn,
         };
-        Ok(Reply { message, stop, usage: self.usage, served: None, account: None })
+        Ok(Reply { message, stop, usage: self.usage, served: None, account: None, batched: false })
     }
 }
 

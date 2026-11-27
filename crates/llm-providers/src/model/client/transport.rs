@@ -229,6 +229,7 @@ impl Transport {
         let windows = *self.windows.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let job = super::batch::Job { provider: self.provider, http: Arc::clone(&self.http), config, windows };
         let stream = super::batch::answer(job, key, body, cancel).await?;
+        super::batch::mark();
         Ok(Response { status: 200, headers: Vec::new(), body: stream.into() })
     }
 }

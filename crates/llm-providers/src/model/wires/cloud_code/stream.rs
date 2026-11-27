@@ -131,6 +131,7 @@ impl Folder {
             usage: self.usage,
             served: self.served,
             account: None,
+            batched: false,
         })
     }
 }

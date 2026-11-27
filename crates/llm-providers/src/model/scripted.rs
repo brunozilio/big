@@ -24,6 +24,7 @@ impl ScriptedModel {
             usage: Usage { input: 10, output: 5, ..Usage::default() },
             served: None,
             account: None,
+            batched: false,
         })
     }
 

@@ -143,7 +143,7 @@ impl Folder {
             _ => 0,
         };
         let usage = Usage { input, output: self.output_chars.div_ceil(4), ..Usage::default() };
-        Ok(Reply { message: Message::assistant(self.blocks), stop, usage, served: self.served, account: None })
+        Ok(Reply { message: Message::assistant(self.blocks), stop, usage, served: self.served, account: None, batched: false })
     }
 }
 

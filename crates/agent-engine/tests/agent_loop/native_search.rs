@@ -19,6 +19,7 @@ fn a_paused_search_turn_goes_on_with_its_results_and_no_new_prompt() {
             usage: Usage::default(),
             served: None,
             account: None,
+            batched: false,
         }),
         ScriptedModel::reply(vec![Block::Text("Rust 2026 shipped.".into())]),
     ]);

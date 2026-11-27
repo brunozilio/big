@@ -12,6 +12,24 @@ use super::super::{CancellationToken, ModelError};
 
 type Answered = Result<String, ModelError>;
 
+tokio::task_local! {
+    static BATCHED: std::cell::Cell<bool>;
+}
+
+pub(super) async fn marking<T>(turn: impl Future<Output = Result<super::super::Reply, T>>) -> Result<super::super::Reply, T> {
+    BATCHED
+        .scope(std::cell::Cell::new(false), async move {
+            let mut reply = turn.await?;
+            reply.batched = BATCHED.with(std::cell::Cell::get);
+            Ok(reply)
+        })
+        .await
+}
+
+pub(super) fn mark() {
+    let _ = BATCHED.try_with(|batched| batched.set(true));
+}
+
 struct Waiting {
     body: Value,
     answer: oneshot::Sender<Answered>,

@@ -13,6 +13,7 @@ fn reply() -> Reply {
         usage: Usage::default(),
         served: None,
         account: None,
+        batched: false,
     }
 }
 

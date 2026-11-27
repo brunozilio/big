@@ -37,6 +37,7 @@ pub fn stopping(blocks: Vec<Block>, stop: StopReason) -> Scripted {
         usage: Usage { input: 10, output: 5, ..Usage::default() },
         served: None,
         account: None,
+        batched: false,
     })
 }
 

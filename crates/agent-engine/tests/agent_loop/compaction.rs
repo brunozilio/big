@@ -18,6 +18,7 @@ fn measured(blocks: Vec<Block>, prompt: u64) -> Result<Reply, ModelError> {
         usage: Usage { input: 1_000, output: 50, cache_read: prompt - 1_000, cache_write: 0, searches: 0 },
         served: None,
         account: None,
+        batched: false,
     })
 }
 
