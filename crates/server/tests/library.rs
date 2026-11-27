@@ -12,7 +12,7 @@ async fn the_library_lists_what_the_content_declares_and_opens_an_agent_as_a_for
     let listed = world.get("/api/library").await;
     let keys: Vec<&str> =
         listed["sections"].as_array().into_iter().flatten().filter_map(|section| section["key"].as_str()).collect();
-    assert_eq!(keys, ["agents", "skills", "prompts", "workflows", "tools", "styles"]);
+    assert_eq!(keys, ["agents", "skills", "prompts", "workflows", "tools", "styles", "scripts"]);
     let drafted = json!({ "path": "workflows/default.ts", "source": "steps: [\n    plan({ agent: \"planner\" }),\n  ],\n" });
     let (status, steps) = world.send(Method::POST, "/api/library/outline", Some(drafted)).await;
     assert_eq!((status, &steps[0]["agent"]), (StatusCode::OK, &json!("planner")));
