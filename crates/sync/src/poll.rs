@@ -8,7 +8,7 @@ use crate::runner::{PollReport, Synchronizer, observed};
 
 impl Synchronizer {
     pub async fn poll_now(&self, connection: &str) -> Result<Option<PollReport>, Error> {
-        let book = Book::load(&self.store)?;
+        let book = crate::stored::stored(&self.store, Book::load).await?;
         let Some(entry) = book.find(connection) else { return Ok(None) };
         let desired = self.active().await?;
         self.poll_connection(entry, &desired).await
@@ -20,8 +20,11 @@ impl Synchronizer {
         desired: &[Desired],
     ) -> Result<Option<PollReport>, Error> {
         let id = entry.connection.id.as_str();
-        let cursor = self.store.cursor(id)?;
-        let watch = store::watched(&self.store.applications()?, id);
+        let owned = id.to_owned();
+        let (cursor, watch) = crate::stored::stored(&self.store, move |store| {
+            Ok((store.cursor(&owned)?, store::watched(&store.applications()?, &owned)))
+        })
+        .await?;
         let Some(batch) = self.connectors.poll(&entry.connection, &entry.settings, cursor.as_deref(), &watch).await?
         else {
             return Ok(None);
@@ -37,7 +40,8 @@ impl Synchronizer {
             self.route(event, desired, &mut report).await?;
             self.store.mark_seen(id, &event.id)?;
         }
-        self.store.set_cursor(id, &batch.cursor)?;
+        let (owned, cursor) = (id.to_owned(), batch.cursor.clone());
+        crate::stored::stored(&self.store, move |store| store.set_cursor(&owned, &cursor)).await?;
         Ok(Some(report))
     }
 

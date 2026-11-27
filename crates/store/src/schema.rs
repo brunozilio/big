@@ -149,6 +149,9 @@ const MIGRATIONS: &[&str] = &[
         connection TEXT NOT NULL
     );
 ",
+    "
+    CREATE INDEX items_by_ended ON items (ended);
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

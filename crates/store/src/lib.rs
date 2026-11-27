@@ -9,6 +9,7 @@ mod identity;
 mod log;
 pub mod ownership;
 mod preferences;
+mod retention;
 mod schema;
 mod sync;
 
@@ -25,6 +26,7 @@ pub use error::Error;
 pub use factory::Generation;
 pub use identity::{CodeCheck, Passkey, Person};
 pub use ownership::OwnedIds;
+pub use retention::Forgotten;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

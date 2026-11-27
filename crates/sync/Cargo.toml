@@ -11,7 +11,7 @@ domain.workspace = true
 store.workspace = true
 connectors.workspace = true
 brand.workspace = true
-tokio = { workspace = true, features = ["sync", "time"] }
+tokio = { workspace = true, features = ["sync", "time", "rt"] }
 async-trait = "0.1"
 serde.workspace = true
 serde_json.workspace = true

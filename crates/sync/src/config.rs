@@ -8,6 +8,7 @@ pub struct SyncConfig {
     pub slow_poll: Duration,
     pub reconcile_every: Duration,
     pub seen_retention: Duration,
+    pub ended_retention: Option<Duration>,
     pub retry: RetryPolicy,
 }
 
@@ -19,13 +20,16 @@ fn number(text: &str, fallback: u64) -> u64 {
 
 impl SyncConfig {
     pub fn from_brand() -> SyncConfig {
-        SyncConfig::from_values(
-            brand::sync::FAST_POLL_SECONDS,
-            brand::sync::SLOW_POLL_SECONDS,
-            brand::sync::RECONCILE_MINUTES,
-            brand::sync::ERROR_BACKOFF_SECONDS,
-            brand::sync::SEEN_RETENTION_DAYS,
-        )
+        SyncConfig {
+            ended_retention: ended_retention(brand::store::ENDED_RETENTION_DAYS),
+            ..SyncConfig::from_values(
+                brand::sync::FAST_POLL_SECONDS,
+                brand::sync::SLOW_POLL_SECONDS,
+                brand::sync::RECONCILE_MINUTES,
+                brand::sync::ERROR_BACKOFF_SECONDS,
+                brand::sync::SEEN_RETENTION_DAYS,
+            )
+        }
     }
 
     pub fn from_values(fast: &str, slow: &str, reconcile_minutes: &str, backoff: &str, seen_days: &str) -> SyncConfig {
@@ -40,8 +44,13 @@ impl SyncConfig {
         let reconcile_every = Duration::from_secs(number(reconcile_minutes, 10) * 60);
         let seen_retention =
             Duration::from_secs(number(seen_days, 30).saturating_mul(DAY)).max(slow_poll.max(reconcile_every) * 2);
-        SyncConfig { fast_poll, slow_poll, reconcile_every, seen_retention, retry }
+        SyncConfig { fast_poll, slow_poll, reconcile_every, seen_retention, ended_retention: None, retry }
     }
+}
+
+pub fn ended_retention(days: &str) -> Option<Duration> {
+    let days = days.trim().parse::<u64>().ok().filter(|days| *days > 0)?;
+    Some(Duration::from_secs(days.saturating_mul(DAY)))
 }
 
 impl Default for SyncConfig {
@@ -71,6 +80,15 @@ mod tests {
         assert_eq!(config.reconcile_every, Duration::from_secs(600));
         assert_eq!(config.retry.initial, Duration::from_secs(5));
         assert_eq!(config.seen_retention, Duration::from_secs(30 * DAY));
+    }
+
+    #[test]
+    fn ended_items_are_kept_forever_unless_a_number_of_days_is_set() {
+        assert_eq!(SyncConfig::from_brand().ended_retention, ended_retention(brand::store::ENDED_RETENTION_DAYS));
+        assert_eq!(ended_retention("0"), None);
+        assert_eq!(ended_retention(""), None);
+        assert_eq!(ended_retention("x"), None);
+        assert_eq!(ended_retention("2"), Some(Duration::from_secs(2 * DAY)));
     }
 
     #[test]

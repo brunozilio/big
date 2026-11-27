@@ -36,7 +36,7 @@ impl StoreView {
 #[async_trait]
 impl ItemView for StoreView {
     async fn active(&self) -> Result<Vec<Desired>, Error> {
-        let items = self.store.active_items()?;
+        let items = crate::stored::stored(&self.store, Store::active_items).await?;
         Ok(items.iter().map(|item| desired_of(item, self.policy(&item.workflow))).collect())
     }
 }

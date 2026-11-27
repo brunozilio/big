@@ -161,7 +161,7 @@ impl Synchronizer {
     }
 
     pub async fn tick(&self) -> Result<(TickReport, Instant), Error> {
-        let book = Book::load(&self.store)?;
+        let book = crate::stored::stored(&self.store, Book::load).await?;
         let desired = self.view.active().await?;
         let mut report = TickReport::default();
         for entry in &book.entries {
@@ -176,10 +176,23 @@ impl Synchronizer {
         if self.schedule().reconcile_at.is_none_or(|at| at <= Instant::now()) {
             let desired = self.view.active().await?;
             report.reconciled = Some(self.reconcile_with(&book, &desired).await);
-            self.store.prune_seen(self.config.seen_retention)?;
+            self.keep_the_store_small().await?;
             self.schedule().reconcile_at = Some(Instant::now() + self.config.reconcile_every);
         }
         Ok((report, self.next_wake(&book)))
+    }
+
+    async fn keep_the_store_small(&self) -> Result<(), Error> {
+        let (seen, ended) = (self.config.seen_retention, self.config.ended_retention);
+        let forgotten = crate::stored::stored(&self.store, move |store| {
+            store.prune_seen(seen)?;
+            store.forget_ended(ended)
+        })
+        .await?;
+        if forgotten.items > 0 {
+            tracing::info!(items = forgotten.items, "items ended long ago were forgotten");
+        }
+        Ok(())
     }
 
     fn parked(&self, entry: &Entry) -> bool {

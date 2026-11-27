@@ -11,6 +11,7 @@ pub mod view;
 mod poll;
 mod reconcile;
 mod runner;
+mod stored;
 
 pub use book::Book;
 pub use config::SyncConfig;

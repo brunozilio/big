@@ -271,6 +271,7 @@ autonomy = "near"
 
 [store]
 snapshot_every = "200"
+ended_retention_days = "0"
 
 [history]
 former = "Cortex=cortex|Superfik=superfik|Superfik Lite=superfik-lite"

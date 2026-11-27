@@ -29,7 +29,7 @@ fn text<'a>(value: &'a Value, name: &str) -> Option<&'a str> {
 
 impl Synchronizer {
     pub async fn reconcile_now(&self) -> Result<ReconcileReport, Error> {
-        let book = Book::load(&self.store)?;
+        let book = crate::stored::stored(&self.store, Book::load).await?;
         let desired = self.active().await?;
         Ok(self.reconcile_with(&book, &desired).await)
     }
