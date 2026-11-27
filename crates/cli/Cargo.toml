@@ -21,7 +21,10 @@ server.workspace = true
 domain.workspace = true
 serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["rt-multi-thread", "signal", "macros"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "signal", "macros", "process", "io-util", "net", "sync"] }
+axum.workspace = true
+futures-util.workspace = true
+reqwest = { workspace = true, features = ["stream"] }
 clap = { version = "4.6.7", features = ["derive", "string"] }
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "env-filter", "std", "ansi", "chrono", "registry", "json"] }

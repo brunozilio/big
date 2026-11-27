@@ -5,6 +5,7 @@ mod git_credential;
 mod http;
 mod instance;
 mod logging;
+mod runner;
 mod teammate;
 
 use std::ffi::OsString;
@@ -49,6 +50,10 @@ fn main() -> ExitCode {
         && let Some(command) = found.iter().find(|command| command.name == name)
     {
         let args = given.get_many::<OsString>(discovered::ARGS).map(|args| args.cloned().collect()).unwrap_or_default();
+        if command.page {
+            logging::install(false);
+            return finish(runner::run(command, args, &root));
+        }
         return finish(discovered::run(command, args, &root));
     }
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
@@ -132,7 +137,7 @@ fn already_running(url: Option<String>, open: bool) -> ExitCode {
     }
 }
 
-fn open_in_browser(url: &str) {
+pub fn open_in_browser(url: &str) {
     let mut command = platform::open_url(url);
     command.stdin(std::process::Stdio::null()).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
     match command.spawn() {
@@ -181,6 +186,7 @@ mod tests {
             about: "Ship".into(),
             run: vec!["true".into()],
             folder: PathBuf::from("."),
+            page: false,
         }];
         let cli = discovered::injected(Cli::command(), &found);
         let matches = cli.try_get_matches_from([brand::COMMAND, "ship-it", "--dry", "x"]).expect("parsed");

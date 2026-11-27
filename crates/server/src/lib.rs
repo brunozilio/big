@@ -63,3 +63,7 @@ pub use scope::{admins as admins_now, configured_admins};
 pub use server::{app, bind, serve};
 pub use vault::VaultTokens;
 pub use workspaces::HELPER_COMMAND as GIT_CREDENTIAL_COMMAND;
+
+pub fn serve_page(uri: &axum::http::Uri) -> axum::response::Response {
+    page::serve(page::embedded(), uri)
+}

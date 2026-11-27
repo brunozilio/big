@@ -14,6 +14,8 @@ struct Declared {
     #[serde(default)]
     about: String,
     run: Vec<String>,
+    #[serde(default)]
+    page: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,6 +24,7 @@ pub struct Discovered {
     pub about: String,
     pub run: Vec<String>,
     pub folder: PathBuf,
+    pub page: bool,
 }
 
 pub fn roots(listed: &str, base: &Path) -> Vec<PathBuf> {
@@ -72,6 +75,7 @@ fn declared(folder: &Path) -> Vec<Discovered> {
             about: declared.about,
             run: declared.run,
             folder: folder.to_path_buf(),
+            page: declared.page,
         })
         .collect()
 }
@@ -93,7 +97,7 @@ pub fn injected(mut cli: Command, found: &[Discovered]) -> Command {
     cli
 }
 
-fn program(command: &Discovered) -> Result<(PathBuf, &[String]), String> {
+pub fn program(command: &Discovered) -> Result<(PathBuf, &[String]), String> {
     let (first, rest) = command.run.split_first().ok_or_else(|| format!("{}: nothing to run", command.name))?;
     let given = PathBuf::from(first);
     let program =
@@ -151,6 +155,7 @@ mod tests {
             about: String::new(),
             run: vec!["./run.sh".into(), "go".into()],
             folder: PathBuf::from("/opt/x"),
+            page: false,
         };
         let (program, rest) = program(&command).expect("program");
         assert_eq!((program, rest), (PathBuf::from("/opt/x/./run.sh"), &["go".to_owned()][..]));
