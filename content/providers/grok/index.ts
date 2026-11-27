@@ -45,7 +45,7 @@ export function provider() {
   };
 }
 
-export const webSearch = (_: unknown, ctx) => ctx.models.webSearch({ format: "responses" });
+export const webSearch = () => ({ type: "web_search" });
 
 export function check({ config }: { config: Config }) {
   refreshable(config);

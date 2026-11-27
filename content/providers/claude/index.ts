@@ -52,7 +52,12 @@ export function provider() {
   };
 }
 
-export const webSearch = ({ name }: { name: string }, ctx) => ctx.models.webSearch({ format: "messages", name });
+const FILTERING_SEARCH = ["fable", "mythos", "opus-5", "opus-4-8", "opus-4-7", "opus-4-6", "sonnet-5", "sonnet-4-6"];
+
+export function webSearch({ name }: { name: string }) {
+  const filtering = FILTERING_SEARCH.some((family) => name.includes(family));
+  return { type: filtering ? "web_search_20260209" : "web_search_20250305", name: "web_search" };
+}
 
 export function check({ config }: { config: Config }) {
   refreshable(config);

@@ -5,7 +5,7 @@ use jiff::{SignedDuration, Timestamp};
 use serde_json::{Value, json};
 
 use crate::oauth::{self, Tokens};
-use crate::{catalog, limits, web_search};
+use crate::{catalog, limits};
 
 fn field<'a>(arguments: &'a Value, name: &str) -> &'a str {
     arguments[name].as_str().unwrap_or_default()
@@ -88,11 +88,6 @@ fn models(function: &str, arguments: &Value) -> Option<Result<Value, String>> {
             )
         }
         "models.outputLimit" => json!(crate::providers::output_limit(model.as_ref(), &arguments["body"])),
-        "models.webSearch" => match field(arguments, "format") {
-            "messages" => web_search::anthropic(field(arguments, "name")),
-            "responses" => web_search::responses(),
-            _ => Value::Null,
-        },
         "models.toolsInConversation" => json!(crate::added_tools::openai(field(arguments, "name"))),
         _ => return None,
     }))
