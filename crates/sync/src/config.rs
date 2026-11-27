@@ -9,6 +9,7 @@ pub struct SyncConfig {
     pub reconcile_every: Duration,
     pub seen_retention: Duration,
     pub ended_retention: Option<Duration>,
+    pub concurrency: usize,
     pub retry: RetryPolicy,
 }
 
@@ -22,6 +23,7 @@ impl SyncConfig {
     pub fn from_brand() -> SyncConfig {
         SyncConfig {
             ended_retention: ended_retention(brand::store::ENDED_RETENTION_DAYS),
+            concurrency: concurrency(brand::sync::CONCURRENCY),
             ..SyncConfig::from_values(
                 brand::sync::FAST_POLL_SECONDS,
                 brand::sync::SLOW_POLL_SECONDS,
@@ -44,8 +46,14 @@ impl SyncConfig {
         let reconcile_every = Duration::from_secs(number(reconcile_minutes, 10) * 60);
         let seen_retention =
             Duration::from_secs(number(seen_days, 30).saturating_mul(DAY)).max(slow_poll.max(reconcile_every) * 2);
-        SyncConfig { fast_poll, slow_poll, reconcile_every, seen_retention, ended_retention: None, retry }
+        SyncConfig { fast_poll, slow_poll, reconcile_every, seen_retention, ended_retention: None, concurrency: DEFAULT_CONCURRENCY, retry }
     }
+}
+
+const DEFAULT_CONCURRENCY: usize = 4;
+
+pub fn concurrency(text: &str) -> usize {
+    usize::try_from(number(text, DEFAULT_CONCURRENCY as u64)).unwrap_or(DEFAULT_CONCURRENCY)
 }
 
 pub fn ended_retention(days: &str) -> Option<Duration> {
@@ -89,6 +97,14 @@ mod tests {
         assert_eq!(ended_retention(""), None);
         assert_eq!(ended_retention("x"), None);
         assert_eq!(ended_retention("2"), Some(Duration::from_secs(2 * DAY)));
+    }
+
+    #[test]
+    fn connections_are_polled_a_few_at_a_time() {
+        assert_eq!(SyncConfig::from_brand().concurrency, concurrency(brand::sync::CONCURRENCY));
+        assert_eq!(concurrency("8"), 8);
+        assert_eq!(concurrency("0"), DEFAULT_CONCURRENCY);
+        assert_eq!(concurrency("x"), DEFAULT_CONCURRENCY);
     }
 
     #[test]

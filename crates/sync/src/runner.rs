@@ -8,6 +8,7 @@ use connectors::{Connectors, ExternalEvent};
 use domain::connection::{Capability, ConnectionId};
 use domain::effect::{ErrorClass, next_retry};
 use domain::workflow::{Observed, WorkflowEvent};
+use futures_util::stream::{self, StreamExt};
 use serde_json::{Value, json};
 use store::Store;
 use tokio::sync::Notify;
@@ -76,6 +77,14 @@ pub(crate) fn observed(event: &ExternalEvent) -> Observed {
 
 pub(crate) fn reconciled(field: &str, local: Value, remote: Value, action: &str) -> WorkflowEvent {
     WorkflowEvent::Reconciled { field: field.to_owned(), local, remote, action: action.to_owned() }
+}
+
+fn moved(outcome: &Result<Option<PollReport>, String>) -> bool {
+    match outcome {
+        Ok(Some(report)) => report.delivered + report.triggered + report.observed > 0,
+        Ok(None) => false,
+        Err(_) => true,
+    }
 }
 
 pub(crate) fn linked(desired: &Desired, book: &Book) -> BTreeSet<ConnectionId> {
@@ -162,24 +171,39 @@ impl Synchronizer {
 
     pub async fn tick(&self) -> Result<(TickReport, Instant), Error> {
         let book = crate::stored::stored(&self.store, Book::load).await?;
-        let desired = self.view.active().await?;
-        let mut report = TickReport::default();
-        for entry in &book.entries {
-            let id = &entry.connection.id;
-            if self.parked(entry) || self.due(id).is_some_and(|due| due > Instant::now()) {
-                continue;
-            }
-            let (outcome, delay) = self.poll_entry(entry, &book, &desired).await;
-            self.schedule().due.insert(id.clone(), Instant::now() + delay);
-            report.polled.push((id.clone(), outcome));
-        }
+        let mut desired = self.view.active().await?;
+        let mut report = TickReport { polled: self.poll_due(&book, &desired).await, reconciled: None };
         if self.schedule().reconcile_at.is_none_or(|at| at <= Instant::now()) {
-            let desired = self.view.active().await?;
+            if report.polled.iter().any(|(_, outcome)| moved(outcome)) {
+                desired = self.view.active().await?;
+            }
             report.reconciled = Some(self.reconcile_with(&book, &desired).await);
             self.keep_the_store_small().await?;
             self.schedule().reconcile_at = Some(Instant::now() + self.config.reconcile_every);
         }
         Ok((report, self.next_wake(&book)))
+    }
+
+    async fn poll_due(&self, book: &Book, desired: &[Desired]) -> Vec<(ConnectionId, Result<Option<PollReport>, String>)> {
+        let now = Instant::now();
+        let due: Vec<&Entry> = book
+            .entries
+            .iter()
+            .filter(|entry| !self.parked(entry) && !self.due(&entry.connection.id).is_some_and(|due| due > now))
+            .collect();
+        let polls: Vec<_> = due.into_iter().map(|entry| self.poll_scheduled(entry, book, desired)).collect();
+        stream::iter(polls).buffered(self.config.concurrency).collect().await
+    }
+
+    async fn poll_scheduled(
+        &self,
+        entry: &Entry,
+        book: &Book,
+        desired: &[Desired],
+    ) -> (ConnectionId, Result<Option<PollReport>, String>) {
+        let (outcome, delay) = self.poll_entry(entry, book, desired).await;
+        self.schedule().due.insert(entry.connection.id.clone(), Instant::now() + delay);
+        (entry.connection.id.clone(), outcome)
     }
 
     async fn keep_the_store_small(&self) -> Result<(), Error> {

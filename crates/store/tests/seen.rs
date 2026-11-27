@@ -60,3 +60,18 @@ fn seeing_an_event_again_renews_it() {
     assert!(store.was_seen("quiet", "again").expect("the store answers"));
     assert_eq!(store.prune_seen(cutoff).expect("the store answers"), 0, "it was just met again");
 }
+
+#[test]
+fn a_whole_batch_is_checked_and_marked_at_once_and_renews_what_it_met_again() {
+    let store = Store::in_memory(0).expect("the store answers");
+    store.mark_seen("c1", "old").expect("the store answers");
+    thread::sleep(Duration::from_millis(200));
+    let batch = ["old".to_owned(), "new".to_owned(), "other".to_owned()];
+    let seen = store.seen_among("c1", &batch).expect("the store answers");
+    assert_eq!(seen.into_iter().collect::<Vec<_>>(), ["old"]);
+    assert_eq!(store.prune_seen(Duration::from_millis(100)).expect("the store answers"), 0, "renewed");
+    assert_eq!(store.mark_all_seen("c1", &batch).expect("the store answers"), 2);
+    assert_eq!(store.mark_all_seen("c1", &[]).expect("the store answers"), 0);
+    assert!(store.seen_among("c2", &batch).expect("the store answers").is_empty(), "each connection sees its own");
+    assert_eq!(store.seen_among("c1", &batch).expect("the store answers").len(), 3);
+}

@@ -32,17 +32,30 @@ impl Synchronizer {
         let mut events = batch.events;
         events.sort_by_key(|event| event.at);
         let mut report = PollReport { fetched: events.len(), ..PollReport::default() };
+        let ids: Vec<String> = events.iter().map(|event| event.id.clone()).collect();
+        let owned = id.to_owned();
+        let mut seen = crate::stored::stored(&self.store, move |store| store.seen_among(&owned, &ids)).await?;
+        let mut routed = Vec::new();
         for event in &events {
-            if self.store.was_seen(id, &event.id)? {
+            if !seen.insert(event.id.clone()) {
                 report.duplicates += 1;
                 continue;
             }
-            self.route(event, desired, &mut report).await?;
-            self.store.mark_seen(id, &event.id)?;
+            if let Err(error) = self.route(event, desired, &mut report).await {
+                self.mark_seen(id, routed).await?;
+                return Err(error);
+            }
+            routed.push(event.id.clone());
         }
+        self.mark_seen(id, routed).await?;
         let (owned, cursor) = (id.to_owned(), batch.cursor.clone());
         crate::stored::stored(&self.store, move |store| store.set_cursor(&owned, &cursor)).await?;
         Ok(Some(report))
+    }
+
+    async fn mark_seen(&self, connection: &str, routed: Vec<String>) -> Result<usize, Error> {
+        let owned = connection.to_owned();
+        crate::stored::stored(&self.store, move |store| store.mark_all_seen(&owned, &routed)).await
     }
 
     pub(crate) async fn route(

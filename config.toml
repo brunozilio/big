@@ -282,6 +282,7 @@ slow_poll_seconds = "180"
 reconcile_minutes = "10"
 error_backoff_seconds = "5"
 seen_retention_days = "30"
+concurrency = "4"
 
 [agent]
 stream_idle_seconds = "300"

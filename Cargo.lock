@@ -4066,6 +4066,7 @@ dependencies = [
  "brand",
  "connectors",
  "domain",
+ "futures-util",
  "jiff",
  "serde",
  "serde_json",

@@ -1,6 +1,7 @@
 use connectors::ExternalEvent;
 use connectors::contracts::{CODE, PIPELINES, TRACKER, code, pipelines, tracker};
 use domain::workflow::WorkflowEvent;
+use futures_util::stream::{self, StreamExt};
 use serde_json::{Value, json};
 
 use crate::book::{Book, Entry};
@@ -35,12 +36,21 @@ impl Synchronizer {
     }
 
     pub(crate) async fn reconcile_with(&self, book: &Book, desired: &[Desired]) -> ReconcileReport {
+        let each: Vec<_> = desired.iter().map(|item| self.reconcile_one(book, desired, item)).collect();
+        let parts: Vec<ReconcileReport> = stream::iter(each).buffered(self.config().concurrency).collect().await;
         let mut report = ReconcileReport::default();
-        for item in desired {
-            report.items += 1;
-            self.reconcile_item(book, desired, item, &mut report).await;
+        for part in parts {
+            report.items += part.items;
+            report.corrections += part.corrections;
+            report.errors.extend(part.errors);
         }
         report
+    }
+
+    async fn reconcile_one(&self, book: &Book, all: &[Desired], item: &Desired) -> ReconcileReport {
+        let mut part = ReconcileReport { items: 1, ..ReconcileReport::default() };
+        self.reconcile_item(book, all, item, &mut part).await;
+        part
     }
 
     async fn reconcile_item(&self, book: &Book, all: &[Desired], item: &Desired, report: &mut ReconcileReport) {

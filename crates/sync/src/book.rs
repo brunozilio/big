@@ -1,4 +1,7 @@
+use std::collections::HashMap;
+
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
+use domain::principal::LOCAL_USER;
 use serde_json::Value;
 use store::{ConnectionRecord, Store};
 
@@ -30,11 +33,15 @@ fn entry(record: ConnectionRecord, owner: String) -> Entry {
 
 impl Book {
     pub fn load(store: &Store) -> Result<Book, store::Error> {
-        let mut entries = Vec::new();
-        for record in store.connections()? {
-            let owner = store.owner_of(store::ownership::CONNECTION, &record.id)?;
-            entries.push(entry(record, owner));
-        }
+        let owners: HashMap<String, String> = store.owned(store::ownership::CONNECTION)?.into_iter().collect();
+        let entries = store
+            .connections()?
+            .into_iter()
+            .map(|record| {
+                let owner = owners.get(&record.id).cloned().unwrap_or_else(|| LOCAL_USER.to_owned());
+                entry(record, owner)
+            })
+            .collect();
         Ok(Book { entries })
     }
 
@@ -92,6 +99,18 @@ mod tests {
         assert_eq!(book.resolve(Some("c"), "tracker").map(|e| e.settings["project"].clone()), Some(json!("c")));
         assert!(book.resolve(Some("z"), "tracker").is_none());
         assert!(book.resolve(None, "pipelines").is_none());
+    }
+
+    #[test]
+    fn every_connection_carries_its_owner_and_an_unclaimed_one_is_the_local_user_s() {
+        let Ok(store) = Store::in_memory(0) else { panic!("store") };
+        for record in [record("a", &["code"]), record("b", &["tracker"])] {
+            assert!(store.save_connection(&record).is_ok());
+        }
+        assert!(store.set_owner(store::ownership::CONNECTION, "b", "u-bia").is_ok());
+        let Ok(book) = Book::load(&store) else { panic!("book") };
+        let owners: Vec<&str> = book.entries.iter().map(|entry| entry.owner.as_str()).collect();
+        assert_eq!(owners, [LOCAL_USER, "u-bia"]);
     }
 }
 

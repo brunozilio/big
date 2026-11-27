@@ -1,3 +1,4 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
 use rusqlite::{OptionalExtension, params};
@@ -20,6 +21,37 @@ impl Store {
             params![connection, event, now()],
         )?;
         Ok(renewed > 0)
+    }
+
+    pub fn seen_among(&self, connection: &str, events: &[String]) -> Result<HashSet<String>> {
+        self.write(|transaction| {
+            let at = now();
+            let mut renew =
+                transaction.prepare("UPDATE seen_events SET at = ?3 WHERE connection = ?1 AND id = ?2")?;
+            let mut seen = HashSet::new();
+            for event in events {
+                if renew.execute(params![connection, event, at])? > 0 {
+                    seen.insert(event.clone());
+                }
+            }
+            Ok(seen)
+        })
+    }
+
+    pub fn mark_all_seen(&self, connection: &str, events: &[String]) -> Result<usize> {
+        if events.is_empty() {
+            return Ok(0);
+        }
+        self.write(|transaction| {
+            let at = now();
+            let mut mark = transaction
+                .prepare("INSERT OR IGNORE INTO seen_events (connection, id, at) VALUES (?1, ?2, ?3)")?;
+            let mut inserted = 0;
+            for event in events {
+                inserted += mark.execute(params![connection, event, at])?;
+            }
+            Ok(inserted)
+        })
     }
 
     pub fn prune_seen(&self, retention: Duration) -> Result<usize> {
