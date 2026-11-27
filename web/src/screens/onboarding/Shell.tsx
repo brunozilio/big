@@ -28,7 +28,7 @@ export function installerLabels(t: T): string[] {
 }
 
 export function journeyLabels(t: T): string[] {
-  return [...installerLabels(t), t('app.stageConnectionsLabel'), t('app.stageAiLabel'), t('app.stageApplicationLabel')]
+  return [...installerLabels(t), t('app.stageBrowserLabel'), t('app.stageConnectionsLabel'), t('app.stageAiLabel'), t('app.stageApplicationLabel')]
 }
 
 export function Steps({ labels, current }: { labels: string[]; current: number }) {

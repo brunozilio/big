@@ -4,7 +4,7 @@ import { setApi } from '../src/api'
 import type { Api } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
 import { boot, getState, stop } from '../src/api/store'
-import { needsOnboarding, Onboarding, returnedTo, stageOf } from '../src/screens/onboarding/Onboarding'
+import { needsOnboarding, Onboarding, orderOf, returnedTo, stageOf } from '../src/screens/onboarding/Onboarding'
 import { INSTALLED_KEY } from '../src/screens/onboarding/Shell'
 import { TooltipProvider } from '../src/ui/overlay'
 
@@ -44,6 +44,10 @@ describe('primeira vez', () => {
     const providers = [{ key: 'jira' }, { key: 'claude-subscription', ai: true }]
     expect(stageOf('jira', providers)).toBe('connections')
     expect(stageOf('claude-subscription', providers)).toBe('ai')
+    expect(stageOf(null, providers, true)).toBe('browser')
+    expect(stageOf('jira', providers, true)).toBe('connections')
+    expect(orderOf(true)[0]).toBe('browser')
+    expect(orderOf(false)).not.toContain('browser')
   })
 
   test('sem a marca do instalador as etapas são as de sempre', async () => {

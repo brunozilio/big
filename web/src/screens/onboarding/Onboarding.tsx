@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { api } from '@/api'
-import { useAdmin } from '@/api/me'
+import { useAdmin, useShared } from '@/api/me'
 import { errorText, setOnboarding, useStore } from '@/api/store'
 import { Button } from '@/ui/button'
 import { Icon } from '@/ui/icon'
@@ -12,6 +12,7 @@ import { ConnectDialog } from '../settings/ConnectDialog'
 import { ConnectionCard } from '../settings/ConnectionCard'
 import { accountsOf } from '../settings/Settings'
 import { ApplicationEditor } from '../settings/ApplicationEditor'
+import { CloudBrowser } from '../settings/Browser'
 import { GridSkeleton } from '@/ui/display'
 import { needsOnboarding, returnedTo, type Resumed } from '@/app/gate'
 import { installerLabels, OnboardingShell, StageHeading, wasInstalled } from './Shell'
@@ -19,11 +20,14 @@ import { installerLabels, OnboardingShell, StageHeading, wasInstalled } from './
 export { needsOnboarding, returnedTo }
 export type { Resumed }
 
-type Stage = 'connections' | 'ai' | 'application'
+type Stage = 'browser' | 'connections' | 'ai' | 'application'
 
-const ORDER: Stage[] = ['connections', 'ai', 'application']
+export function orderOf(shared: boolean): Stage[] {
+  return shared ? ['browser', 'connections', 'ai', 'application'] : ['connections', 'ai', 'application']
+}
 
 const STAGES = (t: T): { stage: Stage; label: string; title: string; text: string }[] => [
+  { stage: 'browser', label: t('app.stageBrowserLabel'), title: t('app.stageBrowserTitle'), text: t('app.stageBrowserText') },
   { stage: 'connections', label: t('app.stageConnectionsLabel'), title: t('app.stageConnectionsTitle'), text: t('app.stageConnectionsText') },
   { stage: 'ai', label: t('app.stageAiLabel'), title: t('app.stageAiTitle'), text: t('app.stageAiText') },
   { stage: 'application', label: t('app.stageApplicationLabel'), title: t('app.stageApplicationTitle'), text: t('app.stageApplicationText') },
@@ -54,13 +58,15 @@ function resumeProps(flow: string | null): Record<string, unknown> {
   return flow ? { resume: flow } : {}
 }
 
-export function stageOf(provider: string | null, providers: { key: string; ai?: boolean }[]): Stage {
+export function stageOf(provider: string | null, providers: { key: string; ai?: boolean }[], shared = false): Stage {
+  if (!provider && shared) return 'browser'
   return providers.find((p) => p.key === provider)?.ai ? 'ai' : 'connections'
 }
 
 export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void; resumed?: Resumed | null; onResumed?: () => void }) {
   const providers = useStore((s) => s.connections?.providers ?? [])
-  const [stage, setStage] = useState<Stage>(() => stageOf(resumed?.provider ?? null, providers))
+  const shared = useShared()
+  const [stage, setStage] = useState<Stage>(() => stageOf(resumed?.provider ?? null, providers, shared))
   const [connecting, setConnecting] = useState<string | null>(resumed?.provider ?? null)
   const [flow, setFlow] = useState<string | null>(resumed?.flow ?? null)
   const [busy, setBusy] = useState(false)
@@ -79,11 +85,13 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
   }
   const t = useT()
   const [installed] = useState(wasInstalled)
-  const at = ORDER.indexOf(stage)
-  const current = STAGES(t)[at]
+  const order = orderOf(shared)
+  const at = order.indexOf(stage)
+  const stages = order.map((wanted) => STAGES(t).find((s) => s.stage === wanted) ?? STAGES(t)[0])
+  const current = stages[at] ?? stages[0]
   const steps = (
     <>
-      {at > 0 && <Button variant="ghost" icon={<Icon name="left" size={15} />} onClick={() => setStage(ORDER[at - 1])}>{t('app.back')}</Button>}
+      {at > 0 && <Button variant="ghost" icon={<Icon name="left" size={15} />} onClick={() => setStage(order[at - 1])}>{t('app.back')}</Button>}
       <Button variant="ghost" disabled={busy} onClick={skip}>{t('app.skipForNow')}</Button>
     </>
   )
@@ -94,13 +102,15 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
       onResumed?.()
     }} />
   )
-  const labels = STAGES(t).map((s) => s.label)
+  const labels = stages.map((s) => s.label)
   return (
     <OnboardingShell labels={installed ? [...installerLabels(t), ...labels] : labels} current={installed ? at + 2 : at} outside={connect}>
       <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
         <StageHeading title={current.title} text={current.text} />
         <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-          {stage !== 'application' ? (
+          {stage === 'browser' ? (
+            <CloudBrowser />
+          ) : stage !== 'application' ? (
             <ConnectionsStage ai={stage === 'ai'} onConnect={setConnecting} />
           ) : (
             <div className="rounded-card bg-surface shadow-card">
@@ -113,7 +123,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
       {stage !== 'application' && (
         <div className="mt-6 flex items-center gap-2">
           {steps}
-          <Button variant="primary" className="ml-auto" onClick={() => setStage(ORDER[at + 1])}>{t('app.continue')}</Button>
+          <Button variant="primary" className="ml-auto" onClick={() => setStage(order[at + 1])}>{t('app.continue')}</Button>
         </div>
       )}
     </OnboardingShell>

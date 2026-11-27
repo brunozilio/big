@@ -237,6 +237,14 @@ function CloudView({ status, onChange }: { status: BrowserStatus; onChange: () =
   )
 }
 
+export function CloudBrowser() {
+  const t = useT()
+  const { loaded, reload } = useBrowserStatus()
+  if (loaded.state === 'loading') return null
+  if (loaded.state === 'failed') return <p role="alert" className="text-sm text-danger-fg">{t('settings.browser_failed')}</p>
+  return <CloudView status={loaded.status} onChange={() => void reload()} />
+}
+
 export function BrowserView() {
   const t = useT()
   const { loaded, setEnabled, reload } = useBrowserStatus()
