@@ -124,7 +124,7 @@ function fakeSource(): { open: (url: string) => LiveSource; urls: string[]; emit
 const wait = { timeout: 8000 }
 
 describe('tela do instalador', () => {
-  test('responder o formulário envia a ação e os valores e trava até o próximo', async () => {
+  test('responder o formulário envia a ação e os valores e volta ao andamento até o próximo', async () => {
     const calls = serve({ [`POST ${RUNNER.answer}`]: { status: 204, body: null } })
     const source = fakeSource()
     const view = render(<Run open={source.open} />)
@@ -144,9 +144,9 @@ describe('tela do instalador', () => {
     fireEvent.change(view.getByLabelText('Segredo'), { target: { value: 's3' } })
     expect(go.disabled).toBe(false)
     fireEvent.click(go)
-    expect(await view.findByText('Recebido. Seguindo…', {}, wait)).toBeTruthy()
+    expect(await view.findByText('Criar rede', {}, wait)).toBeTruthy()
+    expect(view.queryByRole('button', { name: 'Instalar' })).toBeNull()
     expect(calls.find((c) => c.method === 'POST' && c.path === RUNNER.answer)?.body).toEqual({ form: 'f1', action: 'go', values: { region: 'us-east-1', name: 'prod', secret: 's3' } })
-    expect((view.getByRole('button', { name: 'Instalar' }) as HTMLButtonElement).disabled).toBe(true)
     source.emit(form('f2', 'Confirmar'))
     expect(view.getByText('Confirmar')).toBeTruthy()
     expect((view.getByRole('button', { name: 'Voltar' }) as HTMLButtonElement).disabled).toBe(false)

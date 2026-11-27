@@ -132,7 +132,6 @@ function PendingForm({ form, answered, onAnswered, notes }: { form: RunForm; ans
         </fieldset>
       </div>
       {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
-      {answered && <p role="status" className="mt-3 text-sm text-muted">{t('run.answered')}</p>}
       <Bar>
         {form.actions.map((a) => (
           <Button key={a.id} type={a.primary ? 'submit' : 'button'} variant={a.primary ? 'primary' : 'ghost'} className={a.primary ? 'ml-auto' : undefined} loading={busy === a.id} disabled={locked || (a.primary === true && missing)} onClick={a.primary ? undefined : () => answer(a)}>
@@ -218,7 +217,7 @@ export function Run({ open = openEventSource, go = goTo }: { open?: OpenSource; 
   const onContinue = useContinue(state, go)
   return (
     <OnboardingShell labels={journeyLabels(t)} current={0} className="min-h-dvh" language={<LoginLanguage className="w-36" />}>
-      {state.form ? (
+      {state.form && !state.answered ? (
         <PendingForm key={`${state.form.id}:${state.seq}`} form={state.form} answered={state.answered} onAnswered={answered} notes={<Notes state={state} />} />
       ) : (
         <Working state={state} onContinue={onContinue} />
