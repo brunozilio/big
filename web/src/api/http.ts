@@ -180,7 +180,11 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
       const form = new FormData()
       form.append('file', file)
       const res = await fetcher(at(ROUTES.attachments), { method: 'POST', body: form })
-      if (!res.ok) throw new ApiError(res.status, 'upload', translate(currentLanguage(), 'app.uploadFailed'))
+      if (!res.ok) {
+        const told = (safeJson(await res.text()) as { error?: { message?: string } } | null)?.error?.message
+        const message = res.status === 413 ? told ?? translate(currentLanguage(), 'app.uploadTooLarge') : translate(currentLanguage(), 'app.uploadFailed')
+        throw new ApiError(res.status, 'upload', message)
+      }
       return (await res.json()) as { id: string; name: string; size: number }
     },
     live: (onEvent, onState) => followLive(open, onEvent, onState),

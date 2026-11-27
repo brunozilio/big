@@ -53,7 +53,7 @@ export function kindOf(name: string, mime = ''): AttachmentKind {
 let seq = 0
 
 export const ATTACHMENTS_PER_MESSAGE = 10
-const MAX_BYTES = 25 * 1024 * 1024
+export const MAX_BYTES = 10 * 1024 * 1024
 
 export type Uploader = (file: File, onProgress: (percent: number) => void) => Promise<{ id: string }>
 

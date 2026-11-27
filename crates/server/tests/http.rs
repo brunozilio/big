@@ -400,6 +400,19 @@ async fn models_branding_and_attachments() {
     assert_eq!((uploaded["name"].as_str(), uploaded["size"].as_u64()), (Some("nota.txt"), Some(4)));
     let with_file = json!({ "text": "com anexo", "issue": null, "model": "auto", "attachments": [uploaded["id"]] });
     assert_eq!(world.send(Method::POST, "/api/items", Some(with_file)).await.0, StatusCode::OK);
+
+    let big = "a".repeat(10 * 1024 * 1024 + 1);
+    let body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"grande.txt\"\r\nContent-Type: text/plain\r\n\r\n{big}\r\n--{boundary}--\r\n"
+    );
+    let request = axum::http::Request::builder()
+        .method(Method::POST)
+        .uri("/api/attachments")
+        .header("content-type", format!("multipart/form-data; boundary={boundary}"))
+        .body(axum::body::Body::from(body))
+        .expect("request");
+    let response = tower::ServiceExt::oneshot(world.router.clone(), request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
 }
 
 #[tokio::test(flavor = "multi_thread")]

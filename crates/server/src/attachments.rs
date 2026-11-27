@@ -37,6 +37,27 @@ pub fn paths(dir: &Path, ids: &Value) -> Vec<PathBuf> {
         .collect()
 }
 
+pub fn limit_mb() -> usize {
+    brand::attachments::LIMIT_MB.trim().parse().unwrap_or(10)
+}
+
+fn most_bytes() -> usize {
+    limit_mb() * 1024 * 1024
+}
+
+fn too_large() -> ApiError {
+    let most = limit_mb();
+    ApiError::new(
+        axum::http::StatusCode::PAYLOAD_TOO_LARGE,
+        "too_large",
+        said(
+            format!("The attachment is over {most} MB."),
+            format!("El adjunto supera los {most} MB."),
+            format!("O anexo passa de {most} MB."),
+        ),
+    )
+}
+
 pub async fn upload(
     State(ctx): State<Ctx>,
     axum::Extension(person): axum::Extension<domain::principal::Principal>,
@@ -48,6 +69,9 @@ pub async fn upload(
         }
         let name = safe_name(field.file_name().unwrap_or("anexo"));
         let bytes = field.bytes().await.map_err(|error| ApiError::bad(error.to_string()))?;
+        if bytes.len() > most_bytes() {
+            return Err(too_large());
+        }
         let id = random_id()?;
         let folder = ctx.backend.attachments().join(&id);
         std::fs::create_dir_all(&folder).map_err(ApiError::failed)?;

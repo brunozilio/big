@@ -228,6 +228,9 @@ kind = "vscode"
 name = "VS Code"
 scheme = "vscode"
 
+[attachments]
+limit_mb = "10"
+
 [browser]
 call_seconds = "150"
 switch_seconds = "120"
