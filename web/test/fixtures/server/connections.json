@@ -18,6 +18,7 @@
       "alternatives": [],
       "bindings": [],
       "button": "Entrar com Fake",
+      "custom": false,
       "description": "Sua conta Fake",
       "fields": [],
       "group": "tracker",
@@ -55,6 +56,7 @@
         }
       ],
       "button": "Entrar com Picky",
+      "custom": false,
       "description": "Sua conta Picky",
       "fields": [],
       "group": "tracker",
@@ -101,6 +103,7 @@
       ],
       "bindings": [],
       "button": "Entrar com Web",
+      "custom": false,
       "description": "Sua conta Web",
       "fields": [],
       "group": "tracker",
@@ -110,6 +113,44 @@
       "name": "Web",
       "signIn": "oauth",
       "site": "do Web"
+    },
+    {
+      "alternatives": [],
+      "bindings": [],
+      "button": "Conectar",
+      "custom": true,
+      "description": "Conecte o seu próprio servidor MCP",
+      "fields": [
+        {
+          "help": "Por exemplo, https://mcp.exemplo.com/mcp.",
+          "kind": "text",
+          "label": "Endereço do servidor MCP",
+          "mono": true,
+          "name": "url",
+          "optional": false,
+          "placeholder": null,
+          "secret": false,
+          "value": null
+        },
+        {
+          "help": "Os agentes veem as ferramentas como mcp__nome__ferramenta.",
+          "kind": "text",
+          "label": "Nome",
+          "mono": true,
+          "name": "label",
+          "optional": false,
+          "placeholder": null,
+          "secret": false,
+          "value": null
+        }
+      ],
+      "group": "mcp",
+      "key": "mcp",
+      "logo": "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"currentColor\"><g fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><path d=\"M9 2v5M15 2v5\"/><path d=\"M6 7h12v4a6 6 0 0 1-12 0z\"/><path d=\"M12 17v5\"/></g></svg>",
+      "multiple": true,
+      "name": "MCP server",
+      "signIn": "oauth",
+      "site": "do servidor MCP"
     },
     {
       "ai": true,
