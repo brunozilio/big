@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, test } from 'bun:test'
+import { render } from '@testing-library/react'
 import { at, basePath } from '../src/api/base'
+import { setBranding } from '../src/api/store'
+import { ProductMark } from '../src/ui/domain'
 
 function served(href: string | null) {
   document.querySelectorAll('base').forEach((tag) => tag.remove())
@@ -31,5 +34,16 @@ describe('caminho base', () => {
     expect(basePath()).toBe('')
     served('//evil.example.com/')
     expect(basePath()).toBe('')
+  })
+})
+
+describe('logo sob prefixo', () => {
+  test('a marca do produto usa o caminho base no endereço do logo', () => {
+    served('/app/')
+    setBranding({ name: 'X', logo: '/api/branding/logo', favicon: null, editor: '', theme: 'system', language: 'pt-BR', output_style: null, output_styles: [] })
+    const view = render(<ProductMark />)
+    expect(view.container.querySelector('img')?.getAttribute('src')).toBe('/app/api/branding/logo')
+    view.unmount()
+    served(null)
   })
 })

@@ -1,3 +1,4 @@
+import { at } from '@/api/base'
 import { useEffect } from 'react'
 import { useStore } from '@/api/store'
 import type { Theme } from '@/api/contract'
@@ -33,7 +34,7 @@ export function useBrandTitle() {
   useEffect(() => {
     if (!branding) return
     document.title = branding.name
-    const href = branding.favicon
+    const href = branding.favicon ? at(branding.favicon) : null
     let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]')
     if (!href) {
       link?.remove()

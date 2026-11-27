@@ -1,3 +1,4 @@
+import { at } from '@/api/base'
 import { motion } from 'framer-motion'
 import { useStore } from '@/api/store'
 import { currentLanguage, translate } from '@/i18n'
@@ -12,7 +13,7 @@ export function ProductMark({ className }: { className?: string }) {
   const branding = useStore((s) => s.branding)
   const name = branding?.name ?? ''
   if (branding?.logo) {
-    return <img src={branding.logo} alt={name} className={cn('shrink-0 object-contain', className)} style={{ height: 30, borderRadius: size * 0.23 }} />
+    return <img src={at(branding.logo)} alt={name} className={cn('shrink-0 object-contain', className)} style={{ height: 30, borderRadius: size * 0.23 }} />
   }
   return (
     <span role="img" aria-label={name} className={cn('inline-flex shrink-0 items-center justify-center bg-primary font-semibold text-primary-fg', className)} style={{ width: 30, height: 30, borderRadius: size * 0.23, fontSize: size * 0.48 }}>
