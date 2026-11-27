@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, PoisonError};
+use std::sync::Arc;
 
 use base64::Engine;
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use super::bridge::{Answers, Waits, encoded};
 use crate::error::ActionError;
 use crate::http::{Http, HttpRequest, HttpResponse, Method, Part};
-use crate::mcp::McpClient;
+use super::sessions::{Ask, Identity, McpSessions};
 use crate::oauth::mcp::McpSignIn;
 use crate::oauth::{Authorization, CodeSignIn, Grant, LoopbackSignIn};
 
@@ -267,38 +267,32 @@ fn now_of(arguments: &Value) -> Timestamp {
     arguments["now"].as_i64().and_then(|second| Timestamp::from_second(second).ok()).unwrap_or_else(Timestamp::now)
 }
 
-type Session<'a> = (String, String, Arc<McpClient<'a>>);
-
 #[derive(Debug)]
 pub struct Online<'a> {
     http: &'a dyn Http,
     redirect: String,
-    sessions: Mutex<Vec<Session<'a>>>,
+    sessions: Arc<McpSessions>,
+    connection: String,
     sockets: super::socket::Sockets,
 }
 
 impl<'a> Online<'a> {
     pub fn new(http: &'a dyn Http, redirect: String) -> Online<'a> {
-        Online { http, redirect, sessions: Mutex::new(Vec::new()), sockets: super::socket::Sockets::default() }
+        Online::pooled(http, redirect, Arc::default(), &Value::Null)
     }
 
-    async fn session(&self, arguments: &Value) -> Result<Arc<McpClient<'a>>, ActionError> {
-        let url = field(arguments, "url");
-        let token = field(arguments, "token");
-        let known = self
-            .sessions
-            .lock()
-            .unwrap_or_else(PoisonError::into_inner)
-            .iter()
-            .find(|(at, by, _)| at == url && by == token)
-            .map(|(_, _, client)| Arc::clone(client));
-        if let Some(client) = known {
-            return Ok(client);
-        }
-        let client = Arc::new(McpClient::connect(self.http, url, token).await?);
-        let mut sessions = self.sessions.lock().unwrap_or_else(PoisonError::into_inner);
-        sessions.push((url.to_owned(), token.to_owned(), Arc::clone(&client)));
-        Ok(client)
+    pub fn pooled(http: &'a dyn Http, redirect: String, sessions: Arc<McpSessions>, input: &Value) -> Online<'a> {
+        let connection = input["creds"]["connection"].as_str().unwrap_or_default().to_owned();
+        Online { http, redirect, sessions, connection, sockets: super::socket::Sockets::default() }
+    }
+
+    async fn mcp(&self, arguments: &Value, ask: Ask) -> Result<Value, ActionError> {
+        let identity = Identity {
+            connection: self.connection.clone(),
+            url: field(arguments, "url").to_owned(),
+            token: field(arguments, "token").to_owned(),
+        };
+        self.sessions.ask(self.http, &identity, &ask).await
     }
 
     fn sign_in(&self, arguments: &Value) -> McpSignIn {
@@ -330,12 +324,12 @@ impl<'a> Online<'a> {
                 Ok(answer) => Ok(response(&answer, arguments["binary"].as_bool().unwrap_or(false))),
                 Err(error) => Ok(json!({ "failed": error })),
             },
-            "mcp.tools" => Ok(json!(self.session(arguments).await?.tools().await?)),
+            "mcp.tools" => self.mcp(arguments, Ask::Tools).await,
             "mcp.call" => {
-                let client = self.session(arguments).await?;
-                client.call(field(arguments, "tool"), arguments["arguments"].clone()).await
+                let ask = Ask::Call(field(arguments, "tool").to_owned(), arguments["arguments"].clone());
+                self.mcp(arguments, ask).await
             }
-            "mcp.connect" => self.session(arguments).await.map(|_| json!(true)),
+            "mcp.connect" => self.mcp(arguments, Ask::Connect).await,
             "socket.open" => self.sockets.open(arguments).await,
             "socket.send" => self.sockets.send(arguments).await,
             "socket.receive" => self.sockets.receive(arguments).await,

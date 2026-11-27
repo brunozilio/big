@@ -82,10 +82,14 @@ async fn the_account_points_runs_at_the_site_mcp_server_and_lists_its_tools() {
     );
     assert_eq!(http.sent()[0].url, US1);
     assert_eq!(http.sent()[0].header_value("authorization"), Some("Bearer at"));
-    let http = listing(FakeHttp::new());
+    let tools =
+        r#"{"jsonrpc":"2.0","id":3,"result":{"tools":[{"name":"search_datadog_logs"},{"name":"get_datadog_trace"}]}}"#;
+    let http = FakeHttp::new().once(Method::Post, "/v1/mcp", 200, tools);
     let stored = creds("at", account.settings.clone());
     let listed = provider.call(&http, &stored, "mcp.tools", &json!({}), "k").await;
     assert_eq!(listed, Ok(json!([{ "name": "search_datadog_logs" }, { "name": "get_datadog_trace" }])));
+    assert_eq!(http.sent().len(), 1);
+    assert_eq!(http.sent()[0].header_value("mcp-session-id"), Some("s1"));
 }
 
 #[tokio::test]

@@ -296,12 +296,12 @@ async fn the_fake_server_refuses_the_tools_only_the_first_version_had() {
     let mcp = McpClient::connect(&http, SERVER, "at").await;
     let Ok(mcp) = mcp else { panic!("{mcp:?}") };
     for gone in ["getVisibleJiraProjects", "getTransitionsForJiraIssue", "addCommentToJiraIssue"] {
-        let refused = mcp.call(gone, json!({"cloudId": "c1"})).await;
+        let refused = mcp.call(&http, gone, json!({"cloudId": "c1"})).await;
         assert!(refused.as_ref().is_err_and(|e| e.message.contains("Unknown tool")), "{gone}: {refused:?}");
     }
-    let refused = mcp.call("executeRead", json!({"cloudId": "c1", "name": "getVisibleJiraProjects"})).await;
+    let refused = mcp.call(&http, "executeRead", json!({"cloudId": "c1", "name": "getVisibleJiraProjects"})).await;
     assert!(refused.is_err());
-    let siteless = mcp.call("getJiraIssue", json!({"issueIdOrKey": "BIG-1"})).await;
+    let siteless = mcp.call(&http, "getJiraIssue", json!({"issueIdOrKey": "BIG-1"})).await;
     assert!(siteless.is_err());
 }
 

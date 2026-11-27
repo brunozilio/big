@@ -1,5 +1,6 @@
 mod bridge;
 mod host;
+mod sessions;
 mod sign_in;
 mod socket;
 
@@ -15,6 +16,7 @@ pub use bridge::{Answers, Script};
 use bridge::{WRAPPER, invoke, wrapper};
 pub use host::Local;
 use host::{Kept, Online};
+use sessions::McpSessions;
 pub use sign_in::ScriptedSignIn;
 use sign_in::{SIGN_IN, redirect};
 
@@ -64,12 +66,14 @@ pub struct ScriptedProvider {
     chooses: Vec<String>,
     events: Option<ScriptedEvents>,
     answers: Arc<dyn Answers>,
+    sessions: Arc<McpSessions>,
 }
 
 #[derive(Debug)]
 struct ScriptedEvents {
     script: Script,
     answers: Arc<dyn Answers>,
+    sessions: Arc<McpSessions>,
 }
 
 fn config_of(key: &str) -> Value {
@@ -149,8 +153,13 @@ impl ScriptedProvider {
             actions: declared.actions,
         };
         let answers: Arc<dyn Answers> = Arc::new(Local);
-        let events = polls.then(|| ScriptedEvents { script: script.clone(), answers: Arc::clone(&answers) });
-        Ok(ScriptedProvider { key, script, descriptor, chooses: declared.chooses, events, answers })
+        let sessions = Arc::new(McpSessions::default());
+        let events = polls.then(|| ScriptedEvents {
+            script: script.clone(),
+            answers: Arc::clone(&answers),
+            sessions: Arc::clone(&sessions),
+        });
+        Ok(ScriptedProvider { key, script, descriptor, chooses: declared.chooses, events, answers, sessions })
     }
 
     pub fn with_answers(mut self, answers: Arc<dyn Answers>) -> ScriptedProvider {
@@ -167,7 +176,7 @@ impl ScriptedProvider {
     }
 
     async fn online(&self, http: &dyn Http, name: &str, input: Value) -> Result<Value, ActionError> {
-        let online = Online::new(http, redirect());
+        let online = Online::pooled(http, redirect(), Arc::clone(&self.sessions), &input);
         let answers = Kept::of(&self.answers, &input);
         invoke(&self.script, answers, &online, name, input).await
     }
@@ -272,8 +281,8 @@ impl EventSource for ScriptedEvents {
         cursor: Option<&str>,
         watch: &[String],
     ) -> Result<EventBatch, ActionError> {
-        let online = Online::new(http, redirect());
         let input = json!({ "creds": creds_of(creds), "cursor": cursor, "watch": watch });
+        let online = Online::pooled(http, redirect(), Arc::clone(&self.sessions), &input);
         let answers = Kept::of(&self.answers, &input);
         let batch = invoke(&self.script, answers, &online, "poll", input).await?;
         let mut events = Vec::new();

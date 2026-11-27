@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use serde_json::{Value, json};
 
@@ -9,12 +9,12 @@ pub const PROTOCOL: &str = "2025-06-18";
 const SESSION: &str = "mcp-session-id";
 
 #[derive(Debug)]
-pub struct McpClient<'a> {
-    http: &'a dyn Http,
+pub struct McpClient {
     url: String,
     token: String,
     session: Option<String>,
     next: AtomicU64,
+    stale: AtomicBool,
 }
 
 pub fn messages(response: &HttpResponse) -> Vec<Value> {
@@ -115,19 +115,36 @@ fn tool_error(text: &str) -> ActionError {
     }
 }
 
-impl<'a> McpClient<'a> {
-    pub async fn connect(http: &'a dyn Http, url: &str, token: &str) -> Result<McpClient<'a>, ActionError> {
-        let mut client =
-            McpClient { http, url: url.to_owned(), token: token.to_owned(), session: None, next: AtomicU64::new(1) };
+impl McpClient {
+    pub async fn connect(http: &dyn Http, url: &str, token: &str) -> Result<McpClient, ActionError> {
+        let mut client = McpClient {
+            url: url.to_owned(),
+            token: token.to_owned(),
+            session: None,
+            next: AtomicU64::new(1),
+            stale: AtomicBool::new(false),
+        };
         let params = json!({
             "protocolVersion": PROTOCOL,
             "capabilities": {},
             "clientInfo": { "name": brand::connectors::MCP_CLIENT_NAME, "version": brand::connectors::MCP_CLIENT_VERSION },
         });
-        let (response, _) = client.exchange("initialize", params).await?;
+        let (response, _) = client.exchange(http, "initialize", params).await?;
         client.session = response.header(SESSION).map(str::to_owned);
-        client.notify("notifications/initialized").await?;
+        client.notify(http, "notifications/initialized").await?;
         Ok(client)
+    }
+
+    pub fn stale(&self) -> bool {
+        self.stale.load(Ordering::Relaxed)
+    }
+
+    async fn sent(&self, http: &dyn Http, body: &Value) -> Result<HttpResponse, ActionError> {
+        let response = http.send(self.request(body)?).await?;
+        if self.session.is_some() && matches!(response.status, 400 | 401 | 403 | 404) {
+            self.stale.store(true, Ordering::Relaxed);
+        }
+        response.checked()
     }
 
     fn request(&self, body: &Value) -> Result<HttpRequest, ActionError> {
@@ -143,16 +160,21 @@ impl<'a> McpClient<'a> {
         request.json(body)
     }
 
-    async fn notify(&self, method: &str) -> Result<(), ActionError> {
+    async fn notify(&self, http: &dyn Http, method: &str) -> Result<(), ActionError> {
         let body = json!({ "jsonrpc": "2.0", "method": method });
-        self.http.send(self.request(&body)?).await?.checked()?;
+        self.sent(http, &body).await?;
         Ok(())
     }
 
-    async fn exchange(&self, method: &str, params: Value) -> Result<(HttpResponse, Value), ActionError> {
+    async fn exchange(
+        &self,
+        http: &dyn Http,
+        method: &str,
+        params: Value,
+    ) -> Result<(HttpResponse, Value), ActionError> {
         let id = self.next.fetch_add(1, Ordering::Relaxed);
         let body = json!({ "jsonrpc": "2.0", "id": id, "method": method, "params": params });
-        let response = self.http.send(self.request(&body)?).await?.checked()?;
+        let response = self.sent(http, &body).await?;
         let answer = messages(&response)
             .into_iter()
             .find(|message| message["id"] == json!(id))
@@ -164,14 +186,14 @@ impl<'a> McpClient<'a> {
         Ok((response, answer["result"].clone()))
     }
 
-    pub async fn tools(&self) -> Result<Vec<String>, ActionError> {
-        let (_, result) = self.exchange("tools/list", json!({})).await?;
+    pub async fn tools(&self, http: &dyn Http) -> Result<Vec<String>, ActionError> {
+        let (_, result) = self.exchange(http, "tools/list", json!({})).await?;
         let listed = result["tools"].as_array().map(Vec::as_slice).unwrap_or_default();
         Ok(listed.iter().filter_map(|tool| tool["name"].as_str()).map(str::to_owned).collect())
     }
 
-    pub async fn call(&self, tool: &str, arguments: Value) -> Result<Value, ActionError> {
-        let (_, result) = self.exchange("tools/call", json!({ "name": tool, "arguments": arguments })).await?;
+    pub async fn call(&self, http: &dyn Http, tool: &str, arguments: Value) -> Result<Value, ActionError> {
+        let (_, result) = self.exchange(http, "tools/call", json!({ "name": tool, "arguments": arguments })).await?;
         tool_value(&result)
     }
 }
@@ -195,7 +217,7 @@ mod tests {
             );
         let client = McpClient::connect(&http, "https://h/mcp", "tok").await;
         let Ok(client) = client else { panic!("{client:?}") };
-        assert_eq!(client.call("thing", json!({"a": 1})).await, Ok(json!({"ok": 1})));
+        assert_eq!(client.call(&http, "thing", json!({"a": 1})).await, Ok(json!({"ok": 1})));
         let sent = http.sent();
         assert_eq!(sent[0].body_json()["method"], "initialize");
         assert_eq!(sent[1].body_json()["method"], "notifications/initialized");
