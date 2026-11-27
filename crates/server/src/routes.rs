@@ -6,6 +6,7 @@ use axum::extract::{DefaultBodyLimit, Query, State};
 use axum::http::{StatusCode, Uri};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{any, delete, get, post, put};
+use tower_http::compression::CompressionLayer;
 use tower_http::services::{ServeDir, ServeFile};
 
 use crate::error::{ApiError, said};
@@ -146,6 +147,7 @@ pub fn router(ctx: Ctx) -> Router {
     app.layer(axum::middleware::from_fn_with_state(ctx.clone(), crate::auth::gate))
         .layer(axum::middleware::from_fn_with_state(ctx.clone(), crate::error::localized))
         .layer(DefaultBodyLimit::max(MOST_BODY_BYTES))
+        .layer(CompressionLayer::new())
         .layer(axum::middleware::from_fn(crate::access::logged))
         .with_state(ctx)
 }

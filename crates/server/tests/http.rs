@@ -474,6 +474,33 @@ async fn the_live_feed_tells_about_items_sessions_connections_and_branding() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn answers_are_compressed_for_clients_that_accept_it_but_the_live_feed_is_not() {
+    let world = World::new().await;
+    let asked = |uri: &str, encoding: &str| {
+        axum::http::Request::builder()
+            .uri(uri)
+            .header("accept-encoding", encoding)
+            .body(axum::body::Body::empty())
+            .expect("request")
+    };
+    let plain = tower::ServiceExt::oneshot(world.router.clone(), asked("/api/branding", "identity")).await;
+    let plain = plain.expect("response");
+    assert!(plain.headers().get("content-encoding").is_none());
+    let plain = http_body_util::BodyExt::collect(plain.into_body()).await.expect("body").to_bytes();
+    for encoding in ["gzip", "br"] {
+        let response = tower::ServiceExt::oneshot(world.router.clone(), asked("/api/branding", encoding)).await;
+        let response = response.expect("response");
+        assert_eq!(response.headers()["content-encoding"], encoding);
+        let packed = http_body_util::BodyExt::collect(response.into_body()).await.expect("body").to_bytes();
+        assert!(packed.len() < plain.len(), "{encoding}: {} of {}", packed.len(), plain.len());
+    }
+    let live = tower::ServiceExt::oneshot(world.router.clone(), asked("/api/live", "gzip, br")).await;
+    let live = live.expect("response");
+    assert_eq!(live.headers()["content-type"], "text/event-stream");
+    assert!(live.headers().get("content-encoding").is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn a_connection_saved_without_its_choice_learns_the_only_one_and_a_sign_in_with_none_fails() {
     let world = World::new().await;
     let record = store::ConnectionRecord {
