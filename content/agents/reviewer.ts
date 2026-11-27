@@ -6,6 +6,7 @@ export const spec = {
     "Read",
     "Grep",
     "Glob",
+    "History",
     "Bash",
     "BashOutput",
     "KillShell",
