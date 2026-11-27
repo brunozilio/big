@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
-import { act, cleanup, render, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, waitFor, within } from '@testing-library/react'
+import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { setApi } from '../src/api'
 import type { Api, Application, Block } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
@@ -59,7 +60,10 @@ describe('página de segurança', () => {
   test('sem nenhum vínculo a página explica onde escolher o projeto', async () => {
     const base = fresh()
     await started({ ...base, applications: async () => [] })
-    const view = render(<TooltipProvider><SecurityView /></TooltipProvider>)
-    await waitFor(() => expect(view.getByText(/Nenhum repositório tem projeto/)).toBeTruthy())
+    const view = render(<MemoryRouter initialEntries={['/security']}><TooltipProvider><Routes><Route path="/security" element={<SecurityView />} /><Route path="/settings/applications" element={<p>aplicações abertas</p>} /></Routes></TooltipProvider></MemoryRouter>)
+    await waitFor(() => expect(view.getByText('Nada para mostrar ainda')).toBeTruthy())
+    expect(view.getByText(/Vincule um projeto de segurança ou de qualidade/)).toBeTruthy()
+    fireEvent.click(view.getByRole('button', { name: 'Abrir aplicações' }))
+    expect(view.getByText('aplicações abertas')).toBeTruthy()
   })
 })

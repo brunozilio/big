@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '@/api'
 import type { Application, ApplicationRepository, Binding, Block, Finding, FindingKind, QualityReport } from '@/api/contract'
 import { errorText, useStore } from '@/api/store'
 import { TaskTargetProvider } from '@/blocks/findingTask'
 import { BlockView } from '@/blocks/registry'
+import { Button } from '@/ui/button'
 import { Card, EmptyState, ListSkeleton } from '@/ui/display'
 import { Input, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
@@ -185,6 +187,14 @@ function Repository({ targets, loaded, filters }: { targets: Target[]; loaded: R
   )
 }
 
+function NoProjects() {
+  const t = useT()
+  const navigate = useNavigate()
+  const icon = <Icon name="shield" size={28} className="mb-4 text-faint" />
+  const action = <Button variant="primary" onClick={() => navigate('/settings/applications')}>{t('app.securityEmptyAction')}</Button>
+  return <EmptyState icon={icon} title={t('app.securityEmpty')} text={t('app.securityEmptyText')} action={action} />
+}
+
 export function SecurityView() {
   const t = useT()
   const applications = useStore((s) => s.applications)
@@ -196,7 +206,7 @@ export function SecurityView() {
   const chosen = all.filter((target) => (filters.application === ALL || target.application.id === filters.application) && (filters.source === ALL || target.capability === filters.source))
   const groups = [...new Map(chosen.map((target) => [`${target.application.id}/${target.repository.id}`, chosen.filter((other) => other.application.id === target.application.id && other.repository.id === target.repository.id)])).values()]
   if (!applications) return <ListSkeleton />
-  if (all.length === 0) return <EmptyState size="inline" icon={<Icon name="shield" size={22} />} title={t('app.securityEmpty')} text={t('app.securityEmptyText')} />
+  if (all.length === 0) return <NoProjects />
   const set = (next: Partial<Filters>) => setFilters((known) => ({ ...known, ...next }))
   const appOptions = [{ value: ALL, label: t('app.securityAll') }, ...[...new Map(all.map((target) => [target.application.id, target.application.name])).entries()].map(([value, label]) => ({ value, label }))]
   const sourceOptions = [{ value: ALL, label: t('app.securityAll') }, ...sources.map(([value, label]) => ({ value, label }))]
