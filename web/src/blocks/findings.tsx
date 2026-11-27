@@ -101,7 +101,7 @@ function Detail({ f }: { f: Finding }) {
   if (where(f)) facts.push({ label: t('blocks.findingsWhere'), value: <span className="font-mono text-sm">{where(f)}</span> })
   if (f.fixedIn) facts.push({ label: t('blocks.findingsFixedIn'), value: <span className="font-mono text-sm">{f.fixedIn}</span> })
   return (
-    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={tween} className="overflow-hidden">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={tween} className="overflow-hidden">
       <div className="flex flex-col gap-3 border-t bg-subtle px-4 py-3.5 sm:pl-[124px]">
         {f.description && <p className="max-w-[68ch] text-base text-fg2">{f.description}</p>}
         <dl className="grid grid-cols-[110px_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-sm">

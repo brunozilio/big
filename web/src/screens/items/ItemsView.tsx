@@ -1,13 +1,13 @@
 import { AnimatePresence, motion } from 'framer-motion'
 import { memo, useCallback, useEffect, useMemo, useRef, useState, type DragEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useInRouterContext, useSearchParams } from 'react-router-dom'
-import { BOARD_GROUPS, BTW_WORKFLOW, type BoardGroup, type Item } from '@/api/contract'
+import { BOARD_GROUPS, BTW_WORKFLOW, type BoardGroup, type Item, type ItemApplication } from '@/api/contract'
 import { useStore } from '@/api/store'
 import { useT, type T } from '@/i18n'
 import { titleOf } from '@/i18n/server'
 import { cn } from '@/ui/cn'
 import { StatusIcon, type StatusGlyph } from '@/ui/domain'
-import { Input, SegmentedControl } from '@/ui/form'
+import { Input, SegmentedControl, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { Collapse, stagger, tween, tweenClose } from '@/ui/motion'
 import { toast } from '@/ui/toast'
@@ -30,7 +30,7 @@ export function groupItems(items: Item[], group: BoardGroup): Item[] {
   return list.slice().sort((a, b) => (b.doneAt ?? '').localeCompare(a.doneAt ?? ''))
 }
 
-export type Filter = { kind: Kind; archived: boolean; query?: string }
+export type Filter = { kind: Kind; archived: boolean; query?: string; application?: string }
 
 export const isBtw = (it: Item) => it.workflow === BTW_WORKFLOW
 
@@ -50,8 +50,11 @@ export function matchesQuery(it: Item, query: string): boolean {
 export function filterItems(items: Item[], filter: Filter): Item[] {
   const query = (filter.query ?? '').trim()
   const found = (it: Item) => !query || matchesQuery(it, query) || membersOf(it, items).some((member) => matchesQuery(member, query))
+  const app = filter.application ?? ''
+  const owned = (it: Item) => !app || it.application?.id === app || membersOf(it, items).some((member) => member.application?.id === app)
   return items.filter((it) => {
     if (filter.archived !== !!it.archivedAt) return false
+    if (!owned(it)) return false
     if (filter.kind === 'btw' && !isBtw(it)) return false
     if (filter.kind === 'work' && isBtw(it)) return false
     return found(it)
@@ -96,12 +99,12 @@ function useSteady(list: Item[]): Item[] {
 type Lists = Record<BoardGroup, Item[]>
 
 function useLists(items: Item[], view: ViewState, hidden: Set<string>): Lists {
-  const { kind, archived, query } = view
+  const { kind, archived, query, application } = view
   const lists = useMemo(() => {
-    const live = filterItems(items, { kind, query, archived: false }).filter((it) => !hidden.has(it.id))
-    const done = archived ? filterItems(items, { kind, query, archived: true }) : live
+    const live = filterItems(items, { kind, query, application, archived: false }).filter((it) => !hidden.has(it.id))
+    const done = archived ? filterItems(items, { kind, query, application, archived: true }) : live
     return { you: groupItems(live, 'you'), running: groupItems(live, 'running'), delivered: groupItems(done, 'delivered') }
-  }, [items, hidden, kind, archived, query])
+  }, [items, hidden, kind, archived, query, application])
   return { you: useSteady(lists.you), running: useSteady(lists.running), delivered: useSteady(lists.delivered) }
 }
 
@@ -111,6 +114,7 @@ function Board({ onOpen, onConnect, fresh, view, onView }: BoardProps) {
   const board = usePackageBoard(items)
   const lists = useLists(items, view, board.hidden)
   const archivedCount = useMemo(() => items.filter((it) => it.archivedAt).length, [items])
+  const applications = useMemo(() => applicationsOf(items), [items])
   const open = useLatest(onOpen)
   const connect = useLatest(onConnect)
   const move = useLatest(board.move)
@@ -119,7 +123,7 @@ function Board({ onOpen, onConnect, fresh, view, onView }: BoardProps) {
   const toggle = <ArchivedToggle on={view.archived} count={archivedCount} onChange={(archived) => onView({ archived })} />
   return (
     <>
-      <Toolbar view={view} onView={onView} />
+      <Toolbar view={view} onView={onView} applications={applications} />
       <div className="space-y-7">
         {BOARD_GROUPS.map((g, i) => (
           <Group
@@ -196,8 +200,18 @@ function Search({ query, onQuery }: { query: string; onQuery: (query: string) =>
   )
 }
 
-function Toolbar({ view, onView }: { view: ViewState; onView: (patch: Partial<ViewState>) => void }) {
+export function applicationsOf(items: Item[]): ItemApplication[] {
+  const known = new Map<string, ItemApplication>()
+  for (const it of items) if (it.application && !known.has(it.application.id)) known.set(it.application.id, it.application)
+  return [...known.values()].sort((a, b) => a.name.localeCompare(b.name))
+}
+
+const ANY_APPLICATION = 'any'
+
+function Toolbar({ view, onView, applications }: { view: ViewState; onView: (patch: Partial<ViewState>) => void; applications: ItemApplication[] }) {
   const t = useT()
+  const apps = [{ value: ANY_APPLICATION, label: t('items.filterAnyApplication') }, ...applications.map((a) => ({ value: a.id, label: a.name }))]
+  const chosen = applications.some((a) => a.id === view.application) ? view.application : ANY_APPLICATION
   const kinds: { value: Kind; label: string }[] = [
     { value: 'all', label: t('items.filterAll') },
     { value: 'work', label: t('items.filterWork') },
@@ -207,6 +221,7 @@ function Toolbar({ view, onView }: { view: ViewState; onView: (patch: Partial<Vi
     <div className="mb-5 flex flex-wrap items-center gap-2">
       <SegmentedControl size="sm" value={view.kind} onChange={(kind) => onView({ kind })} options={kinds} />
       <Search query={view.query} onQuery={(query) => onView({ query })} />
+      {(applications.length > 0 || view.application) && <Select size="sm" label={t('items.filterApplication')} value={chosen} options={apps} onValueChange={(v) => onView({ application: v === ANY_APPLICATION ? '' : v })} />}
     </div>
   )
 }

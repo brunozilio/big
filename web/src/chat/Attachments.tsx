@@ -151,7 +151,7 @@ export function AttachmentStrip({ items, onRemove }: { items: Attachment[]; onRe
   return (
     <AnimatePresence initial={false}>
       {items.length > 0 && (
-        <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} transition={tween} className="overflow-hidden">
+        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={tween} className="overflow-hidden">
           <div className="flex gap-2 overflow-x-auto px-4 pb-1 pt-4 [scrollbar-width:none]">
             <AnimatePresence initial={false} mode="popLayout">
               {items.map((a) => (

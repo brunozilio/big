@@ -90,7 +90,7 @@ function Row({ task, kind, owners, locked, env, edit, remove }: { task: ChangeTa
         <span>–</span>
         <TimeField label={t('blocks.taskEnd')} value={task.end} disabled={locked} onChange={(end) => edit({ end })} />
       </span>
-      <span className="flex size-8 shrink-0 items-center justify-center">{!locked && <IconButton tooltip={t('blocks.removeTask')} size="sm" className="opacity-0 group-hover:opacity-100" onClick={remove}><Icon name="trash" size={14} /></IconButton>}</span>
+      <span className="flex size-8 shrink-0 items-center justify-center">{!locked && <IconButton tooltip={t('blocks.removeTask')} size="sm" className="opacity-50 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100" onClick={remove}><Icon name="trash" size={14} /></IconButton>}</span>
     </Reorder.Item>
   )
 }

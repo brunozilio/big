@@ -109,6 +109,7 @@ export function toItem(it: SimItem): Omit<Item, 'updatedAt'> {
     change: changeRef(it),
     sources: sourcesOf(it),
     git: it.origin?.git ?? [],
+    application: it.application ?? null,
     steps: steps(it),
     current: cur?.id ?? null,
     live: !it.done && !it.bounce && !!cur && (cur.id === 'plan' || cur.id === 'develop') && it.states[cur.id] === 'running',

@@ -1,7 +1,8 @@
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { api } from '@/api'
 import type { FileRef, Session, SessionEvent } from '@/api/contract'
-import { useSession } from '@/api/store'
+import { errorText, useSession } from '@/api/store'
+import { toast } from '@/ui/toast'
 import { OpenFileContext } from '@/ui/chatMarkdown'
 import { cn } from '@/ui/cn'
 import { plural, useT, type T } from '@/i18n'
@@ -144,7 +145,7 @@ function Chat({ session, composer, dock, hidePlans }: { session: Session; compos
   const running = session.status === 'running'
   const scroll = useChatScroll(id, running, session.events[session.events.length - 1], session.events.length + side.asked.length)
   const respond = useCallback<Respond>((event, response) => api().respond(id, event, response), [id])
-  const openFile = useCallback((file: FileRef) => void api().openFile(id, file).catch(() => undefined), [id])
+  const openFile = useCallback((file: FileRef) => void api().openFile(id, file).catch((e: unknown) => toast.error(errorText(e))), [id])
   const stopJob = useCallback<StopJob>((job) => api().stopJob(id, job), [id])
   const dismiss = useStable(side.dismiss)
 

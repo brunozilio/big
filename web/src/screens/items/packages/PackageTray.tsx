@@ -34,7 +34,7 @@ export function PackageTray({ chosen, busy, onAdd, onReturn, onCancel, onCreate 
   const t = useT()
   const [over, setOver] = useState(false)
   return (
-    <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} transition={tween} className="overflow-hidden">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0, transition: { duration: 0 } }} transition={tween} className="overflow-hidden">
       <div
         onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG_TYPE)) { e.preventDefault(); e.stopPropagation(); setOver(true) } }}
         onDragLeave={() => setOver(false)}

@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { api } from '@/api'
 import { errorText, setOnboarding, useStore } from '@/api/store'
@@ -14,6 +14,7 @@ import { ConnectDialog } from '../settings/ConnectDialog'
 import { ConnectionCard } from '../settings/ConnectionCard'
 import { accountsOf } from '../settings/Settings'
 import { ApplicationEditor } from '../settings/ApplicationEditor'
+import { GridSkeleton } from '@/ui/display'
 import { needsOnboarding, returnedTo, type Resumed } from '@/app/gate'
 
 export { needsOnboarding, returnedTo }
@@ -50,7 +51,7 @@ function Steps({ stage }: { stage: Stage }) {
 function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider: string) => void }) {
   const t = useT()
   const data = useStore((s) => s.connections)
-  if (!data) return null
+  if (!data) return <GridSkeleton groups={1} cards={2} />
   const providers = data.providers.filter((p) => !!p.ai === ai)
   const groups = [...new Set(providers.map((p) => p.group))]
   return (
@@ -112,8 +113,8 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
       <div className="w-full max-w-[560px] rounded-card bg-bg shadow-card">
         <div className="flex max-h-[calc(100dvh-160px)] min-h-[520px] flex-col p-6 md:p-8">
           <Steps stage={stage} />
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -6 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
+          <>
+            <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
               <h1 className="text-2xl font-medium tracking-tighter2 text-fg">{current.title}</h1>
               <p className="mb-6 mt-1.5 text-base text-muted">{current.text}</p>
               <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
@@ -126,7 +127,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
                 )}
               </div>
             </motion.div>
-          </AnimatePresence>
+          </>
           {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
           {stage !== 'application' && (
             <div className="mt-6 flex items-center gap-2">

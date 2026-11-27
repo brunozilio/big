@@ -276,6 +276,7 @@ export function mockApi(options: MockOptions = {}): Api {
       const text = input.text || (pull && !issueKey ? `Pull request ${pull.subject}` : '')
       const made = createItem(text, issueKey, input.model, space)
       made.origin = originOf(input, app)
+      if (app) made.application = { id: app.id, name: app.name }
       return item(made)
     }, 600),
     rerun: (id, step) => wait(() => {

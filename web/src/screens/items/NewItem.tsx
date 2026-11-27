@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { api } from '@/api'
 import type { Application, CodeBranch, Connection, IssueSummary, Item, NewGit, NewSource, OpenPull, Provider } from '@/api/contract'
 import { errorText, setItems, useStore } from '@/api/store'
+import { toast } from '@/ui/toast'
 import { Composer, type ComposerImport } from '@/chat/Composer'
 import { useRememberedModel, useRememberedTuning } from '@/chat/remembered'
 import { currentLanguage, translate, useT } from '@/i18n'
@@ -262,7 +263,7 @@ function useBranches(linked: Linked[]): Record<string, CodeBranch[]> {
       api()
         .call(l.connection, 'code.branches', { repo: l.repo })
         .then((list) => alive && setBranches((had) => ({ ...had, [l.place]: list })))
-        .catch(() => undefined)
+        .catch((e: unknown) => alive && toast.error(errorText(e)))
     }
     return () => {
       alive = false

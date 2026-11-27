@@ -364,6 +364,14 @@ fn shown_steps(summary: &ItemSummary) -> ItemSummary {
     shown
 }
 
+fn application(item: &WorkItem) -> Value {
+    let chosen = &item.input["application"];
+    match chosen["id"].as_str().filter(|id| !id.is_empty()) {
+        Some(id) => json!({ "id": id, "name": chosen["name"].as_str().unwrap_or(id) }),
+        None => Value::Null,
+    }
+}
+
 pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -> Value {
     let summary = &shown_steps(summary);
     let language = language_of(known, item);
@@ -391,6 +399,7 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "links": item.map(|item| item.links.iter().map(ItemId::as_str).collect::<Vec<_>>()).unwrap_or_default(),
         "trail": item.map(trail).unwrap_or(Value::Null),
         "accepting": item.is_some_and(|item| item.accepting && !item.is_ended()),
+        "application": item.map(application).unwrap_or(Value::Null),
         "joinable": item.is_some_and(joinable),
     })
 }

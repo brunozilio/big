@@ -2,6 +2,7 @@
   "item": {
     "accepting": false,
     "activity": null,
+    "application": null,
     "archivedAt": null,
     "attention": null,
     "change": null,

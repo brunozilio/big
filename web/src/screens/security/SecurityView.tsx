@@ -4,7 +4,7 @@ import type { Application, ApplicationRepository, Binding, Block, Finding, Findi
 import { errorText, useStore } from '@/api/store'
 import { TaskTargetProvider } from '@/blocks/findingTask'
 import { BlockView } from '@/blocks/registry'
-import { Card, EmptyState } from '@/ui/display'
+import { Card, EmptyState, ListSkeleton } from '@/ui/display'
 import { Input, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { useT } from '@/i18n'
@@ -195,7 +195,7 @@ export function SecurityView() {
   const sources = [...new Map(all.map((target) => [target.capability, look(target.capability, target.binding).label])).entries()]
   const chosen = all.filter((target) => (filters.application === ALL || target.application.id === filters.application) && (filters.source === ALL || target.capability === filters.source))
   const groups = [...new Map(chosen.map((target) => [`${target.application.id}/${target.repository.id}`, chosen.filter((other) => other.application.id === target.application.id && other.repository.id === target.repository.id)])).values()]
-  if (!applications) return null
+  if (!applications) return <ListSkeleton />
   if (all.length === 0) return <EmptyState size="inline" icon={<Icon name="shield" size={22} />} title={t('app.securityEmpty')} text={t('app.securityEmptyText')} />
   const set = (next: Partial<Filters>) => setFilters((known) => ({ ...known, ...next }))
   const appOptions = [{ value: ALL, label: t('app.securityAll') }, ...[...new Map(all.map((target) => [target.application.id, target.application.name])).entries()].map(([value, label]) => ({ value, label }))]

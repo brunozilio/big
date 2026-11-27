@@ -3,7 +3,7 @@ import type { Item, ItemUsage } from '@/api/contract'
 import { useLoad } from '@/api/store'
 import { useT } from '@/i18n'
 import { money } from '@/ui/cn'
-import { Card, ProgressBar } from '@/ui/display'
+import { Card, ProgressBar, Skeleton } from '@/ui/display'
 import { Icon } from '@/ui/icon'
 import { compact as short } from '../settings/usageCards'
 
@@ -18,7 +18,7 @@ export function refreshKey(it: Pick<Item, 'live' | 'updatedAt'>): string {
 export function UsageCard({ it }: { it: Item }) {
   const t = useT()
   const { data } = useLoad<ItemUsage>(() => api().itemUsage(it.id), [it.id, refreshKey(it)])
-  if (!data) return null
+  if (!data) return <Card variant="inset" aria-hidden className="space-y-3 p-3"><Skeleton className="w-2/3" /><Skeleton className="h-2.5 w-full" /><Skeleton className="w-1/2" /></Card>
   const { spent, context } = data
   return (
     <Card variant="inset" className="space-y-3 p-3" aria-label={t('items.usageTitle')}>

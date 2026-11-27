@@ -67,6 +67,7 @@ export interface SimItem {
   reviewComments: Note[]
   model: string
   origin?: { sources: ItemSource[]; git: ItemGit[] }
+  application?: { id: string; name: string }
   workflow?: string
   archivedAt?: number | null
   triage?: Triage | null

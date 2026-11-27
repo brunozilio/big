@@ -23,7 +23,7 @@ export function MembersBlock({ block }: { block: Of<'members'> }) {
               {known?.issue ? <IssueKey issue={known.issue} /> : member.issue && <span className="min-w-[88px] text-base text-fg2">{member.issue}</span>}
               <span className="truncate text-base text-fg">{known ? titleOf(t, known) : member.title}</span>
               {block.removable && (
-                <IconButton tooltip={t('blocks.unlink')} size="sm" className="ml-auto opacity-0 group-hover:opacity-100" disabled={busy} onClick={() => void send('unlink', { item: member.id })}>
+                <IconButton tooltip={t('blocks.unlink')} size="sm" className="ml-auto opacity-50 hover:opacity-100 focus-visible:opacity-100 group-hover:opacity-100" disabled={busy} onClick={() => void send('unlink', { item: member.id })}>
                   <Icon name="minus" size={14} />
                 </IconButton>
               )}

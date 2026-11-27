@@ -5,7 +5,7 @@ import { setApi } from '../src/api'
 import type { Item } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
 import { boot, getState, stop } from '../src/api/store'
-import { filterItems, ItemsView, matchesQuery } from '../src/screens/items/ItemsView'
+import { applicationsOf, filterItems, ItemsView, matchesQuery } from '../src/screens/items/ItemsView'
 import { readView, toggleClosed, writeView } from '../src/screens/items/viewState'
 import { TooltipProvider } from '../src/ui/overlay'
 
@@ -49,13 +49,28 @@ describe('estado da lista na URL', () => {
     expect(next.get('flow')).toBe('f1')
     expect(next.get('group')).toBe('x')
     expect(next.get('edit')).toBe('1')
-    expect(readView(next)).toEqual({ kind: 'btw', archived: true, query: 'app 12', closed: ['you', 'delivered'] })
+    expect(readView(next)).toEqual({ kind: 'btw', archived: true, query: 'app 12', application: '', closed: ['you', 'delivered'] })
     const back = writeView(next, { kind: 'all', archived: false, query: '', closed: [] })
     expect(back.toString()).toBe('connect=jira&flow=f1&group=x&edit=1')
   })
 
+  test('o filtro de aplicação mostra só as entregas dela, o pacote entra pelo membro e a escolha fica na URL', () => {
+    const loja = it({ id: 'a', title: 'A', application: { id: 'loja', name: 'Loja' } })
+    const outra = it({ id: 'b', title: 'B', application: { id: 'api', name: 'API' } })
+    const solta = it({ id: 'c', title: 'C' })
+    const pack = it({ id: 'p', title: 'Pacote', workflow: 'package', links: ['a'] })
+    const all = [loja, outra, solta, pack]
+    expect(filterItems(all, { kind: 'all', archived: false, application: 'loja' }).map((x) => x.id)).toEqual(['a', 'p'])
+    expect(filterItems(all, { kind: 'all', archived: false, application: '' }).length).toBe(4)
+    expect(applicationsOf(all).map((a) => a.name)).toEqual(['API', 'Loja'])
+    const next = writeView(new URLSearchParams('q=x'), { application: 'loja' })
+    expect(next.get('app')).toBe('loja')
+    expect(readView(next).application).toBe('loja')
+    expect(writeView(next, { application: '' }).has('app')).toBe(false)
+  })
+
   test('valores estranhos caem no padrão', () => {
-    expect(readView(new URLSearchParams('kind=zzz&archived=yes&closed=nope,running'))).toEqual({ kind: 'all', archived: false, query: '', closed: ['running'] })
+    expect(readView(new URLSearchParams('kind=zzz&archived=yes&closed=nope,running'))).toEqual({ kind: 'all', archived: false, query: '', application: '', closed: ['running'] })
     expect(toggleClosed(['you'], 'you')).toEqual([])
     expect(toggleClosed([], 'running')).toEqual(['running'])
   })

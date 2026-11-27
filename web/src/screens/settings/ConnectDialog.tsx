@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, isMock } from '@/api'
 import type { Connection, FormField, Provider, SignInPoll } from '@/api/contract'
@@ -209,11 +209,11 @@ export function ConnectDialog({ provider: key, resume, onClose }: { provider: st
       {provider && way && (
         <div className="flex min-h-[242px] flex-col gap-4">
           <ConnectHeader logo={provider.logo} name={provider.name} description={provider.description} />
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div key={`${signIn.step.kind}-${method ?? ''}`} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -2 }} transition={tweenClose}>
+          <>
+            <motion.div key={`${signIn.step.kind}-${method ?? ''}`} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={tweenClose}>
               <Body signIn={signIn} way={way} accounts={accounts} fields={fields} onField={(name, value) => setFields((v) => ({ ...v, [name]: value }))} toggle={toggle} />
             </motion.div>
-          </AnimatePresence>
+          </>
           <SignInError message={signIn.error} />
         </div>
       )}

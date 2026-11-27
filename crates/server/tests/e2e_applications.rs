@@ -32,6 +32,7 @@ async fn an_item_of_an_application_with_two_repositories_delivers_a_pull_request
     let made = server.post("/api/applications", application).await;
     let body = json!({ "text": "Mudar as duas pontas", "issue": null, "model": "auto", "attachments": [], "application": made["id"] });
     let id = server.create(body).await;
+    server.until(&id, "the item names its application", |item| item["application"]["name"] == "Loja" && item["application"]["id"] == made["id"]).await;
     server.approve_plan(&id).await;
 
     for _ in 0..2 {
