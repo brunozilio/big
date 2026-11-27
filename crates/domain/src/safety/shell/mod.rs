@@ -1,5 +1,6 @@
 mod derived;
 mod parser;
+mod read_only;
 mod rough;
 mod words;
 
@@ -9,6 +10,8 @@ pub(crate) mod sample;
 mod tests;
 
 use std::ops::Range;
+
+pub use read_only::{ReadOnlyCommand, ReadOnlyCommands};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ShellCommand {

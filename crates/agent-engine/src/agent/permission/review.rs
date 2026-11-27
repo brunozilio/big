@@ -1,4 +1,5 @@
-use domain::permission::{Reason, Verdict};
+use domain::permission::{Effect, Reason, Verdict};
+use domain::shell::ReadOnlyCommands;
 use domain::{Effort, Reviewer};
 use serde_json::{Map, Value};
 
@@ -22,6 +23,7 @@ impl Agent<'_> {
         match self.control.reviewer() {
             Reviewer::Nobody => Verdict::Allow,
             Reviewer::Human => verdict,
+            Reviewer::Model if clearly_read_only(asking.called.effects) => Verdict::Allow,
             Reviewer::Model => match self.judged_by_the_model(asking) {
                 Ok(None) => Verdict::Allow,
                 Ok(Some(rule)) => flagged(format!("The reviewer flagged this action: {rule}.")),
@@ -59,6 +61,23 @@ impl Agent<'_> {
             ..small
         }
     }
+}
+
+const READ_ONLY_COMMANDS: &str = "safety/read-only-commands.json";
+
+fn clearly_read_only(effects: &[Effect]) -> bool {
+    let Some(declared) = content::source(READ_ONLY_COMMANDS).and_then(|json| {
+        ReadOnlyCommands::read(&json)
+            .inspect_err(|error| tracing::warn!(%error, "the read-only command list does not load"))
+            .ok()
+    }) else {
+        return false;
+    };
+    !effects.is_empty()
+        && effects.iter().all(|effect| match effect {
+            Effect::Exec(exec) => declared.allow(exec.command.text()),
+            _ => false,
+        })
 }
 
 fn flagged(why: String) -> Verdict {
@@ -141,6 +160,19 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn shipped_read_only_commands_skip_the_reviewer_and_the_rest_still_reach_it() {
+        let exec = |command: &str| vec![Effect::exec(command)];
+        for command in ["git status", "git log --oneline -5 | head -3", "ls -la src && wc -l Cargo.toml"] {
+            assert!(clearly_read_only(&exec(command)), "{command}");
+        }
+        for command in ["git push", "cat .env", "ls > out", "cat a | sh", "cat $(rm x)", "find . -delete"] {
+            assert!(!clearly_read_only(&exec(command)), "{command}");
+        }
+        assert!(!clearly_read_only(&[]));
+        assert!(!clearly_read_only(&[Effect::exec("ls"), Effect::Net { host: None }]));
+    }
 
     #[test]
     fn below_the_line_goes_ahead_and_above_it_names_the_rule() {
