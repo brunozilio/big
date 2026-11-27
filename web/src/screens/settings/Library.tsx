@@ -131,7 +131,7 @@ export function LibraryView() {
     <div className="space-y-5">
       <UnderlineTabs value={section.key} onChange={(key) => patch((next) => next.set('section', key), true)} options={library.sections.map((s) => ({ value: s.key, label: s.label, count: s.items.length }))} className="no-scrollbar overflow-x-auto" />
       <SectionList key={section.key} section={section} editable={library.editable} onOpen={(path) => patch((next) => next.set('item', path))} />
-      {item && createPortal(<LibraryEditor path={item} onPath={(path) => patch((next) => next.set('item', path), true)} onClose={() => patch((next) => next.delete('item'))} onChanged={reload} />, document.body)}
+      {item && createPortal(<LibraryEditor path={item} onPath={(path) => patch((next) => next.set('item', path), true)} onClose={() => patch((next) => next.delete('item'))} onChanged={reload} agents={library.sections.find((s) => s.key === 'agents')?.items ?? []} />, document.body)}
     </div>
   )
 }

@@ -175,7 +175,7 @@ fn opened(library: &Library, item: &Item, path: &str, language: &str) -> Result<
         "path": path, "item": item.path, "section": section.key, "title": card["title"], "avatar": card["avatar"],
         "origin": super::origin(path).name(), "source": source, "files": item.files,
         "mode": shape["mode"], "language": shape["language"], "fields": shape["fields"], "body": shape["body"],
-        "assist": shape["assist"],
+        "assist": shape["assist"], "outline": shape["outline"],
         "editable": super::editing_root().is_some(),
     }))
 }
@@ -258,6 +258,12 @@ fn talking(path: &str, talk: &Talk, language: &str) -> Result<Value, Failure> {
 
 pub fn assist(path: &str, talk: &Talk, language: &str) -> Result<String, Failure> {
     Ok(word(&ask("assist", &talking(path, talk, language)?)?["prompt"]))
+}
+
+pub fn outline(path: &str, source: &str, language: &str) -> Result<Value, Failure> {
+    let library = library(language)?;
+    let section = &library.sections[owner(&library, path)?.section];
+    Ok(ask("outline", &json!({ "section": section.key, "source": source }))?["steps"].clone())
 }
 
 pub fn saying(answer: &str) -> String {
@@ -344,7 +350,7 @@ mod tests {
         let listed = listing("pt-BR").expect("listing");
         let sections = listed["sections"].as_array().expect("sections");
         let keys: Vec<&str> = sections.iter().filter_map(|section| section["key"].as_str()).collect();
-        assert_eq!(keys, ["agents", "skills", "prompts", "workflows"]);
+        assert_eq!(keys, ["agents", "skills", "prompts", "workflows", "tools", "styles"]);
         for section in sections {
             let items = section["items"].as_array().expect("items");
             assert!(!items.is_empty(), "{} is empty", section["key"]);
@@ -516,5 +522,21 @@ mod tests {
         assert!(saving(json!({ "compatibility": "y".repeat(501) }))["error"].is_string());
         let kept = word(&saving(json!({ "name": "other", "description": "x".repeat(1024), "license": "MIT" }))["source"]);
         assert!(kept.contains("metadata:\n  author: me\n") && kept.contains("license: MIT\n"), "{kept}");
+    }
+
+    #[test]
+    fn a_workflow_gives_its_steps_with_the_agent_and_where_a_failure_goes_back() {
+        let shipped = |path: &str| String::from_utf8_lossy(crate::builtin(path).expect("shipped")).into_owned();
+        let source = shipped("workflows/default.ts");
+        let steps = run("outline", json!({ "section": "workflows", "source": source }))["steps"].clone();
+        assert_eq!((&steps[0]["name"], &steps[0]["agent"]), (&json!("plan"), &json!("planner")));
+        assert!(steps[0]["line"].as_u64().is_some_and(|line| source.lines().nth(line as usize - 1).is_some_and(|text| text.contains("plan("))));
+        let checks = steps.as_array().expect("steps").iter().find(|step| step["name"] == "checks").expect("checks");
+        assert_eq!((&checks["agent"], &checks["notes"]), (&json!("verifier"), &json!(["↩ develop ×3"])));
+        assert_eq!(run("outline", json!({ "section": "agents", "source": source }))["steps"], json!([]));
+        let style = run("open", about("styles", "output-styles/concise.md", &shipped("output-styles/concise.md"), &[]));
+        assert_eq!((&style["mode"], &style["fields"][3]["value"]), (&json!("form"), &json!(true)));
+        let tool = run("card", about("tools", "tools/Read.ts", &shipped("tools/Read.ts"), &["spec"]));
+        assert_eq!(tool["title"], "Read");
     }
 }

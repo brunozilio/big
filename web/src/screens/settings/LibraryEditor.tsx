@@ -10,7 +10,7 @@ import { motion, tween } from '@/ui/motion'
 import { useT } from '@/i18n'
 import { LibraryChat } from './LibraryChat'
 import { LibraryFields } from './LibraryFields'
-import { type Draft, type FieldValue, type LibraryItem, blocked, changed, draftOf, fileName, libraryApi } from './libraryData'
+import { type Draft, type FieldValue, type LibraryCard, type LibraryItem, type LibraryStep, blocked, changed, draftOf, fileName, libraryApi } from './libraryData'
 
 const CodeEditor = lazy(() => import('@/ui/codeEditor').then((m) => ({ default: m.CodeEditor })))
 
@@ -23,6 +23,7 @@ interface Props {
   onPath: (path: string) => void
   onClose: () => void
   onChanged: () => void
+  agents?: LibraryCard[]
 }
 
 const CHAT = 'library.chat'
@@ -128,6 +129,52 @@ function Lines({ text, max }: { text: string; max?: number }) {
   return <p role="status" className="absolute bottom-4 right-5 z-10 rounded-control-sm bg-warning-soft px-2.5 py-1 text-xs text-warning-fg">{t('settings.lib_lines', { n: lines, max })}</p>
 }
 
+function useOutline(item: LibraryItem, source: string): LibraryStep[] {
+  const [steps, setSteps] = useState<LibraryStep[]>(item.outline ?? [])
+  const has = item.outline !== null
+  useEffect(() => {
+    if (!has) return
+    let alive = true
+    const timer = setTimeout(() => {
+      libraryApi.outline(item.path, source).then((found) => alive && setSteps(found)).catch(() => undefined)
+    }, 350)
+    return () => {
+      alive = false
+      clearTimeout(timer)
+    }
+  }, [has, item.path, source])
+  return has ? steps : []
+}
+
+function Outline({ steps, agents, onJump }: { steps: LibraryStep[]; agents: LibraryCard[]; onJump: (line: number) => void }) {
+  const t = useT()
+  const cardOf = (name: string | null) => agents.find((agent) => fileName(agent.path).replace(/\.[a-z]+$/, '') === name)
+  return (
+    <div className="space-y-2">
+      <p className="text-sm font-medium text-muted">{t('settings.lib_steps')}</p>
+      <ol className="relative -mx-2">
+        <span aria-hidden className="absolute bottom-5 left-[19px] top-5 w-px bg-line-strong" />
+        {steps.map((step, at) => {
+          const card = cardOf(step.agent)
+          const look = knownLook(card?.avatar)
+          return (
+            <li key={`${step.line}:${step.name}`}>
+              <button type="button" onClick={() => onJump(step.line)} className="relative flex min-h-10 w-full items-center gap-3 rounded-control-sm px-2 py-1.5 text-left transition-colors hover:bg-hover">
+                <span className="z-[1] flex size-6 shrink-0 items-center justify-center rounded-full bg-surface text-xs font-medium tabular-nums text-muted shadow-card">{at + 1}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-base font-medium text-fg">{step.name}</span>
+                  {(step.agent || step.notes.length > 0) && <span className="block truncate text-xs text-muted">{[card?.title ?? step.agent, ...step.notes].filter(Boolean).join(' · ')}</span>}
+                </span>
+                {look && <AgentAvatar look={look} name={card?.title} size={20} />}
+              </button>
+            </li>
+          )
+        })}
+      </ol>
+    </div>
+  )
+}
+
 function Confirm({ text, action, danger, onYes, onNo }: { text: string; action: string; danger?: boolean; onYes: () => void; onNo: () => void }) {
   const t = useT()
   return (
@@ -152,9 +199,11 @@ function Title({ item }: { item: LibraryItem }) {
   )
 }
 
-function Editing({ item, draft, chat, setDraft, onSave, onPick }: { item: LibraryItem; draft: Draft; chat: boolean; setDraft: (draft: Draft) => void; onSave: () => void; onPick: (path: string) => void }) {
+function Editing({ item, draft, chat, agents, setDraft, onSave, onPick }: { item: LibraryItem; draft: Draft; chat: boolean; agents: LibraryCard[]; setDraft: (draft: Draft) => void; onSave: () => void; onPick: (path: string) => void }) {
   const fields = item.fields ?? []
-  const aside = fields.length > 0 || item.files.length > 0 || item.item.split('/').length > 2
+  const steps = useOutline(item, draft.source)
+  const [jump, setJump] = useState<{ line: number; at: number } | null>(null)
+  const aside = fields.length > 0 || item.files.length > 0 || item.item.split('/').length > 2 || steps.length > 0
   const locked = !item.editable
   const set = (key: string, value: FieldValue) => setDraft({ ...draft, values: { ...draft.values, [key]: value } })
   const form = item.mode === 'form' && item.body
@@ -164,6 +213,7 @@ function Editing({ item, draft, chat, setDraft, onSave, onPick }: { item: Librar
       {aside && (
         <aside className={cn('max-h-[40dvh] space-y-6 overflow-y-auto border-b px-6 py-6 lg:max-h-none lg:border-b-0 lg:border-r', !chat && 'bg-subtle')}>
           {fields.length > 0 && <LibraryFields fields={fields} values={draft.values} disabled={locked} onChange={set} />}
+          {steps.length > 0 && <Outline steps={steps} agents={agents} onJump={(line) => setJump({ line, at: Date.now() })} />}
           <Files item={item} onPick={onPick} />
         </aside>
       )}
@@ -173,7 +223,7 @@ function Editing({ item, draft, chat, setDraft, onSave, onPick }: { item: Librar
           {form ? (
             <CodeEditor key={item.path} label={form.label} language={form.language} value={draft.body ?? ''} readOnly={locked} onSave={onSave} onChange={(body) => setDraft({ ...draft, body })} />
           ) : (
-            <CodeEditor key={item.path} label={fileName(item.path)} language={item.language} value={draft.source} readOnly={locked} onSave={onSave} onChange={(source) => setDraft({ ...draft, source })} />
+            <CodeEditor key={item.path} label={fileName(item.path)} language={item.language} value={draft.source} jump={jump} readOnly={locked} onSave={onSave} onChange={(source) => setDraft({ ...draft, source })} />
           )}
         </Suspense>
       </section>
@@ -181,7 +231,7 @@ function Editing({ item, draft, chat, setDraft, onSave, onPick }: { item: Librar
   )
 }
 
-export function LibraryEditor({ path, onPath, onClose, onChanged }: Props) {
+export function LibraryEditor({ path, onPath, onClose, onChanged, agents = [] }: Props) {
   const t = useT()
   const panel = useRef<HTMLDivElement>(null)
   const { loaded, draft, setDraft, take } = useItem(path)
@@ -258,7 +308,7 @@ export function LibraryEditor({ path, onPath, onClose, onChanged }: Props) {
       </header>
       {loaded.state === 'loading' && <div className="flex flex-1 items-center justify-center"><Spinner /></div>}
       {loaded.state === 'failed' && <p role="alert" className="p-6 text-sm text-danger-fg">{loaded.message}</p>}
-      {item && draft && <Editing item={item} draft={draft} chat={talks && chat} setDraft={setDraft} onSave={save} onPick={(next) => leave(() => onPath(next))} />}
+      {item && draft && <Editing item={item} draft={draft} chat={talks && chat} agents={agents} setDraft={setDraft} onSave={save} onPick={(next) => leave(() => onPath(next))} />}
     </motion.div>
   )
 }

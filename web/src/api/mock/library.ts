@@ -1,4 +1,4 @@
-import type { Library, LibraryAssist, LibraryCard, LibraryChange, LibraryDraft, LibraryField, LibraryItem, LibraryTurn, LibraryValue } from '../contract'
+import type { LibraryStep, Library, LibraryAssist, LibraryCard, LibraryChange, LibraryDraft, LibraryField, LibraryItem, LibraryTurn, LibraryValue } from '../contract'
 
 interface Kept {
   section: string
@@ -94,6 +94,21 @@ function fieldsOf(kept: Kept): LibraryField[] {
 
 const text = (value: LibraryValue | undefined, fallback: string) => (typeof value === 'string' && value ? value : fallback)
 
+export function stepsOf(source: string): LibraryStep[] {
+  const lines = source.split('\n')
+  const from = lines.findIndex((line) => /^\s*steps:\s*\[\s*$/.test(line))
+  if (from < 0) return []
+  const found: LibraryStep[] = []
+  for (let at = from + 1; at < lines.length && !/^\s*\],?\s*$/.test(lines[at]); at += 1) {
+    const call = /^\s*([A-Za-z_]\w*)\((.*)\),?\s*$/.exec(lines[at])
+    if (!call) continue
+    const back = /\bon(?:Fail|Changes):\s*"([^"]+)"/.exec(call[2])?.[1]
+    const retries = /\bretries:\s*(\d+)/.exec(call[2])?.[1]
+    found.push({ line: at + 1, name: call[1], agent: /\bagent:\s*"([^"]+)"/.exec(call[2])?.[1] ?? null, notes: back ? [`↩ ${back}${retries ? ` ×${retries}` : ''}`] : [] })
+  }
+  return found
+}
+
 export function mockLibrary() {
   let kept = initial()
   const extras = new Map<string, string>([['skills/verify/examples/cli.md', '# CLI\n\nRun the command and read what it prints.\n']])
@@ -105,9 +120,9 @@ export function mockLibrary() {
     const item = owner(path)
     if (!item) throw missing()
     const base = { item: item.path, section: item.section, title: item.title, avatar: item.avatar, files: item.files, editable: true, assist: { ideas: ['Deixe mais curto', 'Revise e aponte ambiguidades', 'Explique o que isto faz'] } }
-    if (path !== item.path) return { ...base, path, origin: 'shipped', source: extras.get(path) ?? '', mode: 'code', language: 'markdown', fields: [], body: null }
+    if (path !== item.path) return { ...base, outline: null, path, origin: 'shipped', source: extras.get(path) ?? '', mode: 'code', language: 'markdown', fields: [], body: null }
     const form = item.body !== null
-    return { ...base, path, origin: item.origin, source: item.source, mode: form ? 'form' : 'code', language: path.endsWith('.md') ? 'markdown' : path.endsWith('.ts') ? 'typescript' : 'javascript', fields: fieldsOf(item), body: form ? { label: item.section === 'skills' ? 'Instruções' : 'Prompt', text: item.body ?? '', language: 'markdown' } : null }
+    return { ...base, outline: item.section === 'workflows' ? stepsOf(item.source) : null, path, origin: item.origin, source: item.source, mode: form ? 'form' : 'code', language: path.endsWith('.md') ? 'markdown' : path.endsWith('.ts') ? 'typescript' : 'javascript', fields: fieldsOf(item), body: form ? { label: item.section === 'skills' ? 'Instruções' : 'Prompt', text: item.body ?? '', language: 'markdown' } : null }
   }
 
   const list = (): Library => ({

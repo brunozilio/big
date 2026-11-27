@@ -93,6 +93,17 @@ pub async fn create(State(ctx): State<Ctx>, Json(created): Json<Created>) -> Api
     Ok(reply(made.await?))
 }
 
+#[derive(Deserialize)]
+pub struct Drafted {
+    path: String,
+    source: String,
+}
+
+pub async fn outline(State(ctx): State<Ctx>, Json(drafted): Json<Drafted>) -> ApiResult<Response> {
+    let language = ctx.language().code();
+    Ok(reply(worked(move || library::outline(&drafted.path, &drafted.source, language)).await?))
+}
+
 pub async fn restore(State(ctx): State<Ctx>, Query(named): Query<Named>) -> ApiResult<Response> {
     let language = ctx.language().code();
     worked(move || library::restore(&named.path, language)).await?;

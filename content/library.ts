@@ -50,7 +50,10 @@ type Kind = {
   open: (asked: Asked) => Opened;
   save: (saved: Saved) => string;
   create: (name: string, slug: string) => { path: string; source: string };
+  outline?: (source: string) => Step[];
 };
+
+type Step = { line: number; name: string; agent: string | null; notes: string[] };
 
 function pick<T>(language: Language | string | undefined, english: T, spanish: T, portuguese: T): T {
   if (language === "en") return english;
@@ -317,12 +320,23 @@ const prompts: Kind = {
   create: (_name, slug) => ({ path: `prompts/${slug}.md`, source: "" }),
 };
 
-function steps(source: string): string {
-  const at = source.indexOf("steps: [");
-  if (at < 0) return "";
-  const found = [...source.slice(at).matchAll(/^\s{4}([A-Za-z_]\w*)\(/gm)].map((match) => match[1]);
-  return found.join(" → ");
+function outlined(source: string): Step[] {
+  const lines = source.split("\n");
+  const from = lines.findIndex((line) => /^\s*steps:\s*\[\s*$/.test(line));
+  if (from < 0) return [];
+  const found: Step[] = [];
+  for (let at = from + 1; at < lines.length && !/^\s*\],?\s*$/.test(lines[at]); at += 1) {
+    const call = /^\s*([A-Za-z_]\w*)\((.*)\),?\s*$/.exec(lines[at]);
+    if (!call) continue;
+    const back = /\bon(?:Fail|Changes):\s*"([^"]+)"/.exec(call[2])?.[1];
+    const retries = /\bretries:\s*(\d+)/.exec(call[2])?.[1];
+    const notes = back ? [`↩ ${back}${retries ? ` ×${retries}` : ""}`] : [];
+    found.push({ line: at + 1, name: /\bid:\s*"([^"]+)"/.exec(call[2])?.[1] ?? call[1], agent: /\bagent:\s*"([^"]+)"/.exec(call[2])?.[1] ?? null, notes });
+  }
+  return found;
 }
+
+const steps = (source: string): string => outlined(source).map((step) => step.name).join(" → ");
 
 const workflows: Kind = {
   key: "workflows",
@@ -340,13 +354,71 @@ const workflows: Kind = {
   card: ({ path, source }) => ({ title: /\bname:\s*"([^"]+)"/.exec(source)?.[1] ?? stem(path), description: steps(source) }),
   open: ({ path }) => code(path),
   save: ({ source }) => source,
+  outline: outlined,
   create: (_name, slug) => ({
     path: `workflows/${slug}.ts`,
     source: `import { workflow } from "sdk";\nimport { plan, develop } from "sdk/steps";\n\nexport default workflow({\n  name: ${JSON.stringify(slug)},\n  accepts: ["issue", "text"],\n  triggers: [],\n  steps: [\n    plan({ agent: "planner", status: { category: "todo" } }),\n    develop({ agent: "developer", status: { category: "doing" } }),\n  ],\n});\n`,
   }),
 };
 
-const KINDS: Kind[] = [agents, skills, prompts, workflows];
+const brief = (value: string): string => {
+  const first = value.split(/(?<=\.)\s/)[0] ?? "";
+  return first.length > 180 ? `${first.slice(0, 177)}…` : first;
+};
+
+const tools: Kind = {
+  key: "tools",
+  about: "a tool the agents can call: TypeScript that declares its input and runs it",
+  ideas: (language) =>
+    pick(language, ["Explain what this tool does", "Make the description clearer", "Review the input for missing checks"], ["Explica qué hace esta herramienta", "Aclara la descripción", "Revisa la entrada en busca de validaciones faltantes"], ["Explique o que esta ferramenta faz", "Deixe a descrição mais clara", "Revise a entrada e aponte validações que faltam"]),
+  folder: "tools/",
+  icon: "terminal",
+  exports: ["spec"],
+  needs: [],
+  creatable: false,
+  label: (language) => pick(language, "Tools", "Herramientas", "Ferramentas"),
+  hint: (language) => pick(language, "What the agents can do", "Lo que los agentes pueden hacer", "O que os agentes conseguem fazer"),
+  main: (path) => flat(2, [".ts", ".js"])(path) || flat(3, [".ts", ".js"])(path),
+  card: ({ path, exports }) => ({ title: text(record(exports.spec).name) || stem(path), description: brief(text(record(exports.spec).description)) }),
+  open: ({ path }) => code(path),
+  save: ({ source }) => source,
+  create: (_name, slug) => ({ path: `tools/${slug}.ts`, source: "" }),
+};
+
+const styles: Kind = {
+  key: "styles",
+  about: "an output style: how the agent writes its replies",
+  ideas: (language) =>
+    pick(language, ["Make it more direct", "Add a rule about code blocks", "Explain what this style changes"], ["Hazlo más directo", "Añade una regla sobre bloques de código", "Explica qué cambia este estilo"], ["Deixe mais direto", "Acrescente uma regra sobre blocos de código", "Explique o que este estilo muda"]),
+  folder: "output-styles/",
+  icon: "textStyle",
+  exports: [],
+  needs: [],
+  creatable: true,
+  label: (language) => pick(language, "Reply styles", "Estilos de respuesta", "Estilos de resposta"),
+  hint: (language) => pick(language, "How the agent writes in conversations", "Cómo escribe el agente en las conversaciones", "Como o agente escreve nas conversas"),
+  main: flat(2, [".md"]),
+  card({ path, source }) {
+    const parsed = matter(source);
+    return { title: parsed?.values.name || stem(path), description: parsed?.values.description ?? "" };
+  },
+  open(asked) {
+    const parsed = matter(asked.source);
+    if (!parsed) return code(asked.path);
+    const { language } = asked;
+    const fields: Field[] = [
+      { key: "name", label: pick(language, "Name", "Nombre", "Nome"), kind: "text", value: parsed.values.name ?? "", required: true, max: NAME_MAX },
+      { key: "description", label: pick(language, "Description", "Descripción", "Descrição"), kind: "area", value: parsed.values.description ?? "", max: DESCRIPTION_MAX },
+      { key: "turn-reminder", label: pick(language, "Reminder on each turn", "Recordatorio en cada turno", "Lembrete a cada turno"), kind: "area", value: parsed.values["turn-reminder"] ?? "", max: COMPATIBILITY_MAX },
+      { key: "keep-coding-instructions", label: pick(language, "Keep the coding instructions", "Mantener las instrucciones de código", "Manter as instruções de código"), kind: "switch", value: parsed.values["keep-coding-instructions"] === "true" },
+    ];
+    return { mode: "form", language: "markdown", fields, body: { label: pick(language, "Instructions", "Instrucciones", "Instruções"), text: parsed.body, language: "markdown" } };
+  },
+  save: skillSource,
+  create: (name, slug) => ({ path: `output-styles/${slug}.md`, source: `---\n${scalar("name", name).join("\n")}\ndescription: ""\n---\n\n` }),
+};
+
+const KINDS: Kind[] = [agents, skills, prompts, workflows, tools, styles];
 
 const kind = (key: string): Kind => KINDS.find((item) => item.key === key) ?? fail(`there is no ${key} section`);
 
@@ -385,7 +457,11 @@ export function card(asked: Asked) {
 
 export function open(asked: Asked) {
   const found = kind(asked.section);
-  return { ...found.open(asked), assist: { ideas: found.ideas(asked.language) } };
+  return { ...found.open(asked), assist: { ideas: found.ideas(asked.language) }, outline: found.outline?.(asked.source) ?? null };
+}
+
+export function outline({ section, source }: { section: string; source: string }) {
+  return { steps: kind(section).outline?.(source) ?? [] };
 }
 
 function broken(field: Field, value: unknown, language: Language): string | null {

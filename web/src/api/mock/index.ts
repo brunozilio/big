@@ -5,7 +5,7 @@ import type { Api, Application, BindingOption, Branding, CallAction, CallArgs, C
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
 import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, cloudFieldOptions, cloudOptions, codeBranches, openPulls, initialApplications, listDirs } from './applications'
 import { initialConnections, MCP_TOOLS, MODELS, providers as allProviders, repositoryKinds, usageFixture, usageLimitsFixture } from './fixtures'
-import { mockLibrary } from './library'
+import { mockLibrary, stepsOf } from './library'
 import { say } from './say'
 import { mockUsage } from './usage'
 import { itemOfSession, sessionById } from './sessions'
@@ -374,6 +374,7 @@ export function mockApi(options: MockOptions = {}): Api {
     createLibraryItem: (section, name) => wait(() => library.create(section, name)),
     restoreLibraryItem: (path) => wait(() => library.restore(path)),
     createLibraryFile: (item, name) => wait(() => library.createFile(item, name)),
+    outlineLibrary: (_path, source) => wait(() => stepsOf(source), 30),
     assistLibrary: async (path, draft, messages, ask) => {
       const answer = await wait(() => library.assist(path, draft, messages), delay * 2)
       const words = answer.reply.split(' ')

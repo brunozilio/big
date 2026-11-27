@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { setApi } from '../src/api'
 import type { Api, LibraryChange, LibraryDraft, LibraryItem, LibraryTurn } from '../src/api/contract'
 import { ApiError, streamed } from '../src/api/http'
-import { mockLibrary } from '../src/api/mock/library'
+import { mockLibrary, stepsOf } from '../src/api/mock/library'
 import { LibraryFields } from '../src/screens/settings/LibraryFields'
 import { LibraryView } from '../src/screens/settings/Library'
 import { askOnOpen, blocked, changed, draftOf, matching, problemOf, talkOf, toggled } from '../src/screens/settings/libraryData'
@@ -31,6 +31,7 @@ function serve() {
     createLibraryItem: async (section: string, name: string) => library.create(section, name),
     restoreLibraryItem: async (path: string) => library.restore(path),
     createLibraryFile: async (item: string, name: string) => library.createFile(item, name),
+    outlineLibrary: async (_path: string, source: string) => stepsOf(source),
     assistLibrary: async (path: string, draft: LibraryDraft, messages: LibraryTurn[]) => {
       asks.push({ path, draft, messages })
       return library.assist(path, draft, messages)
@@ -104,6 +105,19 @@ describe('biblioteca', () => {
     fireEvent.click(within(within(panel).getByRole('alertdialog')).getByRole('button', { name: 'Restaurar padrão' }))
     await within(document.body).findByRole('dialog', { name: 'Planner' })
     expect(library.shown('agents/planner.ts').origin).toBe('shipped')
+  })
+})
+
+describe('etapas do workflow', () => {
+  test('o workflow mostra as etapas na ordem, com o agente e para onde volta ao falhar', async () => {
+    serve()
+    show('/settings/library?section=workflows&item=workflows/default.ts')
+    const panel = await within(document.body).findByRole('dialog', { name: 'entrega' })
+    const steps = within(within(panel).getByText('Etapas').parentElement as HTMLElement).getAllByRole('listitem')
+    expect(steps.map((step) => step.textContent)).toEqual(['1planPlanner', '2developDeveloper', '3checksverifier · ↩ develop ×3', '4pr', '5reviewReviewer · ↩ develop', '6merge'])
+    expect(within(steps[0]).getByLabelText('Planner')).toBeTruthy()
+    fireEvent.click(within(steps[2]).getByRole('button'))
+    expect(stepsOf('export default 1')).toEqual([])
   })
 })
 

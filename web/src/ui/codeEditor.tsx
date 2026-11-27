@@ -78,10 +78,11 @@ interface Props {
   onChange: (value: string) => void
   onSave?: () => void
   readOnly?: boolean
+  jump?: { line: number; at: number } | null
   className?: string
 }
 
-export function CodeEditor({ value, language, label, onChange, onSave, readOnly = false, className }: Props) {
+export function CodeEditor({ value, language, label, onChange, onSave, readOnly = false, jump = null, className }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const handlers = useRef({ onChange, onSave })
@@ -144,6 +145,14 @@ export function CodeEditor({ value, language, label, onChange, onSave, readOnly 
   useEffect(() => {
     view.current?.dispatch({ effects: parts.current.locked.reconfigure([EditorState.readOnly.of(readOnly), EditorView.editable.of(!readOnly)]) })
   }, [readOnly])
+
+  useEffect(() => {
+    const current = view.current
+    if (!current || !jump || jump.line < 1 || jump.line > current.state.doc.lines) return
+    const line = current.state.doc.line(jump.line)
+    current.dispatch({ selection: { anchor: line.from + (line.text.length - line.text.trimStart().length) }, effects: EditorView.scrollIntoView(line.from, { y: 'center' }) })
+    current.focus()
+  }, [jump])
 
   return <div ref={host} data-code-editor={language} className={cn('h-full min-h-0 overflow-hidden', className)} />
 }

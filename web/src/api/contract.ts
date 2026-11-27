@@ -1056,7 +1056,15 @@ export interface LibraryItem {
   fields: LibraryField[] | null
   body: { label: string; text: string; language: LibraryLanguage; maxLines?: number } | null
   assist: { ideas: string[] } | null
+  outline: LibraryStep[] | null
   editable: boolean
+}
+
+export interface LibraryStep {
+  line: number
+  name: string
+  agent: string | null
+  notes: string[]
 }
 
 export interface LibraryDraft {
@@ -1128,6 +1136,7 @@ export interface Api {
   createLibraryItem(section: string, name: string): Promise<LibraryItem>
   restoreLibraryItem(path: string): Promise<void>
   createLibraryFile(item: string, name: string): Promise<LibraryItem>
+  outlineLibrary(path: string, source: string): Promise<LibraryStep[]>
   assistLibrary(path: string, draft: LibraryDraft, messages: LibraryTurn[], ask?: LibraryAsk): Promise<LibraryAssist>
   upload(file: File): Promise<{ id: string; name: string; size: number }>
   live(onEvent: (event: LiveEvent) => void, onState: (connected: boolean) => void): () => void
@@ -1171,6 +1180,7 @@ export const ROUTES = {
   dirs: (path: string | null) => (path ? `/api/fs/dirs?path=${encodeURIComponent(path)}` : '/api/fs/dirs'),
   library: '/api/library',
   libraryAssist: '/api/library/assist',
+  libraryOutline: '/api/library/outline',
   libraryItem: (path: string | null) => (path ? `/api/library/item?path=${encodeURIComponent(path)}` : '/api/library/item'),
   attachments: '/api/attachments',
   attachment: (id: string) => `/api/attachments/${encodeURIComponent(id)}`,

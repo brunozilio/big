@@ -1,7 +1,7 @@
 import { api } from '@/api'
 import type { LibraryAsk, LibraryAssist, LibraryCard, LibraryDraft, LibraryField, LibraryItem, LibraryTurn, LibraryValue } from '@/api/contract'
 
-export type { Library, LibraryCard, LibraryField, LibraryItem, LibrarySection } from '@/api/contract'
+export type { Library, LibraryCard, LibraryField, LibraryItem, LibrarySection, LibraryStep } from '@/api/contract'
 
 export type FieldValue = LibraryValue
 
@@ -15,6 +15,7 @@ export const libraryApi = {
   restore: (path: string) => api().restoreLibraryItem(path),
   assist: (path: string, draft: Draft, messages: LibraryTurn[], ask?: LibraryAsk) => api().assistLibrary(path, draft, messages, ask),
   createFile: (item: string, name: string) => api().createLibraryFile(item, name),
+  outline: (path: string, source: string) => api().outlineLibrary(path, source),
 }
 
 export function applied(draft: Draft, answer: LibraryAssist): Draft {
