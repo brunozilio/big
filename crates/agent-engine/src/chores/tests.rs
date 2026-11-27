@@ -41,12 +41,10 @@ fn branch_names_are_kebab_case_and_short() {
     assert_eq!(kebab("Fix Login_Bug now please"), Some("fix-login-bug-now".into()));
     assert_eq!(kebab("--"), None);
     assert_eq!(spoken("fix-login-bug"), "Fix login bug", "as a session's title");
-    let model = says("```json\n{\"name\": \"refactor-api-client\"}\n```");
-    let history = vec![Message::user("refactor the API client")];
-    assert_eq!(
-        branch_name(&model, &template(), &history, &no()).expect("name").as_deref(),
-        Some("refactor-api-client")
-    );
+    let history = vec![Message::user("Refatorar a configuração do cliente da API agora")];
+    assert_eq!(branch_name("", &history).as_deref(), Some("refatorar-a-configuracao-do-cliente"));
+    assert_eq!(branch_name("Página de login", &history).as_deref(), Some("pagina-de-login"), "the title wins");
+    assert_eq!(branch_name("  ", &[]), None);
 }
 
 #[test]

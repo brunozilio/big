@@ -24,9 +24,7 @@ pub fn answer(
         SessionCommand::Recap => recap(api, template, history, stop)?.map(ChoreAnswer::Recap),
         SessionCommand::Side => Some(ChoreAnswer::Side(side_answer(api, template, history, prompt, stop)?)),
         SessionCommand::HeadsUp => heads_up::look(api, template, history, stop)?.map(ChoreAnswer::HeadsUp),
-        SessionCommand::Rename => {
-            branch_name(api, template, history, stop)?.map(|name| ChoreAnswer::Title(spoken(&name)))
-        }
+        SessionCommand::Rename => branch_name(prompt, history).map(|name| ChoreAnswer::Title(spoken(&name))),
         SessionCommand::Learn => lesson(api, template, history, prompt, stop)?.map(ChoreAnswer::Learned),
         SessionCommand::Permissions => Some(ChoreAnswer::Permissions(permissions(api, template, prompt, stop)?)),
         SessionCommand::Answer => Some(ChoreAnswer::Answer(plain_answer(api, template, prompt, stop, said)?)),
@@ -37,7 +35,6 @@ pub fn answer(
     })
 }
 
-const BRANCH_TAIL: usize = 1000;
 const RECAP_TAIL: usize = 12_000;
 
 fn ask(
@@ -69,16 +66,10 @@ pub fn title(
     Ok(clean_title(&field(&answer, "title")))
 }
 
-pub fn branch_name(
-    api: &dyn ModelApi,
-    template: &TurnRequest,
-    history: &[Message],
-    stop: &Stop,
-) -> Result<Option<String>, ModelError> {
-    let message =
-        Message::user(format!("<conversation>\n{}\n</conversation>", conversation_text(history, BRANCH_TAIL)));
-    let answer = ask(api, template, crate::prompt::text("chore-branch"), vec![message], 100, stop)?;
-    Ok(kebab(&field(&answer, "name")))
+pub fn branch_name(title: &str, history: &[Message]) -> Option<String> {
+    let opening = || history.iter().find(|message| message.role == crate::transcript::Role::User).map(Message::text);
+    let source = Some(title.to_owned()).filter(|title| !title.trim().is_empty()).or_else(opening)?;
+    domain::workflow::branch_slug(&source)
 }
 
 pub fn recap(
