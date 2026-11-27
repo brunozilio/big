@@ -1,7 +1,7 @@
 import { changeEnvs } from "./rules.js";
 import { shifted } from "./tasks.js";
 import { fill } from "./gates.js";
-import { projectOf as boundProject } from "sdk/bindings.js";
+import { projectOf } from "sdk/bindings.js";
 import { changeSettings, windowOf } from "./change.js";
 
 function described(state, config) {
@@ -36,19 +36,20 @@ function changePayload(state, config, envId) {
 export async function openCard(ctx, state, config) {
   const card = config.card;
   if (!card || state.card || state.members.length === 0) return;
-  const tracker = boundProject(state.application, "tracker");
-  const project = card.project || tracker.project || projectOf(state.members);
-  const made = await ctx.call("tracker", "create_issue", { title: state.title, type: card.type, project, description: described(state, config) }, { optional: true });
-  if (made && made.ref) state.card = { ref: made.ref, url: made.url || null };
+  const tracker = projectOf(ctx.item.application || state.application, "tracker");
+  const project = card.project || tracker.project;
+  if (!project) return;
+  const options = cardOptions(tracker);
+  const made = await ctx.call("tracker", "create_issue", { title: state.title, type: card.type, project, description: described(state, config) }, options);
+  if (made && made.ref) state.card = { ref: made.ref, url: made.url || null, ...(tracker.connection ? { connection: tracker.connection } : {}) };
+}
+
+function cardOptions(card) {
+  return card && card.connection ? { connection: card.connection } : { optional: true };
 }
 
 function keyOf(issue) {
   return issue && typeof issue === "object" ? issue.key : issue;
-}
-
-function projectOf(members) {
-  const key = members.map((member) => keyOf(member.issue)).find((one) => typeof one === "string" && one.includes("-"));
-  return key ? key.slice(0, key.lastIndexOf("-")) : undefined;
 }
 
 export function connectionOf(state, env) {
@@ -65,10 +66,10 @@ export async function publish(ctx, state, config) {
     await ctx.call("changes", "update", { change: change.ref, ...changePayload(state, config, env.id) }, connectionOf(state, env));
   }
   if (!state.card) return;
-  await ctx.call("tracker", "update_issue", { issue: state.card.ref, title: state.title, description: described(state, config) }, { optional: true });
+  await ctx.call("tracker", "update_issue", { issue: state.card.ref, title: state.title, description: described(state, config) }, cardOptions(state.card));
   for (const member of state.members) {
     if (!member.issue || state.cardLinks.includes(member.issue)) continue;
-    await ctx.call("tracker", "link_issues", { issue: state.card.ref, to: member.issue, kind: (config.card && config.card.link) || undefined }, { optional: true });
+    await ctx.call("tracker", "link_issues", { issue: state.card.ref, to: member.issue, kind: (config.card && config.card.link) || undefined }, cardOptions(state.card));
     state.cardLinks.push(member.issue);
   }
 }

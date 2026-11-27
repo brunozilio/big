@@ -13,6 +13,7 @@ fn world() -> World {
     let application = Application {
         id: "app".into(),
         name: "Checkout".into(),
+        bindings: Bindings::from([("tracker".to_owned(), Binding::new("c1", "APP"))]),
         repositories: vec![Repository {
             id: "web".into(),
             bindings: Bindings::from([("code".to_owned(), Binding::new("c1", "o/web"))]),
@@ -39,7 +40,14 @@ async fn merged(kernel: &Handle, title: &str) -> ItemId {
 }
 
 async fn merged_with(kernel: &Handle, title: &str, git: Value) -> ItemId {
-    let input = json!({ "title": title, "issue": title, "application": { "id": "app", "repositories": [{ "id": "web", "bindings": { "code": { "connection": "c1", "value": "o/web" } } }] }, "git": git });
+    let tracker = json!({ "tracker": { "connection": "c1", "value": "APP" } });
+    merged_in(kernel, title, git, tracker).await
+}
+
+async fn merged_in(kernel: &Handle, title: &str, git: Value, bindings: Value) -> ItemId {
+    let repositories = json!([{ "id": "web", "bindings": { "code": { "connection": "c1", "value": "o/web" } } }]);
+    let application = json!({ "id": "app", "bindings": bindings, "repositories": repositories });
+    let input = json!({ "title": title, "issue": title, "application": application, "git": git });
     let story = kernel.create_item("default", input).expect("story");
     until(kernel, &story, WorkItem::waiting_human).await;
     kernel.human_input(&story, "merge", "ok", json!({})).expect("merge");
@@ -168,4 +176,18 @@ async fn the_package_promotes_each_repository_along_the_flow_its_repository_foll
     assert_eq!((opened.1["head"].clone(), opened.1["base"].clone()), (json!("dev"), json!("homolog")));
     let merge = calls.iter().find(|(name, _, _)| name == "code.merge").expect("merged");
     assert_eq!(merge.1["method"], "squash");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_package_of_an_application_without_a_tracker_project_opens_no_card() {
+    let world = world();
+    let mut application = world.store().application("app").expect("store").expect("app");
+    application.bindings.clear();
+    world.store().save_application(&application).expect("unbound");
+    let kernel = world.start().await;
+    merged_in(&kernel, "APP-1", json!({ "web": { "head": "feat/x", "base": "develop" } }), json!({})).await;
+    let package = packages(&kernel, 1).await.remove(0);
+    let item = until(&kernel, &package, |item| item.is_ended() || item.waiting_human() || item.impediment.is_some()).await;
+    assert!(item.impediment.is_none(), "{:?}", item.impediment);
+    assert_eq!(world.provider.count("tracker.create_issue"), 0);
 }
