@@ -31,6 +31,7 @@ fn request() -> TurnRequest {
         }],
         effort: Effort::Medium,
         max_tokens: 4_096,
+        intent: Default::default(),
     }
 }
 
@@ -182,6 +183,7 @@ fn with_image(image: &domain::Image) -> TurnRequest {
         tools: vec![],
         effort: Effort::Low,
         max_tokens: 100,
+        intent: Default::default(),
     }
 }
 

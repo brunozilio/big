@@ -50,6 +50,7 @@ fn run(dir: &std::path::Path, calls: Vec<Block>) -> (Vec<Message>, Vec<EngineEve
             tools: Agent::specs(&tools),
             effort: Effort::Medium,
             max_tokens: 1000,
+            intent: Default::default(),
         },
         agents: &[],
         depth: 0,

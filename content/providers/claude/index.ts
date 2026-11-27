@@ -4,6 +4,7 @@ import {
   type Tokens,
   bearer,
   browser,
+  cacheMarks,
   callback,
   form,
   get,
@@ -12,6 +13,7 @@ import {
   jsonHeaders,
   jsonRequest,
   lasting,
+  lifetime,
   model,
   number,
   option,
@@ -75,9 +77,11 @@ export function headers({ config }: { config: Config }, ctx) {
   return sent;
 }
 
-export function shape({ model, body, effort }, ctx) {
+export function shape({ model, body, effort, intent }, ctx) {
   const existing = Array.isArray(body.system) ? body.system : [];
   body.system = [{ type: "text", text: "You are Claude Code, Anthropic's official CLI for Claude." }, ...existing];
+  const ttl = lifetime(intent, { long: ctx.config.cache_long, short: ctx.config.cache_short });
+  cacheMarks(body, ttl ? { type: "ephemeral", ttl } : null);
   body.max_tokens = ctx.models.outputLimit({ model, body });
   remove(body, ["thinking", "output_config"]);
   return ctx.models.effort({ vendor: "anthropic", body, model, effort, always: false });

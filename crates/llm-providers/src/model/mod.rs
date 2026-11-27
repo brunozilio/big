@@ -5,6 +5,7 @@ pub(crate) mod conversation_key;
 pub mod event_stream;
 pub mod framing;
 pub mod http;
+pub mod intent;
 pub mod pooled;
 pub(crate) mod retry;
 pub mod routed;
@@ -25,6 +26,7 @@ use serde_json::Value;
 
 use crate::transcript::{Message, StopReason, Usage};
 
+pub use intent::{Cache, Intent};
 pub use tokio_util::sync::CancellationToken;
 
 pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
@@ -46,6 +48,8 @@ pub struct TurnRequest {
     pub tools: Vec<ToolSpec>,
     pub effort: Effort,
     pub max_tokens: u32,
+    #[serde(default)]
+    pub intent: Intent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]

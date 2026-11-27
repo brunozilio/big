@@ -64,6 +64,9 @@ fn a_turn_goes_to_the_codex_backend_for_the_account() {
     assert_eq!(body["text"]["verbosity"], "medium");
     assert_eq!(body["store"], false);
     assert!(body.get("max_output_tokens").is_none());
+    let key = body["prompt_cache_key"].as_str().expect("the provider keys its cache by the conversation");
+    assert_eq!(header(&sent, "session_id").as_deref(), Some(key));
+    assert!(body.get("intent").is_none(), "the intent never reaches the API");
 }
 
 #[test]

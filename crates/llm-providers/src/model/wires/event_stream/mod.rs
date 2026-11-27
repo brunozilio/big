@@ -50,7 +50,8 @@ impl Attempt for Conversation {
         cancel: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<Reply, Failed>> {
         Box::pin(async move {
-            let response = self.http.post_streaming("", &[], &body(request).to_string(), cancel).await?;
+            let response =
+                self.http.post_streaming("", &[], &crate::model::intent::sent(request, body(request)), cancel).await?;
             if response.status != 200 {
                 return Err(refusal(response, cancel, status_error).await);
             }
@@ -111,6 +112,7 @@ mod tests {
             tools: Vec::new(),
             effort: domain::Effort::Medium,
             max_tokens: 1024,
+            intent: Default::default(),
         }
     }
 

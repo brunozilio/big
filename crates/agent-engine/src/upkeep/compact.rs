@@ -126,6 +126,7 @@ fn bounded_summary(
                 ))],
                 tools: Vec::new(),
                 max_tokens: template.max_tokens.min(4096),
+                intent: crate::model::Intent::ONCE,
                 ..template.clone()
             };
             match api.turn_blocking(&request, &mut |_| {}, stop.token()) {

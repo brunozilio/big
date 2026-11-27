@@ -13,6 +13,7 @@ fn last_turn() -> TurnRequest {
         tools: vec![ToolSpec { name: "Read".into(), description: "Reads".into(), schema: json!({}) }],
         effort: Effort::Low,
         max_tokens: 100,
+        intent: Default::default(),
     }
 }
 

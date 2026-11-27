@@ -11,18 +11,15 @@ pub fn body(request: &TurnRequest) -> Value {
         "stream": true,
         "thinking": { "type": "adaptive", "display": "summarized" },
         "output_config": { "effort": effort(request.effort) },
-        "cache_control": { "type": "ephemeral" },
-        "system": [{ "type": "text", "text": request.system, "cache_control": { "type": "ephemeral" } }],
+        "system": [{ "type": "text", "text": request.system }],
         "messages": request.messages.iter().filter_map(message).collect::<Vec<_>>(),
     });
-    let mut tools: Vec<Value> = request
-        .tools
-        .iter()
-        .map(|tool| json!({ "name": tool.name, "description": tool.description, "input_schema": tool.schema }))
-        .collect();
-    if let Some(last) = tools.last_mut() {
-        last["cache_control"] = json!({ "type": "ephemeral" });
-        body["tools"] = Value::Array(tools);
+    if !request.tools.is_empty() {
+        body["tools"] = request
+            .tools
+            .iter()
+            .map(|tool| json!({ "name": tool.name, "description": tool.description, "input_schema": tool.schema }))
+            .collect();
     }
     body
 }
@@ -111,18 +108,18 @@ mod tests {
             }],
             effort: Effort::XHigh,
             max_tokens: 64_000,
+            intent: Default::default(),
         }
     }
 
     #[test]
-    fn streams_with_adaptive_thinking_effort_and_caching() {
+    fn streams_with_adaptive_thinking_effort_and_leaves_caching_to_the_provider() {
         let body = body(&request());
         assert_eq!(body["stream"], true);
         assert_eq!(body["thinking"]["type"], "adaptive");
         assert_eq!(body["output_config"]["effort"], "xhigh");
-        assert_eq!(body["cache_control"]["type"], "ephemeral");
-        assert_eq!(body["system"][0]["text"], "Be brief.");
-        assert_eq!(body["system"][0]["cache_control"]["type"], "ephemeral", "tools and system cached on their own");
+        assert!(body.get("cache_control").is_none());
+        assert_eq!(body["system"][0], json!({"type": "text", "text": "Be brief."}));
         assert!(body.get("temperature").is_none(), "sampling settings are refused by the API");
         assert_eq!(body["tools"][0]["input_schema"]["type"], "object");
     }
@@ -136,15 +133,6 @@ mod tests {
         let result = &body["messages"][2]["content"][0];
         assert_eq!(result["tool_use_id"], "t1");
         assert_eq!(result["is_error"], false);
-    }
-
-    #[test]
-    fn the_last_tool_ends_its_own_cached_prefix() {
-        let mut request = request();
-        request.tools.push(ToolSpec { name: "Grep".into(), description: "Greps".into(), schema: json!({}) });
-        let body = body(&request);
-        assert!(body["tools"][0].get("cache_control").is_none());
-        assert_eq!(body["tools"][1]["cache_control"]["type"], "ephemeral", "tools stay cached when the system changes");
     }
 
     #[test]

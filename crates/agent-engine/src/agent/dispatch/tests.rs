@@ -57,6 +57,7 @@ impl Bench {
             tools: Agent::specs(&self.tools),
             effort: domain::Effort::Low,
             max_tokens: 1000,
+            intent: Default::default(),
         }
     }
 

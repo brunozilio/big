@@ -52,6 +52,7 @@ fn request() -> TurnRequest {
         tools: Agent::specs(&tools::standard()),
         effort: Effort::Medium,
         max_tokens: 1000,
+        intent: Default::default(),
     }
 }
 

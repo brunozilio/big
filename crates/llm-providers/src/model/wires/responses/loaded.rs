@@ -111,6 +111,7 @@ mod tests {
             tools: vec![spec("Read"), spec("ToolSearch"), spec(user_info)],
             effort: Effort::Medium,
             max_tokens: 1000,
+            intent: Default::default(),
         };
         let body = body(&request);
         let declared: Vec<&str> =
@@ -146,6 +147,7 @@ mod tests {
             tools: vec![spec("ToolSearch"), spec("mcp__a__b")],
             effort: Effort::Medium,
             max_tokens: 1000,
+            intent: Default::default(),
         };
         let body = body(&request);
         assert_eq!(body["tools"].as_array().map(Vec::len), Some(2));

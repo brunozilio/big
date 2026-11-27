@@ -152,12 +152,12 @@ fn the_catalog_hides_projectors_and_later_parts_and_shows_progress() {
 #[test]
 fn a_turn_carries_the_formats_the_context_and_the_effort_switches() {
     let mut body = json!({ "model": "o/r/M.gguf", "messages": [], "temperature": 0.2 });
-    llamacpp().shape(None, &mut body, "low").unwrap_or_else(|error| panic!("{error}"));
+    llamacpp().shape(None, &mut body, "low", &serde_json::Value::Null).unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(body["temperature"], 0.2);
     assert_eq!(body["top_k"], 20);
     assert_eq!(body["local"]["context"], 65_536);
     assert_eq!(body["local"]["template_kwargs"], json!({ "enable_thinking": true, "reasoning_effort": "low" }));
     assert_eq!(body["local"]["formats"][0]["call"]["format"], "xml");
-    llamacpp().shape(None, &mut body, "none").unwrap_or_else(|error| panic!("{error}"));
+    llamacpp().shape(None, &mut body, "none", &serde_json::Value::Null).unwrap_or_else(|error| panic!("{error}"));
     assert_eq!(body["local"]["template_kwargs"], json!({ "enable_thinking": false }));
 }

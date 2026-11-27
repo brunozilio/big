@@ -178,6 +178,7 @@ mod tests {
             tools: Vec::new(),
             effort: domain::Effort::Medium,
             max_tokens: 100,
+            intent: Default::default(),
         };
         let reply = meter.api.turn_blocking(&request, &mut |_| {}, &stop).expect("reply");
         assert_eq!(meter.served_by(&request, &reply), ("scripted".to_owned(), "a@x.io".to_owned()));
@@ -194,6 +195,7 @@ mod tests {
             tools: Vec::new(),
             effort: domain::Effort::Medium,
             max_tokens: 100,
+            intent: Default::default(),
         };
         let stop = CancellationToken::new();
 

@@ -70,6 +70,8 @@ scopes = "user:inference"
 callback_port = "0"
 callback_path = "/callback"
 fallback_models = "claude-opus-5-5 claude-sonnet-5-5 claude-haiku-5-5 claude-fable-5-1"
+cache_long = "1h"
+cache_short = "5m"
 
 [chatgpt]
 client_id = "app_EMoamEEZ73f0CkXaXp7hrann"

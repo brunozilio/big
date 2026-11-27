@@ -55,6 +55,7 @@ impl Job {
             tools: offered,
             effort: self.request.session.effort,
             max_tokens: MAX_OUTPUT,
+            intent: crate::model::Intent::SESSION,
         };
         Ok(Framed { workspace, toolbox, main, worktree, template })
     }

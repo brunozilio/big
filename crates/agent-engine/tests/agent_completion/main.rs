@@ -58,6 +58,7 @@ fn run_named(
             tools: Agent::specs(&tools),
             effort: Effort::Medium,
             max_tokens: 8192,
+            intent: Default::default(),
         },
         agents: &[found],
         depth: 0,

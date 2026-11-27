@@ -17,6 +17,7 @@ pub fn request(model: &str) -> TurnRequest {
         tools: Vec::new(),
         effort: Effort::High,
         max_tokens: 64000,
+        intent: Default::default(),
     }
 }
 

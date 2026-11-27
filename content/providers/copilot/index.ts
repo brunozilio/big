@@ -3,11 +3,14 @@ import {
   type Model,
   type Reached,
   bearer,
+  cacheKey,
+  cacheMarks,
   capabilities,
   get,
   instant,
   invalid,
   items,
+  lifetime,
   monthly,
   number,
   option,
@@ -157,7 +160,7 @@ function messagesShape(body, caps, effort: string, limit: (asked: unknown, fallb
   }
 }
 
-export function shape({ model, body, effort }) {
+export function shape({ model, body, effort, intent }) {
   const caps = model?.capabilities ?? {};
   const limit = (asked: unknown, fallback: number) => {
     const most = typeof caps.max_output_tokens === "number" ? caps.max_output_tokens : fallback;
@@ -166,13 +169,17 @@ export function shape({ model, body, effort }) {
   const wire = wireOf(model);
   if (wire === "chat") body.max_tokens = limit(body.max_tokens, 16_384);
   if (wire === "responses") {
+    cacheKey(body, intent);
     if (caps.reasoning || (caps.reasoning_levels ?? []).length > 0) body.reasoning = { effort: level(caps.reasoning_levels ?? [], effort), summary: "auto" };
     else {
       delete body.reasoning;
       delete body.include;
     }
   }
-  if (wire === "messages") messagesShape(body, caps, effort, limit);
+  if (wire === "messages") {
+    messagesShape(body, caps, effort, limit);
+    cacheMarks(body, lifetime(intent, { long: { type: "ephemeral" }, short: { type: "ephemeral" } }));
+  }
   return body;
 }
 

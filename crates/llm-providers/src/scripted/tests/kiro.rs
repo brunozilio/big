@@ -39,7 +39,7 @@ fn model(id: &str) -> ModelOption {
 
 fn sent(model: &ModelOption, effort: &str) -> Value {
     let mut body = json!({"conversationState": {}, "output_config": {"effort": effort}});
-    kiro().shape(Some(model), &mut body, effort).unwrap_or_else(|e| panic!("{e}"));
+    kiro().shape(Some(model), &mut body, effort, &serde_json::Value::Null).unwrap_or_else(|e| panic!("{e}"));
     assert!(body.get("output_config").is_none());
     body["additionalModelRequestFields"].clone()
 }
@@ -220,7 +220,7 @@ fn models_without_effort_controls_get_no_extra_fields() {
         assert_eq!(sent(&model(id), "high"), Value::Null, "{id}");
     }
     let mut body = json!({"output_config": {"effort": "high"}});
-    kiro().shape(None, &mut body, "high").unwrap_or_else(|e| panic!("{e}"));
+    kiro().shape(None, &mut body, "high", &serde_json::Value::Null).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(body, json!({}));
 }
 

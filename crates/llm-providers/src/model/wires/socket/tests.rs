@@ -50,6 +50,7 @@ impl Provider for Framed {
         _model: Option<&domain::ModelOption>,
         _body: &mut Value,
         _effort: &str,
+        _intent: &Value,
     ) -> Result<(), ProviderError> {
         Ok(())
     }
@@ -95,6 +96,7 @@ fn request() -> TurnRequest {
         tools: Vec::new(),
         effort: domain::Effort::Low,
         max_tokens: 100,
+        intent: Default::default(),
     }
 }
 

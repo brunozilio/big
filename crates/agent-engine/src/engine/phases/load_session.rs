@@ -91,6 +91,7 @@ impl Job {
             tools: Vec::new(),
             effort: domain::Effort::Low,
             max_tokens: MAX_OUTPUT,
+            intent: crate::model::Intent::ONCE,
         };
         let stop = self.control.stop_flag();
         match crate::chores::answer(command, &api, &template, &self.request.prompt.text, history, stop) {

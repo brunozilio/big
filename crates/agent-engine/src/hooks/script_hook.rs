@@ -138,6 +138,7 @@ export default function (input, ctx) {
             tools: Vec::new(),
             effort: domain::Effort::Low,
             max_tokens: 100,
+            intent: Default::default(),
         }
     }
 

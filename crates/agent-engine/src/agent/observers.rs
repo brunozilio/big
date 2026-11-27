@@ -199,8 +199,14 @@ impl<'env> Agent<'env> {
             crate::tools::subagent::system(&self.request.system, Some(found)),
             crate::prompt::text("observer")
         );
-        let request =
-            TurnRequest { model, system, tools: Agent::specs(&tools), messages: Vec::new(), ..self.request.clone() };
+        let request = TurnRequest {
+            model,
+            system,
+            tools: Agent::specs(&tools),
+            messages: Vec::new(),
+            intent: crate::model::Intent::default(),
+            ..self.request.clone()
+        };
         let quiet = |_| {};
         let observer = Agent {
             api: self.api,

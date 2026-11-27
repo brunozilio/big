@@ -4,6 +4,7 @@ import {
   after,
   bearer,
   browser,
+  cacheKey,
   callback,
   claims,
   epoch,
@@ -82,7 +83,8 @@ export function turnHeaders({ body }) {
 
 export const retriesAfterRefresh = ({ status }: { status: number }) => status === 401;
 
-export function shape({ model, body, effort }, ctx) {
+export function shape({ model, body, effort, intent }, ctx) {
+  cacheKey(body, intent);
   body.instructions = `${ctx.config.instructions}\n\n${typeof body.instructions === "string" ? body.instructions : ""}`;
   body.reasoning = { ...(body.reasoning ?? {}), effort };
   body.text = { verbosity: "medium" };

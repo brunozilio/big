@@ -56,6 +56,7 @@ fn judge_request(agent: &Agent<'_>, request: &str, answer: &str) -> TurnRequest 
         ))],
         effort: domain::Effort::Low,
         max_tokens: template.max_tokens.min(JUDGE_TOKENS),
+        intent: crate::model::Intent::ONCE,
         ..template
     }
 }

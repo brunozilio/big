@@ -13,6 +13,7 @@ fn template() -> TurnRequest {
         tools: Vec::new(),
         effort: Effort::Low,
         max_tokens: 8000,
+        intent: Default::default(),
     }
 }
 

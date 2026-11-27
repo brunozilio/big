@@ -67,6 +67,7 @@ pub(crate) fn ask_model(
         system: field("system").unwrap_or_default(),
         messages: vec![Message::user(prompt)],
         tools: Vec::new(),
+        intent: crate::model::Intent::ONCE,
         ..template.clone()
     };
     let reply = api.turn_blocking(&request, &mut |_| {}, stop.token()).map_err(|error| error.to_string())?;

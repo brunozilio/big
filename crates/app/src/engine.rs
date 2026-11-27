@@ -134,6 +134,7 @@ mod tests {
             tools: Vec::new(),
             effort: domain::Effort::Low,
             max_tokens: 1,
+            intent: Default::default(),
         };
         let _ = api.turn_blocking(&turn, &mut |_| {}, &CancellationToken::new());
         http.sent().last().map(|sent| sent.url.clone()).unwrap_or_default()
@@ -179,6 +180,7 @@ mod tests {
                 tools: Vec::new(),
                 effort: domain::Effort::Low,
                 max_tokens: 1,
+                intent: Default::default(),
             };
             api.turn_blocking(&turn, &mut |_| {}, &CancellationToken::new())
         };
@@ -230,6 +232,7 @@ mod tests {
             tools: Vec::new(),
             effort: domain::Effort::Low,
             max_tokens: 1,
+            intent: Default::default(),
         };
         let _ = api.turn_blocking(&turn, &mut |_| {}, &CancellationToken::new());
         let keys: Vec<bool> =

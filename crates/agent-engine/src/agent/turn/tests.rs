@@ -94,6 +94,7 @@ fn turns_until_the_limit(limit: usize) -> (Result<(), Ending>, usize) {
             tools: Agent::specs(&tools),
             effort: domain::Effort::Low,
             max_tokens: 1000,
+            intent: Default::default(),
         },
         agents: &[],
         depth: 0,

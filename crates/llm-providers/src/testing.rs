@@ -65,7 +65,13 @@ impl Provider for Stand {
     fn path(&self, _model: Option<&ModelOption>) -> &'static str {
         "/chat"
     }
-    fn shape(&self, _model: Option<&ModelOption>, _body: &mut Value, _effort: &str) -> Result<(), ProviderError> {
+    fn shape(
+        &self,
+        _model: Option<&ModelOption>,
+        _body: &mut Value,
+        _effort: &str,
+        _intent: &Value,
+    ) -> Result<(), ProviderError> {
         Ok(())
     }
     fn catalog(&self, config: &Config, after: &str) -> Call {

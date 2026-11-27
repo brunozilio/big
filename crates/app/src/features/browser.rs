@@ -47,6 +47,7 @@ fn ask_small(request: &PromptRequest, system: &str, prompt: &str) -> Option<Stri
         tools: Vec::new(),
         effort: Effort::Low,
         max_tokens: ANSWER_TOKENS,
+        intent: agent_engine::model::Intent::ONCE,
     };
     let stop = platform::Stop::new();
     match api.turn_blocking(&turn, &mut |_| {}, stop.token()) {

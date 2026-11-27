@@ -55,8 +55,19 @@ fn granted() -> Vec<(u16, String)> {
 fn shaped_messages(caps: ModelCapabilities, effort: &str) -> Value {
     let mut body = json!({"max_tokens": 64000, "thinking": {"type": "adaptive", "display": "summarized"},
         "output_config": {"effort": "low"}});
-    copilot().shape(Some(&served(&["/v1/messages"], caps)), &mut body, effort).unwrap_or_else(|e| panic!("{e}"));
+    let once = json!({"cache": "none"});
+    copilot().shape(Some(&served(&["/v1/messages"], caps)), &mut body, effort, &once).unwrap_or_else(|e| panic!("{e}"));
     body
+}
+
+#[test]
+fn claude_through_copilot_marks_the_system_the_tools_and_the_conversation_unless_asked_not_to() {
+    let model = served(&["/v1/messages"], ModelCapabilities::default());
+    let mut body = json!({"max_tokens": 100, "system": [{"type": "text", "text": "s"}], "tools": [{"name": "a"}]});
+    copilot().shape(Some(&model), &mut body, "low", &json!({"cache": "long"})).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(body["cache_control"], json!({"type": "ephemeral"}));
+    assert_eq!(body["system"][0]["cache_control"], json!({"type": "ephemeral"}));
+    assert_eq!(body["tools"][0]["cache_control"], json!({"type": "ephemeral"}));
 }
 
 #[test]
@@ -94,11 +105,11 @@ fn responses_reason_at_the_nearest_offered_level() {
     let levels = vec!["low".to_owned(), "medium".to_owned(), "high".to_owned()];
     let model = served(&["/responses"], ModelCapabilities { reasoning_levels: levels, ..ModelCapabilities::default() });
     let mut body = json!({"reasoning": {"effort": "high"}});
-    copilot().shape(Some(&model), &mut body, "max").unwrap_or_else(|e| panic!("{e}"));
+    copilot().shape(Some(&model), &mut body, "max", &serde_json::Value::Null).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(body["reasoning"], json!({"effort": "high", "summary": "auto"}));
     let plain = served(&["/responses"], ModelCapabilities::default());
     let mut body = json!({"reasoning": {}, "include": ["reasoning.encrypted_content"]});
-    copilot().shape(Some(&plain), &mut body, "high").unwrap_or_else(|e| panic!("{e}"));
+    copilot().shape(Some(&plain), &mut body, "high", &serde_json::Value::Null).unwrap_or_else(|e| panic!("{e}"));
     assert!(body.get("reasoning").is_none() && body.get("include").is_none());
 }
 
@@ -106,7 +117,7 @@ fn responses_reason_at_the_nearest_offered_level() {
 fn chat_stays_within_the_model_output_limit() {
     let model = served(&[], ModelCapabilities { max_output_tokens: Some(4096), ..ModelCapabilities::default() });
     let mut body = json!({"max_tokens": 64000});
-    copilot().shape(Some(&model), &mut body, "medium").unwrap_or_else(|e| panic!("{e}"));
+    copilot().shape(Some(&model), &mut body, "medium", &serde_json::Value::Null).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(body["max_tokens"], 4096);
 }
 

@@ -16,6 +16,7 @@ pub fn reader(small_model: Option<&str>, parent: &TurnRequest, provider: domain:
         tools: Vec::new(),
         effort: parent.effort,
         max_tokens: parent.max_tokens,
+        intent: Default::default(),
     }
 }
 
@@ -87,6 +88,7 @@ mod tests {
             tools: Vec::new(),
             effort: domain::Effort::High,
             max_tokens: 32_000,
+            intent: Default::default(),
         }
     }
 

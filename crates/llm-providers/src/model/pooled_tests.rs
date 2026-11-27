@@ -15,6 +15,7 @@ fn request() -> TurnRequest {
         tools: Vec::new(),
         effort: domain::Effort::Medium,
         max_tokens: 1000,
+        intent: Default::default(),
     }
 }
 

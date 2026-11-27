@@ -6,6 +6,7 @@ pub const STREAM_LIMIT: usize = 8 << 20;
 pub const ERROR_LIMIT: usize = 4 << 10;
 
 pub fn shape(provider: &dyn Provider, model: Option<&ModelOption>, body: &mut Value) -> Result<(), ProviderError> {
+    let intent = crate::model::intent::take(body);
     let prefix = format!("{}:", provider.id());
     if let Some(name) = body["model"].as_str() {
         body["model"] = json!(name.strip_prefix(&prefix).unwrap_or(name));
@@ -20,7 +21,7 @@ pub fn shape(provider: &dyn Provider, model: Option<&ModelOption>, body: &mut Va
     if !provider.tools_in_conversation(&named) {
         crate::added_tools::into_tools(body);
     }
-    provider.shape(model, body, &effort)
+    provider.shape(model, body, &effort, &intent)
 }
 
 pub fn remove(body: &mut Value, keys: &[&str]) {

@@ -56,7 +56,13 @@ pub trait Provider: Sync {
     fn base(&self, config: &Config) -> String;
     fn headers(&self, config: &Config) -> Vec<(String, String)>;
     fn path(&self, model: Option<&ModelOption>) -> &'static str;
-    fn shape(&self, model: Option<&ModelOption>, body: &mut Value, effort: &str) -> Result<(), ProviderError>;
+    fn shape(
+        &self,
+        model: Option<&ModelOption>,
+        body: &mut Value,
+        effort: &str,
+        intent: &Value,
+    ) -> Result<(), ProviderError>;
     fn catalog(&self, config: &Config, after: &str) -> Call;
     fn page(&self, value: &Value) -> Result<Page, ProviderError>;
 

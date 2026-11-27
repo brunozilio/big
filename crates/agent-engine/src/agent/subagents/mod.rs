@@ -106,6 +106,7 @@ impl Agent<'_> {
                 system,
                 tools: self.child_tools(&chosen, &planned.config, planning, &run),
                 effort: planned.config.effort.unwrap_or(self.request.effort),
+                intent: crate::model::Intent::default(),
                 ..self.request.clone()
             },
             agents: &[],

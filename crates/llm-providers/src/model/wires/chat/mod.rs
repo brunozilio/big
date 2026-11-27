@@ -70,7 +70,7 @@ impl Attempt for Chat {
         Box::pin(async move {
             let endpoint = self.endpoints.endpoint(&request.model)?;
             let url = format!("{}/v1/chat/completions", endpoint.base_url.trim_end_matches('/'));
-            let sent = body(request, &endpoint.model).to_string();
+            let sent = crate::model::intent::sent(request, body(request, &endpoint.model));
             let response = self.http.post_streaming(&url, &[], &sent, cancel).await?;
             if response.status != 200 {
                 return Err(refusal(response, cancel, status_error).await);

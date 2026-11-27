@@ -5,6 +5,7 @@ import {
   type Tokens,
   accessToken,
   bearer,
+  cacheKey,
   capabilities,
   formRequest,
   get,
@@ -60,7 +61,7 @@ export function headers({ config }: { config: Config }) {
 
 export const retriesAfterRefresh = ({ status }: { status: number }) => status === 401;
 
-export const shape = ({ model, body, effort }, ctx) => ctx.models.effort({ vendor: "xai", body, model, effort, always: false });
+export const shape = ({ model, body, effort, intent }, ctx) => ctx.models.effort({ vendor: "xai", body: cacheKey(body, intent), model, effort, always: false });
 
 export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.config.api, headers({ config }), "/models");
 

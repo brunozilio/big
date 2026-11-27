@@ -16,6 +16,7 @@ fn request() -> TurnRequest {
         tools: Vec::new(),
         effort: Effort::High,
         max_tokens: 64_000,
+        intent: Default::default(),
     }
 }
 
@@ -147,6 +148,7 @@ fn with_image(image: &domain::Image) -> TurnRequest {
         tools: vec![],
         effort: Effort::Low,
         max_tokens: 100,
+        intent: Default::default(),
     }
 }
 
@@ -173,6 +175,7 @@ fn thought(signature: &str, origin: Option<crate::transcript::ReasoningOrigin>) 
         tools: vec![],
         effort: Effort::Low,
         max_tokens: 100,
+        intent: Default::default(),
     }
 }
 

@@ -268,9 +268,16 @@ impl Provider for ScriptedProvider {
     fn path(&self, model: Option<&ModelOption>) -> &'static str {
         self.named("path", model, self.path)
     }
-    fn shape(&self, model: Option<&ModelOption>, body: &mut Value, effort: &str) -> Result<(), ProviderError> {
+    fn shape(
+        &self,
+        model: Option<&ModelOption>,
+        body: &mut Value,
+        effort: &str,
+        intent: &Value,
+    ) -> Result<(), ProviderError> {
         if self.offers("shape") {
-            *body = self.invoke("shape", json!({ "model": model, "body": body, "effort": effort }))?;
+            *body =
+                self.invoke("shape", json!({ "model": model, "body": body, "effort": effort, "intent": intent }))?;
         }
         Ok(())
     }

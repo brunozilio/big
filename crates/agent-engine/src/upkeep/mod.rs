@@ -84,6 +84,7 @@ mod tests {
             tools: Vec::new(),
             effort: Effort::Low,
             max_tokens: 100,
+            intent: Default::default(),
         }
     }
 

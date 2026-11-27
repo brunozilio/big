@@ -61,7 +61,10 @@ impl Attempt for Responses {
     ) -> BoxFuture<'a, Result<Reply, Failed>> {
         Box::pin(async move {
             let (url, headers) = self.target()?;
-            let response = self.http.post_streaming(&url, &headers, &body(request).to_string(), cancel).await?;
+            let response = self
+                .http
+                .post_streaming(&url, &headers, &crate::model::intent::sent(request, body(request)), cancel)
+                .await?;
             if response.status != 200 {
                 return Err(refusal(response, cancel, status_error).await);
             }

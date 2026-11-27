@@ -3,7 +3,7 @@ use domain::{Language, ModelOption, ModelProvider};
 use serde_json::{Value, json};
 
 use super::provider;
-use crate::model::ModelError;
+use crate::model::{BlockingTurn, CancellationToken, Intent, ModelError, ToolSpec};
 use crate::providers::testing::{client, effort_body, header, sent_turn};
 use crate::testing::ScriptedHost;
 use crate::{Config, Provider, ProviderError, Tokens};
@@ -34,11 +34,39 @@ fn a_turn_goes_to_the_messages_api_signed_in() {
     assert_eq!(body["system"][1]["text"], "Help the user.");
 }
 
+fn cached_as(intent: Intent) -> Value {
+    let (client, http) = client(CLAUDE, [(200, MESSAGES.to_owned())]);
+    let mut request = crate::providers::testing::request("claude-subscription:model-1");
+    request.intent = intent;
+    request.tools.push(ToolSpec { name: "Read".into(), description: "Reads".into(), schema: json!({}) });
+    client.turn_blocking(&request, &mut |_| {}, &CancellationToken::new()).expect("stream");
+    serde_json::from_str(&http.sent()[0].body).expect("body")
+}
+
 #[test]
-fn the_system_prompt_and_the_conversation_are_cached() {
-    let (_, body) = sent_turn(CLAUDE, MESSAGES);
-    assert_eq!(body["cache_control"], json!({"type": "ephemeral"}));
-    assert_eq!(body["system"][1]["cache_control"], json!({"type": "ephemeral"}));
+fn the_system_prompt_the_tools_and_the_conversation_are_cached_for_the_short_lifetime() {
+    let body = cached_as(Intent::default());
+    let short = json!({"type": "ephemeral", "ttl": "5m"});
+    assert_eq!(body["cache_control"], short);
+    assert!(body["system"][0].get("cache_control").is_none());
+    assert_eq!(body["system"][1]["cache_control"], short);
+    assert_eq!(body["tools"][0]["cache_control"], short);
+    assert!(body.get("intent").is_none(), "the intent never reaches the API");
+}
+
+#[test]
+fn a_session_turn_keeps_its_cache_for_the_configured_long_lifetime() {
+    let body = cached_as(Intent::SESSION);
+    assert_eq!(body["cache_control"], json!({"type": "ephemeral", "ttl": "1h"}));
+    assert_eq!(body["tools"][0]["cache_control"], json!({"type": "ephemeral", "ttl": "1h"}));
+}
+
+#[test]
+fn a_one_off_call_marks_nothing_to_cache() {
+    let body = cached_as(Intent::ONCE);
+    assert!(body.get("cache_control").is_none());
+    assert!(body["system"][1].get("cache_control").is_none());
+    assert!(body["tools"][0].get("cache_control").is_none());
 }
 
 #[test]
