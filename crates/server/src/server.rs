@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::net::{Ipv4Addr, SocketAddr, TcpListener};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener};
 use std::sync::{Arc, Mutex};
 
 use axum::Router;
@@ -12,12 +12,17 @@ use crate::sign_in::Flows;
 use crate::stamps::Stamps;
 use crate::state::{Ctx, Shared};
 
+pub fn address_of(configured: &str) -> IpAddr {
+    configured.trim().parse().unwrap_or(IpAddr::V4(Ipv4Addr::LOCALHOST))
+}
+
 pub fn bind(port: u16) -> std::io::Result<TcpListener> {
-    let listener = match TcpListener::bind((Ipv4Addr::LOCALHOST, port)) {
+    let address = address_of(brand::server::BIND);
+    let listener = match TcpListener::bind((address, port)) {
         Ok(listener) => listener,
         Err(error) if port != 0 => {
             tracing::warn!(%error, port, "the configured port is taken; another free one is used");
-            TcpListener::bind((Ipv4Addr::LOCALHOST, 0))?
+            TcpListener::bind((address, 0))?
         }
         Err(error) => return Err(error),
     };
@@ -82,3 +87,15 @@ pub async fn serve(
 }
 
 const SHUTDOWN_GRACE: std::time::Duration = std::time::Duration::from_secs(3);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_listening_address_falls_back_to_the_loopback() {
+        assert_eq!(address_of("0.0.0.0"), IpAddr::V4(Ipv4Addr::UNSPECIFIED));
+        assert_eq!(address_of(""), IpAddr::V4(Ipv4Addr::LOCALHOST));
+        assert_eq!(address_of("nope"), IpAddr::V4(Ipv4Addr::LOCALHOST));
+    }
+}

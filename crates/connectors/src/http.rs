@@ -202,8 +202,8 @@ impl ReqwestHttp {
     pub fn new() -> Result<ReqwestHttp, ActionError> {
         let network =
             platform::network::Settings::shared(platform::network::Configured::from_pairs(brand::network::PAIRS));
-        let client = network
-            .applied(reqwest::Client::builder())
+        let ranges = platform::guard::ranges_of(brand::network::BLOCKED);
+        let client = platform::guard::guarded(network.applied(reqwest::Client::builder()), ranges)
             .user_agent(brand::connectors::USER_AGENT)
             .timeout(TIMEOUT)
             .build()
@@ -280,6 +280,10 @@ fn answered(method: &str, address: &platform::address::Address, status: u16, dur
 
 impl ReqwestHttp {
     async fn sent(&self, request: HttpRequest) -> Result<HttpResponse, ActionError> {
+        let ranges = platform::guard::ranges_of(brand::network::BLOCKED);
+        if reqwest::Url::parse(&request.url).is_ok_and(|url| platform::guard::literal_blocked(&url, &ranges)) {
+            return Err(ActionError::permanent("this server does not call that address"));
+        }
         let mut builder = self.client.request(ReqwestHttp::method(request.method), &request.url);
         for (name, value) in &request.headers {
             builder = builder.header(name, value);

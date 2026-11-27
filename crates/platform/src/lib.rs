@@ -7,6 +7,7 @@ pub mod editor;
 pub mod environment;
 pub mod file_lock;
 pub mod git;
+pub mod guard;
 pub mod keychain;
 pub mod named;
 pub mod network;

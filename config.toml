@@ -4,7 +4,7 @@ company = "brunozilio"
 author = "brunozilio"
 
 [connectors]
-oauth_redirect = "http://127.0.0.1:{port}/api/connections/oauth/callback"
+oauth_redirect = "{origin}/api/connections/oauth/callback"
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36"
 oauth_client_name = "Google Chrome"
 mcp_client_name = "Google Chrome"
@@ -188,6 +188,7 @@ ca_files = ""
 https_proxy = ""
 http_proxy = ""
 no_proxy = ""
+blocked = ""
 
 [components]
 disabled = "providers/llamacpp"

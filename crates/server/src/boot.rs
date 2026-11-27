@@ -50,7 +50,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let engine = Arc::new(app::KeyedEngine::new(services.clone()));
     let config = Config::new(Arc::clone(&store), Arc::clone(&connectors), engine.clone(), launch.data.clone())
         .in_repo(launch.repo.clone())
-        .with_server(format!("http://{address}"));
+        .with_server(format!("http://127.0.0.1:{}", address.port()));
     let handle = Orchestrator::start(config).map_err(|error| error.to_string())?;
     let remembered = (client.clone(), Arc::clone(&engine));
     std::thread::spawn(move || {

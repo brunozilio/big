@@ -52,14 +52,14 @@ impl LoopbackSignIn for CodeSignIn {
     }
 
     fn callback_port(&self) -> Option<u16> {
-        if self.redirect.contains("{port}") {
+        if super::templated(&self.redirect) {
             return None;
         }
         url::Url::parse(&self.redirect).ok()?.port()
     }
 
     async fn begin(&self, _http: &dyn Http, port: u16) -> Result<Authorization, ActionError> {
-        let redirect_uri = self.redirect.replace("{port}", &port.to_string());
+        let redirect_uri = super::redirect_for(&self.redirect, port);
         let state = random_token()?;
         let verifier = random_token()?;
         let url = self.authorize(&redirect_uri, &state, &verifier)?;

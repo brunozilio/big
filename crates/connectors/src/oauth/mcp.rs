@@ -128,7 +128,7 @@ impl LoopbackSignIn for McpSignIn {
     }
 
     fn callback_port(&self) -> Option<u16> {
-        if self.redirect.contains("{port}") {
+        if super::templated(&self.redirect) {
             return None;
         }
         url::Url::parse(&self.redirect).ok()?.port()
@@ -137,7 +137,7 @@ impl LoopbackSignIn for McpSignIn {
     async fn begin(&self, http: &dyn Http, port: u16) -> Result<Authorization, ActionError> {
         let (mut auth, offered) = discover(http, &self.server).await?;
         auth.resource_scopes = self.scopes(&offered);
-        let redirect_uri = self.redirect.replace("{port}", &port.to_string());
+        let redirect_uri = super::redirect_for(&self.redirect, port);
         let client = self.register(http, &auth, &redirect_uri).await?;
         let state = random_token()?;
         let verifier = random_token()?;
