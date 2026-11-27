@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use serde_json::{Value, json};
 
@@ -14,11 +14,14 @@ impl script::Host for NoHost {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+pub const VIEWS_KEPT: usize = 64;
+
+#[derive(Debug)]
 pub struct Script {
     bundle: Bundle,
     pub target: Value,
     pub described: Value,
+    views: Mutex<Vec<(String, Value)>>,
 }
 
 impl Script {
@@ -28,7 +31,7 @@ impl Script {
     }
 
     fn built(bundle: Bundle, workflow: &str) -> Result<Script, String> {
-        let mut script = Script { bundle, target: Value::Null, described: Value::Null };
+        let mut script = Script { bundle, target: Value::Null, described: Value::Null, views: Mutex::default() };
         script.described = script.call("host.describe", &[])?;
         let names: Vec<&str> = script.described["workflows"]
             .as_array()
@@ -45,7 +48,26 @@ impl Script {
     }
 
     pub fn view(&self, request: &Value) -> Result<Value, String> {
-        self.call("host.view", std::slice::from_ref(request))
+        let key = request.to_string();
+        let kept =
+            |views: &[(String, Value)]| views.iter().find(|(known, _)| *known == key).map(|(_, view)| view.clone());
+        if let Some(found) = kept(&self.views.lock().unwrap_or_else(PoisonError::into_inner)) {
+            return Ok(found);
+        }
+        let view = self.call("host.view", std::slice::from_ref(request))?;
+        let mut views = self.views.lock().unwrap_or_else(PoisonError::into_inner);
+        if kept(&views).is_none() {
+            if views.len() >= VIEWS_KEPT {
+                views.remove(0);
+            }
+            views.push((key, view.clone()));
+        }
+        Ok(view)
+    }
+
+    #[cfg(test)]
+    pub fn views_kept(&self) -> usize {
+        self.views.lock().unwrap_or_else(PoisonError::into_inner).len()
     }
 
     fn call(&self, export: &str, arguments: &[Value]) -> Result<Value, String> {

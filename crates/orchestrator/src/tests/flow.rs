@@ -214,6 +214,26 @@ async fn a_client_step_replaces_the_built_in_one() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn an_unchanged_step_is_viewed_again_without_running_the_script() {
+    let world = World::new();
+    world.workflow("mine", OVERRIDE);
+    world.write("sdk/steps/checks.js", CLIENT_CHECKS);
+    let kernel = world.start().await;
+    let id = kernel.create_item("mine", json!({})).expect("item");
+    ended(&kernel, &id).await;
+    let started = std::time::Instant::now();
+    let first = kernel.step_view(&id, "checks", None).await.expect("view");
+    let ran = started.elapsed();
+    let started = std::time::Instant::now();
+    let again = kernel.step_view(&id, "checks", None).await.expect("view");
+    let kept = started.elapsed();
+    eprintln!("step view: ran the script in {ran:?}, served again in {kept:?}");
+    assert_eq!(first.blocks, again.blocks);
+    let script = kernel.shared.script("mine").expect("script");
+    assert_eq!(script.views_kept(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn the_built_in_delivery_workflow_loads_and_describes_its_steps() {
     let world = World::new();
     let kernel = world.start().await;
@@ -342,7 +362,10 @@ async fn the_developer_sees_the_designs_the_plan_read() {
     let world = World::new();
     world.workflow("delivered", DELIVERED);
     let link = "https://www.figma.com/design/AbC/App?node-id=1-2";
-    world.provider.always("tracker.issue", json!({ "ref": "FIRP-1", "title": "Tooltip", "description": format!("Tela: {link}") }));
+    world.provider.always(
+        "tracker.issue",
+        json!({ "ref": "FIRP-1", "title": "Tooltip", "description": format!("Tela: {link}") }),
+    );
     let screen = json!({ "ref": "AbC:1:2", "name": "Cadastro", "file": "App", "url": link, "texts": ["Informe o CPF"],
         "outline": "- Cadastro (frame)", "image": null, "picture": { "media_type": "image/png", "data": PNG } });
     world.provider.always("design.frame", screen);

@@ -4,7 +4,7 @@ mod sessions;
 mod sign_in;
 mod socket;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use async_trait::async_trait;
 use domain::Language;
@@ -67,6 +67,7 @@ pub struct ScriptedProvider {
     events: Option<ScriptedEvents>,
     answers: Arc<dyn Answers>,
     sessions: Arc<McpSessions>,
+    shown: Mutex<Vec<(String, Language, Value)>>,
 }
 
 #[derive(Debug)]
@@ -159,7 +160,16 @@ impl ScriptedProvider {
             answers: Arc::clone(&answers),
             sessions: Arc::clone(&sessions),
         });
-        Ok(ScriptedProvider { key, script, descriptor, chooses: declared.chooses, events, answers, sessions })
+        Ok(ScriptedProvider {
+            key,
+            script,
+            descriptor,
+            chooses: declared.chooses,
+            events,
+            answers,
+            sessions,
+            shown: Mutex::default(),
+        })
     }
 
     pub fn with_answers(mut self, answers: Arc<dyn Answers>) -> ScriptedProvider {
@@ -171,8 +181,21 @@ impl ScriptedProvider {
     }
 
     fn local(&self, name: &str, language: Language) -> Value {
+        let shown = |memo: &[(String, Language, Value)]| {
+            memo.iter()
+                .find(|(known, spoken, _)| known == name && *spoken == language)
+                .map(|(_, _, value)| value.clone())
+        };
+        if let Some(found) = shown(&self.shown.lock().unwrap_or_else(PoisonError::into_inner)) {
+            return found;
+        }
         let input = json!({ "language": language.code() });
-        self.script.invoke_here(name, &input, Arc::new(Local)).unwrap_or_default()
+        let value = self.script.invoke_here(name, &input, Arc::new(Local)).unwrap_or_default();
+        let mut memo = self.shown.lock().unwrap_or_else(PoisonError::into_inner);
+        if shown(&memo).is_none() {
+            memo.push((name.to_owned(), language, value.clone()));
+        }
+        value
     }
 
     async fn online(&self, http: &dyn Http, name: &str, input: Value) -> Result<Value, ActionError> {

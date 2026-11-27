@@ -196,8 +196,11 @@ async fn a_transition_to_a_category_walks_through_the_workflow_until_it_gets_the
     ]);
     let answer = call(&http, "tracker.transition", json!({"issue": "BIG-1", "category": "done"}), "k").await;
     assert_eq!(answer, Ok(json!({"ref": "BIG-1", "status": "Concluído", "changed": true})));
-    let sent: Vec<Value> =
-        tool_calls(&http).iter().filter(|(name, _)| name == "transitionJiraIssue").map(|c| c.1["transitionId"].clone()).collect();
+    let sent: Vec<Value> = tool_calls(&http)
+        .iter()
+        .filter(|(name, _)| name == "transitionJiraIssue")
+        .map(|c| c.1["transitionId"].clone())
+        .collect();
     assert_eq!(sent, [json!("21"), json!("23")]);
 }
 

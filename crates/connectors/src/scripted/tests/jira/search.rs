@@ -48,7 +48,8 @@ async fn picking_keeps_only_the_root_work_items_never_epics_or_subtasks() {
     ];
     assert_eq!(refs(&found), kept);
     let calls = tool_calls(&http);
-    let wanted = "project = \"BIG\" AND text ~ \"login\" AND issuetype not in subTaskIssueTypes() ORDER BY updated DESC";
+    let wanted =
+        "project = \"BIG\" AND text ~ \"login\" AND issuetype not in subTaskIssueTypes() ORDER BY updated DESC";
     assert_eq!(calls[0].1["jql"], wanted);
 }
 
@@ -72,7 +73,12 @@ async fn a_key_that_does_not_exist_finds_nothing_instead_of_failing() {
 
 #[tokio::test]
 async fn a_key_typed_with_spaces_or_another_dash_is_still_read_as_the_key() {
-    for typed in ["FIRP25XPTO - 2532", "firp25xpto–2532", " FIRP25XPTO -2532 ", "https://acme.atlassian.net/browse/FIRP25XPTO-2532"] {
+    for typed in [
+        "FIRP25XPTO - 2532",
+        "firp25xpto–2532",
+        " FIRP25XPTO -2532 ",
+        "https://acme.atlassian.net/browse/FIRP25XPTO-2532",
+    ] {
         let http = session(&[issue("FIRP25XPTO-2532", "Story", 0), json!({"issues": []})]);
         let found = call(&http, "tracker.search", json!({"query": typed, "pick": true}), "").await;
         let Ok(found) = found else { panic!("{typed}: {found:?}") };
@@ -106,7 +112,11 @@ async fn the_exact_key_shows_whatever_its_type_but_never_as_a_subtask() {
 
 #[tokio::test]
 async fn when_the_issue_read_answers_something_else_the_key_is_found_by_jql() {
-    let http = session(&[json!({"errorMessages": ["x"]}), json!({"issues": [issue("BIG-5", "Story", 0)]}), json!({"issues": []})]);
+    let http = session(&[
+        json!({"errorMessages": ["x"]}),
+        json!({"issues": [issue("BIG-5", "Story", 0)]}),
+        json!({"issues": []}),
+    ]);
     let found = call(&http, "tracker.search", json!({"query": "BIG-5", "pick": true}), "").await;
     let Ok(found) = found else { panic!("{found:?}") };
     assert_eq!(refs(&found), vec![("BIG-5".to_owned(), "Story".to_owned(), false)]);
@@ -117,7 +127,8 @@ async fn when_the_issue_read_answers_something_else_the_key_is_found_by_jql() {
 async fn without_a_level_on_the_issue_the_project_types_say_which_are_root() {
     let bare = |key: &str, kind: &str| json!({"key": key, "fields": {"summary": key, "status": {"name": "A fazer"}, "issuetype": {"name": kind}}});
     let page = json!({"isLast": true, "issues": [bare("APP-1", "Épico"), bare("APP-2", "História")]});
-    let types = json!({"issueTypes": [{"name": "Épico", "hierarchyLevel": 1}, {"name": "História", "hierarchyLevel": 0}]});
+    let types =
+        json!({"issueTypes": [{"name": "Épico", "hierarchyLevel": 1}, {"name": "História", "hierarchyLevel": 0}]});
     let http = session(&[page, types, json!({"issues": []})]);
     let found = call(&http, "tracker.search", json!({"query": "login", "project": "APP", "pick": true}), "").await;
     let Ok(found) = found else { panic!("{found:?}") };

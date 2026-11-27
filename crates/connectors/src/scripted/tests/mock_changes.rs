@@ -127,7 +127,10 @@ fn the_change_binding_declares_common_fields_and_a_profile_per_environment() {
     assert_eq!(spec.fields.iter().map(|field| field.key.as_str()).collect::<Vec<_>>(), ["company", "requester_group"]);
     let each = spec.each.unwrap_or_default();
     assert_eq!(each.key, "environment");
-    assert_eq!(each.fields.iter().map(|field| (field.key.as_str(), field.required)).collect::<Vec<_>>(), [("template", true), ("classification", false)]);
+    assert_eq!(
+        each.fields.iter().map(|field| (field.key.as_str(), field.required)).collect::<Vec<_>>(),
+        [("template", true), ("classification", false)]
+    );
 }
 
 #[test]
@@ -142,7 +145,8 @@ fn the_section_and_the_order_a_connector_declares_reach_the_listing_untouched() 
     let quality = loaded("sonarqube").presentation(Language::Portuguese).bindings[0].section.clone();
     assert_eq!(quality, loaded("veracode").presentation(Language::Portuguese).bindings[0].section);
     let plain: crate::descriptor::BindingSpec =
-        serde_json::from_value(json!({ "capability": "code", "scope": "repository", "label": "Code" })).unwrap_or_default();
+        serde_json::from_value(json!({ "capability": "code", "scope": "repository", "label": "Code" }))
+            .unwrap_or_default();
     let sent = serde_json::to_value(&plain).unwrap_or_default();
     assert!(sent.get("section").is_none() && sent.get("order").is_none(), "{sent}");
 }

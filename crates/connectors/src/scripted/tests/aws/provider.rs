@@ -143,19 +143,22 @@ async fn the_application_picks_the_account_and_then_one_of_its_roles() {
         200,
         r#"{"roleList":[{"roleName":"Admin"},{"roleName":"Deploy"}]}"#,
     );
-    let roles = checked(&http, &creds(), "cloud.options", &json!({ "field": "role", "chosen": { "account": "222" } })).await;
+    let roles =
+        checked(&http, &creds(), "cloud.options", &json!({ "field": "role", "chosen": { "account": "222" } })).await;
     assert_eq!(roles, Ok(json!([{ "value": "Admin", "label": "Admin" }, { "value": "Deploy", "label": "Deploy" }])));
     assert!(http.sent()[0].url.contains("account_id=222"));
     let none = checked(&FakeHttp::new(), &creds(), "cloud.options", &json!({ "field": "role" })).await;
     assert_eq!(none, Ok(json!([])), "no role before the account");
-    let profiles = json!([{ "environment": { "value": "prod" }, "account": { "value": "222" }, "role": { "value": "Deploy" } }]);
+    let profiles =
+        json!([{ "environment": { "value": "prod" }, "account": { "value": "222" }, "role": { "value": "Deploy" } }]);
     let http = FakeHttp::new().once(
         Method::Get,
         "/federation/credentials?account_id=222&role_name=Deploy",
         200,
         r#"{"roleCredentials":{"accessKeyId":"ASIA","secretAccessKey":"s","sessionToken":"t"}}"#,
     );
-    let identity = checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles, "environment": "prod" })).await;
+    let identity =
+        checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles, "environment": "prod" })).await;
     assert_eq!(identity.map(|a| (a["account"].clone(), a["role"].clone())), Ok((json!("222"), json!("Deploy"))));
 }
 
@@ -219,7 +222,8 @@ async fn the_application_binds_an_account_and_role_to_each_environment() {
     let http = FakeHttp::new()
         .once(Method::Get, "/federation/credentials?account_id=222&role_name=Deploy", 200, credentials)
         .once(Method::Get, "/federation/credentials?account_id=111&role_name=Dev", 200, credentials);
-    let prd = checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles, "environment": "Produção" })).await;
+    let prd =
+        checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles, "environment": "Produção" })).await;
     assert_eq!(prd.map(|a| (a["account"].clone(), a["role"].clone())), Ok((json!("222"), json!("Deploy"))));
     let first = checked(&http, &creds(), "cloud.identity", &json!({ "profiles": profiles })).await;
     assert_eq!(first.map(|a| a["account"].clone()), Ok(json!("111")));

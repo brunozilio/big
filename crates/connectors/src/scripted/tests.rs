@@ -60,3 +60,18 @@ async fn an_error_thrown_by_the_script_keeps_its_class() {
     assert!(unknown.is_err_and(|error| error.message.contains("tracker.issue")));
     let _ = HttpResponse::new(200, "");
 }
+
+#[test]
+fn the_presentation_runs_the_script_once_per_language() {
+    let provider = loaded("jira");
+    let started = std::time::Instant::now();
+    let first = provider.presentation(Language::Portuguese);
+    let ran = started.elapsed();
+    let started = std::time::Instant::now();
+    let again = provider.presentation(Language::Portuguese);
+    let kept = started.elapsed();
+    eprintln!("presentation: ran the script in {ran:?}, served again in {kept:?}");
+    assert_eq!(first, again);
+    assert_eq!(provider.shown.lock().map(|shown| shown.len()).unwrap_or_default(), 1);
+    assert_ne!(provider.presentation(Language::English), first);
+}

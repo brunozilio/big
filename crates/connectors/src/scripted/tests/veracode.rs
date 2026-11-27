@@ -155,9 +155,12 @@ async fn the_options_to_bind_a_repository_are_its_applications_by_name() {
 #[tokio::test]
 async fn the_suggestion_for_a_repository_is_the_application_named_like_it() {
     let other = "b2c3d4e5-0000-4000-8000-000000000002";
-    let http = FakeHttp::new()
-        .once(Method::Get, "page=0", 200, &applications_page(&[], 1))
-        .once(Method::Get, "page=0", 200, &applications_page(&[(other, "Shop-API legacy"), (GUID, "shop-api")], 1));
+    let http = FakeHttp::new().once(Method::Get, "page=0", 200, &applications_page(&[], 1)).once(
+        Method::Get,
+        "page=0",
+        200,
+        &applications_page(&[(other, "Shop-API legacy"), (GUID, "shop-api")], 1),
+    );
     let names = json!({ "names": ["acme/shop-api", "shop-api"] });
     let found = call(&http, json!({}), "security.options", names).await;
     assert_eq!(found, Ok(json!([{ "value": GUID, "label": "shop-api" }])));

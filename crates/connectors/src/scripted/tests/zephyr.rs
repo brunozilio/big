@@ -315,9 +315,18 @@ async fn a_result_with_the_issue_id_is_linked_to_the_issue() {
         .answer("zephyr_create_test_execution", json!({ "id": 9, "key": "BIG-E9" }))
         .answer("zephyr_create_test_execution_issue_link", json!({}));
     let args = json!({ "case": "BIG-T1", "cycle": "BIG-R1", "status": "passed", "issue_id": "10009" });
-    assert_eq!(zephyr().call(&http, &creds(json!({})), "tests.record", &args, "").await, Ok(json!({ "ref": "BIG-E9" })));
+    assert_eq!(
+        zephyr().call(&http, &creds(json!({})), "tests.record", &args, "").await,
+        Ok(json!({ "ref": "BIG-E9" }))
+    );
     let calls = http.calls();
-    assert_eq!(calls[1], ("zephyr_create_test_execution_issue_link".to_owned(), json!({ "testExecutionIdOrKey": "BIG-E9", "issueId": 10009 })));
+    assert_eq!(
+        calls[1],
+        (
+            "zephyr_create_test_execution_issue_link".to_owned(),
+            json!({ "testExecutionIdOrKey": "BIG-E9", "issueId": 10009 })
+        )
+    );
 }
 
 #[tokio::test]
