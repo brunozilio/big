@@ -22,7 +22,12 @@ export default workflow({
 fn git_repo(path: &Path, file: &str) {
     std::fs::create_dir_all(path).expect("dir");
     std::fs::write(path.join(file), "oi").expect("write");
-    for args in [vec!["init", "-q", "-b", "main"], vec!["add", "-A"], vec!["commit", "-qm", "início"], vec!["branch", "develop"]] {
+    for args in [
+        vec!["init", "-q", "-b", "main"],
+        vec!["add", "-A"],
+        vec!["commit", "-qm", "início"],
+        vec!["branch", "develop"],
+    ] {
         let done = platform::git::command(path).args(["-c", "user.email=a@b", "-c", "user.name=a"]).args(args).output();
         assert!(done.is_ok_and(|done| done.status.success()));
     }
@@ -94,6 +99,7 @@ async fn a_read_only_repository_is_consulted_in_a_detached_copy_the_agent_cannot
     git_repo(&second, "CFG.txt");
     git_repo(&first, "WEB.txt");
     *world.engine.state.write.lock().expect("lock") = Some("feito.txt".into());
+    world.engine.state.hold.store(true, Ordering::SeqCst);
     let kernel = world.start().await;
 
     let mut application = application(&first, &second);
@@ -101,12 +107,16 @@ async fn a_read_only_repository_is_consulted_in_a_detached_copy_the_agent_cannot
     let repositories = application["repositories"].as_array_mut().expect("listed");
     repositories.reverse();
     let id = kernel.create_item("multi", json!({ "title": "x", "application": application })).expect("item");
+    let request = eventually(|| world.engine.requests().into_iter().next()).await.expect("the agent started");
+    consulted_while_the_agent_works(&request, &second);
+    world.engine.state.hold.store(false, Ordering::SeqCst);
     let item = ended(&kernel, &id).await;
     let done = output(&item);
     assert_eq!(done["changed"], json!([["web", true], ["api", false]]));
     assert!(done["ls"][0].as_str().is_some_and(|text| text.contains("CFG.txt")), "{done}");
+}
 
-    let request = &world.engine.requests()[0];
+fn consulted_while_the_agent_works(request: &PromptRequest, second: &Path) {
     assert!(request.session.cwd.to_string_lossy().ends_with("--web"));
     assert!(request.session.add_dirs.is_empty(), "{:?}", request.session.add_dirs);
     let copy = request.session.read_dirs.first().expect("consulted").clone();
@@ -116,7 +126,7 @@ async fn a_read_only_repository_is_consulted_in_a_detached_copy_the_agent_cannot
     assert!(!attached.status.success(), "the copy is on no branch");
     let system = request.session.append_system.clone().unwrap_or_default();
     assert!(system.contains("Read only"), "{system}");
-    let branches = platform::git::command(&second).args(["branch", "--list"]).output().expect("git");
+    let branches = platform::git::command(second).args(["branch", "--list"]).output().expect("git");
     assert_eq!(String::from_utf8_lossy(&branches.stdout).lines().count(), 2);
 }
 

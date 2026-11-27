@@ -125,10 +125,10 @@ fn perform(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> AbortHandle {
             Err(Failure::Class(class, message)) => EffectOutcome::Failed { class, message },
             Err(Failure::Blocked(reason)) => {
                 let reason = connectors::texts::blocker(crate::texts::of_item(&shared, &item), &reason);
+                shared.wake(&item, Wake::Blocked(launch.key.seq));
                 if let Err(error) = crate::runner::block(&shared, &item, &launch.key, &reason) {
                     tracing::warn!(%error, "a blocked effect could not be recorded");
                 }
-                shared.wake(&item, Wake::Blocked(launch.key.seq));
                 return;
             }
         };

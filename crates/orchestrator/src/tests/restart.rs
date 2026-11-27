@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use domain::effect::Effect;
 use domain::workflow::{StepState, WorkItem};
 use serde_json::json;
@@ -117,11 +115,14 @@ async fn an_event_wait_is_registered_again_after_a_restart() {
     let waiting =
         |item: &WorkItem| item.pending_effects().any(|request| matches!(request.effect, Effect::WaitEvent { .. }));
     let (kernel, id) = interrupted(&world, "event", waiting).await;
-    tokio::time::sleep(Duration::from_millis(300)).await;
     let other = event("e0", "pipelines.run.finished", json!({ "run": "r2" }));
-    assert_eq!(kernel.deliver_event(&other).expect("deliver"), 0);
     let hit = event("e1", "pipelines.run.finished", json!({ "run": "r1" }));
-    assert_eq!(kernel.deliver_event(&hit).expect("deliver"), 1);
+    let woke = eventually(|| {
+        assert_eq!(kernel.deliver_event(&other).expect("deliver"), 0, "another run's event wakes nobody");
+        (kernel.deliver_event(&hit).expect("deliver") == 1).then_some(())
+    })
+    .await;
+    assert!(woke.is_some(), "the wait was never registered again");
     let item = ended(&kernel, &id).await;
     assert_eq!(output(&item)["data"], json!({ "id": "e1" }));
 }
@@ -186,12 +187,7 @@ async fn a_pending_ask_survives_a_restart_and_its_answer_is_kept_in_the_log() {
     world.workflow("ask", &single("ask", "return ctx.pass((await ctx.agent(\"worker\", \"planeje\")).text);"));
     let kernel = world.start().await;
     let id = kernel.create_item("ask", json!({ "title": "t" })).expect("item");
-    for _ in 0..200 {
-        if !kernel.asks().is_empty() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    first_ask(&kernel).await;
     assert_eq!(kernel.asks()[0].ask.id.0, "ask-1");
     crash(kernel).await;
     let kernel = world.start().await;
@@ -199,8 +195,10 @@ async fn a_pending_ask_survives_a_restart_and_its_answer_is_kept_in_the_log() {
     assert_eq!(restored.len(), 1, "{restored:?}");
     assert_eq!(restored[0].item, id);
     assert_eq!(restored[0].session.as_deref(), Some("s1"));
-    tokio::time::sleep(Duration::from_millis(100)).await;
-    let current = kernel.asks();
+    let asked_again = |asks: Vec<crate::PendingAsk>| {
+        (!asks.is_empty() && asks.iter().all(|ask| ask.ask.id.0 != "ask-1")).then_some(asks)
+    };
+    let current = eventually(|| asked_again(kernel.asks())).await.expect("the resumed agent asked again");
     assert_eq!(current.len(), 1, "the question asked again replaces the restored one: {current:?}");
     let note = json!({ "id": current[0].ask.id.0, "at": "2026-01-01T00:00:00Z", "resolution": "approved" });
     let decision = domain::Decision::Approve(domain::PermissionMode::Auto);
@@ -219,12 +217,7 @@ async fn a_restored_question_the_resumed_agent_does_not_ask_again_is_cleared_whe
     world.workflow("ask", &single("ask", "return ctx.pass((await ctx.agent(\"worker\", \"planeje\")).text);"));
     let kernel = world.start().await;
     let id = kernel.create_item("ask", json!({ "title": "t" })).expect("item");
-    for _ in 0..200 {
-        if !kernel.asks().is_empty() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    first_ask(&kernel).await;
     crash(kernel).await;
     world.engine.state.ask.store(false, std::sync::atomic::Ordering::SeqCst);
     let kernel = world.start().await;
@@ -243,12 +236,7 @@ async fn the_agent_result_carries_the_plan_put_up_for_approval() {
     world.workflow("plan", &single("plan", "return ctx.pass((await ctx.agent(\"worker\", \"planeje\")).plan);"));
     let kernel = world.start().await;
     let id = kernel.create_item("plan", json!({ "title": "t" })).expect("item");
-    for _ in 0..200 {
-        if !kernel.asks().is_empty() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    first_ask(&kernel).await;
     let ask = kernel.asks()[0].ask.id.clone();
     let decision = domain::Decision::Approve(domain::PermissionMode::Plan);
     kernel.answer_ask_with(&ask, &decision, json!({ "resolution": "approved" })).expect("answer");
@@ -262,12 +250,7 @@ async fn an_answer_given_before_the_resumed_agent_asks_again_is_applied_to_the_n
     world.workflow("ask", &single("ask", "return ctx.pass((await ctx.agent(\"worker\", \"planeje\")).text);"));
     let kernel = world.start().await;
     let id = kernel.create_item("ask", json!({ "title": "t" })).expect("item");
-    for _ in 0..200 {
-        if !kernel.asks().is_empty() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    first_ask(&kernel).await;
     crash(kernel).await;
     let kernel = world.start().await;
     let restored = kernel.asks();
@@ -367,7 +350,9 @@ async fn a_changed_workflow_diverging_in_an_earlier_run_of_a_step_that_ran_again
     world.workflow("loop", &back_and_forth("await ctx.waitHuman([]); return ctx.pass(2);", "return ctx.pass(0);"));
     let kernel = world.start().await;
     let rerun = |item: &WorkItem| {
-        item.effects.values().any(|entry| entry.request.key.seq == 1 && matches!(entry.request.effect, Effect::WaitHuman { .. }))
+        item.effects
+            .values()
+            .any(|entry| entry.request.key.seq == 1 && matches!(entry.request.effect, Effect::WaitHuman { .. }))
     };
     let waiting = until(&kernel, &id, |item| item.impediment.is_some() || rerun(item)).await;
     assert!(waiting.impediment.is_none(), "{:?}", waiting.impediment);

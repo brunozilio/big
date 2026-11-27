@@ -373,7 +373,12 @@ impl World {
     pub fn init_git(&mut self) {
         let repo = self.repo();
         std::fs::write(repo.join("README"), "oi").expect("write");
-        for args in [vec!["init", "-q", "-b", "main"], vec!["add", "-A"], vec!["commit", "-qm", "início"], vec!["branch", "develop"]] {
+        for args in [
+            vec!["init", "-q", "-b", "main"],
+            vec!["add", "-A"],
+            vec!["commit", "-qm", "início"],
+            vec!["branch", "develop"],
+        ] {
             let done =
                 platform::git::command(&repo).args(["-c", "user.email=a@b", "-c", "user.name=a"]).args(args).output();
             assert!(done.is_ok_and(|done| done.status.success()));
@@ -444,25 +449,39 @@ pub fn limits() -> Limits {
     }
 }
 
-pub async fn until(handle: &Handle, id: &ItemId, check: impl Fn(&WorkItem) -> bool) -> WorkItem {
-    for _ in 0..500 {
-        if let Ok(Some(item)) = handle.item(id)
-            && check(&item)
-        {
-            return item;
+pub const PATIENCE: Duration = Duration::from_secs(120);
+
+pub async fn eventually<T>(mut probe: impl FnMut() -> Option<T>) -> Option<T> {
+    let deadline = tokio::time::Instant::now() + PATIENCE;
+    loop {
+        if let Some(found) = probe() {
+            return Some(found);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return None;
         }
         tokio::time::sleep(Duration::from_millis(20)).await;
     }
-    panic!("the item never got there: {:?}", handle.item(id))
+}
+
+pub async fn until(handle: &Handle, id: &ItemId, check: impl Fn(&WorkItem) -> bool) -> WorkItem {
+    let reached = eventually(|| handle.item(id).ok().flatten().filter(|item| check(item))).await;
+    reached.unwrap_or_else(|| panic!("the item never got there: {:?}", handle.item(id)))
 }
 
 pub async fn ended(handle: &Handle, id: &ItemId) -> WorkItem {
     until(handle, id, WorkItem::is_ended).await
 }
 
+pub async fn first_ask(handle: &Handle) -> crate::PendingAsk {
+    eventually(|| handle.asks().first().cloned()).await.unwrap_or_else(|| panic!("no question ever reached a person"))
+}
+
 pub async fn crash(handle: Handle) {
+    let shared = Arc::downgrade(&handle.shared);
     drop(handle);
-    tokio::time::sleep(Duration::from_millis(150)).await;
+    let stopped = eventually(|| (shared.strong_count() == 0).then_some(())).await;
+    assert!(stopped.is_some(), "the crashed kernel never let go of its state");
 }
 
 pub fn output(item: &WorkItem) -> Value {

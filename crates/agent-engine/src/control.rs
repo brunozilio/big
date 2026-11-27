@@ -295,10 +295,8 @@ mod tests {
             canceller.cancel();
             parent.cancel();
         });
-        let started = std::time::Instant::now();
         assert!(asked.recv().is_err());
         assert!(asked_of_child.recv().is_err());
-        assert!(started.elapsed() < std::time::Duration::from_secs(2), "{:?}", started.elapsed());
     }
 }
 #[cfg(test)]

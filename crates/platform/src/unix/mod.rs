@@ -1,3 +1,4 @@
+mod cpu;
 mod ports;
 mod private;
 mod tree;
@@ -6,6 +7,7 @@ use std::fs::OpenOptions;
 use std::path::Path;
 use std::process::Command;
 
+pub use cpu::cpu_time;
 pub use ports::{port_holder, terminate};
 pub use private::{LOCK_FILES_CAN_BE_REMOVED, is_file_at, keep_owner, open_with_mode_of, restrict, restrict_open};
 pub use tree::alive;

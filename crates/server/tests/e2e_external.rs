@@ -2,8 +2,6 @@
 
 mod e2e;
 
-use std::time::Duration;
-
 use domain::workflow::{ItemId, WorkflowEvent};
 use e2e::{Hub, Server, step, waiting_on};
 use serde_json::{Value, json};
@@ -35,13 +33,7 @@ fn observed(server: &Server, id: &str) -> Vec<String> {
 }
 
 async fn eventually(what: &str, check: impl Fn() -> bool) {
-    for _ in 0..1000 {
-        if check() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!("{what} never happened");
+    assert!(e2e::eventually(|| check().then_some(())).await.is_some(), "{what} never happened");
 }
 
 async fn to_review(server: &Server, text: &str) -> String {
@@ -89,12 +81,7 @@ async fn a_pull_request_closed_outside_reaches_the_item_by_event_and_the_merge_s
     let server = hub.start().await;
     let id = to_review(&server, "PR fechado").await;
     hub.github.close_pull(1);
-    for _ in 0..500 {
-        if observed(&server, &id).iter().any(|kind| kind == "code.pr.closed") {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    e2e::eventually(|| observed(&server, &id).iter().any(|kind| kind == "code.pr.closed").then_some(())).await;
     assert!(observed(&server, &id).iter().any(|kind| kind == "code.pr.closed"), "{:?}", observed(&server, &id));
     server.input(&id, "review", "review", json!({ "verdict": "approve", "body": "", "notes": [] })).await;
     server.until(&id, "the merge waits", |item| waiting_on(item, "merge")).await;

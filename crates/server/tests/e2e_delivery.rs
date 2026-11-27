@@ -59,13 +59,9 @@ async fn an_item_without_an_issue_goes_from_the_plan_to_production_through_the_a
     let notes = json!([{ "file": "work-2.txt", "line": 1, "body": "use um nome melhor" }]);
     server.input(&id, "review", "review", json!({ "verdict": "changes", "body": "ajuste", "notes": notes })).await;
     server.until(&id, "the review comes back", |item| step(item, "develop")["attempts"] == 3).await;
-    for _ in 0..500 {
-        if hub.agents.runs_of("developer").len() == 3 {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
-    let fixes = hub.agents.runs_of("developer");
+    let fixes = e2e::eventually(|| Some(hub.agents.runs_of("developer")).filter(|runs| runs.len() >= 3))
+        .await
+        .unwrap_or_else(|| hub.agents.runs_of("developer"));
     assert!(fixes.last().is_some_and(|(_, prompt)| prompt.contains("use um nome melhor")), "{fixes:?}");
 
     approve_review_merge_and_deploy(&server, &id).await;
@@ -110,7 +106,8 @@ async fn an_item_from_an_existing_issue_moves_it_through_every_status_without_cr
 }
 
 async fn release_view_with(server: &Server, id: &str, kind: &str) -> serde_json::Value {
-    for _ in 0..1500 {
+    let deadline = tokio::time::Instant::now() + e2e::PATIENCE;
+    while tokio::time::Instant::now() < deadline {
         let view = server.get(&format!("/api/items/{id}/steps/release")).await;
         if view["blocks"].as_array().is_some_and(|blocks| blocks.iter().any(|block| block["type"] == kind)) {
             return view;

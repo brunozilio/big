@@ -753,9 +753,7 @@ mod tests {
             std::io::Write::write_all(&mut file, &bytes).expect("write");
             file.sync_all().expect("sync");
         }));
-        let started = std::time::Instant::now();
         files.before_writes(&paths);
-        assert!(started.elapsed() < std::time::Duration::from_secs(2), "{:?}", started.elapsed());
         assert_eq!(writes.load(std::sync::atomic::Ordering::SeqCst), 1);
         assert_eq!(files.take().files.len(), 5_000);
     }

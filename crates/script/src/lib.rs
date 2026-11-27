@@ -4,9 +4,11 @@ use std::time::{Duration, Instant};
 
 pub mod bank;
 pub mod cell;
+mod clock;
 pub mod session;
 pub mod typescript;
 
+use clock::Clock;
 use rquickjs::{Context, Ctx, Function, Module, Runtime, Value as JsValue};
 use serde_json::Value;
 
@@ -74,15 +76,21 @@ impl Limit {
 
 struct Timed {
     host: Arc<dyn Host>,
+    clock: Clock,
     waited: Arc<AtomicU64>,
+    ran_for_the_app: Arc<AtomicU64>,
+}
+
+fn nanos(spent: Duration) -> u64 {
+    u64::try_from(spent.as_nanos()).unwrap_or(u64::MAX)
 }
 
 impl Host for Timed {
     fn call(&self, function: &str, arguments: Value) -> Result<Value, String> {
-        let started = Instant::now();
+        let (started, running) = (Instant::now(), self.clock.running());
         let answer = self.host.call(function, arguments);
-        let spent = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
-        self.waited.fetch_add(spent, Ordering::Relaxed);
+        self.waited.fetch_add(nanos(started.elapsed()), Ordering::Relaxed);
+        self.ran_for_the_app.fetch_add(nanos(self.clock.running().saturating_sub(running)), Ordering::Relaxed);
         answer
     }
 }
@@ -172,17 +180,21 @@ fn run_here(
     let timed_out = Arc::new(AtomicBool::new(false));
     let late = Arc::clone(&timed_out);
     let waited = Arc::new(AtomicU64::new(0));
-    let host: Arc<dyn Host> = Arc::new(Timed { host, waited: Arc::clone(&waited) });
-    let spent = Arc::clone(&waited);
-    let started = Instant::now();
+    let for_the_app = Arc::new(AtomicU64::new(0));
+    let clock = Clock::start();
+    let host: Arc<dyn Host> =
+        Arc::new(Timed { host, clock, waited: Arc::clone(&waited), ran_for_the_app: Arc::clone(&for_the_app) });
+    let (started, running) = (Instant::now(), clock.running());
+    let busy = move || {
+        let app = Duration::from_nanos(for_the_app.load(Ordering::Relaxed));
+        clock.running().saturating_sub(running).saturating_sub(app)
+    };
     let noticed = std::sync::OnceLock::new();
+    let checked = busy.clone();
     runtime.set_interrupt_handler(Some(Box::new(move || {
         let past = match limit {
             Limit::Wall(limit) => started.elapsed() > limit,
-            Limit::Busy(limit) => {
-                let waited = Duration::from_nanos(waited.load(Ordering::Relaxed));
-                started.elapsed().saturating_sub(waited) > limit
-            }
+            Limit::Busy(limit) => checked() > limit,
         };
         if past {
             late.store(true, Ordering::Relaxed);
@@ -200,7 +212,8 @@ fn run_here(
         }
         result.map_err(|error| describe(&ctx, error))
     });
-    timed(entry, export, started.elapsed(), Duration::from_nanos(spent.load(Ordering::Relaxed)), result.is_ok());
+    let spent = [started.elapsed(), Duration::from_nanos(waited.load(Ordering::Relaxed)), busy()];
+    timed(entry, export, spent, result.is_ok());
     result
 }
 
@@ -208,7 +221,7 @@ fn micros(spent: Duration) -> u64 {
     u64::try_from(spent.as_micros()).unwrap_or(u64::MAX)
 }
 
-fn timed(entry: &str, export: &str, spent: Duration, waited: Duration, ok: bool) {
+fn timed(entry: &str, export: &str, [spent, waited, busy]: [Duration; 3], ok: bool) {
     tracing::event!(
         target: "timing", tracing::Level::DEBUG,
         timing = "script.run",
@@ -216,7 +229,7 @@ fn timed(entry: &str, export: &str, spent: Duration, waited: Duration, ok: bool)
         script.export = export,
         duration_us = micros(spent),
         waited_us = micros(waited),
-        busy_us = micros(spent.saturating_sub(waited)),
+        busy_us = micros(busy),
         outcome = if ok { "success" } else { "failure" },
         "timing"
     );

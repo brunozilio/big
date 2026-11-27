@@ -20,13 +20,7 @@ fn variable(request: &PromptRequest, name: &str) -> Option<String> {
 }
 
 async fn first_request(world: &World) -> PromptRequest {
-    for _ in 0..500 {
-        if let Some(request) = world.engine.requests().into_iter().next() {
-            return request;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    panic!("the agent never started")
+    eventually(|| world.engine.requests().into_iter().next()).await.expect("the agent started")
 }
 
 #[tokio::test(flavor = "multi_thread")]

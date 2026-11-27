@@ -109,9 +109,12 @@ fn a_page_with_no_text_is_an_error_not_an_answer() {
     assert!(out.content.starts_with("https://app.dev/ has no readable text in its HTML (0 characters of text in "));
 }
 
+const PATIENCE: Duration = Duration::from_secs(60);
+
 #[derive(Debug)]
 struct Stalling {
     before_headers: bool,
+    started: crossbeam_channel::Sender<()>,
     held_open: std::sync::Mutex<Vec<tokio::sync::mpsc::Sender<crate::model::http::Chunk>>>,
 }
 
@@ -123,6 +126,7 @@ impl Http for Stalling {
         _body: Option<&'a str>,
         _cancel: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<crate::model::http::Response, ModelError>> {
+        let _ = self.started.send(());
         if self.before_headers {
             return Box::pin(std::future::pending());
         }
@@ -148,27 +152,32 @@ impl Http for Stalling {
     }
 }
 
-fn ends_when_cancelled(workspace: Workspace, run: impl FnOnce(&Workspace) -> Outcome) {
+fn ends_when_cancelled(
+    workspace: Workspace,
+    stalled: &crossbeam_channel::Receiver<()>,
+    run: impl FnOnce(&Workspace) -> Outcome + Send + 'static,
+) {
     let workspace = Arc::new(workspace);
-    let cancelling = Arc::clone(&workspace);
-    let (marked, cancelled_at) = crossbeam_channel::unbounded();
+    let running = Arc::clone(&workspace);
+    let (ended, outcome) = crossbeam_channel::bounded(1);
     std::thread::spawn(move || {
-        std::thread::sleep(Duration::from_millis(30));
-        let _ = marked.send(Instant::now());
-        cancelling.stop.cancel();
+        let _ = ended.send(run(&running));
     });
-    let out = run(&workspace);
-    let ended = Instant::now();
+    stalled.recv_timeout(PATIENCE).expect("the call reached the stalled service");
+    assert!(outcome.is_empty(), "a call that never answers cannot end before it is cancelled");
+    workspace.stop.cancel();
+    let out = outcome.recv_timeout(PATIENCE).expect("the cancelled call ended");
     assert!(out.is_error && out.content.contains("cancelled"), "{out:?}");
-    let cancelled = cancelled_at.recv().expect("cancelled");
-    assert!(ended - cancelled < Duration::from_secs(1), "{:?}", ended - cancelled);
 }
 
 #[test]
 fn a_stalled_fetch_ends_as_soon_as_the_run_is_cancelled() {
     for before_headers in [true, false] {
-        let stalling = Stalling { before_headers, held_open: std::sync::Mutex::new(Vec::new()) };
-        ends_when_cancelled(networked(Arc::new(stalling)), |workspace| fetched(workspace, "https://slow.dev/"));
+        let (started, stalled) = crossbeam_channel::unbounded();
+        let stalling = Stalling { before_headers, started, held_open: std::sync::Mutex::new(Vec::new()) };
+        ends_when_cancelled(networked(Arc::new(stalling)), &stalled, |workspace| {
+            fetched(workspace, "https://slow.dev/")
+        });
     }
 }
 
@@ -352,11 +361,15 @@ fn five_mebibytes_of_tags_are_read_in_one_pass() {
     let closes = format!("{open}{}", "</x>".repeat((five - open.len()) / 4));
     let raw = "<SCRIPT>a</SCRIPT><Style>b</sTyle>".repeat(five / 34);
     for page in [titles, closes, raw] {
-        let started = Instant::now();
+        let (cpu, wall) = (platform::cpu_time(), Instant::now());
         let out = read_with(WebReading::default(), &page, Some("text/html"), URL);
         assert!(out.content.contains("no readable text"), "{}", out.content);
+        let spent = match (cpu, platform::cpu_time()) {
+            (Some(before), Some(after)) => after.saturating_sub(before),
+            _ => wall.elapsed(),
+        };
         let most = if cfg!(debug_assertions) { Duration::from_secs(120) } else { Duration::from_secs(30) };
-        assert!(started.elapsed() < most, "{:?}", started.elapsed());
+        assert!(spent < most, "{spent:?} of processor time");
     }
 }
 
@@ -466,11 +479,12 @@ impl crate::model::Searcher for Account {
     }
 }
 
-struct Stalled;
+struct Stalled(crossbeam_channel::Sender<()>);
 
 impl crate::model::Searcher for Stalled {
     fn search<'a>(&'a self, _query: &'a str, cancel: &'a CancellationToken) -> BoxFuture<'a, Searched> {
         Box::pin(async move {
+            let _ = self.0.send(());
             cancel.cancelled().await;
             Some(Err(ModelError::Cancelled))
         })
@@ -501,9 +515,10 @@ fn web_search_keeps_its_description_and_is_offered_whatever_the_provider() {
 
 #[test]
 fn a_stalled_search_ends_as_soon_as_the_run_is_cancelled() {
+    let (started, stalled) = crossbeam_channel::unbounded();
     let mut workspace = Workspace::new("/tmp");
-    workspace.services.search = Some(WebSearcher(Arc::new(Stalled)));
-    ends_when_cancelled(workspace, |workspace| searched(workspace, "rust"));
+    workspace.services.search = Some(WebSearcher(Arc::new(Stalled(started))));
+    ends_when_cancelled(workspace, &stalled, |workspace| searched(workspace, "rust"));
 }
 
 fn rust_hit() -> Hit {

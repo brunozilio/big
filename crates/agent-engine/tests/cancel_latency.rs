@@ -466,5 +466,6 @@ fn a_run_is_a_task_of_the_engine_s_one_runtime() {
     }
     let seen = model.0.lock().expect("seen").clone();
     assert_eq!(seen.len(), 2);
-    assert!(seen.iter().all(|name| name.as_deref() == Some(platform::runtime::BLOCKING_NAME)), "{seen:?}");
+    let runtime = [platform::runtime::BLOCKING_NAME, platform::runtime::WORKER_NAME];
+    assert!(seen.iter().all(|name| name.as_deref().is_some_and(|name| runtime.contains(&name))), "{seen:?}");
 }

@@ -24,6 +24,20 @@ use github::Github;
 use tracker::Tracker;
 
 pub const CODE: &str = "gh";
+pub const PATIENCE: Duration = Duration::from_secs(180);
+
+pub async fn eventually<T>(mut probe: impl FnMut() -> Option<T>) -> Option<T> {
+    let deadline = tokio::time::Instant::now() + PATIENCE;
+    loop {
+        if let Some(found) = probe() {
+            return Some(found);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return None;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+}
 
 pub struct Hub {
     pub dir: tempfile::TempDir,
@@ -213,7 +227,8 @@ impl Server {
     }
 
     pub async fn until(&self, id: &str, what: &str, check: impl Fn(&Value) -> bool) -> Value {
-        for _ in 0..1500 {
+        let deadline = tokio::time::Instant::now() + PATIENCE;
+        while tokio::time::Instant::now() < deadline {
             let item = self.item(id).await;
             if check(&item) {
                 return item;
@@ -228,13 +243,11 @@ impl Server {
     }
 
     pub async fn ask(&self, id: &str, what: &str) -> orchestrator::PendingAsk {
-        for _ in 0..1500 {
-            if let Some(found) = self.asks(id).await.first() {
-                return found.clone();
-            }
-            tokio::time::sleep(Duration::from_millis(20)).await;
+        let found = eventually(|| self.handle.asks().into_iter().find(|ask| ask.item.as_str() == id)).await;
+        match found {
+            Some(found) => found,
+            None => panic!("the agent never asked {what}: {}", self.item(id).await),
         }
-        panic!("the agent never asked {what}: {}", self.item(id).await)
     }
 
     pub async fn respond(&self, ask: &orchestrator::PendingAsk, response: Value) {

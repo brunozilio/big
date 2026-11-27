@@ -296,15 +296,7 @@ async fn a_teammate_s_question_waits_on_the_item_and_the_answer_goes_back_to_the
     world.workflow("asking", ASKING_TEAM);
     let kernel = world.start().await;
     let id = kernel.create_item("asking", json!({ "title": "x" })).expect("item");
-    let mut asked = Vec::new();
-    for _ in 0..500 {
-        asked = kernel.asks();
-        if !asked.is_empty() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
-    }
-    let pending = asked.first().cloned().expect("the teammate's question reached the item");
+    let pending = first_ask(&kernel).await;
     assert_eq!(pending.item, id);
     assert_eq!(pending.ask.id.0, "teammate-tester-r1");
     assert!(matches!(&pending.ask.kind, domain::AskKind::Permission { tool, .. } if tool == "Bash"));
@@ -371,12 +363,7 @@ async fn the_developer_sees_the_designs_the_plan_read() {
     world.provider.always("design.frame", screen);
     let kernel = world.start().await;
     let id = kernel.create_item("delivered", json!({ "title": "FIRP-1", "issue": "FIRP-1" })).expect("item");
-    for _ in 0..200 {
-        if world.engine.requests().len() >= 2 {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
+    eventually(|| (world.engine.requests().len() >= 2).then_some(())).await;
     let requests = world.engine.requests();
     let Some(developer) = requests.get(1) else { panic!("the developer never ran: {} requests", requests.len()) };
     assert!(developer.prompt.text.contains("Implement the item"), "{}", developer.prompt.text);
@@ -407,12 +394,7 @@ async fn planning_reads_the_issue_from_the_tracker_and_hands_it_to_the_agent() {
     world.provider.always("design.frame", screen);
     let kernel = world.start().await;
     let id = kernel.create_item("planned", json!({ "title": "FIRP-2532", "issue": "FIRP-2532" })).expect("item");
-    for _ in 0..100 {
-        if !world.engine.requests().is_empty() {
-            break;
-        }
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-    }
+    eventually(|| world.engine.requests().first().cloned()).await;
     let text = world.engine.requests().first().map(|request| request.prompt.text.clone()).unwrap_or_default();
     for expected in [
         "Issue FIRP-2532: Exportar extrato",

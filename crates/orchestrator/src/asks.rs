@@ -129,12 +129,13 @@ impl Asks {
     }
 
     pub fn answer(&self, ask: &AskId, decision: &Decision) -> Option<Answered> {
-        let (run, key, kind, restored, teammate) = {
-            let open = self.held();
-            let known = open.iter().find(|known| &known.pending.ask.id == ask)?;
-            let teammate = known.teammate.clone();
-            (known.run.clone(), known.key.clone(), known.pending.ask.kind.clone(), known.restored, teammate)
+        let known = {
+            let mut open = self.held();
+            let at = open.iter().position(|known| &known.pending.ask.id == ask)?;
+            open.remove(at)
         };
+        let OpenAsk { pending, key, run, teammate, restored } = known;
+        let kind = pending.ask.kind.clone();
         if let Some((client, asked)) = &teammate
             && let Err(error) = agent_engine::team::lead_inbox::answer(*client, asked, decision)
         {
@@ -147,7 +148,7 @@ impl Asks {
             let early = Early { key: key.clone(), kind, decision: decision.clone() };
             self.early.lock().unwrap_or_else(PoisonError::into_inner).push(early);
         }
-        self.close(ask).map(|pending| Answered { pending, key })
+        Some(Answered { pending, key })
     }
 
     pub fn take_early(&self, key: &IdempotencyKey, kind: &AskKind) -> Option<Decision> {
@@ -230,6 +231,34 @@ mod tests {
         let id = restored(&asks, asked("x", &["Simples", "Cadeia"]));
         assert!(asks.answer(&id, &Decision::Answer(vec![vec![0]])).is_some());
         assert_eq!(asks.take_early(&key(), &asked("x", &["Cadeia", "Simples"])), None);
+    }
+
+    struct EndsWhenAnswered(Arc<Asks>);
+
+    impl RunHandle for EndsWhenAnswered {
+        fn cancel(&mut self) {}
+
+        fn answer(&mut self, _ask: &AskId, _decision: &Decision) {
+            self.0.forget(&key());
+        }
+    }
+
+    #[test]
+    fn a_run_that_ends_the_moment_it_is_answered_still_counts_the_answer() {
+        let asks = Arc::new(Asks::default());
+        let id = AskId("ask-1".into());
+        let pending = PendingAsk {
+            item: ItemId::default(),
+            step: "plan".into(),
+            session: None,
+            ask: AgentAsk { id: id.clone(), kind: AskKind::Plan { plan: "p".into() } },
+            since: 0,
+        };
+        let run: SharedRun = Arc::new(Mutex::new(Box::new(EndsWhenAnswered(Arc::clone(&asks)))));
+        asks.open(pending, key(), run);
+        let answered = asks.answer(&id, &Decision::Approve(domain::PermissionMode::Auto));
+        assert_eq!(answered.map(|answered| answered.pending.ask.id), Some(id));
+        assert!(asks.list().is_empty());
     }
 
     #[test]

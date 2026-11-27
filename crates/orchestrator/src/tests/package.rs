@@ -60,15 +60,18 @@ async fn merged_in(kernel: &Handle, title: &str, git: Value, bindings: Value) ->
 }
 
 async fn packages(kernel: &Handle, count: usize) -> Vec<ItemId> {
-    for _ in 0..300 {
-        let found: Vec<ItemId> =
-            kernel.items().expect("items").into_iter().filter(|item| item.workflow == "package").map(|item| item.id).collect();
-        if found.len() >= count {
-            return found;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    panic!("there were never {count} packages")
+    let found = eventually(|| {
+        let found: Vec<ItemId> = kernel
+            .items()
+            .expect("items")
+            .into_iter()
+            .filter(|item| item.workflow == "package")
+            .map(|item| item.id)
+            .collect();
+        Some(found).filter(|found| found.len() >= count)
+    })
+    .await;
+    found.unwrap_or_else(|| panic!("there were never {count} packages"))
 }
 
 fn stage(item: &WorkItem, env: &str) -> Value {
@@ -80,7 +83,9 @@ fn block(item: &WorkItem, kind: &str) -> Option<Value> {
     item.steps
         .iter()
         .filter(|run| run.id == "promotion" && run.state == domain::workflow::StepState::WaitingHuman)
-        .filter_map(|run| run.view.as_array().and_then(|blocks| blocks.iter().find(|block| block["type"] == kind)).cloned())
+        .filter_map(|run| {
+            run.view.as_array().and_then(|blocks| blocks.iter().find(|block| block["type"] == kind)).cloned()
+        })
         .next_back()
 }
 
@@ -98,7 +103,9 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
     let kernel = world.start().await;
     let first = merged(&kernel, "APP-1").await;
     let package = packages(&kernel, 1).await.remove(0);
-    let item = until(&kernel, &package, |item| item.is_ended() || (item.links == vec![first.clone()] && item.waiting_human())).await;
+    let item =
+        until(&kernel, &package, |item| item.is_ended() || (item.links == vec![first.clone()] && item.waiting_human()))
+            .await;
     assert!(!item.is_ended(), "{:?} {:?}", item.ending, item.steps);
     assert_eq!(stage(&item, "hint")["state"], "passed");
     assert_eq!(stage(&item, "hext")["picker"], true);
@@ -111,7 +118,8 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
     let item = until(&kernel, &package, |item| !item.accepting).await;
     assert_eq!(fake.count("changes.create"), 1);
     assert!(fake.count("pipelines.runs") >= 1);
-    let created = fake.calls.lock().expect("lock").iter().find(|(name, _, _)| name == "changes.create").cloned().expect("create");
+    let created =
+        fake.calls.lock().expect("lock").iter().find(|(name, _, _)| name == "changes.create").cloned().expect("create");
     assert_eq!(created.1["environment"], "hext");
     assert_eq!(created.1["tasks"][0]["start"], "22:00");
     assert_eq!(created.1["start"], "2026-11-26T22:00:00-03:00");
@@ -122,22 +130,31 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
     let other = all.into_iter().find(|id| id != &package).expect("a second package");
     until(&kernel, &other, |item| item.links == vec![second.clone()]).await;
     let updates = fake.count("tracker.update_issue");
-    kernel.deliver_event(&connectors::ExternalEvent {
-        id: "mock-1:done".into(),
-        connection: ConnectionId::from("c1"),
-        capability: Capability::from("changes"),
-        kind: "changes.status.changed".into(),
-        subject: "mock-1".into(),
-        data: json!({ "ref": "mock-1", "status": "done" }),
-        at: jiff::Timestamp::UNIX_EPOCH,
-        scope: String::new(),
-    }).expect("deliver");
+    kernel
+        .deliver_event(&connectors::ExternalEvent {
+            id: "mock-1:done".into(),
+            connection: ConnectionId::from("c1"),
+            capability: Capability::from("changes"),
+            kind: "changes.status.changed".into(),
+            subject: "mock-1".into(),
+            data: json!({ "ref": "mock-1", "status": "done" }),
+            at: jiff::Timestamp::UNIX_EPOCH,
+            scope: String::new(),
+        })
+        .expect("deliver");
     let item = until(&kernel, &package, |item| item.waiting_human() && stage(item, "hext")["state"] == "passed").await;
     assert_eq!(stage(&item, "prod")["picker"], true);
     assert!(fake.count("tracker.update_issue") > updates);
     answer(&kernel, &package, "window", json!({ "env": "prod", "at": "2026-11-27T23:00" })).await;
     answer(&kernel, &package, "create_change", json!({ "env": "prod" })).await;
-    let last = fake.calls.lock().expect("lock").iter().rfind(|(name, _, _)| name == "changes.create").cloned().expect("create");
+    let last = fake
+        .calls
+        .lock()
+        .expect("lock")
+        .iter()
+        .rfind(|(name, _, _)| name == "changes.create")
+        .cloned()
+        .expect("create");
     assert_eq!((last.1["environment"].clone(), last.1["tasks"][0]["start"].clone()), (json!("prod"), json!("23:00")));
     let item = until(&kernel, &package, WorkItem::waiting_human).await;
     let tasks = block(&item, "tasks").expect("tasks");
@@ -171,7 +188,8 @@ async fn the_package_promotes_each_repository_along_the_flow_its_repository_foll
     let kernel = world.start().await;
     let promote = json!([{ "from": "dev", "into": "homolog", "method": "squash" }]);
     let story =
-        merged_with(&kernel, "APP-3", json!({ "web": { "head": "feature/APP-3", "base": "dev", "promote": promote } })).await;
+        merged_with(&kernel, "APP-3", json!({ "web": { "head": "feature/APP-3", "base": "dev", "promote": promote } }))
+            .await;
     let package = packages(&kernel, 1).await.remove(0);
     let item = until(&kernel, &package, |item| item.is_ended() || stage(item, "hint")["state"] == "passed").await;
     assert!(item.links.contains(&story), "the delivery arrives through its own flow's integration branch");
@@ -191,7 +209,8 @@ async fn a_package_of_an_application_without_a_tracker_project_opens_no_card() {
     let kernel = world.start().await;
     merged_in(&kernel, "APP-1", json!({ "web": { "head": "feat/x", "base": "develop" } }), json!({})).await;
     let package = packages(&kernel, 1).await.remove(0);
-    let item = until(&kernel, &package, |item| item.is_ended() || item.waiting_human() || item.impediment.is_some()).await;
+    let item =
+        until(&kernel, &package, |item| item.is_ended() || item.waiting_human() || item.impediment.is_some()).await;
     assert!(item.impediment.is_none(), "{:?}", item.impediment);
     assert_eq!(world.provider.count("tracker.create_issue"), 0);
 }
@@ -219,6 +238,13 @@ async fn without_a_change_tool_bound_a_person_approves_the_environment_here_and_
     assert_eq!(stage(&item, "hext")["state"], "passed");
     assert_eq!(stage(&item, "hext")["change"]["label"], "executada · Ana");
     assert_eq!(stage(&item, "prod")["picker"], true);
-    let reached: Vec<String> = fake.calls.lock().expect("lock").iter().map(|(name, _, _)| name.clone()).filter(|name| name.starts_with("changes.")).collect();
+    let reached: Vec<String> = fake
+        .calls
+        .lock()
+        .expect("lock")
+        .iter()
+        .map(|(name, _, _)| name.clone())
+        .filter(|name| name.starts_with("changes."))
+        .collect();
     assert_eq!(reached, Vec::<String>::new());
 }

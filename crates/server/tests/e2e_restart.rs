@@ -14,13 +14,7 @@ fn new_item() -> Value {
 }
 
 async fn until_true(what: &str, check: impl Fn() -> bool) {
-    for _ in 0..1000 {
-        if check() {
-            return;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    panic!("{what} never happened");
+    assert!(e2e::eventually(|| check().then_some(())).await.is_some(), "{what} never happened");
 }
 
 async fn until_true_async<F, Fut>(what: &str, check: F)
@@ -28,7 +22,8 @@ where
     F: Fn() -> Fut,
     Fut: std::future::Future<Output = bool>,
 {
-    for _ in 0..500 {
+    let deadline = tokio::time::Instant::now() + e2e::PATIENCE;
+    while tokio::time::Instant::now() < deadline {
         if check().await {
             return;
         }
@@ -45,12 +40,10 @@ async fn what_a_running_step_writes_reaches_its_session_before_the_run_ends() {
     let id = server.create(new_item()).await;
     server.approve_plan(&id).await;
     let mut session = None;
-    for _ in 0..500 {
+    let deadline = tokio::time::Instant::now() + e2e::PATIENCE;
+    while session.is_none() && tokio::time::Instant::now() < deadline {
         let view = server.get(&format!("/api/items/{id}/steps/develop")).await;
         session = view["blocks"][0]["session"].as_str().map(str::to_owned);
-        if session.is_some() {
-            break;
-        }
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
     let session = session.expect("the develop session");
@@ -198,30 +191,20 @@ async fn a_custom_workflow_with_all_child_and_event_timeouts_resumes_after_a_res
     let body = json!({ "text": "Paralelo", "issue": { "connection": "trk", "key": "K-9" }, "model": "auto", "attachments": [] });
     let id = server.create(body).await;
     let parent = domain::workflow::ItemId::from(id.as_str());
-    let mut child = None;
-    for _ in 0..500 {
-        child = server
-            .handle
-            .item(&parent)
-            .expect("store")
-            .and_then(|item| item.children.first().map(|link| link.id.clone()));
-        if child.is_some() {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
-    let child = child.expect("the child started");
+    let child = e2e::eventually(|| {
+        server.handle.item(&parent).expect("store").and_then(|item| item.children.first().map(|link| link.id.clone()))
+    })
+    .await
+    .expect("the child started");
     until_true("the tracker is polled", || hub.tracker.state().polls >= 2).await;
     server.stop().await;
 
     hub.tracker.move_outside("K-9", "Pronto");
     let server = hub.start().await;
-    for _ in 0..500 {
-        if server.handle.item(&child).expect("store").is_some_and(|kid| kid.pending_effects().count() == 1) {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(10)).await;
-    }
+    until_true("the child waits again", || {
+        server.handle.item(&child).expect("store").is_some_and(|kid| kid.pending_effects().count() == 1)
+    })
+    .await;
     server.handle.human_input(&child, "", "go", json!({})).expect("the child answers");
     let done = server.until(&id, "the parent ends", |item| item["group"] == "delivered").await;
     assert_eq!(done["status"], "Fazendo");

@@ -147,11 +147,7 @@ async fn rewinding_a_step_restores_the_worktree_and_the_session_and_runs_it_agai
     assert_eq!(first.status.as_deref(), Some("Fazendo"));
     let branch = git::head_of(&first, "");
     let worktree = world.dir.path().join("data/worktrees").join(git::folder_for(&branch));
-    let mut waited = 0;
-    while worktree.exists() && waited < 100 {
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        waited += 1;
-    }
+    eventually(|| (!worktree.exists()).then_some(())).await;
     assert!(!worktree.exists(), "an ended item gives its clean worktree back");
     *world.engine.state.write.lock().expect("lock") = None;
     kernel.rewind(&id, "build").await.expect("rewind");
@@ -192,7 +188,10 @@ async fn a_cancelled_item_goes_straight_to_the_archive_and_leaves_it_when_run_ag
     kernel.cancel(&id).expect("cancel");
     ended(&kernel, &id).await;
     assert!(world.store().archived_items().expect("archived").contains_key(id.as_str()));
-    kernel.shared.append(&id, &[domain::workflow::WorkflowEvent::Rewound { to: String::new(), at: None }]).expect("rewound");
+    kernel
+        .shared
+        .append(&id, &[domain::workflow::WorkflowEvent::Rewound { to: String::new(), at: None }])
+        .expect("rewound");
     assert!(world.store().archived_items().expect("archived").is_empty());
 }
 
@@ -204,15 +203,7 @@ async fn an_agent_question_reaches_the_human_and_the_answer_reaches_the_agent() 
     let kernel = world.start().await;
     let mut events = kernel.subscribe();
     let id = kernel.create_item("ask", json!({})).expect("item");
-    let mut asked = None;
-    for _ in 0..200 {
-        if let Some(found) = kernel.asks().first() {
-            asked = Some(found.clone());
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    let asked = asked.expect("the question reached the human");
+    let asked = first_ask(&kernel).await;
     assert_eq!(asked.item, id);
     assert_eq!(asked.session.as_deref(), Some("s1"));
     assert_eq!(kernel.items().expect("items")[0].group, domain::board::Group::WithYou);
@@ -239,15 +230,7 @@ async fn a_step_whose_agent_waits_for_the_human_is_not_shown_as_running() {
     world.workflow("waits", &source);
     let kernel = world.start().await;
     let id = kernel.create_item("waits", json!({})).expect("item");
-    let mut asked = None;
-    for _ in 0..200 {
-        if let Some(found) = kernel.asks().first() {
-            asked = Some(found.clone());
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    let asked = asked.expect("the question reached the human");
+    let asked = first_ask(&kernel).await;
     let summary = kernel.summary(&id).expect("summary").expect("item");
     let shown = summary.steps.iter().filter(|step| step.id == "only").map(|step| step.state).collect::<Vec<_>>();
     assert_eq!(shown, vec![StepState::WaitingHuman]);
@@ -267,15 +250,7 @@ async fn an_approved_plan_ends_a_planning_agent_even_if_it_would_keep_going() {
     world.workflow("plano", "import { workflow } from \"sdk\";\nexport default workflow({ name: \"plano\", async run(ctx) { return (await ctx.agent(\"worker\", \"planeje\", { mode: \"plan\" })).plan; } });");
     let kernel = world.start().await;
     let id = kernel.create_item("plano", json!({})).expect("item");
-    let mut asked = None;
-    for _ in 0..200 {
-        if let Some(found) = kernel.asks().first() {
-            asked = Some(found.clone());
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    let asked = asked.expect("the plan reached the human");
+    let asked = first_ask(&kernel).await;
     kernel.answer_ask(&asked.ask.id, &domain::Decision::Approve(domain::PermissionMode::Auto)).expect("answer");
     assert_eq!(output(&ended(&kernel, &id).await), json!("o plano"));
 }

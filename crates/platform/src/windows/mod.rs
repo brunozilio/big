@@ -18,6 +18,10 @@ pub fn release_target() -> Option<&'static str> {
     None
 }
 
+pub fn cpu_time() -> Option<std::time::Duration> {
+    None
+}
+
 pub fn port_holder(_port: u16) -> Option<(u32, String)> {
     None
 }

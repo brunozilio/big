@@ -29,7 +29,7 @@ export default workflow({ name: "failing", steps: [only({ retries: 0 })] });
 "#;
 
 async fn factory_items(kernel: &Handle, workflow: &str) -> Vec<WorkItem> {
-    for _ in 0..250 {
+    eventually(|| {
         let found: Vec<WorkItem> = kernel
             .items()
             .expect("items")
@@ -37,12 +37,10 @@ async fn factory_items(kernel: &Handle, workflow: &str) -> Vec<WorkItem> {
             .filter_map(|summary| kernel.item(&summary.id).ok().flatten())
             .filter(|item| item.workflow == workflow)
             .collect();
-        if !found.is_empty() {
-            return found;
-        }
-        tokio::time::sleep(Duration::from_millis(20)).await;
-    }
-    Vec::new()
+        Some(found).filter(|found| !found.is_empty())
+    })
+    .await
+    .unwrap_or_default()
 }
 
 #[tokio::test(flavor = "multi_thread")]
