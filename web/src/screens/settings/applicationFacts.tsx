@@ -1,22 +1,19 @@
-import { useMemo, type ReactNode } from 'react'
+import { type ReactNode } from 'react'
 import type { ApplicationRepository, Binding, Bindings, RepositoryKind } from '@/api/contract'
 import { useStore } from '@/api/store'
 import { ProviderLogo } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { useT } from '@/i18n'
-import { FALLBACK_KINDS, isFallbackKind } from './applicationDraft'
 import { useBoundLook } from './bindings'
 
+const NO_KINDS: RepositoryKind[] = []
+
 export function useKinds(): RepositoryKind[] {
-  const t = useT()
-  const served = useStore((s) => s.connections?.repositoryKinds)
-  return useMemo(() => (served && served.length > 0 ? served : FALLBACK_KINDS.map((key) => ({ key, label: t(`settings.app_kind_${key}`) }))), [served, t])
+  return useStore((s) => s.connections?.repositoryKinds) ?? NO_KINDS
 }
 
-export function kindLabel(kinds: RepositoryKind[], name: string, t: ReturnType<typeof useT>): string {
-  const known = kinds.find((k) => k.key === name)
-  if (known) return known.label
-  return isFallbackKind(name) ? t(`settings.app_kind_${name}`) : name
+export function kindLabel(kinds: RepositoryKind[], name: string): string {
+  return kinds.find((k) => k.key === name)?.label ?? name
 }
 
 export function Fact({ label, value, logo }: { label: string; value: string; logo?: ReactNode }) {
@@ -66,7 +63,7 @@ export function RepositoryFacts({ repository }: { repository: ApplicationReposit
   const e2e = (repository.e2e ?? []).map((c) => (repository.e2eDirectory ? `${repository.e2eDirectory}: ${c}` : c))
   return (
     <>
-      {repository.kind && <Fact label={t('settings.app_kind')} value={kindLabel(kinds, repository.kind, t)} />}
+      {repository.kind && <Fact label={t('settings.app_kind')} value={kindLabel(kinds, repository.kind)} />}
       {repository.readOnly && <Fact label={t('settings.app_access')} value={t('settings.app_readOnly')} />}
       <BoundFacts bindings={repository.bindings} />
       <CommandChips icon="play" label={t('settings.app_run')} commands={repository.run} />

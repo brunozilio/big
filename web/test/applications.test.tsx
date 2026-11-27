@@ -483,7 +483,7 @@ describe('edição no lugar', () => {
     expect(getState().applications?.map((a) => a.name)).toEqual(['Checkout'])
   })
 
-  test('os tipos de repositório são os que o servidor serve; sem eles vale a lista padrão', async () => {
+  test('os tipos de repositório são só os que o conteúdo declara; sem eles o campo some', async () => {
     await started(withConnections((found) => ({ ...found, repositoryKinds: [{ key: 'service', label: 'Serviço' }, { key: 'job', label: 'Rotina' }] })))
     const view = listed('/settings/applications?edit=new')
     const kind = await view.findByRole('combobox', { name: 'Tipo' })
@@ -495,10 +495,8 @@ describe('edição no lugar', () => {
     stop()
     await started(withConnections(({ repositoryKinds: _, ...found }) => found))
     const plain = listed('/settings/applications?edit=new')
-    const fallback = await plain.findByRole('combobox', { name: 'Tipo' })
-    expect(fallback.textContent).toContain('Aplicação')
-    fireEvent.keyDown(fallback, { key: 'Enter' })
-    expect(await plain.findByRole('option', { name: /Biblioteca/ })).toBeTruthy()
+    expect(await plain.findByLabelText('Nome')).toBeTruthy()
+    expect(plain.queryByRole('combobox', { name: 'Tipo' })).toBeNull()
   })
 
   test('os vínculos se agrupam nas seções que o conector declara, na ordem pedida', async () => {

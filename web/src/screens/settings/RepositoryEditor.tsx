@@ -27,7 +27,8 @@ function AccessSwitch({ value, onChange }: { value: boolean; onChange: (next: bo
 function KindSelect({ value, kinds, onChange }: { value: string | undefined; kinds: RepositoryKind[]; onChange: (next: string) => void }) {
   const t = useT()
   const names = value && !kinds.some((k) => k.key === value) ? [...kinds.map((k) => k.key), value] : kinds.map((k) => k.key)
-  const options = names.map((name) => ({ value: name, label: kindLabel(kinds, name, t) }))
+  if (names.length === 0) return null
+  const options = names.map((name) => ({ value: name, label: kindLabel(kinds, name) }))
   return (
     <Field label={t('settings.app_kind')}>
       <Select label={t('settings.app_kind')} className="w-full" value={value || kinds[0]?.key || ''} options={options} onValueChange={onChange} />

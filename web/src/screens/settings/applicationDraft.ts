@@ -1,13 +1,5 @@
 import type { Application, ApplicationDraft, ApplicationRepository, Bindings } from '@/api/contract'
 
-export const FALLBACK_KINDS = ['application', 'library', 'configuration', 'infrastructure', 'tests'] as const
-
-export type FallbackKind = (typeof FALLBACK_KINDS)[number]
-
-export function isFallbackKind(name: string): name is FallbackKind {
-  return (FALLBACK_KINDS as readonly string[]).includes(name)
-}
-
 export function folderName(directory: string): string {
   return directory.split('/').filter(Boolean).pop() ?? directory
 }
@@ -21,11 +13,11 @@ export function parentOf(directory: string): string | null {
   return at > 0 ? directory.slice(0, at) : null
 }
 
-export function blankRepository(directory = '', kind: string = FALLBACK_KINDS[0]): ApplicationRepository {
+export function blankRepository(directory = '', kind = ''): ApplicationRepository {
   return { id: '', directory, kind, run: [], verify: [], e2e: [], e2eDirectory: '', bindings: {} }
 }
 
-export function withFolders(repositories: ApplicationRepository[], paths: string[], kind: string = FALLBACK_KINDS[0]): ApplicationRepository[] {
+export function withFolders(repositories: ApplicationRepository[], paths: string[], kind = ''): ApplicationRepository[] {
   const known = new Set(repositories.map((r) => r.directory).filter(Boolean))
   const fresh = [...new Set(paths)].filter((path) => !known.has(path))
   const next = repositories.map((r) => (r.directory || fresh.length === 0 ? r : { ...r, directory: fresh.shift() ?? '' }))
