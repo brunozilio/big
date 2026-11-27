@@ -95,6 +95,7 @@ export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.
 
 export function page({ value }, ctx) {
   const models = items(value, "models").flatMap((item) => {
+    if (item?.visibility === "hide") return [];
     const found = model(ctx, item, { id: "slug", window: "context_window" });
     return found === null ? [] : [reasoning(found, levels(item).length > 0)];
   });

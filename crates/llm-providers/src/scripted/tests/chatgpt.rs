@@ -109,6 +109,14 @@ fn the_catalog_reads_slugs_windows_and_levels() {
 }
 
 #[test]
+fn hidden_models_stay_out_of_the_catalog() {
+    let page = json!({"models": [{"slug": "gpt-5", "visibility": "list"}, {"slug": "codex-auto-review", "visibility": "hide"}]});
+    let models = crate::catalog::collect(chatgpt(), |_| Ok::<_, ProviderError>(page.clone())).unwrap_or_default();
+    let ids: Vec<_> = models.iter().map(|model| model.id.as_str()).collect();
+    assert_eq!(ids, ["openai-subscription:gpt-5"]);
+}
+
+#[test]
 fn the_tokens_and_the_account_go_in_the_headers() {
     let tokens = Tokens { account_id: "acct".into(), ..Tokens::bearer("a") };
     let config = Config { auth: Some(tokens), ..Config::default() };

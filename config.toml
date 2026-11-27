@@ -81,8 +81,8 @@ account_claim = "https://api.openai.com/auth"
 callback_port = "1455"
 callback_path = "/auth/callback"
 originator = "codex_cli_rs"
-version = "0.130.0"
-user_agent = "codex_cli_rs/0.130.0 (Mac OS 26.2.0; arm64) Apple_Terminal/464"
+version = "0.172.0"
+user_agent = "codex_cli_rs/0.172.0 (Mac OS 26.2.0; arm64) Apple_Terminal/464"
 instructions = "You are Codex, based on GPT-5. You are running as a coding agent in the Codex CLI on a user's computer."
 
 [copilot]
@@ -178,7 +178,7 @@ idle_minutes = "15"
 messages_api = "https://api.anthropic.com"
 responses_api = "https://api.openai.com/v1"
 messages_headers = "user-agent: claude-cli/2.1.330 (external, cli)|x-app: cli"
-responses_headers = "originator: codex_cli_rs|version: 0.130.0|user-agent: codex_cli_rs/0.130.0 (Mac OS 26.2.0; arm64) Apple_Terminal/464"
+responses_headers = "originator: codex_cli_rs|version: 0.172.0|user-agent: codex_cli_rs/0.172.0 (Mac OS 26.2.0; arm64) Apple_Terminal/464"
 
 [web]
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36"
