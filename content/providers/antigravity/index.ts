@@ -51,7 +51,61 @@ export function bind({ config, body }: { config: Config; body: Record<string, un
   return body;
 }
 
-export const retriesAfterRefresh = ({ status }: { status: number }) => status === 401;
+const TIERS = ["minimal", "low", "medium", "high"];
+const CLAUDE_ROOM = 8192;
+
+function family(name: string): string {
+  if (name.includes("claude")) return "claude";
+  if (name.startsWith("gemini-2")) return "budget";
+  if (name.startsWith("gemini-")) return "levels";
+  return "other";
+}
+
+const suffixOf = (name: string) => TIERS.find((tier) => name.endsWith(`-${tier}`));
+
+function budget(name: string, level: string): number {
+  const [low, medium, high] = name.startsWith("gemini-2.5-flash")
+    ? [6144, 12_288, 24_576]
+    : name.includes("claude") || name.startsWith("gemini-2.5-pro")
+      ? [8192, 16_384, 32_768]
+      : [4096, 8192, 16_384];
+  if (level === "minimal" || level === "low") return low;
+  return level === "medium" ? medium : high;
+}
+
+function thinking(name: string, level: string, generation: { maxOutputTokens: number }) {
+  const tiered = suffixOf(name) !== undefined;
+  switch (family(name)) {
+    case "claude": {
+      if (!name.includes("thinking") && !tiered) return undefined;
+      const room = budget(name, level);
+      if (generation.maxOutputTokens <= room) generation.maxOutputTokens = room + CLAUDE_ROOM;
+      return { include_thoughts: true, thinking_budget: room };
+    }
+    case "levels":
+      return tiered ? { includeThoughts: true } : { includeThoughts: true, thinkingLevel: level === "high" ? "high" : "low" };
+    case "budget":
+      return { includeThoughts: true, thinkingBudget: budget(name, level) };
+    default:
+      return undefined;
+  }
+}
+
+export function shape({ body, effort }) {
+  const inner = body.request ?? {};
+  const name = String(body.model ?? "").split(":").pop() ?? "";
+  const generation = { maxOutputTokens: Number(inner.generationConfig?.maxOutputTokens ?? 0) };
+  const thought = thinking(name, suffixOf(name) ?? effort, generation);
+  inner.generationConfig = thought === undefined ? generation : { ...generation, thinkingConfig: thought };
+  if (family(name) === "claude" && inner.tools !== undefined) inner.toolConfig = { functionCallingConfig: { mode: "VALIDATED" } };
+  body.request = inner;
+  body.userAgent = "antigravity";
+  body.requestType = "agent";
+  body.requestId = `agent-${body.requestId}`;
+  return body;
+}
+
+export const retriesAfterRefresh =({ status }: { status: number }) => status === 401;
 
 export function catalog({ config }: { config: Config }, ctx) {
   const root = config.base_url ? config.base_url.replace(/\/+$/, "") : ctx.config.api;

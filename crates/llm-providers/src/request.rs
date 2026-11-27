@@ -14,6 +14,7 @@ pub fn shape(provider: &dyn Provider, model: Option<&ModelOption>, body: &mut Va
     let effort = body["reasoning"]["effort"]
         .as_str()
         .or_else(|| body["output_config"]["effort"].as_str())
+        .or_else(|| body["request"]["generationConfig"]["thinkingConfig"]["thinkingLevel"].as_str())
         .unwrap_or("medium")
         .to_owned();
     let named = body["model"].as_str().unwrap_or_default().to_owned();

@@ -5,7 +5,7 @@ use crate::model::wires::responses::Responses;
 use crate::model::{BlockingTurn, CancellationToken, Delta, ModelError, TurnRequest};
 use crate::transcript::{Block, Message, StopReason};
 use domain::Effort;
-use domain::provider::ProviderKey;
+
 use serde_json::json;
 
 fn request() -> TurnRequest {
@@ -20,16 +20,12 @@ fn request() -> TurnRequest {
     }
 }
 
-fn key() -> Arc<ProviderKey> {
-    Arc::new(ProviderKey::new("sk"))
-}
-
 #[test]
 fn folds_reasoning_text_and_a_call() {
     let stream = include_str!("../../../../tests/fixtures/responses_tool_use.sse").to_owned();
     let http = Arc::new(ScriptedHttp::new([(200, stream)]));
     let mut deltas = Vec::new();
-    let reply = Responses::new(http.clone(), key())
+    let reply = Responses::new(http.clone())
         .turn_blocking(&request(), &mut |delta| deltas.push(delta), &CancellationToken::new())
         .expect("reply");
     assert_eq!(reply.stop, StopReason::ToolUse);
@@ -58,24 +54,19 @@ fn folds_reasoning_text_and_a_call() {
 }
 
 #[test]
-fn the_key_goes_to_the_api() {
+fn the_address_and_the_headers_are_the_providers_not_the_wires() {
     let stream = include_str!("../../../../tests/fixtures/responses_tool_use.sse").to_owned();
     let http = Arc::new(ScriptedHttp::new([(200, stream)]));
-    Responses::new(http.clone(), key()).turn_blocking(&request(), &mut |_| {}, &CancellationToken::new()).expect("key");
+    Responses::new(http.clone()).turn_blocking(&request(), &mut |_| {}, &CancellationToken::new()).expect("reply");
     let sent = http.sent();
-    let header = |name: &str| sent[0].headers.iter().find(|(key, _)| key == name).map(|(_, v)| v.clone());
-    assert_eq!(sent[0].url, "https://api.openai.com/v1/responses");
-    assert_eq!(header("authorization").as_deref(), Some("Bearer sk"));
-    for (name, value) in crate::model::wires::declared_headers(brand::wires::RESPONSES_HEADERS) {
-        assert_eq!(header(&name), Some(value));
-    }
-    assert!(header("user-agent").is_some_and(|agent| !agent.contains(brand::NAME)));
+    assert_eq!(sent[0].url, "");
+    assert!(sent[0].headers.is_empty(), "{:?}", sent[0].headers);
 }
 
 #[test]
 fn maps_errors() {
     let http = Arc::new(ScriptedHttp::new([(401, r#"{"detail":"Unauthorized"}"#.to_owned())]));
-    let error = Responses::new(http, key())
+    let error = Responses::new(http)
         .without_backoff()
         .turn_blocking(&request(), &mut |_| {}, &CancellationToken::new())
         .expect_err("refused");
@@ -83,7 +74,7 @@ fn maps_errors() {
 
     let limit = r#"{"error":{"type":"usage_limit_reached","message":"The usage limit has been reached"}}"#;
     let http = Arc::new(ScriptedHttp::new((0..4).map(|_| (429, limit.to_owned()))));
-    let error = Responses::new(http.clone(), key())
+    let error = Responses::new(http.clone())
         .without_backoff()
         .turn_blocking(&request(), &mut |_| {}, &CancellationToken::new())
         .expect_err("limited");
@@ -92,9 +83,8 @@ fn maps_errors() {
 
     let failed = "data: {\"type\":\"response.failed\",\"response\":{\"error\":{\"code\":\"context_length_exceeded\",\"message\":\"too long\"}}}\n\n";
     let http = Arc::new(ScriptedHttp::new([(200, failed.to_owned())]));
-    let error = Responses::new(http, key())
-        .turn_blocking(&request(), &mut |_| {}, &CancellationToken::new())
-        .expect_err("failed");
+    let error =
+        Responses::new(http).turn_blocking(&request(), &mut |_| {}, &CancellationToken::new()).expect_err("failed");
     assert_eq!(error, ModelError::TooLong("too long".into()));
 }
 

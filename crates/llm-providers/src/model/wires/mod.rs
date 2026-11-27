@@ -34,14 +34,6 @@ pub fn open(
     ALL.iter().find(|(known, _)| *known == name).map(|(_, open)| open(http, model))
 }
 
-pub fn declared_headers(spec: &str) -> Vec<(String, String)> {
-    spec.split('|')
-        .filter_map(|pair| pair.split_once(':'))
-        .map(|(name, value)| (name.trim().to_ascii_lowercase(), value.trim().to_owned()))
-        .filter(|(name, _)| !name.is_empty())
-        .collect()
-}
-
 #[cfg(test)]
 mod tests {
     use super::ALL;

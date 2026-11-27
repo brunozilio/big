@@ -16,15 +16,18 @@ Google's user info. Tokens refresh at the same token endpoint (also on a 401).
 
 Turns are `v1internal:streamGenerateContent?alt=sse` on
 `daily-cloudcode-pa.googleapis.com`: a Gemini `generateContent` request
-inside an envelope (`project`, `model`, `request`, `requestType: agent`,
-`userAgent: antigravity`). That wire (`cloud_code`) lives in this folder
-(`wire/`), since only this provider speaks it; each event carries a Gemini
-answer under `response`. Calls and results are paired by id and name.
-A thought signature is kept as an empty thinking block just before the part
-it came with and replayed there; the first call of a reply without one gets
-`skip_thought_signature_validator`. Claude models get a thinking budget and
+inside the Cloud Code Assist envelope (`project`, `model`, `requestId`,
+`request`), the `cloud_code` wire; each event carries a Gemini answer under
+`response`. Calls and results are paired by id and name. A thought signature
+is kept as an empty thinking block just before the part it came with and
+replayed there; the first call of a reply without one gets
+`skip_thought_signature_validator`. The wire asks for the effort as the
+Gemini thinking level; `shape` in `index.ts` names the client
+(`requestType: agent`, `userAgent: antigravity`, `requestId: agent-…`) and
+sets the thinking per model: Claude models get a thinking budget and
 `VALIDATED` function calling; Gemini 3 and later take the thinking level from
-the model's name (`-low`, `-medium`, `-high`) or the effort.
+the model's name (`-low`, `-medium`, `-high`) or the effort; Gemini 2 gets a
+budget.
 
 The catalog is `v1internal:fetchAvailableModels` for the project; when it
 answers nothing usable, a fixed list of the models Antigravity advertises is

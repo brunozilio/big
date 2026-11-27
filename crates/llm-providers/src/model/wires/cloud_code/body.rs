@@ -8,14 +8,14 @@ use crate::transcript::{Block, Message, Role};
 
 pub const SKIP_SIGNATURE: &str = "skip_thought_signature_validator";
 
-const TIERS: [&str; 4] = ["minimal", "low", "medium", "high"];
-
 pub fn body(request: &TurnRequest) -> Value {
     let key = crate::model::conversation_key::conversation_key(request);
-    let model = request.model.rsplit(':').next().unwrap_or(&request.model);
     let mut inner = json!({
         "contents": contents(&request.messages),
-        "generationConfig": generation(model, request.effort, request.max_tokens),
+        "generationConfig": {
+            "maxOutputTokens": request.max_tokens,
+            "thinkingConfig": {"includeThoughts": true, "thinkingLevel": level(request.effort)},
+        },
         "sessionId": key.to_string(),
     });
     if !request.system.trim().is_empty() {
@@ -23,90 +23,21 @@ pub fn body(request: &TurnRequest) -> Value {
     }
     if !request.tools.is_empty() {
         inner["tools"] = json!([{"functionDeclarations": request.tools.iter().map(declaration).collect::<Vec<_>>()}]);
-        if family(model) == Family::Claude {
-            inner["toolConfig"] = json!({"functionCallingConfig": {"mode": "VALIDATED"}});
-        }
     }
     json!({
         "model": request.model,
         "project": "",
-        "userAgent": "antigravity",
-        "requestType": "agent",
-        "requestId": format!("agent-{}", uuid::Uuid::new_v4()),
+        "requestId": uuid::Uuid::new_v4().to_string(),
         "request": inner,
     })
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Family {
-    Claude,
-    GeminiLevels,
-    GeminiBudget,
-    Other,
-}
-
-fn family(model: &str) -> Family {
-    if model.contains("claude") {
-        Family::Claude
-    } else if model.starts_with("gemini-2") {
-        Family::GeminiBudget
-    } else if model.starts_with("gemini-") {
-        Family::GeminiLevels
-    } else {
-        Family::Other
-    }
-}
-
-fn tier(model: &str) -> Option<&'static str> {
-    TIERS.into_iter().find(|tier| model.ends_with(&format!("-{tier}")))
-}
-
-fn wanted(effort: Effort) -> &'static str {
+pub const fn level(effort: Effort) -> &'static str {
     match effort {
         Effort::Low => "low",
         Effort::Medium => "medium",
         Effort::High | Effort::XHigh | Effort::Max => "high",
     }
-}
-
-fn budget(model: &str, level: &str) -> u64 {
-    let [low, medium, high] = if model.starts_with("gemini-2.5-flash") {
-        [6144, 12_288, 24_576]
-    } else if model.contains("claude") || model.starts_with("gemini-2.5-pro") {
-        [8192, 16_384, 32_768]
-    } else {
-        [4096, 8192, 16_384]
-    };
-    match level {
-        "minimal" | "low" => low,
-        "medium" => medium,
-        _ => high,
-    }
-}
-
-fn generation(model: &str, effort: Effort, max_tokens: u32) -> Value {
-    let level = tier(model).unwrap_or_else(|| wanted(effort));
-    let mut output = u64::from(max_tokens);
-    let thinking = match family(model) {
-        Family::Claude if model.contains("thinking") || tier(model).is_some() => {
-            let budget = budget(model, level);
-            if output <= budget {
-                output = budget + 8192;
-            }
-            Some(json!({"include_thoughts": true, "thinking_budget": budget}))
-        }
-        Family::GeminiLevels if tier(model).is_some() => Some(json!({"includeThoughts": true})),
-        Family::GeminiLevels => {
-            Some(json!({"includeThoughts": true, "thinkingLevel": if level == "high" { "high" } else { "low" }}))
-        }
-        Family::GeminiBudget => Some(json!({"includeThoughts": true, "thinkingBudget": budget(model, level)})),
-        Family::Claude | Family::Other => None,
-    };
-    let mut config = json!({"maxOutputTokens": output});
-    if let Some(thinking) = thinking {
-        config["thinkingConfig"] = thinking;
-    }
-    config
 }
 
 fn declaration(tool: &ToolSpec) -> Value {
@@ -243,15 +174,20 @@ mod tests {
     }
 
     fn signed(text: &str, signature: Option<&str>) -> Block {
-        Block::Thinking { text: text.into(), signature: signature.map(Into::into), origin: Some(crate::model::wires::cloud_code::ORIGIN) }
+        Block::Thinking {
+            text: text.into(),
+            signature: signature.map(Into::into),
+            origin: Some(crate::model::wires::cloud_code::ORIGIN),
+        }
     }
 
     #[test]
     fn a_first_turn_carries_the_system_prompt_the_tools_and_the_envelope() {
         let body = body(&request("gemini-3.8-flash-high", vec![Message::user("What is in a.txt?")]));
         assert_eq!(body["model"], "antigravity-subscription:gemini-3.8-flash-high");
-        assert_eq!((body["userAgent"].as_str(), body["requestType"].as_str()), (Some("antigravity"), Some("agent")));
-        assert!(body["requestId"].as_str().is_some_and(|id| id.starts_with("agent-")));
+        assert_eq!(body["project"], "");
+        assert!(body["requestId"].as_str().is_some_and(|id| uuid::Uuid::parse_str(id).is_ok()));
+        assert!(body.get("userAgent").is_none() && body.get("requestType").is_none(), "the provider names its client");
         let inner = &body["request"];
         assert_eq!(inner["systemInstruction"], json!({"role": "user", "parts": [{"text": "Be terse."}]}));
         assert_eq!(inner["contents"], json!([{"role": "user", "parts": [{"text": "What is in a.txt?"}]}]));
@@ -259,8 +195,11 @@ mod tests {
         assert_eq!(declared["name"], "Read");
         assert_eq!(declared["parametersJsonSchema"]["properties"]["file_path"]["type"], "string");
         assert!(declared["parametersJsonSchema"].get("$schema").is_none());
-        assert!(inner.get("toolConfig").is_none(), "only Claude is held to declared calls");
-        assert_eq!(inner["generationConfig"]["thinkingConfig"], json!({"includeThoughts": true}));
+        assert!(inner.get("toolConfig").is_none(), "the provider decides which models are held to declared calls");
+        assert_eq!(
+            inner["generationConfig"],
+            json!({"maxOutputTokens": 8192, "thinkingConfig": {"includeThoughts": true, "thinkingLevel": "medium"}})
+        );
     }
 
     #[test]
@@ -333,25 +272,9 @@ mod tests {
     }
 
     #[test]
-    fn claude_gets_a_budget_room_to_answer_and_declared_calls_only() {
-        let body = body(&request("claude-opus-5-5-high", vec![Message::user("hi")]));
-        let config = &body["request"]["generationConfig"];
-        assert_eq!(config["thinkingConfig"], json!({"include_thoughts": true, "thinking_budget": 32_768}));
-        assert_eq!(config["maxOutputTokens"], 32_768 + 8192);
-        assert_eq!(body["request"]["toolConfig"]["functionCallingConfig"]["mode"], "VALIDATED");
-    }
-
-    #[test]
-    fn an_untiered_model_thinks_as_hard_as_the_effort_asks() {
-        let level = |model: &str, effort| generation(model, effort, 8192)["thinkingConfig"].clone();
-        assert_eq!(level("gemini-4-argon", Effort::Low), json!({"includeThoughts": true, "thinkingLevel": "low"}));
-        assert_eq!(level("gemini-4-argon", Effort::Max), json!({"includeThoughts": true, "thinkingLevel": "high"}));
-        assert_eq!(
-            level("gemini-2.5-flash", Effort::Medium),
-            json!({"includeThoughts": true, "thinkingBudget": 12_288})
-        );
-        assert_eq!(level("gpt-oss-120b-medium", Effort::High), Value::Null);
-        assert_eq!(level("claude-sonnet-5-5", Effort::High), Value::Null);
+    fn the_effort_is_the_thinking_level_the_protocol_names() {
+        let levels = [Effort::Low, Effort::Medium, Effort::High, Effort::XHigh, Effort::Max].map(level);
+        assert_eq!(levels, ["low", "medium", "high", "high", "high"]);
     }
 
     #[test]

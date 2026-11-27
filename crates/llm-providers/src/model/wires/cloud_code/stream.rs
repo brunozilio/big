@@ -80,7 +80,7 @@ impl Folder {
         self.calls += 1;
         let name = call["name"].as_str().unwrap_or_default().to_owned();
         let id = call["id"].as_str().filter(|id| !id.is_empty()).map_or_else(
-            || format!("call_{}_{}", if self.response.is_empty() { "antigravity" } else { &self.response }, self.calls),
+            || format!("call_{}_{}", if self.response.is_empty() { super::NAME } else { &self.response }, self.calls),
             str::to_owned,
         );
         let input = match &call["args"] {

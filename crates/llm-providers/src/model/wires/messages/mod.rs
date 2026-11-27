@@ -9,47 +9,35 @@ pub use stream::Folder;
 
 use crate::model::http::Http;
 use crate::model::retry::{Attempt, Failed, refusal, with_retries};
-use crate::model::{BoxFuture, CancellationToken, Delta, KeySource, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
+use crate::model::{BoxFuture, CancellationToken, Delta, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
 
 pub const NAME: &str = "messages";
 
 pub const ORIGIN: crate::transcript::ReasoningOrigin = crate::transcript::ReasoningOrigin::of("Anthropic");
 
 pub fn open(http: Arc<dyn Http>, _model: Option<&domain::ModelOption>) -> Arc<dyn ModelApi> {
-    Arc::new(Messages::new(http, Arc::new(domain::provider::ProviderKey::new("transport-owned"))))
+    Arc::new(Messages::new(http))
 }
-
-pub const API: &str = brand::wires::MESSAGES_API;
-pub const VERSION: &str = "2026-10-21";
 
 pub struct Messages {
     http: Arc<dyn Http>,
-    keys: Arc<dyn KeySource>,
-    base: String,
     backoff: Duration,
 }
 
 impl std::fmt::Debug for Messages {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Messages").field("base", &self.base).finish_non_exhaustive()
+        f.debug_struct("Messages").finish_non_exhaustive()
     }
 }
 
 impl Messages {
-    pub fn new(http: Arc<dyn Http>, keys: Arc<dyn KeySource>) -> Self {
-        Self { http, keys, base: API.to_owned(), backoff: Duration::from_secs(2) }
+    pub fn new(http: Arc<dyn Http>) -> Self {
+        Self { http, backoff: Duration::from_secs(2) }
     }
 
     pub fn without_backoff(mut self) -> Self {
         self.backoff = Duration::ZERO;
         self
-    }
-
-    fn headers(&self) -> Result<Vec<(String, String)>, ModelError> {
-        let mut headers = vec![("anthropic-version".to_owned(), VERSION.to_owned())];
-        headers.extend(super::declared_headers(brand::wires::MESSAGES_HEADERS));
-        headers.push(("x-api-key".to_owned(), self.keys.key()?.secret().to_owned()));
-        Ok(headers)
     }
 }
 
@@ -61,12 +49,8 @@ impl Attempt for Messages {
         cancel: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<Reply, Failed>> {
         Box::pin(async move {
-            let url = format!("{}/v1/messages", self.base.trim_end_matches('/'));
-            let headers = self.headers()?;
-            let response = self
-                .http
-                .post_streaming(&url, &headers, &crate::model::intent::sent(request, body(request)), cancel)
-                .await?;
+            let response =
+                self.http.post_streaming("", &[], &crate::model::intent::sent(request, body(request)), cancel).await?;
             if response.status != 200 {
                 return Err(refusal(response, cancel, status_error).await);
             }
@@ -91,7 +75,7 @@ impl ModelApi for Messages {
         on: OnDelta<'a>,
         cancel: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<Reply, ModelError>> {
-        Box::pin(with_retries("Anthropic", self.backoff, self, request, on, cancel))
+        Box::pin(with_retries(NAME, self.backoff, self, request, on, cancel))
     }
 }
 

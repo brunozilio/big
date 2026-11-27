@@ -96,7 +96,7 @@ impl ModelApi for Chat {
         on: OnDelta<'a>,
         cancel: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<Reply, ModelError>> {
-        Box::pin(with_retries("The model", self.backoff, self, request, on, cancel))
+        Box::pin(with_retries(NAME, self.backoff, self, request, on, cancel))
     }
 }
 

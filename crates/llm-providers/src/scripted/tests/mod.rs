@@ -1,4 +1,5 @@
 mod antigravity;
+mod antigravity_wire;
 mod chatgpt;
 mod chatgpt_client;
 mod claude;

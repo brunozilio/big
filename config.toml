@@ -176,12 +176,6 @@ min_p = "0"
 folder = ""
 idle_minutes = "15"
 
-[wires]
-messages_api = "https://api.anthropic.com"
-responses_api = "https://api.openai.com/v1"
-messages_headers = "user-agent: claude-cli/2.1.330 (external, cli)|x-app: cli"
-responses_headers = "originator: codex_cli_rs|version: 0.172.0|user-agent: codex_cli_rs/0.172.0 (Mac OS 26.2.0; arm64) Apple_Terminal/464"
-
 [web]
 user_agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/158.0.0.0 Safari/537.36"
 
