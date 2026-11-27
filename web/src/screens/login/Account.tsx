@@ -80,7 +80,7 @@ export function AccountPanel() {
         <p className="flex-1 text-base text-fg">{local ? t('auth.localUser') : me ? t('auth.signedInAs', { email: me.user.email }) : ''}</p>
         {!local && me && <Button size="sm" icon={<Icon name="logout" size={14} />} onClick={out}>{t('auth.logout')}</Button>}
       </section>
-      {local ? <p className="text-sm text-muted">{t('auth.passkeysLocal')}</p> : me && <Passkeys />}
+      {!local && me && <Passkeys />}
     </div>
   )
 }

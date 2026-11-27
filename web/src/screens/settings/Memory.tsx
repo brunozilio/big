@@ -202,7 +202,6 @@ export function MemoryView() {
       <SearchInput aria-label={t('settings.mem_search')} placeholder={t('settings.mem_search')} value={query} onChange={(e) => setQuery(e.target.value)} />
       <GlobalGroup tree={tree} shared={shared} />
       {tree.applications.map((application) => <ApplicationGroup key={application.id} application={application} shared={shared} />)}
-      {tree.applications.length === 0 && !query && <p className="px-1 text-sm text-muted">{t('settings.mem_noApplications')}</p>}
       {nothing && <p className="px-1 text-sm text-muted">{t('settings.mem_noMatch')}</p>}
       {!query && <ForgottenGroup tree={tree} actions={actions} />}
       {error && <p role="alert" className="text-sm text-danger-fg">{error}</p>}

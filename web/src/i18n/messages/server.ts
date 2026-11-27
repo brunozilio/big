@@ -4,6 +4,8 @@ export default namespace(
   'server',
   {
     group_tracker: 'Tarefas',
+    group_corporate: 'Corporativo',
+    group_quality: 'Qualidade',
     group_cloud: 'Nuvem',
     group_mcp: 'Ferramentas',
     group_tests: 'Testes',
@@ -37,6 +39,8 @@ export default namespace(
   },
   {
     group_tracker: 'Tasks',
+    group_corporate: 'Corporate',
+    group_quality: 'Quality',
     group_cloud: 'Cloud',
     group_mcp: 'Tools',
     group_tests: 'Tests',
@@ -70,6 +74,8 @@ export default namespace(
   },
   {
     group_tracker: 'Tareas',
+    group_corporate: 'Corporativo',
+    group_quality: 'Calidad',
     group_cloud: 'Nube',
     group_mcp: 'Herramientas',
     group_tests: 'Pruebas',

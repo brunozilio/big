@@ -187,7 +187,7 @@ export function ApplicationsView() {
         <h2 className="text-base font-medium text-muted">{t('settings.app_title')}</h2>
         {!empty && <Button size="sm" disabled={creating} icon={<Icon name="plus" size={15} />} onClick={() => request(NEW)}>{t('settings.app_new')}</Button>}
       </div>
-      {empty && <EmptyState className="py-14" icon={<Icon name="apps" size={28} className="mb-4 text-faint" />} title={t('settings.app_empty')} text={t('settings.app_emptyText')} action={<Button variant="primary" icon={<Icon name="plus" size={15} />} onClick={() => request(NEW)}>{t('settings.app_new')}</Button>} />}
+      {empty && <EmptyState className="py-14" icon={<Icon name="apps" size={28} className="mb-4 text-faint" />} title={t('settings.app_empty')} action={<Button variant="primary" icon={<Icon name="plus" size={15} />} onClick={() => request(NEW)}>{t('settings.app_new')}</Button>} />}
       <div className="space-y-3">
         {creating && <Editing key={NEW}><ApplicationEditor application={null} {...editor(NEW)} /></Editing>}
         {applications.map((a, i) => editing === a.id ? (

@@ -23,7 +23,7 @@ export function provider() {
 export function presentation({ language }: { language: Language }) {
   return {
     description: pick(language, "Your Microsoft 365 account", "Tu cuenta de Microsoft 365", "Sua conta Microsoft 365"),
-    group: "email",
+    group: "corporate",
     button: pick(language, "Sign in with Microsoft", "Entrar con Microsoft", "Entrar com a Microsoft"),
     site: pick(language, "Microsoft", "de Microsoft", "da Microsoft"),
     choose_title: pick(language, "Microsoft account", "Cuenta de Microsoft", "Conta Microsoft"),
