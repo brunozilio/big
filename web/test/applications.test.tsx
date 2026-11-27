@@ -488,25 +488,21 @@ describe('edição no lugar', () => {
     expect(view.getByRole('status', { name: 'Carregando aplicações' })).toBeTruthy()
   })
 
-  test('os comandos do repositório são listas editáveis e vão no que é salvo', async () => {
+  test('os comandos do repositório não são campos do formulário e seguem intactos ao salvar', async () => {
     const base = fresh()
     const sent: ApplicationDraft[] = []
     await started({ ...base, saveApplication: (draft) => (sent.push(draft), base.saveApplication(draft)) })
     const view = listed()
     fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
-    await view.findByLabelText('Nome')
+    const name = await view.findByLabelText('Nome')
     expandRepositories(view)
     const first = within(view.getByTestId('repository-0'))
-    expect((first.getByLabelText('Rodar 1') as HTMLInputElement).value).toBe('bun dev')
-    expect((first.getByLabelText('Verificação 2') as HTMLInputElement).value).toBe('bun run lint')
-    expect((first.getByLabelText('Pasta dos testes E2E') as HTMLInputElement).value).toBe('e2e')
-    fireEvent.change(first.getByLabelText('Rodar 1'), { target: { value: 'bun run dev' } })
-    fireEvent.click(first.getAllByRole('button', { name: 'Adicionar comando' })[1])
-    fireEvent.change(first.getByLabelText('Verificação 3'), { target: { value: ' bun run typecheck ' } })
-    fireEvent.click(first.getAllByRole('button', { name: 'Adicionar comando' })[2])
+    expect(first.queryByLabelText('Rodar 1')).toBeNull()
+    expect(first.queryByLabelText('Pasta dos testes E2E')).toBeNull()
+    fireEvent.change(name, { target: { value: 'Checkout 2' } })
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(sent.length).toBe(1))
-    expect(sent[0].repositories[0]).toMatchObject({ run: ['bun run dev'], verify: ['bun test', 'bun run lint', 'bun run typecheck'], e2e: ['npx cypress run'], e2eDirectory: 'e2e' })
+    expect(sent[0].repositories[0]).toMatchObject({ run: ['bun dev'], verify: ['bun test', 'bun run lint'], e2e: ['npx cypress run'], e2eDirectory: 'e2e' })
   })
 })
 

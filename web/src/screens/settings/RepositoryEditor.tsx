@@ -1,8 +1,8 @@
 import { memo, useCallback, useMemo, useState } from 'react'
 import type { ApplicationRepository, Bindings, DirListing, Flows, RepositoryKind } from '@/api/contract'
-import { Button, IconButton } from '@/ui/button'
+import { IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
-import { Field, Input, Select, Switch } from '@/ui/form'
+import { Field, Select, Switch } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { Collapse } from '@/ui/motion'
 import { useT } from '@/i18n'
@@ -55,48 +55,6 @@ export function DirectoryField({ value, onChoose }: { value: string; onChoose: (
   )
 }
 
-const CommandList = memo(function CommandList({ label, values, onChange }: { label: string; values: string[]; onChange: (next: string[]) => void }) {
-  const t = useT()
-  return (
-    <div className="space-y-2">
-      <span className="block text-sm font-medium text-fg2">{label}</span>
-      {values.map((command, i) => (
-        <div key={i} className="flex items-center gap-1.5">
-          <Input aria-label={`${label} ${i + 1}`} className="min-w-0 flex-1 font-mono text-sm" value={command} onChange={(e) => onChange(values.map((c, at) => (at === i ? e.target.value : c)))} />
-          <IconButton tooltip={t('settings.app_removeCommand')} size="sm" onClick={() => onChange(values.filter((_, at) => at !== i))}><Icon name="trash" size={15} /></IconButton>
-        </div>
-      ))}
-      <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => onChange([...values, ''])}>{t('settings.app_addCommand')}</Button>
-    </div>
-  )
-})
-
-function Commands({ value, edit }: { value: ApplicationRepository; edit: Edit }) {
-  const t = useT()
-  const run = useCallback((run: string[]) => edit((r) => ({ ...r, run })), [edit])
-  const verify = useCallback((verify: string[]) => edit((r) => ({ ...r, verify })), [edit])
-  const e2e = useCallback((e2e: string[]) => edit((r) => ({ ...r, e2e })), [edit])
-  return (
-    <div className="space-y-3">
-      <div className="space-y-0.5">
-        <p className="text-base font-medium text-fg">{t('settings.app_commands')}</p>
-        <p className="text-sm text-muted">{t('settings.app_commandsHint')}</p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <CommandList label={t('settings.app_run')} values={value.run} onChange={run} />
-        <CommandList label={t('settings.app_verify')} values={value.verify} onChange={verify} />
-        <CommandList label={t('settings.app_e2e')} values={value.e2e ?? NO_COMMANDS} onChange={e2e} />
-        <div className="space-y-2">
-          <span className="block text-sm font-medium text-fg2">{t('settings.app_e2eDirectory')}</span>
-          <Input aria-label={t('settings.app_e2eDirectory')} className="font-mono text-sm" value={value.e2eDirectory ?? ''} placeholder={t('settings.app_e2eDirectoryPlaceholder')} onChange={(e) => edit((r) => ({ ...r, e2eDirectory: e.target.value }))} />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-const NO_COMMANDS: string[] = []
-
 interface BodyProps {
   value: ApplicationRepository
   fields: BindingField[]
@@ -128,7 +86,6 @@ function RepositoryBody({ value, fields, flows, kinds, problem, edit, onChoose }
           </div>
         </div>
       ))}
-      <Commands value={value} edit={edit} />
     </div>
   )
 }
