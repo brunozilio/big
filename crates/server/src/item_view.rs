@@ -213,9 +213,9 @@ fn missing_base(item: Option<&WorkItem>, reason: &str, language: Language) -> Op
         format!("A branch base {base} não existe em {name}"),
     );
     let detail = language.pick(
-        format!("Create {base} from another branch, or pick another base for this item."),
-        format!("Crea {base} a partir de otra rama o elige otra base para este ítem."),
-        format!("Crie {base} a partir de outra branch ou escolha outra base para este item."),
+        "Pick another base branch or add a new one.".to_owned(),
+        "Elige otra rama base o agrega una nueva.".to_owned(),
+        "Escolha outra branch base ou adicione uma nova.".to_owned(),
     );
     let base_said = key("base_missing_in", json!({ "base": base, "name": name }));
     let shown = json!({ "repository": repository, "name": name, "missing": base });
