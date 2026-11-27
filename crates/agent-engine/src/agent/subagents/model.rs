@@ -14,7 +14,7 @@ pub fn choose(kind: &str, configured: Option<String>, input: &Value, parent: &st
         let config = AgentConfig { model, ..Default::default() };
         config.model.is_some() && config.model(parent, provider).is_ok()
     };
-    let configured = configured.and_then(|named| match domain::model_roles::Tier::parse(&named) {
+    let configured = configured.and_then(|named| match workspace.models.tiers.find(&named) {
         Some(_) => {
             Some(workspace.models.resolved(&named, parent).to_owned()).filter(|model| served(Some(model.clone())))
         }

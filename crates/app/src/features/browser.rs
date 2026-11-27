@@ -3,7 +3,7 @@ use std::sync::{Arc, OnceLock};
 use agent_engine::ApiSource;
 use agent_engine::model::{BlockingTurn, TurnRequest};
 use agent_engine::transcript::Message;
-use domain::model_roles::ModelRole;
+use domain::model_roles::SMALL;
 use domain::{Effort, PromptRequest, RunId};
 
 use crate::BrowserAsk;
@@ -38,7 +38,7 @@ fn ask_small(request: &PromptRequest, system: &str, prompt: &str) -> Option<Stri
     let apis = apis();
     let api = apis.api(request).ok()?;
     let model = &request.session.model;
-    let configured = request.session.roles.get(ModelRole::Small);
+    let configured = request.session.roles.get(SMALL);
     let small = agent_engine::pick_small_model(model.provider, &model.id, configured, &apis.catalog(request));
     let turn = TurnRequest {
         model: small.model.unwrap_or_else(|| model.id.clone()),

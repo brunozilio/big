@@ -148,16 +148,19 @@ fn every_alias_runs_the_command_it_names() {
 
 #[test]
 fn model_takes_a_role_before_the_model_name() {
-    use crate::model_roles::ModelRole;
+    use crate::model_roles::{ModelRole, Tiers};
+    let declared = serde_json::json!([{ "name": "main", "session": true }, { "name": "plan" }, { "name": "explore" }]);
+    Tiers::declare(std::sync::Arc::new(Tiers::read(&declared)));
+    let explore = || ModelRole::named("explore");
     assert_eq!(Command::parse("/model roles"), Some(Command::ModelRoles));
-    assert_eq!(Command::parse("/model plan"), Some(Command::ModelRole(ModelRole::Plan, RoleChange::Pick)));
+    assert_eq!(Command::parse("/model plan"), Some(Command::ModelRole(ModelRole::named("plan"), RoleChange::Pick)));
     assert_eq!(
         Command::parse("/model Explore grok-subscription:grok-4.6-fast"),
-        Some(Command::ModelRole(ModelRole::Explore, RoleChange::Set("grok-subscription:grok-4.6-fast".into())))
+        Some(Command::ModelRole(explore(), RoleChange::Set("grok-subscription:grok-4.6-fast".into())))
     );
     assert_eq!(
         Command::parse("/model explore default"),
-        Some(Command::ModelRole(ModelRole::Explore, RoleChange::Clear))
+        Some(Command::ModelRole(explore(), RoleChange::Clear))
     );
     assert_eq!(Command::parse("/model gpt-6.1-sol"), Some(Command::Model(Some("gpt-6.1-sol".into()))));
 }

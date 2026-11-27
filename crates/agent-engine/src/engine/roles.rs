@@ -1,10 +1,10 @@
-use domain::model_roles::{ModelRole, ModelRoles};
+use domain::model_roles::{ModelRoles, SMALL};
 
 use crate::prompt::settings::Settings;
 
 pub fn merged(asked: &ModelRoles, settings: &Settings) -> ModelRoles {
     let mut roles = ModelRoles::default();
-    roles.set(ModelRole::Small, settings.small_model.clone());
+    roles.set(SMALL, settings.small_model.clone());
     for (role, model) in asked.iter() {
         roles.set(role, Some(model.to_owned()));
     }
@@ -27,15 +27,16 @@ pub fn elsewhere(model: &str, current: domain::ModelProvider) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use domain::model_roles::PLAN;
 
     #[test]
     fn what_the_session_asks_for_wins_over_the_settings_files() {
         let settings = Settings { small_model: Some("haiku".into()), ..Settings::default() };
         let mut asked = ModelRoles::default();
-        asked.set(ModelRole::Small, Some("grok-mini".into()));
-        asked.set(ModelRole::Plan, Some("opus".into()));
+        asked.set(SMALL, Some("grok-mini".into()));
+        asked.set(PLAN, Some("opus".into()));
         let roles = merged(&asked, &settings);
-        let all: Vec<(ModelRole, &str)> = roles.iter().collect();
-        assert_eq!(all, [(ModelRole::Plan, "opus"), (ModelRole::Small, "grok-mini")]);
+        let all: Vec<(&str, &str)> = roles.iter().collect();
+        assert_eq!(all, [(PLAN, "opus"), (SMALL, "grok-mini")]);
     }
 }

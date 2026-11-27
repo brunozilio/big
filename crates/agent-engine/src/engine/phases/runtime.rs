@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use domain::model_roles::{ModelRole, ModelRoles};
+use domain::model_roles::{ModelRoles, SMALL};
 
 use super::equip::{MainAgent, Toolbox};
 use super::load_session::LoadedSession;
@@ -60,7 +60,7 @@ impl Job {
         let small = small_model::pick(
             self.request.session.model.provider,
             &self.request.session.model.id,
-            roles.get(ModelRole::Small),
+            roles.get(SMALL),
             &self.source.catalog(&self.request),
         );
         if let Some(why) = &small.ignored {
@@ -117,8 +117,9 @@ impl Job {
     fn settle_model(&mut self, main: &MainAgent, workspace: &mut Workspace) -> Result<(), Stop> {
         self.request.session.effort = main.config.effort.unwrap_or(self.request.session.effort);
         let asked = &self.request.session.model;
-        let tiered = |tier| workspace.models.roles.for_tier(tier, &asked.id, workspace.models.small_model.as_deref());
-        let chosen = match (self.request.session.tier, &main.config.model) {
+        let models = &workspace.models;
+        let tiered = |tier: &str| models.roles.for_tier(&models.tiers, tier, &asked.id, models.small_model.as_deref());
+        let chosen = match (self.request.session.tier.as_deref(), &main.config.model) {
             (Some(tier), _) => tools::subagent_config::AgentConfig { model: Some(tiered(tier).to_owned()), ..Default::default() }
                 .model(&asked.id, asked.provider)
                 .unwrap_or_else(|_| asked.id.clone()),

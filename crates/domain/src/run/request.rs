@@ -53,7 +53,7 @@ pub struct SessionConfig {
     #[serde(default, skip_serializing_if = "crate::model_roles::ModelRoles::is_empty")]
     pub roles: crate::model_roles::ModelRoles,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tier: Option<crate::model_roles::Tier>,
+    pub tier: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub append_system: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

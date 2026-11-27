@@ -25,6 +25,7 @@ pub mod prompt;
 pub mod scope;
 pub mod sessions;
 pub mod team;
+pub mod tiers;
 pub mod tools;
 pub mod upkeep;
 

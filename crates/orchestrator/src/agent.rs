@@ -180,7 +180,8 @@ pub(crate) fn images_of(input: &Value) -> Vec<domain::Image> {
 fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, resume: Option<&str>) -> PromptRequest {
     let input = &command.args["input"];
     let wanted = command.args["model"].as_str().or(profile.model.as_deref());
-    let tier = wanted.and_then(domain::model_roles::Tier::parse);
+    let tiers = agent_engine::tiers::current();
+    let tier = wanted.and_then(|named| tiers.find(named)).map(|spec| spec.name.clone());
     let option = model(shared, wanted.filter(|_| tier.is_none()));
     let carried = input.get("session").and_then(Value::as_str);
     let text = if resume.is_some() { RESUME.to_owned() } else { prompt_of(input) };

@@ -4,7 +4,7 @@ use agent_engine::Engine;
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::sessions::InMemorySessions;
 use agent_engine::transcript::Block;
-use domain::model_roles::ModelRole;
+use domain::model_roles::{EXPLORE, PLAN};
 use domain::{EngineEvent, PermissionMode, PromptRequest};
 
 use crate::{Source, finish, model, start};
@@ -15,7 +15,7 @@ fn engine(model: &Arc<ScriptedModel>) -> Engine {
     Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(model)]))), Arc::new(InMemorySessions::default()))
 }
 
-fn request(dir: &tempfile::TempDir, role: ModelRole, chosen: &str) -> PromptRequest {
+fn request(dir: &tempfile::TempDir, role: &str, chosen: &str) -> PromptRequest {
     let mut request = PromptRequest::plain(dir.path().into(), "Look around", model());
     request.policy.reviewer = domain::Reviewer::Nobody;
     request.session.roles.set(role, Some(chosen.into()));
@@ -34,7 +34,7 @@ fn agent_call(kind: &str) -> Block {
 fn plan_mode_turns_go_to_the_plan_model_even_on_another_provider() {
     let dir = tempfile::tempdir().expect("dir");
     let scripted = Arc::new(ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("A plan.".into())])]));
-    let mut request = request(&dir, ModelRole::Plan, GROK);
+    let mut request = request(&dir, PLAN, GROK);
     request.policy.permission = PermissionMode::Plan;
     let events = finish(&start(&engine(&scripted), &request));
     assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");
@@ -45,7 +45,7 @@ fn plan_mode_turns_go_to_the_plan_model_even_on_another_provider() {
 fn outside_plan_mode_the_session_model_does_the_work() {
     let dir = tempfile::tempdir().expect("dir");
     let scripted = Arc::new(ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Done.".into())])]));
-    finish(&start(&engine(&scripted), &request(&dir, ModelRole::Plan, GROK)));
+    finish(&start(&engine(&scripted), &request(&dir, PLAN, GROK)));
     assert_eq!(scripted.asked()[0].model, model().id);
 }
 
@@ -57,7 +57,7 @@ fn the_explore_agent_runs_on_the_explore_model() {
         ScriptedModel::reply(vec![Block::Text("It is main.rs.".into())]),
         ScriptedModel::reply(vec![Block::Text("Found it.".into())]),
     ]));
-    finish(&start(&engine(&scripted), &request(&dir, ModelRole::Explore, GROK)));
+    finish(&start(&engine(&scripted), &request(&dir, EXPLORE, GROK)));
     let models: Vec<String> = scripted.asked().into_iter().map(|asked| asked.model).collect();
     assert_eq!(models, [model().id.as_str(), GROK, model().id.as_str()]);
 }
@@ -70,7 +70,7 @@ fn the_plan_agent_runs_on_the_plan_model() {
         ScriptedModel::reply(vec![Block::Text("Step one.".into())]),
         ScriptedModel::reply(vec![Block::Text("Planned.".into())]),
     ]));
-    finish(&start(&engine(&scripted), &request(&dir, ModelRole::Plan, GROK)));
+    finish(&start(&engine(&scripted), &request(&dir, PLAN, GROK)));
     assert_eq!(scripted.asked()[1].model, GROK);
 }
 

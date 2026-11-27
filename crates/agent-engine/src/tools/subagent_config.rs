@@ -343,7 +343,7 @@ mod tests {
         for path in ["agents/explore.ts", "agents/plan.ts"] {
             let source = content::builtin_text(path).expect("shipped");
             let spec = script::exported(path, &source, "spec").expect("spec");
-            assert!(spec["model"].as_str().and_then(domain::model_roles::Tier::parse).is_some(), "{path}");
+            assert!(spec["model"].as_str().and_then(|model| models.tiers.find(model)).is_some(), "{path}");
         }
     }
 }

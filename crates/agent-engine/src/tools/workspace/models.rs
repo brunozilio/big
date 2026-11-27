@@ -5,16 +5,24 @@ pub struct Models {
     pub small_model: Option<String>,
     pub escalation: Option<String>,
     pub roles: domain::model_roles::ModelRoles,
+    pub tiers: std::sync::Arc<domain::model_roles::Tiers>,
 }
 
 impl Models {
     pub fn new(model: domain::ModelOption) -> Self {
-        Self { model, fallbacks: Vec::new(), small_model: None, escalation: None, roles: Default::default() }
+        Self {
+            model,
+            fallbacks: Vec::new(),
+            small_model: None,
+            escalation: None,
+            roles: Default::default(),
+            tiers: crate::tiers::current(),
+        }
     }
 
     pub fn resolved<'a>(&'a self, name: &'a str, parent: &'a str) -> &'a str {
-        match domain::model_roles::Tier::parse(name) {
-            Some(tier) => self.roles.for_tier(tier, parent, self.small_model.as_deref()),
+        match self.tiers.find(name) {
+            Some(_) => self.roles.for_tier(&self.tiers, name, parent, self.small_model.as_deref()),
             None => name,
         }
     }
