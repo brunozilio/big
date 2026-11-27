@@ -23,9 +23,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let every = brand::store::SNAPSHOT_EVERY.trim().parse().unwrap_or(0);
     let store = Arc::new(Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?);
     crate::permissions::install(Arc::clone(&store));
-    if let Err(error) = crate::auth::bootstrap(&store) {
-        tracing::error!(%error, "the admin from the bootstrap file could not be set");
-    }
+    crate::scope::load_claimed(&store);
     let http = Arc::new(ReqwestHttp::new().map_err(|error| error.message)?);
     let tokens = Arc::new(VaultTokens::new(Arc::clone(&services.secrets)));
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));

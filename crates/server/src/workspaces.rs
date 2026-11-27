@@ -117,7 +117,8 @@ pub async fn credentials(
     }
     let url = query.get("url").cloned().unwrap_or_default();
     let found = crate::calls::run(&ctx, &record, code::GIT_CREDENTIALS, &json!({ "url": url })).await?;
-    let (user, password) = (found["username"].as_str().unwrap_or_default(), found["password"].as_str().unwrap_or_default());
+    let (user, password) =
+        (found["username"].as_str().unwrap_or_default(), found["password"].as_str().unwrap_or_default());
     if user.is_empty() || password.is_empty() {
         return Ok((StatusCode::NOT_FOUND, "").into_response());
     }

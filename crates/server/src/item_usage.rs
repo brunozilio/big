@@ -129,7 +129,10 @@ pub fn shares(runs: &[Ran], sessions: &[Vec<EngineEvent>]) -> (Vec<Value>, Vec<V
         }
         row
     };
-    let steps = steps.iter().map(|((step, agent), spent)| row(spent, &[("step", step.as_str()), ("agent", agent.as_str())])).collect();
+    let steps = steps
+        .iter()
+        .map(|((step, agent), spent)| row(spent, &[("step", step.as_str()), ("agent", agent.as_str())]))
+        .collect();
     let agents = agents.iter().map(|(agent, spent)| row(spent, &[("agent", agent.as_str())])).collect();
     (steps, agents)
 }

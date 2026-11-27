@@ -95,8 +95,14 @@ pub fn lock_seconds() -> i64 {
     number(brand::auth::LOCK_MINUTES, 15) * 60
 }
 
-pub fn admin_file() -> &'static str {
-    brand::auth::ADMIN_FILE.trim()
+static SETUP_FILE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+pub fn force_setup_file(path: &str) {
+    let _ = SETUP_FILE.set(path.to_owned());
+}
+
+pub fn setup_file() -> &'static str {
+    SETUP_FILE.get().map_or_else(|| brand::auth::SETUP_FILE.trim(), String::as_str)
 }
 
 pub fn code_attempts() -> i64 {

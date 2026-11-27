@@ -11,8 +11,50 @@ pub fn shared_mode() -> bool {
     settings::mode() == Mode::Shared
 }
 
-pub fn admins() -> Vec<String> {
+const CLAIMED_KEY: &str = "auth.claimed_admins";
+
+static CLAIMED: std::sync::RwLock<Vec<String>> = std::sync::RwLock::new(Vec::new());
+
+fn claimed() -> Vec<String> {
+    CLAIMED.read().map(|kept| kept.clone()).unwrap_or_default()
+}
+
+pub fn load_claimed(store: &store::Store) {
+    let kept: Vec<String> = store
+        .preference(CLAIMED_KEY)
+        .ok()
+        .flatten()
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
+    if let Ok(mut held) = CLAIMED.write() {
+        *held = kept;
+    }
+}
+
+pub fn claim_admin(store: &store::Store, login: &str) -> ApiResult<()> {
+    let mut kept = claimed();
+    if !kept.iter().any(|known| known == login) {
+        kept.push(login.to_owned());
+    }
+    store.set_preference(CLAIMED_KEY, &serde_json::json!(kept))?;
+    if let Ok(mut held) = CLAIMED.write() {
+        *held = kept;
+    }
+    Ok(())
+}
+
+pub fn configured_admins() -> Vec<String> {
     settings::domains_of(brand::auth::ADMINS)
+}
+
+pub fn admins() -> Vec<String> {
+    let mut all = configured_admins();
+    for login in claimed() {
+        if !all.contains(&login) {
+            all.push(login);
+        }
+    }
+    all
 }
 
 pub fn is_admin(person: &Principal) -> bool {

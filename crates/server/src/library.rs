@@ -139,8 +139,12 @@ fn started(shared: &Shared, talked: Talked) -> ApiResult<Started> {
         return Err(ApiError::bad(said("Write what you want.", "Escribe lo que quieres.", "Escreva o que você quer.")));
     }
     let language = shared.language().code();
-    let talk =
-        Talk { values: talked.values, body: talked.body, source: talked.source, messages: Value::Array(talked.messages) };
+    let talk = Talk {
+        values: talked.values,
+        body: talked.body,
+        source: talked.source,
+        messages: Value::Array(talked.messages),
+    };
     let prompt = library::assist(&talked.path, &talk, language).map_err(refused)?;
     let models = shared.backend.client.models().map_err(ApiError::failed)?;
     let model = domain::model::choose_model(&models, talked.model.as_deref())

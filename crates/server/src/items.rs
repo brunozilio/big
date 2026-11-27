@@ -510,9 +510,10 @@ pub async fn base(State(ctx): State<Ctx>, Path(id): Path<String>, Json(body): Js
     let id = item_id(&id);
     known(&ctx, &id)?;
     let repository = body["repository"].as_str().unwrap_or_default();
-    let base = body["base"].as_str().map(str::trim).filter(|base| !base.is_empty()).ok_or_else(|| {
-        ApiError::bad(said("Say the base branch.", "Indica la rama base.", "Diga a branch base."))
-    })?;
+    let base =
+        body["base"].as_str().map(str::trim).filter(|base| !base.is_empty()).ok_or_else(|| {
+            ApiError::bad(said("Say the base branch.", "Indica la rama base.", "Diga a branch base."))
+        })?;
     let from = body["from"].as_str().map(str::trim).filter(|from| !from.is_empty());
     ctx.backend.orchestrator.choose_base(&id, repository, base, from).await?;
     Ok(done())

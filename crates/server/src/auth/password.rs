@@ -15,7 +15,6 @@ use crate::error::{ApiError, ApiResult, done, json as reply, said};
 use crate::state::Ctx;
 
 pub const SHORTEST: usize = 8;
-const BOOTSTRAPPED: &str = "auth.bootstrap_admin";
 
 #[derive(Debug, Deserialize)]
 pub struct Entered {
@@ -40,12 +39,6 @@ pub struct Added {
 
 #[derive(Debug, Deserialize)]
 pub struct Reset {
-    password: String,
-}
-
-#[derive(Debug, Deserialize)]
-struct Bootstrap {
-    login: String,
     password: String,
 }
 
@@ -189,33 +182,85 @@ pub async fn reset_password(
     Ok(done())
 }
 
-fn fingerprint(login: &str, password: &str) -> String {
-    platform::crypto::hex(&platform::crypto::sha256(format!("{login}\n{password}").as_bytes()))
+pub fn setup_token() -> Option<String> {
+    let file = settings::setup_file();
+    if file.is_empty() || settings::mode() != settings::Mode::Shared {
+        return None;
+    }
+    std::fs::read_to_string(file).ok().map(|text| text.trim().to_owned()).filter(|token| token.len() >= 16)
 }
 
-pub fn bootstrap(store: &Store) -> Result<(), String> {
-    let file = settings::admin_file();
-    if file.is_empty() || settings::mode() != settings::Mode::Shared {
-        return Ok(());
+pub fn unclaimed(store: &Store) -> ApiResult<bool> {
+    for login in crate::scope::admins() {
+        if let Some(person) = store.user_by_email(&login)?
+            && store.password_of(&person.user)?.is_some()
+        {
+            return Ok(false);
+        }
     }
-    let text = std::fs::read_to_string(file).map_err(|error| format!("{file}: {error}"))?;
-    let given: Bootstrap = serde_json::from_str(&text).map_err(|error| format!("{file}: {error}"))?;
-    let login = normalized_login(&given.login).ok_or_else(|| format!("{file}: the login is not valid"))?;
-    if given.password.chars().count() < SHORTEST {
-        return Err(format!("{file}: the password needs at least {SHORTEST} characters"));
+    Ok(true)
+}
+
+pub fn setup_open(store: &Store) -> ApiResult<bool> {
+    Ok(setup_token().is_some() && unclaimed(store)?)
+}
+
+fn same(given: &str, wanted: &str) -> bool {
+    let given = platform::crypto::sha256(given.as_bytes());
+    let wanted = platform::crypto::sha256(wanted.as_bytes());
+    given.iter().zip(wanted.iter()).fold(0u8, |diff, (a, b)| diff | (a ^ b)) == 0
+}
+
+fn setup_closed() -> ApiError {
+    ApiError::bad(said(
+        "This server is already set up.",
+        "Este servidor ya está configurado.",
+        "Este servidor já está configurado.",
+    ))
+}
+
+fn not_admin() -> ApiError {
+    ApiError::bad(said(
+        "Use the admin user chosen in the installation.",
+        "Usa el usuario administrador elegido en la instalación.",
+        "Use o usuário admin escolhido na instalação.",
+    ))
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Claimed {
+    token: String,
+    login: String,
+    password: String,
+}
+
+pub async fn set_up(State(ctx): State<Ctx>, Json(claimed): Json<Claimed>) -> ApiResult<Response> {
+    let store = &ctx.backend.store;
+    let Some(token) = setup_token().filter(|_| settings::offers(Method::Password)) else { return Err(setup_closed()) };
+    if !unclaimed(store)? {
+        return Err(setup_closed());
     }
+    if !same(claimed.token.trim(), &token) {
+        tracing::warn!(target: "audit", "auth.setup_refused");
+        return Err(ApiError::bad(said(
+            "The setup link is wrong.",
+            "El enlace de configuración es incorrecto.",
+            "O link de configuração está errado.",
+        )));
+    }
+    let login = normalized_login(&claimed.login).ok_or_else(bad_login)?;
+    let configured = crate::scope::configured_admins();
+    if !configured.is_empty() && !configured.contains(&login) {
+        return Err(not_admin());
+    }
+    let hash = hashed(&claimed.password)?;
     let now = settings::now();
     let wanted =
         Principal { user: UserId(format!("u-{}", uuid::Uuid::new_v4().simple())), email: login, name: String::new() };
-    let person = store.ensure_user(&wanted, now).map_err(|error| error.to_string())?;
-    let print = fingerprint(&person.email, &given.password);
-    let applied = store.preference(BOOTSTRAPPED).map_err(|error| error.to_string())?;
-    if applied.as_ref().and_then(|value| value.as_str()) == Some(print.as_str()) {
-        return Ok(());
-    }
-    let hash = platform::password::hash(&given.password)?;
-    store.set_password(&person.user, &hash, now).map_err(|error| error.to_string())?;
-    store.set_preference(BOOTSTRAPPED, &json!(print)).map_err(|error| error.to_string())?;
-    tracing::info!(target: "audit", user = %person.user, "auth.admin_bootstrapped");
-    Ok(())
+    let person = store.ensure_user(&wanted, now)?;
+    store.set_password(&person.user, &hash, now)?;
+    crate::scope::claim_admin(store, &person.email)?;
+    tracing::info!(target: "audit", user = %person.user, "auth.setup_admin");
+    let headers = session::signed_in(&ctx, &person)?;
+    Ok((headers, reply(&person)).into_response())
 }

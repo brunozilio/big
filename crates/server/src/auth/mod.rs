@@ -15,7 +15,7 @@ use axum::routing::{delete, get, post, put};
 use serde_json::json;
 
 pub use gate::gate;
-pub use password::{add_person, bootstrap, reset_password};
+pub use password::{add_person, reset_password};
 
 use crate::error::{ApiResult, json as reply};
 use crate::state::Ctx;
@@ -26,6 +26,7 @@ pub fn routes() -> Router<Ctx> {
         .route("/api/auth/me", get(me))
         .route("/api/auth/logout", post(logout))
         .route("/api/auth/password", post(password::sign_in))
+        .route("/api/auth/setup", post(password::set_up))
         .route("/api/account/password", put(password::change))
         .route("/api/auth/email", post(email::start))
         .route("/api/auth/email/verify", post(email::verify))
@@ -49,11 +50,12 @@ fn mode_name() -> &'static str {
     }
 }
 
-async fn methods() -> Response {
+async fn methods(State(ctx): State<Ctx>) -> ApiResult<Response> {
     let offered: Vec<&str> =
         settings::methods().into_iter().filter(|method| settings::offers(*method)).map(settings::Method::key).collect();
     let label = brand::auth::SSO_LABEL.trim();
-    reply(json!({ "mode": mode_name(), "methods": offered, "ssoLabel": label }))
+    let setup = password::setup_open(&ctx.backend.store)?;
+    Ok(reply(json!({ "mode": mode_name(), "methods": offered, "ssoLabel": label, "setup": setup })))
 }
 
 async fn me(State(ctx): State<Ctx>, headers: HeaderMap) -> ApiResult<Response> {

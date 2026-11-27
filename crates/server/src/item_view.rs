@@ -520,7 +520,10 @@ mod tests {
         let shown = missing_base(Some(&item), &reason, Language::Portuguese).expect("shown");
         assert_eq!(shown["reason"], "A branch base develop não existe em acme/web");
         assert_eq!(shown["base"], json!({ "repository": "r1", "name": "acme/web", "missing": "develop" }));
-        assert_eq!(shown["said"], json!({ "key": "base_missing_in", "vars": { "base": "develop", "name": "acme/web" } }));
+        assert_eq!(
+            shown["said"],
+            json!({ "key": "base_missing_in", "vars": { "base": "develop", "name": "acme/web" } })
+        );
         assert_eq!(said(&reason, &Value::Null)["key"], "base_missing");
         assert!(missing_base(Some(&item), "something else", Language::English).is_none());
     }

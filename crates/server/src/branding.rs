@@ -1,9 +1,9 @@
 use axum::extract::State;
 use axum::http::{HeaderMap, header};
-use axum::{Extension, Json};
-use domain::principal::Principal;
 use axum::response::{IntoResponse, Response};
+use axum::{Extension, Json};
 use domain::Language;
+use domain::principal::Principal;
 use serde_json::{Value, json};
 use store::Store;
 
@@ -130,10 +130,16 @@ mod tests {
         let store = Store::in_memory(0).expect("store");
         let listed = current_for(&store, LOCAL).expect("current")["output_styles"].clone();
         assert!(listed.as_array().is_some_and(|styles| styles.iter().any(|style| style["key"] == "concise")));
-        assert_eq!(apply_for(&store, LOCAL, &json!({ "output_style": "concise" })).expect("saved")["output_style"], "concise");
+        assert_eq!(
+            apply_for(&store, LOCAL, &json!({ "output_style": "concise" })).expect("saved")["output_style"],
+            "concise"
+        );
         assert_eq!(store.output_style().as_deref(), Some("concise"));
         assert!(apply_for(&store, LOCAL, &json!({ "output_style": "nope" })).is_err());
-        assert_eq!(apply_for(&store, LOCAL, &json!({ "output_style": null })).expect("cleared")["output_style"], Value::Null);
+        assert_eq!(
+            apply_for(&store, LOCAL, &json!({ "output_style": null })).expect("cleared")["output_style"],
+            Value::Null
+        );
         assert_eq!(store.output_style(), None);
     }
 }

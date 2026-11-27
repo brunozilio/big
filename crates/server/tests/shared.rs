@@ -214,3 +214,28 @@ async fn only_an_administrator_adds_people_or_sets_their_password() {
     let (status, _) = send(&world, Some(&ana), Method::PUT, "/api/admin/people/u-ana/password", Some(reset)).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_first_admin_is_claimed_once_with_the_setup_token() {
+    let folder = tempfile::tempdir().expect("folder");
+    let file = folder.path().join("setup.token");
+    std::fs::write(&file, "a-setup-token-long-enough\n").expect("token");
+    server::force_setup_file(file.to_str().expect("path"));
+    let world = shared_world().await;
+    let (_, methods) = send(&world, None, Method::GET, "/api/auth/methods", None).await;
+    let admin = server::configured_admins().into_iter().next().unwrap_or_else(|| "boss".to_owned());
+    assert_eq!(methods["setup"], true, "{methods}");
+    let claim = |token: &str, login: &str| json!({ "token": token, "login": login, "password": "a long secret" });
+    let (status, _) = send(&world, None, Method::POST, "/api/auth/setup", Some(claim("wrong", &admin))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, body) =
+        send(&world, None, Method::POST, "/api/auth/setup", Some(claim("a-setup-token-long-enough", &admin))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(server::admins_now().contains(&admin));
+    let (_, methods) = send(&world, None, Method::GET, "/api/auth/methods", None).await;
+    assert_eq!(methods["setup"], false, "{methods}");
+    let (status, _) =
+        send(&world, None, Method::POST, "/api/auth/setup", Some(claim("a-setup-token-long-enough", "someone-else")))
+            .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

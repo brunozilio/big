@@ -51,7 +51,7 @@ mod vault;
 mod watched;
 mod workspaces;
 
-pub use auth::settings::{Mode as AuthMode, force as force_auth_mode};
+pub use auth::settings::{Mode as AuthMode, force as force_auth_mode, force_setup_file};
 pub use backend::Backend;
 pub use boot::{Launch, run};
 pub use connected_mcp::for_runs as connected_mcp;
@@ -59,6 +59,7 @@ pub use connections::StoredSettings;
 pub use live::Live;
 pub use orchestrator::CLOUD_CREDENTIALS_COMMAND;
 pub use page::{Asset, embedded};
+pub use scope::{admins as admins_now, configured_admins};
 pub use server::{app, bind, serve};
 pub use vault::VaultTokens;
 pub use workspaces::HELPER_COMMAND as GIT_CREDENTIAL_COMMAND;
