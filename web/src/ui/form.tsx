@@ -90,6 +90,10 @@ export function Select({ value, onValueChange, options, placeholder, className, 
   return <ChipPicker value={value} onChange={onValueChange} options={options} label={label ?? placeholder ?? ''} empty={placeholder} size={size} look={look ?? (size === 'sm' ? 'chip' : 'field')} leading={leading} className={className} onSearch={onSearch} hint={hint} />
 }
 
+export function MultiSelect({ values, onToggle, options, placeholder, className, label, onSearch, hint }: { values: readonly string[]; onToggle: (v: string) => void; options: SelectOption[]; placeholder?: string; className?: string; label?: string; onSearch?: (query: string) => void; hint?: string }) {
+  return <ChipPicker value="" many={values} onChange={onToggle} options={options} label={label ?? placeholder ?? ''} empty={placeholder} size="md" look="field" className={className} onSearch={onSearch} hint={hint} />
+}
+
 export function SegmentedControl<T extends string>({ value, onChange, options, className, size = 'md' }: { value: T; onChange: (v: T) => void; options: { value: T; label: ReactNode; icon?: ReactNode; badge?: ReactNode }[]; className?: string; size?: 'sm' | 'md' }) {
   const id = useId()
   return (

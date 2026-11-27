@@ -6,7 +6,7 @@ import { Button, IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Card } from '@/ui/display'
 import { ProviderLogo } from '@/ui/domain'
-import { Field, Select } from '@/ui/form'
+import { Field, MultiSelect, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { useT } from '@/i18n'
 
@@ -101,6 +101,7 @@ export interface Search {
   found: Found
   search: (query: string) => void
   hint: string | undefined
+  complete: boolean
 }
 
 type Listed = { found: Found; failed: string | null }
@@ -216,7 +217,8 @@ export function useSearch(connections: string[], capability: string, field?: str
   const failed = shown.scope === scope ? shown.failed : null
   const empty = Object.values(found).every((listed) => listed.length === 0)
   const hint = busy ? t('settings.search_busy') : failed && empty ? failed : query.trim() === '' && !eager ? t('settings.search_type') : empty ? t('settings.search_empty') : undefined
-  return { found, search, hint }
+  const complete = active && eager && !busy && shown.scope === scope && !failed && query.trim() === ''
+  return { found, search, hint, complete }
 }
 
 export function withBinding(bindings: Bindings | undefined, capability: string, next: Binding | null): Bindings {
@@ -370,6 +372,20 @@ type Choices = Record<string, BindingChoice>
 
 const filled = (choices: Choices | undefined, key: string) => Boolean(choices?.[key]?.value.trim())
 
+const vacant = new WeakMap<Api, Map<string, boolean>>()
+
+function vacancyKey(connection: string, capability: string, field: string, chosen: Record<string, string> | undefined): string {
+  return JSON.stringify([connection, capability, field, Object.entries(chosen ?? {}).sort(([a], [b]) => a.localeCompare(b))])
+}
+
+function isVacant(connection: string, capability: string, field: string, chosen: Record<string, string> | undefined): boolean {
+  return shelf(vacant).get(vacancyKey(connection, capability, field, chosen)) === true
+}
+
+function needed(spec: BindingFieldSpec, profile: Choices, connection: string, capability: string): boolean {
+  return Boolean(spec.required) && !filled(profile, spec.key) && !isVacant(connection, capability, spec.key, chosenOf(profile, spec.key))
+}
+
 export function missingOf(fields: BindingField[], bindings: Bindings | undefined): { field: string; binding: string; capability: string } | null {
   for (const field of fields) {
     const bound = bindings?.[field.capability]
@@ -381,17 +397,38 @@ export function missingOf(fields: BindingField[], bindings: Bindings | undefined
     const profiles = (bound.profiles ?? []).filter((profile) => Object.values(profile).some((choice) => choice?.value.trim()))
     for (const profile of profiles) {
       if (!filled(profile, each.key)) return { field: each.label, binding: field.label, capability: field.capability }
-      const gap = each.fields.find((spec) => spec.required && !filled(profile, spec.key))
+      const { [each.key]: _, ...rest } = profile
+      const gap = each.fields.find((spec) => needed(spec, rest, bound.connection, field.capability))
       if (gap) return { field: `${gap.label} (${profile[each.key]?.label || profile[each.key]?.value})`, binding: field.label, capability: field.capability }
     }
   }
   return null
 }
 
-function ChoiceSelect({ spec, connection, capability, value, chosen, onChange }: { spec: BindingFieldSpec; connection: string; capability: string; value: BindingChoice | undefined; chosen?: Record<string, string>; onChange: (next: BindingChoice | null) => void }) {
+function useSettled(spec: BindingFieldSpec, connection: string, capability: string, ready: boolean, value: BindingChoice | undefined, chosen: Record<string, string> | undefined, onChange: (next: BindingChoice | null) => void) {
+  const searched = useSearch([connection], capability, spec.key, true, chosen)
+  const { search, complete } = searched
+  const options = searched.found[connection] ?? []
+  const listed = ready && complete
+  const only = listed && options.length === 1 ? options[0] : undefined
+  const none = listed && options.length === 0
+  const key = vacancyKey(connection, capability, spec.key, chosen)
+  useEffect(() => {
+    if (ready) search('')
+  }, [ready, search])
+  useEffect(() => {
+    if (spec.required && !value && only) onChange({ value: only.value, label: only.label })
+  }, [spec.required, value, only, onChange])
+  useEffect(() => {
+    if (listed) shelf(vacant).set(key, none)
+  }, [listed, none, key])
+  return { ...searched, options, none }
+}
+
+function ChoiceSelect({ spec, connection, capability, value, chosen, ready = false, onChange }: { spec: BindingFieldSpec; connection: string; capability: string; value: BindingChoice | undefined; chosen?: Record<string, string>; ready?: boolean; onChange: (next: BindingChoice | null) => void }) {
   const t = useT()
-  const { found, search, hint } = useSearch([connection], capability, spec.key, true, chosen)
-  const options = found[connection] ?? []
+  const { options, search, hint, none } = useSettled(spec, connection, capability, ready, value, chosen, onChange)
+  if (none && !value) return null
   const label = spec.required ? `${spec.label} *` : spec.label
   const choices = [{ value: NONE, label: t('settings.none') }, ...options.map((o) => ({ value: o.value, label: o.label }))]
   if (value && !choices.some((o) => o.value === value.value)) choices.push({ value: value.value, label: value.label || value.value })
@@ -423,19 +460,77 @@ function withDependent(choices: Choices, specs: BindingFieldSpec[], key: string,
   return withChoice(kept, key, next)
 }
 
-function ProfileCard({ each, connection, capability, value, onChange, onRemove }: { each: BindingEach; connection: string; capability: string; value: Choices; onChange: (next: Choices) => void; onRemove: () => void }) {
+export interface ProfileGroup {
+  heads: BindingChoice[]
+  rest: Choices
+}
+
+const signature = (rest: Choices) => JSON.stringify(Object.entries(rest).map(([key, choice]) => [key, choice.value]).sort())
+
+export function groupsOf(profiles: Choices[], key: string): ProfileGroup[] {
+  const groups: ProfileGroup[] = []
+  for (const profile of profiles) {
+    const { [key]: head, ...rest } = profile
+    const same = head ? groups.find((g) => g.heads.length > 0 && signature(g.rest) === signature(rest)) : undefined
+    if (same && head) same.heads.push(head)
+    else groups.push({ heads: head ? [head] : [], rest })
+  }
+  return groups
+}
+
+export function profilesOf(groups: ProfileGroup[], key: string): Choices[] {
+  return groups.flatMap((g) => (g.heads.length === 0 ? [g.rest] : g.heads.map((head) => ({ ...g.rest, [key]: head }))))
+}
+
+function HeadSelect({ each, connection, capability, heads, taken, onChange }: { each: BindingEach; connection: string; capability: string; heads: BindingChoice[]; taken: string[]; onChange: (next: BindingChoice[]) => void }) {
+  const { found, search, hint } = useSearch([connection], capability, each.key, true)
+  const listed = found[connection] ?? []
+  const mine = heads.map((h) => h.value)
+  const options = listed.filter((o) => mine.includes(o.value) || !taken.includes(o.value)).map((o) => ({ value: o.value, label: o.label }))
+  for (const head of heads) if (!options.some((o) => o.value === head.value)) options.push({ value: head.value, label: head.label || head.value })
+  const toggle = (value: string) => {
+    if (mine.includes(value)) return onChange(heads.filter((h) => h.value !== value))
+    onChange([...heads, { value, label: listed.find((o) => o.value === value)?.label ?? value }])
+  }
+  return (
+    <Field label={`${each.label} *`}>
+      <MultiSelect label={each.label} className="w-full" values={mine} options={options} onSearch={search} hint={hint} onToggle={toggle} />
+    </Field>
+  )
+}
+
+function ProfileCard({ each, connection, capability, group, taken, onChange, onRemove }: { each: BindingEach; connection: string; capability: string; group: ProfileGroup; taken: string[]; onChange: (next: ProfileGroup) => void; onRemove: () => void }) {
   const t = useT()
-  const head = { key: each.key, label: each.label, required: true }
+  const readyAt = (at: number) => group.heads.length > 0 && each.fields.slice(0, at).every((spec) => !spec.required || filled(group.rest, spec.key))
   return (
     <Card variant="inset" className="space-y-3 px-3 py-3">
       <div className="flex items-end gap-2">
-        <div className="min-w-0 flex-1"><ChoiceSelect spec={head} connection={connection} capability={capability} value={value[each.key]} onChange={(next) => onChange(withChoice(value, each.key, next))} /></div>
+        <div className="min-w-0 flex-1"><HeadSelect each={each} connection={connection} capability={capability} heads={group.heads} taken={taken} onChange={(heads) => onChange({ ...group, heads })} /></div>
         <IconButton tooltip={t('settings.app_bindingRemove', { label: each.label })} size="sm" onClick={onRemove}><Icon name="trash" size={15} /></IconButton>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
-        {each.fields.map((spec) => <ChoiceSelect key={spec.key} spec={spec} connection={connection} capability={capability} value={value[spec.key]} chosen={chosenOf(value, spec.key)} onChange={(next) => onChange(withDependent(value, each.fields, spec.key, next))} />)}
+        {each.fields.map((spec, at) => <ChoiceSelect key={spec.key} spec={spec} connection={connection} capability={capability} value={group.rest[spec.key]} chosen={chosenOf(group.rest, spec.key)} ready={readyAt(at)} onChange={(next) => onChange({ ...group, rest: withDependent(group.rest, each.fields, spec.key, next) })} />)}
       </div>
     </Card>
+  )
+}
+
+function Profiles({ each, connection, capability, profiles, onChange }: { each: BindingEach; connection: string; capability: string; profiles: Choices[]; onChange: (next: Choices[]) => void }) {
+  const t = useT()
+  const [groups, setGroups] = useState(() => groupsOf(profiles, each.key))
+  const shown = JSON.stringify(profilesOf(groups, each.key)) === JSON.stringify(profiles) ? groups : groupsOf(profiles, each.key)
+  const update = (next: ProfileGroup[]) => {
+    setGroups(next)
+    onChange(profilesOf(next, each.key))
+  }
+  const takenBy = (at: number) => shown.flatMap((g, i) => (i === at ? [] : g.heads.map((h) => h.value)))
+  return (
+    <div className="space-y-2">
+      {shown.map((group, at) => (
+        <ProfileCard key={at} each={each} connection={connection} capability={capability} group={group} taken={takenBy(at)} onChange={(next) => update(shown.map((g, i) => (i === at ? next : g)))} onRemove={() => update(shown.filter((_, i) => i !== at))} />
+      ))}
+      <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => update([...shown, { heads: [], rest: {} }])}>{t('settings.app_bindingAdd', { label: each.label })}</Button>
+    </div>
   )
 }
 
@@ -450,7 +545,6 @@ function ConnectionSelect({ field, value, onChange }: { field: BindingField; val
 }
 
 export function ShapedBinding({ field, shape, value, error, onChange }: { field: BindingField; shape: BindingShape; value: Binding | undefined; error?: string; onChange: (next: Binding | null) => void }) {
-  const t = useT()
   const single = field.sources.length === 1 ? field.sources[0].connection.id : ''
   const live = field.sources.some((s) => s.connection.id === value?.connection)
   const connection = live && value ? value.connection : single
@@ -468,14 +562,7 @@ export function ShapedBinding({ field, shape, value, error, onChange }: { field:
           {shape.fields.map((spec) => <ChoiceSelect key={spec.key} spec={spec} connection={connection} capability={field.capability} value={current.fields?.[spec.key]} onChange={(next) => set({ fields: withChoice(current.fields, spec.key, next) })} />)}
         </div>
       )}
-      {connection && each && (
-        <div className="space-y-2">
-          {profiles.map((profile, at) => (
-            <ProfileCard key={at} each={each} connection={connection} capability={field.capability} value={profile} onChange={(next) => set({ profiles: profiles.map((p, i) => (i === at ? next : p)) })} onRemove={() => set({ profiles: profiles.filter((_, i) => i !== at) })} />
-          ))}
-          <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => set({ profiles: [...profiles, {}] })}>{t('settings.app_bindingAdd', { label: each.label })}</Button>
-        </div>
-      )}
+      {connection && each && <Profiles each={each} connection={connection} capability={field.capability} profiles={profiles} onChange={(next) => set({ profiles: next })} />}
     </div>
   )
 }

@@ -216,17 +216,68 @@ describe('conta e papel na nuvem', () => {
       fireEvent.keyDown(await view.findByRole('option', { name: option }), { key: 'Enter' })
     }
     await pick('Ambiente', 'prod', 'Produção')
+    fireEvent.keyDown(view.getByRole('option', { name: 'Produção' }), { key: 'Escape' })
     expect(asked).toContain('c-aws cloud.options environment')
     await pick('Conta', 'prod', 'acme-prod')
     expect(asked).toContain('c-aws cloud.options account')
     await pick('Papel', 'dep', 'Deploy')
-    expect(chosenFor.role).toEqual({ account: '111122223333', environment: 'prod' })
+    expect(chosenFor.role).toEqual({ account: '111122223333' })
     fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
     await waitFor(() => expect(getState().applications?.[0]?.bindings?.cloud).toEqual({
       connection: 'c-aws',
       value: '',
       profiles: [{ environment: { value: 'prod', label: 'Produção' }, account: { value: '111122223333', label: 'acme-prod' }, role: { value: 'Deploy', label: 'Deploy' } }],
     }))
+  })
+
+  test('um cartão atende vários ambientes, e o único papel da conta já vem escolhido', async () => {
+    await started(withCloud())
+    const view = listed()
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    await view.findByLabelText('Nome')
+    openSection(view, /^Nuvem/)
+    const cloud = await view.findByTestId('binding-cloud')
+    fireEvent.click(within(cloud).getByRole('button', { name: 'Adicionar Ambiente' }))
+    fireEvent.keyDown(await within(cloud).findByRole('combobox', { name: 'Ambiente' }), { key: 'Enter' })
+    fireEvent.keyDown(await view.findByRole('option', { name: 'Produção' }), { key: 'Enter' })
+    fireEvent.keyDown(await view.findByRole('option', { name: 'Homologação externa' }), { key: 'Enter' })
+    fireEvent.keyDown(view.getByRole('option', { name: 'Produção' }), { key: 'Escape' })
+    await waitFor(() => expect(within(cloud).getByRole('combobox', { name: 'Ambiente' }).textContent).toContain('Homologação externa'))
+    fireEvent.keyDown(await within(cloud).findByRole('combobox', { name: 'Conta' }), { key: 'Enter' })
+    fireEvent.keyDown(await view.findByRole('option', { name: 'acme-dev' }), { key: 'Enter' })
+    await waitFor(() => expect(within(cloud).getByRole('combobox', { name: 'Papel' }).textContent).toContain('Developer'))
+    fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
+    const dev = { account: { value: '444455556666', label: 'acme-dev' }, role: { value: 'Developer', label: 'Developer' } }
+    await waitFor(() => expect(getState().applications?.[0]?.bindings?.cloud?.profiles).toEqual([
+      { ...dev, environment: { value: 'prod', label: 'Produção' } },
+      { ...dev, environment: { value: 'hext', label: 'Homologação externa' } },
+    ]))
+  })
+
+  test('conta única já vem escolhida e, sem papéis, o papel some e não é exigido', async () => {
+    const base = withCloud()
+    const single = { ...base, call: ((connection, action, args) => {
+      const field = (args as { field?: string }).field
+      if (field === 'account') return Promise.resolve([{ value: '999900001111', label: 'eu' }])
+      if (field === 'role') return Promise.resolve([])
+      return base.call(connection, action, args)
+    }) as typeof base.call }
+    await started(single)
+    const view = listed()
+    fireEvent.click(view.getByRole('button', { name: 'Editar Checkout' }))
+    await view.findByLabelText('Nome')
+    openSection(view, /^Nuvem/)
+    const cloud = await view.findByTestId('binding-cloud')
+    fireEvent.click(within(cloud).getByRole('button', { name: 'Adicionar Ambiente' }))
+    fireEvent.keyDown(await within(cloud).findByRole('combobox', { name: 'Ambiente' }), { key: 'Enter' })
+    fireEvent.keyDown(await view.findByRole('option', { name: 'Produção' }), { key: 'Enter' })
+    fireEvent.keyDown(view.getByRole('option', { name: 'Produção' }), { key: 'Escape' })
+    await waitFor(() => expect(within(cloud).getByRole('combobox', { name: 'Conta' }).textContent).toContain('eu'))
+    await waitFor(() => expect(within(cloud).queryByRole('combobox', { name: 'Papel' })).toBeNull())
+    fireEvent.click(view.getByRole('button', { name: 'Salvar' }))
+    await waitFor(() => expect(getState().applications?.[0]?.bindings?.cloud?.profiles).toEqual([
+      { account: { value: '999900001111', label: 'eu' }, environment: { value: 'prod', label: 'Produção' } },
+    ]))
   })
 
   test('a nuvem é opcional: ambiente adicionado e deixado vazio não impede salvar', async () => {
@@ -353,6 +404,7 @@ describe('edição no lugar', () => {
     fireEvent.click(within(cloud).getByRole('button', { name: 'Adicionar Ambiente' }))
     fireEvent.keyDown(await within(cloud).findByRole('combobox', { name: 'Ambiente' }), { key: 'Enter' })
     fireEvent.keyDown(await view.findByRole('option', { name: 'Produção' }), { key: 'Enter' })
+    fireEvent.keyDown(view.getByRole('option', { name: 'Produção' }), { key: 'Escape' })
     await waitFor(() => expect(within(cloud).getByRole('combobox', { name: 'Ambiente' }).textContent).toContain('Produção'))
     fireEvent.click(view.getByRole('button', { name: /^Nuvem/ }))
     expect(view.getByRole('button', { name: /^Nuvem/ }).getAttribute('aria-expanded')).toBe('false')
