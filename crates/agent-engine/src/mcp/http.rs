@@ -12,6 +12,7 @@ pub struct HttpTransport {
     listener: Option<Listener>,
     closed: CancellationToken,
     listening: AtomicBool,
+    changes: Arc<super::ToolsChanged>,
 }
 
 pub(super) struct Shared {
@@ -96,7 +97,16 @@ impl HttpTransport {
             http,
             session: Mutex::new(None),
         };
-        Self { shared: Arc::new(shared), listener, closed: CancellationToken::new(), listening: AtomicBool::new(false) }
+        let changes = Arc::new(super::ToolsChanged::default());
+        let heard = Arc::clone(&changes);
+        let listener = listener.map(|listener| -> Listener {
+            Arc::new(move |method: &str, params: &Value| {
+                heard.heard(method);
+                listener(method, params);
+            })
+        });
+        let closed = CancellationToken::new();
+        Self { shared: Arc::new(shared), listener, closed, listening: AtomicBool::new(false), changes }
     }
 
     async fn requested(&self, message: &Value, cancel: &CancellationToken) -> Result<Value, McpError> {
@@ -116,6 +126,7 @@ impl HttpTransport {
                         self.shared.post(&super::sse::client_answer(id, method), cancel).await?;
                     }
                     (None, Some(method)) => {
+                        self.changes.heard(method);
                         if let Some(listener) = &self.listener {
                             listener(method, &reply["params"]);
                         }
@@ -156,6 +167,10 @@ impl Transport for HttpTransport {
 
     fn notify(&self, message: &Value) -> Result<(), McpError> {
         self.notify_stopped(message, &platform::Stop::new())
+    }
+
+    fn tools_changed(&self) -> bool {
+        self.changes.taken()
     }
 
     fn listen(&self) {

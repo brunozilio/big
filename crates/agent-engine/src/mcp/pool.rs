@@ -30,6 +30,7 @@ impl McpPool {
         let mut connected = super::in_process(request, stop);
         let mut previous = std::mem::take(&mut *self.open.locked());
         let mut kept = Vec::new();
+        let mut picked = Vec::new();
         for spec in super::wanted(request, sources) {
             if stop.load(Ordering::Relaxed) {
                 break;
@@ -38,9 +39,15 @@ impl McpPool {
                 .iter()
                 .position(|(known, server)| *known == spec && server.alive())
                 .map(|at| previous.swap_remove(at).1);
+            picked.push((spec, reused));
+        }
+        let missing: Vec<&ServerSpec> =
+            picked.iter().filter(|(_, reused)| reused.is_none()).map(|(spec, _)| spec).collect();
+        let mut opened = super::opened_all(&missing, http, stop).into_iter();
+        for (spec, reused) in picked {
             let server = match reused {
                 Some(server) => Some(server),
-                None => super::ready(spec.name(), McpServer::open_stopped(&spec, http, stop), stop),
+                None => opened.next().flatten(),
             };
             let Some(server) = server else { continue };
             if pooled(&spec) {

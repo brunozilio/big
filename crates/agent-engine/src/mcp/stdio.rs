@@ -29,6 +29,7 @@ struct Heard {
     ended: AtomicBool,
     messages: AtomicU64,
     problem: Mutex<Option<String>>,
+    changes: super::ToolsChanged,
 }
 
 pub struct StdioTransport {
@@ -102,6 +103,7 @@ impl StdioTransport {
             ended: AtomicBool::new(false),
             messages: AtomicU64::new(0),
             problem: Mutex::new(None),
+            changes: super::ToolsChanged::default(),
         });
         let transport = Self {
             name: name.to_owned(),
@@ -196,6 +198,7 @@ impl Reading {
                 let _ = write(&self.input, &self.server, &super::sse::client_answer(id, method));
             }
             (None, Some(method)) => {
+                self.heard.changes.heard(method);
                 if let Some(listener) = &self.listener {
                     listener(method, &message["params"]);
                 }
@@ -263,6 +266,10 @@ impl Transport for StdioTransport {
 
     fn close(&self) {
         self.child.terminate(GRACE);
+    }
+
+    fn tools_changed(&self) -> bool {
+        self.heard.changes.taken()
     }
 }
 

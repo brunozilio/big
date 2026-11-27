@@ -17,6 +17,7 @@ pub struct SseTransport {
     down: Arc<AtomicBool>,
     greeting: Arc<Mutex<Option<Value>>>,
     answer_wait: Duration,
+    changes: Arc<super::ToolsChanged>,
 }
 
 impl std::fmt::Debug for SseTransport {
@@ -58,6 +59,7 @@ impl SseTransport {
             down: Arc::default(),
             greeting: Arc::default(),
             answer_wait: ANSWER_WAIT,
+            changes: Arc::default(),
         };
         let listening = Listening {
             link: Arc::clone(&transport.link),
@@ -66,6 +68,7 @@ impl SseTransport {
             down: Arc::clone(&transport.down),
             greeting: Arc::clone(&transport.greeting),
             listener,
+            changes: Arc::clone(&transport.changes),
         };
         drop(runtime.spawn(listening.run(opened.stream, opened.decoder)));
         Ok(transport)
@@ -131,6 +134,10 @@ impl Transport for SseTransport {
 
     fn close(&self) {
         self.closed.cancel();
+    }
+
+    fn tools_changed(&self) -> bool {
+        self.changes.taken()
     }
 }
 

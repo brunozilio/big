@@ -158,3 +158,56 @@ fn nothing_is_started_for_a_project_without_servers() {
     assert!(fixture.pool.is_empty());
     assert!(!Path::new(&fixture.log()).exists());
 }
+
+const SLOW_SERVER: &str = r#"echo $$ >> "$1"
+sleep "$2"
+while IFS= read -r line; do
+id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+case "$line" in
+*'"method":"initialize"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id";;
+esac
+done"#;
+
+#[test]
+fn servers_start_together_and_keep_the_configured_order() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.dir.path().join("server.sh"), SLOW_SERVER).expect("server");
+    let request = fixture.request(&[("a", "1"), ("b", "0.5"), ("c", "0")]);
+    let started = Instant::now();
+    let servers = fixture.connect(&request);
+    let took = started.elapsed();
+    assert_eq!(named(&servers), ["a", "b", "c"]);
+    assert!(took < Duration::from_millis(2500), "started one after another: {took:?}");
+}
+
+const CHANGING: &str = r#"while IFS= read -r line; do
+id=$(printf '%s' "$line" | sed -n 's/.*"id":\([0-9][0-9]*\).*/\1/p')
+case "$line" in
+*'"method":"initialize"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{}}\n' "$id";;
+*'"method":"tools/list"'*) echo list >> "$0"; printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[{"name":"ping"}]}}\n' "$id";;
+*'"method":"tools/call"'*) printf '{"jsonrpc":"2.0","method":"notifications/tools/list_changed"}\n'; printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[]}}\n' "$id";;
+esac
+done"#;
+
+#[test]
+fn the_tool_list_is_asked_once_per_connection_until_the_server_says_it_changed() {
+    let dir = tempfile::tempdir().expect("dir");
+    let lists = dir.path().join("lists");
+    let spec = crate::mcp::ServerSpec::Stdio {
+        name: "changing".into(),
+        command: "/bin/sh".into(),
+        args: vec!["-c".into(), CHANGING.into(), lists.display().to_string()],
+        env: vec![],
+    };
+    let http: Arc<dyn Http> = Arc::new(NetHttp);
+    let server = Arc::new(McpServer::open(&spec, &http).expect("open"));
+    let stop = platform::Stop::new();
+    let asked = || std::fs::read_to_string(&lists).unwrap_or_default().lines().count();
+    assert_eq!(server.tools().expect("tools").len(), 1);
+    assert_eq!(server.listed_tools_stopped(&stop).expect("tools").len(), 1);
+    assert_eq!(asked(), 1);
+    server.ask("tools/call", serde_json::json!({"name": "ping", "arguments": {}}), &stop).expect("call");
+    assert_eq!(server.listed_tools_stopped(&stop).expect("tools").len(), 1);
+    assert_eq!(asked(), 2);
+    server.close();
+}

@@ -42,6 +42,23 @@ pub(crate) const MESSAGE_AT_MOST: usize = 16 * 1024 * 1024;
 
 pub type Listener = Arc<dyn Fn(&str, &Value) + Send + Sync>;
 
+pub const TOOLS_CHANGED: &str = "notifications/tools/list_changed";
+
+#[derive(Debug, Default)]
+pub struct ToolsChanged(std::sync::atomic::AtomicBool);
+
+impl ToolsChanged {
+    pub fn heard(&self, method: &str) {
+        if method == TOOLS_CHANGED {
+            self.0.store(true, Ordering::Relaxed);
+        }
+    }
+
+    pub fn taken(&self) -> bool {
+        self.0.swap(false, Ordering::Relaxed)
+    }
+}
+
 pub trait Transport: Send + Sync {
     fn request(&self, message: &Value) -> Result<Value, McpError>;
     fn request_stopped(&self, message: &Value, stop: &platform::Stop) -> Result<Value, McpError> {
@@ -62,6 +79,16 @@ pub trait Transport: Send + Sync {
         true
     }
     fn close(&self) {}
+    fn tools_changed(&self) -> bool {
+        false
+    }
+}
+
+#[derive(Clone)]
+struct Listed {
+    name: String,
+    spec: ToolSpec,
+    marked_read_only: bool,
 }
 
 pub struct McpServer {
@@ -70,6 +97,7 @@ pub struct McpServer {
     next: AtomicU64,
     capabilities: std::sync::Mutex<Value>,
     instructions: std::sync::Mutex<Option<String>>,
+    listed: std::sync::Mutex<Option<Vec<Listed>>>,
 }
 
 impl std::fmt::Debug for McpServer {
@@ -86,6 +114,7 @@ impl McpServer {
             next: AtomicU64::new(1),
             capabilities: std::sync::Mutex::default(),
             instructions: std::sync::Mutex::default(),
+            listed: std::sync::Mutex::default(),
         }
     }
 
@@ -196,6 +225,30 @@ impl McpServer {
     }
 
     pub fn listed_tools_stopped(self: &Arc<Self>, stop: &platform::Stop) -> Result<Vec<McpTool>, McpError> {
+        let changed = self.transport.tools_changed();
+        let kept = self.listed.lock().ok().and_then(|listed| listed.clone()).filter(|_| !changed);
+        let listed = match kept {
+            Some(listed) => listed,
+            None => {
+                let fetched = self.fetched_tools(stop)?;
+                if let Ok(mut listed) = self.listed.lock() {
+                    *listed = Some(fetched.clone());
+                }
+                fetched
+            }
+        };
+        Ok(listed
+            .into_iter()
+            .map(|Listed { name, spec, marked_read_only }| McpTool {
+                server: Arc::clone(self),
+                name,
+                spec,
+                marked_read_only,
+            })
+            .collect())
+    }
+
+    fn fetched_tools(&self, stop: &platform::Stop) -> Result<Vec<Listed>, McpError> {
         let mut tools = Vec::new();
         let mut params = json!({});
         let mut cursors = std::collections::HashSet::new();
@@ -218,7 +271,7 @@ impl McpServer {
                     schema: tool.get("inputSchema").cloned().unwrap_or_else(|| json!({"type":"object"})),
                 };
                 let marked_read_only = tool["annotations"]["readOnlyHint"].as_bool() == Some(true);
-                tools.push(McpTool { server: Arc::clone(self), name, spec, marked_read_only });
+                tools.push(Listed { name, spec, marked_read_only });
             }
             match listed.get("nextCursor") {
                 None | Some(Value::Null) => return Ok(tools),
@@ -261,12 +314,26 @@ pub fn connect_stopped(
     stop: &platform::Stop,
 ) -> Vec<Arc<McpServer>> {
     let mut connected = in_process(request, stop);
-    let remote = wanted(request, sources)
-        .into_iter()
-        .take_while(|_| !stop.load(Ordering::Relaxed))
-        .filter_map(|spec| ready(spec.name(), McpServer::open_stopped(&spec, http, stop), stop));
-    connected.extend(remote);
+    let specs = wanted(request, sources);
+    let specs: Vec<&ServerSpec> = specs.iter().collect();
+    connected.extend(opened_all(&specs, http, stop).into_iter().flatten());
     connected
+}
+
+pub const OPENED_TOGETHER: usize = 8;
+
+fn opened_all(specs: &[&ServerSpec], http: &Arc<dyn Http>, stop: &platform::Stop) -> Vec<Option<Arc<McpServer>>> {
+    let mut opened = Vec::with_capacity(specs.len());
+    for batch in specs.chunks(OPENED_TOGETHER) {
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = batch
+                .iter()
+                .map(|spec| scope.spawn(move || ready(spec.name(), McpServer::open_stopped(spec, http, stop), stop)))
+                .collect();
+            opened.extend(handles.into_iter().map(|handle| handle.join().ok().flatten()));
+        });
+    }
+    opened
 }
 
 fn ready(name: &str, server: Result<McpServer, McpError>, stop: &platform::Stop) -> Option<Arc<McpServer>> {

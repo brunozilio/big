@@ -102,6 +102,7 @@ pub(super) struct Listening {
     pub(super) down: Arc<AtomicBool>,
     pub(super) greeting: Arc<Mutex<Option<Value>>>,
     pub(super) listener: Option<Listener>,
+    pub(super) changes: Arc<super::ToolsChanged>,
 }
 
 impl Listening {
@@ -193,6 +194,7 @@ impl Listening {
                     let _ = self.link.post(&super::sse::client_answer(id, method), &self.closed).await;
                 }
                 (None, Some(method)) => {
+                    self.changes.heard(method);
                     if let Some(listener) = &self.listener {
                         listener(method, &message["params"]);
                     }
