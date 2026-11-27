@@ -152,6 +152,18 @@ const MIGRATIONS: &[&str] = &[
     "
     CREATE INDEX items_by_ended ON items (ended);
 ",
+    "
+    CREATE TABLE passwords (
+        user TEXT PRIMARY KEY,
+        hash TEXT NOT NULL,
+        changed INTEGER NOT NULL
+    );
+    CREATE TABLE login_failures (
+        login TEXT PRIMARY KEY,
+        failures INTEGER NOT NULL,
+        locked_until INTEGER NOT NULL
+    );
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

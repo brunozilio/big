@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api'
-import { addPasskey, logout, passkeys, passkeysWork, removePasskey, whoAmI, type Me, type PasskeyInfo } from '@/api/auth'
+import { addPasskey, authMethods, changePassword, logout, PASSWORD_MIN, passkeys, passkeysWork, removePasskey, whoAmI, type Me, type PasskeyInfo } from '@/api/auth'
 import { at } from '@/api/base'
 import { ApiError } from '@/api/http'
 import { getState, setBranding } from '@/api/store'
@@ -13,6 +13,56 @@ import { Icon } from '@/ui/icon'
 
 function day(locale: string, seconds: number): string {
   return new Date(seconds * 1000).toLocaleDateString(locale, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function PasswordField({ label, value, onChange, autoComplete }: { label: string; value: string; onChange: (value: string) => void; autoComplete: string }) {
+  return (
+    <label className="block">
+      <span className="mb-1.5 block text-sm font-medium text-fg2">{label}</span>
+      <Input type="password" autoComplete={autoComplete} value={value} onChange={(e) => onChange(e.target.value)} />
+    </label>
+  )
+}
+
+function Password() {
+  const t = useT()
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [again, setAgain] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    setNote(null)
+    if (next.length < PASSWORD_MIN) return setError(t('auth.passwordTooShort', { min: PASSWORD_MIN }))
+    if (next !== again) return setError(t('auth.passwordMismatch'))
+    setBusy(true)
+    setError(null)
+    changePassword(current, next)
+      .then(() => {
+        setCurrent('')
+        setNext('')
+        setAgain('')
+        setNote(t('auth.passwordSaved'))
+      })
+      .catch((err: unknown) => setError(err instanceof ApiError ? err.message : t('auth.passwordNotSaved')))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <div>
+        <h2 className="text-md font-medium text-fg">{t('auth.password')}</h2>
+        <p className="text-sm text-muted">{t('auth.passwordHint')}</p>
+      </div>
+      <PasswordField label={t('auth.currentPassword')} value={current} onChange={setCurrent} autoComplete="current-password" />
+      <PasswordField label={t('auth.newPassword')} value={next} onChange={setNext} autoComplete="new-password" />
+      <PasswordField label={t('auth.confirmPassword')} value={again} onChange={setAgain} autoComplete="new-password" />
+      {error && <p className="text-sm text-danger-fg">{error}</p>}
+      {note && !error && <p className="text-sm text-muted">{note}</p>}
+      <Button type="submit" variant="primary" loading={busy} disabled={!current || !next || !again}>{t('auth.savePassword')}</Button>
+    </form>
+  )
 }
 
 function Passkeys() {
@@ -69,8 +119,12 @@ function Passkeys() {
 export function AccountPanel() {
   const t = useT()
   const [me, setMe] = useState<Me | null>(null)
+  const [password, setPassword] = useState(false)
   useEffect(() => {
     whoAmI().then(setMe).catch(() => undefined)
+    authMethods()
+      .then((offered) => setPassword(offered.methods.includes('password')))
+      .catch(() => undefined)
   }, [])
   const out = () => void logout().then(() => window.location.replace(at('/login')))
   const local = me?.mode === 'local'
@@ -81,6 +135,7 @@ export function AccountPanel() {
         <p className="flex-1 text-base text-fg">{local ? t('auth.localUser') : me ? t('auth.signedInAs', { email: me.user.email }) : ''}</p>
         {!local && me && <Button size="sm" icon={<Icon name="logout" size={14} />} onClick={out}>{t('auth.logout')}</Button>}
       </section>
+      {!local && me && password && <Password />}
       {!local && me && <Passkeys />}
     </div>
   )

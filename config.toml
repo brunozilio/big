@@ -211,11 +211,14 @@ max_parallel_items = 4
 
 [auth]
 mode = "local"
-methods = "email,passkey,sso"
+methods = "password,passkey,sso"
 local_email = ""
 admins = ""
+admin_file = ""
 allowed_domains = ""
 session_hours = "336"
+login_attempts = "5"
+lock_minutes = "15"
 code_minutes = "10"
 code_attempts = "5"
 mail_from = ""

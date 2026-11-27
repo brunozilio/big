@@ -2,6 +2,7 @@ mod email;
 mod gate;
 mod mail;
 mod passkey;
+mod password;
 mod session;
 pub mod settings;
 mod sso;
@@ -10,10 +11,11 @@ use axum::Router;
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, get, post, put};
 use serde_json::json;
 
 pub use gate::gate;
+pub use password::{add_person, bootstrap, reset_password};
 
 use crate::error::{ApiResult, json as reply};
 use crate::state::Ctx;
@@ -23,6 +25,8 @@ pub fn routes() -> Router<Ctx> {
         .route("/api/auth/methods", get(methods))
         .route("/api/auth/me", get(me))
         .route("/api/auth/logout", post(logout))
+        .route("/api/auth/password", post(password::sign_in))
+        .route("/api/account/password", put(password::change))
         .route("/api/auth/email", post(email::start))
         .route("/api/auth/email/verify", post(email::verify))
         .route("/api/auth/sso/start", get(sso::start))

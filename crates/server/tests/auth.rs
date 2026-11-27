@@ -20,7 +20,7 @@ async fn the_ways_of_signing_in_are_listed_without_a_session() {
     let world = World::new().await;
     let (status, body) = world.send(Method::GET, "/api/auth/methods", None).await;
     assert_eq!(status, StatusCode::OK, "{body}");
-    assert!(body["methods"].as_array().is_some_and(|methods| methods.contains(&json!("email"))), "{body}");
+    assert!(body["methods"].as_array().is_some_and(|methods| methods.contains(&json!("password"))), "{body}");
     assert!(!body["methods"].as_array().is_some_and(|methods| methods.contains(&json!("sso"))), "{body}");
 }
 

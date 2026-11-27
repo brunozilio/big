@@ -8,6 +8,7 @@ mod factory;
 mod identity;
 mod log;
 pub mod ownership;
+mod passwords;
 mod preferences;
 mod retention;
 mod schema;

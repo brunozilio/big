@@ -5,10 +5,11 @@ open_browser = false
 
 [auth]
 mode = "shared"
-methods = "sso,passkey,email"
-allowed_domains = "example.com"
-admins = "admin@example.com"
-mail_from = "noreply@example.com"
+methods = "password,passkey"
+allowed_domains = ""
+admins = "admin"
+admin_file = "/run/secrets/admin.json"
+mail_from = ""
 smtp_url = ""
 sso_label = "SSO"
 sso_issuer = ""

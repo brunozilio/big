@@ -3,7 +3,7 @@ import { isMock } from '.'
 import { ApiError, request } from './http'
 
 export type AuthMode = 'local' | 'shared'
-export type AuthMethod = 'email' | 'passkey' | 'sso'
+export type AuthMethod = 'password' | 'email' | 'passkey' | 'sso'
 
 export interface AuthMethods {
   mode: AuthMode
@@ -30,7 +30,7 @@ export interface PasskeyInfo {
   used: number | null
 }
 
-const ALL: AuthMethod[] = ['email', 'passkey', 'sso']
+const ALL: AuthMethod[] = ['password', 'email', 'passkey', 'sso']
 
 export const AUTH = {
   methods: '/api/auth/methods',
@@ -38,6 +38,8 @@ export const AUTH = {
   logout: '/api/auth/logout',
   email: '/api/auth/email',
   verify: '/api/auth/email/verify',
+  password: '/api/auth/password',
+  accountPassword: '/api/account/password',
   sso: (next: string) => `/api/auth/sso/start?next=${encodeURIComponent(next)}`,
   passkeyOptions: '/api/auth/passkey/options',
   passkey: '/api/auth/passkey',
@@ -74,6 +76,16 @@ export function sendCode(email: string): Promise<null> {
 export function verifyCode(email: string, code: string): Promise<Person> {
   return request('POST', AUTH.verify, { email, code })
 }
+
+export function signInWithPassword(login: string, password: string): Promise<Person> {
+  return request('POST', AUTH.password, { login, password })
+}
+
+export function changePassword(current: string, password: string): Promise<null> {
+  return request('PUT', AUTH.accountPassword, { current, password })
+}
+
+export const PASSWORD_MIN = 8
 
 export function logout(): Promise<null> {
   return request('POST', AUTH.logout, {})

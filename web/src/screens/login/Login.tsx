@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '@/api'
-import { authMethods, nextPath, passkeysWork, sendCode, signInWithPasskey, ssoUrl, verifyCode, type AuthMethods } from '@/api/auth'
+import { authMethods, nextPath, passkeysWork, sendCode, signInWithPasskey, signInWithPassword, ssoUrl, verifyCode, type AuthMethods } from '@/api/auth'
 import { at } from '@/api/base'
 import { ApiError } from '@/api/http'
 import { getState, setBranding, useStore } from '@/api/store'
@@ -64,6 +64,45 @@ function LoginLanguage() {
 
 function finish(search: string) {
   window.location.replace(at(nextPath(search)))
+}
+
+function PasswordStage() {
+  const t = useT()
+  const location = useLocation()
+  const [login, setLogin] = useState('')
+  const [password, setPassword] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ready = !!login.trim() && !!password
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!ready) return
+    setBusy(true)
+    setError(null)
+    signInWithPassword(login.trim(), password)
+      .then(() => finish(location.search))
+      .catch((err: unknown) => {
+        setPassword('')
+        setError(messageOf(err, t('auth.passwordFailed')))
+      })
+      .finally(() => setBusy(false))
+  }
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.login')}</span>
+        <Input autoComplete="username" autoCapitalize="none" spellCheck={false} autoFocus value={login} onChange={(e) => setLogin(e.target.value)} placeholder={t('auth.loginPlaceholder')} />
+      </label>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.password')}</span>
+        <Input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('auth.passwordPlaceholder')} />
+      </label>
+      {error && <p className="text-sm text-danger-fg">{error}</p>}
+      <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={!ready}>
+        {t('auth.signIn')}
+      </Button>
+    </form>
+  )
 }
 
 function EmailStage({ onSent }: { onSent: (email: string) => void }) {
@@ -141,7 +180,7 @@ function CodeStage({ email, onBack }: { email: string; onBack: () => void }) {
   )
 }
 
-function Others({ methods }: { methods: AuthMethods }) {
+function Others({ methods, divided }: { methods: AuthMethods; divided: boolean }) {
   const t = useT()
   const location = useLocation()
   const [busy, setBusy] = useState(false)
@@ -161,7 +200,7 @@ function Others({ methods }: { methods: AuthMethods }) {
   const withSso = () => window.location.assign(ssoUrl(nextPath(location.search)))
   return (
     <>
-      {methods.methods.includes('email') && <Divider>{t('auth.orContinueWith')}</Divider>}
+      {divided && <Divider>{t('auth.orContinueWith')}</Divider>}
       <div className={passkey && sso ? 'grid grid-cols-2 gap-2' : 'grid grid-cols-1 gap-2'}>
         {passkey && <Tile icon="fingerprint" label={t('auth.passkey')} onClick={withPasskey} busy={busy} />}
         {sso && <Tile icon="building" label={methods.ssoLabel || t('auth.sso')} onClick={withSso} />}
@@ -187,7 +226,8 @@ export function Login() {
   const methods = useBrandingAndMethods()
   const [stage, setStage] = useState<Stage>({ kind: 'email' })
   const failed = new URLSearchParams(location.search).get('error') === 'sso'
-  const email = methods?.methods.includes('email') ?? false
+  const password = methods?.methods.includes('password') ?? false
+  const email = !password && (methods?.methods.includes('email') ?? false)
   return (
     <div className="flex min-h-dvh flex-col bg-bg px-4">
       <main className="mx-auto flex w-full max-w-[392px] flex-1 flex-col justify-center py-16">
@@ -203,8 +243,9 @@ export function Login() {
             <Button variant="link" className="ml-1" onClick={() => finish(location.search)}>{t('auth.localEnter')}</Button>
           </div>
         )}
+        {methods && password && <PasswordStage />}
         {methods && email && (stage.kind === 'email' ? <EmailStage onSent={(sent) => setStage({ kind: 'code', email: sent })} /> : <CodeStage email={stage.email} onBack={() => setStage({ kind: 'email' })} />)}
-        {methods && stage.kind === 'email' && <Others methods={methods} />}
+        {methods && stage.kind === 'email' && <Others methods={methods} divided={password || email} />}
         {methods && methods.methods.length === 0 && <p className="text-center text-sm text-muted">{t('auth.noMethods')}</p>}
       </main>
       <footer className="flex justify-center pb-6">

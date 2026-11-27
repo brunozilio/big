@@ -43,6 +43,13 @@ impl Principal {
     }
 }
 
+pub fn normalized_login(text: &str) -> Option<String> {
+    let login = text.trim().to_lowercase();
+    let fine = (1..=64).contains(&login.chars().count())
+        && login.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '@'));
+    fine.then_some(login)
+}
+
 pub fn normalized_email(text: &str) -> Option<String> {
     let email = text.trim().to_lowercase();
     let (local, domain) = email.split_once('@')?;

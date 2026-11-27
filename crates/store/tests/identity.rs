@@ -101,3 +101,23 @@ fn each_person_keeps_their_own_language_over_the_shared_one() {
     assert_eq!(store.language_for("u-bia").expect("language"), domain::Language::English);
     assert!(!store.branding().expect("branding").keys().any(|key| key.starts_with("user.")));
 }
+
+#[test]
+fn a_password_belongs_to_its_user_and_too_many_failures_lock_the_login() {
+    let store = store();
+    assert!(store.add_user(&ana(), 1).expect("add"));
+    assert!(!store.add_user(&ana(), 2).expect("again"));
+    assert_eq!(store.password_of(&ana().user).expect("none"), None);
+    store.set_password(&ana().user, "h1", 3).expect("set");
+    store.set_password(&ana().user, "h2", 4).expect("reset");
+    assert_eq!(store.password_of(&ana().user).expect("read"), Some("h2".into()));
+    for _ in 0..2 {
+        store.login_failed("ana", 10, 3, 300).expect("fail");
+    }
+    assert!(!store.login_locked("ana", 10).expect("open"));
+    store.login_failed("ana", 10, 3, 300).expect("third");
+    assert!(store.login_locked("ana", 11).expect("locked"));
+    assert!(!store.login_locked("ana", 311).expect("over"));
+    store.login_succeeded("ana").expect("clear");
+    assert!(!store.login_locked("ana", 11).expect("cleared"));
+}

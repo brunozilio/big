@@ -8,6 +8,7 @@ pub enum Mode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Method {
+    Password,
     Email,
     Passkey,
     Sso,
@@ -16,6 +17,7 @@ pub enum Method {
 impl Method {
     pub fn key(self) -> &'static str {
         match self {
+            Method::Password => "password",
             Method::Email => "email",
             Method::Passkey => "passkey",
             Method::Sso => "sso",
@@ -24,6 +26,7 @@ impl Method {
 
     fn named(name: &str) -> Option<Method> {
         match name.trim() {
+            "password" => Some(Method::Password),
             "email" => Some(Method::Email),
             "passkey" => Some(Method::Passkey),
             "sso" => Some(Method::Sso),
@@ -82,6 +85,18 @@ pub fn session_seconds() -> i64 {
 
 pub fn code_seconds() -> i64 {
     number(brand::auth::CODE_MINUTES, 10) * 60
+}
+
+pub fn login_attempts() -> i64 {
+    number(brand::auth::LOGIN_ATTEMPTS, 5)
+}
+
+pub fn lock_seconds() -> i64 {
+    number(brand::auth::LOCK_MINUTES, 15) * 60
+}
+
+pub fn admin_file() -> &'static str {
+    brand::auth::ADMIN_FILE.trim()
 }
 
 pub fn code_attempts() -> i64 {
@@ -144,6 +159,7 @@ mod tests {
     #[test]
     fn methods_and_domains_are_lists() {
         assert_eq!(methods_of("email, sso,nope,passkey"), vec![Method::Email, Method::Sso, Method::Passkey]);
+        assert_eq!(methods_of("password,passkey"), vec![Method::Password, Method::Passkey]);
         assert_eq!(domains_of("Acme.com, b.io"), vec!["acme.com".to_owned(), "b.io".to_owned()]);
     }
 

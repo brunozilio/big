@@ -145,3 +145,72 @@ async fn only_an_administrator_lists_people_and_signs_them_out() {
     let (status, _) = send(&world, Some(&ana), Method::PUT, "/api/onboarding", Some(json!({ "skipped": true }))).await;
     assert_eq!(status, StatusCode::OK);
 }
+
+fn with_password(world: &World, login: &str, password: &str) -> UserId {
+    let person = Principal { user: UserId(format!("u-{login}")), email: login.into(), name: String::new() };
+    world.store.ensure_user(&person, 0).expect("user");
+    let hash = platform::password::hash_with(password, 1_000).expect("hash");
+    world.store.set_password(&person.user, &hash, 0).expect("password");
+    person.user
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_person_signs_in_with_user_and_password_and_too_many_misses_lock_the_user() {
+    let world = shared_world().await;
+    with_password(&world, "bia", "a long secret");
+    let sign = |login: &str, password: &str| json!({ "login": login, "password": password });
+    let (status, body) =
+        send(&world, None, Method::POST, "/api/auth/password", Some(sign(" BIA ", "a long secret"))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["email"], "bia");
+    let (status, _) =
+        send(&world, None, Method::POST, "/api/auth/password", Some(sign("nobody", "a long secret"))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    for _ in 0..5 {
+        let (status, _) = send(&world, None, Method::POST, "/api/auth/password", Some(sign("bia", "wrong one"))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+    }
+    let (status, body) =
+        send(&world, None, Method::POST, "/api/auth/password", Some(sign("bia", "a long secret"))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_person_changes_their_own_password_only_knowing_the_current_one() {
+    let world = shared_world().await;
+    let user = with_password(&world, "caio", "first secret");
+    let token = "token-caio";
+    let hashed = platform::crypto::hex(&platform::crypto::sha256(token.as_bytes()));
+    world.store.open_session(&hashed, &user, 0, i64::MAX).expect("session");
+    let cookie = format!("{}_session={token}", brand::COMMAND.replace('-', "_"));
+    let change = |current: &str, password: &str| json!({ "current": current, "password": password });
+    let (status, _) =
+        send(&world, Some(&cookie), Method::PUT, "/api/account/password", Some(change("nope", "second secret"))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, _) =
+        send(&world, Some(&cookie), Method::PUT, "/api/account/password", Some(change("first secret", "short"))).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let (status, body) = send(
+        &world,
+        Some(&cookie),
+        Method::PUT,
+        "/api/account/password",
+        Some(change("first secret", "second secret")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let stored = world.store.password_of(&user).expect("read").expect("there");
+    assert!(platform::password::matches(&stored, "second secret"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn only_an_administrator_adds_people_or_sets_their_password() {
+    let world = shared_world().await;
+    let ana = signed(&world, "ana");
+    let added = json!({ "login": "dora", "name": "Dora", "password": "a long secret" });
+    let (status, _) = send(&world, Some(&ana), Method::POST, "/api/admin/people", Some(added)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let reset = json!({ "password": "a long secret" });
+    let (status, _) = send(&world, Some(&ana), Method::PUT, "/api/admin/people/u-ana/password", Some(reset)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}

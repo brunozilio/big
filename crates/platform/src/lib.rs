@@ -13,6 +13,7 @@ pub mod named;
 pub mod network;
 pub mod parallel;
 pub mod passkey;
+pub mod password;
 pub mod private_file;
 pub mod runtime;
 pub mod stop;
