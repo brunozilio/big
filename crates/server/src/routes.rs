@@ -68,6 +68,7 @@ fn api() -> Router<Ctx> {
         .route("/api/library", get(crate::library::list))
         .route("/api/library/assist", post(crate::library::assist))
         .route("/api/library/outline", post(crate::library::outline))
+        .route("/api/library/act", post(crate::library::act))
         .route(
             "/api/library/item",
             get(crate::library::open)

@@ -1069,7 +1069,14 @@ export interface LibraryItem {
   body: { label: string; text: string; language: LibraryLanguage; maxLines?: number } | null
   assist: { ideas: string[] } | null
   outline: LibraryStep[] | null
+  actions?: LibraryAction[] | null
   editable: boolean
+}
+
+export interface LibraryAction {
+  key: string
+  label: string
+  hint?: string
 }
 
 export interface LibraryStep {
@@ -1149,6 +1156,7 @@ export interface Api {
   restoreLibraryItem(path: string): Promise<void>
   createLibraryFile(item: string, name: string): Promise<LibraryItem>
   outlineLibrary(path: string, source: string): Promise<LibraryStep[]>
+  actLibrary(path: string, action: string): Promise<LibraryItem>
   assistLibrary(path: string, draft: LibraryDraft, messages: LibraryTurn[], ask?: LibraryAsk): Promise<LibraryAssist>
   upload(file: File): Promise<{ id: string; name: string; size: number }>
   live(onEvent: (event: LiveEvent) => void, onState: (connected: boolean) => void): () => void
@@ -1193,6 +1201,7 @@ export const ROUTES = {
   library: '/api/library',
   libraryAssist: '/api/library/assist',
   libraryOutline: '/api/library/outline',
+  libraryAct: '/api/library/act',
   libraryItem: (path: string | null) => (path ? `/api/library/item?path=${encodeURIComponent(path)}` : '/api/library/item'),
   attachments: '/api/attachments',
   attachment: (id: string) => `/api/attachments/${encodeURIComponent(id)}`,

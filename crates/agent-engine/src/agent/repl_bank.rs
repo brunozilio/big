@@ -14,12 +14,12 @@ impl Agent<'_> {
         let has = |tool: &str| self.has_tool(tool);
         match function {
             SEARCH_SCRIPTS => Some(match input["query"].as_str().map(str::trim).filter(|query| !query.is_empty()) {
-                Some(query) => bank::search(query, has),
+                Some(query) => bank::search(query, bank::AGENT, has),
                 None => Err("searchScripts needs the words to look for, e.g. searchScripts('changed files')".into()),
             }),
             LOAD_SCRIPT => Some(match input["source"].as_str() {
-                Some(source) => bank::compile(source, has),
-                None => bank::load(input["name"].as_str().unwrap_or_default(), has),
+                Some(source) => bank::compile(source, bank::AGENT, has),
+                None => bank::load(input["name"].as_str().unwrap_or_default(), bank::AGENT, has),
             }),
             ADAPT_SCRIPT => {
                 let tools: Vec<String> =

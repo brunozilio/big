@@ -19,7 +19,11 @@ type Body = { label: string; text: string; language: string; maxLines?: number }
 
 type Opened = { mode: "form" | "code"; language: string; fields: Field[]; body: Body | null };
 
-type Asked = {
+type Host = { call?: (name: string, value: unknown) => unknown };
+
+type Action = { key: string; label: string; hint?: string };
+
+type Asked = Host & {
   section: string;
   path: string;
   source: string;
@@ -45,11 +49,14 @@ type Kind = {
   hint: (language: Language) => string;
   about: string;
   ideas: (language: Language) => string[];
-  main: (path: string) => boolean;
+  main: (path: string, host: Host) => boolean;
+  resolve?: (host: Host) => { folder: string; exports: string[] };
+  actions?: (asked: Asked) => Action[];
+  act?: (acting: Asked & { action: string }) => { source?: string; path?: string; error?: string };
   card: (asked: Asked) => { title: string; description: string; avatar?: unknown };
   open: (asked: Asked) => Opened;
   save: (saved: Saved) => string | { source: string; path: string };
-  create: (name: string, slug: string) => { path: string; source: string };
+  create: (name: string, slug: string, host: Host) => { path: string; source: string };
   outline?: (source: string) => Step[];
 };
 
@@ -419,9 +426,23 @@ const styles: Kind = {
 };
 
 
-const PROPOSED = "scripts/proposed/";
+const BANK = "repl/bank.ts";
 
-const proposed = (path: string): boolean => path.startsWith(PROPOSED) && flat(3, [".ts"])(path);
+type Format = { bank: string; proposed: string; extensions: string[]; spec: string };
+
+function formatOf(host: Host): Format {
+  const declared = record(host.call?.("value", { path: BANK, name: "format" }));
+  const extensions = texts(declared.extensions);
+  return { bank: text(declared.bank) || "scripts/", proposed: text(declared.proposed), extensions: extensions.length > 0 ? extensions : [".ts"], spec: text(declared.spec) || "spec" };
+}
+
+const within = (folder: string, extensions: string[], path: string): boolean =>
+  folder !== "" && path.startsWith(folder) && !path.slice(folder.length).includes("/") && extensions.some((extension) => path.endsWith(extension));
+
+const proposed = (path: string, host: Host): boolean => {
+  const format = formatOf(host);
+  return within(format.proposed, format.extensions, path);
+};
 
 function scriptTemplate(name: string, slug: string): string {
   const spec = {
@@ -440,29 +461,37 @@ const scripts: Kind = {
   ideas: (language) =>
     pick(language, ["Explain what this script does", "Make the input path optional", "Return less data"], ["Explica qué hace este script", "Haz opcional la ruta de entrada", "Devuelve menos datos"], ["Explique o que este script faz", "Torne o caminho de entrada opcional", "Devolva menos dados"]),
   folder: "scripts/",
+  resolve: (host) => {
+    const format = formatOf(host);
+    return { folder: format.bank, exports: [format.spec] };
+  },
   icon: "code",
   exports: ["spec"],
   needs: [],
   creatable: true,
   label: () => "Scripts",
   hint: (language) => pick(language, "Ready-made flows the agents run instead of redoing them", "Flujos listos que los agentes ejecutan en vez de rehacerlos", "Fluxos prontos que os agentes rodam em vez de refazer"),
-  main: (path) => flat(2, [".ts", ".js"])(path) || proposed(path),
-  card({ path, exports, language }) {
-    const spec = record(exports.spec);
-    const waiting = proposed(path) ? pick(language, "Proposed from a run, waiting for approval. ", "Propuesto a partir de una ejecución, esperando aprobación. ", "Proposto a partir de uma execução, aguardando aprovação. ") : "";
+  main: (path, host) => {
+    const format = formatOf(host);
+    return within(format.bank, format.extensions, path) || proposed(path, host);
+  },
+  card(asked) {
+    const { path, exports, language } = asked;
+    const spec = record(exports[formatOf(asked).spec]);
+    const waiting = proposed(path, asked) ? pick(language, "Proposed from a run, waiting for approval. ", "Propuesto a partir de una ejecución, esperando aprobación. ", "Proposto a partir de uma execução, aguardando aprovação. ") : "";
     return { title: text(spec.name) || stem(path), description: `${waiting}${text(spec.description)}` };
   },
-  open(asked) {
-    if (!proposed(asked.path)) return code(asked.path);
-    const { language } = asked;
-    const approve = { key: "approve", label: pick(language, "Approve: agents may run it", "Aprobar: los agentes pueden ejecutarlo", "Aprovar: os agentes podem rodá-lo"), kind: "switch" as const, value: false };
-    return { mode: "form", language: "typescript", fields: [approve], body: { label: pick(language, "Code", "Código", "Código"), text: asked.source, language: "typescript" } };
+  open: (asked) => code(asked.path),
+  actions: (asked) =>
+    proposed(asked.path, asked)
+      ? [{ key: "approve", label: pick(asked.language, "Approve", "Aprobar", "Aprovar"), hint: pick(asked.language, "Agents may run it: it moves into the bank", "Los agentes pueden ejecutarlo: pasa al banco", "Os agentes podem rodá-lo: entra no banco") }]
+      : [],
+  act(acting) {
+    if (acting.action !== "approve" || !proposed(acting.path, acting)) return { error: `${acting.path} has no ${acting.action} action` };
+    return { source: acting.source, path: `${formatOf(acting).bank}${acting.path.split("/").pop()}` };
   },
-  save({ path, source, values, body }) {
-    const written = body ?? source;
-    return values.approve === true ? { source: written, path: `scripts/${stem(path)}.ts` } : written;
-  },
-  create: (name, slug) => ({ path: `scripts/${slug}.ts`, source: scriptTemplate(name, slug) }),
+  save: ({ source }) => source,
+  create: (name, slug, host) => ({ path: `${formatOf(host).bank}${slug}${formatOf(host).extensions[0]}`, source: scriptTemplate(name, slug) }),
 };
 
 const KINDS: Kind[] = [agents, skills, prompts, workflows, tools, styles, scripts];
@@ -473,12 +502,14 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
-export function sections({ language }: { language: Language }) {
+const resolved = (item: Kind, host: Host) => ({ folder: item.folder, exports: item.exports, ...item.resolve?.(host) });
+
+export function sections(host: Host & { language: Language }) {
+  const { language } = host;
   return KINDS.map((item) => ({
     key: item.key,
-    folder: item.folder,
+    ...resolved(item, host),
     icon: item.icon,
-    exports: item.exports,
     needs: item.needs,
     creatable: item.creatable,
     label: item.label(language),
@@ -486,13 +517,13 @@ export function sections({ language }: { language: Language }) {
   }));
 }
 
-export function listing({ paths }: { paths: string[] }) {
+export function listing(host: Host & { paths: string[] }) {
   return KINDS.flatMap((item) =>
-    paths
-      .filter((path) => path.startsWith(item.folder) && item.main(path))
+    host.paths
+      .filter((path) => path.startsWith(resolved(item, host).folder) && item.main(path, host))
       .map((path) => {
         const folder = path.endsWith(SKILL) ? path.slice(0, -SKILL.length + 1) : null;
-        const files = folder ? paths.filter((other) => other.startsWith(folder) && other !== path) : [];
+        const files = folder ? host.paths.filter((other) => other.startsWith(folder) && other !== path) : [];
         return { section: item.key, path, files };
       }),
   );
@@ -504,7 +535,14 @@ export function card(asked: Asked) {
 
 export function open(asked: Asked) {
   const found = kind(asked.section);
-  return { ...found.open(asked), assist: { ideas: found.ideas(asked.language) }, outline: found.outline?.(asked.source) ?? null };
+  return { ...found.open(asked), assist: { ideas: found.ideas(asked.language) }, outline: found.outline?.(asked.source) ?? null, actions: found.actions?.(asked) ?? [] };
+}
+
+export function act(acting: Asked & { action: string }) {
+  const found = kind(acting.section);
+  const offered = (found.actions?.(acting) ?? []).some((action) => action.key === acting.action);
+  if (!offered || !found.act) return { error: `${acting.path} has no ${acting.action} action` };
+  return found.act(acting);
 }
 
 export function outline({ section, source }: { section: string; source: string }) {
@@ -626,7 +664,8 @@ export function assisted(asking: Assisting) {
   };
 }
 
-export function create({ section, name }: { section: string; name: string }) {
+export function create(host: Host & { section: string; name: string }) {
+  const { section, name } = host;
   const item = kind(section);
   if (!item.creatable) fail(`a ${section} item cannot be created here`);
   const slug = name
@@ -636,5 +675,5 @@ export function create({ section, name }: { section: string; name: string }) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
   if (slug === "") fail("the name needs a letter or a digit");
-  return item.create(name.trim(), slug);
+  return item.create(name.trim(), slug, host);
 }

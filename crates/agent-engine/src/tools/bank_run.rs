@@ -23,7 +23,7 @@ impl Headless {
     fn tool(&self, name: &str, input: &Value) -> Result<Value, String> {
         if !self.has(name) {
             return Err(format!(
-                "the script calls {name}, which it does not name in spec.tools or a workflow cannot run without an agent"
+                "the script calls {name}, which it does not name in spec.tools; a script that needs an agent declares requires: [\"agent\"]"
             ));
         }
         let Some((_, tool)) = self.tools.iter().find(|(tool, _)| tool == name) else {
@@ -47,8 +47,8 @@ impl Headless {
         let has = |tool: &str| self.has(tool);
         match function {
             LOAD_SCRIPT if input["source"].is_string() => Err("a workflow runs only scripts of the bank".into()),
-            LOAD_SCRIPT => bank::load(input["name"].as_str().unwrap_or_default(), has),
-            SEARCH_SCRIPTS => bank::search(input["query"].as_str().unwrap_or_default(), has),
+            LOAD_SCRIPT => bank::load(input["name"].as_str().unwrap_or_default(), bank::WORKFLOW, has),
+            SEARCH_SCRIPTS => bank::search(input["query"].as_str().unwrap_or_default(), bank::WORKFLOW, has),
             ADAPT_SCRIPT => Err("a workflow step makes no model call, so it cannot adapt a script".into()),
             READ_TEXT => super::raw_text::reading(|| self.tool("Read", &json!({ "file_path": input["path"] }))),
             name => self.tool(name, input),
@@ -63,7 +63,7 @@ pub fn run(name: &str, input: &Value, cwd: &Path, stop: Arc<AtomicBool>) -> Resu
         declared: script.tools(),
         workspace: Workspace::new(cwd),
     };
-    bank::usable(&script, |tool| headless.has(tool))?;
+    bank::usable(&script, bank::WORKFLOW, |tool| headless.has(tool))?;
     let session = Session::with_helpers(super::repl::helpers());
     let code = format!("JSON.stringify((await scripts[{}]({input})) ?? null)", json!(script.name));
     let functions = headless.declared.clone();

@@ -236,6 +236,7 @@ export function LibraryEditor({ path, onPath, onClose, onChanged, agents = [] }:
   const panel = useRef<HTMLDivElement>(null)
   const { loaded, draft, setDraft, take } = useItem(path)
   const [saving, setSaving] = useState(false)
+  const [acting, setActing] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [asking, setAsking] = useState<Asking>(null)
   const item = loaded.state === 'ready' ? loaded.item : null
@@ -265,6 +266,22 @@ export function LibraryEditor({ path, onPath, onClose, onChanged, agents = [] }:
       })
       .catch((e: unknown) => setError(messageOf(e, t('settings.lib_saveFailed'))))
       .finally(() => setSaving(false))
+  }
+
+  const act = (key: string) => {
+    if (!item || !draft || acting || saving || blocked(item, draft)) return
+    setActing(key)
+    setError(null)
+    const ready = dirty ? libraryApi.save(item, draft) : Promise.resolve(item)
+    ready
+      .then((current) => libraryApi.act(current.path, key))
+      .then((acted) => {
+        onChanged()
+        if (acted.path !== path) return onPath(acted.path)
+        take(acted)
+      })
+      .catch((e: unknown) => setError(messageOf(e, t('settings.lib_saveFailed'))))
+      .finally(() => setActing(null))
   }
 
   const restore = () => {
@@ -300,6 +317,7 @@ export function LibraryEditor({ path, onPath, onClose, onChanged, agents = [] }:
         {talks && <IconButton tooltip={t('settings.lib_chat')} aria-pressed={chat} active={chat} onClick={toggle}><Icon name="sparkles" size={17} /></IconButton>}
         {!asking && item?.editable && (
           <>
+            {(item.actions ?? []).map((action) => <Button key={action.key} size="sm" variant="secondary" title={action.hint} loading={acting === action.key} onClick={() => act(action.key)}>{action.label}</Button>)}
             {item.origin !== 'shipped' && <Button size="sm" variant="ghost" onClick={() => setAsking({ kind: 'restore' })}>{t(item.origin === 'own' ? 'settings.lib_delete' : 'settings.lib_restore')}</Button>}
             <Button size="sm" variant="primary" disabled={!dirty || (!!item && !!draft && blocked(item, draft))} loading={saving} kbd={hotkeyLabel('s')} onClick={save}>{t('settings.save')}</Button>
           </>

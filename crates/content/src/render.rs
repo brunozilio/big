@@ -19,6 +19,10 @@ impl script::Host for ContentHost {
         self.calls.fetch_add(1, Ordering::Relaxed);
         match function {
             "text" => Ok(Value::String(super::text(arguments.as_str().unwrap_or_default()))),
+            "value" => {
+                let path = arguments["path"].as_str().unwrap_or_default();
+                Ok(value(path, arguments["name"].as_str().unwrap_or_default()).unwrap_or(Value::Null))
+            }
             "include" => {
                 let path = arguments["path"].as_str().unwrap_or_default();
                 Ok(Value::String(render(path, &arguments["data"])))

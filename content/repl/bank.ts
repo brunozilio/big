@@ -4,6 +4,30 @@ const NAME_WEIGHT = 3;
 
 type Script = { name: string; description: string; input: unknown; tools: string[]; missing: string[] };
 
+export const format = {
+  bank: "scripts/",
+  proposed: "scripts/proposed/",
+  extensions: [".ts", ".js"],
+  spec: "spec",
+  entry: "run",
+  hosts: { agent: ["agent"], workflow: [] as string[] },
+};
+
+const strings = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []);
+
+const stemOf = (path: string): string => (path.split("/").pop() ?? path).replace(/\.[a-z]+$/, "");
+
+export function described({ path, spec }: { path: string; spec: Record<string, unknown> }) {
+  const name = typeof spec.name === "string" && spec.name.trim() !== "" ? spec.name.trim() : stemOf(path);
+  return {
+    name,
+    description: typeof spec.description === "string" ? spec.description : "",
+    input: spec.input ?? null,
+    tools: strings(spec.tools),
+    requires: strings(spec.requires),
+  };
+}
+
 const words = (text: string): string[] =>
   text
     .toLowerCase()
@@ -18,7 +42,7 @@ function score(script: Script, wanted: string[]): number {
 
 const SYSTEM = `You adapt a script from a bank of TypeScript scripts that an AI agent runs inside its REPL. The script almost fits what the agent needs now; change it so that it does exactly the goal, and change nothing else.
 
-The script's shape stays the same: \`export const spec = { name, description, input, tools }\` (input is a JSON schema of what run takes, tools names every tool the script calls) and \`export async function run(input)\`, returning plain data. It has no imports. It calls the agent's tools as global async functions taking the tool's input object (e.g. \`await Grep({ pattern, output_mode: "count" })\`), and the helpers \`file(path).text()\`, \`write(path, text)\`, \`edit(path, oldText, newText)\`, the shell tag $\`git status\` (throws on failure; .nothrow() gives { stdout, exitCode }), \`sleep(ms)\` and \`scripts["name"](input)\` for other scripts of the bank. Use only the tools listed as available. Update spec.description, spec.input and spec.tools when what the script does, takes or calls changes, and give spec.name a new name only when the goal makes it a different script.
+The script's shape stays the same: \`export const spec = { name, description, input, tools }\` (input is a JSON schema of what run takes, tools names every tool the script calls; add requires: ["agent"] only when it calls adaptScript or runScript, which need an agent and its model) and \`export async function run(input)\`, returning plain data. It has no imports. It calls the agent's tools as global async functions taking the tool's input object (e.g. \`await Grep({ pattern, output_mode: "count" })\`), and the helpers \`file(path).text()\`, \`write(path, text)\`, \`edit(path, oldText, newText)\`, the shell tag $\`git status\` (throws on failure; .nothrow() gives { stdout, exitCode }), \`sleep(ms)\` and \`scripts["name"](input)\` for other scripts of the bank. Use only the tools listed as available. Update spec.description, spec.input and spec.tools when what the script does, takes or calls changes, and give spec.name a new name only when the goal makes it a different script.
 
 Answer with the whole adapted script in one \`\`\`ts block, then at most three short lines on what you changed.`;
 

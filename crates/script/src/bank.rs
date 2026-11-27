@@ -44,7 +44,7 @@ fn cuts(path: &str, code: &str) -> Result<(Vec<Cut>, Vec<String>), String> {
                 return Err(format!("{path}: export each name where it is declared, e.g. export const spec = ..."));
             }
             Statement::ExportDefaultDeclaration(_) => {
-                return Err(format!("{path}: a script of the bank exports spec and run, not a default"));
+                return Err(format!("{path}: a script of the bank exports each name, not a default"));
             }
             _ => {}
         }
@@ -52,11 +52,11 @@ fn cuts(path: &str, code: &str) -> Result<(Vec<Cut>, Vec<String>), String> {
     Ok((cuts, names))
 }
 
-pub fn callable(path: &str, source: &str) -> Result<String, String> {
+pub fn callable(path: &str, source: &str, entry: &str) -> Result<String, String> {
     let code = crate::typescript::plain(path, source)?;
     let (cuts, names) = cuts(path, &code)?;
-    if !names.iter().any(|name| name == "run") {
-        return Err(format!("{path}: a script of the bank exports an async function run(input)"));
+    if !names.iter().any(|name| name == entry) {
+        return Err(format!("{path}: a script of the bank exports an async function {entry}(input)"));
     }
     let mut body = code;
     for cut in cuts.iter().rev() {
@@ -75,16 +75,18 @@ mod tests {
     #[test]
     fn a_script_becomes_an_expression_that_gives_its_exports() {
         let source = "export const spec = { name: \"x\" };\ntype In = { n: number };\nexport async function run(input: In) { return input.n + 1; }\n";
-        let code = callable("scripts/x.ts", source).expect("callable");
+        let code = callable("scripts/x.ts", source, "run").expect("callable");
         assert!(code.starts_with("(() => {") && code.ends_with("return { spec: spec, run: run };\n})()"), "{code}");
         assert!(!code.contains("export") && !code.contains(": In"), "{code}");
     }
 
     #[test]
     fn a_script_that_imports_or_lacks_run_is_refused() {
-        assert!(callable("scripts/a.ts", "import x from \"y\";\nexport async function run() { return x; }").is_err());
-        assert!(callable("scripts/b.ts", "export const spec = {};").is_err());
-        assert!(callable("scripts/c.ts", "export default async function run() {}").is_err());
-        assert!(callable("scripts/d.ts", "export const = ;").is_err());
+        assert!(callable("scripts/a.ts", "import x from \"y\";\nexport async function run() { return x; }", "run").is_err());
+        assert!(callable("scripts/b.ts", "export const spec = {};", "run").is_err());
+        assert!(callable("scripts/c.ts", "export default async function run() {}", "run").is_err());
+        assert!(callable("scripts/d.ts", "export const = ;", "run").is_err());
+        assert!(callable("scripts/e.ts", "export async function main() {}", "main").is_ok());
+        assert!(callable("scripts/e.ts", "export async function main() {}", "run").is_err());
     }
 }

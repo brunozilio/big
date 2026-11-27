@@ -104,6 +104,17 @@ pub async fn outline(State(ctx): State<Ctx>, Json(drafted): Json<Drafted>) -> Ap
     Ok(reply(worked(move || library::outline(&drafted.path, &drafted.source, language)).await?))
 }
 
+#[derive(Deserialize)]
+pub struct Acted {
+    path: String,
+    action: String,
+}
+
+pub async fn act(State(ctx): State<Ctx>, Json(acted): Json<Acted>) -> ApiResult<Response> {
+    let language = ctx.language().code();
+    Ok(reply(worked(move || library::act(&acted.path, &acted.action, language)).await?))
+}
+
 pub async fn restore(State(ctx): State<Ctx>, Query(named): Query<Named>) -> ApiResult<Response> {
     let language = ctx.language().code();
     worked(move || library::restore(&named.path, language)).await?;

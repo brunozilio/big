@@ -188,5 +188,10 @@ export function mockLibrary() {
     return shown(path)
   }
 
-  return { list, shown, save, create, restore, assist, createFile }
+  const act = (path: string, action: string): LibraryItem => {
+    shown(path)
+    throw new Error(`Não foi salvo: ${path} não tem a ação ${action}`)
+  }
+
+  return { list, shown, save, create, restore, assist, createFile, act }
 }

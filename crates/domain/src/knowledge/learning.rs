@@ -6,7 +6,6 @@ const ENOUGH: usize = 2;
 const SCRIPTED: usize = 3;
 
 pub const WAITING: &str = "learning";
-pub const PROPOSED: &str = "scripts/proposed/";
 
 pub fn offered(proposal: &Proposal) -> String {
     let what = match proposal.kind {
@@ -101,7 +100,7 @@ pub enum Keeping {
     Remember(String),
     Instruction(String),
     Ask(String),
-    Propose { path: String, source: String },
+    Propose { name: String, source: String },
 }
 
 pub fn script_name(name: &str) -> Option<String> {
@@ -150,7 +149,7 @@ pub fn keeping(proposal: &Proposal) -> Keeping {
             proposal.name, proposal.text
         )),
         Lesson::Script => match script_name(&proposal.name) {
-            Some(name) => Keeping::Propose { path: format!("{PROPOSED}{name}.ts"), source: proposal.text.clone() },
+            Some(name) => Keeping::Propose { name, source: proposal.text.clone() },
             None => Keeping::Remember(proposal.text.clone()),
         },
     }
@@ -266,8 +265,8 @@ mod tests {
             text: "export async function run() {}".into(),
             why: "ran it three times".into(),
         };
-        let path = "scripts/proposed/branch-changes.ts".to_owned();
-        assert_eq!(keeping(&lesson), Keeping::Propose { path, source: lesson.text.clone() });
+        let name = "branch-changes".to_owned();
+        assert_eq!(keeping(&lesson), Keeping::Propose { name, source: lesson.text.clone() });
         assert!(offered(&lesson).contains("propose the script `Branch Changes!`"));
         assert_eq!(script_name(" -- "), None);
     }

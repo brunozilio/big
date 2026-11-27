@@ -174,6 +174,7 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
     restoreLibraryItem: (path) => call('DELETE', ROUTES.libraryItem(path)),
     createLibraryFile: (item, name) => call('POST', ROUTES.libraryItem(null), { item, name }),
     outlineLibrary: (path, source) => call('POST', ROUTES.libraryOutline, { path, source }),
+    actLibrary: (path, action) => call('POST', ROUTES.libraryAct, { path, action }),
     assistLibrary: (path, draft, messages, ask) => streamed(fetcher, ROUTES.libraryAssist, { path, ...draft, messages, model: ask?.model ?? null }, ask?.onReply),
     upload: async (file) => {
       const form = new FormData()

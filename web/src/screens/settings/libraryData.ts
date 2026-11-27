@@ -16,6 +16,7 @@ export const libraryApi = {
   assist: (path: string, draft: Draft, messages: LibraryTurn[], ask?: LibraryAsk) => api().assistLibrary(path, draft, messages, ask),
   createFile: (item: string, name: string) => api().createLibraryFile(item, name),
   outline: (path: string, source: string) => api().outlineLibrary(path, source),
+  act: (path: string, action: string) => api().actLibrary(path, action),
 }
 
 export function applied(draft: Draft, answer: LibraryAssist): Draft {

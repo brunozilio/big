@@ -22,6 +22,10 @@ async fn the_library_lists_what_the_content_declares_and_opens_an_agent_as_a_for
     assert!(opened["assist"]["ideas"].as_array().is_some_and(|ideas| !ideas.is_empty()), "{opened}");
     let (status, _) = world.send(Method::GET, "/api/library/item?path=../config.toml", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(opened["actions"], json!([]));
+    let acted = json!({ "path": "agents/developer.ts", "action": "approve" });
+    let (status, refused) = world.send(Method::POST, "/api/library/act", Some(acted)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{refused}");
 }
 
 #[tokio::test(flavor = "multi_thread")]

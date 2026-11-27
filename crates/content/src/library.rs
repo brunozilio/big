@@ -175,7 +175,7 @@ fn opened(library: &Library, item: &Item, path: &str, language: &str) -> Result<
         "path": path, "item": item.path, "section": section.key, "title": card["title"], "avatar": card["avatar"],
         "origin": super::origin(path).name(), "source": source, "files": item.files,
         "mode": shape["mode"], "language": shape["language"], "fields": shape["fields"], "body": shape["body"],
-        "assist": shape["assist"], "outline": shape["outline"],
+        "assist": shape["assist"], "outline": shape["outline"], "actions": shape["actions"],
         "editable": super::editing_root().is_some(),
     }))
 }
@@ -228,14 +228,39 @@ pub fn save(path: &str, change: &Change, language: &str) -> Result<Value, Failur
             (word(&answer["source"]), word(&answer["path"]))
         }
     };
+    kept(&library, item, (path, &moved), (&current, &source), language)
+}
+
+fn kept(
+    library: &Library,
+    item: &Item,
+    (path, moved): (&str, &str),
+    (current, source): (&str, &str),
+    language: &str,
+) -> Result<Value, Failure> {
+    let section = &library.sections[item.section];
     if !moved.is_empty() && moved != path {
-        return moved_to(section, (path, &moved), &source, language);
+        return moved_to(section, (path, moved), source, language);
     }
-    checked(section, item.path == path, path, &source)?;
+    checked(section, item.path == path, path, source)?;
     if source != current {
-        written(path, &source)?;
+        written(path, source)?;
     }
-    opened(&library, item, path, language)
+    opened(library, item, path, language)
+}
+
+pub fn act(path: &str, action: &str, language: &str) -> Result<Value, Failure> {
+    let library = library(language)?;
+    let item = owner(&library, path)?;
+    let current = super::editable(path).ok_or(Failure::Missing)?;
+    let mut acting = asked(&library.sections[item.section], path, &current, &library.paths, language);
+    acting["action"] = json!(action);
+    let answer = ask("act", &acting)?;
+    if let Some(error) = answer["error"].as_str() {
+        return Err(Failure::Invalid(error.to_owned()));
+    }
+    let source = answer["source"].as_str().unwrap_or(&current).to_owned();
+    kept(&library, item, (path, &word(&answer["path"])), (&current, &source), language)
 }
 
 fn moved_to(section: &Section, (from, to): (&str, &str), source: &str, language: &str) -> Result<Value, Failure> {
@@ -489,22 +514,24 @@ mod tests {
     }
 
     #[test]
-    fn a_proposed_script_waits_for_approval_and_approving_moves_it_into_the_bank() {
+    fn a_proposed_script_waits_for_approval_and_the_approve_action_moves_it_into_the_bank() {
         let source =
             "export const spec = { name: \"tidy\", description: \"Tidy.\" };\nexport async function run() {}\n";
-        let about = about("scripts", "scripts/proposed/tidy.ts", source, &["spec"]);
-        assert!(run("card", about.clone())["description"].as_str().is_some_and(|text| text.starts_with("Proposed")));
-        let shape = run("open", about.clone());
-        assert_eq!((&shape["mode"], &shape["fields"][0]["key"]), (&json!("form"), &json!("approve")));
-        let mut kept = about.clone();
-        kept["values"] = json!({ "approve": false });
-        kept["body"] = json!("edited");
-        assert_eq!(run("save", kept)["path"], Value::Null);
-        let mut approved = about;
-        approved["values"] = json!({ "approve": true });
-        approved["body"] = Value::Null;
-        let saved = run("save", approved);
-        assert_eq!((&saved["path"], &saved["source"]), (&json!("scripts/tidy.ts"), &json!(source)));
+        let waiting = about("scripts", "scripts/proposed/tidy.ts", source, &["spec"]);
+        assert!(run("card", waiting.clone())["description"].as_str().is_some_and(|text| text.starts_with("Proposed")));
+        let shape = run("open", waiting.clone());
+        assert_eq!((&shape["mode"], &shape["actions"][0]["key"]), (&json!("code"), &json!("approve")));
+        let mut acting = waiting;
+        acting["action"] = json!("approve");
+        let approved = run("act", acting.clone());
+        assert_eq!((&approved["path"], &approved["source"]), (&json!("scripts/tidy.ts"), &json!(source)));
+        acting["action"] = json!("delete");
+        assert!(run("act", acting)["error"].is_string());
+        let banked = about("scripts", "scripts/tidy.ts", source, &["spec"]);
+        assert_eq!(run("open", banked.clone())["actions"], json!([]));
+        let mut again = banked;
+        again["action"] = json!("approve");
+        assert!(run("act", again)["error"].is_string());
     }
 
     #[test]

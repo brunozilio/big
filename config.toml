@@ -265,6 +265,8 @@ branch_prefix = "feature"
 ask_timeout_ms = 1800000
 schedule_tick_seconds = "30"
 schedule_catch_up_minutes = "360"
+fingerprint_days = 30
+fingerprint_max_mb = 64
 
 [factory]
 enabled = true

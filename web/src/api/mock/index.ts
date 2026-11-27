@@ -375,6 +375,7 @@ export function mockApi(options: MockOptions = {}): Api {
     restoreLibraryItem: (path) => wait(() => library.restore(path)),
     createLibraryFile: (item, name) => wait(() => library.createFile(item, name)),
     outlineLibrary: (_path, source) => wait(() => stepsOf(source), 30),
+    actLibrary: (path, action) => wait(() => library.act(path, action)),
     assistLibrary: async (path, draft, messages, ask) => {
       const answer = await wait(() => library.assist(path, draft, messages), delay * 2)
       const words = answer.reply.split(' ')

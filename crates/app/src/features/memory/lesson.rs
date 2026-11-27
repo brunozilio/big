@@ -93,9 +93,9 @@ pub(crate) fn edit_of(proposal: &Proposal) -> MemoryEdit {
 }
 
 fn keep(services: &LocalServices, cwd: PathBuf, proposal: &Proposal) {
-    if let Keeping::Propose { path, source } = domain::learning::keeping(proposal) {
-        if let Err(error) = agent_engine::tools::bank::propose(&path, &source) {
-            tracing::warn!(%error, path, "a proposed script could not be written for approval");
+    if let Keeping::Propose { name, source } = domain::learning::keeping(proposal) {
+        if let Err(error) = agent_engine::tools::bank::propose(&name, &source) {
+            tracing::warn!(%error, name, "a proposed script could not be written for approval");
         }
         return;
     }

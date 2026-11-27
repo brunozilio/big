@@ -78,8 +78,9 @@
     const here = __here();
     return tools.loadScript(asked).then((loaded) => {
       const module = __load(loaded.code, here);
-      if (typeof module?.run !== "function") throw toolError("scripts", `the script ${loaded.name} has no run function`);
-      return module.run(input);
+      const entry = loaded.entry ?? "run";
+      if (typeof module?.[entry] !== "function") throw toolError("scripts", `the script ${loaded.name} has no ${entry} function`);
+      return module[entry](input);
     });
   };
   const banked = (name) => (input = {}) => running({ name }, input);
