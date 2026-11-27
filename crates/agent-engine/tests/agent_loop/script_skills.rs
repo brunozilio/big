@@ -1,5 +1,4 @@
 use std::path::Path;
-use std::sync::Arc;
 
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::script_tool::ScriptAccess;
@@ -139,21 +138,7 @@ fn a_project_s_script_skill_the_agent_loads_still_gets_no_files_by_default() {
     let rig = Rig::new(domain::Reviewer::Human);
     let home = tempfile::tempdir().expect("home");
     skill(rig.dir.path(), SKILL);
-    let control = Arc::clone(&rig.control);
-    let events = Arc::clone(&rig.events);
-    let allower = std::thread::spawn(move || {
-        for _ in 0..400 {
-            let ask = events.lock().expect("events").iter().find_map(|event| match event {
-                EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                _ => None,
-            });
-            if let Some(id) = ask {
-                control.answer(&id, Decision::Allow);
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-    });
+    let allower = crate::answering(&rig, Decision::Allow);
     load_mark(&rig, found(rig.dir.path(), home.path()));
     allower.join().expect("allower");
     assert!(asks(&rig).is_empty(), "loading a skill asks nothing");

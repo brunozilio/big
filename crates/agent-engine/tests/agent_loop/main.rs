@@ -130,13 +130,18 @@ impl Rig {
 
 pub(crate) struct Answerer {
     done: Arc<std::sync::atomic::AtomicBool>,
-    thread: std::thread::JoinHandle<()>,
+    thread: std::thread::JoinHandle<usize>,
 }
 
 impl Answerer {
     pub(crate) fn join(self) -> std::thread::Result<()> {
         self.done.store(true, std::sync::atomic::Ordering::SeqCst);
-        self.thread.join()
+        self.thread.join().map(|_| ())
+    }
+
+    pub(crate) fn answered(self) -> usize {
+        self.done.store(true, std::sync::atomic::Ordering::SeqCst);
+        self.thread.join().expect("answerer")
     }
 }
 
@@ -147,6 +152,7 @@ pub(crate) fn answering(rig: &Rig, decision: domain::Decision) -> Answerer {
     let finished = Arc::clone(&done);
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
     let thread = std::thread::spawn(move || {
+        let mut seen = std::collections::BTreeSet::new();
         while !finished.load(std::sync::atomic::Ordering::SeqCst) && std::time::Instant::now() < deadline {
             let asks: Vec<_> = events
                 .lock()
@@ -159,9 +165,11 @@ pub(crate) fn answering(rig: &Rig, decision: domain::Decision) -> Answerer {
                 .collect();
             for id in asks {
                 control.answer(&id, decision.clone());
+                seen.insert(id.0.clone());
             }
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
+        seen.len()
     });
     Answerer { done, thread }
 }

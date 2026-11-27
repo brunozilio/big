@@ -26,25 +26,7 @@ fn an_ask_from_a_sub_agent_is_told_first_as_that_agent_s() {
     let tools = tools::standard();
     let events = Arc::clone(&rig.events);
     let emit = move |event: EngineEvent| events.lock().expect("events").push(event);
-    let control = Arc::clone(&rig.control);
-    let pending_events = Arc::clone(&rig.events);
-    let answerer = std::thread::spawn(move || {
-        for _ in 0..200 {
-            let asks: Vec<_> = pending_events
-                .lock()
-                .expect("events")
-                .iter()
-                .filter_map(|event| match event {
-                    EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                    _ => None,
-                })
-                .collect();
-            for id in asks {
-                control.answer(&id, Decision::Deny);
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-    });
+    let answerer = crate::answering(&rig, Decision::Deny);
     let agent = Agent {
         api: &model,
         tools: &tools,

@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::transcript::{Block, Message};
 use domain::{AskKind, Decision, EngineEvent};
@@ -14,25 +12,7 @@ fn asks_before_commands_and_honours_the_answer() {
         ScriptedModel::reply(vec![tool_use("b1", "Bash", json!({"command": "echo hi > out.txt"}))]),
         ScriptedModel::reply(vec![Block::Text("Ok.".into())]),
     ]);
-    let control = Arc::clone(&rig.control);
-    let pending_events = Arc::clone(&rig.events);
-    let answerer = std::thread::spawn(move || {
-        for _ in 0..200 {
-            let asks: Vec<_> = pending_events
-                .lock()
-                .expect("events")
-                .iter()
-                .filter_map(|event| match event {
-                    EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                    _ => None,
-                })
-                .collect();
-            for id in asks {
-                control.answer(&id, Decision::Deny);
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-    });
+    let answerer = crate::answering(&rig, Decision::Deny);
     rig.run(&model, &mut vec![Message::user("write")]).expect("run");
     answerer.join().expect("answerer");
 
@@ -67,25 +47,7 @@ fn reading_outside_the_project_is_asked_for_by_path_and_a_denial_keeps_it_unread
         ]),
         ScriptedModel::reply(vec![Block::Text("Ok.".into())]),
     ]);
-    let control = Arc::clone(&rig.control);
-    let pending_events = Arc::clone(&rig.events);
-    let answerer = std::thread::spawn(move || {
-        for _ in 0..200 {
-            let asks: Vec<_> = pending_events
-                .lock()
-                .expect("events")
-                .iter()
-                .filter_map(|event| match event {
-                    EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                    _ => None,
-                })
-                .collect();
-            for id in asks {
-                control.answer(&id, Decision::Deny);
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-    });
+    let answerer = crate::answering(&rig, Decision::Deny);
     rig.run(&model, &mut vec![Message::user("look")]).expect("run");
     answerer.join().expect("answerer");
 
@@ -132,25 +94,7 @@ fn asks_the_user_questions_on_the_card_even_while_planning() {
         ScriptedModel::reply(vec![tool_use("q1", "AskUserQuestion", question)]),
         ScriptedModel::reply(vec![Block::Text("Postgres it is.".into())]),
     ]);
-    let control = Arc::clone(&rig.control);
-    let pending_events = Arc::clone(&rig.events);
-    let answerer = std::thread::spawn(move || {
-        for _ in 0..200 {
-            let asks: Vec<_> = pending_events
-                .lock()
-                .expect("events")
-                .iter()
-                .filter_map(|event| match event {
-                    EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                    _ => None,
-                })
-                .collect();
-            for id in asks {
-                control.answer(&id, Decision::Answer(vec![vec![1]]));
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-    });
+    let answerer = crate::answering(&rig, Decision::Answer(vec![vec![1]]));
     let mut history = vec![Message::user("set up storage")];
     rig.run(&model, &mut history).expect("run");
     answerer.join().expect("answerer");

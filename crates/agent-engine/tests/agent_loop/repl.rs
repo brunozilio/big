@@ -431,20 +431,7 @@ fn what_one_script_keeps_the_next_one_reads() {
 #[test]
 fn a_call_the_user_refuses_throws_in_the_script_and_nothing_is_written() {
     let rig = code_mode(domain::Reviewer::Human);
-    let (control, events) = (Arc::clone(&rig.control), Arc::clone(&rig.events));
-    let denier = std::thread::spawn(move || {
-        for _ in 0..2000 {
-            let ask = events.lock().expect("events").iter().find_map(|event| match event {
-                EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                _ => None,
-            });
-            if let Some(ask) = ask {
-                control.answer(&ask, Decision::Deny);
-                return;
-            }
-            std::thread::sleep(std::time::Duration::from_millis(5));
-        }
-    });
+    let denier = crate::answering(&rig, Decision::Deny);
     let code = "let went = 'stopped'; \
                 try { await Bash({ command: 'touch made.txt' }); went = 'on'; } catch (error) { went = 'caught'; } \
                 self.log('after the refusal:', went); went";

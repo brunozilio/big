@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use agent_engine::model::scripted::ScriptedModel;
 use agent_engine::tools::Tool;
 use agent_engine::tools::script_tool::load;
@@ -23,31 +21,8 @@ fn script_tools(home: &std::path::Path, project: &std::path::Path) -> Vec<Box<dy
     load(&trusted).into_iter().map(|tool| Box::new(tool) as Box<dyn Tool>).collect()
 }
 
-fn answer_every_ask(rig: &Rig, decision: Decision) -> std::thread::JoinHandle<usize> {
-    let control = Arc::clone(&rig.control);
-    let events = Arc::clone(&rig.events);
-    std::thread::spawn(move || {
-        let mut answered = Vec::new();
-        for _ in 0..200 {
-            let asks: Vec<domain::AskId> = events
-                .lock()
-                .expect("events")
-                .iter()
-                .filter_map(|event| match event {
-                    EngineEvent::Asked(ask) => Some(ask.id.clone()),
-                    _ => None,
-                })
-                .collect();
-            for id in asks {
-                if !answered.contains(&id) {
-                    answered.push(id.clone());
-                    control.answer(&id, decision.clone());
-                }
-            }
-            std::thread::sleep(std::time::Duration::from_millis(10));
-        }
-        answered.len()
-    })
+fn answer_every_ask(rig: &Rig, decision: Decision) -> crate::Answerer {
+    crate::answering(rig, decision)
 }
 
 fn model() -> ScriptedModel {
@@ -69,7 +44,7 @@ fn project_tool_run_asked(rig: &Rig, asks: usize) -> String {
     let answerer = answer_every_ask(rig, Decision::Allow);
     let mut history = vec![Message::user("mark")];
     rig.run_with(&model(), &mut history, script_tools(home.path(), rig.dir.path())).expect("run");
-    assert_eq!(answerer.join().expect("answerer"), asks);
+    assert_eq!(answerer.answered(), asks);
     format!("{:?}", history.iter().flat_map(|message| &message.blocks).collect::<Vec<_>>())
 }
 
@@ -264,7 +239,7 @@ fn a_declared_exec_the_user_allows_runs() {
     let rig = Rig::new(domain::Reviewer::Human);
     let answerer = answer_every_ask(&rig, Decision::Allow);
     let said = run_runner(&rig, r#", capabilities: ["exec"]"#);
-    assert_eq!(answerer.join().expect("answerer"), 1);
+    assert_eq!(answerer.answered(), 1);
     assert_eq!(said[0], "exit 0", "{said:?}");
     assert!(rig.dir.path().join("made.txt").exists());
 }
