@@ -151,6 +151,11 @@ impl Agent<'_> {
                 rule_context.join("\n")
             )));
         }
+        if self.depth > 0 && crate::agent::subagents::top_level_only(name) {
+            return Some(Outcome::error(format!(
+                "{name} is only for the top-level agent; a sub-agent or fork does the work itself and reports back."
+            )));
+        }
         if tool.is_some() && !offered {
             return Some(Outcome::error(format!(
                 "Tool {name} is not available to this agent (load it with ToolSearch if listed there)."

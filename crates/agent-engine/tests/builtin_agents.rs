@@ -74,7 +74,7 @@ fn a_fork_continues_from_the_parents_conversation_and_reports_only_its_own_words
 
     let fork = &asked[1];
     assert!(fork.system.starts_with("Parent prompt."), "a fork reads the parent's own prompt");
-    assert!(!fork.tools.iter().any(|spec| spec.name == "Agent"), "a fork cannot fork again");
+    assert_eq!(fork.tools, asked[0].tools, "a fork keeps the parent's tool list so the cached prefix holds");
     assert_eq!(fork.messages[0].text(), "Ship the release");
     assert_eq!(fork.messages[1].role, Role::Assistant);
     let directive = fork.messages[2].text();
@@ -86,6 +86,36 @@ fn a_fork_continues_from_the_parents_conversation_and_reports_only_its_own_words
         _ => None,
     });
     assert_eq!(report.as_deref(), Some("Three files.\n\nagent_id: agent-1 (SendMessage continues it)"));
+}
+
+#[test]
+fn a_fork_sees_the_agent_tool_but_is_refused_when_it_calls_it() {
+    let model = ScriptedModel::new([
+        ScriptedModel::reply(vec![tool_use(
+            "f1",
+            "Agent",
+            json!({"description": "Check", "subagent_type": "fork", "prompt": "Count the files"}),
+        )]),
+        ScriptedModel::reply(vec![tool_use(
+            "f2",
+            "Agent",
+            json!({"description": "Again", "subagent_type": "fork", "prompt": "Count again"}),
+        )]),
+        says("Three files."),
+        says("Done."),
+    ]);
+    let mut history = vec![Message::user("Ship the release")];
+    let asked = run(&model, &mut history);
+
+    let refused = asked[2].messages.last().and_then(|message| {
+        message.blocks.iter().find_map(|block| match block {
+            Block::ToolResult { id, content, is_error } if id == "f2" => Some((content.clone(), *is_error)),
+            _ => None,
+        })
+    });
+    let (content, is_error) = refused.expect("the fork's call was answered");
+    assert!(is_error && content.contains("only for the top-level agent"), "{content}");
+    assert_eq!(asked[2].tools, asked[0].tools);
 }
 
 struct Echo;

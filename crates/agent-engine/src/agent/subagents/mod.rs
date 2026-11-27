@@ -22,7 +22,7 @@ use crate::tools::subagent_config::AgentConfig;
 use crate::tools::{Outcome, Workspace, builtin_agents};
 use crate::transcript::{Message, Usage};
 
-fn top_level_only(name: &str) -> bool {
+pub(in crate::agent) fn top_level_only(name: &str) -> bool {
     matches!(ToolName::of(name), ToolName::Agent | ToolName::SendMessage | ToolName::ExitPlanMode)
 }
 
@@ -104,7 +104,7 @@ impl Agent<'_> {
             request: TurnRequest {
                 model: planned.model.clone(),
                 system,
-                tools: self.child_tools(&planned.config, planning, &run),
+                tools: self.child_tools(&chosen, &planned.config, planning, &run),
                 effort: planned.config.effort.unwrap_or(self.request.effort),
                 ..self.request.clone()
             },
@@ -172,8 +172,9 @@ impl Agent<'_> {
     ) -> Workspace {
         let config = &planned.config;
         let mut child_workspace = workspace.fork(child_control.shared_stop());
-        child_workspace.services.deferred =
-            workspace.services.deferred.as_ref().map(|deferred| Arc::new(deferred.only(|name| config.allows(name))));
+        child_workspace.services.deferred = workspace.services.deferred.as_ref().map(|deferred| {
+            Arc::new(if chosen.forked { deferred.inherited() } else { deferred.only(|name| config.allows(name)) })
+        });
         if planned.model != self.request.model {
             child_workspace.models.switch_to(planned.model.clone());
         }
@@ -290,7 +291,10 @@ impl Agent<'_> {
         }
     }
 
-    fn child_tools(&self, config: &AgentConfig, planning: bool, run: &ThisRun) -> Vec<ToolSpec> {
+    fn child_tools(&self, chosen: &Chosen, config: &AgentConfig, planning: bool, run: &ThisRun) -> Vec<ToolSpec> {
+        if chosen.forked {
+            return self.request.tools.clone();
+        }
         self.request
             .tools
             .iter()

@@ -30,6 +30,11 @@ impl Deferred {
         Self { specs, loaded: Mutex::default() }
     }
 
+    pub fn inherited(&self) -> Self {
+        let loaded = self.loaded.lock().map(|loaded| loaded.clone()).unwrap_or_default();
+        Self { specs: self.specs.clone(), loaded: Mutex::new(loaded) }
+    }
+
     pub fn announcement(&self) -> String {
         let names: Vec<&str> = self.specs.iter().map(|spec| spec.name.as_str()).collect();
         format!(
@@ -140,6 +145,22 @@ mod tests {
         }
         let loaded: Vec<String> = deferred.loaded().into_iter().map(|spec| spec.name).collect();
         assert_eq!(loaded, ["mcp__jira__tool9", "mcp__jira__tool3"]);
+    }
+
+    #[test]
+    fn loading_more_tools_only_appends_and_a_fork_inherits_what_was_loaded() {
+        let specs = (0..25).map(|n| spec(&format!("mcp__jira__tool{n}"), "a Jira thing")).collect();
+        let deferred = defer(specs).1.expect("deferred");
+        deferred.search("select:mcp__jira__tool7");
+        let before: Vec<ToolSpec> = deferred.loaded();
+        deferred.search("select:mcp__jira__tool1,mcp__jira__tool7");
+        let after = deferred.loaded();
+        assert_eq!(after[..before.len()], before[..], "earlier tools keep their place");
+        assert_eq!(after.len(), 2);
+        let fork = deferred.inherited();
+        assert_eq!(fork.loaded(), after);
+        fork.search("select:mcp__jira__tool2");
+        assert_eq!(deferred.loaded().len(), 2, "the fork's loads stay its own");
     }
 
     #[test]
