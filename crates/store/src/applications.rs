@@ -93,6 +93,8 @@ pub struct Repository {
     pub flow: String,
     #[serde(rename = "readOnly", default, skip_serializing_if = "std::ops::Not::not")]
     pub read_only: bool,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub remote: String,
 }
 
 impl Repository {

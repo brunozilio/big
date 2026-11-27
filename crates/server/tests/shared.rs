@@ -118,3 +118,14 @@ async fn a_request_from_another_site_is_refused() {
     let response = world.router.clone().oneshot(request).await.expect("response");
     assert_eq!(response.status(), StatusCode::FORBIDDEN);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_server_clones_only_https_repositories() {
+    let world = shared_world().await;
+    let ana = signed(&world, "ana");
+    let made = json!({ "name": "Loja", "repositories": [{ "directory": "", "remote": "file:///etc" }] });
+    let (status, body) = send(&world, Some(&ana), Method::POST, "/api/applications", Some(made)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    let (status, _) = send(&world, None, Method::GET, "/api/git/credentials/nope?url=https://x", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

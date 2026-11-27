@@ -11,6 +11,7 @@ fn open(method: &Method, path: &str) -> bool {
     let reads = method == Method::GET || method == Method::HEAD;
     path.starts_with("/api/auth/")
         || path.starts_with(orchestrator::CLOUD_CREDENTIALS_PATH)
+        || path.starts_with(crate::workspaces::CREDENTIALS_PATH)
         || path == crate::browser_mcp::route()
         || path == browser::ROUTE
         || (reads

@@ -154,6 +154,7 @@ export function code(): Action[] {
       object([["merged", "boolean"]], [["sha", "string"], ["already", "boolean"]]),
       "lookup",
     ),
+    read("code.git_credentials", object([["url", "string"]]), object([["username", "string"], ["password", "string"]])),
   ];
 }
 

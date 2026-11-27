@@ -48,6 +48,7 @@ fn repository(found: Repository) -> ApiResult<Repository> {
         bindings: bound(found.bindings),
         flow: trimmed(&found.flow),
         read_only: found.read_only,
+        remote: trimmed(&found.remote),
     })
 }
 
@@ -191,6 +192,7 @@ pub async fn create(
 ) -> ApiResult<Response> {
     let mut application = parsed(body)?;
     application.id = random_id()?;
+    let application = crate::workspaces::cloned(&ctx, person.owner(), application).await?;
     let application = checked(application)?;
     ctx.backend.store.save_application(&application)?;
     ctx.backend.store.set_owner(store::ownership::APPLICATION, &application.id, person.owner())?;
@@ -200,6 +202,7 @@ pub async fn create(
 pub async fn update(
     State(ctx): State<Ctx>,
     UrlPath(id): UrlPath<String>,
+    Extension(person): Extension<Principal>,
     Json(body): Json<Value>,
 ) -> ApiResult<Response> {
     if ctx.backend.store.application(&id)?.is_none() {
@@ -211,6 +214,7 @@ pub async fn update(
     }
     let mut application = parsed(body)?;
     application.id = id;
+    let application = crate::workspaces::cloned(&ctx, person.owner(), application).await?;
     let application = checked(application)?;
     ctx.backend.store.save_application(&application)?;
     Ok(reply(application))

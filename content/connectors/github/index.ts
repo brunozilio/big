@@ -68,7 +68,16 @@ const ACTIONS: Record<string, (connection: any, args: Record<string, any>, key: 
   "pipelines.review_deployment": runs.reviewDeployment,
 };
 
+function gitCredentials(creds: Creds, args: Record<string, any>, ctx) {
+  const api = new URL(String(ctx.config.api ?? "https://api.github.com"));
+  const wanted = new URL(String(args.url ?? ""));
+  const host = api.hostname.replace(/^api\./, "");
+  if (wanted.hostname !== host && wanted.hostname !== api.hostname) return { username: "", password: "" };
+  return { username: "x-access-token", password: creds.token };
+}
+
 export function call({ action, args, creds, idempotencyKey }: { action: string; args: Record<string, any>; creds: Creds; idempotencyKey: string }, ctx) {
+  if (action === "code.git_credentials") return gitCredentials(creds, args ?? {}, ctx);
   const run = Object.prototype.hasOwnProperty.call(ACTIONS, action) ? ACTIONS[action] : undefined;
   if (run === undefined) return unknownAction(action);
   return run(api(ctx, creds), args ?? {}, idempotencyKey ?? "");

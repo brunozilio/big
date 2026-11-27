@@ -142,6 +142,13 @@ const MIGRATIONS: &[&str] = &[
     ) WITHOUT ROWID;
     CREATE INDEX ownership_by_owner ON ownership (kind, owner);
 ",
+    "
+    CREATE TABLE git_tokens (
+        token TEXT PRIMARY KEY,
+        owner TEXT NOT NULL,
+        connection TEXT NOT NULL
+    );
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

@@ -1,5 +1,6 @@
 mod browser_mcp;
 mod cloud;
+mod git_credential;
 mod http;
 mod instance;
 mod logging;
@@ -29,6 +30,8 @@ enum Internal {
     Teammate(teammate::Args),
     #[command(name = server::CLOUD_CREDENTIALS_COMMAND, hide = true, about = "Print an agent's cloud credentials")]
     CloudCredentials(cloud::Args),
+    #[command(name = server::GIT_CREDENTIAL_COMMAND, hide = true, about = "Answer git with an agent's repository credentials")]
+    GitCredential(git_credential::Args),
     #[command(
         name = brand::browser::MCP_COMMAND,
         about = "Serve the browser tools over MCP on stdin/stdout, for another agent to use"
@@ -42,6 +45,7 @@ fn main() -> ExitCode {
     let ended = match cli.command {
         Some(Internal::Teammate(args)) => teammate::run(args),
         Some(Internal::CloudCredentials(args)) => cloud::run(args),
+        Some(Internal::GitCredential(args)) => git_credential::run(args),
         Some(Internal::BrowserMcp(args)) => data_dir().and_then(|data| browser_mcp::run(args, data)),
         None => serve(cli.port.unwrap_or_else(configured_port), !cli.no_open && configured_open()),
     };

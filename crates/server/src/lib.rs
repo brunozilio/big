@@ -47,6 +47,7 @@ mod usage;
 mod usage_cache;
 mod vault;
 mod watched;
+mod workspaces;
 
 pub use auth::settings::{Mode as AuthMode, force as force_auth_mode};
 pub use backend::Backend;
@@ -58,3 +59,4 @@ pub use orchestrator::CLOUD_CREDENTIALS_COMMAND;
 pub use page::{Asset, embedded};
 pub use server::{app, bind, serve};
 pub use vault::VaultTokens;
+pub use workspaces::HELPER_COMMAND as GIT_CREDENTIAL_COMMAND;

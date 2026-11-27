@@ -78,6 +78,26 @@ impl Store {
     }
 }
 
+impl Store {
+    pub fn put_git_token(&self, token: &str, owner: &str, connection: &str) -> Result<()> {
+        self.locked().execute(
+            "INSERT INTO git_tokens (token, owner, connection) VALUES (?1, ?2, ?3)
+             ON CONFLICT (token) DO UPDATE SET owner = excluded.owner, connection = excluded.connection",
+            params![token, owner, connection],
+        )?;
+        Ok(())
+    }
+
+    pub fn git_token(&self, token: &str) -> Result<Option<(String, String)>> {
+        Ok(self
+            .locked()
+            .query_row("SELECT owner, connection FROM git_tokens WHERE token = ?1", [token], |row| {
+                Ok((row.get(0)?, row.get(1)?))
+            })
+            .optional()?)
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct OwnedIds {
     mine: HashSet<String>,

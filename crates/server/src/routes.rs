@@ -49,6 +49,7 @@ fn api() -> Router<Ctx> {
         .route("/api/applications", get(applications::list).post(applications::create))
         .route("/api/applications/{id}", put(applications::update).delete(applications::remove))
         .route(&cloud::route(), get(cloud::credentials))
+        .route(&crate::workspaces::route(), get(crate::workspaces::credentials))
         .route("/api/fs/dirs", get(folders::dirs))
         .route("/api/attachments", post(attachments::upload))
         .route("/api/attachments/{id}", get(attachments::download))

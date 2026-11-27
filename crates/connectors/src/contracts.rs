@@ -40,6 +40,7 @@ pub mod code {
     pub const PULL_REQUESTS: &str = "code.pull_requests";
     pub const BRANCHES: &str = "code.branches";
     pub const MERGE_BRANCHES: &str = "code.merge_branches";
+    pub const GIT_CREDENTIALS: &str = "code.git_credentials";
 }
 
 pub mod pipelines {
@@ -291,6 +292,11 @@ pub fn code() -> Vec<ActionSpec> {
             object(&[("base", "string"), ("head", "string")], &[("repo", "string"), ("message", "string")]),
             object(&[("merged", "boolean")], &[("sha", "string"), ("already", "boolean")]),
             Idempotency::Lookup,
+        ),
+        ActionSpec::read(
+            code::GIT_CREDENTIALS,
+            object(&[("url", "string")], &[]),
+            object(&[("username", "string"), ("password", "string")], &[]),
         ),
     ]
 }
