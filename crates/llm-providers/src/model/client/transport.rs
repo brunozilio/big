@@ -93,7 +93,7 @@ impl Transport {
                 None => self.http.get(&call.url, &call.headers),
             }
             .map_err(ModelError::Network)
-            .and_then(json_response)
+            .and_then(|response| json_response(self.provider, response))
         })
     }
 
@@ -107,7 +107,7 @@ impl Transport {
             drop(response);
             response = self.limits_once(true)?;
         }
-        status(response.status)?;
+        let response = accepted(self.provider, response)?;
         let value: Value = serde_json::from_str(&read(response, llm_providers::limits::LIMIT)?)
             .map_err(|_| ModelError::Provider("the plan limits answered with something other than JSON".into()))?;
         Ok(Some(self.provider.windows(&value, language)?))
@@ -143,7 +143,11 @@ impl Transport {
             drop(response);
             response = self.search_once(query, true, cancel).await?;
         }
-        status(response.status)?;
+        if !(200..300).contains(&response.status) {
+            let status = response.status;
+            let body = response.body.text(cancel, SEARCH_LIMIT).await.unwrap_or_default();
+            return Err(refused(self.provider, status, &body));
+        }
         let text = response.body.text(cancel, SEARCH_LIMIT).await?;
         let value: Value = serde_json::from_str(&text)
             .map_err(|_| ModelError::Provider("the web search answered with something other than JSON".into()))?;
@@ -243,17 +247,46 @@ pub(super) fn read(mut response: Response, limit: u64) -> Result<String, ModelEr
     Ok(text)
 }
 
-pub(super) fn status(status: u16) -> Result<(), ModelError> {
-    match status {
-        200..=299 => Ok(()),
-        401 | 403 => Err(ModelError::Unauthorized(format!("provider returned HTTP {status}"))),
-        429 | 500..=599 => Err(ModelError::Overloaded(format!("provider returned HTTP {status}"))),
-        _ => Err(ModelError::Provider(format!("provider returned HTTP {status}"))),
+const SHOWN: usize = 300;
+
+fn accepted(provider: &dyn Provider, mut response: Response) -> Result<Response, ModelError> {
+    if (200..300).contains(&response.status) {
+        return Ok(response);
+    }
+    let mut bytes = Vec::new();
+    let _ = response.body.by_ref().take(request::ERROR_LIMIT as u64).read_to_end(&mut bytes);
+    Err(refused(provider, response.status, &String::from_utf8_lossy(&bytes)))
+}
+
+pub(super) fn refused(provider: &dyn Provider, status: u16, body: &str) -> ModelError {
+    let declared = provider.refusal(status, body).unwrap_or_default();
+    let message = match declared.message.trim() {
+        "" => plain(status, body),
+        told => told.to_owned(),
+    };
+    let kind = match (declared.kind.as_str(), status) {
+        ("", 401) => "unauthorized",
+        ("", 429 | 500..=599) => "overloaded",
+        (kind, _) => kind,
+    };
+    match kind {
+        "unauthorized" => ModelError::Unauthorized(message),
+        "overloaded" => ModelError::Overloaded(message),
+        _ => ModelError::Provider(message),
     }
 }
 
-fn json_response(response: Response) -> Result<Value, ModelError> {
-    status(response.status)?;
+fn plain(status: u16, body: &str) -> String {
+    let shown: String = body.trim().chars().take(SHOWN).collect();
+    if shown.is_empty() {
+        format!("provider returned HTTP {status}")
+    } else {
+        format!("provider returned HTTP {status}: {shown}")
+    }
+}
+
+fn json_response(provider: &dyn Provider, response: Response) -> Result<Value, ModelError> {
+    let response = accepted(provider, response)?;
     serde_json::from_str(&read(response, catalog::PAGE_LIMIT)?)
         .map_err(|_| ModelError::Provider("invalid model catalog JSON".into()))
 }

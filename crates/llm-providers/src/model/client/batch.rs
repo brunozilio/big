@@ -16,7 +16,9 @@ tokio::task_local! {
     static BATCHED: std::cell::Cell<bool>;
 }
 
-pub(super) async fn marking<T>(turn: impl Future<Output = Result<super::super::Reply, T>>) -> Result<super::super::Reply, T> {
+pub(super) async fn marking<T>(
+    turn: impl Future<Output = Result<super::super::Reply, T>>,
+) -> Result<super::super::Reply, T> {
     BATCHED
         .scope(std::cell::Cell::new(false), async move {
             let mut reply = turn.await?;
@@ -141,6 +143,10 @@ async fn fetch(job: &Job, call: &Call, limit: usize) -> Result<String, ModelErro
     let method = if call.body.is_some() { "POST" } else { "GET" };
     let out = Outgoing { method, url: &call.url, headers: &call.headers, body: call.body.as_deref(), streaming: false };
     let response = job.http.send(out, &never).await?;
-    super::transport::status(response.status)?;
+    if !(200..300).contains(&response.status) {
+        let status = response.status;
+        let body = response.body.text(&never, limit).await.unwrap_or_default();
+        return Err(super::transport::refused(job.provider, status, &body));
+    }
     response.body.text(&never, limit).await
 }

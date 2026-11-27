@@ -138,7 +138,24 @@ fn the_client_asks_the_usage_once_and_a_provider_without_limits_asks_nothing() {
 }
 
 #[test]
-fn the_browser_is_sent_with_the_inference_scope_and_the_code_is_exchanged_as_json_with_the_state() {
+fn a_refused_side_call_tells_what_the_provider_said_and_only_a_lost_session_asks_to_sign_in() {
+    let limits = |status: u16, body: Value| client(CLAUDE, [(status, body.to_string())]).0.limits(Language::Portuguese);
+    let refused = |kind: &str, message: &str| json!({"type": "error", "error": {"type": kind, "message": message}});
+    assert_eq!(
+        limits(403, refused("permission_error", "OAuth token does not meet scope requirement user:profile")),
+        Err(ModelError::Provider("OAuth token does not meet scope requirement user:profile".into()))
+    );
+    assert_eq!(
+        limits(403, refused("authentication_error", "token revoked")),
+        Err(ModelError::Unauthorized("token revoked".into()))
+    );
+    assert_eq!(limits(429, refused("rate_limit_error", "slow down")), Err(ModelError::Overloaded("slow down".into())));
+    assert_eq!(limits(403, json!("blocked")), Err(ModelError::Provider("provider returned HTTP 403: \"blocked\"".into())));
+    assert_eq!(limits(401, json!({})), Err(ModelError::Unauthorized("provider returned HTTP 401: {}".into())));
+}
+
+#[test]
+fn the_browser_is_sent_with_the_profile_and_inference_scopes_and_the_code_is_exchanged_as_json_with_the_state() {
     let host = ScriptedHost::new(
         [(200, json!({"access_token": "a", "refresh_token": "r", "expires_in": 3600}).to_string())],
         [("/callback", "code=c&state=r2x32")],
@@ -148,7 +165,7 @@ fn the_browser_is_sent_with_the_inference_scope_and_the_code_is_exchanged_as_jso
     let log = host.log.borrow();
     let url = &log.opened[0].0;
     assert!(url.starts_with("https://claude.com/cai/oauth/authorize?code=true&client_id="), "{url}");
-    assert!(url.contains("scope=user%3Ainference"), "{url}");
+    assert!(url.contains("scope=user%3Aprofile+user%3Ainference&"), "{url}");
     assert_eq!(log.sent[0].0, "https://platform.claude.com/v1/oauth/token");
     let body: Value = serde_json::from_str(&log.sent[0].1).unwrap_or_default();
     assert_eq!(

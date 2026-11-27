@@ -145,6 +145,24 @@ export function batchAnswers({ text }) {
   });
 }
 
+const REFUSALS: Record<string, string> = {
+  authentication_error: "unauthorized",
+  rate_limit_error: "overloaded",
+  overloaded_error: "overloaded",
+  api_error: "overloaded",
+};
+
+export function refusal({ body }: { status: number; body: string }) {
+  let error;
+  try {
+    error = JSON.parse(body)?.error;
+  } catch (_) {
+    return null;
+  }
+  if (typeof error?.message !== "string") return null;
+  return { kind: REFUSALS[error.type] ?? "", message: error.message };
+}
+
 export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.config.api, headers({ config }, ctx), "/models?limit=1000");
 
 export function page({ value }, ctx) {

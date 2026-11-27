@@ -371,6 +371,9 @@ impl Provider for ScriptedProvider {
     fn retries_after_refresh(&self, status: u16) -> bool {
         self.quiet("retriesAfterRefresh", json!({ "status": status }))
     }
+    fn refusal(&self, status: u16, body: &str) -> Option<crate::Refusal> {
+        self.quiet("refusal", json!({ "status": status, "body": body }))
+    }
     fn framing(&self) -> &'static str {
         if self.framing.is_empty() { "ndjson" } else { self.framing }
     }

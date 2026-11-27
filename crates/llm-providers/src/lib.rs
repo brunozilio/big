@@ -39,6 +39,14 @@ pub enum ProviderError {
     PortInUse(u16),
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Deserialize)]
+pub struct Refusal {
+    #[serde(default)]
+    pub kind: String,
+    #[serde(default)]
+    pub message: String,
+}
+
 pub trait Provider: Sync {
     fn id(&self) -> &'static str;
     fn name(&self) -> &'static str;
@@ -136,6 +144,10 @@ pub trait Provider: Sync {
 
     fn retries_after_refresh(&self, _status: u16) -> bool {
         false
+    }
+
+    fn refusal(&self, _status: u16, _body: &str) -> Option<Refusal> {
+        None
     }
 
     fn framing(&self) -> &'static str {
