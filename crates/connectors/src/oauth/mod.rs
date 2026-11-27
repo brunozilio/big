@@ -104,12 +104,7 @@ pub(crate) fn granted(answer: &Value, now: Timestamp) -> Result<Grant, ActionErr
 }
 
 pub fn origin(port: u16) -> String {
-    origin_of(brand::server::PUBLIC_URL, port)
-}
-
-pub fn origin_of(configured: &str, port: u16) -> String {
-    let configured = configured.trim().trim_end_matches('/');
-    if configured.is_empty() { format!("http://127.0.0.1:{port}") } else { configured.to_owned() }
+    format!("http://127.0.0.1:{port}")
 }
 
 pub fn templated(redirect: &str) -> bool {
@@ -123,9 +118,8 @@ pub fn redirect_for(redirect: &str, port: u16) -> String {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn the_origin_placeholder_becomes_the_public_address_or_the_loopback_port() {
-        assert_eq!(super::origin_of("", 7420), "http://127.0.0.1:7420");
-        assert_eq!(super::origin_of("https://app.acme.com/", 7420), "https://app.acme.com");
+    fn the_origin_placeholder_is_always_this_computer_so_the_extension_relays_it_in_the_cloud() {
+        assert_eq!(super::redirect_for("{origin}/api/connections/oauth/callback", 7420), "http://127.0.0.1:7420/api/connections/oauth/callback");
         assert!(super::templated("{origin}/cb") && super::templated("http://127.0.0.1:{port}/cb"));
         assert!(!super::templated("http://127.0.0.1:33418/cb"));
     }
