@@ -94,7 +94,11 @@ impl Job {
             intent: crate::model::Intent::ONCE,
         };
         let stop = self.control.stop_flag();
-        match crate::chores::answer(command, &api, &template, &self.request.prompt.text, history, stop) {
+        let gate = self.gate.clone();
+        let mut said = move |piece: String| {
+            gate.emit(EngineEvent::TextDelta(piece));
+        };
+        match crate::chores::answer(command, &api, &template, &self.request.prompt.text, history, stop, &mut said) {
             Ok(Some(answer)) => {
                 self.gate.emit(EngineEvent::Chore(answer));
             }

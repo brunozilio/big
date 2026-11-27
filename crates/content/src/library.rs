@@ -221,7 +221,11 @@ pub fn save(path: &str, change: &Change, language: &str) -> Result<Value, Failur
             let mut saved = asked(section, path, &current, &library.paths, language);
             saved["values"] = change.values.clone();
             saved["body"] = json!(change.body);
-            word(&ask("save", &saved)?["source"])
+            let answer = ask("save", &saved)?;
+            if let Some(error) = answer["error"].as_str() {
+                return Err(Failure::Invalid(error.to_owned()));
+            }
+            word(&answer["source"])
         }
     };
     checked(section, item.path == path, path, &source)?;
@@ -256,6 +260,10 @@ pub fn assist(path: &str, talk: &Talk, language: &str) -> Result<String, Failure
     Ok(word(&ask("assist", &talking(path, talk, language)?)?["prompt"]))
 }
 
+pub fn saying(answer: &str) -> String {
+    ask("saying", &json!({ "answer": answer })).map(|said| word(&said["reply"])).unwrap_or_default()
+}
+
 pub fn assisted(path: &str, talk: &Talk, answer: &str, language: &str) -> Result<Value, Failure> {
     let mut asking = talking(path, talk, language)?;
     asking["answer"] = json!(answer);
@@ -275,6 +283,26 @@ pub fn create(section: &str, name: &str, language: &str) -> Result<Value, Failur
         return Err(Failure::Exists);
     }
     written(&path, &word(&made["source"]))?;
+    open(&path, language)
+}
+
+pub fn create_file(item: &str, name: &str, language: &str) -> Result<Value, Failure> {
+    let library = library(language)?;
+    let owner = library.items.iter().find(|found| found.path == item).ok_or(Failure::Missing)?;
+    let folder = std::path::Path::new(item).parent().and_then(|parent| parent.to_str()).unwrap_or_default();
+    let name = name.trim().trim_matches('/');
+    let own_folder = format!("{folder}/") != library.sections[owner.section].folder;
+    let plain = !name.is_empty()
+        && !name.split('/').any(|part| part.starts_with('.'))
+        && super::override_path(std::path::Path::new(""), name).is_some();
+    if !own_folder || !plain {
+        return Err(Failure::Invalid(name.to_owned()));
+    }
+    let path = format!("{folder}/{name}");
+    if super::editable(&path).is_some() {
+        return Err(Failure::Exists);
+    }
+    written(&path, "")?;
     open(&path, language)
 }
 
@@ -456,5 +484,37 @@ mod tests {
         asking["answer"] = json!("{\"reply\": \"ok\", \"text\": \"new\"}");
         let done = run("assisted", asking);
         assert_eq!((&done["source"], &done["body"]), (&json!("new"), &Value::Null));
+    }
+
+    #[test]
+    fn the_reply_is_read_out_of_an_answer_still_being_written() {
+        assert_eq!(saying("{\"rep"), "");
+        assert_eq!(saying("```json\n{\"reply\": \"Fiz a mu"), "Fiz a mu");
+        assert_eq!(saying("{\"reply\": \"linha\\nnova \\\"x\\\" \\u00e"), "linha\nnova \"x\" ");
+        assert_eq!(saying("{\"reply\": \"pronto\", \"values\": {"), "pronto");
+        assert_eq!(saying("Sem formato."), "Sem formato.");
+    }
+
+    #[test]
+    fn a_skill_field_follows_the_size_and_shape_the_skills_format_asks_for() {
+        let source = "---\nname: other\ndescription: Short.\nmetadata:\n  author: me\n---\n\nBody.\n";
+        let about = about("skills", "skills/mine/SKILL.md", source, &[]);
+        let shape = run("open", about.clone());
+        assert_eq!(shape["mode"], "form", "a nested block does not push the skill to code");
+        assert_eq!((&shape["fields"][0]["max"], &shape["fields"][1]["max"]), (&json!(64), &json!(1024)));
+        assert_eq!(shape["fields"][0]["readOnly"], false);
+        assert_eq!(shape["body"]["maxLines"], 500);
+        let saving = |values: Value| {
+            let mut saved = about.clone();
+            saved["values"] = values;
+            saved["body"] = Value::Null;
+            run("save", saved)
+        };
+        assert!(saving(json!({ "description": "x".repeat(1025) }))["error"].as_str().is_some_and(|e| e.contains("1024")));
+        assert!(saving(json!({ "description": " " }))["error"].is_string());
+        assert!(saving(json!({ "name": "Not--valid" }))["error"].is_string());
+        assert!(saving(json!({ "compatibility": "y".repeat(501) }))["error"].is_string());
+        let kept = word(&saving(json!({ "name": "other", "description": "x".repeat(1024), "license": "MIT" }))["source"]);
+        assert!(kept.contains("metadata:\n  author: me\n") && kept.contains("license: MIT\n"), "{kept}");
     }
 }

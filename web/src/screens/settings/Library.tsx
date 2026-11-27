@@ -5,12 +5,12 @@ import { errorText } from '@/api/store'
 import { AgentAvatar, knownLook } from '@/ui/agentAvatar'
 import { Button } from '@/ui/button'
 import { Badge, Card, EmptyState, ListSkeleton } from '@/ui/display'
-import { Input, SearchInput, UnderlineTabs } from '@/ui/form'
+import { Input, SearchInput, Textarea, UnderlineTabs } from '@/ui/form'
 import { Icon, NamedIcon } from '@/ui/icon'
 import { Popover } from '@/ui/overlay'
 import { useT } from '@/i18n'
 import { LibraryEditor } from './LibraryEditor'
-import { type Library, type LibraryCard, type LibrarySection, libraryApi, matching } from './libraryData'
+import { type Library, type LibraryCard, type LibrarySection, askOnOpen, libraryApi, matching } from './libraryData'
 
 type Loaded = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; library: Library }
 
@@ -57,6 +57,7 @@ function NewItem({ section, onCreated }: { section: LibrarySection; onCreated: (
   const t = useT()
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
+  const [wanted, setWanted] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const submit = (e: FormEvent) => {
@@ -67,17 +68,20 @@ function NewItem({ section, onCreated }: { section: LibrarySection; onCreated: (
     libraryApi
       .create(section.key, name.trim())
       .then((made) => {
+        askOnOpen(made.path, wanted)
         setOpen(false)
         setName('')
+        setWanted('')
         onCreated(made.path)
       })
       .catch((failure: unknown) => setError(errorText(failure) || t('settings.lib_saveFailed')))
       .finally(() => setBusy(false))
   }
   return (
-    <Popover open={open} onOpenChange={setOpen} align="end" className="w-72 p-3" trigger={<Button icon={<Icon name="plus" size={15} />}>{t('settings.lib_new')}</Button>}>
+    <Popover open={open} onOpenChange={setOpen} align="end" className="w-80 p-3" trigger={<Button icon={<Icon name="plus" size={15} />}>{t('settings.lib_new')}</Button>}>
       <form onSubmit={submit} className="space-y-2.5">
         <Input autoFocus aria-label={t('settings.lib_name')} placeholder={t('settings.lib_name')} value={name} onChange={(e) => setName(e.target.value)} />
+        <Textarea aria-label={t('settings.lib_describe')} placeholder={t('settings.lib_describe')} rows={3} value={wanted} onChange={(e) => setWanted(e.target.value)} className="resize-none text-sm" />
         {error && <p role="alert" className="text-sm text-danger-fg">{error}</p>}
         <Button type="submit" variant="primary" className="w-full" loading={busy} disabled={!name.trim()}>{t('settings.lib_create')}</Button>
       </form>

@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from 'react'
 import { errorText } from '@/api/store'
 import { hotkeyLabel } from '@/app/escape'
 import { AgentAvatar, knownLook } from '@/ui/agentAvatar'
@@ -10,7 +10,7 @@ import { motion, tween } from '@/ui/motion'
 import { useT } from '@/i18n'
 import { LibraryChat } from './LibraryChat'
 import { LibraryFields } from './LibraryFields'
-import { type Draft, type FieldValue, type LibraryItem, changed, draftOf, fileName, libraryApi } from './libraryData'
+import { type Draft, type FieldValue, type LibraryItem, blocked, changed, draftOf, fileName, libraryApi } from './libraryData'
 
 const CodeEditor = lazy(() => import('@/ui/codeEditor').then((m) => ({ default: m.CodeEditor })))
 
@@ -67,9 +67,42 @@ function useItem(path: string) {
   return { loaded, draft, setDraft, take }
 }
 
+function NewFile({ item, onPick }: { item: LibraryItem; onPick: (path: string) => void }) {
+  const t = useT()
+  const [name, setName] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!name?.trim()) return setName(null)
+    setError(null)
+    libraryApi
+      .createFile(item.item, name.trim())
+      .then((made) => {
+        setName(null)
+        onPick(made.path)
+      })
+      .catch((failure: unknown) => setError(messageOf(failure, t('settings.lib_saveFailed'))))
+  }
+  if (name === null) {
+    return (
+      <button type="button" onClick={() => setName('')} className="flex h-8 w-full items-center gap-2 rounded-control-sm px-2 text-left text-sm text-muted transition-colors hover:bg-hover hover:text-fg">
+        <Icon name="plus" size={14} className="shrink-0" />
+        {t('settings.lib_newFile')}
+      </button>
+    )
+  }
+  return (
+    <form onSubmit={submit} className="px-2 py-1">
+      <input autoFocus aria-label={t('settings.lib_newFile')} placeholder="examples/case.md" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => !name.trim() && setName(null)} onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setName(null))} className="h-7 w-full rounded-control-sm bg-surface px-2 font-mono text-xs text-fg shadow-card outline-none" />
+      {error && <p role="alert" className="mt-1 text-xs text-danger-fg">{error}</p>}
+    </form>
+  )
+}
+
 function Files({ item, onPick }: { item: LibraryItem; onPick: (path: string) => void }) {
   const t = useT()
-  if (item.files.length === 0) return null
+  const nested = item.item.split('/').length > 2
+  if (item.files.length === 0 && !nested) return null
   return (
     <div className="space-y-1.5">
       <p className="text-sm font-medium text-muted">{t('settings.lib_files')}</p>
@@ -82,9 +115,17 @@ function Files({ item, onPick }: { item: LibraryItem; onPick: (path: string) => 
             </button>
           </li>
         ))}
+        {nested && item.editable && <li><NewFile item={item} onPick={onPick} /></li>}
       </ul>
     </div>
   )
+}
+
+function Lines({ text, max }: { text: string; max?: number }) {
+  const t = useT()
+  const lines = text.split('\n').length
+  if (!max || lines <= max) return null
+  return <p role="status" className="absolute bottom-4 right-5 z-10 rounded-control-sm bg-warning-soft px-2.5 py-1 text-xs text-warning-fg">{t('settings.lib_lines', { n: lines, max })}</p>
 }
 
 function Confirm({ text, action, danger, onYes, onNo }: { text: string; action: string; danger?: boolean; onYes: () => void; onNo: () => void }) {
@@ -113,7 +154,7 @@ function Title({ item }: { item: LibraryItem }) {
 
 function Editing({ item, draft, chat, setDraft, onSave, onPick }: { item: LibraryItem; draft: Draft; chat: boolean; setDraft: (draft: Draft) => void; onSave: () => void; onPick: (path: string) => void }) {
   const fields = item.fields ?? []
-  const aside = fields.length > 0 || item.files.length > 0
+  const aside = fields.length > 0 || item.files.length > 0 || item.item.split('/').length > 2
   const locked = !item.editable
   const set = (key: string, value: FieldValue) => setDraft({ ...draft, values: { ...draft.values, [key]: value } })
   const form = item.mode === 'form' && item.body
@@ -126,7 +167,8 @@ function Editing({ item, draft, chat, setDraft, onSave, onPick }: { item: Librar
           <Files item={item} onPick={onPick} />
         </aside>
       )}
-      <section aria-label={form ? form.label : fileName(item.path)} className="flex min-h-0 min-w-0 flex-col">
+      <section aria-label={form ? form.label : fileName(item.path)} className="relative flex min-h-0 min-w-0 flex-col">
+        {form && <Lines text={draft.body ?? ''} max={form.maxLines} />}
         <Suspense fallback={<div className="flex flex-1 items-center justify-center"><Spinner /></div>}>
           {form ? (
             <CodeEditor key={item.path} label={form.label} language={form.language} value={draft.body ?? ''} readOnly={locked} onSave={onSave} onChange={(body) => setDraft({ ...draft, body })} />
@@ -162,7 +204,7 @@ export function LibraryEditor({ path, onPath, onClose, onChanged }: Props) {
   const leave = (then: () => void) => (dirty ? setAsking({ kind: 'discard', then }) : then())
 
   const save = () => {
-    if (!item || !draft || !dirty || saving) return
+    if (!item || !draft || !dirty || saving || blocked(item, draft)) return
     setSaving(true)
     setError(null)
     libraryApi
@@ -209,7 +251,7 @@ export function LibraryEditor({ path, onPath, onClose, onChanged }: Props) {
         {!asking && item?.editable && (
           <>
             {item.origin !== 'shipped' && <Button size="sm" variant="ghost" onClick={() => setAsking({ kind: 'restore' })}>{t(item.origin === 'own' ? 'settings.lib_delete' : 'settings.lib_restore')}</Button>}
-            <Button size="sm" variant="primary" disabled={!dirty} loading={saving} kbd={hotkeyLabel('s')} onClick={save}>{t('settings.save')}</Button>
+            <Button size="sm" variant="primary" disabled={!dirty || (!!item && !!draft && blocked(item, draft))} loading={saving} kbd={hotkeyLabel('s')} onClick={save}>{t('settings.save')}</Button>
           </>
         )}
         {item && !item.editable && <Badge tone="outline">{t('settings.lib_readOnly')}</Badge>}

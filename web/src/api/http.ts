@@ -32,6 +32,48 @@ export async function request<T>(method: string, path: string, body?: unknown, f
   return data as T
 }
 
+type Told = { type?: string; text?: string; message?: string }
+
+function heard<T>(block: string, onReply: ((text: string) => void) | undefined): T | null {
+  const data = block.split('\n').filter((line) => line.startsWith('data:')).map((line) => line.slice(5).trimStart()).join('\n')
+  const told = data ? (safeJson(data) as Told | null) : null
+  if (!told) return null
+  if (told.type === 'reply') onReply?.(told.text ?? '')
+  if (told.type === 'error') throw new ApiError(502, 'assist', told.message ?? translate(currentLanguage(), 'app.somethingWrong'))
+  return told.type === 'done' ? (told as T) : null
+}
+
+export async function streamed<T>(fetcher: Fetcher, path: string, body: unknown, onReply?: (text: string) => void): Promise<T> {
+  let res: Response
+  try {
+    res = await fetcher(path, { method: 'POST', headers: { accept: 'text/event-stream', 'content-type': 'application/json' }, body: JSON.stringify(body) })
+  } catch {
+    throw new ApiError(0, 'offline', translate(currentLanguage(), 'app.offline'))
+  }
+  if (!res.ok) {
+    const error = (safeJson(await res.text()) as { error?: { code?: string; message?: string } } | null)?.error
+    throw new ApiError(res.status, error?.code ?? 'http', error?.message ?? translate(currentLanguage(), 'app.httpError', { status: res.status }))
+  }
+  const reader = res.body?.getReader()
+  const decoder = new TextDecoder()
+  let pending = reader ? '' : await res.text()
+  let done: T | null = null
+  const drain = (all: boolean) => {
+    const blocks = pending.split('\n\n')
+    pending = all ? '' : (blocks.pop() ?? '')
+    for (const block of blocks) done = heard<T>(block, onReply) ?? done
+  }
+  while (reader) {
+    const chunk = await reader.read()
+    if (chunk.done) break
+    pending += decoder.decode(chunk.value, { stream: true }).replace(/\r\n/g, '\n')
+    drain(false)
+  }
+  drain(true)
+  if (!done) throw new ApiError(502, 'assist', translate(currentLanguage(), 'app.somethingWrong'))
+  return done
+}
+
 function signedOut() {
   if (typeof window === 'undefined' || appPath() === '/login') return
   window.location.assign(toLogin())
@@ -130,7 +172,8 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
     saveLibraryItem: (path, change) => call('PUT', ROUTES.libraryItem(null), { path, ...change }),
     createLibraryItem: (section, name) => call('POST', ROUTES.libraryItem(null), { section, name }),
     restoreLibraryItem: (path) => call('DELETE', ROUTES.libraryItem(path)),
-    assistLibrary: (path, draft, messages) => call('POST', ROUTES.libraryAssist, { path, ...draft, messages }),
+    createLibraryFile: (item, name) => call('POST', ROUTES.libraryItem(null), { item, name }),
+    assistLibrary: (path, draft, messages, ask) => streamed(fetcher, ROUTES.libraryAssist, { path, ...draft, messages, model: ask?.model ?? null }, ask?.onReply),
     upload: async (file) => {
       const form = new FormData()
       form.append('file', file)

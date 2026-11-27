@@ -16,6 +16,7 @@ pub fn answer(
     prompt: &str,
     history: &[Message],
     stop: &Stop,
+    said: &mut (dyn FnMut(String) + Send),
 ) -> Result<Option<ChoreAnswer>, ModelError> {
     Ok(match command {
         SessionCommand::Title => title(api, template, prompt, stop)?.map(ChoreAnswer::Title),
@@ -28,7 +29,7 @@ pub fn answer(
         }
         SessionCommand::Learn => lesson(api, template, history, prompt, stop)?.map(ChoreAnswer::Learned),
         SessionCommand::Permissions => Some(ChoreAnswer::Permissions(permissions(api, template, prompt, stop)?)),
-        SessionCommand::Answer => Some(ChoreAnswer::Answer(plain_answer(api, template, prompt, stop)?)),
+        SessionCommand::Answer => Some(ChoreAnswer::Answer(plain_answer(api, template, prompt, stop, said)?)),
         SessionCommand::MeasureContext
         | SessionCommand::Compact
         | SessionCommand::Rewind(_)
@@ -136,9 +137,20 @@ pub fn plain_answer(
     template: &TurnRequest,
     request: &str,
     stop: &Stop,
+    said: &mut (dyn FnMut(String) + Send),
 ) -> Result<String, ModelError> {
-    let message = Message::user(request.trim().to_owned());
-    let answer = ask(api, template, crate::prompt::text("chore-answer"), vec![message], template.max_tokens, stop)?;
+    let turn = TurnRequest {
+        system: crate::prompt::text("chore-answer"),
+        messages: vec![Message::user(request.trim().to_owned())],
+        tools: Vec::new(),
+        ..template.clone()
+    };
+    let mut heard = |delta: crate::model::Delta| {
+        if let crate::model::Delta::Text(piece) = delta {
+            said(piece);
+        }
+    };
+    let answer = api.turn_blocking(&turn, &mut heard, stop.token())?.message.text();
     if answer.trim().is_empty() {
         return Err(ModelError::Provider("the model gave no answer".into()));
     }

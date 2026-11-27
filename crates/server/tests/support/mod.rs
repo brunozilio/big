@@ -328,6 +328,9 @@ impl World {
         let engine = FakeEngine::new(vec![model], script()).answering_chores(vec![
             domain::ChoreAnswer::Suggestion("rode os testes".into()),
             domain::ChoreAnswer::Side("está no passo dois".into()),
+            domain::ChoreAnswer::Answer(
+                r#"{"reply": "Feito.", "values": {"label": "Builder", "nope": 1}, "edits": [], "text": null}"#.into(),
+            ),
         ]);
         let services = app::LocalServices::with_engine(Arc::new(engine.clone())).kept_in(&data);
         let store = Arc::new(Store::open(&data.join("app.db"), 0).expect("store"));

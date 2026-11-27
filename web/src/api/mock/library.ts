@@ -70,8 +70,8 @@ function fieldsOf(kept: Kept): LibraryField[] {
   const value = (key: string) => kept.values[key]
   if (kept.section === 'agents') {
     return [
-      { key: 'label', label: 'Nome', kind: 'text', value: value('label') },
-      { key: 'description', label: 'Descrição', kind: 'area', value: value('description') },
+      { key: 'label', label: 'Nome', kind: 'text', value: value('label'), required: true, max: 64 },
+      { key: 'description', label: 'Descrição', kind: 'area', value: value('description'), max: 1024 },
       { key: 'tools', label: 'Ferramentas', kind: 'chips', value: value('tools'), options: TOOLS },
       { key: 'skills', label: 'Skills', kind: 'chips', value: value('skills'), options: SKILLS },
       { key: 'permissionMode', label: 'Modo', kind: 'select', value: value('permissionMode'), options: ['auto', 'plan'] },
@@ -79,13 +79,13 @@ function fieldsOf(kept: Kept): LibraryField[] {
       { key: 'avatar.shape', label: 'Forma', kind: 'select', value: value('avatar.shape'), options: ['circle', 'squircle', 'triangle', 'cloud', 'drop', 'pill'] },
       { key: 'disallowedTools', label: 'Ferramentas bloqueadas', kind: 'chips', value: value('disallowedTools'), options: TOOLS, more: true },
       { key: 'observer', label: 'Observadores', kind: 'chips', value: value('observer'), options: ['observer'], more: true },
-      { key: 'model', label: 'Modelo', kind: 'text', value: value('model'), more: true },
+      { key: 'model', label: 'Modelo', kind: 'select', value: value('model'), options: ['', 'inherit'], from: 'models', more: true },
     ]
   }
   if (kept.section === 'skills') {
     return [
-      { key: 'name', label: 'Nome', kind: 'text', value: value('name') },
-      { key: 'description', label: 'Quando usar', kind: 'area', value: value('description') },
+      { key: 'name', label: 'Nome', kind: 'text', value: value('name'), required: true, max: 64, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', hint: 'Minúsculas, dígitos e hífens simples', readOnly: true },
+      { key: 'description', label: 'Quando usar', kind: 'area', value: value('description'), required: true, max: 1024 },
       { key: 'disable-model-invocation', label: 'Só quando chamada pelo nome', kind: 'switch', value: value('disable-model-invocation') },
     ]
   }
@@ -162,5 +162,16 @@ export function mockLibrary() {
     return { reply: 'Pronto: enxuguei o texto e mantive a primeira parte.', values: {}, body: item.mode === 'form' ? changed : null, source: item.mode === 'code' ? changed : null }
   }
 
-  return { list, shown, save, create, restore, assist }
+  const createFile = (itemPath: string, name: string): LibraryItem => {
+    const item = find(itemPath)
+    const folder = itemPath.slice(0, itemPath.lastIndexOf('/') + 1)
+    const path = `${folder}${name.trim()}`
+    if (!item || folder.split('/').length < 3 || !name.trim()) throw missing()
+    if (owner(path)) throw new Error('Já existe um item com esse nome.')
+    kept = kept.map((it) => (it === item ? { ...item, files: [...item.files, path] } : it))
+    extras.set(path, '')
+    return shown(path)
+  }
+
+  return { list, shown, save, create, restore, assist, createFile }
 }

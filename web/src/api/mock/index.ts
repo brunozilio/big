@@ -373,7 +373,16 @@ export function mockApi(options: MockOptions = {}): Api {
     saveLibraryItem: (path, change) => wait(() => library.save(path, change)),
     createLibraryItem: (section, name) => wait(() => library.create(section, name)),
     restoreLibraryItem: (path) => wait(() => library.restore(path)),
-    assistLibrary: (path, draft, messages) => wait(() => library.assist(path, draft, messages), delay * 6),
+    createLibraryFile: (item, name) => wait(() => library.createFile(item, name)),
+    assistLibrary: async (path, draft, messages, ask) => {
+      const answer = await wait(() => library.assist(path, draft, messages), delay * 2)
+      const words = answer.reply.split(' ')
+      for (let at = 1; at <= words.length && delay > 0; at += 1) {
+        await wait(() => null, delay / 6)
+        ask?.onReply?.(words.slice(0, at).join(' '))
+      }
+      return answer
+    },
     upload: (file) => wait(() => ({ id: `a-${Date.now()}`, name: file.name, size: file.size })),
     live: (onEvent, onState) => {
       listeners.add(onEvent)

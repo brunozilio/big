@@ -8,7 +8,7 @@ export const STEP_STATES: StepState[] = ['pending', 'running', 'waiting_human', 
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'accent'
 
-export type AgentShape = 'circle' | 'squircle' | 'triangle' | 'cloud' | 'drop' | 'pill'
+export type AgentShape = 'circle' | 'squircle' | 'triangle' | 'cloud' | 'drop' | 'pill' | 'hexagon'
 
 export type AvatarLook = { kind: 'agent'; shape: AgentShape; color: string } | { kind: 'image'; url: string }
 
@@ -1010,7 +1010,13 @@ export interface LibraryField {
   kind: 'text' | 'area' | 'chips' | 'select' | 'switch' | 'color'
   value: LibraryValue
   options?: string[]
+  from?: string
   more?: boolean
+  required?: boolean
+  max?: number
+  pattern?: string
+  hint?: string
+  readOnly?: boolean
 }
 
 export interface LibraryCard {
@@ -1048,7 +1054,7 @@ export interface LibraryItem {
   mode: 'form' | 'code'
   language: LibraryLanguage
   fields: LibraryField[] | null
-  body: { label: string; text: string; language: LibraryLanguage } | null
+  body: { label: string; text: string; language: LibraryLanguage; maxLines?: number } | null
   assist: { ideas: string[] } | null
   editable: boolean
 }
@@ -1069,6 +1075,11 @@ export interface LibraryAssist {
   values: Record<string, LibraryValue>
   body: string | null
   source: string | null
+}
+
+export interface LibraryAsk {
+  model?: string | null
+  onReply?: (text: string) => void
 }
 
 export type LibraryChange = { source: string } | { values: Record<string, LibraryValue>; body: string | null }
@@ -1116,7 +1127,8 @@ export interface Api {
   saveLibraryItem(path: string, change: LibraryChange): Promise<LibraryItem>
   createLibraryItem(section: string, name: string): Promise<LibraryItem>
   restoreLibraryItem(path: string): Promise<void>
-  assistLibrary(path: string, draft: LibraryDraft, messages: LibraryTurn[]): Promise<LibraryAssist>
+  createLibraryFile(item: string, name: string): Promise<LibraryItem>
+  assistLibrary(path: string, draft: LibraryDraft, messages: LibraryTurn[], ask?: LibraryAsk): Promise<LibraryAssist>
   upload(file: File): Promise<{ id: string; name: string; size: number }>
   live(onEvent: (event: LiveEvent) => void, onState: (connected: boolean) => void): () => void
 }

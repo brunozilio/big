@@ -4,14 +4,12 @@ import { AgentAvatar } from '@/ui/agentAvatar'
 import { cn } from '@/ui/cn'
 import { Icon } from '@/ui/icon'
 import { useT } from '@/i18n'
-import { type Draft, type LibraryItem, applied, libraryApi, touches } from './libraryData'
+import { useStore } from '@/api/store'
+import { Select } from '@/ui/form'
+import { Tooltip } from '@/ui/overlay'
+import { type ChatTurn, type Draft, type LibraryItem, applied, askedOnOpen, chooseModel, chosenModel, keepTalk, libraryApi, talkOf, touches } from './libraryData'
 
-interface Turn {
-  role: 'user' | 'assistant'
-  text: string
-  before?: Draft
-  undone?: boolean
-}
+type Turn = ChatTurn
 
 interface Props {
   item: LibraryItem
@@ -41,14 +39,22 @@ function Said({ turn, onUndo }: { turn: Turn; onUndo: () => void }) {
   )
 }
 
-function Thinking() {
+function Thinking({ live }: { live: string }) {
   const t = useT()
   return (
-    <li role="status" className="flex items-center gap-2.5 text-base text-muted">
-      <AgentAvatar look={LOOK} size={20} working />
-      {t('settings.lib_chatThinking')}
+    <li role="status" className="flex gap-2.5 text-base">
+      <AgentAvatar look={LOOK} size={20} working className="mt-0.5" />
+      {live ? <p className="min-w-0 flex-1 whitespace-pre-wrap text-fg">{live}</p> : <span className="text-muted">{t('settings.lib_chatThinking')}</span>}
     </li>
   )
+}
+
+function ModelChoice({ value, onChange }: { value: string | null; onChange: (id: string) => void }) {
+  const t = useT()
+  const models = useStore((s) => s.models)
+  if (!models || models.models.length < 2) return null
+  const current = models.models.find((model) => model.id === value)?.id ?? models.default ?? models.models[0].id
+  return <Select size="sm" label={t('settings.lib_chatModel')} value={current} options={models.models.map((model) => ({ value: model.id, label: model.name }))} onValueChange={onChange} className="max-w-[60%]" />
 }
 
 function Ideas({ ideas, onPick }: { ideas: string[]; onPick: (idea: string) => void }) {
@@ -70,40 +76,61 @@ function Ideas({ ideas, onPick }: { ideas: string[]; onPick: (idea: string) => v
 
 export function LibraryChat({ item, draft, onDraft }: Props) {
   const t = useT()
-  const [turns, setTurns] = useState<Turn[]>([])
+  const [turns, setTurns] = useState<Turn[]>(() => talkOf(item.path))
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [live, setLive] = useState('')
+  const [model, setModel] = useState(() => chosenModel())
   const [error, setError] = useState<string | null>(null)
   const end = useRef<HTMLDivElement>(null)
+  const first = useRef(true)
 
   useEffect(() => {
     end.current?.scrollIntoView?.({ block: 'end' })
-  }, [turns, busy])
+  }, [turns, busy, live])
+
+  const keep = (next: Turn[]) => {
+    setTurns(next)
+    keepTalk(item.path, next)
+  }
 
   const send = (asked: string) => {
     const wanted = asked.trim()
     if (!wanted || busy) return
     const said: Turn[] = [...turns, { role: 'user', text: wanted }]
-    setTurns(said)
+    keep(said)
     setText('')
     setBusy(true)
+    setLive('')
     setError(null)
     libraryApi
-      .assist(item.path, draft, said.map(({ role, text: told }) => ({ role, text: told })))
+      .assist(item.path, draft, said.map(({ role, text: told }) => ({ role, text: told })), { model, onReply: setLive })
       .then((answer) => {
         const changes = touches(answer)
-        setTurns([...said, { role: 'assistant', text: answer.reply || t('settings.lib_chatApplied'), before: changes ? draft : undefined }])
+        keep([...said, { role: 'assistant', text: answer.reply || t('settings.lib_chatApplied'), before: changes ? draft : undefined }])
         if (changes) onDraft(applied(draft, answer))
       })
       .catch((failure: unknown) => setError(errorText(failure)))
       .finally(() => setBusy(false))
   }
 
+  useEffect(() => {
+    if (!first.current) return
+    first.current = false
+    const asked = askedOnOpen(item.path)
+    if (asked) send(asked)
+  })
+
+  const pick = (id: string) => {
+    chooseModel(id)
+    setModel(id)
+  }
+
   const undo = (at: number) => {
     const turn = turns[at]
     if (!turn?.before) return
     onDraft(turn.before)
-    setTurns(turns.map((other, index) => (index === at ? { ...other, undone: true } : other)))
+    keep(turns.map((other, index) => (index === at ? { ...other, undone: true } : other)))
   }
 
   const onKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -120,18 +147,27 @@ export function LibraryChat({ item, draft, onDraft }: Props) {
         ) : (
           <ul aria-live="polite" className="flex flex-col gap-4">
             {turns.map((turn, at) => <Said key={at} turn={turn} onUndo={() => undo(at)} />)}
-            {busy && <Thinking />}
+            {busy && <Thinking live={live} />}
           </ul>
         )}
         {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
         <div ref={end} className="h-4 shrink-0" />
       </div>
       <div className="shrink-0 px-4 pb-4">
-        <div className="ring-field-within flex items-end gap-2 rounded-card bg-surface p-2 shadow-card transition-shadow">
-          <textarea aria-label={t('settings.lib_chatAsk')} placeholder={t('settings.lib_chatAsk')} rows={2} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} className="max-h-40 min-h-[44px] flex-1 resize-none bg-transparent px-1.5 py-1 text-base text-fg outline-none placeholder:text-muted" />
-          <button type="button" aria-label={t('settings.lib_chatSend')} disabled={!text.trim() || busy} onClick={() => send(text)} className={cn('flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-fg transition-[opacity,transform] duration-150 active:scale-[0.94]', (!text.trim() || busy) && 'opacity-30')}>
-            <Icon name="up" size={16} strokeWidth={2} />
-          </button>
+        <div className="ring-field-within rounded-card bg-surface p-2 shadow-card transition-shadow">
+          <textarea aria-label={t('settings.lib_chatAsk')} placeholder={t('settings.lib_chatAsk')} rows={2} value={text} onChange={(e) => setText(e.target.value)} onKeyDown={onKey} className="max-h-40 min-h-[44px] w-full resize-none bg-transparent px-1.5 py-1 text-base text-fg outline-none placeholder:text-muted" />
+          <div className="flex items-center gap-2">
+            <ModelChoice value={model} onChange={pick} />
+            <span className="flex-1" />
+            {turns.length > 0 && !busy && (
+              <Tooltip content={t('settings.lib_chatClear')}>
+                <button type="button" aria-label={t('settings.lib_chatClear')} onClick={() => keep([])} className="flex size-8 items-center justify-center rounded-full text-muted transition-colors hover:bg-hover hover:text-fg"><Icon name="trash" size={15} /></button>
+              </Tooltip>
+            )}
+            <button type="button" aria-label={t('settings.lib_chatSend')} disabled={!text.trim() || busy} onClick={() => send(text)} className={cn('flex size-8 shrink-0 items-center justify-center rounded-full bg-primary text-primary-fg transition-[opacity,transform] duration-150 active:scale-[0.94]', (!text.trim() || busy) && 'opacity-30')}>
+              <Icon name="up" size={16} strokeWidth={2} />
+            </button>
+          </div>
         </div>
       </div>
     </section>

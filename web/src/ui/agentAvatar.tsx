@@ -12,6 +12,7 @@ const BODIES: Record<Shape, string> = {
   cloud: 'M7.5 21.5a5.5 5.5 0 0 1-1.3-10.8A6 6 0 0 1 17.6 8.4a5.6 5.6 0 0 1-1.1 13.1z',
   drop: 'M12 1.8c2.8 3.6 8.2 9 8.2 13a8.2 8.2 0 0 1-16.4 0c0-4 5.4-9.4 8.2-13z',
   pill: 'M7.5 2h9C19.5 2 22 4.5 22 7.5v9c0 3-2.5 5.5-5.5 5.5h-9C4.5 22 2 19.5 2 16.5v-9C2 4.5 4.5 2 7.5 2z',
+  hexagon: 'M10.5 2.1c.9-.5 2.1-.5 3 0l6.6 3.8c.9.5 1.5 1.5 1.5 2.6v7c0 1.1-.6 2.1-1.5 2.6l-6.6 3.8c-.9.5-2.1.5-3 0l-6.600-3.8c-.9-.5-1.5-1.5-1.5-2.600v-7c0-1.100.6-2.100 1.5-2.600z',
 }
 
 const EYES: Record<Shape, { y: number; gap: number; h: number }> = {
@@ -21,10 +22,12 @@ const EYES: Record<Shape, { y: number; gap: number; h: number }> = {
   cloud: { y: 11.4, gap: 4.4, h: 5.4 },
   drop: { y: 11.6, gap: 4.2, h: 5.2 },
   pill: { y: 8.8, gap: 4.6, h: 6 },
+  hexagon: { y: 8.8, gap: 4.4, h: 6 },
 }
 
 export const AGENT_COLORS = ['#1c1c1e', '#4fb39c', '#8b5cf6', '#3b82f6', '#ef6c2f', '#f0a235', '#e94b9b', '#8a5a3b']
 const SHAPES: Shape[] = ['circle', 'squircle', 'triangle', 'cloud', 'drop', 'pill']
+const DRAWN: Shape[] = [...SHAPES, 'hexagon']
 
 function hash(s: string) {
   let h = 2166136261
@@ -36,7 +39,7 @@ function hash(s: string) {
 }
 
 export function knownLook(look: { shape?: string; color?: string } | null | undefined): { shape: Shape; color: string } | null {
-  const shape = SHAPES.find((known) => known === look?.shape)
+  const shape = DRAWN.find((known) => known === look?.shape)
   return shape && look?.color ? { shape, color: look.color } : null
 }
 

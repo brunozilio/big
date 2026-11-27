@@ -6,10 +6,16 @@ type Field = {
   kind: "text" | "area" | "chips" | "select" | "switch" | "color";
   value: unknown;
   options?: string[];
+  from?: string;
   more?: boolean;
+  required?: boolean;
+  max?: number;
+  pattern?: string;
+  hint?: string;
+  readOnly?: boolean;
 };
 
-type Body = { label: string; text: string; language: string };
+type Body = { label: string; text: string; language: string; maxLines?: number };
 
 type Opened = { mode: "form" | "code"; language: string; fields: Field[]; body: Body | null };
 
@@ -99,8 +105,13 @@ function templated(source: string, shape: RegExp): boolean {
 const named = (paths: string[], folder: string, main: (path: string) => boolean): string[] =>
   paths.filter((path) => path.startsWith(folder) && main(path)).map((path) => (path.endsWith("/SKILL.md") ? path.split("/")[1] : stem(path)));
 
-const SHAPES = ["circle", "squircle", "triangle", "cloud", "drop", "pill"];
+const SHAPES = ["circle", "squircle", "triangle", "cloud", "drop", "pill", "hexagon"];
 const MODES = ["auto", "plan"];
+const NAME_MAX = 64;
+const DESCRIPTION_MAX = 1024;
+const COMPATIBILITY_MAX = 500;
+const BODY_LINES = 500;
+const SKILL_NAME = "^[a-z0-9]+(-[a-z0-9]+)*$";
 
 const withCurrent = (options: string[], current: string[]): string[] => [...new Set([...options, ...current])];
 
@@ -112,8 +123,8 @@ function agentFields({ exports, paths, language }: Asked): Field[] {
   const agents = named(paths, "agents/", flat(2, [".ts"]));
   const mode = text(spec.permissionMode);
   return [
-    { key: "label", label: pick(language, "Name", "Nombre", "Nome"), kind: "text", value: text(spec.label) || text(spec.name) },
-    { key: "description", label: pick(language, "Description", "Descripción", "Descrição"), kind: "area", value: text(spec.description) },
+    { key: "label", label: pick(language, "Name", "Nombre", "Nome"), kind: "text", value: text(spec.label) || text(spec.name), required: true, max: NAME_MAX },
+    { key: "description", label: pick(language, "Description", "Descripción", "Descrição"), kind: "area", value: text(spec.description), max: DESCRIPTION_MAX },
     { key: "tools", label: pick(language, "Tools", "Herramientas", "Ferramentas"), kind: "chips", value: texts(spec.tools), options: withCurrent(tools, texts(spec.tools)) },
     { key: "skills", label: "Skills", kind: "chips", value: texts(spec.skills), options: withCurrent(skills, texts(spec.skills)) },
     { key: "permissionMode", label: pick(language, "Mode", "Modo", "Modo"), kind: "select", value: mode, options: withCurrent(MODES, mode ? [mode] : []) },
@@ -121,7 +132,7 @@ function agentFields({ exports, paths, language }: Asked): Field[] {
     { key: "avatar.shape", label: pick(language, "Shape", "Forma", "Forma"), kind: "select", value: text(avatar.shape), options: withCurrent(SHAPES, text(avatar.shape) ? [text(avatar.shape)] : []) },
     { key: "disallowedTools", label: pick(language, "Blocked tools", "Herramientas bloqueadas", "Ferramentas bloqueadas"), kind: "chips", value: texts(spec.disallowedTools), options: withCurrent(tools, texts(spec.disallowedTools)), more: true },
     { key: "observer", label: pick(language, "Observers", "Observadores", "Observadores"), kind: "chips", value: texts(spec.observer), options: withCurrent(agents, texts(spec.observer)), more: true },
-    { key: "model", label: pick(language, "Model", "Modelo", "Modelo"), kind: "text", value: text(spec.model), more: true },
+    { key: "model", label: pick(language, "Model", "Modelo", "Modelo"), kind: "select", value: text(spec.model), options: withCurrent(["", "inherit"], [text(spec.model)]), from: "models", more: true },
   ];
 }
 
@@ -205,9 +216,10 @@ function matter(source: string): Matter | null {
     let next = at + 1;
     while (next < lines.length && (lines[next].startsWith(" ") || lines[next].trim() === "")) next += 1;
     const block = /^[|>][+-]?$/.test(found[2].trim());
-    if (!block && next > at + 1) return null;
+    const nested = found[2].trim() === "" && next > at + 1;
+    if (!block && !nested && next > at + 1) return null;
     const inside = lines.slice(at + 1, next).map((line) => line.replace(/^ {2}/, ""));
-    values[found[1]] = block ? inside.join(found[2].trim().startsWith(">") ? " " : "\n").trim() : unquoted(found[2]);
+    values[found[1]] = nested ? "" : block ? inside.join(found[2].trim().startsWith(">") ? " " : "\n").trim() : unquoted(found[2]);
     spans[found[1]] = [at, next];
     at = next;
   }
@@ -265,12 +277,17 @@ const skills: Kind = {
     const parsed = asked.path.endsWith(SKILL) ? matter(asked.source) : null;
     if (!parsed) return code(asked.path);
     const { language } = asked;
+    const named = pick(language, "Lowercase letters, digits and single hyphens", "Minúsculas, dígitos y guiones simples", "Minúsculas, dígitos e hífens simples");
+    const folder = asked.path.split("/")[1];
     const fields: Field[] = [
-      { key: "name", label: pick(language, "Name", "Nombre", "Nome"), kind: "text", value: parsed.values.name ?? "" },
-      { key: "description", label: pick(language, "When to use it", "Cuándo usarla", "Quando usar"), kind: "area", value: parsed.values.description ?? "" },
+      { key: "name", label: pick(language, "Name", "Nombre", "Nome"), kind: "text", value: parsed.values.name ?? "", required: true, max: NAME_MAX, pattern: SKILL_NAME, hint: named, readOnly: parsed.values.name === folder },
+      { key: "description", label: pick(language, "When to use it", "Cuándo usarla", "Quando usar"), kind: "area", value: parsed.values.description ?? "", required: true, max: DESCRIPTION_MAX },
       { key: "disable-model-invocation", label: pick(language, "Only when called by name", "Solo cuando se llama por nombre", "Só quando chamada pelo nome"), kind: "switch", value: parsed.values["disable-model-invocation"] === "true" },
+      { key: "compatibility", label: pick(language, "Compatibility", "Compatibilidad", "Compatibilidade"), kind: "area", value: parsed.values.compatibility ?? "", max: COMPATIBILITY_MAX, more: true },
+      { key: "allowed-tools", label: pick(language, "Pre-approved tools", "Herramientas preaprobadas", "Ferramentas pré-aprovadas"), kind: "text", value: parsed.values["allowed-tools"] ?? "", more: true },
+      { key: "license", label: pick(language, "License", "Licencia", "Licença"), kind: "text", value: parsed.values.license ?? "", more: true },
     ];
-    return { mode: "form", language: "markdown", fields, body: { label: pick(language, "Instructions", "Instrucciones", "Instruções"), text: parsed.body, language: "markdown" } };
+    return { mode: "form", language: "markdown", fields, body: { label: pick(language, "Instructions", "Instrucciones", "Instruções"), text: parsed.body, language: "markdown", maxLines: BODY_LINES } };
   },
   save: skillSource,
   create: (name, slug) => ({ path: `skills/${slug}${SKILL}`, source: `---\nname: ${slug}\n${scalar("description", name).join("\n")}\n---\n\n# ${name}\n` }),
@@ -371,9 +388,22 @@ export function open(asked: Asked) {
   return { ...found.open(asked), assist: { ideas: found.ideas(asked.language) } };
 }
 
-export function save(saved: Saved): { source: string } {
+function broken(field: Field, value: unknown, language: Language): string | null {
+  if (typeof value !== "string" || value === field.value) return null;
+  const size = [...value].length;
+  if (field.required && value.trim() === "") return pick(language, `${field.label} cannot be empty.`, `${field.label} no puede quedar vacío.`, `${field.label} não pode ficar vazio.`);
+  if (field.max !== undefined && size > field.max) return pick(language, `${field.label} takes up to ${field.max} characters and has ${size}.`, `${field.label} admite hasta ${field.max} caracteres y tiene ${size}.`, `${field.label} aceita até ${field.max} caracteres e tem ${size}.`);
+  if (field.pattern && value !== "" && !new RegExp(field.pattern).test(value)) return `${field.label}: ${field.hint ?? field.pattern}`;
+  return null;
+}
+
+export function save(saved: Saved): { source?: string; error?: string } {
   const opened = kind(saved.section).open(saved);
   if (opened.mode === "code") return { source: saved.source };
+  for (const field of opened.fields) {
+    const error = broken(field, saved.values?.[field.key], saved.language);
+    if (error) return { error };
+  }
   return { source: kind(saved.section).save(saved) };
 }
 
@@ -440,6 +470,16 @@ function edited(whole: string, edits: unknown): { text: string; missed: number }
     current = current.slice(0, found) + text(record(edit).replace) + current.slice(found + find.length);
   }
   return { text: current, missed };
+}
+
+export function saying({ answer }: { answer: string }): { reply: string } {
+  const found = /"reply"\s*:\s*"((?:[^"\\]|\\.)*)/.exec(answer);
+  if (!found) return { reply: /^\s*[{`]/.test(answer) || answer.trim() === "" ? "" : answer };
+  try {
+    return { reply: JSON.parse(`"${found[1].replace(/\\u[0-9a-fA-F]{0,3}$/, "")}"`) };
+  } catch {
+    return { reply: "" };
+  }
 }
 
 export function assisted(asking: Assisting) {

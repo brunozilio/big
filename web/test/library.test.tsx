@@ -3,15 +3,17 @@ import { cleanup, fireEvent, render, waitFor, within } from '@testing-library/re
 import { MemoryRouter } from 'react-router-dom'
 import { setApi } from '../src/api'
 import type { Api, LibraryChange, LibraryDraft, LibraryItem, LibraryTurn } from '../src/api/contract'
+import { ApiError, streamed } from '../src/api/http'
 import { mockLibrary } from '../src/api/mock/library'
 import { LibraryFields } from '../src/screens/settings/LibraryFields'
 import { LibraryView } from '../src/screens/settings/Library'
-import { changed, draftOf, matching, toggled } from '../src/screens/settings/libraryData'
+import { askOnOpen, blocked, changed, draftOf, matching, problemOf, talkOf, toggled } from '../src/screens/settings/libraryData'
 import { TooltipProvider } from '../src/ui/overlay'
 
 afterEach(() => {
   cleanup()
   setApi(null)
+  localStorage.clear()
   document.body.innerHTML = ''
 })
 
@@ -28,6 +30,7 @@ function serve() {
     },
     createLibraryItem: async (section: string, name: string) => library.create(section, name),
     restoreLibraryItem: async (path: string) => library.restore(path),
+    createLibraryFile: async (item: string, name: string) => library.createFile(item, name),
     assistLibrary: async (path: string, draft: LibraryDraft, messages: LibraryTurn[]) => {
       asks.push({ path, draft, messages })
       return library.assist(path, draft, messages)
@@ -141,6 +144,46 @@ describe('assistente ao lado do editor', () => {
     expect(within(panel).queryByRole('region', { name: 'Assistente' })).toBeNull()
     fireEvent.click(within(panel).getByRole('button', { name: 'Assistente' }))
   })
+  test('a conversa fica guardada por item e um pedido deixado ao criar é enviado ao abrir', async () => {
+    const { asks } = serve()
+    askOnOpen('agents/reviewer.ts', 'cuida das migrações de banco')
+    const first = show('/settings/library?item=agents/reviewer.ts')
+    const chat = within(await within(document.body).findByRole('dialog', { name: 'Reviewer' })).getByRole('region', { name: 'Assistente' })
+    await within(chat).findByText('Pronto: enxuguei o texto e mantive a primeira parte.')
+    expect(asks[0].messages).toEqual([{ role: 'user', text: 'cuida das migrações de banco' }])
+    expect(talkOf('agents/reviewer.ts').map((turn) => turn.role)).toEqual(['user', 'assistant'])
+    first.unmount()
+    document.body.innerHTML = ''
+    show('/settings/library?item=agents/reviewer.ts')
+    const again = within(await within(document.body).findByRole('dialog', { name: 'Reviewer' })).getByRole('region', { name: 'Assistente' })
+    expect(within(again).getByText('cuida das migrações de banco')).toBeTruthy()
+    expect(asks).toHaveLength(1)
+    fireEvent.click(within(again).getByRole('button', { name: 'Nova conversa' }))
+    expect(talkOf('agents/reviewer.ts')).toEqual([])
+  })
+
+  test('a resposta em fluxo mostra o texto parcial e termina com o resultado', async () => {
+    const body = 'data: {"type":"reply","text":"Fiz"}\n\ndata: {"type":"reply","text":"Fiz a mudança."}\n\ndata: {"type":"done","reply":"Fiz a mudança.","values":{},"body":"x","source":null}\n\n'
+    const seen: string[] = []
+    const done = await streamed<{ reply: string; body: string }>(async () => new Response(body), '/api/library/assist', {}, (text) => seen.push(text))
+    expect(seen).toEqual(['Fiz', 'Fiz a mudança.'])
+    expect(done.body).toBe('x')
+    const failed = streamed(async () => new Response('data: {"type":"error","message":"sem modelo"}\n\n'), '/x', {})
+    expect(failed).rejects.toThrow('sem modelo')
+    const refused = streamed(async () => new Response('{"error":{"code":"bad_request","message":"Escreva o que você quer."}}', { status: 400 }), '/x', {})
+    expect(refused).rejects.toBeInstanceOf(ApiError)
+  })
+
+  test('uma skill ganha um arquivo novo pela lista de arquivos', async () => {
+    const { library } = serve()
+    show('/settings/library?section=skills&item=skills/verify/SKILL.md')
+    const panel = await within(document.body).findByRole('dialog', { name: 'verify' })
+    fireEvent.click(within(panel).getByRole('button', { name: 'Novo arquivo' }))
+    const input = within(panel).getByRole('textbox', { name: 'Novo arquivo' })
+    fireEvent.change(input, { target: { value: 'examples/web.md' } })
+    fireEvent.submit(input)
+    await waitFor(() => expect(library.shown('skills/verify/SKILL.md').files).toContain('skills/verify/examples/web.md'))
+  })
 })
 
 describe('campos declarados pelo conteúdo', () => {
@@ -162,6 +205,34 @@ describe('campos declarados pelo conteúdo', () => {
     expect(view.queryByRole('textbox', { name: 'Modelo' })).toBeNull()
     fireEvent.click(view.getByRole('button', { name: 'Mais opções' }))
     expect(view.getByRole('textbox', { name: 'Modelo' })).toBeTruthy()
+  })
+
+  test('um campo com limite mostra a contagem, avisa quando passa e não deixa salvar', async () => {
+    serve()
+    show('/settings/library?item=agents/planner.ts')
+    const panel = await within(document.body).findByRole('dialog', { name: 'Planner' })
+    const save = within(panel).getByRole('button', { name: /Salvar/ })
+    expect(within(panel).getByText(/^\d+\/1024$/).textContent).toBe(`${'Turns an item into a delivery plan the Developer can carry out.'.length}/1024`)
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Descrição' }), { target: { value: 'x'.repeat(1025) } })
+    expect(within(panel).getByText('1025/1024')).toBeTruthy()
+    expect(save).toHaveProperty('disabled', true)
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Descrição' }), { target: { value: 'ok' } })
+    expect(save).toHaveProperty('disabled', false)
+    fireEvent.change(within(panel).getByRole('textbox', { name: 'Nome' }), { target: { value: ' ' } })
+    expect(within(panel).getByRole('alert').textContent).toBe('Não pode ficar vazio')
+    expect(save).toHaveProperty('disabled', true)
+  })
+
+  test('as regras do campo: obrigatório, tamanho em caracteres e formato', () => {
+    const name = { key: 'name', label: 'Nome', kind: 'text' as const, value: 'a', required: true, max: 4, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$', hint: 'minúsculas' }
+    expect(problemOf(name, 'ab-c')).toBeNull()
+    expect(problemOf(name, '')).toEqual({ kind: 'required' })
+    expect(problemOf(name, 'abcde')).toEqual({ kind: 'long', size: 5, max: 4 })
+    expect(problemOf(name, 'a--b')).toEqual({ kind: 'shape', hint: 'minúsculas' })
+    expect(problemOf({ ...name, max: 2, pattern: undefined }, 'çã')).toBeNull()
+    const item = { mode: 'form', source: '', fields: [{ ...name, value: 'a--b' }], body: null } as unknown as LibraryItem
+    expect(blocked(item, { values: { name: 'a--b' }, body: null, source: '' })).toBe(false)
+    expect(blocked(item, { values: { name: 'a--c' }, body: null, source: '' })).toBe(true)
   })
 
   test('o rascunho só conta como alterado quando difere do que veio', () => {
