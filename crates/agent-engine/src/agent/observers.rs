@@ -192,8 +192,7 @@ impl<'env> Agent<'env> {
         let mut workspace = self.workspace.fork(control.shared_stop());
         workspace.agent_name.clone_from(&found.name);
         workspace.observing = None;
-        let provider = self.workspace.models.model.provider;
-        let model = found.config.model(&self.request.model, provider).unwrap_or_else(|_| self.request.model.clone());
+        let model = found.config.model_in(&self.request.model, &self.workspace.models).unwrap_or_else(|_| self.request.model.clone());
         let system = format!(
             "{}\n\n{}",
             crate::tools::subagent::system(&self.request.system, Some(found)),

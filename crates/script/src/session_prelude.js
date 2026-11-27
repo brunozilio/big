@@ -3,10 +3,12 @@
   const log = globalThis.__log;
   const timer = globalThis.__timer;
   const untimer = globalThis.__untimer;
+  const compile = globalThis.__compile;
   delete globalThis.__begin;
   delete globalThis.__log;
   delete globalThis.__timer;
   delete globalThis.__untimer;
+  delete globalThis.__compile;
   const timers = new Map();
   const pending = new Map();
   const ring = [];
@@ -72,6 +74,8 @@
     const entries = await Promise.all(Object.entries(settled).map(async ([key, item]) => [key, await item]));
     return Object.fromEntries(entries);
   });
+  fixed("__here", owners);
+  fixed("__load", (code, here) => compile(typeof here === "string" ? here : owners(), String(code)));
   fixed("__expose", (names) => {
     for (const name of names) {
       if (identifier.test(name) && !(name in globalThis)) fixed(name, (input) => call(name, input));

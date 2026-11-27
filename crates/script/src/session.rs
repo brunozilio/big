@@ -258,6 +258,7 @@ fn install<'js>(ctx: &Ctx<'js>, accounts: &Rc<RefCell<Accounts>>, helpers: &str)
     })?;
     ctx.globals().set("__begin", begin)?;
     ctx.globals().set("__log", log)?;
+    install_loader(ctx, accounts)?;
     install_timers(ctx, accounts)?;
     ctx.eval::<(), _>(PRELUDE)?;
     let mut options = EvalOptions::default();
@@ -265,6 +266,22 @@ fn install<'js>(ctx: &Ctx<'js>, accounts: &Rc<RefCell<Accounts>>, helpers: &str)
     options.strict = true;
     options.filename = Some("helpers".to_owned());
     ctx.eval_with_options::<(), _>(helpers, options)
+}
+
+fn install_loader<'js>(ctx: &Ctx<'js>, accounts: &Rc<RefCell<Accounts>>) -> rquickjs::Result<()> {
+    let state = Rc::clone(accounts);
+    let load = Function::new(ctx.clone(), move |ctx: Ctx<'js>, owners: String, code: String| {
+        let owner = state.borrow().owner(&owners);
+        let Some(owner) = owner else {
+            return Err(Exception::throw_message(&ctx, "the script that loaded this code has already ended"));
+        };
+        let mut options = EvalOptions::default();
+        options.global = true;
+        options.strict = true;
+        options.filename = Some(format!("script-{owner}"));
+        ctx.eval_with_options::<JsValue<'js>, _>(code, options)
+    })?;
+    ctx.globals().set("__compile", load)
 }
 
 fn install_timers<'js>(ctx: &Ctx<'js>, accounts: &Rc<RefCell<Accounts>>) -> rquickjs::Result<()> {

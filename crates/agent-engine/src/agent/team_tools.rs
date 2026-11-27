@@ -36,11 +36,10 @@ impl Agent<'_> {
         let session = &self.workspace.session_id;
         let team = Team::of_session(&home, session);
         team.open(session)?;
-        let provider = self.workspace.models.model.provider;
         let model = input["model"]
             .as_str()
-            .map(str::to_owned)
-            .or_else(|| found.and_then(|agent| agent.config.model(&self.request.model, provider).ok()))
+            .map(|named| self.workspace.models.resolved(named, &self.request.model).to_owned())
+            .or_else(|| found.and_then(|agent| agent.config.model_in(&self.request.model, &self.workspace.models).ok()))
             .unwrap_or_else(|| self.request.model.clone());
         let cwd = self.workspace.cwd.clone();
         let member = Member {

@@ -3,6 +3,7 @@ mod dispatch;
 mod observers;
 pub(crate) mod permission;
 mod repl;
+mod repl_bank;
 mod run;
 mod scripts;
 mod subagents;

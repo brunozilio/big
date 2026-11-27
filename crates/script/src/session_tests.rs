@@ -468,3 +468,18 @@ fn a_stop_or_the_total_limit_ends_a_cell_that_sleeps() {
     assert!(timed.outcome.expect_err("over its limit").starts_with("Timed out"));
     assert!(started.elapsed() < Duration::from_secs(5));
 }
+
+#[test]
+fn code_a_script_loads_runs_as_part_of_it_and_calls_its_tools_after_waiting() {
+    let session = Session::start();
+    let code = "const here = __here();\nconst module = __load('(() => ({ run: async (input) => { await sleep(1); return (await Read({ file_path: input })) + \"!\"; } }))()', here);\nawait module.run('a.txt')";
+
+    let done = evaluate(&session, code, |function, input| {
+        Ok(json!(format!("{function} {}", input["file_path"].as_str().unwrap_or_default())))
+    });
+
+    assert_eq!(done.outcome, Ok("Read a.txt!".to_owned()));
+    assert_eq!(done.calls, 1);
+    let broken = evaluate(&session, "__load('(() => { throw new Error(\"bad\") })()')", nothing);
+    assert!(broken.outcome.is_err_and(|error| error.contains("bad")));
+}

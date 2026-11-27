@@ -2,6 +2,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
+pub mod bank;
 pub mod cell;
 pub mod session;
 pub mod typescript;

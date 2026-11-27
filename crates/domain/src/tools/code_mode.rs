@@ -6,6 +6,9 @@ pub const TOOL: &str = crate::tool_name::ToolName::Repl.as_str();
 pub const SEARCH: &str = "searchTools";
 pub const DESCRIBE: &str = "describeTool";
 pub const READ_TEXT: &str = "readText";
+pub const SEARCH_SCRIPTS: &str = "searchScripts";
+pub const LOAD_SCRIPT: &str = "loadScript";
+pub const ADAPT_SCRIPT: &str = "adaptScript";
 pub const DETACH: Duration = Duration::from_secs(30);
 
 pub fn dispatched(number: u64, task: &str, after: Duration) -> String {

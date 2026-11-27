@@ -134,6 +134,9 @@ impl Agent<'_> {
         if function == DESCRIBE_TOOL {
             return self.describe_tool(input);
         }
+        if let Some(answered) = self.answer_from_bank(function, input) {
+            return answered;
+        }
         if function == READ_TEXT {
             let input = json!({ "file_path": input["path"] });
             let id = format!("repl-{}", self.control.next_agent());

@@ -74,6 +74,24 @@
       }),
     ),
   );
+  const running = (asked, input) => {
+    const here = __here();
+    return tools.loadScript(asked).then((loaded) => {
+      const module = __load(loaded.code, here);
+      if (typeof module?.run !== "function") throw toolError("scripts", `the script ${loaded.name} has no run function`);
+      return module.run(input);
+    });
+  };
+  const banked = (name) => (input = {}) => running({ name }, input);
+  __define("runScript", (source, input = {}) => running({ source: String(source) }, input));
+  __define("adaptScript", (script, goal, input = {}) =>
+    tools.adaptScript({ ...(/\bexport\s/.test(String(script)) ? { source: String(script) } : { name: String(script) }), goal: String(goal), input }),
+  );
+  __define(
+    "scripts",
+    new Proxy(Object.freeze({}), { get: (_, name) => (typeof name === "string" && name !== "then" ? banked(name) : undefined) }),
+  );
+  __define("searchScripts", (query) => tools.searchScripts({ query: String(query) }));
   __define("searchTools", (query) => tools.searchTools({ query: String(query) }));
   __define("describeTool", (name) => tools.describeTool({ name: String(name) }));
 })();
