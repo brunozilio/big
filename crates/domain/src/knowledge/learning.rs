@@ -3,20 +3,27 @@ use serde::{Deserialize, Serialize};
 use crate::{Decision, EngineEvent};
 
 const ENOUGH: usize = 2;
+const SCRIPTED: usize = 3;
 
 pub const WAITING: &str = "learning";
+pub const PROPOSED: &str = "scripts/proposed/";
 
 pub fn offered(proposal: &Proposal) -> String {
     let what = match proposal.kind {
         Lesson::Memory => format!("remember \"{}\"", proposal.text),
         Lesson::Skill => format!("write the skill `{}`: {}", proposal.name, proposal.text),
         Lesson::Instruction => format!("add to {}: {}", brand::INSTRUCTIONS, proposal.text),
+        Lesson::Script => format!("propose the script `{}` for the script bank", proposal.name),
     };
     format!("Lesson from this run: {what}\nWhy: {}\n/learn keep saves it, /learn skip drops it.", proposal.why)
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct Signals(Vec<String>);
+pub struct Signals {
+    notes: Vec<String>,
+    running: Vec<(String, String)>,
+    scripted: Vec<String>,
+}
 
 impl Signals {
     pub fn observe(&mut self, event: &EngineEvent) {
@@ -26,17 +33,40 @@ impl Signals {
             }
             EngineEvent::Steered(text) => Some(format!("The user redirected the agent mid-task: {text}")),
             EngineEvent::Repeated { tool } => Some(format!("The agent kept repeating the same {tool} call")),
+            EngineEvent::ToolStarted(call) if call.name == crate::code_mode::TOOL => {
+                self.running.push((call.id.clone(), call.summary.clone()));
+                None
+            }
+            EngineEvent::ToolResult { id, failed, .. } => {
+                let at = self.running.iter().position(|(running, _)| running == id);
+                if let Some((_, summary)) = at.map(|at| self.running.remove(at))
+                    && !failed
+                {
+                    self.scripted.push(summary);
+                }
+                None
+            }
             _ => None,
         };
-        self.0.extend(noted);
+        self.notes.extend(noted);
     }
 
     pub fn worth_learning(&self) -> bool {
-        self.0.len() >= ENOUGH
+        self.notes.len() >= ENOUGH || self.scripted.len() >= SCRIPTED
     }
 
     pub fn take(&mut self) -> Vec<String> {
-        std::mem::take(&mut self.0)
+        let mut taken = std::mem::take(&mut self.notes);
+        let scripted = std::mem::take(&mut self.scripted);
+        if scripted.len() >= SCRIPTED {
+            taken.push(format!(
+                "The agent ran {} {} scripts that worked ({}); a flow it may need again could become a script of the bank",
+                scripted.len(),
+                crate::code_mode::TOOL,
+                scripted.join("; ")
+            ));
+        }
+        taken
     }
 
     pub fn lesson_due(&mut self) -> Option<String> {
@@ -55,6 +85,7 @@ pub enum Lesson {
     Memory,
     Skill,
     Instruction,
+    Script,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -70,6 +101,20 @@ pub enum Keeping {
     Remember(String),
     Instruction(String),
     Ask(String),
+    Propose { path: String, source: String },
+}
+
+pub fn script_name(name: &str) -> Option<String> {
+    let mut slug = String::new();
+    for character in name.trim().chars().flat_map(char::to_lowercase) {
+        if character.is_ascii_alphanumeric() {
+            slug.push(character);
+        } else if !slug.is_empty() && !slug.ends_with('-') {
+            slug.push('-');
+        }
+    }
+    let slug = slug.trim_end_matches('-').to_owned();
+    (!slug.is_empty()).then_some(slug)
 }
 
 const LEARNED: &str = "## Learned";
@@ -104,6 +149,10 @@ pub fn keeping(proposal: &Proposal) -> Keeping {
             "Create or update the skill `{}` for this: {}\n\nLoad the skill-creator skill and follow it.",
             proposal.name, proposal.text
         )),
+        Lesson::Script => match script_name(&proposal.name) {
+            Some(name) => Keeping::Propose { path: format!("{PROPOSED}{name}.ts"), source: proposal.text.clone() },
+            None => Keeping::Remember(proposal.text.clone()),
+        },
     }
 }
 
@@ -194,6 +243,33 @@ mod tests {
         assert_eq!(with_learned("", "Be brief.").as_deref(), Ok("## Learned\n- Be brief.\n"));
         assert!(with_learned("", "Use token=abc123 for the API.").is_err(), "no secrets in instructions");
         assert!(with_learned("", "  ").is_err());
+    }
+
+    #[test]
+    fn repl_scripts_that_worked_are_worth_a_script_lesson_kept_as_a_proposal() {
+        let mut signals = Signals::default();
+        for (id, failed) in [("a", false), ("b", true), ("c", false)] {
+            let call = crate::ToolCall::new(id, crate::code_mode::TOOL, format!("step {id}"));
+            signals.observe(&EngineEvent::ToolStarted(call));
+            signals.observe(&EngineEvent::ToolResult { id: id.into(), output: String::new(), failed });
+        }
+        signals.observe(&EngineEvent::ToolResult { id: "x".into(), output: String::new(), failed: false });
+        assert!(!signals.worth_learning(), "two scripts worked so far");
+        signals.observe(&EngineEvent::ToolStarted(crate::ToolCall::new("d", crate::code_mode::TOOL, "step d")));
+        signals.observe(&EngineEvent::ToolResult { id: "d".into(), output: String::new(), failed: false });
+        let brief = signals.lesson_due().expect("due");
+        assert!(brief.contains("ran 3 REPL scripts that worked (step a; step c; step d)"), "{brief}");
+
+        let lesson = Proposal {
+            kind: Lesson::Script,
+            name: "Branch Changes!".into(),
+            text: "export async function run() {}".into(),
+            why: "ran it three times".into(),
+        };
+        let path = "scripts/proposed/branch-changes.ts".to_owned();
+        assert_eq!(keeping(&lesson), Keeping::Propose { path, source: lesson.text.clone() });
+        assert!(offered(&lesson).contains("propose the script `Branch Changes!`"));
+        assert_eq!(script_name(" -- "), None);
     }
 
     #[test]

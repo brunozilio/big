@@ -2,7 +2,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
-use domain::learning::{Lesson, Proposal, Signals};
+use domain::learning::{Keeping, Lesson, Proposal, Signals};
 use domain::{
     Author, ChoreAnswer, EngineEvent, MemoryEdit, MemoryKind, ModelOption, PromptRequest, Provenance, RunId,
     SessionCommand, SessionId,
@@ -87,12 +87,18 @@ pub(crate) fn edit_of(proposal: &Proposal) -> MemoryEdit {
     let (kind, text) = match proposal.kind {
         Lesson::Memory => (MemoryKind::Semantic, proposal.text.clone()),
         Lesson::Instruction => (MemoryKind::Procedural, proposal.text.clone()),
-        Lesson::Skill => (MemoryKind::Procedural, format!("{}: {}", proposal.name, proposal.text)),
+        Lesson::Skill | Lesson::Script => (MemoryKind::Procedural, format!("{}: {}", proposal.name, proposal.text)),
     };
     MemoryEdit::Remember { kind, text, tags: vec![ORIGIN.to_owned()], touches: Vec::new(), scope: Default::default() }
 }
 
 fn keep(services: &LocalServices, cwd: PathBuf, proposal: &Proposal) {
+    if let Keeping::Propose { path, source } = domain::learning::keeping(proposal) {
+        if let Err(error) = agent_engine::tools::bank::propose(&path, &source) {
+            tracing::warn!(%error, path, "a proposed script could not be written for approval");
+        }
+        return;
+    }
     let by = Provenance { author: Author::Agent, now: super::now(), origin: Some(ORIGIN.to_owned()) };
     if let Err(error) = super::of(services).edit(&cwd, &[edit_of(proposal)], by) {
         tracing::warn!(%error, "a lesson could not be kept in memory");
