@@ -90,4 +90,5 @@ fn the_conversation_reads_as_plain_lines_from_its_end() {
     let model = says("  You are moving   the login page.  Next: run the tests. ");
     let recap = recap(&model, &template(), &history, &no()).expect("recap");
     assert_eq!(recap.as_deref(), Some("You are moving the login page. Next: run the tests."));
+    assert_eq!(model.asked()[0].intent, crate::model::Intent::LATER, "a recap can wait for a cheaper slot");
 }

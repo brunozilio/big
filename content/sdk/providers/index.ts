@@ -220,7 +220,7 @@ export function remove(body: Record<string, unknown>, keys: string[]) {
   return body;
 }
 
-export type Intent = { cache?: "long" | "short" | "none"; key?: string } | null | undefined;
+export type Intent = { cache?: "long" | "short" | "none"; priority?: "now" | "later"; key?: string } | null | undefined;
 
 export function lifetime<T>(intent: Intent, lifetimes: { long: T; short: T }): T | null {
   const cache = intent?.cache ?? "short";

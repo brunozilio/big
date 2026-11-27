@@ -65,6 +65,8 @@ struct Declared {
     serves_all: bool,
     #[serde(default)]
     needs: Vec<String>,
+    #[serde(default)]
+    later_discount: Option<f64>,
 }
 
 #[derive(Debug)]
@@ -86,6 +88,7 @@ pub struct ScriptedProvider {
     small: Option<&'static str>,
     serves_all: bool,
     needs: Vec<String>,
+    later_discount: Option<f64>,
 }
 
 fn section(name: &str) -> Value {
@@ -157,6 +160,7 @@ impl ScriptedProvider {
             small: declared.small_model.as_deref().map(intern),
             serves_all: declared.serves_all,
             needs: declared.needs,
+            later_discount: declared.later_discount.filter(|discount| (0.0..=1.0).contains(discount)),
         })
     }
 
@@ -323,6 +327,9 @@ impl Provider for ScriptedProvider {
     }
     fn small_model(&self) -> Option<&'static str> {
         self.small.or_else(|| crate::vendor(self.vendor).and_then(crate::Vendor::small))
+    }
+    fn later_discount(&self) -> Option<f64> {
+        self.later_discount
     }
     fn web_search(&self, model: &str) -> Option<Value> {
         let native: Value = self.quiet("webSearch", json!({ "name": model }));

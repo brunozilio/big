@@ -26,7 +26,7 @@ use serde_json::Value;
 
 use crate::transcript::{Message, StopReason, Usage};
 
-pub use intent::{Cache, Intent};
+pub use intent::{Cache, Intent, Priority};
 pub use tokio_util::sync::CancellationToken;
 
 pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;

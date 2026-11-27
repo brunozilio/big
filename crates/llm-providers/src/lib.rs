@@ -89,6 +89,10 @@ pub trait Provider: Sync {
         vendor(self.vendor()).and_then(Vendor::small)
     }
 
+    fn later_discount(&self) -> Option<f64> {
+        None
+    }
+
     fn web_search(&self, _model: &str) -> Option<Value> {
         None
     }

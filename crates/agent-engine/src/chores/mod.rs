@@ -73,6 +73,10 @@ pub fn branch_name(title: &str, history: &[Message]) -> Option<String> {
     domain::workflow::branch_slug(&source)
 }
 
+fn later(template: &TurnRequest) -> TurnRequest {
+    TurnRequest { intent: crate::model::Intent::LATER, ..template.clone() }
+}
+
 pub fn recap(
     api: &dyn ModelApi,
     template: &TurnRequest,
@@ -80,7 +84,7 @@ pub fn recap(
     stop: &Stop,
 ) -> Result<Option<String>, ModelError> {
     let message = Message::user(format!("<conversation>\n{}\n</conversation>", conversation_text(history, RECAP_TAIL)));
-    let answer = ask(api, template, crate::prompt::text("chore-recap"), vec![message], 300, stop)?;
+    let answer = ask(api, &later(template), crate::prompt::text("chore-recap"), vec![message], 300, stop)?;
     let answer = answer.split_whitespace().collect::<Vec<_>>().join(" ");
     Ok((!answer.is_empty()).then_some(answer))
 }
@@ -108,7 +112,7 @@ pub fn lesson(
         messages.pop();
     }
     messages.push(Message::user(format!("{signals}\n\n{}", crate::prompt::text("chore-learn"))));
-    let answer = ask(api, template, template.system.clone(), messages, 600, stop)?;
+    let answer = ask(api, &later(template), template.system.clone(), messages, 600, stop)?;
     Ok(domain::learning::parse(&answer))
 }
 

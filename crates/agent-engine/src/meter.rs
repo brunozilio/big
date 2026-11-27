@@ -70,6 +70,7 @@ impl Metered {
                 ..ModelUsage::default()
             },
         );
+        let cost = crate::model::intent::discounted(cost, request.intent, provider.and_then(|p| p.later_discount()));
         self.ledger.costs.lock().map_err(|_| ModelError::Provider("usage ledger unavailable".into()))?.push(cost);
         let served = self.served_by(request, reply);
         self.gate.emit(spent_by(
