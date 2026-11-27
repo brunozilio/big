@@ -925,8 +925,8 @@ export interface BindingSpec {
 }
 
 export interface BindingSummary {
-  template: string
-  separator?: string
+  parts: string[]
+  separator: string
 }
 
 export interface BindingFieldSpec {

@@ -96,25 +96,23 @@ describe('diálogo de pasta', () => {
   })
 
   test('o resumo declarado pelo conector mostra só o campo escolhido, sem repetir', () => {
-    const each = { key: 'environment', label: 'Ambiente', fields: [] }
     const profile = (env: string) => ({ environment: { value: env }, account: { value: '1', label: 'Loja' }, role: { value: 'Admin' } })
     const binding = { connection: 'c', value: '', profiles: [profile('develop'), profile('production')] }
-    expect(boundText(binding, each, { template: '{account}' })).toBe('Loja')
-    expect(boundText(binding, each)).toBe('develop · production')
+    expect(boundText(binding, { parts: ['{account}'], separator: ' · ' })).toBe('Loja')
+    expect(boundText(binding, { parts: ['{environment}'], separator: ' | ' })).toBe('develop | production')
+    expect(boundText({ connection: 'c', value: 'APP', label: 'App' })).toBe('App')
   })
 
-  test('o modelo do resumo combina campos e some com o separador do que falta', () => {
+  test('cada parte do resumo só aparece quando todos os seus campos existem', () => {
     const both = { connection: 'c', value: '', profiles: [{ account: { value: '1', label: 'Loja' }, region: { value: 'sa-east-1' } }] }
-    expect(summaryText(both, { template: '{account} · {region}' })).toBe('Loja · sa-east-1')
+    expect(summaryText(both, { parts: ['{account}', ' · {region}'], separator: ', ' })).toBe('Loja · sa-east-1')
     const alone = { connection: 'c', value: '', profiles: [{ account: { value: '1', label: 'Loja' } }] }
-    expect(summaryText(alone, { template: '{account} · {region}' })).toBe('Loja')
-    expect(summaryText(alone, { template: '{account} ({region})' })).toBe('Loja')
-    expect(summaryText(alone, { template: '{region}' })).toBe('')
+    expect(summaryText(alone, { parts: ['{account}', ' ({region})'], separator: ', ' })).toBe('Loja')
+    expect(summaryText(alone, { parts: ['{region}'], separator: ', ' })).toBe('')
     const two = { connection: 'c', value: '', profiles: [{ account: { value: '1', label: 'Loja' } }, { account: { value: '2', label: 'Caixa' } }] }
-    expect(summaryText(two, { template: '{account}' })).toBe('Loja · Caixa')
-    expect(summaryText(two, { template: '{account}', separator: ', ' })).toBe('Loja, Caixa')
-    expect(summaryText({ connection: 'c', value: 'APP', label: 'App' }, { template: 'Projeto {label}' })).toBe('Projeto App')
-    expect(boundText({ connection: 'c', value: 'APP', label: 'App' }, undefined, { template: '{region}' })).toBe('App')
+    expect(summaryText(two, { parts: ['{account}'], separator: ', ' })).toBe('Loja, Caixa')
+    expect(summaryText({ connection: 'c', value: 'APP', label: 'App' }, { parts: ['Projeto {label}'], separator: '' })).toBe('Projeto App')
+    expect(boundText({ connection: 'c', value: 'APP', label: 'App' }, { parts: ['{region}'], separator: '' })).toBe('App')
   })
 
   test('só há campo de vínculo quando um conector conectado o declara, no escopo que ele pede', () => {

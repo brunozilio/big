@@ -1,5 +1,5 @@
 import { type Creds, type Language, decode, regional, fetchJson, form, missing, optionalText, pick, setting, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
-import { binding, bindingField, cloud, options } from "sdk/connectors/contracts.ts";
+import { binding, bindingField, cloud, options, summaryOf } from "sdk/connectors/contracts.ts";
 import { chosenIn, environmentOptions } from "sdk/connectors/environments.ts";
 import { caller, keysOf, type Keys } from "./sts.ts";
 import { isoSeconds } from "./login.ts";
@@ -53,7 +53,7 @@ function cloudBinding(language: Language) {
       bindingField(ROLE, pick(language, "Role", "Rol", "Papel"), true, true),
     ],
   };
-  return binding("cloud", "application", "AWS", { each, summary: { template: `{${ACCOUNT}}`, separator: " · " }, section: pick(language, "Cloud", "Nube", "Nuvem"), order: 70 });
+  return binding("cloud", "application", "AWS", { each, summary: summaryOf([ACCOUNT]), section: pick(language, "Cloud", "Nube", "Nuvem"), order: 70 });
 }
 
 function accessKeys(language: Language) {

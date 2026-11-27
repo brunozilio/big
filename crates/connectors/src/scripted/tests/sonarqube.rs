@@ -57,6 +57,8 @@ fn the_provider_signs_in_with_an_address_an_organization_and_a_token_and_binds_r
         look.bindings.iter().map(|binding| (binding.capability.as_str(), binding.scope.as_str())).collect();
     assert_eq!(bound, [("quality", "repository")]);
     assert!(look.bindings[0].suggests);
+    let summary = look.bindings[0].summary.clone().unwrap_or_default();
+    assert_eq!((summary.parts, summary.separator.as_str()), (vec!["{label}".to_owned()], " · "));
 }
 
 #[tokio::test]

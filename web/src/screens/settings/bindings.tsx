@@ -615,16 +615,16 @@ export function ShapedBinding({ field, shape, value, error, onChange }: { field:
 }
 
 const PLACEHOLDER = /\{([^{}]+)\}/g
-const LOOSE_EDGES = /^[\s·•|,;:/-]+|[\s·•|,;:/-]+$/g
 
-function rendered(template: string, pick: (key: string) => string): string {
-  const keys = [...template.matchAll(PLACEHOLDER)].map((m) => m[1].trim())
-  if (keys.length > 0 && keys.every((key) => !pick(key))) return ''
-  const parts = template.split(PLACEHOLDER).map((part, i) => (i % 2 === 1 ? pick(part.trim()) : part))
-  return parts.filter((_, i) => i % 2 === 1 || (parts[i - 1] !== '' && parts[i + 1] !== '')).join('').replace(LOOSE_EDGES, '')
+function rendered(parts: string[], pick: (key: string) => string): string {
+  return parts.map((part) => {
+    const keys = [...part.matchAll(PLACEHOLDER)].map((m) => m[1])
+    if (keys.some((key) => !pick(key))) return ''
+    return part.replace(PLACEHOLDER, (_, key: string) => pick(key))
+  }).join('')
 }
 
-export function summaryText(binding: Binding, { template, separator = ' · ' }: BindingSummary): string {
+export function summaryText(binding: Binding, { parts, separator }: BindingSummary): string {
   const own = (key: string) => (key === 'value' ? binding.value : key === 'label' ? binding.label || binding.value : '')
   const choice = (sources: Record<string, BindingChoice>[]) => (key: string) => {
     const found = sources.map((source) => source[key]).find(Boolean)
@@ -632,17 +632,12 @@ export function summaryText(binding: Binding, { template, separator = ' · ' }: 
   }
   const fields = binding.fields ?? {}
   const profiles = binding.profiles ?? []
-  const lines = profiles.length > 0 ? profiles.map((p) => rendered(template, choice([p, fields]))) : [rendered(template, choice([fields]))]
+  const lines = profiles.length > 0 ? profiles.map((p) => rendered(parts, choice([p, fields]))) : [rendered(parts, choice([fields]))]
   return [...new Set(lines.filter(Boolean))].join(separator)
 }
 
-export function boundText(binding: Binding, each: BindingEach | undefined, summary?: BindingSummary): string {
-  const summarized = summary ? summaryText(binding, summary) : ''
-  if (summarized) return summarized
-  if (binding.label || binding.value) return binding.label || binding.value
-  const profiles = (binding.profiles ?? []).map((p) => (each ? p[each.key]?.label || p[each.key]?.value : '')).filter(Boolean)
-  if (profiles.length > 0) return profiles.join(' · ')
-  return Object.values(binding.fields ?? {}).map((c) => c.label || c.value).join(' · ')
+export function boundText(binding: Binding, summary?: BindingSummary): string {
+  return (summary && summaryText(binding, summary)) || binding.label || binding.value
 }
 
 export function useBoundLook(): (capability: string, binding: Binding) => { label: string; text: string; source: Source | null } {
@@ -651,6 +646,6 @@ export function useBoundLook(): (capability: string, binding: Binding) => { labe
     const connection = connections?.connections.find((c) => c.id === binding.connection)
     const provider = connections?.providers.find((p) => p.key === connection?.provider)
     const spec = provider?.bindings?.find((b) => b.capability === capability)
-    return { label: spec?.label ?? capability, text: boundText(binding, spec?.each, spec?.summary), source: connection && provider ? { connection, provider } : null }
+    return { label: spec?.label ?? capability, text: boundText(binding, spec?.summary), source: connection && provider ? { connection, provider } : null }
   }
 }

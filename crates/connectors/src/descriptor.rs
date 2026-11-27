@@ -206,9 +206,8 @@ pub struct BindingSpec {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BindingSummary {
-    pub template: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub separator: Option<String>,
+    pub parts: Vec<String>,
+    pub separator: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

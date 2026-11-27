@@ -379,12 +379,28 @@ export type BindingEach = { key: string; label: string; fields: BindingField[] }
 
 export type BindingShape = { multiple?: boolean; fields?: BindingField[]; each?: BindingEach; section?: string; order?: number; suggests?: boolean; summary?: BindingSummary };
 
-export type BindingSummary = { template: string; separator?: string };
+export type BindingSummary = { parts: string[]; separator: string };
 
 export type BindingSpec = { capability: string; scope: BindingScope; label: string } & BindingShape;
 
+export const SUMMARY_SEPARATOR = " · ";
+
+export function placeholder(key: string): string {
+  return `{${key}}`;
+}
+
+export function summaryOf(keys: string[], separator = SUMMARY_SEPARATOR): BindingSummary {
+  return { parts: keys.map((key, i) => (i === 0 ? placeholder(key) : `${separator}${placeholder(key)}`)), separator };
+}
+
+function defaultSummary(shape: BindingShape): BindingSummary {
+  if (shape.each) return summaryOf([shape.each.key]);
+  if (shape.fields && shape.fields.length > 0) return summaryOf(shape.fields.map((field) => field.key));
+  return summaryOf(["label"]);
+}
+
 export function binding(capability: string, scope: BindingScope, label: string, shape: BindingShape = {}): BindingSpec {
-  return { capability, scope, label, ...shape };
+  return { capability, scope, label, ...shape, summary: shape.summary ?? defaultSummary(shape) };
 }
 
 export function bindingField(key: string, label: string, required = false, skippable = false): BindingField {
