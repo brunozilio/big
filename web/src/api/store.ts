@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { api } from '.'
 import { currentLanguage, translate } from '@/i18n'
-import type { Api, Application, Branding, OnboardingState, CallAction, CallArgs, CallResult, Connections, Item, LiveEvent, Models, Session, SessionEvent, StepView } from './contract'
+import type { Api, Application, Branding, Language, OnboardingState, CallAction, CallArgs, CallResult, Connections, Item, LiveEvent, Models, Session, SessionEvent, StepView } from './contract'
 
 export interface State {
   ready: boolean
@@ -11,12 +11,13 @@ export interface State {
   connections: Connections | null
   models: Models | null
   branding: Branding | null
+  language: Language | null
   applications: Application[] | null
   onboarding: OnboardingState | null
   sessions: Record<string, Session>
 }
 
-const initial = (): State => ({ ready: false, connected: false, error: null, items: [], connections: null, models: null, branding: null, applications: null, onboarding: null, sessions: {} })
+const initial = (): State => ({ ready: false, connected: false, error: null, items: [], connections: null, models: null, branding: null, language: null, applications: null, onboarding: null, sessions: {} })
 
 let state: State = initial()
 const listeners = new Set<() => void>()
@@ -264,4 +265,8 @@ export function useProviderOf(connection: string | null) {
     const c = s.connections?.connections.find((x) => x.id === connection)
     return c ? s.connections?.providers.find((p) => p.key === c.provider) ?? null : null
   })
+}
+
+export function setLanguage(language: Language) {
+  set({ language })
 }

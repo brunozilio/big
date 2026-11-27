@@ -4,7 +4,7 @@ import { api } from '@/api'
 import { authMethods, nextPath, passkeysWork, PASSWORD_MIN, sendCode, setUpAdmin, signInWithPasskey, signInWithPassword, ssoUrl, verifyCode, type AuthMethods } from '@/api/auth'
 import { at } from '@/api/base'
 import { ApiError } from '@/api/http'
-import { getState, setBranding, useStore } from '@/api/store'
+import { getState, setBranding, useStore, setLanguage } from '@/api/store'
 import { isLanguage, LANGUAGES, useLanguage, useT } from '@/i18n'
 import { applyLanguage } from '@/i18n/sync'
 import { Button } from '@/ui/button'
@@ -57,6 +57,7 @@ export function LoginLanguage({ className }: { className?: string }) {
       onValueChange={(value) => {
         if (!isLanguage(value)) return
         applyLanguage(value)
+        setLanguage(value)
         const branding = getState().branding
         if (branding) setBranding({ ...branding, language: value })
       }}

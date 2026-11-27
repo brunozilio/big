@@ -43,7 +43,8 @@ export function initialLanguage(): Language {
 }
 
 export function currentLanguage(): Language {
-  return getState().branding?.language ?? initialLanguage()
+  const now = getState()
+  return now.branding?.language ?? now.language ?? initialLanguage()
 }
 
 export function translate(language: Language, key: MessageKey, vars?: Vars): string {
@@ -64,7 +65,7 @@ export function currentLocale(): string {
 }
 
 export function useLanguage(): Language {
-  return useStore((s) => s.branding?.language) ?? initialLanguage()
+  return useStore((s) => s.branding?.language ?? s.language) ?? initialLanguage()
 }
 
 export function useT(): T {

@@ -32,15 +32,16 @@ export function journeyLabels(t: T): string[] {
 }
 
 export function Steps({ labels, current }: { labels: string[]; current: number }) {
+  const many = labels.length > 3
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-2 text-sm text-muted">
+    <div className={cn('mb-6 flex items-center text-sm text-muted', many ? 'gap-1.5' : 'gap-2')}>
       {labels.map((label, i) => (
-        <span key={label} data-step={i < current ? 'done' : i === current ? 'current' : 'next'} className="flex items-center gap-2">
-          {i > 0 && <span className="h-px w-6 bg-border" />}
+        <span key={label} data-step={i < current ? 'done' : i === current ? 'current' : 'next'} className={cn('flex shrink-0 items-center', many ? 'gap-1.5' : 'gap-2')}>
+          {i > 0 && <span className={cn('h-px bg-border', many ? 'w-3' : 'w-6')} />}
           <span className={cn('flex size-5 items-center justify-center rounded-full text-xs tabular-nums', i < current ? 'bg-success text-white' : i === current ? 'bg-fg text-bg' : 'bg-inset text-faint')}>
             {i < current ? <Icon name="check" size={11} strokeWidth={2.6} /> : i + 1}
           </span>
-          <span className={i === current ? 'text-fg' : undefined}>{label}</span>
+          <span className={cn(i === current ? 'text-fg' : undefined, many && i !== current && 'hidden sm:inline')}>{label}</span>
         </span>
       ))}
     </div>
@@ -57,13 +58,14 @@ export function StageHeading({ title, text }: { title: string; text?: string }) 
 }
 
 export function OnboardingShell({ labels, current, language, className, outside, children }: { labels: string[]; current: number; language?: ReactNode; className?: string; outside?: ReactNode; children: ReactNode }) {
+  const width = labels.length > 3 ? 'max-w-[640px]' : 'max-w-[560px]'
   return (
     <div className={cn('flex min-h-full flex-col items-center bg-subtle px-4 py-10', className)}>
-      <div className="mb-8 flex w-full max-w-[560px] items-center justify-between">
+      <div className={cn('mb-8 flex w-full items-center justify-between', width)}>
         <ProductMark />
         {language ?? <LanguagePicker className="w-36" />}
       </div>
-      <div className="w-full max-w-[560px] rounded-card bg-bg shadow-card">
+      <div className={cn('w-full rounded-card bg-bg shadow-card', width)}>
         <div className="flex max-h-[calc(100dvh-160px)] min-h-[520px] flex-col p-6 md:p-8">
           <Steps labels={labels} current={current} />
           {children}

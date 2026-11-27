@@ -12,7 +12,8 @@ export function ProductMark({ className }: { className?: string }) {
   const size = 30
   const branding = useStore((s) => s.branding)
   const name = branding?.name ?? ''
-  if (branding?.logo) {
+  if (!branding) return <span aria-hidden className={cn('inline-block shrink-0', className)} style={{ width: 30, height: 30 }} />
+  if (branding.logo) {
     return <img src={at(branding.logo)} alt={name} className={cn('shrink-0 object-contain', className)} style={{ height: 30, borderRadius: size * 0.23 }} />
   }
   return (
