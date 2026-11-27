@@ -14,6 +14,7 @@ pub mod history;
 pub mod hooks;
 pub mod intercept;
 pub use language_servers as lsp;
+pub mod limits;
 pub mod lsp_catalog;
 mod lsp_fetch;
 pub mod lsp_warm;

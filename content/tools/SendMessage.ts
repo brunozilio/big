@@ -1,5 +1,6 @@
 export const spec = {
   name: "SendMessage",
+  topLevelOnly: true,
   input: {
     "properties": {
       "message": {

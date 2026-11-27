@@ -20,6 +20,7 @@ function known(agents: unknown): Known[] {
 
 export const spec = {
   name: "Agent",
+  topLevelOnly: true,
   input: {
     "properties": {
       "description": {

@@ -16,15 +16,11 @@ use super::{Agent, Ending, MAX_TURNS};
 use crate::agent_runtime::WorktreeLease;
 use crate::control::Control;
 use crate::model::{ModelError, ToolSpec, TurnRequest};
-use crate::tools::names::{self, ToolName};
+use crate::tools::names;
 use crate::tools::subagent::{self, FoundAgent};
 use crate::tools::subagent_config::AgentConfig;
 use crate::tools::{Outcome, Workspace, builtin_agents};
 use crate::transcript::{Message, Usage};
-
-pub(in crate::agent) fn top_level_only(name: &str) -> bool {
-    matches!(ToolName::of(name), ToolName::Agent | ToolName::SendMessage | ToolName::ExitPlanMode)
-}
 
 struct Spawning<'s> {
     input: &'s Value,
@@ -302,7 +298,7 @@ impl Agent<'_> {
             .tools
             .iter()
             .chain(waiting.map(|deferred| deferred.specs()).unwrap_or_default())
-            .filter(|spec| !top_level_only(&spec.name) && config.allows(&spec.name))
+            .filter(|spec| config.allows(&spec.name) && !self.tool(run, &spec.name).is_some_and(|tool| tool.top_level_only()))
             .filter(|spec| !planning || !self.refused_while_planning(&spec.name, run))
             .cloned()
             .collect()

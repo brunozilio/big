@@ -296,6 +296,8 @@ concurrency = "4"
 
 [agent]
 stream_idle_seconds = "300"
+parallel_agents = "4"
+mcp_defer_over = "20"
 
 [log]
 filter = "info"

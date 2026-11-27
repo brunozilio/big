@@ -1,5 +1,6 @@
 export const spec = {
   name: "ExitPlanMode",
+  topLevelOnly: true,
   input: {
     "additionalProperties": false,
     "properties": {

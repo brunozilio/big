@@ -29,6 +29,7 @@ pub fn tool(name: &str, data: &Value) -> Option<ScriptTool> {
         exports,
         serial: shape["serial"].as_bool() == Some(true),
         deferred: shape["deferred"].as_bool() == Some(true),
+        top_level_only: shape["topLevelOnly"].as_bool() == Some(true),
         source,
         path: PathBuf::from(path),
         trusted: true,

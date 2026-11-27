@@ -271,6 +271,7 @@ pub struct ScriptTool {
     pub exports: Exports,
     pub serial: bool,
     pub deferred: bool,
+    pub top_level_only: bool,
     pub skills: Vec<super::skill::FoundSkill>,
     pub interceptors: Vec<crate::intercept::Interceptor>,
 }
@@ -311,6 +312,7 @@ pub(crate) fn parse_source(path: &Path, source: String, trusted: bool) -> Result
         exports: Exports::of(&shown, &source),
         serial: spec["serial"].as_bool() == Some(true),
         deferred: spec["deferred"].as_bool() == Some(true),
+        top_level_only: spec["topLevelOnly"].as_bool() == Some(true),
         source,
         path: path.to_path_buf(),
         trusted,
@@ -530,6 +532,17 @@ impl Tool for ScriptTool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tool_declares_in_its_spec_that_only_the_top_level_agent_may_call_it() {
+        let shipped: Vec<String> =
+            builtin().into_iter().filter(Tool::top_level_only).map(|tool| tool.spec.name).collect();
+        assert_eq!(shipped, ["Agent", "ExitPlanMode", "SendMessage"]);
+        let source = r#"export const spec = { name: "Delegate", topLevelOnly: true };
+export function execute() { return "ok"; }"#;
+        let mine = parse_source(Path::new("tools/Delegate.ts"), source.to_owned(), true).expect("parsed");
+        assert!(Tool::top_level_only(&mine));
+    }
 
     #[test]
     fn a_tool_s_own_interceptors_are_read_with_it_and_a_wrapper_file_is_not_a_tool() {

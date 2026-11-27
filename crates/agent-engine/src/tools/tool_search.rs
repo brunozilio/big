@@ -4,7 +4,6 @@ use crate::model::ToolSpec;
 
 pub use llm_providers::added_tools::{TOOL_SEARCH, loaded_names};
 
-const DEFER_OVER: usize = 20;
 const FOUND: usize = 5;
 const MIN_WORD: usize = 3;
 const NAME_WEIGHT: usize = 3;
@@ -123,7 +122,7 @@ pub fn defer_declared(specs: Vec<ToolSpec>, declared: &[String]) -> (Vec<ToolSpe
     let mcp = |spec: &ToolSpec| {
         spec.name.starts_with("mcp__") && !spec.name.starts_with(concat!("mcp__", brand::command!(), "_"))
     };
-    let many_mcp = specs.iter().filter(|spec| mcp(spec)).count() > DEFER_OVER;
+    let many_mcp = specs.iter().filter(|spec| mcp(spec)).count() > crate::limits::mcp_defer_over();
     let deferrable = |spec: &ToolSpec| (many_mcp && mcp(spec)) || declared.contains(&spec.name);
     if !specs.iter().any(deferrable) {
         return (specs, None);

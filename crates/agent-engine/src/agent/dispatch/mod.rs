@@ -151,7 +151,7 @@ impl Agent<'_> {
                 rule_context.join("\n")
             )));
         }
-        if self.depth > 0 && crate::agent::subagents::top_level_only(name) {
+        if self.depth > 0 && tool.is_some_and(|tool| tool.top_level_only()) {
             return Some(Outcome::error(format!(
                 "{name} is only for the top-level agent; a sub-agent or fork does the work itself and reports back."
             )));

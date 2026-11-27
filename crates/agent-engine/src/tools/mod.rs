@@ -136,6 +136,10 @@ pub trait Tool: Send + Sync {
         false
     }
 
+    fn top_level_only(&self) -> bool {
+        self.script().is_some_and(|script| script.top_level_only)
+    }
+
     fn script(&self) -> Option<&script_tool::ScriptTool> {
         None
     }

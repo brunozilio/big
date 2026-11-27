@@ -9,7 +9,6 @@ use crate::tools::names::ToolName;
 use crate::transcript::{Block, Message};
 
 const SIDE_BY_SIDE: usize = 8;
-const AGENTS_AT_ONCE: usize = 4;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Lane {
@@ -60,7 +59,7 @@ impl Agent<'_> {
                     group.chunks(SIDE_BY_SIDE).for_each(|chunk| results.extend(self.side_by_side(chunk, run)));
                 }
                 Lane::Agents if group.len() > 1 => {
-                    for chunk in group.chunks(AGENTS_AT_ONCE) {
+                    for chunk in group.chunks(crate::limits::agents_at_once()) {
                         results.extend(self.agents_at_once(chunk, run, history, spawn));
                     }
                 }
