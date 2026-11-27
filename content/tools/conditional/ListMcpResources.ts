@@ -2,6 +2,7 @@ const SHOWN = 60000;
 
 export const spec = {
   name: "ListMcpResources",
+  deferred: true,
   input: {
     type: "object",
     properties: { server: { type: "string", description: "The server whose resources to list." } },

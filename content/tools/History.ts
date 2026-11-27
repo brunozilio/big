@@ -2,6 +2,7 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 export const spec = {
   name: "History",
+  deferred: true,
   input: {
     additionalProperties: false,
     properties: {

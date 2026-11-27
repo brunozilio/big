@@ -116,10 +116,16 @@ impl Deferred {
 }
 
 pub fn defer(specs: Vec<ToolSpec>) -> (Vec<ToolSpec>, Option<Deferred>) {
-    let deferrable = |spec: &ToolSpec| {
+    defer_declared(specs, &[])
+}
+
+pub fn defer_declared(specs: Vec<ToolSpec>, declared: &[String]) -> (Vec<ToolSpec>, Option<Deferred>) {
+    let mcp = |spec: &ToolSpec| {
         spec.name.starts_with("mcp__") && !spec.name.starts_with(concat!("mcp__", brand::command!(), "_"))
     };
-    if specs.iter().filter(|spec| deferrable(spec)).count() <= DEFER_OVER {
+    let many_mcp = specs.iter().filter(|spec| mcp(spec)).count() > DEFER_OVER;
+    let deferrable = |spec: &ToolSpec| (many_mcp && mcp(spec)) || declared.contains(&spec.name);
+    if !specs.iter().any(deferrable) {
         return (specs, None);
     }
     let (deferred, kept): (Vec<ToolSpec>, Vec<ToolSpec>) = specs.into_iter().partition(deferrable);
@@ -211,6 +217,16 @@ mod tests {
         let found = jira().search("transition de issue e jira");
         assert_eq!(found[0].name, "mcp__jira__transitionJiraIssue", "{found:?}");
         assert!(jira().search("e de").is_empty(), "words under three letters match nothing");
+    }
+
+    #[test]
+    fn a_tool_that_declares_itself_deferrable_waits_even_with_few_mcp_tools() {
+        let specs = vec![spec("Read", ""), spec("NotebookEdit", "Change a notebook cell"), spec("mcp__a__b", "")];
+        let (kept, deferred) = defer_declared(specs, &["NotebookEdit".to_owned()]);
+        assert_eq!(kept.iter().map(|s| s.name.as_str()).collect::<Vec<_>>(), ["Read", "mcp__a__b"]);
+        let deferred = deferred.expect("deferred");
+        assert!(deferred.announcement().contains("NotebookEdit"));
+        assert_eq!(deferred.search("select:NotebookEdit").len(), 1);
     }
 
     #[test]

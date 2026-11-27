@@ -130,6 +130,10 @@ pub trait Tool: Send + Sync {
         false
     }
 
+    fn deferrable(&self) -> bool {
+        false
+    }
+
     fn script(&self) -> Option<&script_tool::ScriptTool> {
         None
     }

@@ -1,5 +1,6 @@
 export const spec = {
   name: "ListSessions",
+  deferred: true,
   input: {
     "additionalProperties": false,
     "properties": {},

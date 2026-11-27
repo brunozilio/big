@@ -1,5 +1,6 @@
 export const spec = {
   name: "NotebookEdit",
+  deferred: true,
   input: {
     "additionalProperties": false,
     "properties": {

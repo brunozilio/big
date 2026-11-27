@@ -35,7 +35,9 @@ impl Job {
         let system = prompt::system(&Environment { appended, ..environment.clone() });
         workspace.prompt_context = Some(environment);
         let offered = Agent::specs(&toolbox.tools).into_iter().filter(|spec| main.config.allows(&spec.name)).collect();
-        let (mut offered, deferred) = tools::tool_search::defer(offered);
+        let declared: Vec<String> =
+            toolbox.tools.iter().filter(|tool| tool.deferrable()).map(|tool| tool.spec().name).collect();
+        let (mut offered, deferred) = tools::tool_search::defer_declared(offered, &declared);
         if let Some(deferred) = deferred {
             workspace.services.deferred = Some(Arc::new(deferred));
             let present: Vec<String> = toolbox.tools.iter().map(|tool| tool.spec().name).collect();

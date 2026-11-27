@@ -2,6 +2,7 @@ const SHOWN = 60000;
 
 export const spec = {
   name: "ReadMcpResource",
+  deferred: true,
   input: {
     type: "object",
     properties: { server: { type: "string" }, uri: { type: "string" } },

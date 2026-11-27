@@ -2,6 +2,7 @@ const WAKE = { least: 60, most: 3600 };
 
 export const spec = {
   name: "ScheduleWakeup",
+  deferred: true,
   input: {
     "additionalProperties": false,
     "properties": {

@@ -295,9 +295,12 @@ impl Agent<'_> {
         if chosen.forked {
             return self.request.tools.clone();
         }
+        let searches = config.allows(crate::tools::tool_search::TOOL_SEARCH);
+        let waiting = self.workspace.services.deferred.as_ref().filter(|_| !searches);
         self.request
             .tools
             .iter()
+            .chain(waiting.map(|deferred| deferred.specs()).unwrap_or_default())
             .filter(|spec| !top_level_only(&spec.name) && config.allows(&spec.name))
             .filter(|spec| !planning || !self.refused_while_planning(&spec.name, run))
             .cloned()

@@ -270,6 +270,7 @@ pub struct ScriptTool {
     pub trusted: bool,
     pub exports: Exports,
     pub serial: bool,
+    pub deferred: bool,
     pub skills: Vec<super::skill::FoundSkill>,
     pub interceptors: Vec<crate::intercept::Interceptor>,
 }
@@ -309,6 +310,7 @@ pub(crate) fn parse_source(path: &Path, source: String, trusted: bool) -> Result
         declared,
         exports: Exports::of(&shown, &source),
         serial: spec["serial"].as_bool() == Some(true),
+        deferred: spec["deferred"].as_bool() == Some(true),
         source,
         path: path.to_path_buf(),
         trusted,
@@ -503,6 +505,10 @@ impl Tool for ScriptTool {
 
     fn serial(&self) -> bool {
         self.serial
+    }
+
+    fn deferrable(&self) -> bool {
+        self.deferred
     }
 
     fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {

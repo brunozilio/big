@@ -1,5 +1,6 @@
 export const spec = {
   name: "Watch",
+  deferred: true,
   input: {
     "additionalProperties": false,
     "properties": {

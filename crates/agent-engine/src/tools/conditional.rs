@@ -28,6 +28,7 @@ pub fn tool(name: &str, data: &Value) -> Option<ScriptTool> {
         capabilities,
         exports,
         serial: shape["serial"].as_bool() == Some(true),
+        deferred: shape["deferred"].as_bool() == Some(true),
         source,
         path: PathBuf::from(path),
         trusted: true,
