@@ -99,19 +99,22 @@ describe('diálogo de pasta', () => {
     const each = { key: 'environment', label: 'Ambiente', fields: [] }
     const profile = (env: string) => ({ environment: { value: env }, account: { value: '1', label: 'Loja' }, role: { value: 'Admin' } })
     const binding = { connection: 'c', value: '', profiles: [profile('develop'), profile('production')] }
-    expect(boundText(binding, each, '{account}')).toBe('Loja')
+    expect(boundText(binding, each, { template: '{account}' })).toBe('Loja')
     expect(boundText(binding, each)).toBe('develop · production')
   })
 
   test('o modelo do resumo combina campos e some com o separador do que falta', () => {
     const both = { connection: 'c', value: '', profiles: [{ account: { value: '1', label: 'Loja' }, region: { value: 'sa-east-1' } }] }
-    expect(summaryText(both, '{account} · {region}')).toBe('Loja · sa-east-1')
+    expect(summaryText(both, { template: '{account} · {region}' })).toBe('Loja · sa-east-1')
     const alone = { connection: 'c', value: '', profiles: [{ account: { value: '1', label: 'Loja' } }] }
-    expect(summaryText(alone, '{account} · {region}')).toBe('Loja')
-    expect(summaryText(alone, '{account} ({region})')).toBe('Loja')
-    expect(summaryText(alone, '{region}')).toBe('')
-    expect(summaryText({ connection: 'c', value: 'APP', label: 'App' }, 'Projeto {label}')).toBe('Projeto App')
-    expect(boundText({ connection: 'c', value: 'APP', label: 'App' }, undefined, '{region}')).toBe('App')
+    expect(summaryText(alone, { template: '{account} · {region}' })).toBe('Loja')
+    expect(summaryText(alone, { template: '{account} ({region})' })).toBe('Loja')
+    expect(summaryText(alone, { template: '{region}' })).toBe('')
+    const two = { connection: 'c', value: '', profiles: [{ account: { value: '1', label: 'Loja' } }, { account: { value: '2', label: 'Caixa' } }] }
+    expect(summaryText(two, { template: '{account}' })).toBe('Loja · Caixa')
+    expect(summaryText(two, { template: '{account}', separator: ', ' })).toBe('Loja, Caixa')
+    expect(summaryText({ connection: 'c', value: 'APP', label: 'App' }, { template: 'Projeto {label}' })).toBe('Projeto App')
+    expect(boundText({ connection: 'c', value: 'APP', label: 'App' }, undefined, { template: '{region}' })).toBe('App')
   })
 
   test('só há campo de vínculo quando um conector conectado o declara, no escopo que ele pede', () => {

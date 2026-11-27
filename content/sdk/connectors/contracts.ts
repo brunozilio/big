@@ -377,7 +377,9 @@ export type BindingField = { key: string; label: string; required?: boolean; ski
 
 export type BindingEach = { key: string; label: string; fields: BindingField[] };
 
-export type BindingShape = { multiple?: boolean; fields?: BindingField[]; each?: BindingEach; section?: string; order?: number; suggests?: boolean; summary?: string };
+export type BindingShape = { multiple?: boolean; fields?: BindingField[]; each?: BindingEach; section?: string; order?: number; suggests?: boolean; summary?: BindingSummary };
+
+export type BindingSummary = { template: string; separator?: string };
 
 export type BindingSpec = { capability: string; scope: BindingScope; label: string } & BindingShape;
 

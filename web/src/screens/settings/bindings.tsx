@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/api'
-import type { Api, Binding, BindingChoice, BindingEach, BindingFieldSpec, BindingOption, Bindings, BindingScope, Connection, Provider } from '@/api/contract'
+import type { Api, Binding, BindingChoice, BindingEach, BindingSummary, BindingFieldSpec, BindingOption, Bindings, BindingScope, Connection, Provider } from '@/api/contract'
 import { errorText, useStore } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
@@ -624,7 +624,7 @@ function rendered(template: string, pick: (key: string) => string): string {
   return parts.filter((_, i) => i % 2 === 1 || (parts[i - 1] !== '' && parts[i + 1] !== '')).join('').replace(LOOSE_EDGES, '')
 }
 
-export function summaryText(binding: Binding, template: string): string {
+export function summaryText(binding: Binding, { template, separator = ' · ' }: BindingSummary): string {
   const own = (key: string) => (key === 'value' ? binding.value : key === 'label' ? binding.label || binding.value : '')
   const choice = (sources: Record<string, BindingChoice>[]) => (key: string) => {
     const found = sources.map((source) => source[key]).find(Boolean)
@@ -633,10 +633,10 @@ export function summaryText(binding: Binding, template: string): string {
   const fields = binding.fields ?? {}
   const profiles = binding.profiles ?? []
   const lines = profiles.length > 0 ? profiles.map((p) => rendered(template, choice([p, fields]))) : [rendered(template, choice([fields]))]
-  return [...new Set(lines.filter(Boolean))].join(' · ')
+  return [...new Set(lines.filter(Boolean))].join(separator)
 }
 
-export function boundText(binding: Binding, each: BindingEach | undefined, summary?: string): string {
+export function boundText(binding: Binding, each: BindingEach | undefined, summary?: BindingSummary): string {
   const summarized = summary ? summaryText(binding, summary) : ''
   if (summarized) return summarized
   if (binding.label || binding.value) return binding.label || binding.value

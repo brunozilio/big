@@ -921,7 +921,12 @@ export interface BindingSpec {
   section?: string
   order?: number
   suggests?: boolean
-  summary?: string
+  summary?: BindingSummary
+}
+
+export interface BindingSummary {
+  template: string
+  separator?: string
 }
 
 export interface BindingFieldSpec {

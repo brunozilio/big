@@ -237,6 +237,6 @@ fn the_role_may_be_skipped_when_the_account_has_none_but_the_account_may_not() {
 #[test]
 fn the_listing_summarizes_the_binding_by_the_account_alone() {
     let look = loaded("aws").presentation(domain::Language::Portuguese);
-    let summary = look.bindings.first().and_then(|binding| binding.summary.clone());
-    assert_eq!(summary.as_deref(), Some("{account}"));
+    let summary = look.bindings.first().and_then(|binding| binding.summary.clone()).unwrap_or_default();
+    assert_eq!((summary.template.as_str(), summary.separator.as_deref()), ("{account}", Some(" · ")));
 }
