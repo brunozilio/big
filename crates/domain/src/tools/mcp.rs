@@ -118,6 +118,49 @@ impl McpBundle {
     }
 }
 
+pub struct McpPicked {
+    part: LocalMcp,
+    tools: Vec<String>,
+}
+
+impl McpPicked {
+    pub fn local(part: LocalMcp, tools: Vec<String>) -> LocalMcp {
+        if tools.is_empty() {
+            return part;
+        }
+        let name = part.name.clone();
+        LocalMcp::new(name, Arc::new(Self { part, tools }))
+    }
+
+    fn offers(&self, name: &str) -> bool {
+        self.tools.iter().any(|tool| tool == name)
+    }
+}
+
+impl std::fmt::Debug for McpPicked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("McpPicked").field("part", &self.part).field("tools", &self.tools).finish()
+    }
+}
+
+impl McpEndpoint for McpPicked {
+    fn handle(&self, message: &Value) -> Option<Value> {
+        match message["method"].as_str().unwrap_or_default() {
+            "tools/list" => {
+                let mut reply = self.part.endpoint.handle(message)?;
+                if let Some(tools) = reply["result"]["tools"].as_array_mut() {
+                    tools.retain(|tool| self.offers(tool["name"].as_str().unwrap_or_default()));
+                }
+                Some(reply)
+            }
+            "tools/call" if !self.offers(message["params"]["name"].as_str().unwrap_or_default()) => {
+                respond(message, &self.part.name, Vec::new, |name, _| Err((-32602, format!("unknown tool: {name}"))))
+            }
+            _ => self.part.endpoint.handle(message),
+        }
+    }
+}
+
 impl std::fmt::Debug for McpBundle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("McpBundle").field("server", &self.server).field("parts", &self.parts).finish()

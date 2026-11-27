@@ -12,7 +12,7 @@ const MARGIN_SECONDS: u64 = 60;
 
 #[derive(Debug, clap::Args)]
 pub struct Args {
-    #[arg(required = true, help = "The resources to serve, such as browser or memory")]
+    #[arg(required = true, help = "The resources to serve, as content/mcp-resources.ts names them")]
     resources: Vec<String>,
     #[arg(long, help = "The project folder whose memory to use (default: the current folder)")]
     project: Option<PathBuf>,

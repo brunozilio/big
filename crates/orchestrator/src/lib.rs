@@ -21,6 +21,7 @@ mod factory;
 mod git;
 mod kept;
 pub mod kinds;
+pub mod mcp_resources;
 mod ledger;
 pub mod library;
 mod links;

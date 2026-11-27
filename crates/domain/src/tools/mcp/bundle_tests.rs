@@ -57,3 +57,17 @@ fn a_single_server_keeps_its_own_name() {
     let bundle = McpBundle::new("all", vec![browser]);
     assert_eq!(ask(&bundle, "initialize", json!({}))["result"]["serverInfo"]["name"], "browser");
 }
+
+#[test]
+fn a_picked_server_lists_and_runs_only_the_tools_named() {
+    let (memory, _) = part("memory", &["memory_search", "memory_forget"]);
+    let picked = super::McpPicked::local(memory, vec!["memory_search".into()]);
+    let bundle = McpBundle::new("all", vec![picked]);
+    let tools = ask(&bundle, "tools/list", Value::Null)["result"]["tools"].clone();
+    assert_eq!(tools, json!([{ "name": "memory_search" }]));
+    assert_eq!(ask(&bundle, "tools/call", json!({ "name": "memory_forget" }))["error"]["code"], -32602);
+    assert_eq!(
+        ask(&bundle, "tools/call", json!({ "name": "memory_search" }))["result"]["content"][0]["text"],
+        "memory:memory_search"
+    );
+}

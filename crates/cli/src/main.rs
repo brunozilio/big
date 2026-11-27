@@ -37,7 +37,7 @@ enum Internal {
     GitCredential(git_credential::Args),
     #[command(
         name = brand::mcp::COMMAND,
-        about = "Serve the app's resources (browser, memory) over MCP on stdin/stdout, for another agent to use"
+        about = "Serve the MCP resources the content declares (browser, memory, connectors…) on stdin/stdout, for another agent to use"
     )]
     Mcp(mcp::Args),
 }

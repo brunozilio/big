@@ -112,3 +112,26 @@ async fn another_agent_reads_and_writes_memory_and_gets_only_the_resources_it_na
     let (_, _, tools) = asked(&world, &both, Some(&token), None, &list).await;
     assert_eq!(tools["result"]["tools"].as_array().map(Vec::len), Some(4 + browser::tools().len()));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_content_declares_the_resources_and_a_connection_s_actions_become_tools() {
+    let world = World::new().await;
+    let list = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+    assert_eq!(asked(&world, &[], Some("wrong"), None, &list).await.0, StatusCode::UNAUTHORIZED);
+    let token = token(&world);
+    let project = world.dir.path().display().to_string();
+    let read_only = [("mcp-resources", "memory-read"), ("mcp-project", project.as_str())];
+    let (_, _, tools) = asked(&world, &read_only, Some(&token), None, &list).await;
+    assert_eq!(tools["result"]["tools"].as_array().map(Vec::len), Some(1), "{tools}");
+    let connectors = [("mcp-resources", "connectors")];
+    let (status, _, tools) = asked(&world, &connectors, Some(&token), None, &list).await;
+    assert_eq!(status, StatusCode::OK, "{tools}");
+    let names: Vec<String> = tools["result"]["tools"]
+        .as_array()
+        .map(|tools| tools.iter().filter_map(|tool| tool["name"].as_str().map(str::to_owned)).collect())
+        .unwrap_or_default();
+    assert!(names.contains(&"fake_tracker_issue".to_owned()), "{names:?}");
+    let issue = json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": { "name": "fake_tracker_issue", "arguments": { "issue": "BIG-1" } } });
+    let (_, _, answer) = asked(&world, &connectors, Some(&token), None, &issue).await;
+    assert_eq!(answer["result"]["isError"], json!(false), "{answer}");
+}

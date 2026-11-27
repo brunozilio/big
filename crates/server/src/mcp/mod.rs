@@ -5,19 +5,20 @@ use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use domain::mcp::{LocalMcp, McpBundle, McpEndpoint};
+use domain::mcp::{McpBundle, McpEndpoint};
 use serde_json::{Value, json};
 
 use crate::state::Ctx;
 
 pub const SESSION_HEADER: &str = "mcp-session-id";
 const EXTERNAL: &str = "external";
-const ORIGIN: &str = "MCP";
-pub const BROWSER: &str = "browser";
-pub const MEMORY: &str = "memory";
-pub const RESOURCES: &[&str] = &[BROWSER, MEMORY];
+
+pub use resources::BROWSER;
 
 type Refusal = (StatusCode, String);
+
+mod connector;
+mod resources;
 
 pub fn route() -> &'static str {
     brand::mcp::ROUTE.trim()
@@ -102,29 +103,6 @@ fn header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
     headers.get(name).and_then(|value| value.to_str().ok()).map(str::trim).filter(|value| !value.is_empty())
 }
 
-fn wanted(headers: &HeaderMap) -> Result<Vec<String>, Refusal> {
-    let known = RESOURCES.join(", ");
-    let given = header(headers, resources_header()).unwrap_or_default();
-    let mut names: Vec<String> = Vec::new();
-    for name in given.split([',', ' ']).map(str::trim).filter(|name| !name.is_empty()) {
-        let name = name.to_ascii_lowercase();
-        if !RESOURCES.contains(&name.as_str()) {
-            return Err((
-                StatusCode::BAD_REQUEST,
-                format!("There is no resource `{name}`; the resources are {known}."),
-            ));
-        }
-        if !names.contains(&name) {
-            names.push(name);
-        }
-    }
-    if names.is_empty() {
-        let told = format!("Send the {} header with the resources you want: {known}.", resources_header());
-        return Err((StatusCode::BAD_REQUEST, told));
-    }
-    Ok(names)
-}
-
 fn project(headers: &HeaderMap) -> Result<PathBuf, Refusal> {
     let folder =
         header(headers, project_header()).map(PathBuf::from).filter(|folder| folder.is_absolute() && folder.is_dir());
@@ -134,25 +112,13 @@ fn project(headers: &HeaderMap) -> Result<PathBuf, Refusal> {
     })
 }
 
-fn browser_part(ctx: &Ctx, id: &str) -> Result<LocalMcp, Refusal> {
-    if !crate::browsers::enabled(&ctx.backend.store) {
-        return Err((StatusCode::SERVICE_UNAVAILABLE, "The browser tools are turned off in the app.".to_owned()));
-    }
-    let settings = browser::Settings::configured(&ctx.backend.data);
-    let roots = vec![ctx.backend.attachments(), settings.files.clone()];
-    Ok(browser::Session::new(ctx.backend.browser.clone(), format!("{EXTERNAL}:{id}"), settings, roots).local())
-}
-
-fn part(ctx: &Ctx, headers: &HeaderMap, name: &str, id: &str) -> Result<LocalMcp, Refusal> {
-    match name {
-        BROWSER => browser_part(ctx, id),
-        MEMORY => Ok(ctx.backend.client.memory_mcp(&project(headers)?, ORIGIN)),
-        _ => Err((StatusCode::BAD_REQUEST, format!("There is no resource `{name}`."))),
-    }
-}
-
 fn bundle(ctx: &Ctx, headers: &HeaderMap, id: &str) -> Result<McpBundle, Refusal> {
-    let parts = wanted(headers)?.iter().map(|name| part(ctx, headers, name, id)).collect::<Result<Vec<_>, _>>()?;
+    let asked = resources::Asked { ctx, headers, id, runtime: tokio::runtime::Handle::current() };
+    let declared = resources::declared();
+    let mut parts = Vec::new();
+    for resource in resources::wanted(header(headers, resources_header()).unwrap_or_default(), &declared)? {
+        parts.extend(asked.parts(resource)?);
+    }
     Ok(McpBundle::new(brand::COMMAND.replace('-', "_"), parts))
 }
 
@@ -242,21 +208,6 @@ mod tests {
         let batch = json!([{ "id": 1, "method": "ping" }, { "method": "notifications/initialized" }]);
         let replies = answer(&Echo, &batch).expect("replies");
         assert_eq!(replies.as_array().map(Vec::len), Some(1));
-    }
-
-    fn asking(resources: &str) -> HeaderMap {
-        let mut headers = HeaderMap::new();
-        headers.insert(resources_header(), HeaderValue::from_str(resources).unwrap_or(HeaderValue::from_static("")));
-        headers
-    }
-
-    #[test]
-    fn the_header_names_the_resources_once_each_and_only_known_ones() {
-        assert_eq!(wanted(&asking("Memory, browser memory")).expect("named"), vec![MEMORY, BROWSER]);
-        assert_eq!(wanted(&asking("skills")).map_err(|(status, _)| status), Err(StatusCode::BAD_REQUEST));
-        let (status, told) = wanted(&HeaderMap::new()).expect_err("none named");
-        assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert!(told.contains(resources_header()) && told.contains("browser, memory"), "{told}");
     }
 
     #[test]
