@@ -97,7 +97,7 @@ impl LocalServices {
     pub fn detect() -> Self {
         let root = DataRoot::system();
         let stores = root.stores();
-        let engine = crate::engine::build(Arc::clone(&stores.sessions), &root);
+        let engine = crate::engine::build(Arc::clone(&stores.sessions), Arc::clone(&stores.catalog), &root);
         let mut services = Self::of(Arc::new(engine), root, stores);
         services.homes = Arc::new(crate::OwnerHome::system());
         services

@@ -1,6 +1,7 @@
 mod browser;
 pub(crate) mod code_map;
 pub mod context;
+pub(crate) mod history;
 pub(crate) mod memory;
 pub(crate) mod trace;
 

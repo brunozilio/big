@@ -48,6 +48,7 @@ pub struct Engine {
     mcp: Arc<dyn Http>,
     lsp: Arc<dyn LanguageServers>,
     pointers: Option<crate::tools::CodePointers>,
+    history: Option<crate::history::HostHistory>,
     launch: crate::tools::Launch,
     live: Arc<live::LiveSessions>,
     runtime: Result<tokio::runtime::Handle, String>,
@@ -68,6 +69,7 @@ impl Engine {
             mcp: Arc::new(NetHttp),
             lsp: Arc::new(LspPool::default()),
             pointers: None,
+            history: None,
             launch: crate::tools::Launch::default(),
             live: Arc::default(),
             runtime: task::runtime().map_err(|error| error.to_string()),
@@ -81,6 +83,11 @@ impl Engine {
 
     pub fn with_pointers(mut self, pointers: Arc<dyn crate::tools::Pointers>) -> Self {
         self.pointers = Some(crate::tools::CodePointers(pointers));
+        self
+    }
+
+    pub fn with_history(mut self, history: Arc<dyn crate::history::History>) -> Self {
+        self.history = Some(crate::history::HostHistory(history));
         self
     }
 }
@@ -99,6 +106,7 @@ impl AgentEngine for Engine {
         let mut workspace = Workspace::for_request(request);
         workspace.services.launch = self.launch.clone();
         workspace.services.pointers.clone_from(&self.pointers);
+        workspace.services.history.clone_from(&self.history);
         let control = Arc::new(
             Control::new(request.policy.permission, workspace.stop.clone()).reviewed_by(request.policy.reviewer),
         );

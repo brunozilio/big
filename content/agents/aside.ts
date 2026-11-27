@@ -11,6 +11,7 @@ export const spec = {
     "KillShell",
     "Monitor",
     "LSP",
+    "History",
     "WebFetch",
     "WebSearch",
     "Skill",

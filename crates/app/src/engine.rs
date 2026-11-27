@@ -89,12 +89,20 @@ pub fn other_keys(providers: &ModelProviders, model: &ModelOption) -> Vec<(Model
         .collect()
 }
 
-pub fn build(sessions: Arc<FileSessions>, root: &crate::data_root::DataRoot) -> Engine {
+pub fn build(
+    sessions: Arc<FileSessions>,
+    catalog: Arc<dyn crate::catalog::SessionCatalog>,
+    root: &crate::data_root::DataRoot,
+) -> Engine {
     let apis = ProviderApis::new(Arc::new(NetHttp));
     let servers = LspPool::installing(Processes, IDLE, root.language_servers(), Downloads(agent_engine::NetFetch));
     let pointers =
         crate::features::code_map::MapPointers { maps: root.code_map(), homes: Arc::new(crate::OwnerHome::system()) };
-    Engine::new(Arc::new(apis), sessions).with_language_servers(Arc::new(servers)).with_pointers(Arc::new(pointers))
+    let history = crate::features::history::KeptHistory::new(root.clone(), catalog);
+    Engine::new(Arc::new(apis), sessions)
+        .with_language_servers(Arc::new(servers))
+        .with_pointers(Arc::new(pointers))
+        .with_history(Arc::new(history))
 }
 
 #[cfg(test)]

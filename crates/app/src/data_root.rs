@@ -24,6 +24,15 @@ enum Kept {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataRoot(Kept);
 
+pub(crate) fn former_names(listed: &str) -> Vec<(String, String)> {
+    listed
+        .split('|')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(name, command)| (name.trim().to_owned(), command.trim().to_owned()))
+        .filter(|(name, command)| !name.is_empty() && !command.is_empty() && *name != brand::NAME)
+        .collect()
+}
+
 impl DataRoot {
     pub fn system() -> Self {
         Self(Kept::System { app: crate::dirs::app_data_dir(), local: crate::dirs::local_data_dir() })
@@ -88,6 +97,28 @@ impl DataRoot {
 
     pub fn sessions(&self) -> PathBuf {
         self.local().join(SESSIONS)
+    }
+
+    pub fn data(&self) -> PathBuf {
+        self.app()
+    }
+
+    pub fn logs(&self) -> PathBuf {
+        self.local().join("logs")
+    }
+
+    pub fn former(&self) -> Vec<(String, PathBuf, PathBuf)> {
+        if !matches!(self.0, Kept::System { .. }) {
+            return Vec::new();
+        }
+        former_names(brand::history::FORMER)
+            .into_iter()
+            .filter_map(|(name, command)| {
+                let data = platform::data_dir(&name, &command)?;
+                let local = platform::local_data_dir(&name, &command)?;
+                Some((name, data, local.join(SESSIONS)))
+            })
+            .collect()
     }
 
     pub fn language_servers(&self) -> PathBuf {
@@ -257,5 +288,15 @@ mod tests {
         assert_eq!(root.secrets(), local.clone());
         assert_eq!(root.sessions(), local.clone().unwrap_or_else(fallback).join("native-sessions"));
         assert_eq!(root.language_servers(), local.unwrap_or_else(fallback).join("lsp"));
+    }
+
+    #[test]
+    fn the_former_names_are_read_from_their_pairs_leaving_out_the_current_one() {
+        let listed = format!("Old=old | Older Lite=older-lite|broken||{}=x|=y", brand::NAME);
+        assert_eq!(
+            former_names(&listed),
+            vec![("Old".to_owned(), "old".to_owned()), ("Older Lite".to_owned(), "older-lite".to_owned())]
+        );
+        assert!(DataRoot::under(std::env::temp_dir()).former().is_empty(), "only the system folders have a past");
     }
 }

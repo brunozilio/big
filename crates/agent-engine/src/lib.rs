@@ -10,6 +10,7 @@ mod engine;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake;
 pub mod frontmatter;
+pub mod history;
 pub mod hooks;
 pub mod intercept;
 pub use language_servers as lsp;

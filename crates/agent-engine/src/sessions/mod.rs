@@ -78,7 +78,7 @@ pub trait Sessions: Send + Sync {
     }
 }
 
-fn scoped_id(cwd: &Path, id: &SessionId) -> SessionId {
+pub fn scoped_id(cwd: &Path, id: &SessionId) -> SessionId {
     let cwd = cwd.canonicalize().unwrap_or_else(|_| cwd.to_path_buf());
     let scope = (LEGACY_OWNER_TAG, cwd.to_string_lossy(), id);
     let bytes = serde_json::to_vec(&scope).unwrap_or_else(|_| format!("{scope:?}").into_bytes());
@@ -145,6 +145,7 @@ mod log;
 mod records;
 mod repair;
 mod seq;
+mod told;
 
 pub use durable::Written;
 pub use file::FileSessions;
@@ -152,6 +153,7 @@ pub use hold::{ANSWERING_ELSEWHERE, Hold};
 pub use log::Entry;
 pub use records::records;
 pub use repair::{INTERRUPTED, repaired};
+pub use told::{Prompt, Said, Told};
 
 #[cfg(test)]
 mod scope_tests {

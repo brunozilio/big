@@ -4,6 +4,7 @@ mod fence;
 mod files;
 mod fs;
 mod git;
+mod history;
 mod hosted;
 mod http;
 mod lsp;
@@ -43,6 +44,7 @@ const SPACES: &[(&str, Space)] = &[
     (lsp::SPACE, lsp::call),
     (mcp::SPACE, mcp::call),
     (session::SPACE, session::call),
+    (history::SPACE, history::call),
     (schema::SPACE, schema::call),
     (tasks::SPACE, tasks::call),
     (observer::SPACE, observer::call),

@@ -16,6 +16,7 @@ pub enum ToolName {
     ExitPlanMode,
     Glob,
     Grep,
+    History,
     KillShell,
     Lsp,
     ListMcpResources,
@@ -45,7 +46,7 @@ pub enum ToolName {
 }
 
 impl ToolName {
-    pub const BUILTIN: [Self; 34] = [
+    pub const BUILTIN: [Self; 35] = [
         Self::AddRepository,
         Self::Agent,
         Self::Artifact,
@@ -56,6 +57,7 @@ impl ToolName {
         Self::ExitPlanMode,
         Self::Glob,
         Self::Grep,
+        Self::History,
         Self::KillShell,
         Self::Lsp,
         Self::ListMcpResources,
@@ -101,6 +103,7 @@ impl ToolName {
             Self::ExitPlanMode => "ExitPlanMode",
             Self::Glob => "Glob",
             Self::Grep => "Grep",
+            Self::History => "History",
             Self::KillShell => "KillShell",
             Self::Lsp => "LSP",
             Self::ListMcpResources => "ListMcpResources",

@@ -255,6 +255,7 @@ pub fn facts(workspace: &Workspace) -> Value {
         "services": {
             "lsp": workspace.services.lsp.is_some(),
             "deferred": workspace.services.deferred.is_some(),
+            "history": workspace.services.history.is_some(),
         },
     })
 }

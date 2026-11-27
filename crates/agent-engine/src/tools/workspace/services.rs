@@ -12,6 +12,7 @@ pub struct Services {
     pub output_schema: Option<serde_json::Value>,
     pub artifacts: Option<std::path::PathBuf>,
     pub pointers: Option<CodePointers>,
+    pub history: Option<crate::history::HostHistory>,
 }
 
 pub trait Pointers: Send + Sync {
