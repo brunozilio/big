@@ -9,6 +9,14 @@ use crate::tools::names::ToolName;
 use crate::transcript::{Block, Message};
 
 const SIDE_BY_SIDE: usize = 8;
+const AGENTS_AT_ONCE: usize = 4;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Lane {
+    Alone,
+    SideBySide,
+    Agents,
+}
 
 impl Agent<'_> {
     pub(in crate::agent) fn pending_rules(&self, calls: &[(String, String, Value)]) -> Vec<String> {
@@ -43,19 +51,53 @@ impl Agent<'_> {
         if !new_rules.is_empty() {
             return self.sent_back_to_read(calls, new_rules);
         }
-        let parallel: Vec<bool> = calls.iter().map(|(_, name, input)| self.concurrent(run, name, input)).collect();
+        let lanes: Vec<Lane> = calls.iter().map(|(_, name, input)| self.lane(run, name, input)).collect();
         let mut results = Vec::with_capacity(calls.len());
-        for range in batches(&parallel) {
+        for range in batches(&lanes) {
             let group = &calls[range.clone()];
-            if !parallel[range.start] || group.len() == 1 {
-                results.extend(group.iter().map(|(id, name, input)| self.call(id, name, input, run, history, spawn)));
-                continue;
-            }
-            for chunk in group.chunks(SIDE_BY_SIDE) {
-                results.extend(self.side_by_side(chunk, run));
+            match lanes[range.start] {
+                Lane::SideBySide if group.len() > 1 => {
+                    group.chunks(SIDE_BY_SIDE).for_each(|chunk| results.extend(self.side_by_side(chunk, run)));
+                }
+                Lane::Agents if group.len() > 1 => {
+                    for chunk in group.chunks(AGENTS_AT_ONCE) {
+                        results.extend(self.agents_at_once(chunk, run, history, spawn));
+                    }
+                }
+                _ => results.extend(group.iter().map(|(id, name, input)| self.call(id, name, input, run, history, spawn))),
             }
         }
         results
+    }
+
+    fn lane(&self, run: &ThisRun, name: &str, input: &Value) -> Lane {
+        let teammate = input.get("name").and_then(Value::as_str).is_some_and(|name| !name.trim().is_empty());
+        if self.concurrent(run, name, input) {
+            Lane::SideBySide
+        } else if self.depth == 0 && ToolName::of(name) == ToolName::Agent && !teammate {
+            Lane::Agents
+        } else {
+            Lane::Alone
+        }
+    }
+
+    fn agents_at_once<'env>(
+        &'env self,
+        chunk: &[(String, String, Value)],
+        run: &ThisRun,
+        history: &[Message],
+        spawn: Spawn<'_, 'env>,
+    ) -> Vec<Block> {
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = chunk
+                .iter()
+                .map(|(id, name, input)| scope.spawn(move || self.call(id, name, input, run, history, spawn)))
+                .collect();
+            handles
+                .into_iter()
+                .map(|handle| handle.join().unwrap_or_else(|panic| std::panic::resume_unwind(panic)))
+                .collect()
+        })
     }
 
     fn sent_back_to_read(&self, calls: &[(String, String, Value)], new_rules: &[String]) -> Vec<Block> {
@@ -110,11 +152,11 @@ impl Agent<'_> {
     }
 }
 
-fn batches(parallel: &[bool]) -> Vec<std::ops::Range<usize>> {
+fn batches(lanes: &[Lane]) -> Vec<std::ops::Range<usize>> {
     let mut groups: Vec<std::ops::Range<usize>> = Vec::new();
-    for (at, &together) in parallel.iter().enumerate() {
+    for (at, &lane) in lanes.iter().enumerate() {
         match groups.last_mut() {
-            Some(last) if together && parallel[last.start] => last.end = at + 1,
+            Some(last) if lane != Lane::Alone && lanes[last.start] == lane => last.end = at + 1,
             _ => groups.push(at..at + 1),
         }
     }
@@ -123,10 +165,18 @@ fn batches(parallel: &[bool]) -> Vec<std::ops::Range<usize>> {
 
 #[cfg(test)]
 mod tests {
+    use super::Lane::{Agents, Alone, SideBySide};
+
     #[test]
     fn parallel_calls_group_between_the_serial_ones_in_order() {
-        let groups = super::batches(&[true, true, false, false, true, true, true]);
+        let groups = super::batches(&[SideBySide, SideBySide, Alone, Alone, SideBySide, SideBySide, SideBySide]);
         assert_eq!(groups, [0..2, 2..3, 3..4, 4..7]);
         assert!(super::batches(&[]).is_empty());
+    }
+
+    #[test]
+    fn agent_calls_next_to_each_other_form_their_own_group() {
+        let groups = super::batches(&[Agents, Agents, SideBySide, Agents, Alone, Agents, Agents, Agents]);
+        assert_eq!(groups, [0..2, 2..3, 3..4, 4..5, 5..8]);
     }
 }

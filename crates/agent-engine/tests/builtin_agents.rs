@@ -118,6 +118,88 @@ fn a_fork_sees_the_agent_tool_but_is_refused_when_it_calls_it() {
     assert_eq!(asked[2].tools, asked[0].tools);
 }
 
+struct Overlapping {
+    main: ScriptedModel,
+    helpers: ScriptedModel,
+    running: std::sync::atomic::AtomicUsize,
+    most: std::sync::atomic::AtomicUsize,
+}
+
+impl agent_engine::model::ModelApi for Overlapping {
+    fn turn<'a>(
+        &'a self,
+        request: &'a TurnRequest,
+        on: agent_engine::model::OnDelta<'a>,
+        _cancel: &'a agent_engine::model::CancellationToken,
+    ) -> agent_engine::model::BoxFuture<'a, Result<agent_engine::model::Reply, agent_engine::model::ModelError>> {
+        use std::sync::atomic::Ordering;
+        Box::pin(async move {
+            if !request.system.contains("# You are a sub-agent") {
+                return self.main.answer(request, on);
+            }
+            let now = self.running.fetch_add(1, Ordering::SeqCst) + 1;
+            self.most.fetch_max(now, Ordering::SeqCst);
+            std::thread::sleep(std::time::Duration::from_millis(300));
+            self.running.fetch_sub(1, Ordering::SeqCst);
+            self.helpers.answer(request, on)
+        })
+    }
+}
+
+#[test]
+fn agents_called_in_one_turn_run_at_once_and_report_in_the_order_called() {
+    let explore = |id: &str, prompt: &str| {
+        tool_use(id, "Agent", json!({"description": "Look", "subagent_type": "Explore", "prompt": prompt}))
+    };
+    let model = Overlapping {
+        main: ScriptedModel::new([
+            ScriptedModel::reply(vec![explore("a1", "Where is main?"), explore("a2", "Where are the tests?")]),
+            says("Both found."),
+        ]),
+        helpers: ScriptedModel::new([says("Found it."), says("Found it.")]),
+        running: Default::default(),
+        most: Default::default(),
+    };
+    let dir = tempfile::tempdir().expect("dir");
+    let workspace = Workspace::new(dir.path());
+    let control =
+        Arc::new(Control::new(domain::PermissionMode::Auto, Arc::default()).reviewed_by(domain::Reviewer::Human));
+    let agents = builtin_agents::all();
+    let mut tools = tools::standard();
+    tools::subagent::offer(&mut tools, &agents);
+    let agent = Agent {
+        api: &model,
+        tools: &tools,
+        workspace: &workspace,
+        control: &control,
+        emit: &|_| {},
+        request: TurnRequest {
+            model: "m".into(),
+            system: "Parent prompt.".into(),
+            messages: Vec::new(),
+            tools: Agent::specs(&tools),
+            effort: Effort::Medium,
+            max_tokens: 1000,
+        },
+        agents: &agents,
+        depth: 0,
+        turn_limit: agent_engine::agent::MAX_TURNS,
+    };
+    let mut history = vec![Message::user("Look around")];
+    agent.run(&mut history).expect("run");
+
+    assert_eq!(model.most.load(std::sync::atomic::Ordering::SeqCst), 2, "the two agents overlapped");
+    let ids: Vec<&str> = history
+        .iter()
+        .flat_map(|message| &message.blocks)
+        .filter_map(|block| match block {
+            Block::ToolResult { id, content, is_error: false } if content.starts_with("Found it.") => Some(id.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ids, ["a1", "a2"]);
+}
+
 struct Echo;
 
 impl tools::Pointers for Echo {
