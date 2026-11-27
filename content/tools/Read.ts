@@ -1,7 +1,7 @@
 const DEFAULT_LINES = 2000;
 const LINE_CHARS = 2000;
-const MAX_CHARS = 100000;
-const PDF_SHOWN = 100000;
+const MAX_CHARS = 40000;
+const PDF_SHOWN = 40000;
 const NOTEBOOK_OUTPUT = 4000;
 
 export const spec = {
@@ -31,7 +31,7 @@ export const spec = {
     ],
     "type": "object"
   },
-  description: `Read a text file, a PNG, JPEG, GIF or WebP image, a PDF (as text; \`pages\` like "1-5" for a long one) or a Jupyter notebook (its cells and outputs) from the machine. Images are sent visually to the model. Give an absolute path, or one relative to the working directory. Returns up to ${DEFAULT_LINES} lines from the start, each prefixed with its line number and a tab; pass \`offset\` (first line, from 1) and \`limit\` to read a part of a long file. Lines longer than ${LINE_CHARS} characters are cut, and a read stops at the last whole line before ${MAX_CHARS} characters, saying where to go on. Reading lines of an unchanged file that an earlier read already returned gives a short note instead of the text. When you know which part of a file you need, read only that part. Read a file before editing or overwriting it, but do not read it again to check an edit: Edit and Write fail when a change does not apply. To find files, use Glob; to search inside them, Grep. Several reads can be requested at once.`,
+  description: `Read a text file, a PNG, JPEG, GIF or WebP image, a PDF (as text; \`pages\` like "1-5" for a long one) or a Jupyter notebook (its cells and outputs) from the machine. Images are sent visually to the model. Give an absolute path, or one relative to the working directory. Returns up to ${DEFAULT_LINES} lines from the start, each prefixed with its line number and a tab; pass \`offset\` (first line, from 1) and \`limit\` to read a part of a long file. Lines longer than ${LINE_CHARS} characters are cut, and a read stops at the last whole line before ${MAX_CHARS} characters, saying which \`offset\` reads on; paging through every line of a file counts as reading it whole. Reading lines of an unchanged file that an earlier read already returned gives a short note instead of the text. When you know which part of a file you need, read only that part. Read a file before editing or overwriting it, but do not read it again to check an edit: Edit and Write fail when a change does not apply. To find files, use Glob; to search inside them, Grep. Several reads can be requested at once.`,
 };
 
 type Input = { file_path: string; offset?: number; limit?: number; pages?: string };
@@ -85,7 +85,7 @@ function bytes(text: string) {
   return size;
 }
 
-function clip(text: string, limit: number) {
+function clip(text: string, limit: number, hint = "") {
   if (text.length <= limit) {
     return text;
   }
@@ -93,7 +93,7 @@ function clip(text: string, limit: number) {
   if (chars.length <= limit) {
     return text;
   }
-  return `${chars.slice(0, limit).join("")}\n… [${chars.length - limit} more characters cut]`;
+  return `${chars.slice(0, limit).join("")}\n… [${chars.length - limit} more characters cut${hint}]`;
 }
 
 function cut(line: string) {
@@ -184,7 +184,7 @@ function pdf(input: Input, ctx): Answer {
       out += `--- page ${at + 1} ---\n${page.trimEnd()}\n`;
     }
   });
-  return clip(out, PDF_SHOWN);
+  return clip(out, PDF_SHOWN, "; read a smaller `pages` range to see the rest");
 }
 
 function raw(input: Input, shown: string, ctx): Answer {
@@ -229,10 +229,20 @@ function numbered(text: string, path: string, shown: string, input: Input, ctx):
     size += length;
   }
   ctx.files.saw({ path, first: offset, last });
-  if (last < total) {
-    out += `… [${total - last} more lines; read on from offset ${last + 1}]\n`;
+  if (offset > 1 && ctx.files.seen({ path, first: 1, last: total })) {
+    ctx.files.markRead({ path, whole: true });
   }
-  return out;
+  return out + rest(total, last, last < Math.min(offset - 1 + limit, total));
+}
+
+function rest(total: number, last: number, capped: boolean) {
+  if (last >= total) {
+    return "";
+  }
+  if (capped) {
+    return `… [stopped at line ${last} of ${total}: one read returns at most ${MAX_CHARS} characters. Read on from offset ${last + 1} (a \`limit\` keeps each part small), or Grep for the part you need]\n`;
+  }
+  return `… [${total - last} more lines; read on from offset ${last + 1}]\n`;
 }
 
 function notebookPath(full: string) {

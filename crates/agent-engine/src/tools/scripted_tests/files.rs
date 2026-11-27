@@ -132,9 +132,17 @@ fn a_huge_read_stops_at_a_whole_line_and_says_where_to_go_on() {
     let line = "x".repeat(1_000);
     std::fs::write(dir.path().join("big.txt"), format!("{line}\n").repeat(500)).expect("write");
     let text = read_text(&workspace, json!({"file_path": "big.txt"}));
-    assert!(text.len() < 100_000 + 500, "{}", text.len());
+    assert!(text.len() < 40_000 + 500, "{}", text.len());
     let next = text.lines().filter(|l| l.contains('\t')).count() + 1;
-    assert!(text.ends_with(&format!("read on from offset {next}]\n")), "{}", &text[text.len() - 200..]);
+    assert!(text.contains(&format!("Read on from offset {next} (a `limit`")), "{}", &text[text.len() - 300..]);
+    assert!(text.contains("at most 40000 characters"));
+    assert_eq!(workspace.freshness(&dir.path().join("big.txt")), Freshness::Partial, "a part is not the whole file");
+    let mut offset = next;
+    while offset <= 500 {
+        let part = read_text(&workspace, json!({"file_path": "big.txt", "offset": offset}));
+        offset += part.lines().filter(|l| l.contains('\t')).count();
+    }
+    assert_eq!(workspace.freshness(&dir.path().join("big.txt")), Freshness::Current, "paging through it reads it whole");
 }
 
 #[test]

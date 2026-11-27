@@ -54,6 +54,7 @@ impl SeenFiles {
             *entry = Seen { stamp: now, ranges: Vec::new() };
         }
         entry.ranges.push((first, last));
+        entry.ranges = joined(std::mem::take(&mut entry.ranges));
     }
 
     pub fn forget(&self) {
@@ -72,9 +73,26 @@ impl SeenFiles {
     }
 }
 
+fn joined(mut ranges: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
+    ranges.sort_unstable();
+    let mut out: Vec<(usize, usize)> = Vec::with_capacity(ranges.len());
+    for (from, to) in ranges {
+        match out.last_mut() {
+            Some(last) if from <= last.1.saturating_add(1) => last.1 = last.1.max(to),
+            _ => out.push((from, to)),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::SeenFiles;
+
+    #[test]
+    fn reads_of_adjacent_parts_join_into_one_range() {
+        assert_eq!(super::joined(vec![(11, 20), (1, 10), (30, 40), (15, 25)]), [(1, 25), (30, 40)]);
+    }
 
     #[test]
     fn reads_made_out_of_the_model_s_sight_are_neither_recorded_nor_answered_from_memory() {
