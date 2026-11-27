@@ -80,8 +80,14 @@ fn api() -> Router<Ctx> {
         )
 }
 
-async fn live(State(ctx): State<Ctx>) -> Response {
-    ctx.live.response()
+async fn live(
+    State(ctx): State<Ctx>,
+    axum::Extension(person): axum::Extension<domain::principal::Principal>,
+) -> Response {
+    if !crate::scope::shared_mode() {
+        return ctx.live.response();
+    }
+    ctx.live.response_for(crate::scope::live_filter(&ctx, person.owner()))
 }
 
 fn chosen_folder() -> Option<PathBuf> {

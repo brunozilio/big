@@ -55,6 +55,12 @@ pub fn normalized_email(text: &str) -> Option<String> {
     fine.then_some(email)
 }
 
+pub const OWNER_FIELD: &str = "owner";
+
+pub fn owner_in(input: &serde_json::Value) -> &str {
+    input[OWNER_FIELD].as_str().filter(|owner| !owner.is_empty()).unwrap_or(LOCAL_USER)
+}
+
 pub fn domain_of(email: &str) -> &str {
     email.rsplit_once('@').map_or("", |(_, domain)| domain)
 }
@@ -71,6 +77,12 @@ mod tests {
         assert_eq!(normalized_email("a b@example.com"), None);
         assert_eq!(normalized_email("a@b@example.com"), None);
         assert_eq!(domain_of("ana@example.com"), "example.com");
+    }
+
+    #[test]
+    fn an_item_without_an_owner_belongs_to_the_local_user() {
+        assert_eq!(owner_in(&serde_json::json!({})), LOCAL_USER);
+        assert_eq!(owner_in(&serde_json::json!({ "owner": "u-1" })), "u-1");
     }
 
     #[test]

@@ -1,8 +1,9 @@
 use std::path::Path;
 
-use axum::Json;
 use axum::extract::{Path as UrlPath, State};
 use axum::response::Response;
+use axum::{Extension, Json};
+use domain::principal::Principal;
 use serde_json::Value;
 use store::{Application, Binding, Bindings, Choice, Environment, Fields, Repository};
 
@@ -164,23 +165,35 @@ fn parsed(body: Value) -> ApiResult<Application> {
     })
 }
 
-pub async fn all(shared: &Shared) -> ApiResult<Vec<Application>> {
-    Ok(shared.backend.store.applications()?)
+pub async fn all(shared: &Shared, owner: &str) -> ApiResult<Vec<Application>> {
+    let theirs = shared.backend.store.owned_ids(store::ownership::APPLICATION, owner)?;
+    Ok(shared
+        .backend
+        .store
+        .applications()?
+        .into_iter()
+        .filter(|application| theirs.contains(&application.id))
+        .collect())
 }
 
 pub fn snapshot(shared: &Shared, application: &Application) -> ApiResult<Value> {
     Ok(orchestrator::application_snapshot(&shared.backend.store, application))
 }
 
-pub async fn list(State(ctx): State<Ctx>) -> ApiResult<Response> {
-    Ok(reply(all(&ctx).await?))
+pub async fn list(State(ctx): State<Ctx>, Extension(person): Extension<Principal>) -> ApiResult<Response> {
+    Ok(reply(all(&ctx, person.owner()).await?))
 }
 
-pub async fn create(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {
+pub async fn create(
+    State(ctx): State<Ctx>,
+    Extension(person): Extension<Principal>,
+    Json(body): Json<Value>,
+) -> ApiResult<Response> {
     let mut application = parsed(body)?;
     application.id = random_id()?;
     let application = checked(application)?;
     ctx.backend.store.save_application(&application)?;
+    ctx.backend.store.set_owner(store::ownership::APPLICATION, &application.id, person.owner())?;
     Ok(reply(application))
 }
 
@@ -204,6 +217,7 @@ pub async fn update(
 }
 
 pub async fn remove(State(ctx): State<Ctx>, UrlPath(id): UrlPath<String>) -> ApiResult<Response> {
+    ctx.backend.store.forget_owner(store::ownership::APPLICATION, &id)?;
     if !ctx.backend.store.delete_application(&id)? {
         return Err(ApiError::missing(said(
             "There is no such application.",

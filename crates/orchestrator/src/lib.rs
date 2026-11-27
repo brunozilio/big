@@ -24,6 +24,7 @@ mod ledger;
 mod links;
 mod matching;
 mod naming;
+pub mod owners;
 mod progress;
 mod protocol;
 mod provenance;
@@ -53,8 +54,8 @@ pub use events::OrchestratorEvent;
 pub use factory::{Autonomy, ESCAPED as FACTORY_ESCAPED, Factory, RECURRING as FACTORY_RECURRING};
 pub use git::{is_repo, origin};
 pub use provenance::snapshot as application_snapshot;
-pub use schedules::{Cron, Schedules};
 pub use resources::{Builtin, Origin, Resource, Resources};
+pub use schedules::{Cron, Schedules};
 pub use texts::is_workflow_changed;
 pub use views::{Attempt, ItemSummary, StepSummary, StepView};
 

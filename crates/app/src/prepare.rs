@@ -57,7 +57,7 @@ pub(crate) fn prepare(services: &LocalServices, client: u64, run: RunId, request
     credentials.other_models = crate::engine::other_keys(providers, &request.session.model);
     credentials.client = client;
     credentials.mcp_tokens = Some(services.mcp_auth.for_run());
-    credentials.remote_mcp = services.connected_mcp.servers();
+    credentials.remote_mcp = services.connected_mcp.servers(request.host.owner.as_deref());
     let request = services.extensions.brief(request, services.home());
     let context = Context { services };
     let (request, finishes) = crate::features::prepare(&context, run, request);

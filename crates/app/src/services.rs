@@ -9,18 +9,18 @@ use crate::extensions::Extensions;
 use crate::providers::ModelProviders;
 use crate::settings::SettingsStore;
 
-type ServersOf = Arc<dyn Fn() -> Vec<domain::mcp::RemoteMcp> + Send + Sync>;
+type ServersOf = Arc<dyn Fn(Option<&str>) -> Vec<domain::mcp::RemoteMcp> + Send + Sync>;
 
 #[derive(Clone, Default)]
 pub struct ConnectedMcp(Option<ServersOf>);
 
 impl ConnectedMcp {
-    pub fn new(servers: impl Fn() -> Vec<domain::mcp::RemoteMcp> + Send + Sync + 'static) -> Self {
+    pub fn new(servers: impl Fn(Option<&str>) -> Vec<domain::mcp::RemoteMcp> + Send + Sync + 'static) -> Self {
         Self(Some(Arc::new(servers)))
     }
 
-    pub fn servers(&self) -> Vec<domain::mcp::RemoteMcp> {
-        self.0.as_ref().map(|servers| servers()).unwrap_or_default()
+    pub fn servers(&self, owner: Option<&str>) -> Vec<domain::mcp::RemoteMcp> {
+        self.0.as_ref().map(|servers| servers(owner)).unwrap_or_default()
     }
 }
 

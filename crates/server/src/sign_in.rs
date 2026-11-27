@@ -42,6 +42,7 @@ pub struct Flow {
     pub started: Instant,
     pub method: Option<String>,
     pub fields: Value,
+    pub owner: String,
 }
 
 #[derive(Debug, Default)]
@@ -76,6 +77,7 @@ impl Flows {
             started: Instant::now(),
             method: method.map(str::to_owned),
             fields,
+            owner: domain::principal::LOCAL_USER.to_owned(),
         };
         flows.insert(id.clone(), flow);
         Ok(id)
@@ -83,6 +85,12 @@ impl Flows {
 
     pub fn get(&self, id: &str) -> Option<Flow> {
         held(&self.0).get(id).cloned()
+    }
+
+    pub fn own(&self, id: &str, owner: &str) {
+        if let Some(flow) = held(&self.0).get_mut(id) {
+            owner.clone_into(&mut flow.owner);
+        }
     }
 
     pub fn set(&self, id: &str, stage: Stage) {
@@ -305,7 +313,7 @@ pub async fn poll(shared: &Shared, flow_id: &str, choice: Option<&str>) -> ApiRe
         Stage::Granted(grant) => accounts(shared, &flow, grant).await,
         Stage::Choose { grant, options } => {
             match choice.and_then(|wanted| options.iter().find(|option| option.id == wanted)) {
-                Some(chosen) => finish(shared, &flow.provider, &grant, chosen).await,
+                Some(chosen) => finish(shared, &flow, &grant, chosen).await,
                 None => Stage::Choose { grant, options },
             }
         }
@@ -414,7 +422,7 @@ async fn accounts(shared: &Shared, flow: &Flow, mut grant: Grant) -> Stage {
         }
         Ok(options) => {
             let fallback = AccountOption { id: String::new(), label: found.name.clone(), settings: json!({}) };
-            finish(shared, provider, &grant, options.first().unwrap_or(&fallback)).await
+            finish(shared, flow, &grant, options.first().unwrap_or(&fallback)).await
         }
         Err(error) => Stage::Failed(error.message),
     }
@@ -437,9 +445,10 @@ fn nothing_to_choose(found: &ProviderDescriptor, language: Language) -> String {
     )
 }
 
-async fn finish(shared: &Shared, provider: &str, grant: &Grant, chosen: &AccountOption) -> Stage {
+async fn finish(shared: &Shared, flow: &Flow, grant: &Grant, chosen: &AccountOption) -> Stage {
+    let provider = flow.provider.as_str();
     let Ok(found) = descriptor(shared, provider) else { return unknown_provider(shared.language()) };
-    let records = shared.backend.store.connections().unwrap_or_default();
+    let records = shared.backend.store.connections_of(&flow.owner).unwrap_or_default();
     let same =
         records.iter().find(|record| record.provider == provider && record.account.as_deref() == Some(&chosen.label));
     let id = same.map_or_else(|| format!("c-{}", random_id().unwrap_or_default()), |record| record.id.clone());
@@ -455,6 +464,9 @@ async fn finish(shared: &Shared, provider: &str, grant: &Grant, chosen: &Account
         return Stage::Failed(error.message);
     }
     if let Err(error) = shared.backend.store.save_connection(&record) {
+        return Stage::Failed(error.to_string());
+    }
+    if let Err(error) = shared.backend.store.set_owner(store::ownership::CONNECTION, &id, &flow.owner) {
         return Stage::Failed(error.to_string());
     }
     if let Some(health) = shared.backend.orchestrator.health() {

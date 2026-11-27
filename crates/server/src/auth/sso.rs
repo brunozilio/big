@@ -9,8 +9,8 @@ use domain::principal::{Principal, UserId, domain_of, normalized_email};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::settings::{self, Method};
 use super::session;
+use super::settings::{self, Method};
 use crate::error::{ApiError, ApiResult};
 use crate::state::{Ctx, Shared};
 

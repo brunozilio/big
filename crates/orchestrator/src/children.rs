@@ -17,7 +17,8 @@ pub fn start(shared: &Arc<Shared>, parent: &ItemId, command: &Command, key: &Ide
     let workflow = command.text("workflow");
     if shared.store.item(&id)?.is_none() {
         let mut input = command.args["input"].clone();
-        let application = &shared.item(parent)?.input["application"];
+        let parent_item = shared.item(parent)?;
+        let application = &parent_item.input["application"];
         if !application.is_null() && (input.is_null() || input.get("application").is_none()) && !input.is_array() {
             if input.is_null() {
                 input = serde_json::json!({});
@@ -25,6 +26,10 @@ pub fn start(shared: &Arc<Shared>, parent: &ItemId, command: &Command, key: &Ide
             if let Some(fields) = input.as_object_mut() {
                 fields.insert("application".to_owned(), application.clone());
             }
+        }
+        if let Some(fields) = input.as_object_mut() {
+            let owner = crate::owners::of(&shared.store, &parent_item);
+            fields.insert(domain::principal::OWNER_FIELD.to_owned(), serde_json::Value::String(owner));
         }
         let created = WorkflowEvent::ItemCreated {
             id: id.clone(),

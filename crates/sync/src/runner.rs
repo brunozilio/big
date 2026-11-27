@@ -79,9 +79,12 @@ pub(crate) fn reconciled(field: &str, local: Value, remote: Value, action: &str)
 }
 
 pub(crate) fn linked(desired: &Desired, book: &Book) -> BTreeSet<ConnectionId> {
-    let issue = desired.issue.iter().filter_map(|issue| book.resolve(issue.connection.as_deref(), TRACKER));
-    let pulls = desired.pulls.iter().filter_map(|pull| book.resolve(pull.connection.as_deref(), CODE));
-    let runs = desired.runs.iter().filter_map(|run| book.resolve(run.connection.as_deref(), PIPELINES));
+    let issue =
+        desired.issue.iter().filter_map(|issue| book.resolve_for(&desired.owner, issue.connection.as_deref(), TRACKER));
+    let pulls =
+        desired.pulls.iter().filter_map(|pull| book.resolve_for(&desired.owner, pull.connection.as_deref(), CODE));
+    let runs =
+        desired.runs.iter().filter_map(|run| book.resolve_for(&desired.owner, run.connection.as_deref(), PIPELINES));
     issue.chain(pulls).chain(runs).map(|entry| entry.connection.id.clone()).collect()
 }
 

@@ -16,14 +16,14 @@ pub const CREDENTIALS_COMMAND: &str = "cloud-credentials";
 pub const CREDENTIALS_PATH: &str = "/api/cloud/credentials/";
 
 #[derive(Debug, Default)]
-pub struct Leases(Mutex<HashMap<String, Call>>);
+pub struct Leases(Mutex<HashMap<String, (String, Call)>>);
 
 impl Leases {
-    fn held(&self) -> std::sync::MutexGuard<'_, HashMap<String, Call>> {
+    fn held(&self) -> std::sync::MutexGuard<'_, HashMap<String, (String, Call)>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
-    pub fn call(&self, token: &str) -> Option<Call> {
+    pub fn call(&self, token: &str) -> Option<(String, Call)> {
         self.held().get(token).cloned()
     }
 }
@@ -53,10 +53,9 @@ fn asked(cloud: &Value) -> Option<(Option<String>, Option<String>)> {
     match cloud {
         Value::Bool(true) => Some((None, None)),
         Value::String(id) if !id.is_empty() => Some((Some(id.clone()), None)),
-        Value::Object(fields) => Some((
-            fields.get("connection").and_then(text),
-            fields.get("environment").and_then(text),
-        )),
+        Value::Object(fields) => {
+            Some((fields.get("connection").and_then(text), fields.get("environment").and_then(text)))
+        }
         _ => None,
     }
 }
@@ -143,7 +142,8 @@ fn environment(file: &std::path::Path, region: Option<&str>) -> Vec<(String, Str
 
 pub async fn lease(shared: &Arc<Shared>, command: &Command, input: &Value) -> Result<Option<Lease>, Failure> {
     let Some((call, optional)) = wanted(command, chosen(shared, input).as_ref()) else { return Ok(None) };
-    let (connection, _) = match crate::effects::connection_of(shared, &call) {
+    let owner = domain::principal::owner_in(input).to_owned();
+    let (connection, _) = match crate::effects::connection_of(shared, &owner, &call) {
         Ok(found) => found,
         Err(Failure::Blocked(_)) if optional => return Ok(None),
         Err(failure) => return Err(failure),
@@ -151,12 +151,13 @@ pub async fn lease(shared: &Arc<Shared>, command: &Command, input: &Value) -> Re
     let base = shared.config.server.clone().ok_or_else(|| Failure::permanent("the server address is not known"))?;
     let call = Call { connection: Some(connection.id.to_string()), ..call };
     let token = token();
-    let identity = connector(shared, &call, &format!("{}:{CREDENTIALS_COMMAND}:{token}", brand::COMMAND)).await?;
+    let identity =
+        connector(shared, &owner, &call, &format!("{}:{CREDENTIALS_COMMAND}:{token}", brand::COMMAND)).await?;
     let region = identity["region"].as_str().filter(|region| !region.is_empty()).map(str::to_owned);
     let url = format!("{}{CREDENTIALS_PATH}{token}", base.trim_end_matches('/'));
     let text = profile_text(&url, region.as_deref())?;
     let folder = shared.config.data.join("cloud").join(&token);
-    shared.clouds.held().insert(token.clone(), call);
+    shared.clouds.held().insert(token.clone(), (owner, call));
     let mut lease = Lease { shared: Arc::clone(shared), token, folder: folder.clone(), environment: Vec::new() };
     let file = write_profile(&folder, &text).map_err(|error| {
         Failure::Class(ErrorClass::Transient, format!("the cloud profile could not be kept: {error}"))
@@ -182,9 +183,9 @@ pub fn process_credentials(identity: &Value) -> Value {
 }
 
 pub async fn credentials(shared: &Shared, token: &str) -> crate::error::Result<Value> {
-    let call = shared.clouds.call(token).ok_or(crate::error::Error::UnknownCloudToken)?;
+    let (owner, call) = shared.clouds.call(token).ok_or(crate::error::Error::UnknownCloudToken)?;
     let key = format!("{}:{CREDENTIALS_COMMAND}:{}", brand::COMMAND, uuid::Uuid::new_v4().simple());
-    match connector(shared, &call, &key).await {
+    match connector(shared, &owner, &call, &key).await {
         Ok(identity) => Ok(process_credentials(&identity)),
         Err(Failure::Class(_, message) | Failure::Blocked(message)) => Err(crate::error::Error::Cloud(message)),
     }
@@ -259,7 +260,8 @@ mod tests {
             ])
         };
         chosen.profiles = vec![profile("develop", "111/Dev"), profile("prod", "222/Deploy")];
-        let asked = wanted(&command(json!({ "environment": "prod" })), Some(&chosen)).map(|(call, optional)| (call.args, optional));
+        let asked = wanted(&command(json!({ "environment": "prod" })), Some(&chosen))
+            .map(|(call, optional)| (call.args, optional));
         let Some((args, optional)) = asked else { panic!("no call") };
         assert_eq!(args["environment"], "prod");
         assert_eq!(args["profiles"][1]["account"]["value"], "222/Deploy");
@@ -268,7 +270,10 @@ mod tests {
         let plain = wanted(&command(json!(true)), Some(&chosen)).map(|(call, _)| call.args);
         assert!(plain.is_some_and(|args| args.get("environment").is_none() && args["profiles"].is_array()));
         let elsewhere = wanted(&command(json!({ "connection": "cl-2", "environment": "hint" })), Some(&chosen));
-        assert_eq!(elsewhere.map(|(call, _)| (call.connection, call.args)), Some((Some("cl-2".to_owned()), json!({ "environment": "hint" }))));
+        assert_eq!(
+            elsewhere.map(|(call, _)| (call.connection, call.args)),
+            Some((Some("cl-2".to_owned()), json!({ "environment": "hint" })))
+        );
     }
 
     #[test]

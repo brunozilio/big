@@ -1,13 +1,14 @@
 use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, header};
 use axum::response::{Html, IntoResponse, Redirect, Response};
+use axum::{Extension, Json};
 use connectors::{AuthSpec, ProviderDescriptor, SettingsSink, TokenField};
 use domain::Language;
 use domain::connection::ConnectionId;
+use domain::principal::Principal;
 use serde_json::{Value, json};
 use store::{ConnectionRecord, Store};
 use sync::ConnectionState;
@@ -102,7 +103,7 @@ fn status(shared: &Shared, record: &ConnectionRecord, lapsed: &BTreeSet<Connecti
     }
 }
 
-pub fn listing(shared: &Shared) -> ApiResult<Value> {
+pub fn listing(shared: &Shared, owner: &str) -> ApiResult<Value> {
     let descriptors: Vec<ProviderDescriptor> = shared.backend.connectors.descriptors().into_iter().cloned().collect();
     let ai = crate::ai::subscriptions(shared);
     let connectors = &shared.backend.connectors;
@@ -112,7 +113,7 @@ pub fn listing(shared: &Shared) -> ApiResult<Value> {
         .map(|descriptor| provider_json(shared, descriptor))
         .collect();
     providers.extend(ai.iter().map(|summary| crate::ai::provider_json(summary, shared.language())));
-    let records = shared.backend.store.connections()?;
+    let records = shared.backend.store.connections_of(owner)?;
     let lapsed = connectors.keeper().lapsed();
     let mut connections: Vec<Value> =
         records.iter().map(|record| record_json(record, status(shared, record, &lapsed))).collect();
@@ -122,8 +123,14 @@ pub fn listing(shared: &Shared) -> ApiResult<Value> {
 }
 
 pub fn announce(shared: &Shared) {
-    if let Ok(listed) = listing(shared) {
-        shared.live.connections(listed);
+    let mut owners = vec![domain::principal::LOCAL_USER.to_owned()];
+    owners.extend(shared.backend.store.user_ids().unwrap_or_default());
+    owners.sort();
+    owners.dedup();
+    for owner in owners {
+        if let Ok(listed) = listing(shared, &owner) {
+            shared.live.connections(&owner, listed);
+        }
     }
 }
 
@@ -131,9 +138,9 @@ async fn blocking<T: Send + 'static>(work: impl FnOnce() -> ApiResult<T> + Send 
     tokio::task::spawn_blocking(work).await.map_err(ApiError::failed)?
 }
 
-pub async fn list(State(ctx): State<Ctx>) -> ApiResult<Response> {
+pub async fn list(State(ctx): State<Ctx>, Extension(person): Extension<Principal>) -> ApiResult<Response> {
     let shared = Arc::clone(&ctx);
-    Ok(reply(blocking(move || listing(&shared)).await?))
+    Ok(reply(blocking(move || listing(&shared, person.owner())).await?))
 }
 
 fn is_connector(shared: &Shared, provider: &str) -> bool {
@@ -143,13 +150,21 @@ fn is_connector(shared: &Shared, provider: &str) -> bool {
 pub async fn start(
     State(ctx): State<Ctx>,
     Path(provider): Path<String>,
+    Extension(person): Extension<Principal>,
     headers: HeaderMap,
     body: Option<Json<Value>>,
 ) -> ApiResult<Response> {
     let body = body.map(|Json(body)| body).unwrap_or(Value::Null);
     let fields = body["fields"].clone();
     if is_connector(&ctx, &provider) {
-        return Ok(reply(crate::sign_in::start(&ctx, &provider, &fields, body["method"].as_str()).await?));
+        let started = crate::sign_in::start(&ctx, &provider, &fields, body["method"].as_str()).await?;
+        if let Some(flow) = started["flow"].as_str() {
+            ctx.flows.own(flow, person.owner());
+        }
+        return Ok(reply(started));
+    }
+    if !crate::scope::is_admin(&person) {
+        return Err(crate::scope::admin_only());
     }
     let shared = Arc::clone(&ctx);
     let host = headers.get(header::HOST).and_then(|host| host.to_str().ok()).map(str::to_owned);
@@ -209,6 +224,7 @@ pub async fn remove(State(ctx): State<Ctx>, Path(id): Path<String>) -> ApiResult
                 "Não há essa conexão.",
             )));
         }
+        ctx.backend.store.forget_owner(store::ownership::CONNECTION, &id)?;
         let _ = ctx.backend.connectors.keeper().store().remove(&ConnectionId::from(id.as_str())).await;
     }
     let shared = Arc::clone(&ctx);

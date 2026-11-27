@@ -13,7 +13,10 @@ fn open(method: &Method, path: &str) -> bool {
         || path.starts_with(orchestrator::CLOUD_CREDENTIALS_PATH)
         || path == crate::browser_mcp::route()
         || path == browser::ROUTE
-        || (reads && (path == "/api/branding" || path == crate::branding::LOGO_ROUTE || path == crate::branding::FAVICON_ROUTE))
+        || (reads
+            && (path == "/api/branding"
+                || path == crate::branding::LOGO_ROUTE
+                || path == crate::branding::FAVICON_ROUTE))
 }
 
 fn guarded(path: &str) -> bool {
@@ -48,12 +51,19 @@ pub async fn gate(State(ctx): State<Ctx>, mut request: Request, next: Next) -> R
         return ApiError::new(
             StatusCode::FORBIDDEN,
             "cross_origin",
-            said("This request came from another site.", "Esta solicitud vino de otro sitio.", "Este pedido veio de outro site."),
+            said(
+                "This request came from another site.",
+                "Esta solicitud vino de otro sitio.",
+                "Este pedido veio de outro site.",
+            ),
         )
         .into_response();
     }
     match session::person(&ctx, request.headers()) {
         Ok(Some(person)) => {
+            if let Err(refused) = crate::scope::check(&ctx, &person, request.method(), &path) {
+                return refused.into_response();
+            }
             request.extensions_mut().insert(person);
             next.run(request).await
         }

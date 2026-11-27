@@ -49,6 +49,13 @@ impl Store {
             .optional()?)
     }
 
+    pub fn user_ids(&self) -> Result<Vec<String>> {
+        let connection = self.locked();
+        let mut statement = connection.prepare("SELECT id FROM users")?;
+        let rows = statement.query_map([], |row| row.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
     pub fn user(&self, id: &UserId) -> Result<Option<Principal>> {
         Ok(self
             .locked()

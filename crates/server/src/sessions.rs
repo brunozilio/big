@@ -205,8 +205,19 @@ fn send_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<()> {
     let mode = session_view::free_mode(agent.as_ref(), &shown);
     let style = shared.backend.store.output_style();
     let language = shared.backend.store.language().ok();
-    let message =
-        Message { session, folder: row.folder, text: &text, model, effort, agent, mode, style, language, shown };
+    let message = Message {
+        session,
+        folder: row.folder,
+        text: &text,
+        model,
+        effort,
+        agent,
+        mode,
+        style,
+        language,
+        shown,
+        owner: crate::scope::session_owner(shared, session),
+    };
     shared.chats.send(&shared.backend.client, message, notify)
 }
 
@@ -230,6 +241,7 @@ fn side_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<Value> {
         style: None,
         language: shared.backend.store.language().ok(),
         shown: Shown::default(),
+        owner: crate::scope::session_owner(shared, session),
     };
     let answer = crate::chats::Chats::side(&shared.backend.client, &message)?;
     Ok(json!({ "answer": answer }))

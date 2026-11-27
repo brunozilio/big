@@ -7,6 +7,7 @@ mod error;
 mod factory;
 mod identity;
 mod log;
+pub mod ownership;
 mod preferences;
 mod schema;
 mod sync;
@@ -22,6 +23,7 @@ pub use connections::ConnectionRecord;
 pub use error::Error;
 pub use factory::Generation;
 pub use identity::{CodeCheck, Passkey};
+pub use ownership::OwnedIds;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

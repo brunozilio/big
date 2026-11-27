@@ -295,6 +295,7 @@ impl AgentEffect<'_> {
         let mut environment = crate::application::environment(&self.shared.store, &state.input);
         environment.extend(cloud.as_ref().map(|lease| lease.environment.clone()).unwrap_or_default());
         request.host.environment = environment;
+        request.host.owner = Some(crate::owners::of(&self.shared.store, &state));
         request.session.add_dirs = trees.iter().skip(1).map(|tree| tree.path.clone()).collect();
         if let Some(text) = repos::described(&trees) {
             let system = request.session.append_system.take().unwrap_or_default();
@@ -305,8 +306,11 @@ impl AgentEffect<'_> {
         if let Some(session) = collected.session.clone() {
             crate::chores::heads_up(self.shared, self.item, &self.key.step, session, cwd.clone());
         }
-        let pushed: Vec<(PathBuf, String)> =
-            trees.iter().filter(|tree| !here && !tree.checkout.read_only).map(|tree| (tree.path.clone(), tree.branch.clone())).collect();
+        let pushed: Vec<(PathBuf, String)> = trees
+            .iter()
+            .filter(|tree| !here && !tree.checkout.read_only)
+            .map(|tree| (tree.path.clone(), tree.branch.clone()))
+            .collect();
         blocking(move || {
             for (place, branch) in &pushed {
                 git::push(place, branch);

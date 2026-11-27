@@ -45,13 +45,13 @@ impl Synchronizer {
 
     async fn reconcile_item(&self, book: &Book, all: &[Desired], item: &Desired, report: &mut ReconcileReport) {
         if let Some(issue) = &item.issue
-            && let Some(entry) = book.resolve(issue.connection.as_deref(), TRACKER)
+            && let Some(entry) = book.resolve_for(&item.owner, issue.connection.as_deref(), TRACKER)
         {
             let outcome = self.reconcile_issue(entry, item, &issue.issue).await;
             self.tally(outcome, entry, book, all, report).await;
         }
         for pull in &item.pulls {
-            if let Some(entry) = book.resolve(pull.connection.as_deref(), CODE) {
+            if let Some(entry) = book.resolve_for(&item.owner, pull.connection.as_deref(), CODE) {
                 let outcome = self.reconcile_pull(entry, item, pull).await;
                 self.tally(outcome, entry, book, all, report).await;
             }
@@ -60,7 +60,7 @@ impl Synchronizer {
             return;
         }
         for run in item.runs.iter().filter(|run| !run.finished()) {
-            if let Some(entry) = book.resolve(run.connection.as_deref(), PIPELINES) {
+            if let Some(entry) = book.resolve_for(&item.owner, run.connection.as_deref(), PIPELINES) {
                 let outcome = self.reconcile_run(entry, item, run).await;
                 self.tally(outcome, entry, book, all, report).await;
             }

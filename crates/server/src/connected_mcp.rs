@@ -15,8 +15,8 @@ fn offers_mcp(record: &ConnectionRecord) -> Option<&str> {
     record.capabilities.iter().any(|capability| capability == MCP).then_some(url)
 }
 
-pub async fn servers(store: &Store, connectors: &Connectors) -> Vec<RemoteMcp> {
-    let records = store.connections().unwrap_or_default();
+pub async fn servers(store: &Store, connectors: &Connectors, owner: &str) -> Vec<RemoteMcp> {
+    let records = store.connections_of(owner).unwrap_or_default();
     let mut found = Vec::new();
     for record in &records {
         let Some(url) = offers_mcp(record) else { continue };
@@ -31,8 +31,10 @@ pub async fn servers(store: &Store, connectors: &Connectors) -> Vec<RemoteMcp> {
 }
 
 pub fn for_runs(store: Arc<Store>, connectors: Arc<Connectors>, runtime: tokio::runtime::Handle) -> app::ConnectedMcp {
-    app::ConnectedMcp::new(move || {
-        let found = async { tokio::time::timeout(WAITS, servers(&store, &connectors)).await.unwrap_or_default() };
+    app::ConnectedMcp::new(move |owner| {
+        let owner = owner.unwrap_or(domain::principal::LOCAL_USER);
+        let found =
+            async { tokio::time::timeout(WAITS, servers(&store, &connectors, owner)).await.unwrap_or_default() };
         std::thread::scope(|scope| scope.spawn(|| runtime.block_on(found)).join().unwrap_or_default())
     })
 }
@@ -80,7 +82,7 @@ mod tests {
     #[tokio::test]
     async fn every_connected_mcp_server_goes_to_runs_with_its_current_token() {
         let (store, hub) = kept().await;
-        let found = servers(&store, &hub).await;
+        let found = servers(&store, &hub, domain::principal::LOCAL_USER).await;
         let shown: Vec<(String, String, Option<String>)> =
             found.into_iter().map(|remote| (remote.name, remote.url, remote.token)).collect();
         assert_eq!(
@@ -96,7 +98,7 @@ mod tests {
     async fn runs_ask_for_them_from_any_thread() {
         let (store, hub) = kept().await;
         let hook = for_runs(store, hub, tokio::runtime::Handle::current());
-        let names = tokio::task::spawn_blocking(move || hook.servers().len()).await.expect("joined");
+        let names = tokio::task::spawn_blocking(move || hook.servers(None).len()).await.expect("joined");
         assert_eq!(names, 2);
     }
 }

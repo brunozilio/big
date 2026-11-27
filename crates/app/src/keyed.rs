@@ -108,7 +108,7 @@ mod tests {
         let engine = FakeEngine::new(Vec::new(), Vec::new());
         let asked = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let counted = Arc::clone(&asked);
-        let connected = crate::ConnectedMcp::new(move || {
+        let connected = crate::ConnectedMcp::new(move |_| {
             let n = counted.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
             domain::mcp::RemoteMcp::named("Linear", "https://linear.test/mcp", &format!("t{n}")).into_iter().collect()
         });

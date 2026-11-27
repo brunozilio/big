@@ -31,6 +31,7 @@ pub struct Headless {
     pub teammate: Option<domain::team::TeammateOf>,
     pub output_style: Option<String>,
     pub language: Option<domain::Language>,
+    pub owner: Option<String>,
 }
 
 impl Session {
@@ -86,6 +87,7 @@ impl Session {
         });
         request.session.effort = self.effort;
         request.host.memory = Some(MemoryBrief::new(None));
+        request.host.owner.clone_from(&self.headless.owner);
         request.session.agent.clone_from(&self.agent);
         {
             let carried = self.carried.locked();

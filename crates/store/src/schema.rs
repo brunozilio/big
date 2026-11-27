@@ -133,6 +133,15 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX passkeys_by_user ON passkeys (user);
 ",
+    "
+    CREATE TABLE ownership (
+        kind TEXT NOT NULL,
+        id TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        PRIMARY KEY (kind, id)
+    ) WITHOUT ROWID;
+    CREATE INDEX ownership_by_owner ON ownership (kind, owner);
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

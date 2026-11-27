@@ -14,7 +14,7 @@ fn keys(value: &Value) -> Vec<String> {
     keys
 }
 
-const ITEM_KEYS: [&str; 25] = [
+const ITEM_KEYS: [&str; 26] = [
     "accepting",
     "activity",
     "archivedAt",
@@ -31,6 +31,7 @@ const ITEM_KEYS: [&str; 25] = [
     "joinable",
     "links",
     "live",
+    "owner",
     "recap",
     "sources",
     "status",
@@ -221,7 +222,7 @@ async fn a_session_shows_its_events_and_refuses_unknown_answers() {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     while announced.is_none() && tokio::time::Instant::now() < deadline {
         if let Ok(Ok(text)) = tokio::time::timeout(Duration::from_millis(200), feed.recv()).await {
-            let event: Value = serde_json::from_str(&text).expect("json");
+            let event: Value = serde_json::from_str(&text.data).expect("json");
             if event["type"] == "session.suggestion" && !event["suggestion"].is_null() {
                 announced = Some(event);
             }
@@ -443,7 +444,7 @@ async fn the_live_feed_tells_about_items_sessions_connections_and_branding() {
     let deadline = tokio::time::Instant::now() + Duration::from_secs(5);
     while tokio::time::Instant::now() < deadline {
         match tokio::time::timeout(Duration::from_millis(200), feed.recv()).await {
-            Ok(Ok(text)) => seen.push(serde_json::from_str(&text).expect("json")),
+            Ok(Ok(text)) => seen.push(serde_json::from_str(&text.data).expect("json")),
             _ if seen.iter().any(|event| event["type"] == "branding")
                 && seen.iter().any(|event| event["type"] == "session.status") =>
             {

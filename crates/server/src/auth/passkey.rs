@@ -9,11 +9,10 @@ use serde::Deserialize;
 use serde_json::{Value, json};
 use store::Passkey;
 
-use super::settings::{self, Method};
 use super::session;
+use super::settings::{self, Method};
 use crate::error::{ApiError, ApiResult, done, json as reply};
 use crate::state::{Ctx, Shared};
-
 
 const SIGN_IN: &str = "passkey.get";
 const ENROLL: &str = "passkey.create";
@@ -135,7 +134,8 @@ pub async fn enroll_options(State(ctx): State<Ctx>, Extension(person): Extension
         .into_iter()
         .map(|key| json!({ "type": "public-key", "id": key.id }))
         .collect();
-    let algorithms: Vec<Value> = webauthn::SUPPORTED.iter().map(|alg| json!({ "type": "public-key", "alg": alg })).collect();
+    let algorithms: Vec<Value> =
+        webauthn::SUPPORTED.iter().map(|alg| json!({ "type": "public-key", "alg": alg })).collect();
     Ok(reply(json!({
         "challengeId": id,
         "publicKey": {

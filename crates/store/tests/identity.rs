@@ -77,3 +77,16 @@ fn passkeys_belong_to_one_user() {
     assert!(!store.remove_passkey(&UserId("u-other".into()), "k1").expect("remove"));
     assert!(store.remove_passkey(&ana().user, "k1").expect("remove"));
 }
+
+#[test]
+fn what_nobody_claimed_belongs_to_the_local_user() {
+    let store = store();
+    store.set_owner("connection", "c-ana", "u-ana").expect("own");
+    assert_eq!(store.owner_of("connection", "c-old").expect("owner"), "local");
+    let local = store.owned_ids("connection", "local").expect("ids");
+    assert!(local.contains("c-old") && !local.contains("c-ana"));
+    let ana = store.owned_ids("connection", "u-ana").expect("ids");
+    assert!(ana.contains("c-ana") && !ana.contains("c-old"));
+    assert_eq!(store.claim("session", "s1", "u-ana").expect("claim"), "u-ana");
+    assert_eq!(store.claim("session", "s1", "u-bia").expect("claim"), "u-ana");
+}

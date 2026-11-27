@@ -7,8 +7,8 @@ use serde::Deserialize;
 use store::CodeCheck;
 
 use super::mail::{self, Letter};
-use super::settings::{self, Method};
 use super::session;
+use super::settings::{self, Method};
 use crate::error::{ApiError, ApiResult, done, json, said};
 use crate::state::{Ctx, Shared};
 

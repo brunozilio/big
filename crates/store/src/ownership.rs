@@ -1,0 +1,92 @@
+use std::collections::HashSet;
+
+use domain::principal::LOCAL_USER;
+use rusqlite::{OptionalExtension, params};
+
+use crate::{ConnectionRecord, Result, Store};
+
+pub const CONNECTION: &str = "connection";
+pub const APPLICATION: &str = "application";
+pub const SESSION: &str = "session";
+pub const ATTACHMENT: &str = "attachment";
+
+impl Store {
+    pub fn set_owner(&self, kind: &str, id: &str, owner: &str) -> Result<()> {
+        self.locked().execute(
+            "INSERT INTO ownership (kind, id, owner) VALUES (?1, ?2, ?3)
+             ON CONFLICT (kind, id) DO UPDATE SET owner = excluded.owner",
+            params![kind, id, owner],
+        )?;
+        Ok(())
+    }
+
+    pub fn claim(&self, kind: &str, id: &str, owner: &str) -> Result<String> {
+        self.write(|transaction| {
+            transaction.execute(
+                "INSERT INTO ownership (kind, id, owner) VALUES (?1, ?2, ?3) ON CONFLICT (kind, id) DO NOTHING",
+                params![kind, id, owner],
+            )?;
+            Ok(transaction.query_row(
+                "SELECT owner FROM ownership WHERE kind = ?1 AND id = ?2",
+                params![kind, id],
+                |row| row.get(0),
+            )?)
+        })
+    }
+
+    pub fn recorded_owner(&self, kind: &str, id: &str) -> Result<Option<String>> {
+        Ok(self
+            .locked()
+            .query_row("SELECT owner FROM ownership WHERE kind = ?1 AND id = ?2", params![kind, id], |row| row.get(0))
+            .optional()?)
+    }
+
+    pub fn owner_of(&self, kind: &str, id: &str) -> Result<String> {
+        Ok(self.recorded_owner(kind, id)?.unwrap_or_else(|| LOCAL_USER.to_owned()))
+    }
+
+    pub fn owns(&self, kind: &str, id: &str, owner: &str) -> Result<bool> {
+        Ok(self.owner_of(kind, id)? == owner)
+    }
+
+    pub fn owned(&self, kind: &str) -> Result<Vec<(String, String)>> {
+        let connection = self.locked();
+        let mut statement = connection.prepare("SELECT id, owner FROM ownership WHERE kind = ?1")?;
+        let rows = statement.query_map([kind], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn forget_owner(&self, kind: &str, id: &str) -> Result<()> {
+        self.locked().execute("DELETE FROM ownership WHERE kind = ?1 AND id = ?2", params![kind, id])?;
+        Ok(())
+    }
+
+    pub fn connections_of(&self, owner: &str) -> Result<Vec<ConnectionRecord>> {
+        let theirs = self.kept_by(CONNECTION, owner)?;
+        Ok(self.connections()?.into_iter().filter(|record| theirs.contains(&record.id)).collect())
+    }
+
+    fn kept_by(&self, kind: &str, owner: &str) -> Result<OwnedIds> {
+        let all = self.owned(kind)?;
+        let others: HashSet<String> = all.iter().filter(|(_, by)| by != owner).map(|(id, _)| id.clone()).collect();
+        let mine: HashSet<String> = all.into_iter().filter(|(_, by)| by == owner).map(|(id, _)| id).collect();
+        Ok(OwnedIds { mine, others, local: owner == LOCAL_USER })
+    }
+
+    pub fn owned_ids(&self, kind: &str, owner: &str) -> Result<OwnedIds> {
+        self.kept_by(kind, owner)
+    }
+}
+
+#[derive(Debug, Clone, Default)]
+pub struct OwnedIds {
+    mine: HashSet<String>,
+    others: HashSet<String>,
+    local: bool,
+}
+
+impl OwnedIds {
+    pub fn contains(&self, id: &str) -> bool {
+        self.mine.contains(id) || (self.local && !self.others.contains(id))
+    }
+}

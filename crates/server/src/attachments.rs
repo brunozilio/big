@@ -37,7 +37,11 @@ pub fn paths(dir: &Path, ids: &Value) -> Vec<PathBuf> {
         .collect()
 }
 
-pub async fn upload(State(ctx): State<Ctx>, mut form: Multipart) -> ApiResult<Response> {
+pub async fn upload(
+    State(ctx): State<Ctx>,
+    axum::Extension(person): axum::Extension<domain::principal::Principal>,
+    mut form: Multipart,
+) -> ApiResult<Response> {
     while let Some(field) = form.next_field().await.map_err(|error| ApiError::bad(error.to_string()))? {
         if field.name() != Some("file") {
             continue;
@@ -48,6 +52,7 @@ pub async fn upload(State(ctx): State<Ctx>, mut form: Multipart) -> ApiResult<Re
         let folder = ctx.backend.attachments().join(&id);
         std::fs::create_dir_all(&folder).map_err(ApiError::failed)?;
         std::fs::write(folder.join(&name), &bytes).map_err(ApiError::failed)?;
+        ctx.backend.store.set_owner(store::ownership::ATTACHMENT, &id, person.owner())?;
         return Ok(reply(json!({ "id": id, "name": name, "size": bytes.len() })));
     }
     Err(ApiError::bad(said(

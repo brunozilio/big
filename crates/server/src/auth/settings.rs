@@ -32,8 +32,14 @@ impl Method {
     }
 }
 
+static FORCED: std::sync::OnceLock<Mode> = std::sync::OnceLock::new();
+
+pub fn force(mode: Mode) {
+    let _ = FORCED.set(mode);
+}
+
 pub fn mode() -> Mode {
-    mode_of(brand::auth::MODE)
+    FORCED.get().copied().unwrap_or_else(|| mode_of(brand::auth::MODE))
 }
 
 pub fn mode_of(text: &str) -> Mode {

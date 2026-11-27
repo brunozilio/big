@@ -37,7 +37,11 @@ fn folder(shared: &Shared, body: &Value) -> ApiResult<PathBuf> {
     })
 }
 
-pub async fn ask(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {
+pub async fn ask(
+    State(ctx): State<Ctx>,
+    person: axum::Extension<domain::principal::Principal>,
+    Json(body): Json<Value>,
+) -> ApiResult<Response> {
     let text = body["text"].as_str().map(str::trim).filter(|text| !text.is_empty());
     let text = text
         .ok_or_else(|| ApiError::bad(said("Write the question.", "Escribe la pregunta.", "Escreva a pergunta.")))?
@@ -47,5 +51,5 @@ pub async fn ask(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<R
         "text": text, "application": body["application"], "model": body["model"], "workflow": WORKFLOW,
         "sources": [], "attachments": [],
     });
-    crate::items::create(State(ctx), Json(item)).await
+    crate::items::create(State(ctx), person, Json(item)).await
 }

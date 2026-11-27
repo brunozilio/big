@@ -1,12 +1,13 @@
 use std::collections::HashMap;
 
 use crate::calls::connection;
-use axum::Json;
 use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use axum::response::Response;
+use axum::{Extension, Json};
 use connectors::ProviderDescriptor;
 use connectors::contracts::{self, code};
+use domain::principal::Principal;
 use domain::workflow::{ItemId, StepState};
 use orchestrator::ItemSummary;
 use serde_json::{Map, Value, json};
@@ -65,10 +66,18 @@ impl Context {
             described: &described,
             language: shared.language(),
         };
-        let value = with_archive(item_view::item(&known, summary, item.as_ref()), &self.archived, &summary.id);
+        let mut value = with_archive(item_view::item(&known, summary, item.as_ref()), &self.archived, &summary.id);
+        value["owner"] = json!(owned_by(shared, item.as_ref()));
         let (value, _) = shared.stamps.stamp(value);
         Ok(value)
     }
+}
+
+fn owned_by(shared: &Shared, item: Option<&domain::workflow::WorkItem>) -> String {
+    item.map_or_else(
+        || domain::principal::LOCAL_USER.to_owned(),
+        |item| orchestrator::owners::of(&shared.backend.store, item),
+    )
 }
 
 fn stale(shared: &Shared, connections: &[ConnectionRecord]) -> Vec<String> {
@@ -329,13 +338,15 @@ pub fn changed(shared: &Shared, id: &ItemId) -> ApiResult<Option<Value>> {
         described: &described,
         language: shared.language(),
     };
-    let value = with_archive(item_view::item(&known, &summary, item.as_ref()), &context.archived, id);
+    let mut value = with_archive(item_view::item(&known, &summary, item.as_ref()), &context.archived, id);
+    value["owner"] = json!(owned_by(shared, item.as_ref()));
     let (value, moved) = shared.stamps.stamp(value);
     Ok(moved.then_some(value))
 }
 
-pub async fn list(State(ctx): State<Ctx>) -> ApiResult<Response> {
-    Ok(reply(all(&ctx)?))
+pub async fn list(State(ctx): State<Ctx>, Extension(person): Extension<Principal>) -> ApiResult<Response> {
+    let mine: Vec<Value> = all(&ctx)?.into_iter().filter(|item| item["owner"] == person.owner()).collect();
+    Ok(reply(mine))
 }
 
 fn workflow(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<String> {
@@ -429,11 +440,16 @@ fn chosen<'a>(applications: &'a [Application], body: &Value) -> ApiResult<Option
     })
 }
 
-pub async fn create(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<Response> {
-    let applications = crate::applications::all(&ctx).await?;
+pub async fn create(
+    State(ctx): State<Ctx>,
+    Extension(person): Extension<Principal>,
+    Json(body): Json<Value>,
+) -> ApiResult<Response> {
+    let applications = crate::applications::all(&ctx, person.owner()).await?;
     let mut origin = Origin::read(&body, chosen(&applications, &body)?)?;
     origin.resolve(&ctx, &applications).await?;
-    let input = input(&ctx, &body, &origin)?;
+    let mut input = input(&ctx, &body, &origin)?;
+    input[domain::principal::OWNER_FIELD] = json!(person.owner());
     let workflow = workflow(&ctx, &body, &origin)?;
     let shared = std::sync::Arc::clone(&ctx);
     let models =

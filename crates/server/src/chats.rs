@@ -35,6 +35,7 @@ struct Resumed {
     mode: Option<PermissionMode>,
     style: Option<String>,
     language: Option<domain::Language>,
+    owner: Option<String>,
 }
 
 impl Resumed {
@@ -48,6 +49,7 @@ impl Resumed {
         session.set_headless(Headless {
             output_style: self.style.clone(),
             language: self.language,
+            owner: self.owner.clone(),
             ..Headless::default()
         });
         session
@@ -79,6 +81,7 @@ pub struct Message<'a> {
     pub style: Option<String>,
     pub language: Option<domain::Language>,
     pub shown: Shown,
+    pub owner: Option<String>,
 }
 
 impl Chats {
@@ -113,6 +116,7 @@ impl Chats {
             mode: message.mode,
             style: message.style.clone(),
             language: message.language,
+            owner: message.owner.clone(),
         };
         resumed.session().side(message.text).and_then(app::Run::side_answer).map_err(ApiError::failed)
     }
@@ -139,6 +143,7 @@ impl Chats {
             mode: message.mode,
             style: message.style.clone(),
             language: message.language,
+            owner: message.owner.clone(),
         };
         let mut session = resumed.session();
         if let Some(effort) = message.effort {

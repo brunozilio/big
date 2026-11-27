@@ -12,8 +12,16 @@ const KEEP_ALIVE: Duration = Duration::from_secs(15);
 
 #[derive(Debug, Clone)]
 pub struct Live {
-    sender: broadcast::Sender<String>,
+    sender: broadcast::Sender<Told>,
 }
+
+#[derive(Debug, Clone)]
+pub struct Told {
+    pub owner: Option<String>,
+    pub data: String,
+}
+
+pub type Allowed = std::sync::Arc<dyn Fn(&Told) -> bool + Send + Sync>;
 
 impl Default for Live {
     fn default() -> Self {
@@ -23,11 +31,19 @@ impl Default for Live {
 
 impl Live {
     pub fn publish(&self, event: &Value) {
-        let _ = self.sender.send(event.to_string());
+        let _ = self.sender.send(Told { owner: None, data: event.to_string() });
+    }
+
+    pub fn publish_for(&self, owner: &str, event: &Value) {
+        let _ = self.sender.send(Told { owner: Some(owner.to_owned()), data: event.to_string() });
     }
 
     pub fn item(&self, item: Value) {
-        self.publish(&json!({ "type": "item", "item": item }));
+        let event = json!({ "type": "item", "item": item });
+        match item_owner(&event) {
+            Some(owner) => self.publish_for(&owner, &event),
+            None => self.publish(&event),
+        }
     }
 
     pub fn removed(&self, id: &str) {
@@ -54,33 +70,45 @@ impl Live {
         self.publish(&json!({ "type": "session.status", "session": session, "status": status }));
     }
 
-    pub fn connections(&self, connections: Value) {
-        self.publish(&json!({ "type": "connections", "connections": connections }));
+    pub fn connections(&self, owner: &str, connections: Value) {
+        self.publish_for(owner, &json!({ "type": "connections", "connections": connections }));
     }
 
     pub fn branding(&self, branding: Value) {
         self.publish(&json!({ "type": "branding", "branding": branding }));
     }
 
-    pub fn subscribe(&self) -> broadcast::Receiver<String> {
+    pub fn subscribe(&self) -> broadcast::Receiver<Told> {
         self.sender.subscribe()
     }
 
     pub fn response(&self) -> Response {
-        let events = following(self.subscribe()).map(|data| Ok::<Event, Infallible>(Event::default().data(data)));
+        self.response_for(std::sync::Arc::new(|_: &Told| true))
+    }
+
+    pub fn response_for(&self, allowed: Allowed) -> Response {
+        let events =
+            following(self.subscribe(), allowed).map(|data| Ok::<Event, Infallible>(Event::default().data(data)));
         Sse::new(events).keep_alive(KeepAlive::new().interval(KEEP_ALIVE)).into_response()
     }
 }
 
-fn following(receiver: broadcast::Receiver<String>) -> impl Stream<Item = String> {
-    stream::unfold(receiver, |mut receiver| async move {
-        match receiver.recv().await {
-            Ok(data) => Some((data, receiver)),
-            Err(broadcast::error::RecvError::Lagged(_)) => {
-                receiver = receiver.resubscribe();
-                Some((json!({ "type": "resync" }).to_string(), receiver))
+fn item_owner(event: &Value) -> Option<String> {
+    event["item"]["owner"].as_str().map(str::to_owned)
+}
+
+fn following(receiver: broadcast::Receiver<Told>, allowed: Allowed) -> impl Stream<Item = String> {
+    stream::unfold((receiver, allowed), |(mut receiver, allowed)| async move {
+        loop {
+            match receiver.recv().await {
+                Ok(told) if allowed(&told) => return Some((told.data, (receiver, allowed))),
+                Ok(_) => {}
+                Err(broadcast::error::RecvError::Lagged(_)) => {
+                    receiver = receiver.resubscribe();
+                    return Some((json!({ "type": "resync" }).to_string(), (receiver, allowed)));
+                }
+                Err(broadcast::error::RecvError::Closed) => return None,
             }
-            Err(broadcast::error::RecvError::Closed) => None,
         }
     })
 }

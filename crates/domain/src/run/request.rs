@@ -93,6 +93,8 @@ pub struct HostContext {
     pub credentials: crate::credentials::RunCredentials,
     #[serde(skip)]
     pub environment: Vec<(String, String)>,
+    #[serde(skip)]
+    pub owner: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy)]

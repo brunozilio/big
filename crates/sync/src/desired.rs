@@ -90,6 +90,7 @@ pub struct Desired {
     pub runs: Vec<RunRef>,
     pub waits: Vec<Wait>,
     pub policy: ReconcilePolicy,
+    pub owner: String,
 }
 
 impl Desired {
@@ -259,6 +260,7 @@ pub fn desired_of(item: &WorkItem, policy: ReconcilePolicy) -> Desired {
         runs: Vec::new(),
         waits: Vec::new(),
         policy,
+        owner: domain::principal::owner_in(&item.input).to_owned(),
     };
     desired.learn_sources(&item.input["sources"]);
     let entries = ordered(item);

@@ -68,7 +68,8 @@ async fn send(
 ) -> Result<Pushed, Error> {
     let Some(issue) = desired_of(item, ReconcilePolicy::default()).issue else { return Ok(Pushed::NoIssue) };
     let book = Book::load(store)?;
-    let Some(entry) = book.resolve(issue.connection.as_deref(), contracts::TRACKER) else {
+    let owner = domain::principal::owner_in(&item.input);
+    let Some(entry) = book.resolve_for(owner, issue.connection.as_deref(), contracts::TRACKER) else {
         return Ok(Pushed::NoConnection);
     };
     args["issue"] = Value::String(issue.issue);

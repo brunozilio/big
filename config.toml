@@ -207,6 +207,7 @@ max_parallel_items = 4
 mode = "local"
 methods = "email,passkey,sso"
 local_email = ""
+admins = ""
 allowed_domains = ""
 session_hours = "336"
 code_minutes = "10"
