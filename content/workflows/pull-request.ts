@@ -1,11 +1,13 @@
 import { workflow, on } from "sdk";
 import { develop, checks, ci, review, merge, release } from "sdk/steps";
 import { environments } from "../environments.ts";
+import { branches } from "../branches.ts";
 
 export default workflow({
   name: "pull-request",
   accepts: ["pull_request"],
   triggers: [on("code.review.submitted", { verdict: "request_changes" })],
+  branches,
   steps: [
     develop({ agent: "developer", status: { category: "doing" }, feedbackOnly: true }),
     checks({ onFail: "develop", retries: 3 }),

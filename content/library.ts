@@ -329,29 +329,7 @@ const workflows: Kind = {
   }),
 };
 
-const flows: Kind = {
-  key: "flows",
-  about: "a branch flow: TypeScript that declares how branches are named, based and merged",
-  ideas: (language) =>
-    pick(language, ["Explain this flow", "Base everything on main", "Merge with a merge commit"], ["Explica este flujo", "Basa todo en main", "Fusiona con un merge commit"], ["Explique este fluxo", "Baseie tudo na main", "Faça o merge com merge commit"]),
-  folder: "flows/",
-  icon: "branch",
-  exports: [],
-  needs: [],
-  creatable: true,
-  label: (language) => pick(language, "Branch flows", "Flujos de ramas", "Fluxos de branch"),
-  hint: (language) => pick(language, "How branches are named, based and merged", "Cómo se nombran, basan y fusionan las ramas", "Como as branches são nomeadas, baseadas e mescladas"),
-  main: flat(2, [".ts"]),
-  card: ({ path, source }) => ({ title: stem(path), description: /\bbranch:\s*"([^"]+)"/.exec(source)?.[1] ?? "" }),
-  open: ({ path }) => code(path),
-  save: ({ source }) => source,
-  create: (_name, slug) => ({
-    path: `flows/${slug}.ts`,
-    source: `import { flow } from "sdk/flow.js";\n\nexport const spec = {\n  branch: "feature/{issue}-{slug}",\n  base: "main",\n  method: "squash",\n};\n\nexport const branch = flow(spec);\n`,
-  }),
-};
-
-const KINDS: Kind[] = [agents, skills, prompts, workflows, flows];
+const KINDS: Kind[] = [agents, skills, prompts, workflows];
 
 const kind = (key: string): Kind => KINDS.find((item) => item.key === key) ?? fail(`there is no ${key} section`);
 

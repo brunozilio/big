@@ -132,7 +132,10 @@ impl Orchestrator {
         self.stamp_language(&mut input, parent.as_ref())?;
         let id = ItemId::new();
         if parent.is_none() {
-            crate::flows::stamp(id.as_str(), &mut input);
+            match self.shared.script_in(self.shared.home(&input).as_deref(), workflow) {
+                Ok(script) => crate::branches::stamp(&script, id.as_str(), &mut input),
+                Err(error) => tracing::warn!(%error, "the workflow's branch rule could not be read"),
+            }
         }
         let named = parent.is_none() && !crate::naming::titled(&input);
         let text = input["text"].as_str().or(input["title"].as_str()).unwrap_or_default().to_owned();

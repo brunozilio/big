@@ -316,7 +316,7 @@ mod tests {
         let listed = listing("pt-BR").expect("listing");
         let sections = listed["sections"].as_array().expect("sections");
         let keys: Vec<&str> = sections.iter().filter_map(|section| section["key"].as_str()).collect();
-        assert_eq!(keys, ["agents", "skills", "prompts", "workflows", "flows"]);
+        assert_eq!(keys, ["agents", "skills", "prompts", "workflows"]);
         for section in sections {
             let items = section["items"].as_array().expect("items");
             assert!(!items.is_empty(), "{} is empty", section["key"]);

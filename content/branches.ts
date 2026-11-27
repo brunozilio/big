@@ -1,6 +1,6 @@
 import { flow } from "sdk/flow.js";
 
-export const spec = {
+const gitflow = flow({
   branch: "feature/{issue}-{slug}",
   base: "develop",
   method: "squash",
@@ -12,6 +12,18 @@ export const spec = {
     { from: "develop", into: "release", method: "merge" },
     { from: "release", into: "main", method: "merge" },
   ],
-};
+});
 
-export const branch = flow(spec);
+const trunk = flow({
+  branch: "feature/{issue}-{slug}",
+  method: "squash",
+  byType: {
+    Bug: { branch: "bugfix/{issue}-{slug}" },
+    Hotfix: { branch: "hotfix/{issue}-{slug}" },
+  },
+});
+
+export function branches(asked) {
+  if (asked.repository?.kind === "configuration") return trunk(asked);
+  return gitflow(asked);
+}

@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from 'react'
 import { api } from '@/api'
-import type { Application, ApplicationDraft, Bindings, DirListing, Flows, RepositoryKind } from '@/api/contract'
+import type { Application, ApplicationDraft, Bindings, DirListing, RepositoryKind } from '@/api/contract'
 import { errorText } from '@/api/store'
 import { Button, IconButton } from '@/ui/button'
 import { Card } from '@/ui/display'
@@ -15,7 +15,6 @@ import { saveApplication, saveOptimistically } from './applicationSave'
 import { BindingFields, groupedBySection, missingOf, suggested, useBindingFields, type BindingField, type BindingProblem, type FieldGroup } from './bindings'
 import { FolderPopover } from './FolderDialog'
 import { useAdmin } from '@/api/me'
-import { useFlows } from './flows'
 import { RepositoryCard } from './RepositoryEditor'
 
 const GENERAL = 'general'
@@ -254,7 +253,6 @@ interface RepositoriesProps {
   rows: Row[]
   opened: ReadonlySet<string>
   fields: BindingField[]
-  flows: Flows
   kinds: RepositoryKind[]
   problem: Problem | null
   change: (change: Change) => void
@@ -263,7 +261,7 @@ interface RepositoriesProps {
   onAdded: (paths: string[]) => void
 }
 
-function Repositories({ rows, opened, fields, flows, kinds, problem, change, onToggle, onFolder, onAdded }: RepositoriesProps) {
+function Repositories({ rows, opened, fields, kinds, problem, change, onToggle, onFolder, onAdded }: RepositoriesProps) {
   const t = useT()
   const [adding, setAdding] = useState(false)
   const admin = useAdmin()
@@ -275,7 +273,7 @@ function Repositories({ rows, opened, fields, flows, kinds, problem, change, onT
   return (
     <div className="space-y-2.5">
       {rows.map((row, i) => (
-        <RepositoryCard key={row.key} row={row} index={i} removable={rows.length > 1} open={opened.has(row.key)} fields={fields} flows={flows} kinds={kinds} problem={problem?.row === row.key ? (problem.binding ?? null) : null} change={change} onToggle={onToggle} onFolder={onFolder} />
+        <RepositoryCard key={row.key} row={row} index={i} removable={rows.length > 1} open={opened.has(row.key)} fields={fields} kinds={kinds} problem={problem?.row === row.key ? (problem.binding ?? null) : null} change={change} onToggle={onToggle} onFolder={onFolder} />
       ))}
       {admin ? (
         <FolderPopover open={adding} onOpenChange={setAdding} start={last ? parentOf(last) : null} trigger={<Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />}>{t('settings.app_addRepository')}</Button>} onChoose={(listing) => added([listing.path])} onChooseMany={added} />
@@ -345,7 +343,6 @@ function Sections({ editing, problem, focus, opening, change, folders }: Section
   const kinds = useKinds()
   const shared = useBindingFields('application')
   const own = useBindingFields('repository')
-  const flows = useFlows(true)
   const groups = useMemo(() => groupedBySection(shared), [shared])
   const variables = useCallback((next: Variable[]) => change({ type: 'variables', variables: next }), [change])
   const { sections, rows, toggleSection, toggleRow } = opening
@@ -361,7 +358,7 @@ function Sections({ editing, problem, focus, opening, change, folders }: Section
         </Section>
       ))}
       <Section id={REPOSITORIES} title={t('settings.app_sectionRepositories')} note={editing.repositories.length} open={sections.has(REPOSITORIES)} invalid={problem?.section === REPOSITORIES} onToggle={toggleSection}>
-        <Repositories rows={editing.repositories} opened={rows} fields={own} flows={flows} kinds={kinds} problem={problem} change={change} onToggle={toggleRow} onFolder={folders.onFolder} onAdded={folders.onAdded} />
+        <Repositories rows={editing.repositories} opened={rows} fields={own} kinds={kinds} problem={problem} change={change} onToggle={toggleRow} onFolder={folders.onFolder} onAdded={folders.onAdded} />
       </Section>
       <Section id={ENVIRONMENT} title={t('settings.app_env')} note={filled > 0 ? filled : undefined} open={sections.has(ENVIRONMENT)} onToggle={toggleSection}>
         <EnvList value={editing.variables} onChange={variables} />

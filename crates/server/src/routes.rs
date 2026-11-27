@@ -42,7 +42,6 @@ fn api() -> Router<Ctx> {
         .route("/api/connections/{id}/start", post(connections::start))
         .route("/api/connections/{id}/call", post(connections::call))
         .route("/api/models", get(models::list))
-        .route("/api/flows", get(models::flows))
         .route("/api/usage/limits", get(crate::limits::list))
         .route("/api/usage", get(usage::report))
         .route("/api/branding", get(branding::get).put(branding::put))

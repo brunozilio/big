@@ -259,7 +259,6 @@ execution_seconds = "30"
 
 [workflow]
 branch_prefix = "feature"
-flow = "gitflow"
 ask_timeout_ms = 1800000
 schedule_tick_seconds = "30"
 schedule_catch_up_minutes = "360"

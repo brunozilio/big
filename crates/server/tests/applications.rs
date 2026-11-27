@@ -119,11 +119,7 @@ async fn a_new_item_keeps_a_snapshot_of_its_application_and_its_space() {
     assert_eq!(status, StatusCode::OK, "{created}");
     let id = domain::workflow::ItemId::from(created["id"].as_str().expect("id"));
     let kept = world.handle.item(&id).expect("store").expect("item");
-    assert_eq!(kept.input["type"], "Bug", "the issue's type reaches the flows and the workflow");
-
-    let (status, flows) = world.send(Method::GET, "/api/flows", None).await;
-    assert_eq!(status, StatusCode::OK);
-    assert!(flows["names"].as_array().is_some_and(|names| names.contains(&flows["default"])), "{flows}");
+    assert_eq!(kept.input["type"], "Bug", "the issue's type reaches the workflow's branch rule");
 
     let gone = json!({ "text": "x", "issue": null, "model": "auto", "attachments": [], "application": "zz" });
     assert_eq!(world.send(Method::POST, "/api/items", Some(gone)).await.0, StatusCode::BAD_REQUEST);

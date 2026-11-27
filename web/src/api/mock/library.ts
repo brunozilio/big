@@ -18,7 +18,6 @@ const SECTIONS = [
   { key: 'skills', label: 'Skills', hint: 'Conhecimento que os agentes carregam quando precisam', icon: 'idea', creatable: true },
   { key: 'prompts', label: 'Prompts', hint: 'Os textos que o sistema envia ao modelo', icon: 'note', creatable: false },
   { key: 'workflows', label: 'Workflows', hint: 'As etapas que um item percorre', icon: 'workflow', creatable: true },
-  { key: 'flows', label: 'Fluxos de branch', hint: 'Como as branches são nomeadas, baseadas e mescladas', icon: 'branch', creatable: true },
 ]
 
 const TOOLS = ['Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write', 'WebFetch', 'WebSearch', 'Agent', 'mcp__*']
@@ -54,17 +53,6 @@ export default workflow({
 });
 `
 
-const FLOW = `import { flow } from "sdk/flow.js";
-
-export const spec = {
-  branch: "feature/{issue}-{slug}",
-  base: "develop",
-  method: "squash",
-};
-
-export const branch = flow(spec);
-`
-
 function initial(): Kept[] {
   return [
     agent('planner', 'Planner', 'Turns an item into a delivery plan the Developer can carry out.', 'triangle', '#e94b9b', ['Read', 'Grep', 'Glob'], 'You are the Planner.\n\n## What you receive\n- The item: title, description and acceptance criteria.\n\n## How to work\n1. **Understand the request.**\n2. **Actually read the code.**\n3. **Write the plan.**\n'),
@@ -75,7 +63,6 @@ function initial(): Kept[] {
     { ...code('prompts', 'prompts/chore-title.js', 'chore-title', '', ''), body: 'You are naming a coding session so the user can pick it out of a long list.\n' },
     code('prompts', 'prompts/system.js', 'system', '', 'const role = `You are an interactive agent.`;\n\nexport default function ({ tools }) {\n  return [role, tools].join("\\n\\n");\n}\n'),
     code('workflows', 'workflows/default.ts', 'entrega', 'plan → develop → checks → pr → review → merge', WORKFLOW),
-    code('flows', 'flows/gitflow.ts', 'gitflow', 'feature/{issue}-{slug}', FLOW),
   ]
 }
 
@@ -152,7 +139,7 @@ export function mockLibrary() {
   const create = (section: string, name: string): LibraryItem => {
     const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     if (!slug) throw new Error('O nome precisa de uma letra ou um número.')
-    const made = section === 'agents' ? agent(slug, name.trim(), '', 'circle', '#8b5cf6', ['Read', 'Grep', 'Glob'], `You are ${name.trim()}.\n`) : section === 'skills' ? skill(slug, name.trim(), `# ${name.trim()}\n`) : code(section, `${section}/${slug}.ts`, slug, '', section === 'workflows' ? WORKFLOW : FLOW)
+    const made = section === 'agents' ? agent(slug, name.trim(), '', 'circle', '#8b5cf6', ['Read', 'Grep', 'Glob'], `You are ${name.trim()}.\n`) : section === 'skills' ? skill(slug, name.trim(), `# ${name.trim()}\n`) : code(section, `${section}/${slug}.ts`, slug, '', section === 'workflows' ? WORKFLOW : '')
     if (find(made.path)) throw new Error('Já existe um item com esse nome.')
     kept = [...kept, { ...made, origin: 'own' }]
     return shown(made.path)

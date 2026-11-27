@@ -3,11 +3,11 @@ use store::{Application, Binding, Bindings, Repository};
 
 use super::*;
 
-const WAITS: &str = "export default workflow({ name: \"NAME\", triggers: [on(\"KIND\")], async run(ctx) { return await ctx.waitHuman([]); } });";
+const WAITS: &str = "export default workflow({ name: \"NAME\", branches, triggers: [on(\"KIND\")], async run(ctx) { return await ctx.waitHuman([]); } });";
 
 fn waiting(world: &World, name: &str, kind: &str) {
     let body = WAITS.replace("NAME", name).replace("KIND", kind);
-    world.workflow(name, &format!("import {{ workflow, on }} from \"sdk\";\n{body}"));
+    world.workflow(name, &format!("import {{ workflow, on }} from \"sdk\";\nimport {{ branches }} from \"../branches.ts\";\n{body}"));
 }
 
 fn checkout(world: &World) -> Application {
@@ -55,7 +55,7 @@ async fn an_issue_trigger_lands_in_the_application_that_tracks_that_connection()
     let items = kernel.items().expect("items");
     let kept = kernel.item(&items[0].id).expect("store").expect("item");
     assert_eq!(kept.input["application"]["id"], "app");
-    assert_eq!(kept.input["git"]["web"]["head"], "feature/BIG-9-nova", "the default flow names the branch");
+    assert_eq!(kept.input["git"]["web"]["head"], "feature/BIG-9-nova", "the workflow's branch rule names the branch");
     assert_eq!(kept.input["git"]["web"]["base"], "develop");
 }
 

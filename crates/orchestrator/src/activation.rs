@@ -47,6 +47,10 @@ impl Script {
         self.call("host.activate", std::slice::from_ref(activation))
     }
 
+    pub fn branch(&self, asked: &Value) -> Result<Value, String> {
+        self.call("host.branch", &[self.target.clone(), asked.clone()])
+    }
+
     pub fn view(&self, request: &Value) -> Result<Value, String> {
         let key = request.to_string();
         let kept =

@@ -1103,6 +1103,7 @@ export function workflow(definition) {
     accepts: Array.isArray(definition.accepts) ? definition.accepts : [],
     steps,
     run,
+    branches: typeof definition.branches === "function" ? definition.branches : null,
     code: typeof definition.run === "function",
   });
   registry.workflows.set(shape.name, shape);
@@ -1244,6 +1245,20 @@ function describe() {
   return { workflows, steps: [...registry.steps.keys()], labels, nodes };
 }
 
+const BRANCH_FIELDS = ["head", "base", "method"];
+
+function branch(target, asked) {
+  const found = registry.workflows.get(objectOf(target).workflow);
+  if (!found || !found.branches) return null;
+  const given = objectOf(found.branches(objectOf(asked)));
+  const chosen = {};
+  for (const name of BRANCH_FIELDS) {
+    if (typeof given[name] === "string" && given[name].trim() !== "") chosen[name] = given[name].trim();
+  }
+  if (Array.isArray(given.promote)) chosen.promote = given.promote.map(objectOf).filter((step) => step.from && step.into);
+  return Object.keys(chosen).length > 0 ? chosen : null;
+}
+
 export const PROTOCOL = 1;
 
-export const host = Object.freeze({ protocol: PROTOCOL, activate, view, describe });
+export const host = Object.freeze({ protocol: PROTOCOL, activate, view, describe, branch });

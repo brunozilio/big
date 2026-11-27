@@ -353,7 +353,6 @@ export function mockApi(options: MockOptions = {}): Api {
     onboarding: () => wait(() => onboarding),
     saveOnboarding: (state) => wait(() => (onboarding = { skipped: state.skipped })),
     applications: () => wait(() => applications),
-    flows: () => wait(() => ({ names: ['gitflow'], default: 'gitflow' })),
     createApplication: (draft) => wait(() => {
       const made = checkedApplication(draft, `app-${Date.now()}-${applications.length}`)
       applications = [...applications, made]

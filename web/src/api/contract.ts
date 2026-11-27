@@ -948,11 +948,6 @@ export interface BindingOption {
   detail?: string | null
 }
 
-export interface Flows {
-  names: string[]
-  default: string
-}
-
 export interface ApplicationRepository {
   id: string
   directory: string
@@ -962,7 +957,6 @@ export interface ApplicationRepository {
   e2e?: string[]
   e2eDirectory?: string
   bindings?: Bindings
-  flow?: string
   readOnly?: boolean
   remote?: string
 }
@@ -1113,7 +1107,6 @@ export interface Api {
   onboarding(): Promise<OnboardingState>
   saveOnboarding(state: OnboardingState): Promise<OnboardingState>
   applications(): Promise<Application[]>
-  flows(): Promise<Flows>
   createApplication(application: ApplicationDraft): Promise<Application>
   saveApplication(application: Application): Promise<Application>
   deleteApplication(id: string): Promise<void>
@@ -1162,7 +1155,6 @@ export const ROUTES = {
   branding: '/api/branding',
   onboarding: '/api/onboarding',
   applications: '/api/applications',
-  flows: '/api/flows',
   application: (id: string) => `/api/applications/${encodeURIComponent(id)}`,
   dirs: (path: string | null) => (path ? `/api/fs/dirs?path=${encodeURIComponent(path)}` : '/api/fs/dirs'),
   library: '/api/library',

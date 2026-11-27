@@ -145,7 +145,7 @@ const bindings = (v: unknown) => v === undefined || (obj(v) && Object.values(v).
 const variables = (v: unknown) => v === undefined || (obj(v) && Object.values(v).every(str))
 
 function isRepository(v: unknown): v is Application['repositories'][number] {
-  return obj(v) && str(v.id) && str(v.directory) && (v.kind === undefined || str(v.kind)) && arr(v.run, str) && arr(v.verify, str) && (v.e2e === undefined || arr(v.e2e, str)) && (v.e2eDirectory === undefined || str(v.e2eDirectory)) && (v.flow === undefined || str(v.flow)) && bindings(v.bindings)
+  return obj(v) && str(v.id) && str(v.directory) && (v.kind === undefined || str(v.kind)) && arr(v.run, str) && arr(v.verify, str) && (v.e2e === undefined || arr(v.e2e, str)) && (v.e2eDirectory === undefined || str(v.e2eDirectory)) && bindings(v.bindings)
 }
 
 export function isApplication(v: unknown): v is Application {

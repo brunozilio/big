@@ -58,7 +58,6 @@ describe('primeira vez', () => {
     fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Loja' } })
     expect((screen.getByLabelText('Nome') as HTMLInputElement).value).toBe('Loja')
     expect((screen.getByText('Criar aplicação').closest('button') as HTMLButtonElement).disabled).toBe(true)
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Fluxo de branch' }).textContent).toContain('gitflow'))
     fireEvent.click(screen.getByText('Pular por agora'))
     await waitFor(() => expect(done).toBe(1))
     expect(getState().onboarding).toEqual({ skipped: true })

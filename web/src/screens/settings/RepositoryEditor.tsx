@@ -1,5 +1,5 @@
 import { memo, useCallback, useMemo, useState } from 'react'
-import type { ApplicationRepository, Bindings, DirListing, Flows, RepositoryKind } from '@/api/contract'
+import type { ApplicationRepository, Bindings, DirListing, RepositoryKind } from '@/api/contract'
 import { IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
 import { Field, Input, Select, Switch } from '@/ui/form'
@@ -11,7 +11,6 @@ import { folderName, shortPath, withAccess, type Change, type Row } from './appl
 import { kindLabel, RepositoryFacts } from './applicationFacts'
 import { BindingFields, groupedBySection, type BindingField, type BindingProblem } from './bindings'
 import { FolderPopover } from './FolderDialog'
-import { FlowSelect, withFlow } from './flows'
 
 type Edit = (change: (repository: ApplicationRepository) => ApplicationRepository) => void
 
@@ -70,14 +69,13 @@ export function RemoteField({ value, onChange }: { value: string; onChange: (rem
 interface BodyProps {
   value: ApplicationRepository
   fields: BindingField[]
-  flows: Flows
   kinds: RepositoryKind[]
   problem: BindingProblem | null
   edit: Edit
   onChoose: (listing: DirListing) => void
 }
 
-function RepositoryBody({ value, fields, flows, kinds, problem, edit, onChoose }: BodyProps) {
+function RepositoryBody({ value, fields, kinds, problem, edit, onChoose }: BodyProps) {
   const t = useT()
   const groups = useMemo(() => groupedBySection(fields), [fields])
   const bound = useCallback((bindings: Bindings) => edit((r) => ({ ...r, bindings })), [edit])
@@ -90,7 +88,6 @@ function RepositoryBody({ value, fields, flows, kinds, problem, edit, onChoose }
         {admin && <DirectoryField value={value.directory} onChoose={onChoose} />}
         <BindingFields fields={groups[0].fields} bindings={value.bindings} problem={problem} onChange={bound} />
         <KindSelect value={value.kind} kinds={kinds} onChange={(kind) => edit((r) => ({ ...r, kind }))} />
-        {!value.readOnly && <FlowSelect value={value.flow} flows={flows} onChange={(flow) => edit((r) => withFlow(r, flow))} />}
       </div>
       {value.readOnly && <p className="text-sm text-muted">{t('settings.app_readOnlyHint')}</p>}
       {groups.slice(1).map((group) => (
@@ -111,7 +108,6 @@ export interface RepositoryProps {
   removable: boolean
   open: boolean
   fields: BindingField[]
-  flows: Flows
   kinds: RepositoryKind[]
   problem: BindingProblem | null
   change: (change: Change) => void
@@ -119,7 +115,7 @@ export interface RepositoryProps {
   onFolder: (key: string, listing: DirListing) => void
 }
 
-export const RepositoryCard = memo(function RepositoryCard({ row, index, removable, open, fields, flows, kinds, problem, change, onToggle, onFolder }: RepositoryProps) {
+export const RepositoryCard = memo(function RepositoryCard({ row, index, removable, open, fields, kinds, problem, change, onToggle, onFolder }: RepositoryProps) {
   const t = useT()
   const { key, value } = row
   const edit = useCallback<Edit>((next) => change({ type: 'repository', key, change: next }), [change, key])
@@ -143,7 +139,7 @@ export const RepositoryCard = memo(function RepositoryCard({ row, index, removab
         {removable && <IconButton tooltip={t('settings.app_removeRepository')} size="sm" onClick={() => change({ type: 'remove', key })}><Icon name="trash" size={15} /></IconButton>}
       </div>
       <Collapse open={open}>
-        <RepositoryBody value={value} fields={fields} flows={flows} kinds={kinds} problem={problem} edit={edit} onChoose={chosen} />
+        <RepositoryBody value={value} fields={fields} kinds={kinds} problem={problem} edit={edit} onChoose={chosen} />
       </Collapse>
     </div>
   )

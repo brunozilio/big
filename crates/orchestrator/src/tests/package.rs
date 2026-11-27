@@ -4,8 +4,9 @@ use store::{Application, Binding, Bindings, Repository};
 use super::*;
 
 const STORY: &str = r#"import { workflow, step } from "sdk";
+import { branches } from "../branches.ts";
 const merge = step({ name: "merge", async run(ctx) { await ctx.waitHuman([]); return ctx.pass({ sha: "s1" }); } });
-export default workflow({ name: "default", steps: [merge({})] });
+export default workflow({ name: "default", branches, steps: [merge({})] });
 "#;
 
 fn world() -> World {

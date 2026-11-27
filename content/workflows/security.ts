@@ -1,8 +1,10 @@
 import { workflow } from "sdk";
 import { findings, ticket, develop, checks, pr, review } from "sdk/steps";
+import { branches } from "../branches.ts";
 
 export default workflow({
   name: "security",
+  branches,
   steps: [
     findings({ id: "plan", minSeverity: 3, batch: 5, status: { category: "todo" } }),
     ticket(),
