@@ -65,15 +65,31 @@ function Passkeys() {
   )
 }
 
-export function Account() {
+export function AccountPanel() {
   const t = useT()
   const [me, setMe] = useState<Me | null>(null)
   useEffect(() => {
-    if (!getState().branding) api().branding().then(setBranding).catch(() => undefined)
     whoAmI().then(setMe).catch(() => undefined)
   }, [])
   const out = () => void logout().then(() => window.location.replace('/login'))
   const local = me?.mode === 'local'
+  return (
+    <div className="space-y-8">
+      <section className="flex items-center gap-3 rounded-card bg-surface px-4 py-3 shadow-card">
+        <Icon name="user" size={18} className="text-muted" />
+        <p className="flex-1 text-base text-fg">{local ? t('auth.localUser') : me ? t('auth.signedInAs', { email: me.user.email }) : ''}</p>
+        {!local && me && <Button size="sm" icon={<Icon name="logout" size={14} />} onClick={out}>{t('auth.logout')}</Button>}
+      </section>
+      {local ? <p className="text-sm text-muted">{t('auth.passkeysLocal')}</p> : me && <Passkeys />}
+    </div>
+  )
+}
+
+export function Account() {
+  const t = useT()
+  useEffect(() => {
+    if (!getState().branding) api().branding().then(setBranding).catch(() => undefined)
+  }, [])
   return (
     <div className="min-h-dvh bg-bg px-4">
       <main className="mx-auto w-full max-w-[520px] space-y-8 py-12">
@@ -84,12 +100,7 @@ export function Account() {
             <Link to="/">{t('auth.back')}</Link>
           </Button>
         </div>
-        <section className="flex items-center gap-3 rounded-card bg-surface px-4 py-3 shadow-card">
-          <Icon name="user" size={18} className="text-muted" />
-          <p className="flex-1 text-base text-fg">{local ? t('auth.localUser') : me ? t('auth.signedInAs', { email: me.user.email }) : ''}</p>
-          {!local && me && <Button size="sm" icon={<Icon name="logout" size={14} />} onClick={out}>{t('auth.logout')}</Button>}
-        </section>
-        {local ? <p className="text-sm text-muted">{t('auth.passkeysLocal')}</p> : me && <Passkeys />}
+        <AccountPanel />
       </main>
     </div>
   )

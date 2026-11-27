@@ -25,9 +25,15 @@ export async function request<T>(method: string, path: string, body?: unknown, f
   const data: unknown = text ? safeJson(text) : null
   if (!res.ok) {
     const error = (data as { error?: { code?: string; message?: string } } | null)?.error
+    if (res.status === 401 && error?.code === 'signed_out') signedOut()
     throw new ApiError(res.status, error?.code ?? 'http', error?.message ?? translate(currentLanguage(), 'app.httpError', { status: res.status }))
   }
   return data as T
+}
+
+function signedOut() {
+  if (typeof window === 'undefined' || window.location.pathname === '/login') return
+  window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
 }
 
 function safeJson(text: string): unknown {

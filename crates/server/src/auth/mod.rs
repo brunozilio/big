@@ -50,7 +50,10 @@ async fn methods() -> Response {
 
 async fn me(State(ctx): State<Ctx>, headers: HeaderMap) -> ApiResult<Response> {
     match session::person(&ctx, &headers)? {
-        Some(person) => Ok(reply(json!({ "mode": mode_name(), "user": person }))),
+        Some(person) => {
+            let admin = crate::scope::is_admin(&person);
+            Ok(reply(json!({ "mode": mode_name(), "user": person, "admin": admin })))
+        }
         None => Err(gate::signed_out_error()),
     }
 }

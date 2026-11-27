@@ -19,6 +19,7 @@ export interface Person {
 export interface Me {
   mode: AuthMode
   user: Person
+  admin: boolean
 }
 
 export interface PasskeyInfo {
@@ -44,7 +45,7 @@ export const AUTH = {
   removePasskey: (id: string) => `/api/account/passkeys/${encodeURIComponent(id)}`,
 }
 
-const LOCAL: Me = { mode: 'local', user: { user: 'local', email: '', name: '' } }
+const LOCAL: Me = { mode: 'local', user: { user: 'local', email: '', name: '' }, admin: true }
 
 export function isSignedOut(error: unknown): boolean {
   return error instanceof ApiError && error.status === 401

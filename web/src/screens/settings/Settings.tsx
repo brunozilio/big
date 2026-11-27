@@ -12,6 +12,7 @@ import { FadeIn } from '@/ui/motion'
 import { LANGUAGES, useLanguage, useT } from '@/i18n'
 import { groupName, styleDescription, styleName } from '@/i18n/server'
 import { ConnectionCard } from './ConnectionCard'
+import { AccountPanel } from '../login/Account'
 
 export type { SettingsTab } from '@/app/settingsNav'
 
@@ -27,7 +28,7 @@ export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTa
       <SettingsNav tab={tab} onTab={onTab} />
       <FadeIn key={tab} className="min-w-0">
         <Suspense fallback={<ListSkeleton />}>
-          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'memory' ? <MemoryView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : <CustomView />}
+          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'memory' ? <MemoryView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : tab === 'account' ? <AccountPanel /> : <CustomView />}
         </Suspense>
       </FadeIn>
     </div>
