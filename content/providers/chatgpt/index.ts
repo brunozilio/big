@@ -5,6 +5,7 @@ import {
   bearer,
   browser,
   cacheKey,
+  chosen,
   callback,
   claims,
   epoch,
@@ -20,6 +21,7 @@ import {
   number,
   parsed,
   reasoning,
+  unoffered,
   refreshable,
   remove,
   span,
@@ -83,14 +85,22 @@ export function turnHeaders({ body }) {
 
 export const retriesAfterRefresh = ({ status }: { status: number }) => status === 401;
 
+const REASONING = ["o1", "o3", "o4", "gpt-5", "gpt-6"];
+const LEVELS = ["low", "medium", "high", "xhigh"];
+
+const owned = (slug: string) => slug.startsWith("gpt-") || ["o1", "o3", "o4"].some((prefix) => slug.startsWith(prefix));
+const reasons = (slug: string) => owned(slug) && REASONING.some((prefix) => slug.toLowerCase().startsWith(prefix));
+
 export function shape({ model, body, effort, intent }, ctx) {
   cacheKey(body, intent);
   body.instructions = `${ctx.config.instructions}\n\n${typeof body.instructions === "string" ? body.instructions : ""}`;
-  body.reasoning = { ...(body.reasoning ?? {}), effort };
   body.text = { verbosity: "medium" };
   remove(body, ["parallel_tool_calls", "tool_choice"]);
   if (Array.isArray(body.tools)) for (const tool of body.tools) if (tool && typeof tool === "object") delete tool.strict;
-  return ctx.models.effort({ vendor: "openai", body, model, effort, always: true });
+  const asked = effort === "max" ? "xhigh" : effort;
+  if (unoffered(chosen(model, body), asked)) invalid(`model ${body.model} does not support reasoning effort ${asked}`);
+  body.reasoning = { effort: asked, summary: "auto" };
+  return body;
 }
 
 export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.config.api, headers({ config }, ctx), `/codex/models?client_version=${ctx.config.version}`);
@@ -99,7 +109,9 @@ export function page({ value }, ctx) {
   const models = items(value, "models").flatMap((item) => {
     if (item?.visibility === "hide") return [];
     const found = model(ctx, item, { id: "slug", window: "context_window" });
-    return found === null ? [] : [reasoning(found, levels(item).length > 0)];
+    if (found === null) return [];
+    if (levels(item).length === 0 && reasons(found.id.split(":").pop() ?? "") && found.capabilities) found.capabilities.reasoning_levels = LEVELS;
+    return [reasoning(found, levels(item).length > 0)];
   });
   return { models, next: null };
 }

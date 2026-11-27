@@ -4,7 +4,10 @@ import {
   type Tokens,
   bearer,
   browser,
+  EFFORTS,
   cacheMarks,
+  capabilities,
+  chosen,
   callback,
   form,
   get,
@@ -22,6 +25,7 @@ import {
   remove,
   span,
   standard,
+  unoffered,
   window,
   words,
   invalid,
@@ -59,6 +63,21 @@ export function webSearch({ name }: { name: string }) {
   return { type: filtering ? "web_search_20260209" : "web_search_20250305", name: "web_search" };
 }
 
+const ADAPTIVE = [/^claude-(opus|sonnet|haiku)-[5-9](-|$)/, /^claude-(opus|sonnet)-4-[6-9](-|$)/];
+const adaptive = (name: string) => ADAPTIVE.some((pattern) => pattern.test(name));
+const dialed = (name: string) => adaptive(name) || name.startsWith("claude-opus-4-5");
+
+function thinking(body, model: Model | null, effort: string) {
+  const caps = chosen(model, body);
+  const name = typeof body.model === "string" ? body.model : "";
+  const thinks = adaptive(name) || caps?.adaptive_thinking === true;
+  if (!thinks && !name.startsWith("claude-opus-4-5")) return body;
+  if (unoffered(caps, effort)) invalid(`model ${name} does not support effort ${effort}`);
+  body.output_config = { effort };
+  if (thinks) body.thinking = { type: "adaptive" };
+  return body;
+}
+
 export function check({ config }: { config: Config }) {
   refreshable(config);
 }
@@ -89,7 +108,7 @@ export function shape({ model, body, effort, intent }, ctx) {
   cacheMarks(body, ttl ? { type: "ephemeral", ttl } : null);
   body.max_tokens = ctx.models.outputLimit({ model, body });
   remove(body, ["thinking", "output_config"]);
-  return ctx.models.effort({ vendor: "anthropic", body, model, effort, always: false });
+  return thinking(body, model, effort);
 }
 
 export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.config.api, headers({ config }, ctx), "/models?limit=1000");
@@ -103,7 +122,12 @@ export function page({ value }, ctx) {
 }
 
 export function finish({ models }: { models: Model[] }, ctx) {
-  return models.length > 0 ? models : words(ctx.config.fallback_models).map((id) => option(ctx, id, id));
+  if (models.length > 0) return models;
+  return words(ctx.config.fallback_models).map((id) => {
+    const fallback = option(ctx, id, id);
+    if (dialed(id)) fallback.capabilities = capabilities({ reasoning_levels: EFFORTS });
+    return fallback;
+  });
 }
 
 export function limits({ config }: { config: Config }, ctx) {

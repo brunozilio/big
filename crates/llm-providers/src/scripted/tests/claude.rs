@@ -197,3 +197,55 @@ fn it_needs_both_tokens() {
     let tokens = Tokens { refresh_token: "r".into(), ..Tokens::bearer("a") };
     assert!(Config { auth: Some(tokens), ..Config::default() }.validate(claude()).is_ok());
 }
+
+fn thought(model: &str, effort: &str, chosen: Option<&ModelOption>) -> Result<Value, ProviderError> {
+    let mut body =
+        json!({"model": format!("claude-subscription:{model}"), "output_config": {"effort": effort}, "max_tokens": 4096});
+    crate::request::shape(claude(), chosen, &mut body).map(|()| body)
+}
+
+#[test]
+fn modern_claude_models_think_adaptively_with_the_effort() {
+    for model in ["claude-opus-5", "claude-sonnet-5-5", "claude-opus-4-6", "claude-haiku-5-5"] {
+        let body = thought(model, "low", None).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(body["thinking"], json!({"type": "adaptive"}), "{model}");
+        assert_eq!(body["output_config"], json!({"effort": "low"}));
+    }
+    let dialed = thought("claude-opus-4-5", "high", None).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(dialed["output_config"], json!({"effort": "high"}));
+    assert!(dialed.get("thinking").is_none());
+    for model in ["claude-opus-50", "claude-sonnet-4-5", "claude-fable-5-1"] {
+        let plain = thought(model, "high", None).unwrap_or_else(|e| panic!("{e}"));
+        assert!(plain.get("thinking").is_none() && plain.get("output_config").is_none(), "{model}");
+    }
+}
+
+#[test]
+fn an_effort_the_catalog_does_not_list_is_refused_and_adaptive_follows_the_catalog() {
+    let mut model = ModelOption::new("claude-subscription:claude-next", "Next");
+    model.capabilities = Some(ModelCapabilities {
+        adaptive_thinking: true,
+        reasoning_levels: vec!["low".into()],
+        ..Default::default()
+    });
+    assert!(thought("claude-next", "high", Some(&model)).is_err_and(|e| e.to_string().contains("does not support")));
+    let body = thought("claude-next", "low", Some(&model)).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(body["thinking"], json!({"type": "adaptive"}));
+}
+
+#[test]
+fn the_fallback_models_offer_efforts_only_where_claude_takes_them() {
+    let (client, _) = client(CLAUDE, [(200, "{\"data\":[]}".to_owned())]);
+    let models = client.models().expect("fallback");
+    let offered: Vec<(&str, Vec<&str>)> = models.iter().map(|m| (m.id.as_str(), crate::efforts(m))).collect();
+    let all = crate::EFFORTS.to_vec();
+    assert_eq!(
+        offered,
+        [
+            ("claude-subscription:claude-opus-5-5", all.clone()),
+            ("claude-subscription:claude-sonnet-5-5", all.clone()),
+            ("claude-subscription:claude-haiku-5-5", all),
+            ("claude-subscription:claude-fable-5-1", Vec::new()),
+        ]
+    );
+}

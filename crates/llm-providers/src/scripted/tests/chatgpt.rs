@@ -197,3 +197,11 @@ fn the_call_carries_the_account_and_asks_for_json() {
     assert!(call.headers.contains(&("chatgpt-account-id".to_owned(), "acct".to_owned())));
     assert!(call.headers.contains(&("accept".to_owned(), "application/json".to_owned())));
 }
+
+#[test]
+fn a_reasoning_family_without_listed_levels_offers_the_four_it_accepts() {
+    let page = json!({"models": [{"slug": "gpt-5.5"}, {"slug": "gpt-4o"}, {"slug": "codex-x"}]});
+    let models = crate::catalog::collect(chatgpt(), |_| Ok::<_, ProviderError>(page.clone())).unwrap_or_default();
+    let offered: Vec<Vec<&str>> = models.iter().map(crate::efforts).collect();
+    assert_eq!(offered, [vec!["low", "medium", "high", "xhigh"], vec![], vec![]]);
+}

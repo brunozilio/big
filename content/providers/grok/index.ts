@@ -7,9 +7,11 @@ import {
   bearer,
   cacheKey,
   capabilities,
+  chosen,
   formRequest,
   get,
   items,
+  nearest,
   option,
   parsed,
   positive,
@@ -61,7 +63,29 @@ export function headers({ config }: { config: Config }) {
 
 export const retriesAfterRefresh = ({ status }: { status: number }) => status === 401;
 
-export const shape = ({ model, body, effort, intent }, ctx) => ctx.models.effort({ vendor: "xai", body: cacheKey(body, intent), model, effort, always: false });
+const WITH_EFFORT = ["grok-3-mini", "grok-4.20-multi-agent", "grok-4.3", "grok-4.5", "grok-4.6"];
+const EXTRA_HIGH = ["grok-4.6"];
+
+const dials = (id: string) => WITH_EFFORT.some((prefix) => id.toLowerCase().startsWith(prefix));
+
+function known(id: string): string[] {
+  const lower = id.toLowerCase();
+  const extra = EXTRA_HIGH.some((family) => lower === family || lower.startsWith(`${family}-`));
+  return extra ? ["low", "medium", "high", "xhigh"] : ["low", "medium", "high"];
+}
+
+export function shape({ model, body, effort, intent }) {
+  cacheKey(body, intent);
+  const caps = chosen(model, body);
+  const name = typeof body.model === "string" ? body.model : "";
+  const offered: string[] = caps?.reasoning === true && Array.isArray(caps.reasoning_levels) ? caps.reasoning_levels : [];
+  if (offered.length === 0 && !dials(name)) {
+    delete body.reasoning;
+    return body;
+  }
+  body.reasoning = { effort: nearest(offered.length === 0 ? known(name) : offered, effort) };
+  return body;
+}
 
 export const catalog = ({ config }: { config: Config }, ctx) => get(config, ctx.config.api, headers({ config }), "/models");
 
@@ -77,8 +101,8 @@ function modelOf(ctx, item): Model | null {
   if (!lower.startsWith("grok") || SKIPPED.some((part) => lower.includes(part))) return null;
   const model = option(ctx, id, `${id} (Grok)`);
   model.window = windowOf(item);
-  const reasons = typeof item?.supports_reasoning_effort === "boolean" ? item.supports_reasoning_effort : ctx.models.reasons({ vendor: "xai", id });
-  model.capabilities = capabilities({ reasoning: reasons });
+  const reasons = typeof item?.supports_reasoning_effort === "boolean" ? item.supports_reasoning_effort : dials(id);
+  model.capabilities = capabilities({ reasoning: reasons, reasoning_levels: dials(id) ? known(id) : [] });
   return model;
 }
 

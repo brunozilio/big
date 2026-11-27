@@ -32,18 +32,6 @@ pub fn remove(body: &mut Value, keys: &[&str]) {
     }
 }
 
-pub(crate) fn capabilities<'a>(
-    body: &Value,
-    selected: Option<&'a ModelOption>,
-) -> Option<&'a domain::model::ModelCapabilities> {
-    let model = body["model"].as_str().unwrap_or_default();
-    selected.filter(|s| s.id.rsplit(':').next() == Some(model)).and_then(|s| s.capabilities.as_ref())
-}
-
-pub(crate) fn unsupported(caps: Option<&domain::model::ModelCapabilities>, what: &str) -> bool {
-    caps.is_some_and(|c| !c.reasoning_levels.is_empty() && !c.reasoning_levels.iter().any(|l| l == what))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

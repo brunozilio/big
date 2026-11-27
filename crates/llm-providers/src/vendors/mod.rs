@@ -15,17 +15,19 @@ mod tests {
     }
 
     #[test]
-    fn each_family_offers_the_efforts_its_requests_take() {
+    fn the_efforts_offered_are_what_the_catalog_declares() {
         use domain::ModelOption;
         use domain::model::ModelCapabilities;
-        let named = |id: &str| crate::efforts(&ModelOption::new(id, id));
-        assert_eq!(named("anthropic:claude-opus-5-5"), crate::EFFORTS);
-        assert_eq!(named("openai:gpt-6-astra"), ["low", "medium", "high", "xhigh"]);
-        assert_eq!(named("xai:grok-4.3"), ["low", "medium", "high"]);
-        assert!(named("xai:grok-2").is_empty() && named("other:plain").is_empty());
-        let mut listed = ModelOption::new("copilot:x", "x");
-        listed.capabilities =
-            Some(ModelCapabilities { reasoning_levels: vec!["low".into(), "high".into()], ..Default::default() });
-        assert_eq!(crate::efforts(&listed), ["low", "high"]);
+        let with = |caps: Option<ModelCapabilities>| {
+            let mut model = ModelOption::new("x:claude-opus-5-5", "x");
+            model.capabilities = caps;
+            crate::efforts(&model)
+        };
+        assert!(with(None).is_empty(), "no vendor is guessed from the model's name");
+        let levels = ModelCapabilities { reasoning_levels: vec!["high".into(), "low".into()], ..Default::default() };
+        assert_eq!(with(Some(levels)), ["low", "high"]);
+        assert_eq!(with(Some(ModelCapabilities { reasoning: true, ..Default::default() })), crate::EFFORTS);
+        assert_eq!(with(Some(ModelCapabilities { adaptive_thinking: true, ..Default::default() })), crate::EFFORTS);
+        assert!(with(Some(ModelCapabilities::default())).is_empty());
     }
 }

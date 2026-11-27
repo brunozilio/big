@@ -179,3 +179,52 @@ fn a_refused_or_expired_code_ends_the_sign_in() {
     let (error, _) = signed(answers);
     assert!(error.map(|_| ()).err().unwrap_or_else(|| panic!("expired")).to_string().contains("expired"));
 }
+
+fn sent(model: &str, effort: &str, chosen: Option<&domain::ModelOption>) -> Value {
+    let mut body = json!({"model": model, "reasoning": {"effort": effort, "summary": "auto"}});
+    crate::request::shape(grok(), chosen, &mut body).unwrap_or_else(|e| panic!("{e}"));
+    body
+}
+
+#[test]
+fn only_models_with_an_effort_dial_get_one_and_never_a_summary() {
+    assert_eq!(sent("grok-4.3", "medium", None)["reasoning"], json!({"effort": "medium"}));
+    assert!(sent("grok-4.20-0309-non-reasoning", "high", None).get("reasoning").is_none());
+    assert!(sent("grok-composer-2.5-fast", "high", None).get("reasoning").is_none());
+}
+
+#[test]
+fn the_highest_efforts_fall_to_what_the_family_accepts() {
+    assert_eq!(sent("grok-4.6", "max", None)["reasoning"]["effort"], "xhigh");
+    assert_eq!(sent("grok-4.6-fast", "xhigh", None)["reasoning"]["effort"], "xhigh");
+    assert_eq!(sent("grok-4.5", "xhigh", None)["reasoning"]["effort"], "high");
+    assert_eq!(sent("grok-4.3", "low", None)["reasoning"]["effort"], "low");
+}
+
+#[test]
+fn the_catalog_s_levels_win_over_the_known_families() {
+    let mut model = domain::ModelOption::new("grok-subscription:grok-9", "Grok 9");
+    model.capabilities = Some(domain::model::ModelCapabilities {
+        reasoning: true,
+        reasoning_levels: vec!["medium".into(), "high".into()],
+        ..Default::default()
+    });
+    assert_eq!(sent("grok-9", "low", Some(&model))["reasoning"], json!({"effort": "medium"}));
+}
+
+#[test]
+fn the_provider_declares_the_levels_each_family_offers() {
+    let page = json!({"data": [
+        {"id": "grok-4.6"}, {"id": "grok-4.5", "supports_reasoning_effort": false},
+        {"id": "grok-code", "supports_reasoning_effort": true}, {"id": "grok-2"}
+    ]});
+    let models = crate::catalog::collect(grok(), |_| Ok::<_, ProviderError>(page.clone())).unwrap_or_default();
+    let offered = |id: &str| {
+        let found = models.iter().find(|model| model.id == format!("grok-subscription:{id}"));
+        found.map(crate::efforts).unwrap_or_default()
+    };
+    assert_eq!(offered("grok-4.6"), ["low", "medium", "high", "xhigh"]);
+    assert_eq!(offered("grok-4.5"), ["low", "medium", "high"]);
+    assert_eq!(offered("grok-code"), crate::EFFORTS);
+    assert!(offered("grok-2").is_empty());
+}

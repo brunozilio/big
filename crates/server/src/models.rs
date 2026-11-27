@@ -91,10 +91,13 @@ mod tests {
     }
 
     #[test]
-    fn a_model_lists_the_efforts_of_its_family() {
-        let listed = listing(&[app::Model::new("anthropic:claude-opus-5-5", "Claude Opus 5.5")]);
+    fn a_model_lists_the_efforts_its_provider_declared_and_none_are_guessed_from_its_name() {
+        let mut opus = app::Model::new("anthropic:claude-opus-5-5", "Claude Opus 5.5");
+        opus.capabilities = Some(domain::model::ModelCapabilities { reasoning: true, ..Default::default() });
+        let listed = listing(&[opus, app::Model::new("anthropic:claude-opus-5-6", "Claude Opus 5.6")]);
         assert_eq!(listed["default"], "anthropic:claude-opus-5-5");
         assert_eq!(listed["models"][0]["efforts"], json!(["low", "medium", "high", "xhigh", "max"]));
+        assert_eq!(listed["models"][1]["efforts"], json!([]));
         assert_eq!(listed["models"][0]["fast"], false);
     }
 

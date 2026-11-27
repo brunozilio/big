@@ -72,21 +72,6 @@ fn query(arguments: &Value) -> Value {
 fn models(function: &str, arguments: &Value) -> Option<Result<Value, String>> {
     let model: Option<ModelOption> = parsed(&arguments["model"]);
     Some(Ok(match function {
-        "models.effort" => {
-            let mut body = arguments["body"].clone();
-            let always = arguments["always"].as_bool().unwrap_or(false);
-            if let Err(error) =
-                crate::effort(field(arguments, "vendor"), &mut body, model.as_ref(), field(arguments, "effort"), always)
-            {
-                return Some(Err(super::bridge::encoded(&error)));
-            }
-            body
-        }
-        "models.reasons" => {
-            json!(
-                crate::vendor(field(arguments, "vendor")).is_some_and(|vendor| vendor.reasons(field(arguments, "id")))
-            )
-        }
         "models.outputLimit" => json!(crate::providers::output_limit(model.as_ref(), &arguments["body"])),
         "models.toolsInConversation" => json!(crate::added_tools::openai(field(arguments, "name"))),
         _ => return None,

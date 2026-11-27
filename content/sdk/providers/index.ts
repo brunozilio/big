@@ -243,4 +243,21 @@ export function cacheKey(body, intent: Intent) {
   return body;
 }
 
-export const effort = (ctx, input: { vendor: string; body: unknown; model: unknown; effort: string; always: boolean }) => ctx.models.effort(input);
+export const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
+
+export function chosen(model: Model | null | undefined, body): Record<string, any> | undefined {
+  const id = typeof model?.id === "string" ? model.id.split(":").pop() : undefined;
+  return id !== undefined && id === body?.model && model?.capabilities ? model.capabilities : undefined;
+}
+
+export function unoffered(caps: Record<string, any> | undefined, effort: string): boolean {
+  const levels = Array.isArray(caps?.reasoning_levels) ? caps.reasoning_levels : [];
+  return levels.length > 0 && !levels.includes(effort);
+}
+
+export function nearest(levels: string[], effort: string): string {
+  const wanted = EFFORTS.indexOf(effort);
+  const asked = wanted < 0 ? 1 : wanted;
+  const below = [...EFFORTS.slice(0, asked + 1)].reverse().find((level) => levels.includes(level));
+  return below ?? EFFORTS.find((level) => levels.includes(level)) ?? "medium";
+}
