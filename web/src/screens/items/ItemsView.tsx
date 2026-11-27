@@ -329,6 +329,7 @@ type RowProps = { it: Item; fresh: boolean; draggable: boolean; onOpen: (it: Ite
 const Row = memo(function Row({ it, fresh, draggable, onOpen, onConnect }: RowProps) {
   const t = useT()
   const title = titleOf(t, it)
+  const origin = originOf(it)
   const drag = draggable ? { draggable: true, onDragStart: (e: DragEvent) => e.dataTransfer.setData(DRAG_TYPE, it.id) } : {}
   return (
     <div {...drag} className={cn('rounded-card transition-colors duration-200', fresh && 'flash-new', draggable && 'cursor-grab active:cursor-grabbing')}>
@@ -345,7 +346,7 @@ const Row = memo(function Row({ it, fresh, draggable, onOpen, onConnect }: RowPr
         }}
         className="group flex min-h-[52px] w-full cursor-pointer items-center gap-3 rounded-control px-2.5 text-left transition-colors hover:bg-hover"
       >
-        <OriginCell><Origin it={it} /></OriginCell>
+        {origin && <OriginCell>{origin}</OriginCell>}
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate text-md text-fg" title={title}>{title}</span>
           {it.live && <LiveDot className="shrink-0" />}
@@ -359,7 +360,7 @@ const Row = memo(function Row({ it, fresh, draggable, onOpen, onConnect }: RowPr
   )
 })
 
-function Origin({ it }: { it: Item }) {
+function originOf(it: Item) {
   if (isBtw(it)) return <BtwChip />
   if (it.issue) return <IssueKey issue={it.issue} className="min-w-0 shrink" />
   const source = (it.sources ?? []).find((s) => s.kind === 'branch' || (s.kind === 'pull_request' && !it.change))

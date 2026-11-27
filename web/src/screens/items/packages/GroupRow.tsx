@@ -45,7 +45,7 @@ function Member({ it, from, movable, onOpen }: { it: Item; from: string; movable
   const drag = movable ? { draggable: true, onDragStart: (e: DragEvent) => { e.dataTransfer.setData(DRAG_TYPE, it.id); e.dataTransfer.setData(FROM_TYPE, from) } } : {}
   return (
     <div role="button" tabIndex={0} onClick={onOpen} onKeyDown={(e) => openOnKey(e, onOpen)} {...drag} className={cn('flex min-h-[44px] cursor-pointer items-center gap-3 rounded-control pl-9 pr-2.5 transition-colors hover:bg-hover', movable && 'cursor-grab active:cursor-grabbing')}>
-      <OriginCell>{it.issue && <IssueKey issue={it.issue} className="min-w-0 shrink" />}</OriginCell>
+      {it.issue && <OriginCell><IssueKey issue={it.issue} className="min-w-0 shrink" /></OriginCell>}
       <span className="truncate text-base text-fg2">{titleOf(t, it)}</span>
     </div>
   )
