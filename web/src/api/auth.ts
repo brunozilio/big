@@ -9,6 +9,7 @@ export interface AuthMethods {
   mode: AuthMode
   methods: AuthMethod[]
   ssoLabel: string
+  setup?: boolean
 }
 
 export interface Person {
@@ -39,6 +40,7 @@ export const AUTH = {
   email: '/api/auth/email',
   verify: '/api/auth/email/verify',
   password: '/api/auth/password',
+  setup: '/api/auth/setup',
   accountPassword: '/api/account/password',
   sso: (next: string) => `/api/auth/sso/start?next=${encodeURIComponent(next)}`,
   passkeyOptions: '/api/auth/passkey/options',
@@ -79,6 +81,10 @@ export function verifyCode(email: string, code: string): Promise<Person> {
 
 export function signInWithPassword(login: string, password: string): Promise<Person> {
   return request('POST', AUTH.password, { login, password })
+}
+
+export function setUpAdmin(token: string, login: string, password: string): Promise<Person> {
+  return request('POST', AUTH.setup, { token, login, password })
 }
 
 export function changePassword(current: string, password: string): Promise<null> {

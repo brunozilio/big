@@ -787,10 +787,13 @@ version = "0.0.1"
 dependencies = [
  "agent-engine",
  "app",
+ "axum",
  "brand",
  "clap",
  "domain",
+ "futures-util",
  "platform",
+ "reqwest",
  "serde",
  "serde_json",
  "server",

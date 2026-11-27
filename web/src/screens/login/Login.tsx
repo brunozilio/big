@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '@/api'
-import { authMethods, nextPath, passkeysWork, sendCode, signInWithPasskey, signInWithPassword, ssoUrl, verifyCode, type AuthMethods } from '@/api/auth'
+import { authMethods, nextPath, passkeysWork, PASSWORD_MIN, sendCode, setUpAdmin, signInWithPasskey, signInWithPassword, ssoUrl, verifyCode, type AuthMethods } from '@/api/auth'
 import { at } from '@/api/base'
 import { ApiError } from '@/api/http'
 import { getState, setBranding, useStore } from '@/api/store'
@@ -42,7 +42,7 @@ function Divider({ children }: { children: ReactNode }) {
   )
 }
 
-function LoginLanguage() {
+export function LoginLanguage() {
   const t = useT()
   const language = useLanguage()
   return (
@@ -210,6 +210,84 @@ function Others({ methods, divided }: { methods: AuthMethods; divided: boolean }
   )
 }
 
+function SetupStage({ token }: { token: string }) {
+  const t = useT()
+  const location = useLocation()
+  const [login, setLogin] = useState('admin')
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const ready = !!login.trim() && !!password && !!confirm
+  const submit = (e: FormEvent) => {
+    e.preventDefault()
+    if (!ready) return
+    if (password.length < PASSWORD_MIN) return setError(t('auth.passwordTooShort', { min: PASSWORD_MIN }))
+    if (password !== confirm) return setError(t('auth.passwordMismatch'))
+    setBusy(true)
+    setError(null)
+    setUpAdmin(token, login.trim(), password)
+      .then(() => finish(location.search))
+      .catch((err: unknown) => setError(messageOf(err, t('auth.setupFailed'))))
+      .finally(() => setBusy(false))
+  }
+  return (
+    <form onSubmit={submit} className="space-y-3">
+      <div className="mb-2 text-center">
+        <p className="text-md font-medium text-fg">{t('auth.setupTitle')}</p>
+        <p className="mt-1 text-sm text-muted">{t('auth.setupHint')}</p>
+      </div>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.login')}</span>
+        <Input autoComplete="username" autoCapitalize="none" spellCheck={false} value={login} onChange={(e) => setLogin(e.target.value)} placeholder={t('auth.loginPlaceholder')} />
+      </label>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.password')}</span>
+        <Input type="password" autoComplete="new-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('auth.passwordPlaceholder')} />
+      </label>
+      <label className="block">
+        <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.setupConfirm')}</span>
+        <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+      </label>
+      {error && <p className="text-sm text-danger-fg">{error}</p>}
+      <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={!ready}>
+        {t('auth.setupSubmit')}
+      </Button>
+    </form>
+  )
+}
+
+function SignIn({ methods }: { methods: AuthMethods }) {
+  const t = useT()
+  const location = useLocation()
+  const [stage, setStage] = useState<Stage>({ kind: 'email' })
+  const password = methods.methods.includes('password')
+  const email = !password && methods.methods.includes('email')
+  return (
+    <>
+      {methods.mode === 'local' && (
+        <div className="mb-6 rounded-card bg-inset px-4 py-3 text-center text-sm text-fg2">
+          {t('auth.localNotice')}
+          <Button variant="link" className="ml-1" onClick={() => finish(location.search)}>{t('auth.localEnter')}</Button>
+        </div>
+      )}
+      {password && <PasswordStage />}
+      {email && (stage.kind === 'email' ? <EmailStage onSent={(sent) => setStage({ kind: 'code', email: sent })} /> : <CodeStage email={stage.email} onBack={() => setStage({ kind: 'email' })} />)}
+      {stage.kind === 'email' && <Others methods={methods} divided={password || email} />}
+      {methods.methods.length === 0 && <p className="text-center text-sm text-muted">{t('auth.noMethods')}</p>}
+    </>
+  )
+}
+
+function Entry({ methods }: { methods: AuthMethods }) {
+  const t = useT()
+  const location = useLocation()
+  const token = new URLSearchParams(location.search).get('setup') ?? ''
+  if (!methods.setup) return <SignIn methods={methods} />
+  if (token) return <SetupStage token={token} />
+  return <p className="rounded-card bg-inset px-4 py-3 text-center text-sm text-fg2">{t('auth.setupWaiting')}</p>
+}
+
 function useBrandingAndMethods(): AuthMethods | null {
   const [methods, setMethods] = useState<AuthMethods | null>(null)
   useEffect(() => {
@@ -224,10 +302,7 @@ export function Login() {
   const location = useLocation()
   const name = useStore((s) => s.branding?.name) ?? ''
   const methods = useBrandingAndMethods()
-  const [stage, setStage] = useState<Stage>({ kind: 'email' })
   const failed = new URLSearchParams(location.search).get('error') === 'sso'
-  const password = methods?.methods.includes('password') ?? false
-  const email = !password && (methods?.methods.includes('email') ?? false)
   return (
     <div className="flex min-h-dvh flex-col bg-bg px-4">
       <main className="mx-auto flex w-full max-w-[392px] flex-1 flex-col justify-center py-16">
@@ -237,16 +312,7 @@ export function Login() {
           <p className="text-xl font-semibold leading-tight text-muted">{t('auth.subtitle', { name })}</p>
         </div>
         {failed && <p className="mb-4 rounded-control bg-danger/10 px-3 py-2 text-sm text-danger-fg">{t('auth.ssoFailed')}</p>}
-        {methods?.mode === 'local' && (
-          <div className="mb-6 rounded-card bg-inset px-4 py-3 text-center text-sm text-fg2">
-            {t('auth.localNotice')}
-            <Button variant="link" className="ml-1" onClick={() => finish(location.search)}>{t('auth.localEnter')}</Button>
-          </div>
-        )}
-        {methods && password && <PasswordStage />}
-        {methods && email && (stage.kind === 'email' ? <EmailStage onSent={(sent) => setStage({ kind: 'code', email: sent })} /> : <CodeStage email={stage.email} onBack={() => setStage({ kind: 'email' })} />)}
-        {methods && stage.kind === 'email' && <Others methods={methods} divided={password || email} />}
-        {methods && methods.methods.length === 0 && <p className="text-center text-sm text-muted">{t('auth.noMethods')}</p>}
+        {methods && <Entry methods={methods} />}
       </main>
       <footer className="flex justify-center pb-6">
         <LoginLanguage />

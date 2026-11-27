@@ -8,12 +8,23 @@ import { appPath, toLogin } from './api/base'
 import { setMe } from './api/me'
 import { boot } from './api/store'
 import { createRouter } from './app/router'
+import { Run } from './screens/run/Run'
 import { TooltipProvider } from './ui/overlay'
 import './ui/tokens.css'
 
 
 const root = document.getElementById('root')
-if (root) {
+if (root && appPath() === '/run') {
+  createRoot(root).render(
+    <StrictMode>
+      <MotionConfig reducedMotion="user">
+        <TooltipProvider>
+          <Run />
+        </TooltipProvider>
+      </MotionConfig>
+    </StrictMode>,
+  )
+} else if (root) {
   void loadApi().then(async (api) => {
     const signedIn = await whoAmI().catch(() => undefined)
     const onLogin = appPath() === '/login'

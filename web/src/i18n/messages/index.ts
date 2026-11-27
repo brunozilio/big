@@ -11,8 +11,9 @@ import editor from './editor'
 import server from './server'
 import mock from './mock'
 import auth from './auth'
+import run from './run'
 
-export const NAMESPACES = [common, app, settings, items, chat, plan, blocks, editor, server, mock, auth] as const
+export const NAMESPACES = [common, app, settings, items, chat, plan, blocks, editor, server, mock, auth, run] as const
 
 type KeysOf<S> = S extends Namespace<infer N, infer T> ? `${N}.${keyof T & string}` : never
 
