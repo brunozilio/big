@@ -35,7 +35,7 @@ pub use features::memory::{ApplicationOf, ApplicationRef, MemoryShelf};
 pub use handler::local::LocalBackend;
 pub(crate) use homes::{Homes, OwnerHome};
 pub use keyed::KeyedEngine;
-pub use llm_providers::{efforts, maker};
+pub use llm_providers::{efforts, logo, maker};
 pub(crate) use mcp_auth::McpAuth;
 pub use providers::{InMemoryProviderStore, ModelProviders};
 pub use secrets::{InMemorySecretStore, SecretStore};

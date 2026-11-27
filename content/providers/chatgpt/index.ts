@@ -45,7 +45,6 @@ export function provider() {
     name: "ChatGPT Subscription",
     label: "ChatGPT",
     logo: "logo.svg",
-    vendor: "openai",
     access: "browser",
     rank: 40,
     slot: "0x7072_6f76_6964_6572_0000_0000_0000_0004",
@@ -55,7 +54,7 @@ export function provider() {
     prices: OPENAI,
     searchPrice: 0.01,
     owns: ["gpt-", "o1", "o3", "o4"],
-    makers: [["gpt", "openai"], ["codex", "openai"], ["o3", "openai"], ["o4", "openai"]],
+    makers: [["gpt", "openai.svg"], ["codex", "openai.svg"], ["o3", "openai.svg"], ["o4", "openai.svg"]],
     smallModel: "gpt-6-luna",
   };
 }

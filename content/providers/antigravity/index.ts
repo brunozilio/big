@@ -11,7 +11,6 @@ export function provider() {
     name: "Antigravity Subscription",
     label: "Antigravity",
     logo: "logo.svg",
-    vendor: "antigravity",
     access: "browser",
     rank: 80,
     slot: "0x7072_6f76_6964_6572_0000_0000_0000_0009",
@@ -20,7 +19,7 @@ export function provider() {
     path: "/v1internal:streamGenerateContent?alt=sse",
     servesAll: true,
     prices: VERTEX,
-    makers: [["gemini", "google"]],
+    makers: [["gemini", "google.svg"]],
   };
 }
 

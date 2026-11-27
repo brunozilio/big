@@ -51,7 +51,6 @@ export function provider() {
     name: "llama.cpp",
     label: "llama.cpp",
     logo: "logo.svg",
-    vendor: "",
     access: "code",
     rank: 95,
     slot: "0x7072_6f76_6964_6572_0000_0000_0000_000b",

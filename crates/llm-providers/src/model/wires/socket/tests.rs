@@ -18,9 +18,6 @@ impl Provider for Framed {
     fn name(&self) -> &'static str {
         "Framed"
     }
-    fn vendor(&self) -> &'static str {
-        ""
-    }
     fn access(&self) -> domain::Access {
         domain::Access::default()
     }

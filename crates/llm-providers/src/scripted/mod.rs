@@ -45,8 +45,6 @@ struct Declared {
     #[serde(default)]
     logo: String,
     #[serde(default)]
-    vendor: String,
-    #[serde(default)]
     access: Access,
     #[serde(default)]
     rank: u8,
@@ -88,7 +86,6 @@ pub struct ScriptedProvider {
     name: &'static str,
     label: &'static str,
     logo: &'static str,
-    vendor: &'static str,
     access: Access,
     rank: u8,
     slot: u128,
@@ -165,7 +162,6 @@ impl ScriptedProvider {
             name: intern(&declared.name),
             label: intern(&label),
             logo: intern(&logo_of(root, &folder, &declared.logo)),
-            vendor: intern(&declared.vendor),
             access: declared.access,
             rank: declared.rank,
             slot: slot_of(&declared.slot),
@@ -179,7 +175,7 @@ impl ScriptedProvider {
             later_discount: declared.later_discount.filter(|discount| (0.0..=1.0).contains(discount)),
             prices: declared.prices,
             owns: declared.owns.iter().map(|prefix| intern(prefix)).collect(),
-            makers: declared.makers.iter().map(|(word, logo)| (intern(word), intern(logo))).collect(),
+            makers: declared.makers.iter().map(|(word, logo)| (intern(word), intern(&logo_of(root, &folder, logo)))).collect(),
             aliases: declared.aliases.into_iter().map(|(short, full)| (short, intern(&full))).collect(),
             search_price: declared.search_price.filter(|usd| *usd >= 0.0).map(|usd| (usd * 1_000_000.0).round() as u64),
         })
@@ -268,9 +264,6 @@ impl Provider for ScriptedProvider {
     }
     fn logo(&self) -> &'static str {
         self.logo
-    }
-    fn vendor(&self) -> &'static str {
-        self.vendor
     }
     fn access(&self) -> Access {
         self.access

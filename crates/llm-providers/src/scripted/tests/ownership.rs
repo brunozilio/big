@@ -38,16 +38,26 @@ fn short_names_and_the_small_model_are_what_each_provider_declares() {
 
 #[test]
 fn the_logo_of_a_model_is_its_declared_maker_whatever_account_serves_it() {
+    let file = |path: &str| {
+        let bytes = content::bytes_in(None, &format!("providers/{path}")).unwrap_or_default();
+        String::from_utf8_lossy(&bytes).into_owned()
+    };
+    let (claude, openai, google, grok) =
+        (file("claude/logo.svg"), file("chatgpt/openai.svg"), file("antigravity/google.svg"), file("grok/logo.svg"));
+    assert!([&claude, &openai, &google, &grok].iter().all(|svg| svg.starts_with("<svg")));
     for (model, logo) in [
-        ("claude-sonnet-4-5", Some("claude")),
-        ("gpt-5", Some("openai")),
-        ("gpt-5-codex", Some("openai")),
-        ("o3-mini", Some("openai")),
-        ("grok-4", Some("grok")),
-        ("gemini-3-pro", Some("google")),
-        ("us.anthropic.claude-opus-4", Some("claude")),
+        ("claude-sonnet-4-5", Some(&claude)),
+        ("gpt-5", Some(&openai)),
+        ("gpt-5-codex", Some(&openai)),
+        ("o3-mini", Some(&openai)),
+        ("grok-4", Some(&grok)),
+        ("gemini-3-pro", Some(&google)),
+        ("us.anthropic.claude-opus-4", Some(&claude)),
         ("auto-kiro", None),
     ] {
-        assert_eq!(crate::maker(model), logo, "{model}");
+        assert_eq!(crate::maker(model), logo.map(String::as_str), "{model}");
     }
+    let kiro = domain::ModelProvider::new("kiro-subscription");
+    assert_eq!(crate::logo("auto-kiro", kiro), provider("kiro-subscription").logo());
+    assert_eq!(crate::logo("us.anthropic.claude-opus-4", kiro), claude);
 }

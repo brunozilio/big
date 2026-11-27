@@ -27,6 +27,10 @@ pub fn maker(model: &str) -> Option<&'static str> {
         .map(|(_, logo)| *logo)
 }
 
+pub fn logo(model: &str, served: domain::ModelProvider) -> &'static str {
+    maker(model).or_else(|| crate::providers::find(served).map(|provider| provider.logo())).unwrap_or_default()
+}
+
 pub fn priced(provider: &dyn Provider, model: &str, prompt_tokens: u64, cache: Cache) -> Option<TokenRates> {
     crate::prices::overridden(provider.id(), model, prompt_tokens)
         .or_else(|| provider.prices().rates(model, prompt_tokens, cache))

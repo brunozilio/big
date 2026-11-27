@@ -49,7 +49,6 @@ export function provider() {
     name: "Claude Subscription",
     label: "Claude",
     logo: "logo.svg",
-    vendor: "anthropic",
     access: "browser",
     rank: 20,
     slot: "0x7072_6f76_6964_6572_0000_0000_0000_0005",
@@ -60,7 +59,7 @@ export function provider() {
     prices: ANTHROPIC,
     searchPrice: 0.01,
     owns: ["claude-"],
-    makers: [["claude", "claude"]],
+    makers: [["claude", "logo.svg"]],
     aliases: { sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5", haiku: "claude-haiku-5-5" },
     smallModel: "claude-haiku-5-5",
   };

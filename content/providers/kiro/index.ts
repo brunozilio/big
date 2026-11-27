@@ -20,7 +20,6 @@ export function provider() {
     name: "Kiro Subscription",
     label: "Kiro",
     logo: "logo.svg",
-    vendor: "kiro",
     smallModel: "claude-haiku-4.5",
     access: "browser",
     rank: 70,

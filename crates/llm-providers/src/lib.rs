@@ -18,7 +18,7 @@ pub mod testing;
 pub mod transcript;
 pub mod web_search;
 
-pub use owners::{EFFORTS, efforts, later_discount, maker, owner, owns, priced, serves};
+pub use owners::{EFFORTS, efforts, later_discount, logo, maker, owner, owns, priced, serves};
 
 use domain::{Access, ModelOption};
 use serde_json::Value;
@@ -55,7 +55,6 @@ pub trait Provider: Sync {
     fn logo(&self) -> &'static str {
         ""
     }
-    fn vendor(&self) -> &'static str;
     fn access(&self) -> Access;
     fn rank(&self) -> u8;
     fn slot(&self) -> u128;

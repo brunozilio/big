@@ -48,7 +48,6 @@ export function provider() {
     name: "GitHub Copilot Subscription",
     label: "GitHub Copilot",
     logo: "logo.svg",
-    vendor: "github",
     access: "code",
     rank: 50,
     slot: "0x7072_6f76_6964_6572_0000_0000_0000_0006",

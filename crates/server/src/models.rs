@@ -20,17 +20,12 @@ pub fn listing(models: &[app::Model]) -> Value {
         return json!({ "models": [], "default": null });
     }
     let listed = models.iter().map(|model| {
-        let provider = model.provider.id();
         json!({
-            "id": model.id, "name": model.label, "provider": provider, "logo": logo_of(&model.id, provider),
+            "id": model.id, "name": model.label, "provider": model.provider.id(), "logo": app::logo(&model.id, model.provider),
             "efforts": app::efforts(model), "fast": false,
         })
     });
     json!({ "models": listed.collect::<Vec<_>>(), "default": models.first().map(|model| &model.id) })
-}
-
-pub fn logo_of(model: &str, provider: &str) -> String {
-    app::maker(model).map_or_else(|| provider.trim_end_matches("-subscription").to_owned(), str::to_owned)
 }
 
 fn unknown_effort() -> Spoken {
@@ -107,7 +102,7 @@ mod tests {
         let listed = listing(&[native]);
         assert_eq!(listed["models"][0]["id"], "kiro-subscription:auto");
         assert_eq!(listed["models"][0]["provider"], "kiro-subscription");
-        assert_eq!(listed["models"][0]["logo"], "kiro");
+        assert!(listed["models"][0]["logo"].as_str().is_some_and(|logo| logo.starts_with("<svg")), "{listed}");
     }
 
     #[test]
@@ -119,18 +114,3 @@ mod tests {
     }
 }
 
-#[cfg(test)]
-mod logo_tests {
-    use super::logo_of;
-
-    #[test]
-    fn the_logo_is_the_maker_of_the_model_whatever_account_serves_it() {
-        assert_eq!(logo_of("claude-sonnet-4-5", "copilot-subscription"), "claude");
-        assert_eq!(logo_of("gpt-5", "copilot-subscription"), "openai");
-        assert_eq!(logo_of("gpt-5-codex", "openai-subscription"), "openai");
-        assert_eq!(logo_of("grok-4", "grok-subscription"), "grok");
-        assert_eq!(logo_of("gemini-3-pro", "antigravity-subscription"), "google");
-        assert_eq!(logo_of("us.anthropic.claude-opus-4", "kiro-subscription"), "claude");
-        assert_eq!(logo_of("auto-kiro", "kiro-subscription"), "kiro");
-    }
-}

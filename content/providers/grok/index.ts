@@ -38,7 +38,6 @@ export function provider() {
     name: "Grok Subscription",
     label: "Grok",
     logo: "logo.svg",
-    vendor: "xai",
     access: "code",
     rank: 60,
     slot: "0x7072_6f76_6964_6572_0000_0000_0000_0008",
@@ -47,7 +46,7 @@ export function provider() {
     path: "/responses",
     prices: XAI,
     owns: ["grok"],
-    makers: [["grok", "grok"]],
+    makers: [["grok", "logo.svg"]],
   };
 }
 

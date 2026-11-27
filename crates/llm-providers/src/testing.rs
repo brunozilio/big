@@ -7,25 +7,23 @@ use super::{Call, Config, Page, Provider, ProviderError};
 pub struct Stand {
     pub id: &'static str,
     pub name: &'static str,
-    pub vendor: &'static str,
     pub access: Access,
     pub rank: u8,
 }
 
-pub static KEYED: Stand = Stand { id: "keyed", name: "Keyed", vendor: "keyed", access: Access::Key, rank: 200 };
+pub static KEYED: Stand = Stand { id: "keyed", name: "Keyed", access: Access::Key, rank: 200 };
 pub static KEYED_TOO: Stand =
-    Stand { id: "keyed-too", name: "Keyed Too", vendor: "keyed-too", access: Access::Key, rank: 201 };
+    Stand { id: "keyed-too", name: "Keyed Too", access: Access::Key, rank: 201 };
 pub static BROWSER: Stand = Stand {
     id: "browser-sub",
     name: "Browser Subscription",
-    vendor: "browser-sub",
     access: Access::Browser,
     rank: 202,
 };
 pub static DEVICE: Stand =
-    Stand { id: "device-sub", name: "Device Subscription", vendor: "device-sub", access: Access::Code, rank: 203 };
+    Stand { id: "device-sub", name: "Device Subscription", access: Access::Code, rank: 203 };
 pub static FAMILY: Stand =
-    Stand { id: "family-key", name: "Family Key", vendor: "family-key", access: Access::Key, rank: 204 };
+    Stand { id: "family-key", name: "Family Key", access: Access::Key, rank: 204 };
 
 const FAMILY_OWNS: &[&str] = &["claude-"];
 const FAMILY_ALIASES: [(&str, &str); 3] =
@@ -47,9 +45,6 @@ impl Provider for Stand {
     }
     fn name(&self) -> &'static str {
         self.name
-    }
-    fn vendor(&self) -> &'static str {
-        self.vendor
     }
     fn access(&self) -> Access {
         self.access
