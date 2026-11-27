@@ -6,6 +6,8 @@ export type Action = {
   output_schema: Schema;
   writes: boolean;
   idempotent: "native" | "lookup";
+  description?: string;
+  secret?: boolean;
 };
 
 type Fields = [string, string | string[]][];
@@ -19,21 +21,85 @@ export function object(required: Fields, optional: Fields = []): Schema {
 export const list = (): Schema => ({ type: "array" });
 const listOf = (items: Schema): Schema => ({ type: "array", items });
 
-export const read = (name: string, input: Schema, output: Schema): Action => ({
-  name,
-  input_schema: input,
-  output_schema: output,
-  writes: false,
-  idempotent: "native",
-});
+const DESCRIPTIONS: Record<string, string> = {
+  "tracker.create_issue": "Create an issue in the tracker and return its key and link.",
+  "tracker.issue": "Read one issue: title, status, description and link.",
+  "tracker.comment": "Add a comment to an issue.",
+  "tracker.statuses": "List the statuses an issue can be in, for a project.",
+  "tracker.transition": "Move an issue to another status.",
+  "tracker.schema": "Describe the tracker's issue types and fields for a project.",
+  "tracker.set_impediment": "Flag an issue as blocked, or clear the flag, with a reason.",
+  "tracker.search": "Search issues by text, project or status; page with the cursor.",
+  "tracker.projects": "List the tracker's projects, optionally matching a query.",
+  "tracker.fields": "List the fields an issue type has in a project.",
+  "tracker.update_issue": "Change an issue's title, description or fields.",
+  "tracker.link_issues": "Link one issue to another.",
+  "tracker.attach": "Attach files to an issue.",
+  "code.open_pull_request": "Open a pull request from a branch.",
+  "code.pull_request": "Read a pull request: title, state, branches and link.",
+  "code.files_diff": "List the files a pull request changes, with their diffs.",
+  "code.review_comments": "List the review comments on a pull request.",
+  "code.submit_review": "Approve a pull request, request changes, or comment on it.",
+  "code.resolve_thread": "Mark a review thread as resolved.",
+  "code.merge": "Merge a pull request.",
+  "code.repos": "List the repositories the connection can see, optionally matching a query.",
+  "code.pull_requests": "List the open pull requests of a repository.",
+  "code.branches": "List a repository's branches.",
+  "code.merge_branches": "Merge one branch into another.",
+  "code.git_credentials": "Give git credentials for a repository address.",
+  "pipelines.runs": "List the pipeline runs, newest first.",
+  "pipelines.run": "Read one pipeline run with its jobs and their states.",
+  "pipelines.job_log": "Read the log of one job of a run.",
+  "pipelines.pending_deployments": "List the deployments of a run waiting for approval.",
+  "pipelines.review_deployment": "Approve or reject a run's pending deployments.",
+  "cloud.identity": "Give cloud credentials for an account and role.",
+  "cloud.accounts_and_roles": "List the cloud accounts and the roles the person can take in each.",
+  "cloud.last_deployment": "Tell which version of a service is deployed in an environment, and when.",
+  "changes.create": "Open a change request for a deploy window.",
+  "changes.update": "Change a change request's fields.",
+  "changes.get": "Read a change request and its status.",
+  "changes.cancel": "Cancel a change request.",
+  "tests.create_case": "Create a test case linked to an issue.",
+  "tests.cases": "List the test cases linked to an issue.",
+  "tests.create_cycle": "Create a test cycle.",
+  "tests.record": "Record a test case's result in a cycle.",
+  "tests.finish_cycle": "Close a test cycle.",
+  "tests.projects": "List the test projects, optionally matching a query.",
+  "security.status": "Tell whether a project's last security scan passed, and when it ran.",
+  "security.projects": "List the security projects, optionally matching a query.",
+  "security.findings": "List a project's security findings.",
+  "mcp.tools": "List the tools the connected MCP server offers.",
+  "quality.report": "Read a project's code quality report.",
+  "email.list_messages": "List email messages in a folder, optionally matching a query.",
+  "email.message": "Read one email message.",
+  "email.send": "Send an email.",
+  "email.reply": "Reply to an email message.",
+  "email.list_events": "List calendar events between two moments.",
+  "email.create_event": "Create a calendar event.",
+  "files.list": "List the files in a folder.",
+  "files.search": "Search files by text.",
+  "files.download": "Read a file's content.",
+  "files.sites": "List the sites whose files the connection can reach.",
+  "messaging.list_chats": "List the chats the person is in.",
+  "messaging.list_messages": "List the latest messages of a chat.",
+  "messaging.send_message": "Send a message to a chat.",
+  "design.frame": "Read a design frame by its link.",
+  "assistant.ask": "Ask the connected assistant a question.",
+};
 
-export const write = (name: string, input: Schema, output: Schema, idempotent: "native" | "lookup"): Action => ({
-  name,
-  input_schema: input,
-  output_schema: output,
-  writes: true,
-  idempotent,
-});
+const SECRET = new Set(["code.git_credentials", "cloud.identity"]);
+
+function described(action: Action): Action {
+  const description = action.description ?? DESCRIPTIONS[action.name];
+  const shown = description ? { ...action, description } : action;
+  return SECRET.has(action.name) ? { ...shown, secret: true } : shown;
+}
+
+export const read = (name: string, input: Schema, output: Schema): Action =>
+  described({ name, input_schema: input, output_schema: output, writes: false, idempotent: "native" });
+
+export const write = (name: string, input: Schema, output: Schema, idempotent: "native" | "lookup"): Action =>
+  described({ name, input_schema: input, output_schema: output, writes: true, idempotent });
 
 const issueOutput = () =>
   object(
@@ -409,7 +475,8 @@ export function bindingField(key: string, label: string, required = false, skipp
 
 export function options(capability: string): Action {
   const option = object([["value", "string"], ["label", "string"]], [["detail", "string"]]);
-  return read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"], ["names", "array"], ["page", "integer"]]), listOf(option));
+  const action = read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"], ["names", "array"], ["page", "integer"]]), listOf(option));
+  return { ...action, description: `List the choices for a ${capability} field, optionally matching a query.` };
 }
 
 export type Option = { value: string; label: string };

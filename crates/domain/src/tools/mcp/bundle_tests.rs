@@ -54,8 +54,11 @@ fn several_servers_answer_as_one_and_each_call_reaches_its_owner() {
 #[test]
 fn a_single_server_keeps_its_own_name() {
     let (browser, _) = part("browser", &["navigate"]);
-    let bundle = McpBundle::new("all", vec![browser]);
-    assert_eq!(ask(&bundle, "initialize", json!({}))["result"]["serverInfo"]["name"], "browser");
+    let bundle = McpBundle::new("all", vec![browser]).instructed("browser: drive the browser.");
+    let hello = ask(&bundle, "initialize", json!({}));
+    assert_eq!(hello["result"]["serverInfo"]["name"], "browser");
+    assert_eq!(hello["result"]["instructions"], "browser: drive the browser.");
+    assert!(ask(&bundle, "tools/list", Value::Null)["result"].get("instructions").is_none());
 }
 
 #[test]

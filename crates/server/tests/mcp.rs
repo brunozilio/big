@@ -135,3 +135,27 @@ async fn the_content_declares_the_resources_and_a_connection_s_actions_become_to
     let (_, _, answer) = asked(&world, &connectors, Some(&token), None, &issue).await;
     assert_eq!(answer["result"]["isError"], json!(false), "{answer}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_resource_gets_what_it_needs_from_the_headers_and_says_what_it_is() {
+    let world = World::new().await;
+    let list = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+    assert_eq!(asked(&world, &[], Some("wrong"), None, &list).await.0, StatusCode::UNAUTHORIZED);
+    let token = token(&world);
+    let alone = [("mcp-resources", "connection")];
+    let (status, _, refused) = asked(&world, &alone, Some(&token), None, &list).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(refused["error"]["message"].as_str().unwrap_or_default().contains("mcp-connection"), "{refused}");
+    let unknown = [("mcp-resources", "connection"), ("mcp-connection", "nope")];
+    assert_eq!(asked(&world, &unknown, Some(&token), None, &list).await.0, StatusCode::BAD_REQUEST);
+    let chosen = [("mcp-resources", "connection"), ("mcp-connection", "Fake")];
+    let (status, _, tools) = asked(&world, &chosen, Some(&token), None, &list).await;
+    assert_eq!(status, StatusCode::OK, "{tools}");
+    assert!(tools["result"]["tools"].as_array().is_some_and(|tools| !tools.is_empty()), "{tools}");
+    let initialize = json!({ "jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {} });
+    let (_, _, hello) = asked(&world, &chosen, Some(&token), None, &initialize).await;
+    let instructions = hello["result"]["instructions"].as_str().unwrap_or_default();
+    assert!(instructions.starts_with("- connection: "), "{hello}");
+    let (_, status) = world.send(Method::GET, "/api/browser", None).await;
+    assert_eq!(status["mcp"]["headers"]["mcp-resources"], "browser", "{status}");
+}

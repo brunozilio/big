@@ -92,3 +92,15 @@ fn connectors_load_together_in_the_listed_order() {
     assert!(!together.is_empty());
     assert_eq!(together, one_by_one);
 }
+
+#[test]
+fn every_shipped_action_says_what_it_does_and_credentials_are_kept_secret() {
+    for provider in discover() {
+        let descriptor = provider.descriptor();
+        for action in &descriptor.actions {
+            assert!(!action.description.trim().is_empty(), "{}: {} has no description", descriptor.key, action.name);
+            let gives_credentials = matches!(action.name.as_str(), "code.git_credentials" | "cloud.identity");
+            assert_eq!(action.secret, gives_credentials, "{}: {}", descriptor.key, action.name);
+        }
+    }
+}

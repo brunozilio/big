@@ -25,6 +25,10 @@ pub struct ActionSpec {
     pub writes: bool,
     #[serde(default = "native")]
     pub idempotent: Idempotency,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub description: String,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub secret: bool,
 }
 
 fn native() -> Idempotency {
@@ -39,11 +43,26 @@ impl ActionSpec {
             output_schema,
             writes: false,
             idempotent: Idempotency::Native,
+            description: String::new(),
+            secret: false,
         }
     }
 
     pub fn write(name: &str, input_schema: Value, output_schema: Value, idempotent: Idempotency) -> ActionSpec {
-        ActionSpec { name: name.to_owned(), input_schema, output_schema, writes: true, idempotent }
+        ActionSpec {
+            name: name.to_owned(),
+            input_schema,
+            output_schema,
+            writes: true,
+            idempotent,
+            description: String::new(),
+            secret: false,
+        }
+    }
+
+    pub fn secret(mut self) -> ActionSpec {
+        self.secret = true;
+        self
     }
 
     pub fn capability(&self) -> Option<Capability> {

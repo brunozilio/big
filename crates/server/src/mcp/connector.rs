@@ -16,14 +16,28 @@ pub struct Wanted<'a> {
     pub provider: &'a str,
     pub actions: &'a [String],
     pub writes: bool,
+    pub connection: Option<&'a str>,
 }
 
 impl Wanted<'_> {
+    fn reaches(&self, record: &ConnectionRecord) -> bool {
+        let provider = self.provider == ANY || record.provider == self.provider;
+        let chosen = self.connection.is_none_or(|chosen| {
+            record.id == chosen
+                || record.label.trim().eq_ignore_ascii_case(chosen.trim())
+                || slug(&record.label) == slug(chosen)
+        });
+        provider && chosen
+    }
+
     fn takes(&self, record: &ConnectionRecord, action: &ActionSpec) -> bool {
         let named = |given: &String| action.name == *given || action.name.starts_with(&format!("{given}."));
         let offered =
             Capability::of_action(&action.name).is_some_and(|capability| connection(record).offers(&capability));
-        offered && (self.writes || !action.writes) && (self.actions.is_empty() || self.actions.iter().any(named))
+        offered
+            && !action.secret
+            && (self.writes || !action.writes)
+            && (self.actions.is_empty() || self.actions.iter().any(named))
     }
 }
 
@@ -45,20 +59,23 @@ fn tool_name(label: &str, action: &str) -> String {
 }
 
 fn definition(name: &str, provider: &str, record: &ConnectionRecord, action: &ActionSpec) -> Value {
+    let what = action.description.trim();
+    let what = if what.is_empty() { format!("Run `{}`.", action.name) } else { what.to_owned() };
     let changes = if action.writes { " It changes data there." } else { "" };
     let schema =
         if action.input_schema.is_object() { action.input_schema.clone() } else { json!({ "type": "object" }) };
     json!({
         "name": name,
-        "description": format!("Run `{}` on the {provider} connection \"{}\".{changes}", action.name, record.label),
+        "description": format!("{what} Through the {provider} connection \"{}\".{changes}", record.label),
         "inputSchema": schema,
+        "annotations": { "readOnlyHint": !action.writes },
     })
 }
 
 fn tools_of(hub: &Connectors, records: Vec<ConnectionRecord>, wanted: &Wanted<'_>) -> Vec<Tool> {
     let mut tools = Vec::new();
     for record in records {
-        if wanted.provider != ANY && record.provider != wanted.provider {
+        if !wanted.reaches(&record) {
             continue;
         }
         let Ok(descriptor) = hub.descriptor(&ProviderKey::from(record.provider.as_str())) else { continue };
@@ -137,15 +154,42 @@ mod tests {
         let create = ActionSpec::write("tracker.create_issue", json!({}), json!({}), Idempotency::Lookup);
         let diff = ActionSpec::read("code.files_diff", json!({}), json!({}));
         let none: [String; 0] = [];
-        let reading = Wanted { provider: "*", actions: &none, writes: false };
+        let reading = Wanted { provider: "*", actions: &none, writes: false, connection: None };
         assert!(reading.takes(&record(), &issue));
         assert!(!reading.takes(&record(), &create));
         assert!(!reading.takes(&record(), &diff));
         let tracker = ["tracker".to_owned()];
-        let writing = Wanted { provider: "jira", actions: &tracker, writes: true };
+        let writing = Wanted { provider: "jira", actions: &tracker, writes: true, connection: None };
         assert!(writing.takes(&record(), &create));
+        let secret = ActionSpec::read("tracker.token", json!({}), json!({})).secret();
+        assert!(!writing.takes(&record(), &secret));
         let only = ["tracker.issue".to_owned()];
-        assert!(!Wanted { provider: "jira", actions: &only, writes: true }.takes(&record(), &create));
+        assert!(!Wanted { provider: "jira", actions: &only, writes: true, connection: None }.takes(&record(), &create));
+    }
+
+    #[test]
+    fn a_connection_is_chosen_by_id_name_or_slug() {
+        let chosen = |connection: &str| {
+            let wanted = Wanted { provider: "*", actions: &[], writes: true, connection: Some(connection) };
+            wanted.reaches(&ConnectionRecord { label: "Jira Prod".into(), ..record() })
+        };
+        assert!(chosen("c1") && chosen(" jira prod ") && chosen("jira-prod"));
+        assert!(!chosen("jira"));
+        let other = Wanted { provider: "github", actions: &[], writes: true, connection: None };
+        assert!(!other.reaches(&record()));
+    }
+
+    #[test]
+    fn the_action_s_own_description_leads_and_writes_are_flagged() {
+        let mut issue = ActionSpec::read("tracker.issue", json!({ "type": "object" }), json!({}));
+        let tool = definition("jira_tracker_issue", "Jira", &record(), &issue);
+        assert_eq!(tool["description"], "Run `tracker.issue`. Through the Jira connection \"Jira\".");
+        assert_eq!(tool["annotations"]["readOnlyHint"], true);
+        issue.description = "Read one issue.".into();
+        issue.writes = true;
+        let tool = definition("jira_tracker_issue", "Jira", &record(), &issue);
+        assert_eq!(tool["description"], "Read one issue. Through the Jira connection \"Jira\". It changes data there.");
+        assert_eq!(tool["annotations"]["readOnlyHint"], false);
     }
 
     #[test]

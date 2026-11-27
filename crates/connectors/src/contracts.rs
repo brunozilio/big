@@ -299,7 +299,8 @@ pub fn code() -> Vec<ActionSpec> {
             code::GIT_CREDENTIALS,
             object(&[("url", "string")], &[]),
             object(&[("username", "string"), ("password", "string")], &[]),
-        ),
+        )
+        .secret(),
     ]
 }
 
@@ -370,7 +371,8 @@ pub fn cloud() -> Vec<ActionSpec> {
                 ],
             ),
             credentials,
-        ),
+        )
+        .secret(),
         ActionSpec::read(
             cloud::ACCOUNTS_AND_ROLES,
             json!({ "type": "object", "properties": {} }),

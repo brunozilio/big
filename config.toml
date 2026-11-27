@@ -241,6 +241,7 @@ token_file = "mcp.token"
 command = "mcp"
 resources_header = "mcp-resources"
 project_header = "mcp-project"
+connection_header = "mcp-connection"
 
 [retry]
 max = 5

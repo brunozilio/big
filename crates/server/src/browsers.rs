@@ -71,16 +71,16 @@ fn status_of(ctx: &Ctx, person: &Principal) -> ApiResult<Value> {
         "server": browser::server_name(),
         "browsers": browsers,
         "extensionFolder": folder(&ctx.backend.data),
-        "mcp": {
+        "mcp": crate::mcp::served_by(crate::mcp::BROWSER).map(|resource| json!({
             "url": format!("http://127.0.0.1:{}{}", ctx.port, crate::mcp::route()),
             "tokenFile": crate::mcp::token_file(&ctx.backend.data),
-            "headers": { crate::mcp::resources_header(): crate::mcp::BROWSER },
+            "headers": { crate::mcp::resources_header(): resource },
             "command": [
                 std::env::current_exe().unwrap_or_default(),
                 PathBuf::from(brand::mcp::COMMAND.trim()),
-                PathBuf::from(crate::mcp::BROWSER),
+                PathBuf::from(&resource),
             ],
-        },
+        })),
         "tools": browser::tools().iter().map(|tool| tool["name"].clone()).collect::<Vec<Value>>(),
     }))
 }

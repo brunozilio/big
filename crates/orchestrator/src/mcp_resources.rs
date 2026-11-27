@@ -30,6 +30,8 @@ pub struct Resource {
     pub name: String,
     #[serde(default)]
     pub description: String,
+    #[serde(default)]
+    pub needs: Vec<String>,
     pub serves: Vec<Serve>,
 }
 
@@ -68,7 +70,10 @@ mod tests {
     #[test]
     fn the_built_in_content_declares_what_each_resource_serves() {
         let declared = declared_in(None);
-        assert_eq!(names(&declared), "browser, memory, memory-read, connectors");
+        assert_eq!(names(&declared), "browser, memory, memory-read, connectors, connection");
+        assert_eq!(declared[1].needs, ["project"]);
+        assert_eq!(declared[4].needs, ["connection"]);
+        assert_eq!(declared[4].serves[0], Serve::Connector { connector: "*".into(), actions: vec![], writes: true });
         let read = &declared[2].serves[0];
         assert_eq!(read, &Serve::Host { host: "memory".into(), tools: vec!["memory_search".into()] });
         let connectors = &declared[3].serves[0];

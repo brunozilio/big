@@ -32,6 +32,10 @@ fn project_header() -> &'static str {
     brand::mcp::PROJECT_HEADER.trim()
 }
 
+fn connection_header() -> &'static str {
+    brand::mcp::CONNECTION_HEADER.trim()
+}
+
 pub fn token_file(data: &Path) -> PathBuf {
     data.join(brand::mcp::TOKEN_FILE.trim())
 }
@@ -107,19 +111,34 @@ fn project(headers: &HeaderMap) -> Result<PathBuf, Refusal> {
     let folder =
         header(headers, project_header()).map(PathBuf::from).filter(|folder| folder.is_absolute() && folder.is_dir());
     folder.ok_or_else(|| {
-        let told = format!("The memory needs the {} header with the project's absolute folder.", project_header());
+        let told = format!("This resource needs the {} header with the project's absolute folder.", project_header());
         (StatusCode::BAD_REQUEST, told)
     })
+}
+
+fn connection(headers: &HeaderMap) -> Result<&str, Refusal> {
+    header(headers, connection_header()).ok_or_else(|| {
+        let told = format!("This resource needs the {} header with a connection's name or id.", connection_header());
+        (StatusCode::BAD_REQUEST, told)
+    })
+}
+
+pub fn served_by(host: &str) -> Option<String> {
+    resources::declared()
+        .into_iter()
+        .find(|resource| resources::serves_only(resource, host))
+        .map(|resource| resource.name)
 }
 
 fn bundle(ctx: &Ctx, headers: &HeaderMap, id: &str) -> Result<McpBundle, Refusal> {
     let asked = resources::Asked { ctx, headers, id, runtime: tokio::runtime::Handle::current() };
     let declared = resources::declared();
+    let wanted = resources::wanted(header(headers, resources_header()).unwrap_or_default(), &declared)?;
     let mut parts = Vec::new();
-    for resource in resources::wanted(header(headers, resources_header()).unwrap_or_default(), &declared)? {
+    for resource in &wanted {
         parts.extend(asked.parts(resource)?);
     }
-    Ok(McpBundle::new(brand::COMMAND.replace('-', "_"), parts))
+    Ok(McpBundle::new(brand::COMMAND.replace('-', "_"), parts).instructed(resources::described(&wanted)))
 }
 
 pub async fn post(State(ctx): State<Ctx>, headers: HeaderMap, body: Bytes) -> Response {

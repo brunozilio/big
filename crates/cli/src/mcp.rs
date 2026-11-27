@@ -16,6 +16,8 @@ pub struct Args {
     resources: Vec<String>,
     #[arg(long, help = "The project folder whose memory to use (default: the current folder)")]
     project: Option<PathBuf>,
+    #[arg(long, help = "The connection to use, by name or id, for resources that need one")]
+    connection: Option<String>,
 }
 
 #[derive(Debug)]
@@ -25,6 +27,7 @@ struct Bridge {
     wait: Duration,
     resources: String,
     project: String,
+    connection: Option<String>,
 }
 
 fn wait() -> Duration {
@@ -74,6 +77,9 @@ impl Bridge {
             (brand::mcp::RESOURCES_HEADER.trim(), self.resources.as_str()),
             (brand::mcp::PROJECT_HEADER.trim(), self.project.as_str()),
         ];
+        if let Some(connection) = &self.connection {
+            headers.push((brand::mcp::CONNECTION_HEADER.trim(), connection.as_str()));
+        }
         let session = self.session.clone().unwrap_or_default();
         if !session.is_empty() {
             headers.push(("Mcp-Session-Id", session.as_str()));
@@ -106,7 +112,14 @@ impl Bridge {
         let project = args.project.or_else(|| std::env::current_dir().ok()).unwrap_or_default();
         let project = std::path::absolute(&project).unwrap_or(project);
         let resources = args.resources.iter().map(|name| name.trim()).collect::<Vec<_>>().join(",");
-        Self { data, session: None, wait: wait(), resources, project: project.display().to_string() }
+        Self {
+            data,
+            session: None,
+            wait: wait(),
+            resources,
+            project: project.display().to_string(),
+            connection: args.connection,
+        }
     }
 }
 
@@ -153,9 +166,14 @@ mod tests {
     #[test]
     fn without_the_app_running_each_request_is_told_so() {
         let data = tempfile::tempdir().expect("data");
-        let args = Args { resources: vec!["memory".into(), "browser".into()], project: Some("/repo".into()) };
+        let args = Args {
+            resources: vec!["memory".into(), "browser".into()],
+            project: Some("/repo".into()),
+            connection: Some("Jira Prod".into()),
+        };
         let mut bridge = Bridge::new(args, data.path().to_path_buf());
         assert_eq!((bridge.resources.as_str(), bridge.project.as_str()), ("memory,browser", "/repo"));
+        assert_eq!(bridge.connection.as_deref(), Some("Jira Prod"));
         let answer = bridge.relay(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#).expect("reply");
         assert_eq!(answer["id"], 1);
         assert!(answer["error"]["message"].as_str().unwrap_or_default().contains("not running"));

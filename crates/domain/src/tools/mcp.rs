@@ -81,11 +81,32 @@ impl Eq for LocalMcp {}
 pub struct McpBundle {
     server: String,
     parts: Vec<LocalMcp>,
+    instructions: String,
 }
 
 impl McpBundle {
     pub fn new(server: impl Into<String>, parts: Vec<LocalMcp>) -> Self {
-        Self { server: server.into(), parts }
+        Self { server: server.into(), parts, instructions: String::new() }
+    }
+
+    pub fn instructed(mut self, instructions: impl Into<String>) -> Self {
+        self.instructions = instructions.into();
+        self
+    }
+
+    fn answer(&self, message: &Value) -> Option<Value> {
+        if let [only] = self.parts.as_slice() {
+            return only.endpoint.handle(message);
+        }
+        match message["method"].as_str().unwrap_or_default() {
+            "tools/call" => self.call(message),
+            _ => respond(
+                message,
+                &self.server,
+                || self.tools().into_iter().map(|(_, tool)| tool).collect(),
+                |name, _| Err((-32602, format!("unknown tool: {name}"))),
+            ),
+        }
     }
 
     fn tools_of(part: &LocalMcp) -> Vec<Value> {
@@ -163,7 +184,7 @@ impl McpEndpoint for McpPicked {
 
 impl std::fmt::Debug for McpBundle {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("McpBundle").field("server", &self.server).field("parts", &self.parts).finish()
+        f.debug_struct("McpBundle").field("server", &self.server).field("parts", &self.parts).finish_non_exhaustive()
     }
 }
 
@@ -175,18 +196,11 @@ impl McpEndpoint for McpBundle {
             }
             return None;
         }
-        if let [only] = self.parts.as_slice() {
-            return only.endpoint.handle(message);
+        let mut reply = self.answer(message)?;
+        if message["method"] == "initialize" && !self.instructions.is_empty() && reply["result"].is_object() {
+            reply["result"]["instructions"] = json!(self.instructions);
         }
-        match message["method"].as_str().unwrap_or_default() {
-            "tools/call" => self.call(message),
-            _ => respond(
-                message,
-                &self.server,
-                || self.tools().into_iter().map(|(_, tool)| tool).collect(),
-                |name, _| Err((-32602, format!("unknown tool: {name}"))),
-            ),
-        }
+        Some(reply)
     }
 }
 
