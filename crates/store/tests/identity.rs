@@ -90,3 +90,14 @@ fn what_nobody_claimed_belongs_to_the_local_user() {
     assert_eq!(store.claim("session", "s1", "u-ana").expect("claim"), "u-ana");
     assert_eq!(store.claim("session", "s1", "u-bia").expect("claim"), "u-ana");
 }
+
+#[test]
+fn each_person_keeps_their_own_language_over_the_shared_one() {
+    let store = store();
+    store.set_branding_for("local", "language", &serde_json::json!("en")).expect("set");
+    store.set_branding_for("u-ana", "language", &serde_json::json!("es")).expect("set");
+    assert_eq!(store.language().expect("language"), domain::Language::English);
+    assert_eq!(store.language_for("u-ana").expect("language"), domain::Language::Spanish);
+    assert_eq!(store.language_for("u-bia").expect("language"), domain::Language::English);
+    assert!(!store.branding().expect("branding").keys().any(|key| key.starts_with("user.")));
+}

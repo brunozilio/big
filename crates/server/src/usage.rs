@@ -45,7 +45,7 @@ fn first_second(today: &Zoned, days: i64) -> u64 {
     u64::try_from(start).unwrap_or(0)
 }
 
-fn gather(shared: &Shared, days: i64) -> ApiResult<Value> {
+fn gather(shared: &Shared, days: i64, only: Option<&str>) -> ApiResult<Value> {
     let now = Zoned::now();
     let zone = now.time_zone().clone();
     let window = window(now.date(), days);
@@ -57,7 +57,11 @@ fn gather(shared: &Shared, days: i64) -> ApiResult<Value> {
     let sessions = client.sessions().map_err(ApiError::failed)?;
     let mut cache = held(&shared.usage);
     cache.keep_only(&sessions);
-    for listed in sessions.iter().filter(|listed| listed.updated == 0 || listed.updated >= start) {
+    let theirs = |session: &str| {
+        only.is_none_or(|owner| crate::scope::session_owner(shared, session).is_some_and(|found| found == owner))
+    };
+    let recent = sessions.iter().filter(|listed| listed.updated == 0 || listed.updated >= start);
+    for listed in recent.filter(|listed| theirs(&listed.session.0)) {
         let spent = cache.spent(listed, || match client.history(&listed.session, &listed.cwd) {
             Ok(records) => Some(records),
             Err(error) => {
@@ -155,10 +159,17 @@ pub fn listing(
     })
 }
 
-pub async fn report(State(ctx): State<Ctx>, Query(query): Query<HashMap<String, String>>) -> ApiResult<Response> {
+pub async fn report(
+    State(ctx): State<Ctx>,
+    axum::Extension(person): axum::Extension<domain::principal::Principal>,
+    Query(query): Query<HashMap<String, String>>,
+) -> ApiResult<Response> {
     let shared = Arc::clone(&ctx);
     let days = days_of(&query);
-    let listed = tokio::task::spawn_blocking(move || gather(&shared, days)).await.map_err(ApiError::failed)??;
+    let only = (!crate::scope::is_admin(&person)).then(|| person.owner().to_owned());
+    let listed = tokio::task::spawn_blocking(move || gather(&shared, days, only.as_deref()))
+        .await
+        .map_err(ApiError::failed)??;
     Ok(reply(listed))
 }
 

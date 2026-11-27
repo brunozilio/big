@@ -68,6 +68,8 @@ fn api() -> Router<Ctx> {
             crate::browser_mcp::route(),
             post(crate::browser_mcp::post).get(crate::browser_mcp::other).delete(crate::browser_mcp::ended),
         )
+        .route("/api/admin/people", get(crate::people::list))
+        .route("/api/admin/people/{id}/sessions", delete(crate::people::sign_out))
         .route("/api/live", get(live))
         .route(
             "/api/{*rest}",

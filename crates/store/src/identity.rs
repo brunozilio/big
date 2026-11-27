@@ -16,6 +16,14 @@ pub struct Passkey {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Person {
+    pub principal: Principal,
+    pub created: i64,
+    pub seen: i64,
+    pub sessions: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CodeCheck {
     Matched,
     Wrong,
@@ -99,6 +107,28 @@ impl Store {
             .optional()?)
     }
 
+    pub fn people(&self, now: i64) -> Result<Vec<Person>> {
+        let connection = self.locked();
+        let mut statement = connection.prepare(
+            "SELECT u.id, u.email, u.name, u.created, u.seen,
+                    (SELECT COUNT(*) FROM auth_sessions s WHERE s.user = u.id AND s.expires > ?1)
+             FROM users u ORDER BY u.email",
+        )?;
+        let rows = statement.query_map([now], |row| {
+            Ok(Person {
+                principal: principal(row)?,
+                created: row.get(3)?,
+                seen: row.get(4)?,
+                sessions: row.get(5)?,
+            })
+        })?;
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+    }
+
+    pub fn close_sessions_of(&self, user: &UserId) -> Result<usize> {
+        Ok(self.locked().execute("DELETE FROM auth_sessions WHERE user = ?1", [user.as_str()])?)
+    }
+
     pub fn close_session(&self, token: &str) -> Result<()> {
         self.locked().execute("DELETE FROM auth_sessions WHERE token = ?1", [token])?;
         Ok(())
@@ -120,6 +150,13 @@ impl Store {
             params![email, code, expires],
         )?;
         Ok(())
+    }
+
+    pub fn code_expires(&self, email: &str) -> Result<Option<i64>> {
+        Ok(self
+            .locked()
+            .query_row("SELECT expires FROM auth_codes WHERE email = ?1", [email], |row| row.get(0))
+            .optional()?)
     }
 
     pub fn check_code(&self, email: &str, code: &str, now: i64, most_attempts: i64) -> Result<CodeCheck> {

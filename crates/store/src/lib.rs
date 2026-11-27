@@ -22,7 +22,7 @@ pub use applications::{Application, Binding, Bindings, Choice, Environment, Fiel
 pub use connections::ConnectionRecord;
 pub use error::Error;
 pub use factory::Generation;
-pub use identity::{CodeCheck, Passkey};
+pub use identity::{CodeCheck, Passkey, Person};
 pub use ownership::OwnedIds;
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -73,12 +73,26 @@ fn letter(language: Language, to: &str, code: &str) -> Letter {
     Letter { to: to.to_owned(), subject, body }
 }
 
+pub const RESEND_SECONDS: i64 = 60;
+
+pub fn waits(expires: Option<i64>, now: i64, lasts: i64) -> bool {
+    expires.is_some_and(|expires| now < expires - lasts + RESEND_SECONDS)
+}
+
+fn too_soon(shared: &Shared, email: &str) -> ApiResult<bool> {
+    let soon = waits(shared.backend.store.code_expires(email)?, settings::now(), settings::code_seconds());
+    if soon {
+        tracing::warn!(target: "audit", "auth.code_throttled");
+    }
+    Ok(soon)
+}
+
 pub async fn start(State(ctx): State<Ctx>, Json(asked): Json<Asked>) -> ApiResult<Response> {
     if !settings::offers(Method::Email) {
         return Err(closed());
     }
     let email = normalized_email(&asked.email).ok_or_else(bad_email)?;
-    if admitted(&ctx, &email)? {
+    if admitted(&ctx, &email)? && !too_soon(&ctx, &email)? {
         let code = code()?;
         let expires = settings::now() + settings::code_seconds();
         ctx.backend.store.put_code(&email, &session::hashed(&code), expires)?;
@@ -107,4 +121,17 @@ pub async fn verify(State(ctx): State<Ctx>, Json(answered): Json<Answered>) -> A
     let person = ctx.backend.store.ensure_user(&wanted, settings::now())?;
     let headers = session::signed_in(&ctx, &person)?;
     Ok((headers, json(&person)).into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_new_code_waits_a_minute_after_the_last_one() {
+        let lasts = 600;
+        assert!(waits(Some(1_000 + lasts), 1_030, lasts));
+        assert!(!waits(Some(1_000 + lasts), 1_000 + RESEND_SECONDS, lasts));
+        assert!(!waits(None, 1_000, lasts));
+    }
 }

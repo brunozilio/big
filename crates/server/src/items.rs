@@ -450,6 +450,9 @@ pub async fn create(
     origin.resolve(&ctx, &applications).await?;
     let mut input = input(&ctx, &body, &origin)?;
     input[domain::principal::OWNER_FIELD] = json!(person.owner());
+    if input.get("language").is_none_or(Value::is_null) {
+        input["language"] = json!(ctx.backend.store.language_for(person.owner())?.code());
+    }
     let workflow = workflow(&ctx, &body, &origin)?;
     let shared = std::sync::Arc::clone(&ctx);
     let models =

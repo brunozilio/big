@@ -74,8 +74,8 @@ impl Live {
         self.publish_for(owner, &json!({ "type": "connections", "connections": connections }));
     }
 
-    pub fn branding(&self, branding: Value) {
-        self.publish(&json!({ "type": "branding", "branding": branding }));
+    pub fn branding(&self, owner: &str, branding: Value) {
+        self.publish_for(owner, &json!({ "type": "branding", "branding": branding }));
     }
 
     pub fn subscribe(&self) -> broadcast::Receiver<Told> {

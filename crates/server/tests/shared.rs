@@ -97,7 +97,7 @@ async fn connections_of_the_local_install_are_not_shown_to_signed_in_people() {
 async fn settings_for_everyone_need_an_administrator() {
     let world = shared_world().await;
     let ana = signed(&world, "ana");
-    let (status, body) = send(&world, Some(&ana), Method::PUT, "/api/branding", Some(json!({ "name": "X" }))).await;
+    let (status, body) = send(&world, Some(&ana), Method::PUT, "/api/permissions", Some(json!({}))).await;
     assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
     let (status, _) = send(&world, Some(&ana), Method::GET, "/api/fs/dirs", None).await;
     assert_eq!(status, StatusCode::FORBIDDEN);
@@ -128,4 +128,20 @@ async fn the_server_clones_only_https_repositories() {
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     let (status, _) = send(&world, None, Method::GET, "/api/git/credentials/nope?url=https://x", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn only_an_administrator_lists_people_and_signs_them_out() {
+    let world = shared_world().await;
+    let ana = signed(&world, "ana");
+    let (status, _) = send(&world, Some(&ana), Method::GET, "/api/admin/people", None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = send(&world, Some(&ana), Method::PUT, "/api/branding", Some(json!({ "language": "es" }))).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, mine) = send(&world, Some(&ana), Method::GET, "/api/branding", None).await;
+    assert_eq!(mine["language"], "es");
+    let (_, others) = send(&world, None, Method::GET, "/api/branding", None).await;
+    assert_ne!(others["language"], "es");
+    let (status, _) = send(&world, Some(&ana), Method::PUT, "/api/onboarding", Some(json!({ "skipped": true }))).await;
+    assert_eq!(status, StatusCode::OK);
 }

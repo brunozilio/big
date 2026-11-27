@@ -63,11 +63,10 @@ fn segments(path: &str) -> Vec<&str> {
 fn needs_admin(method: &Method, parts: &[&str]) -> bool {
     let changes = method != Method::GET && method != Method::HEAD;
     match parts {
-        ["api", "branding"] | ["api", "permissions"] | ["api", "browser"] | ["api", "memories" | "onboarding"] => {
-            changes
-        }
+        ["api", "permissions" | "browser" | "memories"] => changes,
         ["api", "permissions", "discover"] | ["api", "fs", "dirs"] | ["api", "memories", "move"] => true,
         ["api", "items" | "sessions", _, "open"] => true,
+        ["api", "admin", ..] => true,
         _ => false,
     }
 }
@@ -123,7 +122,8 @@ mod tests {
 
     #[test]
     fn settings_for_everyone_need_an_administrator() {
-        assert!(needs_admin(&Method::PUT, &segments("/api/branding")));
+        assert!(!needs_admin(&Method::PUT, &segments("/api/branding")));
+        assert!(needs_admin(&Method::PUT, &segments("/api/permissions")));
         assert!(!needs_admin(&Method::GET, &segments("/api/branding")));
         assert!(needs_admin(&Method::GET, &segments("/api/fs/dirs")));
         assert!(needs_admin(&Method::POST, &segments("/api/items/i-1/open")));

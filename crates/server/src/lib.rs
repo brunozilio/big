@@ -33,6 +33,7 @@ mod marks;
 mod memories;
 mod models;
 mod onboarding;
+mod people;
 mod permissions;
 mod pump;
 mod routes;

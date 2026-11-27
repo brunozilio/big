@@ -34,6 +34,10 @@ pub fn routes() -> Router<Ctx> {
         .route("/api/account/passkeys/{id}", delete(passkey::remove))
 }
 
+pub fn person_of(shared: &crate::state::Shared, headers: &HeaderMap) -> Option<domain::principal::Principal> {
+    session::person(shared, headers).ok().flatten()
+}
+
 fn mode_name() -> &'static str {
     match settings::mode() {
         settings::Mode::Local => "local",

@@ -203,8 +203,10 @@ fn send_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<()> {
     let notify: Notify = Arc::new(move |session: &str| nudged.follow(session));
     let agent = shared.backend.orchestrator.session_agent(session)?;
     let mode = session_view::free_mode(agent.as_ref(), &shown);
-    let style = shared.backend.store.output_style();
-    let language = shared.backend.store.language().ok();
+    let owner = crate::scope::session_owner(shared, session);
+    let mine = owner.as_deref().unwrap_or(domain::principal::LOCAL_USER);
+    let style = shared.backend.store.output_style_for(mine);
+    let language = shared.backend.store.language_for(mine).ok();
     let message = Message {
         session,
         folder: row.folder,
@@ -216,7 +218,7 @@ fn send_now(ctx: &Ctx, session: &str, body: &Value) -> ApiResult<()> {
         style,
         language,
         shown,
-        owner: crate::scope::session_owner(shared, session),
+        owner,
     };
     shared.chats.send(&shared.backend.client, message, notify)
 }
