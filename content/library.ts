@@ -48,7 +48,7 @@ type Kind = {
   main: (path: string) => boolean;
   card: (asked: Asked) => { title: string; description: string; avatar?: unknown };
   open: (asked: Asked) => Opened;
-  save: (saved: Saved) => string;
+  save: (saved: Saved) => string | { source: string; path: string };
   create: (name: string, slug: string) => { path: string; source: string };
   outline?: (source: string) => Step[];
 };
@@ -418,7 +418,54 @@ const styles: Kind = {
   create: (name, slug) => ({ path: `output-styles/${slug}.md`, source: `---\n${scalar("name", name).join("\n")}\ndescription: ""\n---\n\n` }),
 };
 
-const KINDS: Kind[] = [agents, skills, prompts, workflows, tools, styles];
+
+const PROPOSED = "scripts/proposed/";
+
+const proposed = (path: string): boolean => path.startsWith(PROPOSED) && flat(3, [".ts"])(path);
+
+function scriptTemplate(name: string, slug: string): string {
+  const spec = {
+    name: slug,
+    description: name,
+    input: { type: "object", properties: { path: { type: "string", description: "Folder to work in." } }, additionalProperties: false },
+    tools: ["Glob", "Read"],
+  };
+  const body = `type Input = { path?: string };\n\nexport async function run(input: Input = {}) {\n  const found = await Glob({ pattern: "**/*", path: input.path });\n  return { files: found.numFiles ?? 0 };\n}\n`;
+  return `export const spec = ${literal(spec, "")};\n\n${body}`;
+}
+
+const scripts: Kind = {
+  key: "scripts",
+  about: "a script of the bank: TypeScript that exports spec (name, description, input as a JSON schema, the tools it calls) and an async run(input); agents find it with searchScripts and run it from the REPL as scripts[\"name\"](input), calling their tools as global functions (Grep, Read, $`cmd`, file(path)) instead of redoing the flow turn by turn",
+  ideas: (language) =>
+    pick(language, ["Explain what this script does", "Make the input path optional", "Return less data"], ["Explica qué hace este script", "Haz opcional la ruta de entrada", "Devuelve menos datos"], ["Explique o que este script faz", "Torne o caminho de entrada opcional", "Devolva menos dados"]),
+  folder: "scripts/",
+  icon: "code",
+  exports: ["spec"],
+  needs: [],
+  creatable: true,
+  label: () => "Scripts",
+  hint: (language) => pick(language, "Ready-made flows the agents run instead of redoing them", "Flujos listos que los agentes ejecutan en vez de rehacerlos", "Fluxos prontos que os agentes rodam em vez de refazer"),
+  main: (path) => flat(2, [".ts", ".js"])(path) || proposed(path),
+  card({ path, exports, language }) {
+    const spec = record(exports.spec);
+    const waiting = proposed(path) ? pick(language, "Proposed from a run, waiting for approval. ", "Propuesto a partir de una ejecución, esperando aprobación. ", "Proposto a partir de uma execução, aguardando aprovação. ") : "";
+    return { title: text(spec.name) || stem(path), description: `${waiting}${text(spec.description)}` };
+  },
+  open(asked) {
+    if (!proposed(asked.path)) return code(asked.path);
+    const { language } = asked;
+    const approve = { key: "approve", label: pick(language, "Approve: agents may run it", "Aprobar: los agentes pueden ejecutarlo", "Aprovar: os agentes podem rodá-lo"), kind: "switch" as const, value: false };
+    return { mode: "form", language: "typescript", fields: [approve], body: { label: pick(language, "Code", "Código", "Código"), text: asked.source, language: "typescript" } };
+  },
+  save({ path, source, values, body }) {
+    const written = body ?? source;
+    return values.approve === true ? { source: written, path: `scripts/${stem(path)}.ts` } : written;
+  },
+  create: (name, slug) => ({ path: `scripts/${slug}.ts`, source: scriptTemplate(name, slug) }),
+};
+
+const KINDS: Kind[] = [agents, skills, prompts, workflows, tools, styles, scripts];
 
 const kind = (key: string): Kind => KINDS.find((item) => item.key === key) ?? fail(`there is no ${key} section`);
 
@@ -473,14 +520,15 @@ function broken(field: Field, value: unknown, language: Language): string | null
   return null;
 }
 
-export function save(saved: Saved): { source?: string; error?: string } {
+export function save(saved: Saved): { source?: string; path?: string; error?: string } {
   const opened = kind(saved.section).open(saved);
   if (opened.mode === "code") return { source: saved.source };
   for (const field of opened.fields) {
     const error = broken(field, saved.values?.[field.key], saved.language);
     if (error) return { error };
   }
-  return { source: kind(saved.section).save(saved) };
+  const made = kind(saved.section).save(saved);
+  return typeof made === "string" ? { source: made } : made;
 }
 
 function request(asking: Assisting): { opened: Opened; text: string } {

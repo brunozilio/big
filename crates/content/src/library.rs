@@ -215,8 +215,8 @@ pub fn save(path: &str, change: &Change, language: &str) -> Result<Value, Failur
     let item = owner(&library, path)?;
     let section = &library.sections[item.section];
     let current = super::editable(path).ok_or(Failure::Missing)?;
-    let source = match &change.source {
-        Some(source) => source.clone(),
+    let (source, moved) = match &change.source {
+        Some(source) => (source.clone(), String::new()),
         None => {
             let mut saved = asked(section, path, &current, &library.paths, language);
             saved["values"] = change.values.clone();
@@ -225,14 +225,30 @@ pub fn save(path: &str, change: &Change, language: &str) -> Result<Value, Failur
             if let Some(error) = answer["error"].as_str() {
                 return Err(Failure::Invalid(error.to_owned()));
             }
-            word(&answer["source"])
+            (word(&answer["source"]), word(&answer["path"]))
         }
     };
+    if !moved.is_empty() && moved != path {
+        return moved_to(section, (path, &moved), &source, language);
+    }
     checked(section, item.path == path, path, &source)?;
     if source != current {
         written(path, &source)?;
     }
     opened(&library, item, path, language)
+}
+
+fn moved_to(section: &Section, (from, to): (&str, &str), source: &str, language: &str) -> Result<Value, Failure> {
+    if !to.starts_with(section.folder.as_str()) || super::override_path(std::path::Path::new(""), to).is_none() {
+        return Err(Failure::Invalid(to.to_owned()));
+    }
+    if super::editable(to).is_some() {
+        return Err(Failure::Exists);
+    }
+    checked(section, true, to, source)?;
+    written(to, source)?;
+    super::restore(from).map_err(|error| Failure::Failed(error.to_string()))?;
+    open(to, language)
 }
 
 #[derive(Debug)]
@@ -350,7 +366,7 @@ mod tests {
         let listed = listing("pt-BR").expect("listing");
         let sections = listed["sections"].as_array().expect("sections");
         let keys: Vec<&str> = sections.iter().filter_map(|section| section["key"].as_str()).collect();
-        assert_eq!(keys, ["agents", "skills", "prompts", "workflows", "tools", "styles"]);
+        assert_eq!(keys, ["agents", "skills", "prompts", "workflows", "tools", "styles", "scripts"]);
         for section in sections {
             let items = section["items"].as_array().expect("items");
             assert!(!items.is_empty(), "{} is empty", section["key"]);
@@ -453,6 +469,45 @@ mod tests {
     }
 
     #[test]
+    fn a_script_of_the_bank_shows_its_spec_and_a_new_one_is_valid() {
+        for path in crate::paths().into_iter().filter(|path| path.starts_with("scripts/")) {
+            let source = String::from_utf8_lossy(crate::builtin(path).expect("shipped")).into_owned();
+            let card = run("card", about("scripts", path, &source, &["spec"]));
+            assert_eq!(card["title"].as_str(), path.strip_prefix("scripts/").and_then(|name| name.strip_suffix(".ts")));
+            assert!(card["description"].as_str().is_some_and(|text| !text.is_empty()), "{path}");
+            assert_eq!(run("open", about("scripts", path, &source, &["spec"]))["mode"], "code");
+        }
+        let made = run("create", json!({ "section": "scripts", "name": "Contar arquivos", "language": "pt-BR" }));
+        assert_eq!(made["path"], "scripts/contar-arquivos.ts");
+        let section = Section {
+            key: "scripts".into(),
+            folder: "scripts/".into(),
+            exports: vec!["spec".into()],
+            shown: Value::Null,
+        };
+        assert_eq!(checked(&section, true, "scripts/contar-arquivos.ts", &word(&made["source"])), Ok(()));
+    }
+
+    #[test]
+    fn a_proposed_script_waits_for_approval_and_approving_moves_it_into_the_bank() {
+        let source =
+            "export const spec = { name: \"tidy\", description: \"Tidy.\" };\nexport async function run() {}\n";
+        let about = about("scripts", "scripts/proposed/tidy.ts", source, &["spec"]);
+        assert!(run("card", about.clone())["description"].as_str().is_some_and(|text| text.starts_with("Proposed")));
+        let shape = run("open", about.clone());
+        assert_eq!((&shape["mode"], &shape["fields"][0]["key"]), (&json!("form"), &json!("approve")));
+        let mut kept = about.clone();
+        kept["values"] = json!({ "approve": false });
+        kept["body"] = json!("edited");
+        assert_eq!(run("save", kept)["path"], Value::Null);
+        let mut approved = about;
+        approved["values"] = json!({ "approve": true });
+        approved["body"] = Value::Null;
+        let saved = run("save", approved);
+        assert_eq!((&saved["path"], &saved["source"]), (&json!("scripts/tidy.ts"), &json!(source)));
+    }
+
+    #[test]
     fn the_chat_request_carries_the_draft_and_the_reply_changes_only_what_fits() {
         let (path, source) = agent();
         let mut asking = about("agents", &path, &source, &["spec", "default"]);
@@ -486,7 +541,10 @@ mod tests {
         asking["body"] = Value::Null;
         asking["draft"] = json!("draft");
         asking["messages"] = json!([]);
-        assert!(word(&run("assist", asking.clone())["prompt"]).contains("<text name=\"workflows/default.ts\" language=\"typescript\">\ndraft\n</text>"));
+        assert!(
+            word(&run("assist", asking.clone())["prompt"])
+                .contains("<text name=\"workflows/default.ts\" language=\"typescript\">\ndraft\n</text>")
+        );
         asking["answer"] = json!("{\"reply\": \"ok\", \"text\": \"new\"}");
         let done = run("assisted", asking);
         assert_eq!((&done["source"], &done["body"]), (&json!("new"), &Value::Null));
