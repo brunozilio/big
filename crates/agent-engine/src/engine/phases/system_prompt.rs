@@ -28,12 +28,12 @@ impl Job {
         let Runtime { mut workspace, mut toolbox, main, worktree } = runtime;
         let setup = &worktree.lease.setup;
         let environment = self.environment(&workspace, &toolbox, setup, brief, session);
-        let mut system = prompt::system(&environment);
-        workspace.prompt_context = Some(environment);
         let style = self.request.session.output_style.as_deref().and_then(prompt::output_style::find);
         workspace.style_reminder = style.as_ref().and_then(|style| style.turn_reminder.clone());
-        system.push_str(&style.map(|style| style.system()).unwrap_or_default());
-        let extra = self.extra_instructions(&main, setup, &toolbox, &workspace)?;
+        let mut appended = style.map(|style| style.system()).unwrap_or_default();
+        appended.push_str(&self.extra_instructions(&main, setup, &toolbox, &workspace)?);
+        let system = prompt::system(&Environment { appended, ..environment.clone() });
+        workspace.prompt_context = Some(environment);
         let offered = Agent::specs(&toolbox.tools).into_iter().filter(|spec| main.config.allows(&spec.name)).collect();
         let (mut offered, deferred) = tools::tool_search::defer(offered);
         if let Some(deferred) = deferred {
@@ -46,7 +46,6 @@ impl Job {
             offered.extend(now_offered.iter().map(|script| script.spec.clone()));
             toolbox.tools.extend(now_offered.into_iter().map(|script| Box::new(script) as Box<dyn tools::Tool>));
         }
-        system.push_str(&extra);
         let template = TurnRequest {
             model: self.request.session.model.id.clone(),
             system,
@@ -101,6 +100,7 @@ impl Job {
                 })
                 .collect(),
             language: self.request.session.language.map(|language| language.prompt_name().to_owned()),
+            appended: String::new(),
         }
     }
 

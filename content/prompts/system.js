@@ -109,6 +109,9 @@ export default function system(ctx) {
   if (ctx.language) {
     prompt += `\n\n# Language\nReply and write everything (replies, plans, commit messages, review comments, summaries) in ${ctx.language}. Code, identifiers and the fixed markers named in your instructions stay exactly as written.`;
   }
+  if (ctx.appended) {
+    prompt += ctx.appended;
+  }
   prompt += "\n\n# Environment\n";
   prompt += `- Working directory: ${ctx.cwd}\n`;
   if (ctx.added_dirs.length > 0) {

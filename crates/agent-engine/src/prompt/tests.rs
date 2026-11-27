@@ -279,3 +279,12 @@ fn names_the_session_language_only_when_one_is_set() {
     assert!(prompt.contains("# Language\nReply and write everything"), "{prompt}");
     assert!(prompt.contains("in Spanish."));
 }
+
+#[test]
+fn stable_additions_come_before_the_volatile_environment() {
+    let prompt = system(&Environment { appended: "\n\n# Agent instructions (x)\nSTABLE".into(), ..environment() });
+    let stable = prompt.find("STABLE").expect("appended");
+    let volatile = prompt.find("# Environment").expect("environment");
+    assert!(stable < volatile, "{prompt}");
+    assert!(prompt.contains("- Today: 2026-11-07"));
+}
