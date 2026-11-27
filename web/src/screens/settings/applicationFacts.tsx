@@ -35,8 +35,13 @@ export function BoundFacts({ bindings }: { bindings: Bindings | undefined }) {
     <>
       {Object.entries(bindings ?? {}).map(([capability, binding]: [string, Binding]) => {
         const { label, text, source } = look(capability, binding)
-        const logo = source ? <ProviderLogo logo={source.provider.logo} name={source.provider.name} size={12} /> : undefined
-        return <Fact key={capability} label={label} value={text} logo={logo} />
+        if (!source) return <Fact key={capability} label={label} value={text} />
+        return (
+          <span key={capability} title={label} className="inline-flex h-6 min-w-0 max-w-full items-center gap-1.5 rounded-full border bg-surface px-2 text-xs">
+            <ProviderLogo logo={source.provider.logo} name={source.provider.name} size={14} />
+            <span className="truncate font-medium text-fg2">{text}</span>
+          </span>
+        )
       })}
     </>
   )

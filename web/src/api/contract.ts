@@ -921,6 +921,7 @@ export interface BindingSpec {
   section?: string
   order?: number
   suggests?: boolean
+  summary?: string
 }
 
 export interface BindingFieldSpec {

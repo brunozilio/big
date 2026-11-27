@@ -614,7 +614,14 @@ export function ShapedBinding({ field, shape, value, error, onChange }: { field:
   )
 }
 
-export function boundText(binding: Binding, each: BindingEach | undefined): string {
+function summaryText(binding: Binding, key: string): string {
+  const chosen = [...(binding.profiles ?? []), binding.fields ?? {}].map((p) => p[key]?.label || p[key]?.value || '').filter(Boolean)
+  return [...new Set(chosen)].join(' · ')
+}
+
+export function boundText(binding: Binding, each: BindingEach | undefined, summary?: string): string {
+  const summarized = summary ? summaryText(binding, summary) : ''
+  if (summarized) return summarized
   if (binding.label || binding.value) return binding.label || binding.value
   const profiles = (binding.profiles ?? []).map((p) => (each ? p[each.key]?.label || p[each.key]?.value : '')).filter(Boolean)
   if (profiles.length > 0) return profiles.join(' · ')
@@ -627,6 +634,6 @@ export function useBoundLook(): (capability: string, binding: Binding) => { labe
     const connection = connections?.connections.find((c) => c.id === binding.connection)
     const provider = connections?.providers.find((p) => p.key === connection?.provider)
     const spec = provider?.bindings?.find((b) => b.capability === capability)
-    return { label: spec?.label ?? capability, text: boundText(binding, spec?.each), source: connection && provider ? { connection, provider } : null }
+    return { label: spec?.label ?? capability, text: boundText(binding, spec?.each, spec?.summary), source: connection && provider ? { connection, provider } : null }
   }
 }

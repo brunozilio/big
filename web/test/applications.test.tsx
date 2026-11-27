@@ -7,7 +7,7 @@ import { MOCK_HOME } from '../src/api/mock/applications'
 import { boot, getState, stop } from '../src/api/store'
 import { NewItem } from '../src/screens/items/NewItem'
 import { ApplicationsView } from '../src/screens/settings/Applications'
-import { fieldsOf, groupedBySection, suggested, withBinding, withChoices } from '../src/screens/settings/bindings'
+import { boundText, fieldsOf, groupedBySection, suggested, withBinding, withChoices } from '../src/screens/settings/bindings'
 import { FolderDialog } from '../src/screens/settings/FolderDialog'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { TooltipProvider } from '../src/ui/overlay'
@@ -93,6 +93,14 @@ describe('diálogo de pasta', () => {
     const kept = { code: { connection: 'c-github', value: 'acme/api' } }
     expect(await suggested('acme/web', fields, kept)).toEqual(kept)
     expect(withBinding(kept, 'code', null)).toEqual({})
+  })
+
+  test('o resumo declarado pelo conector mostra só o campo escolhido, sem repetir', () => {
+    const each = { key: 'environment', label: 'Ambiente', fields: [] }
+    const profile = (env: string) => ({ environment: { value: env }, account: { value: '1', label: 'Loja' }, role: { value: 'Admin' } })
+    const binding = { connection: 'c', value: '', profiles: [profile('develop'), profile('production')] }
+    expect(boundText(binding, each, 'account')).toBe('Loja')
+    expect(boundText(binding, each)).toBe('develop · production')
   })
 
   test('só há campo de vínculo quando um conector conectado o declara, no escopo que ele pede', () => {
