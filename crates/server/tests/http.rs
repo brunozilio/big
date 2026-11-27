@@ -171,6 +171,7 @@ async fn a_session_shows_its_events_and_refuses_unknown_answers() {
     assert_eq!(keys(&session), ["agents", "events", "id", "mode", "model", "status", "suggestion", "title", "work"]);
     assert_eq!(session["status"], "idle");
     fixture("session", &session);
+    assert_eq!(world.get(&format!("/api/sessions/{SESSION}")).await, session, "an unchanged session reads the same");
     let bad = world.send(Method::GET, "/api/sessions/..", None).await;
     assert_ne!(bad.0, StatusCode::OK);
     let unknown = world
@@ -264,8 +265,12 @@ async fn connections_list_sign_in_with_a_device_choose_an_account_and_disconnect
     let bindings = &listed["providers"][1]["bindings"];
     assert_eq!((&bindings[0]["section"], &bindings[0]["order"]), (&json!("Planejamento"), &json!(10)));
     assert_eq!((&bindings[1]["section"], &bindings[1]["order"]), (&json!("Planejamento"), &json!(10.5)));
-    assert_eq!(bindings[2], json!({ "capability": "plain", "scope": "repository", "label": "Sem seção", "multiple": false }));
-    let kinds: Vec<&str> = listed["repositoryKinds"].as_array().into_iter().flatten().filter_map(|kind| kind["key"].as_str()).collect();
+    assert_eq!(
+        bindings[2],
+        json!({ "capability": "plain", "scope": "repository", "label": "Sem seção", "multiple": false })
+    );
+    let kinds: Vec<&str> =
+        listed["repositoryKinds"].as_array().into_iter().flatten().filter_map(|kind| kind["key"].as_str()).collect();
     assert_eq!(kinds, ["application", "library", "configuration", "infrastructure", "tests"]);
     assert_eq!(listed["repositoryKinds"][0], json!({ "key": "application", "label": "Aplicação" }));
     fixture("connections", &listed);

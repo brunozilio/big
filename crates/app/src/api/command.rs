@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use domain::provider::ModelProvider;
+use domain::trace::HistoryStamp;
 use domain::{AskId, Decision, PromptRequest, RunId, SessionId};
 use serde::{Deserialize, Serialize};
 
@@ -49,6 +50,12 @@ pub enum ClientCommand {
         session: SessionId,
         cwd: PathBuf,
     },
+    SessionHistorySince {
+        session: SessionId,
+        cwd: PathBuf,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        known: Option<HistoryStamp>,
+    },
     CancelRequest {
         request: RequestId,
     },
@@ -72,6 +79,7 @@ impl ClientCommand {
             Self::RemoveProviderAccount { .. } => "remove_provider_account",
             Self::ListSessions => "list_sessions",
             Self::SessionHistory { .. } => "session_history",
+            Self::SessionHistorySince { .. } => "session_history_since",
             Self::CancelRequest { .. } => "cancel_request",
             Self::BackgroundJobs => "background_jobs",
             Self::StopBackground { .. } => "stop_background",
@@ -105,6 +113,11 @@ mod tests {
             ClientCommand::RemoveProviderAccount { provider: ModelProvider::new("keyed"), account: "a@x.io".into() },
             ClientCommand::ListSessions,
             ClientCommand::SessionHistory { session: SessionId("s".into()), cwd: "/repo".into() },
+            ClientCommand::SessionHistorySince {
+                session: SessionId("s".into()),
+                cwd: "/repo".into(),
+                known: Some(HistoryStamp { bytes: 12, modified_ns: 34 }),
+            },
             ClientCommand::CancelRequest { request: RequestId(7) },
             ClientCommand::BackgroundJobs,
             ClientCommand::StopBackground { id: "bash_1".into() },

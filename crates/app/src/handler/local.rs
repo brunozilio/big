@@ -98,6 +98,7 @@ fn is_query(command: &ClientCommand) -> bool {
         command,
         ClientCommand::ListSessions
             | ClientCommand::SessionHistory { .. }
+            | ClientCommand::SessionHistorySince { .. }
             | ClientCommand::CancelRequest { .. }
             | ClientCommand::BackgroundJobs
             | ClientCommand::StopBackground { .. }

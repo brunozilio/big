@@ -136,3 +136,32 @@ fn a_rewind_and_a_compaction_are_kept_as_they_always_were() {
     assert_eq!(kinds, ["message", "message", "message", "truncated", "restarted", "message", "message", "message"]);
     assert_eq!(FileSessions::new(&native).load_for(&request, &id), Some(grown));
 }
+
+#[test]
+fn reading_the_entries_again_parses_only_what_was_appended_and_matches_a_fresh_read() {
+    let (_dir, native, request, id) = staged();
+    let store = FileSessions::new(&native);
+    let mut history = vec![Message::user("go")];
+    store.save_for(&request, &id, &history).expect("save");
+    assert_eq!(store.entries(&request, &id).expect("first").len(), 1);
+    for at in 0..5 {
+        turn(&mut history, at);
+        store.save_for(&request, &id, &history).expect("save");
+        let again = store.entries(&request, &id).expect("again");
+        assert_eq!(again, FileSessions::new(&native).entries(&request, &id).expect("fresh"));
+    }
+    assert_eq!(store.entries(&request, &id).expect("unchanged").len(), history.len());
+
+    let file = conversation_file(&native, &request, &id);
+    let line = log::encoded(&Entry::Message(Message::user("cut")), 9_999).expect("line");
+    let mut text = std::fs::read_to_string(&file).expect("text");
+    text.push_str(line.trim_end());
+    std::fs::write(&file, &text).expect("unfinished line");
+    let read = store.entries(&request, &id).expect("with the unfinished line");
+    assert_eq!(read, FileSessions::new(&native).entries(&request, &id).expect("fresh"));
+    assert_eq!(read.len(), history.len() + 1, "a whole last line without its newline is read as before");
+
+    std::fs::write(&file, log::encoded(&Entry::Message(Message::user("other")), 1).expect("line")).expect("rewritten");
+    let rewritten = store.entries(&request, &id).expect("rewritten");
+    assert_eq!(rewritten, vec![Entry::Message(Message::user("other"))], "a file written over is read from the start");
+}

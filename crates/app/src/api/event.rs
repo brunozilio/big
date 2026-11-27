@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use domain::catalog::Listed;
 use domain::provider::ModelProvider;
-use domain::trace::Record;
+use domain::trace::{HistoryStamp, Record};
 use domain::{EngineEvent, ModelOption, RunId};
 use serde::{Deserialize, Serialize};
 
@@ -24,6 +24,7 @@ pub enum Reply {
     Models(Vec<ModelOption>),
     Sessions(Vec<Listed>),
     History(Vec<Record>),
+    HistorySince { stamp: Option<HistoryStamp>, records: Option<Vec<Record>> },
     Providers(ProviderEvent),
     Background(Vec<BackgroundJob>),
     Error { message: String },
@@ -91,6 +92,7 @@ mod tests {
             Reply::Models(vec![ModelOption::new("m", "M")]),
             Reply::Sessions(Vec::new()),
             Reply::History(Vec::new()),
+            Reply::HistorySince { stamp: Some(HistoryStamp { bytes: 1, modified_ns: 2 }), records: None },
             Reply::Background(vec![BackgroundJob { id: "bash_1".into(), command: "npm start".into(), running: true }]),
             Reply::error("could not save the settings"),
         ];

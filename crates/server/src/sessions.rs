@@ -48,6 +48,22 @@ fn shown(shared: &Shared, session: &str, folder: &std::path::Path) -> ApiResult<
     Ok(Shown::of(&records))
 }
 
+fn kept_shown(shared: &Shared, session: &str, folder: &std::path::Path) -> ApiResult<Arc<Shown>> {
+    let kept = shared.watched.read(session);
+    let known = kept.as_ref().map(|(stamp, _)| *stamp);
+    let id = SessionId(session.to_owned());
+    let (stamp, records) = shared.backend.client.history_since(&id, folder, known).map_err(ApiError::failed)?;
+    let shown = match (records, kept) {
+        (None, Some((_, shown))) => return Ok(shown),
+        (Some(records), _) => Arc::new(Shown::of(&records)),
+        (None, None) => Arc::new(shown(shared, session, folder)?),
+    };
+    if let Some(stamp) = stamp {
+        shared.watched.keep_read(session, stamp, Arc::clone(&shown));
+    }
+    Ok(shown)
+}
+
 fn kernel_asks(shared: &Shared, session: &str) -> Vec<AgentAsk> {
     let asks = shared.backend.orchestrator.asks();
     asks.into_iter().filter(|pending| pending.session.as_deref() == Some(session)).map(|pending| pending.ask).collect()
@@ -81,7 +97,7 @@ pub fn view(shared: &Shared, session: &str) -> ApiResult<Value> {
     let read = live.is_none();
     let value = match live {
         Some(live) => live,
-        None => rendered(shared, session, &row, &shown(shared, session, &row.folder)?),
+        None => rendered(shared, session, &row, kept_shown(shared, session, &row.folder)?.as_ref()),
     };
     let duration_us = u64::try_from(started.elapsed().as_micros()).unwrap_or(u64::MAX);
     tracing::event!(target: "timing", tracing::Level::DEBUG, timing = "session.view", read, duration_us, "timing");
@@ -354,8 +370,11 @@ const FORGET_AFTER: std::time::Duration = std::time::Duration::from_secs(1800);
 
 fn refresh(shared: &Shared, sessions: &[String]) {
     for session in sessions {
-        let Ok(value) = view(shared, session) else { continue };
-        let events = value["events"].as_array().cloned().unwrap_or_default();
+        let Ok(mut value) = view(shared, session) else { continue };
+        let events = match value["events"].take() {
+            Value::Array(events) => events,
+            _ => Vec::new(),
+        };
         let status = value["status"].as_str().unwrap_or("idle").to_owned();
         let suggestion = value["suggestion"].as_str().map(str::to_owned);
         let mut followed = held(&shared.followed);
@@ -369,9 +388,8 @@ fn refresh(shared: &Shared, sessions: &[String]) {
         }
         for event in events {
             let id = event["id"].as_str().unwrap_or_default().to_owned();
-            let signature = event.to_string();
-            if entry.seen.get(&id) != Some(&signature) {
-                entry.seen.insert(id, signature);
+            if entry.seen.get(&id) != Some(&event) {
+                entry.seen.insert(id, event.clone());
                 shared.live.session_event(session, event);
             }
         }
@@ -379,10 +397,9 @@ fn refresh(shared: &Shared, sessions: &[String]) {
             shared.live.session_status(session, &status);
             entry.status = status;
         }
-        let work = value["work"].to_string();
-        if entry.work != work {
+        if entry.work != value["work"] {
             shared.live.session_work(session, value["work"].clone());
-            entry.work = work;
+            entry.work = value["work"].clone();
         }
         if entry.suggestion != suggestion {
             shared.live.session_suggestion(session, suggestion.as_deref());

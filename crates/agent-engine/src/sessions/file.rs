@@ -4,9 +4,11 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use domain::SessionId;
+use domain::trace::HistoryStamp;
 use platform::store::Document;
 use platform::sync::Locked;
 
+use super::appended::{self, Parsed};
 use super::durable::{self, Counted, Digests, Persisted, Tail, Written};
 use super::log::{self, Entry};
 use super::{Hold, Sessions, scoped_id, seq};
@@ -17,12 +19,14 @@ const CONVERSATION: &str = "jsonl";
 const TRACE_BUFFERED_AT_MOST: usize = 256 * 1024;
 const BEFORE_THE_LOG: &str = "json";
 const CORRUPT: &str = "jsonl.corrupt";
+const PARSED_AT_MOST: usize = 32;
 
 #[derive(Debug)]
 pub struct FileSessions {
     dir: PathBuf,
     persisted: Mutex<HashMap<String, Persisted>>,
     traced: Mutex<HashMap<String, String>>,
+    parsed: Mutex<HashMap<String, Parsed>>,
     counted: Counted,
     notices: Mutex<Vec<String>>,
 }
@@ -33,6 +37,7 @@ impl FileSessions {
             dir: dir.into(),
             persisted: Mutex::default(),
             traced: Mutex::default(),
+            parsed: Mutex::default(),
             counted: Counted::default(),
             notices: Mutex::default(),
         }
@@ -45,14 +50,32 @@ impl FileSessions {
     pub fn entries(&self, cwd: &Path, id: &SessionId) -> Result<Vec<Entry>, String> {
         let id = scoped_id(cwd, id);
         self.write_traced(&id)?;
-        match read(&self.path(&id, CONVERSATION)?)? {
-            Some(text) => {
-                let (said, skipped) = log::lines(&text);
-                self.set_aside(&id, &skipped);
-                Ok(said)
+        let kept = self.parsed.locked().remove(&id.0);
+        match appended::read(&self.path(&id, CONVERSATION)?, kept)? {
+            Some(reread) => {
+                self.set_aside(&id, &reread.skipped);
+                let mut parsed = self.parsed.locked();
+                if parsed.len() >= PARSED_AT_MOST {
+                    parsed.clear();
+                }
+                parsed.insert(id.0.clone(), reread.parsed);
+                Ok(reread.entries)
             }
             None => Ok(self.before_the_log(&id)?.into_iter().flatten().map(Entry::Message).collect()),
         }
+    }
+
+    pub fn stamp(&self, cwd: &Path, id: &SessionId) -> Result<Option<HistoryStamp>, String> {
+        let id = scoped_id(cwd, id);
+        self.write_traced(&id)?;
+        for extension in [CONVERSATION, BEFORE_THE_LOG] {
+            match std::fs::metadata(self.path(&id, extension)?) {
+                Ok(metadata) => return Ok(Some(stamp_of(&metadata))),
+                Err(error) if error.kind() == ErrorKind::NotFound => {}
+                Err(error) => return Err(format!("the saved conversation could not be read: {error}")),
+            }
+        }
+        Ok(None)
     }
 
     fn path(&self, id: &SessionId, extension: &str) -> Result<PathBuf, String> {
@@ -199,6 +222,12 @@ impl FileSessions {
     fn write_json(&self, name: String, value: &impl serde::Serialize) -> Result<(), String> {
         self.side_file(name).write(value).map_err(|error| error.to_string())
     }
+}
+
+fn stamp_of(metadata: &std::fs::Metadata) -> HistoryStamp {
+    let modified = metadata.modified().ok().and_then(|at| at.duration_since(std::time::UNIX_EPOCH).ok());
+    let modified_ns = modified.map_or(0, |since| u64::try_from(since.as_nanos()).unwrap_or(u64::MAX));
+    HistoryStamp { bytes: metadata.len(), modified_ns }
 }
 
 fn read(path: &PathBuf) -> Result<Option<String>, String> {

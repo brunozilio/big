@@ -92,6 +92,12 @@ impl CommandHandler {
                     Err(message) => Reply::error(message),
                 }
             }
+            ClientCommand::SessionHistorySince { session, cwd, known } => {
+                match crate::sessions::history_since(&self.services, &cwd, &session, known) {
+                    Ok((stamp, records)) => Reply::HistorySince { stamp, records },
+                    Err(message) => Reply::error(message),
+                }
+            }
             ClientCommand::CancelRequest { request } => {
                 if !self.flows.cancel(request) {
                     tracing::debug!(%request, "nothing left to cancel for this request");

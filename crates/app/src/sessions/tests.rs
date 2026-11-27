@@ -41,6 +41,24 @@ fn a_sessions_history_is_what_was_asked_and_what_happened_in_order() {
 }
 
 #[test]
+fn a_history_that_did_not_change_since_it_was_last_read_is_not_sent_again() {
+    let dir = tempfile::tempdir().expect("dir");
+    let store = FileSessions::new(dir.path().join("sessions"));
+    let id = SessionId("s1".into());
+    assert_eq!(kept_since(&store, dir.path(), &id, None).expect("nothing yet"), (None, Some(Vec::new())));
+    kept(&store, dir.path(), &id, vec![Entry::Prompted { at_ms: 1, prompt: "one".into() }]);
+
+    let (stamp, records) = kept_since(&store, dir.path(), &id, None).expect("first");
+    assert_eq!(records, Some(vec![Record::Prompted { at_ms: 1, prompt: "one".into() }]));
+    assert_eq!(kept_since(&store, dir.path(), &id, stamp).expect("again"), (stamp, None));
+
+    kept(&store, dir.path(), &id, vec![Entry::Prompted { at_ms: 2, prompt: "two".into() }]);
+    let (grown, records) = kept_since(&store, dir.path(), &id, stamp).expect("grown");
+    assert_ne!(grown, stamp);
+    assert_eq!(records.map(|records| records.len()), Some(2));
+}
+
+#[test]
 fn another_folder_has_no_history_of_it() {
     let dir = tempfile::tempdir().expect("dir");
     let store = FileSessions::new(dir.path().join("sessions"));

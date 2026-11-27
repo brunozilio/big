@@ -13,10 +13,10 @@ use crate::stamps::Stamps;
 
 #[derive(Debug)]
 pub struct Followed {
-    pub seen: HashMap<String, String>,
+    pub seen: HashMap<String, Value>,
     pub status: String,
     pub suggestion: Option<String>,
-    pub work: String,
+    pub work: Value,
     pub wanted: Instant,
 }
 
@@ -26,7 +26,7 @@ impl Default for Followed {
             seen: HashMap::new(),
             status: String::new(),
             suggestion: None,
-            work: String::new(),
+            work: Value::Null,
             wanted: Instant::now(),
         }
     }

@@ -3,7 +3,7 @@ use std::path::Path;
 use agent_engine::sessions::{FileSessions, records};
 use domain::SessionId;
 use domain::catalog::Listed;
-use domain::trace::Record;
+use domain::trace::{HistoryStamp, Record};
 
 use crate::services::LocalServices;
 
@@ -14,6 +14,25 @@ pub(crate) fn listed(services: &LocalServices) -> Vec<Listed> {
 
 pub(crate) fn history(services: &LocalServices, cwd: &Path, id: &SessionId) -> Result<Vec<Record>, String> {
     kept_history(&services.sessions, cwd, id)
+}
+
+pub(crate) fn history_since(
+    services: &LocalServices,
+    cwd: &Path,
+    id: &SessionId,
+    known: Option<HistoryStamp>,
+) -> Result<Since, String> {
+    kept_since(&services.sessions, cwd, id, known)
+}
+
+type Since = (Option<HistoryStamp>, Option<Vec<Record>>);
+
+fn kept_since(store: &FileSessions, cwd: &Path, id: &SessionId, known: Option<HistoryStamp>) -> Result<Since, String> {
+    let stamp = store.stamp(cwd, id)?;
+    if stamp.is_some() && stamp == known {
+        return Ok((stamp, None));
+    }
+    Ok((stamp, Some(kept_history(store, cwd, id)?)))
 }
 
 fn kept_history(store: &FileSessions, cwd: &Path, id: &SessionId) -> Result<Vec<Record>, String> {

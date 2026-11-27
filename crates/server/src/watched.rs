@@ -1,14 +1,16 @@
 use std::collections::HashMap;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use app::EngineEvent;
+use domain::trace::HistoryStamp;
 
 use crate::marks::now_ms;
 use crate::session_view::Shown;
 
 const NOTIFY_GAP: Duration = Duration::from_millis(300);
 const KEPT_AFTER_END: Duration = Duration::from_secs(5);
+const READ_AT_MOST: usize = 64;
 
 struct Watching {
     shown: Shown,
@@ -19,6 +21,7 @@ struct Watching {
 #[derive(Default)]
 pub struct Watched {
     runs: Mutex<HashMap<String, Watching>>,
+    read: Mutex<HashMap<String, (HistoryStamp, Arc<Shown>)>>,
 }
 
 impl std::fmt::Debug for Watched {
@@ -59,6 +62,18 @@ impl Watched {
             watching.told = Some(Instant::now());
         }
         due
+    }
+
+    pub fn read(&self, session: &str) -> Option<(HistoryStamp, Arc<Shown>)> {
+        self.read.lock().unwrap_or_else(PoisonError::into_inner).get(session).cloned()
+    }
+
+    pub fn keep_read(&self, session: &str, stamp: HistoryStamp, shown: Arc<Shown>) {
+        let mut read = self.read.lock().unwrap_or_else(PoisonError::into_inner);
+        if read.len() >= READ_AT_MOST && !read.contains_key(session) {
+            read.clear();
+        }
+        read.insert(session.to_owned(), (stamp, shown));
     }
 
     pub fn with<R>(&self, session: &str, read: impl FnOnce(&Shown) -> R) -> Option<R> {

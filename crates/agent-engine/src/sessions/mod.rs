@@ -138,6 +138,7 @@ impl Sessions for InMemorySessions {
     }
 }
 
+mod appended;
 mod durable;
 mod file;
 mod hold;

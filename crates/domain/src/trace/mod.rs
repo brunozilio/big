@@ -26,6 +26,12 @@ pub enum Record {
     Partial,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HistoryStamp {
+    pub bytes: u64,
+    pub modified_ns: u64,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 pub struct RunInfo {
     pub model: String,
