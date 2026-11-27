@@ -157,7 +157,9 @@ impl Shelf {
     }
 
     fn stored(&self) -> Vec<Stored> {
-        let mut all: Vec<Stored> = self.kept.iter().flat_map(stored_in).collect();
+        let mut seen = HashSet::new();
+        let mut all: Vec<Stored> =
+            self.kept.iter().flat_map(stored_in).filter(|stored| seen.insert(stored.id.clone())).collect();
         all.sort_by(|a, b| b.updated_ms.cmp(&a.updated_ms).then_with(|| a.id.cmp(&b.id)));
         all
     }

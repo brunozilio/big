@@ -107,6 +107,17 @@ impl DataRoot {
         self.local().join("logs")
     }
 
+    fn formers(&self) -> Vec<crate::catalog::former::Former> {
+        self.former()
+            .into_iter()
+            .map(|(name, data, sessions)| crate::catalog::former::Former {
+                name,
+                database: data.join(crate::db::FILE),
+                sessions,
+            })
+            .collect()
+    }
+
     pub fn former(&self) -> Vec<(String, PathBuf, PathBuf)> {
         if !matches!(self.0, Kept::System { .. }) {
             return Vec::new();
@@ -160,6 +171,7 @@ impl DataRoot {
         match Db::open(&file) {
             Ok(db) => {
                 crate::catalog::legacy::import(&db, &self.users());
+                crate::catalog::former::import(&db, &self.app(), &self.sessions(), &self.formers());
                 if let Some(memory) = self.memory() {
                     crate::features::memory::store::legacy::import(&db, &memory);
                 }

@@ -123,3 +123,17 @@ fn an_excerpt_shows_the_words_around_the_first_match() {
     assert!(shown.starts_with('…') && shown.ends_with('…') && shown.contains("needle"), "{shown}");
     assert_eq!(excerpt("nothing here", &words), None);
 }
+
+#[test]
+fn a_session_kept_both_now_and_under_a_former_name_is_shown_once_as_the_current_one() {
+    let (now, before) = (tempfile::tempdir().expect("now"), tempfile::tempdir().expect("before"));
+    write(now.path(), &format!("{ONE}.jsonl"), &said("User", "same words"));
+    write(before.path(), &format!("{ONE}.jsonl"), &said("User", "same words"));
+    let shelf = Shelf::new(vec![
+        Kept { name: "current".into(), dir: now.path().to_path_buf() },
+        Kept { name: "Old".into(), dir: before.path().to_path_buf() },
+    ]);
+    let hits = shelf.search(&everything("same"));
+    assert_eq!(hits.len(), 1, "{hits:?}");
+    assert_eq!(hits[0].session.kept_in, "current");
+}

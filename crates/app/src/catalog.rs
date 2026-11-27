@@ -1,3 +1,4 @@
+pub(crate) mod former;
 pub(crate) mod legacy;
 mod sqlite;
 #[cfg(test)]
