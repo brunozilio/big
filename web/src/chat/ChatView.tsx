@@ -214,17 +214,19 @@ export const Transcript = memo(function Transcript({ events, running, respond, h
   return (
     <>
       {turns.map((turn, i) => (
-        <TurnSection key={turn.user?.id ?? `t${i}`} turn={turn} live={running && i === turns.length - 1} historical={!!turn.user && historical(turn.user.id)} render={render} />
+        <TurnSection key={turn.user?.id ?? `t${i}`} turn={turn} live={running && i === turns.length - 1} past={i < turns.length - 1} historical={!!turn.user && historical(turn.user.id)} render={render} />
       ))}
     </>
   )
 })
 
-const TurnSection = memo(function TurnSection({ turn, live, historical, render }: { turn: Turn; live: boolean; historical: boolean; render: (e: SessionEvent) => ReactNode }) {
+export const PAST_TURN = 'past-turn'
+
+const TurnSection = memo(function TurnSection({ turn, live, past = false, historical, render }: { turn: Turn; live: boolean; past?: boolean; historical: boolean; render: (e: SessionEvent) => ReactNode }) {
   const started = turn.user?.at ?? turn.events[0]?.at
   const ended = turn.events[turn.events.length - 1]?.at ?? started
   return (
-    <section className="mb-10">
+    <section className={cn('mb-10', past && !live && PAST_TURN)}>
       {turn.user && (
         <motion.div {...(historical ? settled : enter)} className="mb-8">
           <UserMessage event={turn.user} />

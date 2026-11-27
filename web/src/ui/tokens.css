@@ -302,6 +302,8 @@ svg.lucide { stroke-width: 1.6; }
   .flash-new { animation: none !important; }
 }
 
+.past-turn { content-visibility: auto; contain-intrinsic-size: auto 640px; }
+
 .dash-flow { stroke-dasharray: 4 5; animation: dash-flow 0.9s linear infinite; }
 @keyframes dash-flow { to { stroke-dashoffset: -18; } }
 

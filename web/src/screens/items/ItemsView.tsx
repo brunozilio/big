@@ -11,6 +11,7 @@ import { Input, SegmentedControl, Select } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { Collapse, stagger, tween, tweenClose } from '@/ui/motion'
 import { toast } from '@/ui/toast'
+import { useVirtualRows } from '@/ui/virtual'
 import { grouping, membersOf, movable, usePackageBoard, type PackageBoard } from './packages/board'
 import { DRAG_TYPE, GroupRow } from './packages/GroupRow'
 import { PackageTray } from './packages/PackageTray'
@@ -303,13 +304,22 @@ type RowsProps = {
   onMove: (target: Item, id: string, from: string | null) => void
 }
 
-const Rows = memo(function Rows({ items, empty, fresh, accepting, onOpen, onConnect, onMove }: RowsProps) {
+export const VIRTUAL_FROM = 80
+const ROW_HEIGHT = 52
+
+function ItemRow({ it, fresh, accepting, onOpen, onConnect, onMove }: Omit<RowsProps, 'items' | 'empty' | 'fresh'> & { it: Item; fresh: boolean }) {
+  return grouping(it) ? <PackageRow it={it} onOpen={onOpen} onMove={onMove} /> : <Row it={it} fresh={fresh} draggable={movable(it, accepting)} onOpen={onOpen} onConnect={onConnect} />
+}
+
+export const Rows = memo(function Rows(props: RowsProps) {
+  const { items, empty, fresh } = props
+  if (items.length > VIRTUAL_FROM) return <VirtualRows {...props} />
   return (
     <ul>
       <AnimatePresence initial={false}>
         {items.map((it) => (
           <motion.li key={it.id} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, transition: tweenClose }} transition={tween}>
-            {grouping(it) ? <PackageRow it={it} onOpen={onOpen} onMove={onMove} /> : <Row it={it} fresh={fresh === it.id} draggable={movable(it, accepting)} onOpen={onOpen} onConnect={onConnect} />}
+            <ItemRow {...props} it={it} fresh={fresh === it.id} />
           </motion.li>
         ))}
       </AnimatePresence>
@@ -317,6 +327,21 @@ const Rows = memo(function Rows({ items, empty, fresh, accepting, onOpen, onConn
     </ul>
   )
 })
+
+function VirtualRows(props: RowsProps) {
+  const { items, fresh } = props
+  const keys = useMemo(() => items.map((it) => it.id), [items])
+  const rows = useVirtualRows<HTMLUListElement>(keys, { estimate: ROW_HEIGHT })
+  return (
+    <ul ref={rows.list} style={{ paddingTop: rows.span.before, paddingBottom: rows.span.after }}>
+      {items.slice(rows.span.start, rows.span.end).map((it) => (
+        <li key={it.id} ref={rows.measure} {...rows.keyProp(it.id)}>
+          <ItemRow {...props} it={it} fresh={fresh === it.id} />
+        </li>
+      ))}
+    </ul>
+  )
+}
 
 const PackageRow = memo(function PackageRow({ it, onOpen, onMove }: { it: Item; onOpen: (it: Item) => void; onMove: (target: Item, id: string, from: string | null) => void }) {
   const items = useStore((s) => s.items)
