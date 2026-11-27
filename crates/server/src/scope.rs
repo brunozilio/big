@@ -66,7 +66,7 @@ fn needs_admin(method: &Method, parts: &[&str]) -> bool {
         ["api", "permissions" | "browser" | "memories"] => changes,
         ["api", "permissions", "discover"] | ["api", "fs", "dirs"] | ["api", "memories", "move"] => true,
         ["api", "items" | "sessions", _, "open"] => true,
-        ["api", "admin", ..] => true,
+        ["api", "admin" | "library", ..] => true,
         _ => false,
     }
 }
@@ -126,6 +126,7 @@ mod tests {
         assert!(needs_admin(&Method::PUT, &segments("/api/permissions")));
         assert!(!needs_admin(&Method::GET, &segments("/api/branding")));
         assert!(needs_admin(&Method::GET, &segments("/api/fs/dirs")));
+        assert!(needs_admin(&Method::GET, &segments("/api/library/item")));
         assert!(needs_admin(&Method::POST, &segments("/api/items/i-1/open")));
         assert!(!needs_admin(&Method::POST, &segments("/api/items/i-1/rerun")));
     }

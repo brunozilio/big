@@ -80,7 +80,7 @@ export const providers = (): MockProvider[] => [
     }],
   },
   {
-    key: 'mcp', name: say('mcpName'), group: 'mcp', hidden: true, description: say('mcpDescription'), logo: MCP_LOGO, button: say('connect'), site: say('siteMcp'), signIn: 'oauth', multiple: true, capabilities: ['mcp'], accounts: [],
+    key: 'mcp', name: say('mcpName'), group: 'mcp', custom: true, description: say('mcpDescription'), logo: MCP_LOGO, button: say('connect'), site: say('siteMcp'), signIn: 'oauth', multiple: true, capabilities: ['mcp'], accounts: [],
     fields: [
       { name: 'url', label: say('mcpUrl'), kind: 'text', mono: true, help: say('mcpUrlHelp') },
       { name: 'label', label: say('name'), kind: 'text', mono: true, help: say('mcpNameHelp') },

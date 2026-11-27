@@ -43,7 +43,8 @@ fn the_person_enters_the_server_address_and_a_name_and_only_safe_addresses_pass(
     assert_eq!(names, ["url", "label"]);
     assert_eq!(loaded("mcp").descriptor().key.0, "mcp");
     assert_eq!(loaded("mcp").descriptor().capabilities, vec![Capability::from("mcp")]);
-    assert!(loaded("mcp").presentation(Language::Portuguese).hidden);
+    let look = loaded("mcp").presentation(Language::Portuguese);
+    assert!(look.custom && !look.hidden, "{look:?}");
     assert!(entered(json!({})).is_err());
     assert!(entered(json!({ "url": "http://tools.test/mcp" })).is_err());
     assert!(entered(json!({ "url": "http://localhost:3000/mcp" })).is_ok());

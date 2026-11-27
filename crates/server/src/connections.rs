@@ -81,6 +81,7 @@ fn provider_json(shared: &Shared, descriptor: &ProviderDescriptor) -> Value {
         "logo": logo(&descriptor.logo), "signIn": sign_in, "fields": fields, "multiple": true,
         "alternatives": alternatives,
         "bindings": look.bindings,
+        "custom": look.custom,
     })
 }
 

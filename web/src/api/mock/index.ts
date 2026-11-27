@@ -5,6 +5,7 @@ import type { Api, Application, BindingOption, Branding, CallAction, CallArgs, C
 import { addIssueComment, changeData, issueData, pipelineRun, searchIssues, trackerProjects } from './calls'
 import { CLOUD_ACCOUNTS, CODE_REPOS, checkedApplication, cloudFieldOptions, cloudOptions, codeBranches, openPulls, initialApplications, listDirs } from './applications'
 import { initialConnections, MCP_TOOLS, MODELS, providers as allProviders, repositoryKinds, usageFixture, usageLimitsFixture } from './fixtures'
+import { mockLibrary } from './library'
 import { say } from './say'
 import { mockUsage } from './usage'
 import { itemOfSession, sessionById } from './sessions'
@@ -85,6 +86,7 @@ export function mockApi(options: MockOptions = {}): Api {
   let applications: Application[] = initialApplications()
   let onboarding: OnboardingState = { skipped: false }
   const flows = new Map<string, Flow>()
+  const library = mockLibrary()
   const listeners = new Set<(e: LiveEvent) => void>()
   const itemSigs = new Map<string, { sig: string; updatedAt: string }>()
   const sessionSigs = new Map<string, Map<string, string>>()
@@ -367,6 +369,11 @@ export function mockApi(options: MockOptions = {}): Api {
       applications = applications.filter((x) => x.id !== id)
     }),
     dirs: (path) => wait(() => listDirs(path), 60),
+    library: () => wait(() => library.list()),
+    libraryItem: (path) => wait(() => library.shown(path)),
+    saveLibraryItem: (path, change) => wait(() => library.save(path, change)),
+    createLibraryItem: (section, name) => wait(() => library.create(section, name)),
+    restoreLibraryItem: (path) => wait(() => library.restore(path)),
     upload: (file) => wait(() => ({ id: `a-${Date.now()}`, name: file.name, size: file.size })),
     live: (onEvent, onState) => {
       listeners.add(onEvent)

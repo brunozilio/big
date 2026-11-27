@@ -27,6 +27,7 @@ mod folders;
 mod item_usage;
 mod item_view;
 mod items;
+mod library;
 mod limits;
 mod live;
 mod marks;

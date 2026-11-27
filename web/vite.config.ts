@@ -11,6 +11,7 @@ const vendors: [string, RegExp][] = [
   ['vendor-motion', /\/node_modules\/(framer-motion|motion-dom|motion-utils)\//],
   ['vendor-radix', /\/node_modules\/(@radix-ui|@floating-ui|react-remove-scroll|react-remove-scroll-bar|react-style-singleton|use-callback-ref|use-sidecar|aria-hidden)\//],
   ['vendor-editor', /\/node_modules\/(@tiptap|prosemirror-[^/]+|tiptap-markdown|markdown-it|markdown-it-task-lists|linkifyjs|tippy\.js|@popperjs)\//],
+  ['vendor-code', /\/node_modules\/(@codemirror|@lezer|@marijn|style-mod|w3c-keyname|crelt)\//],
   ['vendor-markdown', /\/node_modules\/(react-markdown|remark-[^/]+|mdast-[^/]+|micromark[^/]*|unified|unist-[^/]+|hast-[^/]+|vfile[^/]*)\//],
   ['vendor-charts', /\/node_modules\/(recharts|recharts-scale|react-smooth|victory-vendor|d3-[^/]+|decimal\.js-light|internmap)\//],
   ['vendor-avatars', /\/node_modules\/@dicebear\//],

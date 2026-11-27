@@ -1,0 +1,388 @@
+use std::collections::{BTreeSet, HashMap};
+use std::hash::{DefaultHasher, Hash, Hasher};
+use std::sync::{Mutex, OnceLock};
+
+use serde_json::{Value, json};
+
+pub const ENTRY: &str = "library.ts";
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Failure {
+    Missing,
+    ReadOnly,
+    Exists,
+    Invalid(String),
+    Failed(String),
+}
+
+#[derive(Debug)]
+pub struct Change {
+    pub source: Option<String>,
+    pub values: Value,
+    pub body: Option<String>,
+}
+
+struct Section {
+    key: String,
+    folder: String,
+    exports: Vec<String>,
+    shown: Value,
+}
+
+struct Item {
+    section: usize,
+    path: String,
+    files: Vec<String>,
+}
+
+struct Library {
+    sections: Vec<Section>,
+    items: Vec<Item>,
+    paths: Vec<String>,
+}
+
+fn ask(export: &str, data: &Value) -> Result<Value, Failure> {
+    super::call(ENTRY, export, data).ok_or_else(|| Failure::Failed(format!("{ENTRY} did not answer {export}")))
+}
+
+fn words(value: &Value) -> Vec<String> {
+    value.as_array().into_iter().flatten().filter_map(|item| item.as_str().map(str::to_owned)).collect()
+}
+
+fn word(value: &Value) -> String {
+    value.as_str().unwrap_or_default().to_owned()
+}
+
+fn sections(language: &str) -> Result<(Vec<Section>, Vec<String>), Failure> {
+    let declared = ask("sections", &json!({ "language": language }))?;
+    let mut folders = BTreeSet::new();
+    let mut found = Vec::new();
+    for section in declared.as_array().into_iter().flatten() {
+        let folder = word(&section["folder"]);
+        if folder.is_empty() || !folder.ends_with('/') {
+            continue;
+        }
+        folders.insert(folder.clone());
+        folders.extend(words(&section["needs"]).into_iter().filter(|need| need.ends_with('/')));
+        let shown = json!({
+            "key": section["key"], "label": section["label"], "hint": section["hint"], "icon": section["icon"],
+            "creatable": section["creatable"].as_bool().unwrap_or(false),
+        });
+        found.push(Section { key: word(&section["key"]), folder, exports: words(&section["exports"]), shown });
+    }
+    Ok((found, folders.into_iter().collect()))
+}
+
+fn library(language: &str) -> Result<Library, Failure> {
+    let (sections, folders) = sections(language)?;
+    let paths: Vec<String> = folders.iter().flat_map(|folder| super::listed(folder)).collect();
+    let listed = ask("listing", &json!({ "paths": paths }))?;
+    let mut items = Vec::new();
+    for item in listed.as_array().into_iter().flatten() {
+        let Some(section) = sections.iter().position(|section| section.key == word(&item["section"])) else { continue };
+        let path = word(&item["path"]);
+        let inside = |path: &String| path.starts_with(&sections[section].folder);
+        if inside(&path) {
+            items.push(Item { section, path, files: words(&item["files"]).into_iter().filter(inside).collect() });
+        }
+    }
+    Ok(Library { sections, items, paths })
+}
+
+fn scripted(path: &str) -> bool {
+    path.ends_with(".ts") || path.ends_with(".js")
+}
+
+fn evaluated() -> &'static Mutex<HashMap<u64, Value>> {
+    static CACHE: OnceLock<Mutex<HashMap<u64, Value>>> = OnceLock::new();
+    CACHE.get_or_init(Default::default)
+}
+
+fn exports(section: &Section, path: &str, source: &str) -> Value {
+    if !scripted(path) || section.exports.is_empty() {
+        return json!({});
+    }
+    let mut hasher = DefaultHasher::new();
+    (path, source, &section.exports).hash(&mut hasher);
+    let key = hasher.finish();
+    if let Some(found) = evaluated().lock().ok().and_then(|cache| cache.get(&key).cloned()) {
+        return found;
+    }
+    let found: serde_json::Map<String, Value> = section
+        .exports
+        .iter()
+        .map(|name| (name.clone(), script::exported(path, source, name).unwrap_or(Value::Null)))
+        .collect();
+    let found = Value::Object(found);
+    if let Ok(mut cache) = evaluated().lock() {
+        cache.insert(key, found.clone());
+    }
+    found
+}
+
+fn asked(section: &Section, path: &str, source: &str, paths: &[String], language: &str) -> Value {
+    json!({
+        "section": section.key, "path": path, "source": source, "exports": exports(section, path, source),
+        "paths": paths, "language": language,
+    })
+}
+
+fn card(library: &Library, item: &Item, language: &str) -> Value {
+    let section = &library.sections[item.section];
+    let source = super::editable(&item.path).unwrap_or_default();
+    let card = ask("card", &asked(section, &item.path, &source, &[], language)).unwrap_or_default();
+    json!({
+        "path": item.path, "title": card["title"], "description": card["description"], "avatar": card["avatar"],
+        "origin": super::origin(&item.path).name(), "files": item.files,
+    })
+}
+
+pub fn listing(language: &str) -> Result<Value, Failure> {
+    let library = library(language)?;
+    let sections: Vec<Value> = library
+        .sections
+        .iter()
+        .enumerate()
+        .map(|(at, section)| {
+            let items: Vec<Value> = library
+                .items
+                .iter()
+                .filter(|item| item.section == at)
+                .map(|item| card(&library, item, language))
+                .collect();
+            let mut shown = section.shown.clone();
+            shown["items"] = Value::Array(items);
+            shown
+        })
+        .collect();
+    Ok(json!({ "editable": super::editing_root().is_some(), "sections": sections }))
+}
+
+fn owner<'a>(library: &'a Library, path: &str) -> Result<&'a Item, Failure> {
+    library
+        .items
+        .iter()
+        .find(|item| item.path == path || item.files.iter().any(|file| file == path))
+        .ok_or(Failure::Missing)
+}
+
+fn opened(library: &Library, item: &Item, path: &str, language: &str) -> Result<Value, Failure> {
+    let section = &library.sections[item.section];
+    let source = super::editable(path).ok_or(Failure::Missing)?;
+    let shape = ask("open", &asked(section, path, &source, &library.paths, language))?;
+    let card = card(library, item, language);
+    Ok(json!({
+        "path": path, "item": item.path, "section": section.key, "title": card["title"], "avatar": card["avatar"],
+        "origin": super::origin(path).name(), "source": source, "files": item.files,
+        "mode": shape["mode"], "language": shape["language"], "fields": shape["fields"], "body": shape["body"],
+        "editable": super::editing_root().is_some(),
+    }))
+}
+
+pub fn open(path: &str, language: &str) -> Result<Value, Failure> {
+    let library = library(language)?;
+    opened(&library, owner(&library, path)?, path, language)
+}
+
+fn checked(section: &Section, main: bool, path: &str, source: &str) -> Result<(), Failure> {
+    if !scripted(path) {
+        return Ok(());
+    }
+    script::typescript::plain(path, source).map_err(Failure::Invalid)?;
+    if !main {
+        return Ok(());
+    }
+    for name in &section.exports {
+        match script::exported(path, source, name) {
+            Ok(Value::Null) => return Err(Failure::Invalid(format!("{path} must export {name}"))),
+            Ok(_) => {}
+            Err(error) => return Err(Failure::Invalid(error)),
+        }
+    }
+    Ok(())
+}
+
+fn written(path: &str, source: &str) -> Result<(), Failure> {
+    if super::editing_root().is_none() {
+        return Err(Failure::ReadOnly);
+    }
+    super::write(path, source).map_err(|error| Failure::Failed(error.to_string()))
+}
+
+pub fn save(path: &str, change: &Change, language: &str) -> Result<Value, Failure> {
+    let library = library(language)?;
+    let item = owner(&library, path)?;
+    let section = &library.sections[item.section];
+    let current = super::editable(path).ok_or(Failure::Missing)?;
+    let source = match &change.source {
+        Some(source) => source.clone(),
+        None => {
+            let mut saved = asked(section, path, &current, &library.paths, language);
+            saved["values"] = change.values.clone();
+            saved["body"] = json!(change.body);
+            word(&ask("save", &saved)?["source"])
+        }
+    };
+    checked(section, item.path == path, path, &source)?;
+    if source != current {
+        written(path, &source)?;
+    }
+    opened(&library, item, path, language)
+}
+
+pub fn create(section: &str, name: &str, language: &str) -> Result<Value, Failure> {
+    let before = library(language)?;
+    let folder = &before.sections.iter().find(|found| found.key == section).ok_or(Failure::Missing)?.folder;
+    let made = super::call(ENTRY, "create", &json!({ "section": section, "name": name, "language": language }))
+        .ok_or_else(|| Failure::Invalid(name.to_owned()))?;
+    let path = word(&made["path"]);
+    if !path.starts_with(folder.as_str()) || super::override_path(std::path::Path::new(""), &path).is_none() {
+        return Err(Failure::Invalid(path));
+    }
+    if super::editable(&path).is_some() {
+        return Err(Failure::Exists);
+    }
+    written(&path, &word(&made["source"]))?;
+    open(&path, language)
+}
+
+pub fn restore(path: &str, language: &str) -> Result<(), Failure> {
+    let library = library(language)?;
+    owner(&library, path)?;
+    if super::editing_root().is_none() {
+        return Err(Failure::ReadOnly);
+    }
+    super::restore(path).map_err(|error| Failure::Failed(error.to_string()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run(export: &str, data: Value) -> Value {
+        ask(export, &data).expect(export)
+    }
+
+    fn agent() -> (String, String) {
+        let path = "agents/developer.ts".to_owned();
+        let source = String::from_utf8(crate::builtin(&path).expect("shipped").to_vec()).expect("text");
+        (path, source)
+    }
+
+    fn about(section: &str, path: &str, source: &str, exported: &[&str]) -> Value {
+        let section = Section {
+            key: section.into(),
+            folder: String::new(),
+            exports: exported.iter().map(|name| (*name).to_owned()).collect(),
+            shown: Value::Null,
+        };
+        asked(&section, path, source, &["tools/Read.ts".into(), "skills/verify/SKILL.md".into()], "en")
+    }
+
+    #[test]
+    fn every_shipped_item_is_listed_under_its_section_with_a_title() {
+        let listed = listing("pt-BR").expect("listing");
+        let sections = listed["sections"].as_array().expect("sections");
+        let keys: Vec<&str> = sections.iter().filter_map(|section| section["key"].as_str()).collect();
+        assert_eq!(keys, ["agents", "skills", "prompts", "workflows", "flows"]);
+        for section in sections {
+            let items = section["items"].as_array().expect("items");
+            assert!(!items.is_empty(), "{} is empty", section["key"]);
+            assert!(
+                items.iter().all(|item| item["title"].as_str().is_some_and(|title| !title.is_empty())),
+                "{items:?}"
+            );
+        }
+        let skill = sections[1]["items"]
+            .as_array()
+            .expect("skills")
+            .iter()
+            .find(|item| item["path"] == "skills/verify/SKILL.md");
+        assert!(skill.expect("verify")["files"].as_array().is_some_and(|files| !files.is_empty()));
+    }
+
+    #[test]
+    fn every_shipped_agent_opens_as_a_form_and_saves_back_to_the_same_meaning() {
+        for path in crate::paths().into_iter().filter(|path| path.starts_with("agents/")) {
+            let source = String::from_utf8(crate::builtin(path).expect("shipped").to_vec()).expect("text");
+            let about = about("agents", path, &source, &["spec", "default"]);
+            let shape = run("open", about.clone());
+            assert_eq!(shape["mode"], "form", "{path}");
+            let mut saved = about.clone();
+            saved["values"] = json!({});
+            saved["body"] = Value::Null;
+            let again = word(&run("save", saved)["source"]);
+            assert_eq!(script::exported(path, &again, "spec"), script::exported(path, &source, "spec"), "{path}");
+            assert_eq!(script::exported(path, &again, "default"), script::exported(path, &source, "default"), "{path}");
+        }
+    }
+
+    #[test]
+    fn a_form_change_reaches_the_agent_s_file_and_keeps_what_the_form_does_not_show() {
+        let (path, source) = agent();
+        let mut saved = about("agents", &path, &source, &["spec", "default"]);
+        saved["values"] = json!({ "label": "Builder", "tools": ["Read"], "avatar.color": "#000000", "model": "" });
+        saved["body"] = json!("Use `code` and ${nothing} \\ here.");
+        let again = word(&run("save", saved)["source"]);
+        let spec = script::exported(&path, &again, "spec").expect("spec");
+        assert_eq!(spec["label"], "Builder");
+        assert_eq!(spec["tools"], json!(["Read"]));
+        assert_eq!(spec["avatar"], json!({ "shape": "squircle", "color": "#000000" }));
+        assert_eq!(spec["observer"], json!(["observer"]), "untouched");
+        assert!(spec.get("model").is_none());
+        assert_eq!(script::exported(&path, &again, "default").expect("default"), "Use `code` and ${nothing} \\ here.");
+    }
+
+    #[test]
+    fn a_skill_keeps_its_other_front_matter_and_takes_a_long_description() {
+        let source = "---\nname: mine\ndescription: |-\n  First.\n  Second.\nallowed-tools: Read\n---\n\nBody.\n";
+        let about = about("skills", "skills/mine/SKILL.md", source, &[]);
+        let shape = run("open", about.clone());
+        assert_eq!(shape["fields"][1]["value"], "First.\nSecond.");
+        assert_eq!(shape["body"]["text"], "Body.\n");
+        let mut saved = about;
+        saved["values"] = json!({ "name": "mine", "description": "Use it: always", "disable-model-invocation": true });
+        saved["body"] = json!("New body.");
+        let again = word(&run("save", saved)["source"]);
+        assert_eq!(
+            again,
+            "---\nname: mine\ndescription: \"Use it: always\"\nallowed-tools: Read\ndisable-model-invocation: true\n---\n\nNew body.\n"
+        );
+    }
+
+    #[test]
+    fn a_plain_prompt_is_a_text_and_one_with_code_stays_code() {
+        let plain = run("open", about("prompts", "prompts/a.js", "export default `Say \\`hi\\`.`;\n", &["default"]));
+        assert_eq!(plain["mode"], "form");
+        assert_eq!(plain["body"]["text"], "Say `hi`.");
+        let coded = "const a = 1;\nexport default function () { return `${a}`; }\n";
+        assert_eq!(run("open", about("prompts", "prompts/b.js", coded, &["default"]))["mode"], "code");
+        let workflow = run(
+            "card",
+            about(
+                "workflows",
+                "workflows/default.ts",
+                &String::from_utf8_lossy(crate::builtin("workflows/default.ts").expect("shipped")),
+                &[],
+            ),
+        );
+        assert!(workflow["description"].as_str().is_some_and(|steps| steps.starts_with("plan → ticket")), "{workflow}");
+    }
+
+    #[test]
+    fn a_new_item_gets_a_path_from_its_name_and_broken_code_is_refused() {
+        let made = run("create", json!({ "section": "agents", "name": "Revisor de Segurança", "language": "pt-BR" }));
+        assert_eq!(made["path"], "agents/revisor-de-seguranca.ts");
+        let source = word(&made["source"]);
+        let section = Section {
+            key: "agents".into(),
+            folder: "agents/".into(),
+            exports: vec!["spec".into(), "default".into()],
+            shown: Value::Null,
+        };
+        assert_eq!(checked(&section, true, "agents/x.ts", &source), Ok(()));
+        assert!(matches!(checked(&section, true, "agents/x.ts", "export const spec = {"), Err(Failure::Invalid(_))));
+        assert!(matches!(checked(&section, true, "agents/x.ts", "export const spec = {};"), Err(Failure::Invalid(_))));
+        assert!(ask("create", &json!({ "section": "prompts", "name": "x" })).is_err());
+    }
+}

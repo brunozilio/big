@@ -1,0 +1,169 @@
+import type { Library, LibraryCard, LibraryChange, LibraryField, LibraryItem, LibraryValue } from '../contract'
+
+interface Kept {
+  section: string
+  path: string
+  title: string
+  description: string
+  avatar: LibraryCard['avatar']
+  origin: LibraryCard['origin']
+  files: string[]
+  values: Record<string, LibraryValue>
+  body: string | null
+  source: string
+}
+
+const SECTIONS = [
+  { key: 'agents', label: 'Agentes', hint: 'Quem faz o trabalho em cada etapa', icon: 'bot', creatable: true },
+  { key: 'skills', label: 'Skills', hint: 'Conhecimento que os agentes carregam quando precisam', icon: 'idea', creatable: true },
+  { key: 'prompts', label: 'Prompts', hint: 'Os textos que o sistema envia ao modelo', icon: 'note', creatable: false },
+  { key: 'workflows', label: 'Workflows', hint: 'As etapas que um item percorre', icon: 'workflow', creatable: true },
+  { key: 'flows', label: 'Fluxos de branch', hint: 'Como as branches são nomeadas, baseadas e mescladas', icon: 'branch', creatable: true },
+]
+
+const TOOLS = ['Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write', 'WebFetch', 'WebSearch', 'Agent', 'mcp__*']
+const SKILLS = ['verify', 'simplify', 'run', 'code-review']
+
+function agent(name: string, label: string, description: string, shape: string, color: string, tools: string[], body: string): Kept {
+  return { section: 'agents', path: `agents/${name}.ts`, title: label, description, avatar: { shape, color }, origin: 'shipped', files: [], values: { label, description, tools, skills: ['verify'], permissionMode: 'auto', 'avatar.color': color, 'avatar.shape': shape, disallowedTools: [], observer: [], model: '' }, body, source: '' }
+}
+
+function skill(name: string, description: string, body: string, files: string[] = []): Kept {
+  return { section: 'skills', path: `skills/${name}/SKILL.md`, title: name, description, avatar: null, origin: 'shipped', files, values: { name, description, 'disable-model-invocation': false }, body, source: '' }
+}
+
+function code(section: string, path: string, title: string, description: string, source: string): Kept {
+  return { section, path, title, description, avatar: null, origin: 'shipped', files: [], values: {}, body: null, source }
+}
+
+const WORKFLOW = `import { workflow, on } from "sdk";
+import { plan, develop, checks, pr, review, merge } from "sdk/steps";
+
+export default workflow({
+  name: "entrega",
+  accepts: ["issue", "text"],
+  triggers: [on("tracker.issue.created")],
+  steps: [
+    plan({ agent: "planner", status: { category: "todo" } }),
+    develop({ agent: "developer", status: { category: "doing" } }),
+    checks({ agent: "verifier", onFail: "develop", retries: 3 }),
+    pr(),
+    review({ agent: "reviewer", onChanges: "develop" }),
+    merge({ method: "squash" }),
+  ],
+});
+`
+
+const FLOW = `import { flow } from "sdk/flow.js";
+
+export const spec = {
+  branch: "feature/{issue}-{slug}",
+  base: "develop",
+  method: "squash",
+};
+
+export const branch = flow(spec);
+`
+
+function initial(): Kept[] {
+  return [
+    agent('planner', 'Planner', 'Turns an item into a delivery plan the Developer can carry out.', 'triangle', '#e94b9b', ['Read', 'Grep', 'Glob'], 'You are the Planner.\n\n## What you receive\n- The item: title, description and acceptance criteria.\n\n## How to work\n1. **Understand the request.**\n2. **Actually read the code.**\n3. **Write the plan.**\n'),
+    agent('developer', 'Developer', "Implements an item's plan on its branch, with tests, until the checks pass.", 'squircle', '#3b82f6', ['Read', 'Grep', 'Glob', 'Bash', 'Edit', 'Write'], 'You are the Developer.\n\n## How to work\n1. **Read before changing.**\n2. **Change in small steps.**\n3. **Test.**\n'),
+    agent('reviewer', 'Reviewer', 'Reviews the change like a careful colleague and asks for what is missing.', 'circle', '#4fb39c', ['Read', 'Grep', 'Glob'], 'You are the Reviewer.\n'),
+    skill('verify', 'Verify that a change does what it should by driving the real flow.', '**Verification is runtime observation.**\n\n## Find the change\n\n```bash\ngit diff --stat\n```\n', ['skills/verify/examples/cli.md']),
+    skill('code-review', 'Review the current changes for correctness bugs.', '# Code review\n'),
+    { ...code('prompts', 'prompts/chore-title.js', 'chore-title', '', ''), body: 'You are naming a coding session so the user can pick it out of a long list.\n' },
+    code('prompts', 'prompts/system.js', 'system', '', 'const role = `You are an interactive agent.`;\n\nexport default function ({ tools }) {\n  return [role, tools].join("\\n\\n");\n}\n'),
+    code('workflows', 'workflows/default.ts', 'entrega', 'plan → develop → checks → pr → review → merge', WORKFLOW),
+    code('flows', 'flows/gitflow.ts', 'gitflow', 'feature/{issue}-{slug}', FLOW),
+  ]
+}
+
+function fieldsOf(kept: Kept): LibraryField[] {
+  const value = (key: string) => kept.values[key]
+  if (kept.section === 'agents') {
+    return [
+      { key: 'label', label: 'Nome', kind: 'text', value: value('label') },
+      { key: 'description', label: 'Descrição', kind: 'area', value: value('description') },
+      { key: 'tools', label: 'Ferramentas', kind: 'chips', value: value('tools'), options: TOOLS },
+      { key: 'skills', label: 'Skills', kind: 'chips', value: value('skills'), options: SKILLS },
+      { key: 'permissionMode', label: 'Modo', kind: 'select', value: value('permissionMode'), options: ['auto', 'plan'] },
+      { key: 'avatar.color', label: 'Cor', kind: 'color', value: value('avatar.color') },
+      { key: 'avatar.shape', label: 'Forma', kind: 'select', value: value('avatar.shape'), options: ['circle', 'squircle', 'triangle', 'cloud', 'drop', 'pill'] },
+      { key: 'disallowedTools', label: 'Ferramentas bloqueadas', kind: 'chips', value: value('disallowedTools'), options: TOOLS, more: true },
+      { key: 'observer', label: 'Observadores', kind: 'chips', value: value('observer'), options: ['observer'], more: true },
+      { key: 'model', label: 'Modelo', kind: 'text', value: value('model'), more: true },
+    ]
+  }
+  if (kept.section === 'skills') {
+    return [
+      { key: 'name', label: 'Nome', kind: 'text', value: value('name') },
+      { key: 'description', label: 'Quando usar', kind: 'area', value: value('description') },
+      { key: 'disable-model-invocation', label: 'Só quando chamada pelo nome', kind: 'switch', value: value('disable-model-invocation') },
+    ]
+  }
+  return []
+}
+
+const text = (value: LibraryValue | undefined, fallback: string) => (typeof value === 'string' && value ? value : fallback)
+
+export function mockLibrary() {
+  let kept = initial()
+  const extras = new Map<string, string>([['skills/verify/examples/cli.md', '# CLI\n\nRun the command and read what it prints.\n']])
+  const find = (path: string) => kept.find((item) => item.path === path)
+  const owner = (path: string) => kept.find((item) => item.path === path || item.files.includes(path))
+  const missing = () => new Error('Esse item não existe.')
+
+  const shown = (path: string): LibraryItem => {
+    const item = owner(path)
+    if (!item) throw missing()
+    const base = { item: item.path, section: item.section, title: item.title, avatar: item.avatar, files: item.files, editable: true }
+    if (path !== item.path) return { ...base, path, origin: 'shipped', source: extras.get(path) ?? '', mode: 'code', language: 'markdown', fields: [], body: null }
+    const form = item.body !== null
+    return { ...base, path, origin: item.origin, source: item.source, mode: form ? 'form' : 'code', language: path.endsWith('.md') ? 'markdown' : path.endsWith('.ts') ? 'typescript' : 'javascript', fields: fieldsOf(item), body: form ? { label: item.section === 'skills' ? 'Instruções' : 'Prompt', text: item.body ?? '', language: 'markdown' } : null }
+  }
+
+  const list = (): Library => ({
+    editable: true,
+    sections: SECTIONS.map((section) => ({
+      ...section,
+      items: kept.filter((item) => item.section === section.key).map(({ path, title, description, avatar, origin, files }) => ({ path, title, description, avatar, origin, files })),
+    })),
+  })
+
+  const save = (path: string, change: LibraryChange): LibraryItem => {
+    const item = find(path)
+    if (!item) {
+      if (!owner(path) || !('source' in change)) throw missing()
+      extras.set(path, change.source)
+      return shown(path)
+    }
+    const origin = item.origin === 'own' ? 'own' : 'edited'
+    if ('source' in change) kept = kept.map((it) => (it === item ? { ...item, source: change.source, origin } : it))
+    else {
+      const values = { ...item.values, ...change.values }
+      const avatar = item.avatar ? { shape: text(values['avatar.shape'], item.avatar.shape ?? ''), color: text(values['avatar.color'], item.avatar.color ?? '') } : null
+      const next: Kept = { ...item, values, avatar, origin, body: change.body ?? item.body, title: text(values.label ?? values.name, item.title), description: text(values.description, '') }
+      kept = kept.map((it) => (it === item ? next : it))
+    }
+    return shown(path)
+  }
+
+  const create = (section: string, name: string): LibraryItem => {
+    const slug = name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+    if (!slug) throw new Error('O nome precisa de uma letra ou um número.')
+    const made = section === 'agents' ? agent(slug, name.trim(), '', 'circle', '#8b5cf6', ['Read', 'Grep', 'Glob'], `You are ${name.trim()}.\n`) : section === 'skills' ? skill(slug, name.trim(), `# ${name.trim()}\n`) : code(section, `${section}/${slug}.ts`, slug, '', section === 'workflows' ? WORKFLOW : FLOW)
+    if (find(made.path)) throw new Error('Já existe um item com esse nome.')
+    kept = [...kept, { ...made, origin: 'own' }]
+    return shown(made.path)
+  }
+
+  const restore = (path: string) => {
+    const item = find(path)
+    if (!item) throw missing()
+    const original = initial().find((it) => it.path === path)
+    kept = original ? kept.map((it) => (it === item ? original : it)) : kept.filter((it) => it !== item)
+  }
+
+  return { list, shown, save, create, restore }
+}

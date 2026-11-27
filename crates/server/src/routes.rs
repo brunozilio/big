@@ -64,6 +64,14 @@ fn api() -> Router<Ctx> {
         )
         .route("/api/memories", get(crate::memories::list).post(crate::memories::edit))
         .route("/api/memories/move", post(crate::memories::moved))
+        .route("/api/library", get(crate::library::list))
+        .route(
+            "/api/library/item",
+            get(crate::library::open)
+                .put(crate::library::save)
+                .post(crate::library::create)
+                .delete(crate::library::restore),
+        )
         .route("/api/browser", get(crate::browsers::status).put(crate::browsers::set))
         .route(browser::ROUTE, get(crate::browsers::connect))
         .route(

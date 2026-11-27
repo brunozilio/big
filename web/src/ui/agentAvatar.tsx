@@ -23,7 +23,7 @@ const EYES: Record<Shape, { y: number; gap: number; h: number }> = {
   pill: { y: 8.8, gap: 4.6, h: 6 },
 }
 
-const COLORS = ['#1c1c1e', '#4fb39c', '#8b5cf6', '#3b82f6', '#ef6c2f', '#f0a235', '#e94b9b', '#8a5a3b']
+export const AGENT_COLORS = ['#1c1c1e', '#4fb39c', '#8b5cf6', '#3b82f6', '#ef6c2f', '#f0a235', '#e94b9b', '#8a5a3b']
 const SHAPES: Shape[] = ['circle', 'squircle', 'triangle', 'cloud', 'drop', 'pill']
 
 function hash(s: string) {
@@ -35,9 +35,14 @@ function hash(s: string) {
   return Math.abs(h)
 }
 
+export function knownLook(look: { shape?: string; color?: string } | null | undefined): { shape: Shape; color: string } | null {
+  const shape = SHAPES.find((known) => known === look?.shape)
+  return shape && look?.color ? { shape, color: look.color } : null
+}
+
 export function agentLook(seed: string): { shape: Shape; color: string } {
   const h = hash(seed)
-  return { shape: SHAPES[h % SHAPES.length], color: COLORS[(h >> 3) % COLORS.length] }
+  return { shape: SHAPES[h % SHAPES.length], color: AGENT_COLORS[(h >> 3) % AGENT_COLORS.length] }
 }
 
 export function AgentAvatar({ look, seed = 'agente', name, size = 22, working, className }: { look?: { shape: Shape; color: string } | null; seed?: string; name?: string; size?: number; working?: boolean; className?: string }) {

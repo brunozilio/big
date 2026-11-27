@@ -38,15 +38,15 @@ export function presentation({ language }: { language: Language }) {
   return {
     description: pick(
       language,
-      "Tools from a remote MCP server for the agents",
-      "Herramientas de un servidor MCP remoto para los agentes",
-      "Ferramentas de um servidor MCP remoto para os agentes",
+      "Connect your own MCP server",
+      "Conecta tu propio servidor MCP",
+      "Conecte o seu próprio servidor MCP",
     ),
     group: "mcp",
     button: connect(language),
     site: pick(language, "the MCP server", "del servidor MCP", "do servidor MCP"),
     choose_title: pick(language, "MCP server", "Servidor MCP", "Servidor MCP"),
-    hidden: true,
+    custom: true,
   };
 }
 

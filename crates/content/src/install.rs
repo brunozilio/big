@@ -28,7 +28,7 @@ pub(crate) fn read_manifest(folder: &Path) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)?;
     }

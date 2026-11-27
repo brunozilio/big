@@ -54,7 +54,7 @@ function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider
   const data = useStore((s) => s.connections)
   const admin = useAdmin()
   if (!data) return <GridSkeleton groups={1} cards={2} />
-  const providers = data.providers.filter((p) => !!p.ai === ai && (admin || !p.ai))
+  const providers = data.providers.filter((p) => !!p.ai === ai && !p.custom && (admin || !p.ai))
   const groups = [...new Set(providers.map((p) => p.group))]
   return (
     <div className="space-y-5">

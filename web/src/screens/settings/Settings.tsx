@@ -22,6 +22,7 @@ const ApplicationsView = lazy(() => import('./Applications').then((m) => ({ defa
 const MemoryView = lazy(() => import('./Memory').then((m) => ({ default: m.MemoryView })))
 const PermissionsView = lazy(() => import('./Permissions').then((m) => ({ default: m.PermissionsView })))
 const UsageView = lazy(() => import('./Usage').then((m) => ({ default: m.UsageView })))
+const LibraryView = lazy(() => import('./Library').then((m) => ({ default: m.LibraryView })))
 const PeopleView = lazy(() => import('./People').then((m) => ({ default: m.PeopleView })))
 
 export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTab: (t: SettingsTab) => void; onConnect: (provider: string) => void }) {
@@ -30,7 +31,7 @@ export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTa
       <SettingsNav tab={tab} onTab={onTab} />
       <FadeIn key={tab} className="min-w-0">
         <Suspense fallback={<ListSkeleton />}>
-          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'memory' ? <MemoryView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : tab === 'account' ? <AccountPanel /> : tab === 'people' ? <PeopleView /> : <CustomView />}
+          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'memory' ? <MemoryView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : tab === 'account' ? <AccountPanel /> : tab === 'people' ? <PeopleView /> : tab === 'library' ? <LibraryView /> : <CustomView />}
         </Suspense>
       </FadeIn>
     </div>

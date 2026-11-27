@@ -21,6 +21,7 @@ pub mod flows;
 mod git;
 mod kept;
 pub mod kinds;
+pub mod library;
 mod ledger;
 mod links;
 mod matching;

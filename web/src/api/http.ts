@@ -126,6 +126,11 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
     saveApplication: (application) => call('PUT', ROUTES.application(application.id), application),
     deleteApplication: (id) => call('DELETE', ROUTES.application(id)),
     dirs: (path) => call('GET', ROUTES.dirs(path)),
+    library: () => call('GET', ROUTES.library),
+    libraryItem: (path) => call('GET', ROUTES.libraryItem(path)),
+    saveLibraryItem: (path, change) => call('PUT', ROUTES.libraryItem(null), { path, ...change }),
+    createLibraryItem: (section, name) => call('POST', ROUTES.libraryItem(null), { section, name }),
+    restoreLibraryItem: (path) => call('DELETE', ROUTES.libraryItem(path)),
     upload: async (file) => {
       const form = new FormData()
       form.append('file', file)

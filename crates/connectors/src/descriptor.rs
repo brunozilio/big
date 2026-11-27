@@ -178,6 +178,7 @@ pub struct Presentation {
     pub site: String,
     pub choose_title: String,
     pub hidden: bool,
+    pub custom: bool,
     pub bindings: Vec<BindingSpec>,
 }
 

@@ -6,11 +6,13 @@ mod embedded {
 
 #[cfg(test)]
 mod bundle;
+mod edit;
 #[cfg(test)]
 mod factory_tests;
 #[cfg(test)]
 mod graph_tests;
 mod install;
+pub mod library;
 mod modules;
 mod place;
 mod render;
@@ -22,6 +24,7 @@ mod security_tests;
 mod stdlib_tests;
 
 pub use modules::{bytes_in, listed, listed_in, modules, modules_in};
+pub use edit::{Origin, editable, editing_root, origin, restore, write};
 pub use install::{CACHE, Installed, MANIFEST, install_files, install_once};
 pub use place::{Mode, folder, home, installs, live_root, mode, shipped, skills, use_folder};
 

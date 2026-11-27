@@ -699,6 +699,7 @@ export interface Provider {
   multiple: boolean
   alternatives?: SignInAlternative[]
   ai?: boolean
+  custom?: boolean
   bindings?: BindingSpec[]
 }
 
@@ -997,6 +998,62 @@ export type LiveEvent =
   | { type: 'branding'; branding: Branding }
   | { type: 'resync' }
 
+export type LibraryOrigin = 'shipped' | 'edited' | 'own'
+
+export type LibraryLanguage = 'markdown' | 'typescript' | 'javascript' | 'json'
+
+export type LibraryValue = string | boolean | string[]
+
+export interface LibraryField {
+  key: string
+  label: string
+  kind: 'text' | 'area' | 'chips' | 'select' | 'switch' | 'color'
+  value: LibraryValue
+  options?: string[]
+  more?: boolean
+}
+
+export interface LibraryCard {
+  path: string
+  title: string
+  description: string | null
+  avatar: { shape?: string; color?: string } | null
+  origin: LibraryOrigin
+  files: string[]
+}
+
+export interface LibrarySection {
+  key: string
+  label: string
+  hint: string
+  icon: string
+  creatable: boolean
+  items: LibraryCard[]
+}
+
+export interface Library {
+  editable: boolean
+  sections: LibrarySection[]
+}
+
+export interface LibraryItem {
+  path: string
+  item: string
+  section: string
+  title: string
+  avatar: LibraryCard['avatar']
+  origin: LibraryOrigin
+  source: string
+  files: string[]
+  mode: 'form' | 'code'
+  language: LibraryLanguage
+  fields: LibraryField[] | null
+  body: { label: string; text: string; language: LibraryLanguage } | null
+  editable: boolean
+}
+
+export type LibraryChange = { source: string } | { values: Record<string, LibraryValue>; body: string | null }
+
 export interface Api {
   items(): Promise<Item[]>
   createItem(input: NewItem): Promise<Item>
@@ -1036,6 +1093,11 @@ export interface Api {
   saveApplication(application: Application): Promise<Application>
   deleteApplication(id: string): Promise<void>
   dirs(path: string | null): Promise<DirListing>
+  library(): Promise<Library>
+  libraryItem(path: string): Promise<LibraryItem>
+  saveLibraryItem(path: string, change: LibraryChange): Promise<LibraryItem>
+  createLibraryItem(section: string, name: string): Promise<LibraryItem>
+  restoreLibraryItem(path: string): Promise<void>
   upload(file: File): Promise<{ id: string; name: string; size: number }>
   live(onEvent: (event: LiveEvent) => void, onState: (connected: boolean) => void): () => void
 }
@@ -1077,6 +1139,8 @@ export const ROUTES = {
   flows: '/api/flows',
   application: (id: string) => `/api/applications/${encodeURIComponent(id)}`,
   dirs: (path: string | null) => (path ? `/api/fs/dirs?path=${encodeURIComponent(path)}` : '/api/fs/dirs'),
+  library: '/api/library',
+  libraryItem: (path: string | null) => (path ? `/api/library/item?path=${encodeURIComponent(path)}` : '/api/library/item'),
   attachments: '/api/attachments',
   attachment: (id: string) => `/api/attachments/${encodeURIComponent(id)}`,
   artifactContent: (id: string, download = false) => `/api/artifacts/${encodeURIComponent(id)}/content${download ? '?download=1' : ''}`,
