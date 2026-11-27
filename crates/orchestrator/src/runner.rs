@@ -229,6 +229,8 @@ impl Runner {
         let owner = item.clone();
         let mut activation = json!({
             "item": item_json(item),
+            "application": crate::application::current(&self.shared.store, &item.input),
+            "seen": ledger.applications(&item.input["application"]),
             "journal": ledger.journal(),
             "start": ledger.start,
             "seed": item.id.as_str(),

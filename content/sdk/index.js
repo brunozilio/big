@@ -141,6 +141,8 @@ class Runtime {
     this.tries = new Map();
     this.groups = new Map();
     this.item = Object.freeze({ ...(activation.item || {}) });
+    this.application = activation.application || null;
+    this.seen = activation.seen && typeof activation.seen === "object" ? activation.seen : {};
     this.clock = Number(activation.start || 0);
     this.random = generator(String(activation.seed === undefined ? "" : activation.seed));
     this.finished = null;
@@ -255,6 +257,7 @@ class Ctx {
     this.from = from === undefined ? null : from;
     this.each = null;
     this.needs = {};
+    this.view = null;
   }
 
   scoped(branch, step, attempt, from) {
@@ -267,11 +270,12 @@ class Ctx {
     );
     next.each = this.each;
     next.needs = this.needs;
+    next.view = this.view;
     return next;
   }
 
   get item() {
-    return this.runtime.item;
+    return this.view || this.runtime.item;
   }
 
   get workflow() {
@@ -492,11 +496,27 @@ function plain(value) {
   }
 }
 
+function trackedBy(item, application) {
+  if (item.issue) return {};
+  const bound = statusObject(statusObject(statusObject(application).bindings).tracker);
+  return { project: bound.connection && bound.value ? bound.value : undefined, connection: bound.connection && bound.value ? bound.connection : undefined };
+}
+
+function seenBy(runtime, scope) {
+  const key = `${scope.branch}|${scope.step}|${scope.attempt}`;
+  if (Object.prototype.hasOwnProperty.call(runtime.seen, key)) return runtime.seen[key];
+  return runtime.application;
+}
+
 function opened(ctx, call, kind, from) {
   const attempt = ctx.runtime.attempt(ctx.branch, call.id);
   const scope = ctx.scoped(ctx.branch, call.id, attempt, from || null);
   const extra = call.type === "group" ? { group: true } : {};
-  ctx.runtime.signal(scope, "step.started", { type: kind, options: plain(call.options), ...extra });
+  const application = seenBy(ctx.runtime, scope);
+  const item = ctx.runtime.item;
+  if (application && application !== item.application) scope.view = Object.freeze({ ...item, ...trackedBy(item, application), application });
+  const seen = application ? { application } : {};
+  ctx.runtime.signal(scope, "step.started", { type: kind, options: plain(call.options), ...extra, ...seen });
   return scope;
 }
 
@@ -526,6 +546,13 @@ export function transitionArgs(value) {
   if (typeof value === "string") return value ? { status: value } : null;
   const wanted = statusObject(value);
   return typeof wanted.category === "string" ? { category: wanted.category } : null;
+}
+
+function untracked(item) {
+  const found = statusObject(item);
+  const application = statusObject(found.application);
+  const bound = statusObject(statusObject(application.bindings).tracker);
+  return Boolean(application.id) && !found.connection && !(bound.connection && bound.value);
 }
 
 async function quietStatus(work) {
@@ -559,6 +586,7 @@ export async function resolveStatus(scope, value) {
   const wanted = statusObject(value);
   const options = { optional: true };
   const issue = statusIssue(scope);
+  if (!issue && untracked(scope.item)) return null;
   const found = issue ? await quietStatus(() => scope.call("tracker", "issue", { issue }, options)) : {};
   const type = found.type ?? null;
   const fixed = type ? statusByType(wanted, type) : null;

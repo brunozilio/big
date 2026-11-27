@@ -1,7 +1,9 @@
 import { step, issue, markdown, form, actions } from "sdk";
-import { attempt, defined, effects, object, planOf, sourcesOf, waitOptions } from "./context.js";
+import { attempt, defined, effects, object, planOf, sourcesOf, unbound, waitOptions } from "./context.js";
 
 const UNTRACKED = "No issue tracker is connected, so the item continues without an issue.";
+
+const UNBOUND = "The application has no tracker project bound, so the item continues without an issue.";
 
 const CHOOSE = "The tracker has more than one project. Choose where to create this item's issue.";
 
@@ -176,6 +178,7 @@ export default step({
       const checked = await checkStatuses(ctx, opts, project, options);
       return ctx.pass({ issue: existing, created: false, ...checked });
     }
+    if (unbound(ctx, { ...opts, connection: opts.connection ?? ctx.item.connection }, "tracker")) return ctx.skip({ created: false, reason: UNBOUND });
     const chosen = await destination(ctx, opts, options);
     if (chosen === null) return ctx.skip({ created: false, reason: UNTRACKED });
     const plan = planOf(ctx, opts);

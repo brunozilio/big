@@ -23,7 +23,7 @@ async fn an_item_of_an_application_with_two_repositories_delivers_a_pull_request
     hub.github.add("acme/api", api.clone());
     let server = hub.start().await;
     let application = json!({
-        "name": "Loja", "bindings": { "tracker": { "connection": "trk", "value": "K" } },
+        "name": "Loja", "bindings": { "tracker": { "connection": "trk", "value": "K" }, "tests": { "connection": "trk", "value": "K" } },
         "repositories": [
             { "directory": hub.repo(), "bindings": { "code": { "connection": CODE, "value": "acme/app" } }, "verify": ["test -f README.md"] },
             { "directory": api, "bindings": { "code": { "connection": CODE, "value": "acme/api" } }, "verify": ["test -f API.md"] },

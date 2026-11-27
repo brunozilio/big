@@ -64,6 +64,7 @@ fn item() -> Value {
         "schedule": { "day": "2026-11-24" },
         "application": {
             "id": "app", "name": "Loja",
+            "bindings": { "tracker": { "connection": "trk", "value": "LOJA" } },
             "repositories": [{
                 "id": "r1", "directory": "/src/loja",
                 "bindings": {

@@ -111,6 +111,18 @@ impl Ledger {
         self.order.push(key.seq);
     }
 
+    pub fn applications(&self, original: &Value) -> serde_json::Map<String, Value> {
+        self.signals
+            .values()
+            .filter(|signal| signal.kind == "step.started")
+            .filter_map(|signal| {
+                let step = signal.step.as_deref()?;
+                let seen = signal.data.get("application").unwrap_or(original).clone();
+                Some((format!("{}|{step}|{}", signal.branch, signal.attempt), seen))
+            })
+            .collect()
+    }
+
     pub fn cut(&self, step: &str) -> Option<u64> {
         self.signals
             .iter()

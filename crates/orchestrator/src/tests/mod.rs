@@ -8,6 +8,7 @@ mod package;
 mod repos;
 mod restart;
 mod triggers;
+mod unbound;
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
@@ -46,8 +47,10 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value, String)>>,
 }
 
-const ACTIONS: [&str; 16] = [
+const ACTIONS: [&str; 18] = [
     "tracker.issue",
+    "tracker.schema",
+    "tracker.projects",
     "tracker.create_issue",
     "tracker.update_issue",
     "tracker.link_issues",

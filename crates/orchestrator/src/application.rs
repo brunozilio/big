@@ -21,6 +21,11 @@ pub fn live(store: &Store, input: &Value) -> Value {
     input
 }
 
+pub fn current(store: &Store, input: &Value) -> Value {
+    let found = id_of(input).and_then(|id| store.application(&id).ok().flatten());
+    found.map_or(Value::Null, |application| crate::provenance::snapshot(store, &application))
+}
+
 pub fn environment(store: &Store, input: &Value) -> Vec<(String, String)> {
     let found = id_of(input).and_then(|id| store.application(&id).ok().flatten());
     found.map(|application| application.env.into_iter().collect()).unwrap_or_default()

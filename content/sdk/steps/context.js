@@ -396,6 +396,12 @@ const CHOICES = [
   { id: "cancel", label: "Cancel item", icon: "stop", variant: "danger" },
 ];
 
+export function unbound(ctx, opts, capability) {
+  const application = object(ctx.item.application);
+  if (!application.id || opts.connection) return false;
+  return !bindingOf(application, capability);
+}
+
 export async function missingConnection(ctx, opts, capability, what) {
   const reason = `connect an account for ${capability}`;
   const text = `**A ${what} connection is missing.** Connect an account in Settings › Connections and try again, or continue without this step.`;

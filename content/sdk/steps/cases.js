@@ -1,6 +1,6 @@
 import { projectOf } from "sdk/bindings.js";
 import { step, markdown, testCases } from "sdk";
-import { agentOptions, attempt, defined, effects, inLanguage, issueOf, languageOf, missingConnection, object, planOf, waitOptions } from "./context.js";
+import { agentOptions, attempt, defined, effects, inLanguage, issueOf, languageOf, missingConnection, object, planOf, unbound, waitOptions } from "./context.js";
 
 const KINDS = { api: "API", ui: "UI" };
 
@@ -211,6 +211,7 @@ export default step({
   doing: "Writing test cases",
   view: (s) => (Array.isArray(s.cases) ? [testCases(s.cases.map(bdd), defined({ session: s.session }))] : s.reason ? [markdown(s.reason)] : []),
   async run(ctx, opts) {
+    if (unbound(ctx, opts, "tests")) return ctx.skip({ reason: "Step skipped: the application has no test project bound." });
     const issue = issueOf(ctx, opts);
     const existing = await linkedCases(ctx, opts, issue);
     if (existing === SKIPPED) return ctx.skip({ reason: "Step skipped: no test case connection." });
