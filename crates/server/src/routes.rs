@@ -79,10 +79,7 @@ fn api() -> Router<Ctx> {
         )
         .route("/api/browser", get(crate::browsers::status).put(crate::browsers::set))
         .route(browser::ROUTE, get(crate::browsers::connect))
-        .route(
-            crate::browser_mcp::route(),
-            post(crate::browser_mcp::post).get(crate::browser_mcp::other).delete(crate::browser_mcp::ended),
-        )
+        .route(crate::mcp::route(), post(crate::mcp::post).get(crate::mcp::other).delete(crate::mcp::ended))
         .route("/api/admin/people", get(crate::people::list).post(crate::auth::add_person))
         .route("/api/admin/people/{id}/password", put(crate::auth::reset_password))
         .route("/api/admin/people/{id}/sessions", delete(crate::people::sign_out))

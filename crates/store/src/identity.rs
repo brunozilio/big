@@ -115,12 +115,7 @@ impl Store {
              FROM users u ORDER BY u.email",
         )?;
         let rows = statement.query_map([now], |row| {
-            Ok(Person {
-                principal: principal(row)?,
-                created: row.get(3)?,
-                seen: row.get(4)?,
-                sessions: row.get(5)?,
-            })
+            Ok(Person { principal: principal(row)?, created: row.get(3)?, seen: row.get(4)?, sessions: row.get(5)? })
         })?;
         Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }

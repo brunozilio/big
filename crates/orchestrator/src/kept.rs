@@ -109,9 +109,13 @@ mod tests {
         let store = store(&root.path().join("data"));
         let kept = keep(&store, &tree, &json!(["a.png"]));
         let id = kept[0]["id"].as_str().expect("id").to_owned();
-        let mut args = json!({ "issue": "T-1", "files": [{ "$file": id }, { "$file": "../tree" }, { "$file": "x", "more": 1 }] });
+        let mut args =
+            json!({ "issue": "T-1", "files": [{ "$file": id }, { "$file": "../tree" }, { "$file": "x", "more": 1 }] });
         expand(&store, &mut args);
-        assert_eq!(args["files"][0], json!({ "id": id, "name": "a.png", "size": 3, "contentType": "image/png", "base64": "cG5n" }));
+        assert_eq!(
+            args["files"][0],
+            json!({ "id": id, "name": "a.png", "size": 3, "contentType": "image/png", "base64": "cG5n" })
+        );
         assert_eq!(args["files"][1]["missing"], true);
         assert_eq!(args["files"][2], json!({ "$file": "x", "more": 1 }));
         assert_eq!(args["issue"], "T-1");

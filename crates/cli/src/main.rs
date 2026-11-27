@@ -1,10 +1,10 @@
-mod browser_mcp;
 mod cloud;
 mod discovered;
 mod git_credential;
 mod http;
 mod instance;
 mod logging;
+mod mcp;
 mod runner;
 mod teammate;
 
@@ -36,10 +36,10 @@ enum Internal {
     #[command(name = server::GIT_CREDENTIAL_COMMAND, hide = true, about = "Answer git with an agent's repository credentials")]
     GitCredential(git_credential::Args),
     #[command(
-        name = brand::browser::MCP_COMMAND,
-        about = "Serve the browser tools over MCP on stdin/stdout, for another agent to use"
+        name = brand::mcp::COMMAND,
+        about = "Serve the app's resources (browser, memory) over MCP on stdin/stdout, for another agent to use"
     )]
-    BrowserMcp(browser_mcp::Args),
+    Mcp(mcp::Args),
 }
 
 fn main() -> ExitCode {
@@ -66,7 +66,7 @@ fn launched(cli: Cli, root: &Path) -> Result<ExitCode, String> {
         Some(Internal::Teammate(args)) => teammate::run(args),
         Some(Internal::CloudCredentials(args)) => cloud::run(args),
         Some(Internal::GitCredential(args)) => git_credential::run(args),
-        Some(Internal::BrowserMcp(args)) => data_dir().and_then(|data| browser_mcp::run(args, data)),
+        Some(Internal::Mcp(args)) => data_dir().and_then(|data| mcp::run(args, data)),
         None => serve(root, cli.port.unwrap_or_else(configured_port), !cli.no_open && configured_open()),
     }
 }
@@ -174,9 +174,10 @@ mod tests {
     }
 
     #[test]
-    fn the_browser_mcp_command_takes_no_arguments() {
-        let cli = Cli::parse_from([brand::COMMAND, brand::browser::MCP_COMMAND]);
-        assert!(matches!(cli.command, Some(Internal::BrowserMcp(_))));
+    fn the_mcp_command_takes_the_resources_to_serve() {
+        let cli = Cli::parse_from([brand::COMMAND, brand::mcp::COMMAND, "memory", "browser", "--project", "/repo"]);
+        assert!(matches!(cli.command, Some(Internal::Mcp(_))));
+        assert!(Cli::try_parse_from([brand::COMMAND, brand::mcp::COMMAND]).is_err());
     }
 
     #[test]

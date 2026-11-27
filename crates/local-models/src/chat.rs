@@ -154,13 +154,21 @@ pub fn complete(body: &Value, send: &mut dyn FnMut(Value) -> bool) -> Result<(),
         for piece in out {
             send(chunks.piece(piece));
         }
-        let finish = if chunks.calls > 0 { "tool_calls" } else if full { "length" } else { "stop" };
+        let finish = if chunks.calls > 0 {
+            "tool_calls"
+        } else if full {
+            "length"
+        } else {
+            "stop"
+        };
         send(chunks.chunk(json!({}), Some(finish)));
         let usage = json!({
             "prompt_tokens": tokens.len(), "completion_tokens": output, "total_tokens": tokens.len() + output,
             "prompt_tokens_details": { "cached_tokens": reused },
         });
-        send(json!({ "id": chunks.id, "object": "chat.completion.chunk", "model": ask.model, "choices": [], "usage": usage }));
+        send(
+            json!({ "id": chunks.id, "object": "chat.completion.chunk", "model": ask.model, "choices": [], "usage": usage }),
+        );
         Ok(())
     })
 }

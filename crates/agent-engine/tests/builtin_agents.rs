@@ -239,7 +239,10 @@ fn a_new_sub_agent_gets_the_code_map_for_its_own_task_and_a_fork_does_not() {
     assert!(explore.messages[1].text().contains("<code-map>"), "{:?}", explore.messages[1].text());
     assert!(explore.messages[1].text().contains("for Where is main?"));
     let fork = &asked[3];
-    assert!(!fork.messages.iter().any(|message| message.text().contains("<code-map>")), "a fork keeps the parent's view");
+    assert!(
+        !fork.messages.iter().any(|message| message.text().contains("<code-map>")),
+        "a fork keeps the parent's view"
+    );
 }
 
 #[test]

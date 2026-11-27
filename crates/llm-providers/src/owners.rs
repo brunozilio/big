@@ -22,7 +22,9 @@ pub fn maker(model: &str) -> Option<&'static str> {
     let words: Vec<&str> = id.split(|letter: char| !letter.is_ascii_alphanumeric()).collect();
     let providers = crate::providers::all();
     let mut makers = providers.iter().flat_map(|provider| provider.makers().iter());
-    makers.find(|(word, _)| words.iter().any(|said| said.starts_with(&word.to_ascii_lowercase()))).map(|(_, logo)| *logo)
+    makers
+        .find(|(word, _)| words.iter().any(|said| said.starts_with(&word.to_ascii_lowercase())))
+        .map(|(_, logo)| *logo)
 }
 
 pub fn priced(provider: &dyn Provider, model: &str, prompt_tokens: u64, cache: Cache) -> Option<TokenRates> {

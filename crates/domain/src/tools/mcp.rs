@@ -78,6 +78,75 @@ impl PartialEq for LocalMcp {
 
 impl Eq for LocalMcp {}
 
+pub struct McpBundle {
+    server: String,
+    parts: Vec<LocalMcp>,
+}
+
+impl McpBundle {
+    pub fn new(server: impl Into<String>, parts: Vec<LocalMcp>) -> Self {
+        Self { server: server.into(), parts }
+    }
+
+    fn tools_of(part: &LocalMcp) -> Vec<Value> {
+        let asked = json!({ "jsonrpc": "2.0", "id": 0, "method": "tools/list" });
+        let listed = part.endpoint.handle(&asked).unwrap_or(Value::Null);
+        listed["result"]["tools"].as_array().cloned().unwrap_or_default()
+    }
+
+    fn tools(&self) -> Vec<(usize, Value)> {
+        let mut seen = std::collections::BTreeSet::new();
+        let mut all = Vec::new();
+        for (index, part) in self.parts.iter().enumerate() {
+            for tool in Self::tools_of(part) {
+                let name = tool["name"].as_str().unwrap_or_default().to_owned();
+                if seen.insert(name) {
+                    all.push((index, tool));
+                }
+            }
+        }
+        all
+    }
+
+    fn call(&self, message: &Value) -> Option<Value> {
+        let name = message["params"]["name"].as_str().unwrap_or_default();
+        let owner = self.tools().into_iter().find(|(_, tool)| tool["name"] == name).map(|(index, _)| index);
+        match owner.and_then(|index| self.parts.get(index)) {
+            Some(part) => part.endpoint.handle(message),
+            None => respond(message, &self.server, Vec::new, |name, _| Err((-32602, format!("unknown tool: {name}")))),
+        }
+    }
+}
+
+impl std::fmt::Debug for McpBundle {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("McpBundle").field("server", &self.server).field("parts", &self.parts).finish()
+    }
+}
+
+impl McpEndpoint for McpBundle {
+    fn handle(&self, message: &Value) -> Option<Value> {
+        if message.get("id").is_none() {
+            for part in &self.parts {
+                part.endpoint.handle(message);
+            }
+            return None;
+        }
+        if let [only] = self.parts.as_slice() {
+            return only.endpoint.handle(message);
+        }
+        match message["method"].as_str().unwrap_or_default() {
+            "tools/call" => self.call(message),
+            _ => respond(
+                message,
+                &self.server,
+                || self.tools().into_iter().map(|(_, tool)| tool).collect(),
+                |name, _| Err((-32602, format!("unknown tool: {name}"))),
+            ),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Eq)]
 pub struct RemoteMcp {
     pub name: String,
@@ -114,6 +183,9 @@ impl std::fmt::Debug for RemoteMcp {
             .finish()
     }
 }
+
+#[cfg(test)]
+mod bundle_tests;
 
 #[cfg(test)]
 mod remote_tests {

@@ -72,7 +72,8 @@ impl Metered {
             },
             request.intent.cache,
         );
-        let discount = provider.filter(|_| reply.batched).and_then(|p| llm_providers::later_discount(p, &request.model));
+        let discount =
+            provider.filter(|_| reply.batched).and_then(|p| llm_providers::later_discount(p, &request.model));
         let cost = crate::model::intent::discounted(cost, request.intent, discount);
         self.ledger.costs.lock().map_err(|_| ModelError::Provider("usage ledger unavailable".into()))?.push(cost);
         let served = self.served_by(request, reply);
@@ -115,8 +116,7 @@ pub fn estimate(provider: &str, usage: &ModelUsage) -> Option<f64> {
 
 pub fn estimate_cached(provider: &str, usage: &ModelUsage, cache: Cache) -> Option<f64> {
     let provider = crate::providers::all().into_iter().find(|known| known.id() == provider)?;
-    let searched =
-        provider.search_price().map_or(0.0, |price| domain::billing::searches_cost(price, usage.searches));
+    let searched = provider.search_price().map_or(0.0, |price| domain::billing::searches_cost(price, usage.searches));
     let prompt = usage.input + usage.cache_read + usage.cache_write;
     priced(provider, &usage.model, prompt, cache)
         .map(|rate| rate.estimate(usage.input, usage.output, usage.cache_read, usage.cache_write) + searched)

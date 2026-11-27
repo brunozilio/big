@@ -298,7 +298,9 @@ impl Agent<'_> {
             .tools
             .iter()
             .chain(waiting.map(|deferred| deferred.specs()).unwrap_or_default())
-            .filter(|spec| config.allows(&spec.name) && !self.tool(run, &spec.name).is_some_and(|tool| tool.top_level_only()))
+            .filter(|spec| {
+                config.allows(&spec.name) && !self.tool(run, &spec.name).is_some_and(|tool| tool.top_level_only())
+            })
             .filter(|spec| !planning || !self.refused_while_planning(&spec.name, run))
             .cloned()
             .collect()

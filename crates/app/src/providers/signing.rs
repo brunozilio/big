@@ -36,7 +36,9 @@ impl ModelProviders {
             return replies.send(failed(provider, message));
         }
         let (this, replies) = (self.clone(), replies.clone());
-        platform::named::spawn("provider-sign-in", move || this.signing_in(provider, back.as_deref(), &fields, &replies));
+        platform::named::spawn("provider-sign-in", move || {
+            this.signing_in(provider, back.as_deref(), &fields, &replies)
+        });
     }
 
     fn cannot_sign_in(&self, provider: ModelProvider) -> Option<String> {

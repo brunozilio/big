@@ -2,8 +2,8 @@ use std::fmt::Write as _;
 use std::sync::Arc;
 
 use agent_engine::tools::{self, Workspace};
-use serde_json::Value;
 use connectors::contracts::CODE;
+use serde_json::Value;
 use store::{Application, Binding, Repository, Store};
 
 pub const ADD_REPOSITORY: &str = domain::ToolName::AddRepository.as_str();
@@ -77,7 +77,11 @@ fn inside(input: &Value) -> Result<Option<String>, String> {
         return Ok(None);
     };
     let normal = std::path::Path::new(&folder).components().all(|part| matches!(part, std::path::Component::Normal(_)));
-    if normal { Ok(Some(folder)) } else { Err(format!("`e2eDirectory` {folder} must be a folder inside the repository.")) }
+    if normal {
+        Ok(Some(folder))
+    } else {
+        Err(format!("`e2eDirectory` {folder} must be a folder inside the repository."))
+    }
 }
 
 fn wanted(input: &Value, workspace: &Workspace) -> Result<Wanted, String> {
@@ -156,7 +160,8 @@ const KEPT_READ_ONLY: &str = "is read only, and only the person can make it writ
      settings; leave out `readOnly` to update its other fields.";
 
 fn unlocks(application: &Application, wanted: &Wanted, directory: &str) -> Option<String> {
-    let locked = application.repositories.iter().any(|repository| repository.directory == directory && repository.read_only);
+    let locked =
+        application.repositories.iter().any(|repository| repository.directory == directory && repository.read_only);
     (locked && wanted.read_only == Some(false)).then(|| format!("{directory} {KEPT_READ_ONLY}"))
 }
 

@@ -63,4 +63,3 @@ fn an_application_saved_with_the_old_dependabot_flag_still_reads() {
     let off: Application = serde_json::from_str(r#"{"name":"Loja","skipDependabot":false}"#).expect("turned off");
     assert_eq!(off.name, "Loja");
 }
-

@@ -7,7 +7,10 @@ const WAITS: &str = "export default workflow({ name: \"NAME\", branches, trigger
 
 fn waiting(world: &World, name: &str, kind: &str) {
     let body = WAITS.replace("NAME", name).replace("KIND", kind);
-    world.workflow(name, &format!("import {{ workflow, on }} from \"sdk\";\nimport {{ branches }} from \"../branches.ts\";\n{body}"));
+    world.workflow(
+        name,
+        &format!("import {{ workflow, on }} from \"sdk\";\nimport {{ branches }} from \"../branches.ts\";\n{body}"),
+    );
 }
 
 fn checkout(world: &World) -> Application {
@@ -40,7 +43,10 @@ async fn a_review_trigger_lands_in_the_application_of_the_repository_on_the_pull
     assert_eq!(kept.input["application"]["id"], "app");
     assert_eq!(kept.input["sources"][0]["repository"], "web");
     let promote = json!([{ "from": "develop", "into": "release", "method": "merge" }, { "from": "release", "into": "main", "method": "merge" }]);
-    assert_eq!(kept.input["git"], json!({ "web": { "head": "feat/cache", "base": "develop", "method": "squash", "promote": promote } }));
+    assert_eq!(
+        kept.input["git"],
+        json!({ "web": { "head": "feat/cache", "base": "develop", "method": "squash", "promote": promote } })
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -28,7 +28,9 @@ fn disabled(config: &Path) -> Vec<String> {
         }
         let Some((key, value)) = line.split_once('=') else { continue };
         if inside && key.trim() == "disabled" {
-            found.extend(value.trim().trim_matches('"').split_whitespace().map(|item| item.trim_matches('/').to_owned()));
+            found.extend(
+                value.trim().trim_matches('"').split_whitespace().map(|item| item.trim_matches('/').to_owned()),
+            );
         }
     }
     found

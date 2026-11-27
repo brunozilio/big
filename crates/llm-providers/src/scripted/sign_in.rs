@@ -38,7 +38,9 @@ struct Remote {
 
 impl script::Host for Remote {
     fn call(&self, function: &str, arguments: Value) -> Result<Value, String> {
-        if !OFFERED.contains(&function) && let Some(answer) = self.local.answer(function, &arguments) {
+        if !OFFERED.contains(&function)
+            && let Some(answer) = self.local.answer(function, &arguments)
+        {
             return answer;
         }
         let (reply, answer) = channel();

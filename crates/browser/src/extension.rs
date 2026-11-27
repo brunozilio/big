@@ -182,13 +182,19 @@ mod tests {
         let permissions = manifest["permissions"].as_array().cloned().unwrap_or_default();
         assert!(permissions.iter().any(|permission| permission == "declarativeNetRequest"));
         let scripts = manifest["content_scripts"].as_array().cloned().unwrap_or_default();
-        let relay = scripts.iter().find(|script| script["js"].as_array().is_some_and(|js| js.iter().any(|file| file == "page/relay.js")));
+        let relay = scripts
+            .iter()
+            .find(|script| script["js"].as_array().is_some_and(|js| js.iter().any(|file| file == "page/relay.js")));
         let relay = relay.cloned().unwrap_or_default();
         assert_eq!(relay["matches"][0], "<all_urls>");
         assert_eq!(relay["run_at"], "document_start");
         assert_eq!(relay["all_frames"], false);
         let marker = format!("{}:relay", brand::NAME);
-        let script = FILES.iter().find(|(path, _)| *path == "page/relay.js").map(|(_, source)| render(source, 4321)).unwrap_or_default();
+        let script = FILES
+            .iter()
+            .find(|(path, _)| *path == "page/relay.js")
+            .map(|(_, source)| render(source, 4321))
+            .unwrap_or_default();
         assert!(script.contains(&format!("\"{marker}\"")));
         let main = FILES.iter().find(|(path, _)| *path == "bg/main.js").map(|(_, source)| *source).unwrap_or_default();
         assert!(main.contains("from \"./relay.js\""));

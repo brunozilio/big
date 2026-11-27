@@ -120,9 +120,11 @@ impl Job {
         let models = &workspace.models;
         let tiered = |tier: &str| models.roles.for_tier(&models.tiers, tier, &asked.id, models.small_model.as_deref());
         let chosen = match (self.request.session.tier.as_deref(), &main.config.model) {
-            (Some(tier), _) => tools::subagent_config::AgentConfig { model: Some(tiered(tier).to_owned()), ..Default::default() }
-                .model(&asked.id, asked.provider)
-                .unwrap_or_else(|_| asked.id.clone()),
+            (Some(tier), _) => {
+                tools::subagent_config::AgentConfig { model: Some(tiered(tier).to_owned()), ..Default::default() }
+                    .model(&asked.id, asked.provider)
+                    .unwrap_or_else(|_| asked.id.clone())
+            }
             (None, Some(_)) => main.config.model_in(&asked.id, &workspace.models).map_err(Stop::failed)?,
             (None, None) => workspace.models.roles.for_turn(&asked.id, self.request.policy.permission).to_owned(),
         };

@@ -8,8 +8,8 @@ mod template;
 
 use std::sync::OnceLock;
 
-pub use engine::unload;
 pub use download::{Request, Transfer, start as download, transfers};
+pub use engine::unload;
 pub use serve::{endpoint, models};
 pub use store::{Stored, folder, remove, stored};
 

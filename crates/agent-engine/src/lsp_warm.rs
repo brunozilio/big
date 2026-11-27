@@ -33,8 +33,11 @@ pub fn warm(lsp: &crate::lsp::Lsp, cwd: &Path) {
 }
 
 pub fn first_files(cwd: &Path, specs: &[ServerSpec]) -> Vec<PathBuf> {
-    let rooted: Vec<ServerSpec> =
-        specs.iter().filter(|spec| spec.root_markers.iter().any(|marker| cwd.join(marker).is_file())).cloned().collect();
+    let rooted: Vec<ServerSpec> = specs
+        .iter()
+        .filter(|spec| spec.root_markers.iter().any(|marker| cwd.join(marker).is_file()))
+        .cloned()
+        .collect();
     if rooted.is_empty() {
         return Vec::new();
     }
@@ -74,7 +77,8 @@ mod tests {
     #[test]
     fn each_server_rooted_at_the_folder_warms_on_its_shallowest_file_under_that_root() {
         let dir = tempfile::tempdir().expect("dir");
-        for path in ["Cargo.toml", "crates/a/Cargo.toml", "crates/a/src/lib.rs", "crates/a/src/deep/x.rs", "web/app.ts"] {
+        for path in ["Cargo.toml", "crates/a/Cargo.toml", "crates/a/src/lib.rs", "crates/a/src/deep/x.rs", "web/app.ts"]
+        {
             write(dir.path(), path);
         }
         let outermost = spec(serde_json::json!({"name": "ra", "command": "ra", "extensionToLanguage": {".rs": "rust"},

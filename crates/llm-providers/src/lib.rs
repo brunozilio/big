@@ -7,6 +7,7 @@ mod config;
 pub mod limits;
 pub mod model;
 pub mod oauth;
+mod owners;
 pub mod prices;
 pub mod providers;
 pub mod request;
@@ -15,7 +16,6 @@ pub mod sign_in;
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;
 pub mod transcript;
-mod owners;
 pub mod web_search;
 
 pub use owners::{EFFORTS, efforts, later_discount, maker, owner, owns, priced, serves};

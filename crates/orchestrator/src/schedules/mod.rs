@@ -74,10 +74,7 @@ fn expand(application: Application, field: Option<&str>) -> Vec<Target> {
         return vec![whole(application)];
     }
     let several = application.repositories.len() > 1;
-    let chosen = application
-        .repositories
-        .iter()
-        .filter(|repository| repository.bound(field).is_some());
+    let chosen = application.repositories.iter().filter(|repository| repository.bound(field).is_some());
     chosen
         .map(|repository| Target {
             application: Application { repositories: vec![repository.clone()], ..application.clone() },

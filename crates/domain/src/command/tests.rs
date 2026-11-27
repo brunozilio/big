@@ -158,10 +158,7 @@ fn model_takes_a_role_before_the_model_name() {
         Command::parse("/model Explore grok-subscription:grok-4.6-fast"),
         Some(Command::ModelRole(explore(), RoleChange::Set("grok-subscription:grok-4.6-fast".into())))
     );
-    assert_eq!(
-        Command::parse("/model explore default"),
-        Some(Command::ModelRole(explore(), RoleChange::Clear))
-    );
+    assert_eq!(Command::parse("/model explore default"), Some(Command::ModelRole(explore(), RoleChange::Clear)));
     assert_eq!(Command::parse("/model gpt-6.1-sol"), Some(Command::Model(Some("gpt-6.1-sol".into()))));
 }
 

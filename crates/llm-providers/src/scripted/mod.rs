@@ -203,7 +203,8 @@ impl ScriptedProvider {
 
     fn read<T: DeserializeOwned>(&self, function: &str, input: Value) -> Result<T, ProviderError> {
         let value = self.invoke(function, input)?;
-        serde_json::from_value(value).map_err(|error| ProviderError::Invalid(format!("{} {function}: {error}", self.id)))
+        serde_json::from_value(value)
+            .map_err(|error| ProviderError::Invalid(format!("{} {function}: {error}", self.id)))
     }
 
     fn quiet<T: DeserializeOwned + Default>(&self, function: &str, input: Value) -> T {
@@ -309,8 +310,11 @@ impl Provider for ScriptedProvider {
         Ok(())
     }
     fn catalog(&self, config: &Config, after: &str) -> Call {
-        self.optional_call("catalog", json!({ "config": config, "after": after }))
-            .unwrap_or_else(|| Call { url: String::new(), headers: Vec::new(), body: None })
+        self.optional_call("catalog", json!({ "config": config, "after": after })).unwrap_or_else(|| Call {
+            url: String::new(),
+            headers: Vec::new(),
+            body: None,
+        })
     }
     fn page(&self, value: &Value) -> Result<Page, ProviderError> {
         let page: Value = self.read("page", json!({ "value": value }))?;
@@ -434,9 +438,18 @@ impl Provider for ScriptedProvider {
         let content_type = intern(value["contentType"].as_str().unwrap_or("application/json"));
         Some(TokenRequest { url, content_type, body: value["body"].as_str().unwrap_or_default().to_owned() })
     }
-    fn tokens(&self, status: u16, body: &str, previous: Option<&Tokens>, now: Timestamp) -> Result<Tokens, ProviderError> {
+    fn tokens(
+        &self,
+        status: u16,
+        body: &str,
+        previous: Option<&Tokens>,
+        now: Timestamp,
+    ) -> Result<Tokens, ProviderError> {
         if !self.offers("tokens") {
-            return Err(ProviderError::Unauthorized(format!("{} returned HTTP {status} and keeps no tokens", self.name)));
+            return Err(ProviderError::Unauthorized(format!(
+                "{} returned HTTP {status} and keeps no tokens",
+                self.name
+            )));
         }
         let input = json!({ "status": status, "body": body, "previous": previous, "now": now.to_string() });
         self.read("tokens", input)

@@ -46,9 +46,8 @@ pub fn base_of(item: &WorkItem) -> Option<String> {
     let given = item.input["git"].as_object().and_then(|repos| repos.values().find_map(|repo| text_at(&repo["base"])));
     given.or_else(|| {
         item.steps.iter().rev().find_map(|run| {
-            text_at(&run.output["base"]).or_else(|| {
-                run.output["prs"].as_array().and_then(|prs| prs.iter().find_map(|pr| text_at(&pr["base"])))
-            })
+            text_at(&run.output["base"])
+                .or_else(|| run.output["prs"].as_array().and_then(|prs| prs.iter().find_map(|pr| text_at(&pr["base"]))))
         })
     })
 }

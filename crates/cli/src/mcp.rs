@@ -11,13 +11,20 @@ const SESSION_HEADER: &str = "mcp-session-id";
 const MARGIN_SECONDS: u64 = 60;
 
 #[derive(Debug, clap::Args)]
-pub struct Args {}
+pub struct Args {
+    #[arg(required = true, help = "The resources to serve, such as browser or memory")]
+    resources: Vec<String>,
+    #[arg(long, help = "The project folder whose memory to use (default: the current folder)")]
+    project: Option<PathBuf>,
+}
 
 #[derive(Debug)]
 struct Bridge {
     data: PathBuf,
     session: Option<String>,
     wait: Duration,
+    resources: String,
+    project: String,
 }
 
 fn wait() -> Duration {
@@ -31,10 +38,10 @@ fn not_running() -> String {
 
 fn target(data: &Path) -> Result<(String, String), String> {
     let address = crate::instance::address(data).ok_or_else(not_running)?;
-    let token = std::fs::read_to_string(data.join(brand::browser::MCP_TOKEN_FILE.trim()))
+    let token = std::fs::read_to_string(data.join(brand::mcp::TOKEN_FILE.trim()))
         .map(|text| text.trim().to_owned())
         .map_err(|_| not_running())?;
-    let url = format!("{}{}", address.trim_end_matches('/'), brand::browser::MCP_ROUTE.trim());
+    let url = format!("{}{}", address.trim_end_matches('/'), brand::mcp::ROUTE.trim());
     Ok((url, token))
 }
 
@@ -61,7 +68,12 @@ impl Bridge {
     fn send(&mut self, message: &Value) -> Result<Reply, String> {
         let (url, token) = target(&self.data)?;
         let authorization = format!("Bearer {token}");
-        let mut headers = vec![("Authorization", authorization.as_str()), ("Content-Type", "application/json")];
+        let mut headers = vec![
+            ("Authorization", authorization.as_str()),
+            ("Content-Type", "application/json"),
+            (brand::mcp::RESOURCES_HEADER.trim(), self.resources.as_str()),
+            (brand::mcp::PROJECT_HEADER.trim(), self.project.as_str()),
+        ];
         let session = self.session.clone().unwrap_or_default();
         if !session.is_empty() {
             headers.push(("Mcp-Session-Id", session.as_str()));
@@ -89,8 +101,17 @@ impl Bridge {
     }
 }
 
-pub fn run(_args: Args, data: PathBuf) -> Result<ExitCode, String> {
-    let mut bridge = Bridge { data, session: None, wait: wait() };
+impl Bridge {
+    fn new(args: Args, data: PathBuf) -> Self {
+        let project = args.project.or_else(|| std::env::current_dir().ok()).unwrap_or_default();
+        let project = std::path::absolute(&project).unwrap_or(project);
+        let resources = args.resources.iter().map(|name| name.trim()).collect::<Vec<_>>().join(",");
+        Self { data, session: None, wait: wait(), resources, project: project.display().to_string() }
+    }
+}
+
+pub fn run(args: Args, data: PathBuf) -> Result<ExitCode, String> {
+    let mut bridge = Bridge::new(args, data);
     let mut out = std::io::stdout().lock();
     for line in std::io::stdin().lock().lines() {
         let line = line.map_err(|error| error.to_string())?;
@@ -132,7 +153,9 @@ mod tests {
     #[test]
     fn without_the_app_running_each_request_is_told_so() {
         let data = tempfile::tempdir().expect("data");
-        let mut bridge = Bridge { data: data.path().to_path_buf(), session: None, wait: wait() };
+        let args = Args { resources: vec!["memory".into(), "browser".into()], project: Some("/repo".into()) };
+        let mut bridge = Bridge::new(args, data.path().to_path_buf());
+        assert_eq!((bridge.resources.as_str(), bridge.project.as_str()), ("memory,browser", "/repo"));
         let answer = bridge.relay(r#"{"jsonrpc":"2.0","id":1,"method":"initialize"}"#).expect("reply");
         assert_eq!(answer["id"], 1);
         assert!(answer["error"]["message"].as_str().unwrap_or_default().contains("not running"));

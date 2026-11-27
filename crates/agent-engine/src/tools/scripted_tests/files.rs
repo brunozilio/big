@@ -142,7 +142,11 @@ fn a_huge_read_stops_at_a_whole_line_and_says_where_to_go_on() {
         let part = read_text(&workspace, json!({"file_path": "big.txt", "offset": offset}));
         offset += part.lines().filter(|l| l.contains('\t')).count();
     }
-    assert_eq!(workspace.freshness(&dir.path().join("big.txt")), Freshness::Current, "paging through it reads it whole");
+    assert_eq!(
+        workspace.freshness(&dir.path().join("big.txt")),
+        Freshness::Current,
+        "paging through it reads it whole"
+    );
 }
 
 #[test]

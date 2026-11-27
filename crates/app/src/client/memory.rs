@@ -23,6 +23,11 @@ impl Client {
     pub fn move_memory(&self, from: &MemoryShelf, id: MemoryId, to: &MemoryShelf) -> Result<(), String> {
         memory::of(&self.services).move_memory(from, id, to)
     }
+
+    pub fn memory_mcp(&self, project: &Path, origin: &str) -> domain::mcp::LocalMcp {
+        let memories = memory::of(&self.services);
+        memory::mcp::MemoryEndpoint::for_agent(memories, project.to_path_buf(), origin.to_owned())
+    }
 }
 
 #[cfg(test)]

@@ -42,8 +42,10 @@ async fn an_application_bound_to_a_tracker_project_still_creates_the_issue_there
     let input = json!({ "title": "Tela de pedidos", "project": "XP", "connection": "c1",
         "application": { "id": "app", "name": "XPTO", "bindings": bindings, "repositories": [] } });
     let id = kernel.create_item("unbound", input).expect("item");
-    until(&kernel, &id, |item| item.step("ticket", Some("main")).is_some_and(|run| run.state == StepState::Passed)).await;
-    let created = world.provider.calls.lock().expect("lock").iter().find(|(name, _, _)| name == "tracker.create_issue").cloned();
+    until(&kernel, &id, |item| item.step("ticket", Some("main")).is_some_and(|run| run.state == StepState::Passed))
+        .await;
+    let created =
+        world.provider.calls.lock().expect("lock").iter().find(|(name, _, _)| name == "tracker.create_issue").cloned();
     assert_eq!(created.map(|(_, args, _)| args["project"].clone()), Some(json!("XP")));
 }
 
@@ -71,6 +73,7 @@ async fn a_tracker_project_bound_while_the_item_runs_is_used_by_the_steps_that_s
     let item = until(&kernel, &id, |item| item.is_ended() || item.impediment.is_some()).await;
     assert_eq!(item.step("waiting", Some("main")).map(|run| run.output["seen"].clone()), Some(json!([])));
     assert_eq!(item.step("ticket", Some("main")).map(|run| run.state), Some(StepState::Passed), "{:?}", item.steps);
-    let created = world.provider.calls.lock().expect("lock").iter().find(|(name, _, _)| name == "tracker.create_issue").cloned();
+    let created =
+        world.provider.calls.lock().expect("lock").iter().find(|(name, _, _)| name == "tracker.create_issue").cloned();
     assert_eq!(created.map(|(_, args, _)| args["project"].clone()), Some(json!("XP")));
 }

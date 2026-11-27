@@ -5,20 +5,34 @@ use axum::body::Bytes;
 use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use domain::mcp::McpEndpoint;
+use domain::mcp::{LocalMcp, McpBundle, McpEndpoint};
 use serde_json::{Value, json};
 
 use crate::state::Ctx;
 
 pub const SESSION_HEADER: &str = "mcp-session-id";
 const EXTERNAL: &str = "external";
+const ORIGIN: &str = "MCP";
+pub const BROWSER: &str = "browser";
+pub const MEMORY: &str = "memory";
+pub const RESOURCES: &[&str] = &[BROWSER, MEMORY];
+
+type Refusal = (StatusCode, String);
 
 pub fn route() -> &'static str {
-    brand::browser::MCP_ROUTE.trim()
+    brand::mcp::ROUTE.trim()
+}
+
+pub fn resources_header() -> &'static str {
+    brand::mcp::RESOURCES_HEADER.trim()
+}
+
+fn project_header() -> &'static str {
+    brand::mcp::PROJECT_HEADER.trim()
 }
 
 pub fn token_file(data: &Path) -> PathBuf {
-    data.join(brand::browser::MCP_TOKEN_FILE.trim())
+    data.join(brand::mcp::TOKEN_FILE.trim())
 }
 
 pub fn token(data: &Path) -> std::io::Result<String> {
@@ -84,11 +98,62 @@ fn refused(status: StatusCode, message: &str) -> Response {
     (status, axum::Json(body)).into_response()
 }
 
-fn session(ctx: &Ctx, id: &str) -> browser::Session {
-    let data = &ctx.backend.data;
-    let settings = browser::Settings::configured(data);
+fn header<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+    headers.get(name).and_then(|value| value.to_str().ok()).map(str::trim).filter(|value| !value.is_empty())
+}
+
+fn wanted(headers: &HeaderMap) -> Result<Vec<String>, Refusal> {
+    let known = RESOURCES.join(", ");
+    let given = header(headers, resources_header()).unwrap_or_default();
+    let mut names: Vec<String> = Vec::new();
+    for name in given.split([',', ' ']).map(str::trim).filter(|name| !name.is_empty()) {
+        let name = name.to_ascii_lowercase();
+        if !RESOURCES.contains(&name.as_str()) {
+            return Err((
+                StatusCode::BAD_REQUEST,
+                format!("There is no resource `{name}`; the resources are {known}."),
+            ));
+        }
+        if !names.contains(&name) {
+            names.push(name);
+        }
+    }
+    if names.is_empty() {
+        let told = format!("Send the {} header with the resources you want: {known}.", resources_header());
+        return Err((StatusCode::BAD_REQUEST, told));
+    }
+    Ok(names)
+}
+
+fn project(headers: &HeaderMap) -> Result<PathBuf, Refusal> {
+    let folder =
+        header(headers, project_header()).map(PathBuf::from).filter(|folder| folder.is_absolute() && folder.is_dir());
+    folder.ok_or_else(|| {
+        let told = format!("The memory needs the {} header with the project's absolute folder.", project_header());
+        (StatusCode::BAD_REQUEST, told)
+    })
+}
+
+fn browser_part(ctx: &Ctx, id: &str) -> Result<LocalMcp, Refusal> {
+    if !crate::browsers::enabled(&ctx.backend.store) {
+        return Err((StatusCode::SERVICE_UNAVAILABLE, "The browser tools are turned off in the app.".to_owned()));
+    }
+    let settings = browser::Settings::configured(&ctx.backend.data);
     let roots = vec![ctx.backend.attachments(), settings.files.clone()];
-    browser::Session::new(ctx.backend.browser.clone(), format!("{EXTERNAL}:{id}"), settings, roots)
+    Ok(browser::Session::new(ctx.backend.browser.clone(), format!("{EXTERNAL}:{id}"), settings, roots).local())
+}
+
+fn part(ctx: &Ctx, headers: &HeaderMap, name: &str, id: &str) -> Result<LocalMcp, Refusal> {
+    match name {
+        BROWSER => browser_part(ctx, id),
+        MEMORY => Ok(ctx.backend.client.memory_mcp(&project(headers)?, ORIGIN)),
+        _ => Err((StatusCode::BAD_REQUEST, format!("There is no resource `{name}`."))),
+    }
+}
+
+fn bundle(ctx: &Ctx, headers: &HeaderMap, id: &str) -> Result<McpBundle, Refusal> {
+    let parts = wanted(headers)?.iter().map(|name| part(ctx, headers, name, id)).collect::<Result<Vec<_>, _>>()?;
+    Ok(McpBundle::new(brand::COMMAND.replace('-', "_"), parts))
 }
 
 pub async fn post(State(ctx): State<Ctx>, headers: HeaderMap, body: Bytes) -> Response {
@@ -98,9 +163,6 @@ pub async fn post(State(ctx): State<Ctx>, headers: HeaderMap, body: Bytes) -> Re
         let told = format!("Send Authorization: Bearer <token>; the token is in {}.", file.display());
         return refused(StatusCode::UNAUTHORIZED, &told);
     }
-    if !crate::browsers::enabled(&ctx.backend.store) {
-        return refused(StatusCode::SERVICE_UNAVAILABLE, "The browser tools are turned off in the app.");
-    }
     let Ok(message) = serde_json::from_slice::<Value>(&body) else {
         return refused(StatusCode::BAD_REQUEST, "The body is not JSON-RPC.");
     };
@@ -108,7 +170,10 @@ pub async fn post(State(ctx): State<Ctx>, headers: HeaderMap, body: Bytes) -> Re
         Ok(id) => id,
         Err(error) => return refused(StatusCode::INTERNAL_SERVER_ERROR, &error),
     };
-    let endpoint = session(&ctx, &id);
+    let endpoint = match bundle(&ctx, &headers, &id) {
+        Ok(endpoint) => endpoint,
+        Err((status, told)) => return refused(status, &told),
+    };
     let replied = tokio::task::spawn_blocking(move || answer(&endpoint, &message)).await.ok().flatten();
     let mut response = match replied {
         Some(reply) => axum::Json(reply).into_response(),
@@ -177,6 +242,33 @@ mod tests {
         let batch = json!([{ "id": 1, "method": "ping" }, { "method": "notifications/initialized" }]);
         let replies = answer(&Echo, &batch).expect("replies");
         assert_eq!(replies.as_array().map(Vec::len), Some(1));
+    }
+
+    fn asking(resources: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(resources_header(), HeaderValue::from_str(resources).unwrap_or(HeaderValue::from_static("")));
+        headers
+    }
+
+    #[test]
+    fn the_header_names_the_resources_once_each_and_only_known_ones() {
+        assert_eq!(wanted(&asking("Memory, browser memory")).expect("named"), vec![MEMORY, BROWSER]);
+        assert_eq!(wanted(&asking("skills")).map_err(|(status, _)| status), Err(StatusCode::BAD_REQUEST));
+        let (status, told) = wanted(&HeaderMap::new()).expect_err("none named");
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(told.contains(resources_header()) && told.contains("browser, memory"), "{told}");
+    }
+
+    #[test]
+    fn the_memory_needs_an_existing_absolute_project_folder() {
+        let folder = tempfile::tempdir().expect("folder");
+        let mut headers = HeaderMap::new();
+        let path = folder.path().display().to_string();
+        headers.insert(project_header(), HeaderValue::from_str(&path).unwrap_or(HeaderValue::from_static("")));
+        assert_eq!(project(&headers).expect("project"), folder.path());
+        headers.insert(project_header(), HeaderValue::from_static("relative/dir"));
+        assert!(project(&headers).is_err());
+        assert!(project(&HeaderMap::new()).is_err());
     }
 
     #[test]

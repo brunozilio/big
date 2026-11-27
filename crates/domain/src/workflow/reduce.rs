@@ -145,9 +145,10 @@ const STEP_RESET: &str = "step.reset";
 
 fn within(run: &StepRun, step: &str, branch: &str) -> bool {
     let path = run.id == step || run.id.strip_prefix(step).is_some_and(|rest| rest.starts_with('/'));
-    let lane = run.branch.as_deref().is_none_or(|own| {
-        own == branch || own.strip_prefix(branch).is_some_and(|rest| rest.starts_with('/'))
-    });
+    let lane = run
+        .branch
+        .as_deref()
+        .is_none_or(|own| own == branch || own.strip_prefix(branch).is_some_and(|rest| rest.starts_with('/')));
     path && lane
 }
 

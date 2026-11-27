@@ -297,7 +297,8 @@ impl Orchestrator {
     }
 
     pub async fn choose_base(&self, id: &ItemId, repository: &str, base: &str, from: Option<&str>) -> Result<()> {
-        let choice = from.map_or(crate::bases::Choice::Existing, |from| crate::bases::Choice::CreatedFrom(from.to_owned()));
+        let choice =
+            from.map_or(crate::bases::Choice::Existing, |from| crate::bases::Choice::CreatedFrom(from.to_owned()));
         crate::bases::choose(&self.shared, id, repository, base, choice).await
     }
 

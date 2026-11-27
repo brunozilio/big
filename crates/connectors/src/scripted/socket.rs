@@ -50,7 +50,9 @@ fn message(frame: &Value) -> Result<Message, ActionError> {
     if let Some(binary) = frame["binary"].as_str() {
         return Ok(Message::Binary(binary.as_bytes().to_vec().into()));
     }
-    let encoded = frame["base64"].as_str().ok_or_else(|| ActionError::permanent("a socket frame needs text, binary or base64"))?;
+    let encoded = frame["base64"]
+        .as_str()
+        .ok_or_else(|| ActionError::permanent("a socket frame needs text, binary or base64"))?;
     let bytes = STANDARD.decode(encoded).map_err(|error| ActionError::permanent(error.to_string()))?;
     Ok(Message::Binary(bytes.into()))
 }
@@ -62,7 +64,8 @@ fn request(arguments: &Value) -> Result<tokio_tungstenite::tungstenite::handshak
     }
     let mut request = url.into_client_request().map_err(|error| ActionError::permanent(error.to_string()))?;
     for (name, value) in arguments["headers"].as_object().into_iter().flatten() {
-        let name = HeaderName::from_bytes(name.as_bytes()).map_err(|error| ActionError::permanent(error.to_string()))?;
+        let name =
+            HeaderName::from_bytes(name.as_bytes()).map_err(|error| ActionError::permanent(error.to_string()))?;
         let value = HeaderValue::from_str(value.as_str().unwrap_or_default())
             .map_err(|error| ActionError::permanent(error.to_string()))?;
         request.headers_mut().insert(name, value);

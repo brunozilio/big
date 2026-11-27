@@ -184,7 +184,11 @@ impl Synchronizer {
         Ok((report, self.next_wake(&book)))
     }
 
-    async fn poll_due(&self, book: &Book, desired: &[Desired]) -> Vec<(ConnectionId, Result<Option<PollReport>, String>)> {
+    async fn poll_due(
+        &self,
+        book: &Book,
+        desired: &[Desired],
+    ) -> Vec<(ConnectionId, Result<Option<PollReport>, String>)> {
         let now = Instant::now();
         let due: Vec<&Entry> = book
             .entries

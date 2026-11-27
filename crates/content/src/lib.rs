@@ -23,9 +23,9 @@ mod security_tests;
 #[cfg(test)]
 mod stdlib_tests;
 
-pub use modules::{bytes_in, listed, listed_in, modules, modules_in};
 pub use edit::{Origin, editable, editing_root, origin, restore, write};
 pub use install::{CACHE, Installed, MANIFEST, install_files, install_once};
+pub use modules::{bytes_in, listed, listed_in, modules, modules_in};
 pub use place::{Mode, folder, home, installs, live_root, mode, shipped, skills, use_folder};
 
 pub use render::{LIMIT, call, call_in, exports, render, render_export, render_export_in, render_in, value, value_in};

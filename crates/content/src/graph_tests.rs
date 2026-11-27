@@ -444,7 +444,8 @@ fn a_workflow_made_only_of_groups_commands_and_agents_runs_through_the_bundler()
     let mut journal: Vec<Value> = Vec::new();
     let mut prompts: Vec<String> = Vec::new();
     for round in 0..20 {
-        let activation = json!({ "item": { "id": "i1", "title": "x" }, "journal": journal, "start": 1000, "seed": "i1" });
+        let activation =
+            json!({ "item": { "id": "i1", "title": "x" }, "journal": journal, "start": 1000, "seed": "i1" });
         let result = activate(&source, &activation);
         if result["state"] != "running" {
             assert_eq!(result["state"], "completed", "{result}");

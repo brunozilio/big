@@ -7,8 +7,8 @@ pub mod http;
 pub mod hub;
 pub mod idempotency;
 pub mod limiter;
-pub mod memory;
 pub mod mcp;
+pub mod memory;
 pub mod oauth;
 pub mod provider;
 pub mod providers;
@@ -25,7 +25,7 @@ pub use http::{FakeHttp, Http, HttpRequest, HttpResponse, Method, Part, ReqwestH
 pub use hub::Connectors;
 pub use limiter::RateLimiter;
 pub use oauth::{
-    Authorization, DeviceApp, DeviceCode, DeviceSignIn, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, Polled, Proceeded,
-    RegisteredClient, Started, Stepped, TokenKeeper, TokenStore,
+    Authorization, DeviceApp, DeviceCode, DeviceSignIn, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, Polled,
+    Proceeded, RegisteredClient, Started, Stepped, TokenKeeper, TokenStore,
 };
 pub use provider::{AccountOption, Args, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SettingsSink};

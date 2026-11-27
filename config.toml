@@ -234,9 +234,13 @@ switch_seconds = "120"
 upload_limit_mb = "10"
 extension_folder = "browser-extension"
 files_folder = "browser-files"
-mcp_route = "/mcp/browser"
-mcp_token_file = "browser-mcp.token"
-mcp_command = "browser-mcp"
+
+[mcp]
+route = "/mcp"
+token_file = "mcp.token"
+command = "mcp"
+resources_header = "mcp-resources"
+project_header = "mcp-project"
 
 [retry]
 max = 5

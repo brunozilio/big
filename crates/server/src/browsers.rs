@@ -60,9 +60,14 @@ fn status_of(ctx: &Ctx) -> Value {
         "browsers": ctx.backend.browser.browsers(),
         "extensionFolder": folder(&ctx.backend.data),
         "mcp": {
-            "url": format!("http://127.0.0.1:{}{}", ctx.port, crate::browser_mcp::route()),
-            "tokenFile": crate::browser_mcp::token_file(&ctx.backend.data),
-            "command": [std::env::current_exe().unwrap_or_default(), PathBuf::from(brand::browser::MCP_COMMAND.trim())],
+            "url": format!("http://127.0.0.1:{}{}", ctx.port, crate::mcp::route()),
+            "tokenFile": crate::mcp::token_file(&ctx.backend.data),
+            "headers": { crate::mcp::resources_header(): crate::mcp::BROWSER },
+            "command": [
+                std::env::current_exe().unwrap_or_default(),
+                PathBuf::from(brand::mcp::COMMAND.trim()),
+                PathBuf::from(crate::mcp::BROWSER),
+            ],
         },
         "tools": browser::tools().iter().map(|tool| tool["name"].clone()).collect::<Vec<Value>>(),
     })

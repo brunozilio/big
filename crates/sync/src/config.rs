@@ -46,7 +46,15 @@ impl SyncConfig {
         let reconcile_every = Duration::from_secs(number(reconcile_minutes, 10) * 60);
         let seen_retention =
             Duration::from_secs(number(seen_days, 30).saturating_mul(DAY)).max(slow_poll.max(reconcile_every) * 2);
-        SyncConfig { fast_poll, slow_poll, reconcile_every, seen_retention, ended_retention: None, concurrency: DEFAULT_CONCURRENCY, retry }
+        SyncConfig {
+            fast_poll,
+            slow_poll,
+            reconcile_every,
+            seen_retention,
+            ended_retention: None,
+            concurrency: DEFAULT_CONCURRENCY,
+            retry,
+        }
     }
 }
 

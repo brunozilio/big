@@ -104,7 +104,11 @@ mod tests {
         ]);
         let gitflow = json!({ "head": "bugfix/OPS-7-corrigir-o-login-do-app", "base": "develop", "method": "squash", "promote": promote });
         assert_eq!(git["r1"], gitflow);
-        assert_eq!(git["r2"], json!({ "head": "bugfix/OPS-7-corrigir-o-login-do-app", "method": "squash" }), "no base: the repository's own default branch");
+        assert_eq!(
+            git["r2"],
+            json!({ "head": "bugfix/OPS-7-corrigir-o-login-do-app", "method": "squash" }),
+            "no base: the repository's own default branch"
+        );
     }
 
     #[test]

@@ -9,7 +9,12 @@ fn second_repo(hub: &Hub) -> std::path::PathBuf {
     let dir = hub.dir.path().join("api");
     std::fs::create_dir_all(&dir).expect("dir");
     std::fs::write(dir.join("API.md"), "api\n").expect("file");
-    for args in [vec!["init", "-q", "-b", "main"], vec!["add", "-A"], vec!["commit", "-qm", "início"], vec!["branch", "develop"]] {
+    for args in [
+        vec!["init", "-q", "-b", "main"],
+        vec!["add", "-A"],
+        vec!["commit", "-qm", "início"],
+        vec!["branch", "develop"],
+    ] {
         let done = platform::git::command(&dir).args(["-c", "user.email=a@b", "-c", "user.name=a"]).args(args).output();
         assert!(done.is_ok_and(|done| done.status.success()));
     }
@@ -32,7 +37,11 @@ async fn an_item_of_an_application_with_two_repositories_delivers_a_pull_request
     let made = server.post("/api/applications", application).await;
     let body = json!({ "text": "Mudar as duas pontas", "issue": null, "model": "auto", "attachments": [], "application": made["id"] });
     let id = server.create(body).await;
-    server.until(&id, "the item names its application", |item| item["application"]["name"] == "Loja" && item["application"]["id"] == made["id"]).await;
+    server
+        .until(&id, "the item names its application", |item| {
+            item["application"]["name"] == "Loja" && item["application"]["id"] == made["id"]
+        })
+        .await;
     server.approve_plan(&id).await;
 
     for _ in 0..2 {
@@ -53,9 +62,14 @@ async fn an_item_of_an_application_with_two_repositories_delivers_a_pull_request
     let done = server.until(&id, "the delivery", |item| item["group"] == "delivered").await;
     assert_eq!(done["status"], "Feito");
     assert_eq!((hub.github.pulls_of("acme/app"), hub.github.pulls_of("acme/api")), (2, 2));
-    let routes: Vec<(String, String)> = hub.github.state().pulls.iter().map(|pull| (pull.head.clone(), pull.base.clone())).collect();
+    let routes: Vec<(String, String)> =
+        hub.github.state().pulls.iter().map(|pull| (pull.head.clone(), pull.base.clone())).collect();
     let promoted = ("develop".to_owned(), "release".to_owned());
-    assert_eq!(routes.iter().filter(|route| **route == promoted).count(), 2, "the flow promotes develop into release: {routes:?}");
+    assert_eq!(
+        routes.iter().filter(|route| **route == promoted).count(),
+        2,
+        "the flow promotes develop into release: {routes:?}"
+    );
     assert_eq!(hub.github.state().merges, 4, "each repository merges its pull request and its promotion");
     assert_eq!(hub.github.state().deploy_reviews, ["approved", "approved"]);
     let checks = server.get(&format!("/api/items/{id}/steps/checks")).await;

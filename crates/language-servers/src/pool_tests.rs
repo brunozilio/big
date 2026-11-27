@@ -3,8 +3,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use crate::install::{Install, Recipe, install_for};
 use crate::fake::specs as defaults;
+use crate::install::{Install, Recipe, install_for};
 use domain::lsp::ServerSpec;
 use serde_json::Value;
 

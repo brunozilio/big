@@ -63,7 +63,8 @@ impl Agent<'_> {
                         results.extend(self.agents_at_once(chunk, run, history, spawn));
                     }
                 }
-                _ => results.extend(group.iter().map(|(id, name, input)| self.call(id, name, input, run, history, spawn))),
+                _ => results
+                    .extend(group.iter().map(|(id, name, input)| self.call(id, name, input, run, history, spawn))),
             }
         }
         results

@@ -138,8 +138,10 @@ fn field_list() -> Value {
 
 fn tracker_schema() -> Value {
     let status = object(&[("name", "string")], &[("id", "string"), ("category", "string")]);
-    let mut kind =
-        object(&[("name", "string"), ("level", "integer"), ("children", "array"), ("statuses", "array")], &[("id", "string")]);
+    let mut kind = object(
+        &[("name", "string"), ("level", "integer"), ("children", "array"), ("statuses", "array")],
+        &[("id", "string")],
+    );
     kind["properties"]["statuses"] = json!({ "type": "array", "items": status });
     let mut shaped = object(&[("types", "array")], &[("default", "string")]);
     shaped["properties"]["types"] = json!({ "type": "array", "items": kind });

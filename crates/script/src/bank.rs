@@ -82,7 +82,9 @@ mod tests {
 
     #[test]
     fn a_script_that_imports_or_lacks_run_is_refused() {
-        assert!(callable("scripts/a.ts", "import x from \"y\";\nexport async function run() { return x; }", "run").is_err());
+        assert!(
+            callable("scripts/a.ts", "import x from \"y\";\nexport async function run() { return x; }", "run").is_err()
+        );
         assert!(callable("scripts/b.ts", "export const spec = {};", "run").is_err());
         assert!(callable("scripts/c.ts", "export default async function run() {}", "run").is_err());
         assert!(callable("scripts/d.ts", "export const = ;", "run").is_err());

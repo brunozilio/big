@@ -95,7 +95,9 @@ pub(crate) fn import(db: &Db, data: &Path, sessions: &Path, formers: &[Former]) 
                     tracing::warn!(%error, "the import of a former name could not be marked as done");
                 }
             }
-            Err(error) => tracing::warn!(%error, former = %former.name, "the sessions of a former name were not imported"),
+            Err(error) => {
+                tracing::warn!(%error, former = %former.name, "the sessions of a former name were not imported")
+            }
         }
     }
 }

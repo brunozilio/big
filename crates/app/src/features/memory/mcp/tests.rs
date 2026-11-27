@@ -112,3 +112,47 @@ fn a_run_searches_only_its_own_project_s_memory() {
     assert_eq!(text("/repo").as_deref(), Some("[0] procedural: Run clippy before committing"));
     assert!(text("/other").is_some_and(|text| text.starts_with("Nothing in this project's memory matches")));
 }
+
+fn tool_call(name: &str, arguments: Value) -> Value {
+    json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": arguments } })
+}
+
+fn said(server: &LocalMcp, name: &str, arguments: Value) -> (String, bool) {
+    let answer = server.endpoint.handle(&tool_call(name, arguments)).expect("answer");
+    let text = answer["result"]["content"][0]["text"].as_str().unwrap_or_default().to_owned();
+    (text, answer["result"]["isError"] == json!(true))
+}
+
+#[test]
+fn another_agent_reads_and_writes_the_project_s_memory() {
+    let memories = remembered(&["Run clippy before committing"]);
+    let server = MemoryEndpoint::for_agent(memories.clone(), "/repo".into(), "Kiro".into());
+    let listed = server.endpoint.handle(&json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" })).expect("list");
+    let names: Vec<&str> = listed["result"]["tools"]
+        .as_array()
+        .map(|t| t.iter().filter_map(|t| t["name"].as_str()).collect())
+        .unwrap_or_default();
+    assert_eq!(names, vec![MEMORY_SEARCH_TOOL, "memory_remember", "memory_revise", "memory_forget"]);
+    let remember = json!({ "text": "Deploys go out on Tuesdays", "kind": "semantic" });
+    assert_eq!(said(&server, "memory_remember", remember), ("Remembered as [1].".to_owned(), false));
+    for _ in 0..4 {
+        assert_eq!(
+            said(&server, MEMORY_SEARCH_TOOL, json!({ "query": "deploys" })).0,
+            "[1] semantic: Deploys go out on Tuesdays (from \"Kiro\")"
+        );
+    }
+    assert_eq!(said(&server, "memory_revise", json!({ "id": 0, "text": "Run clippy and nextest" })).0, "Revised [0].");
+    assert_eq!(said(&server, "memory_forget", json!({ "id": 1 })).0, "Forgot [1].");
+    let texts: Vec<String> =
+        memories.load(std::path::Path::new("/repo")).memories.into_iter().map(|m| m.text).collect();
+    assert_eq!(texts, vec!["Run clippy and nextest".to_owned()]);
+    assert!(said(&server, "memory_forget", json!({ "id": 42 })).1);
+    assert!(said(&server, "memory_remember", json!({ "text": "x", "kind": "weird" })).1);
+}
+
+#[test]
+fn a_run_of_the_app_only_searches() {
+    let server = MemoryEndpoint::for_run(remembered(&[]), "/repo".into(), MemorySearches::default());
+    let answer = server.endpoint.handle(&tool_call("memory_remember", json!({ "text": "x", "kind": "semantic" })));
+    assert_eq!(answer.expect("answer")["error"]["code"], -32602);
+}

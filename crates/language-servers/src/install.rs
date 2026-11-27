@@ -166,8 +166,12 @@ mod tests {
         let mut plain = downloaded();
         plain.install = None;
         assert_eq!(install_for(&plain, "macos", "aarch64"), None);
-        let escaping = spec("e", "e", serde_json::json!({"download": {"program": "../../bin/e", "platforms": {
-            "macos-aarch64": {"url": "https://example.com/e.gz", "archive": "gzip", "sha256": "cc"}}}}));
+        let escaping = spec(
+            "e",
+            "e",
+            serde_json::json!({"download": {"program": "../../bin/e", "platforms": {
+            "macos-aarch64": {"url": "https://example.com/e.gz", "archive": "gzip", "sha256": "cc"}}}}),
+        );
         assert_eq!(install_for(&escaping, "macos", "aarch64"), None);
         let pathed = spec("n", "/opt/n", serde_json::json!({"npm": ["n@1"]}));
         assert_eq!(install_for(&pathed, "macos", "aarch64"), None, "a command with a path is not what npm installs");

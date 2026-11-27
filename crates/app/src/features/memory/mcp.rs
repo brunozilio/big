@@ -87,22 +87,49 @@ pub struct MemoryEndpoint {
     memories: Memories,
     project: PathBuf,
     searches: Mutex<MemorySearches>,
+    writer: Option<String>,
 }
 
 impl MemoryEndpoint {
     pub fn for_run(memories: Memories, project: PathBuf, searches: MemorySearches) -> LocalMcp {
-        LocalMcp::new(MEMORY_SERVER, Arc::new(Self { memories, project, searches: Mutex::new(searches) }))
+        let endpoint = Self { memories, project, searches: Mutex::new(searches), writer: None };
+        LocalMcp::new(MEMORY_SERVER, Arc::new(endpoint))
+    }
+
+    pub fn for_agent(memories: Memories, project: PathBuf, origin: String) -> LocalMcp {
+        let searches = Mutex::new(MemorySearches::default());
+        let endpoint = Self { memories, project, searches, writer: Some(origin) };
+        LocalMcp::new(MEMORY_SERVER, Arc::new(endpoint))
+    }
+
+    fn search(&self, query: &str, limit: usize) -> String {
+        let mut searches = self.searches.locked();
+        if self.writer.is_some() {
+            *searches = MemorySearches::default();
+        }
+        answer(self.memories.find(&self.project, query, limit, &mut searches))
     }
 }
 
 impl McpEndpoint for MemoryEndpoint {
     fn handle(&self, message: &Value) -> Option<Value> {
-        respond(message, |query, limit| {
-            let mut searches = self.searches.locked();
-            answer(self.memories.find(&self.project, query, limit, &mut searches))
-        })
+        let Some(origin) = &self.writer else {
+            return respond(message, |query, limit| self.search(query, limit));
+        };
+        domain::mcp::respond(
+            message,
+            MEMORY_SERVER,
+            || std::iter::once(tool_definition()).chain(write::tools()).collect(),
+            |name, arguments| match write::edit_of(name, arguments) {
+                None => call(name, arguments, |query, limit| self.search(query, limit)),
+                Some(Err(told)) => Ok(text_result(told, true)),
+                Some(Ok(edit)) => Ok(write::applied(&self.memories, &self.project, edit, origin)),
+            },
+        )
     }
 }
+
+mod write;
 
 #[cfg(test)]
 mod tests;

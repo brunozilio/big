@@ -1,6 +1,6 @@
+use connectors::contracts::CODE;
 use domain::workflow::WorkItem;
 use serde_json::{Value, json};
-use connectors::contracts::CODE;
 use store::{Application, ConnectionRecord, Store};
 
 pub fn owned(items: &[WorkItem], subject: &str) -> bool {
@@ -38,8 +38,10 @@ fn by_repo<'a>(applications: &'a [Application], repo: &str) -> Option<Found<'a>>
         return None;
     }
     applications.iter().find_map(|application| {
-        let repository =
-            application.repositories.iter().find(|repository| repository.bound(CODE).is_some_and(|code| code.holds(repo)))?;
+        let repository = application
+            .repositories
+            .iter()
+            .find(|repository| repository.bound(CODE).is_some_and(|code| code.holds(repo)))?;
         Some((application, Some(repository.id.clone())))
     })
 }

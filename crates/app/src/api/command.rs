@@ -103,7 +103,11 @@ mod tests {
             ClientCommand::SteerRun { run, text: "also the tests".into() },
             ClientCommand::ListModels,
             ClientCommand::ListProviders,
-            ClientCommand::SignInProvider { provider: ModelProvider::new("browser-sub"), back: None, fields: serde_json::Value::Null },
+            ClientCommand::SignInProvider {
+                provider: ModelProvider::new("browser-sub"),
+                back: None,
+                fields: serde_json::Value::Null,
+            },
             ClientCommand::SignInProvider {
                 provider: ModelProvider::new("browser-sub"),
                 back: Some("http://127.0.0.1:7999/settings".into()),

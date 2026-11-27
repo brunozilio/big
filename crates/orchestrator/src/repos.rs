@@ -108,7 +108,11 @@ pub fn described(worktrees: &[Worktree]) -> Option<String> {
             let _ = write!(text, "\n  - To verify: {}", quoted(&checkout.verify));
         }
         if !checkout.e2e.is_empty() {
-            let place = if checkout.e2e_directory.is_empty() { String::new() } else { format!(" in `{}`", checkout.e2e_directory) };
+            let place = if checkout.e2e_directory.is_empty() {
+                String::new()
+            } else {
+                format!(" in `{}`", checkout.e2e_directory)
+            };
             let _ = write!(text, "\n  - End-to-end suite{place}: {}", quoted(&checkout.e2e));
         }
     }
@@ -175,7 +179,11 @@ mod tests {
             .map(|checkout| Worktree { path: PathBuf::from("/w").join(&checkout.id), branch: String::new(), checkout })
             .collect();
         let text = described(&worktrees).expect("described");
-        assert!(text.contains("acme/web (application repository): /w/web") && text.contains("`bun dev`") && text.contains("`bun test`"));
+        assert!(
+            text.contains("acme/web (application repository): /w/web")
+                && text.contains("`bun dev`")
+                && text.contains("`bun test`")
+        );
         assert!(text.contains("  - To run: `bun api`, `bun web`"));
         assert!(text.contains("`AddRepository`") && text.contains("app: /w/app"));
     }

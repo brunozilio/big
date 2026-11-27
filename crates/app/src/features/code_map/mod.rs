@@ -36,7 +36,6 @@ fn mapped(project: &Path, home: Option<&Path>) -> bool {
     home != Some(project) && project.ancestors().any(|folder| folder.join(".git").exists())
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

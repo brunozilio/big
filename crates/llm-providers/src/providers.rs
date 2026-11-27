@@ -148,7 +148,11 @@ mod tests {
         for provider in builtin() {
             let http: std::sync::Arc<dyn crate::model::http::Http> =
                 std::sync::Arc::new(crate::model::http::ScriptedHttp::new([]));
-            assert!(crate::model::wires::open(provider.wire(None), http, None, *provider).is_some(), "{}", provider.id());
+            assert!(
+                crate::model::wires::open(provider.wire(None), http, None, *provider).is_some(),
+                "{}",
+                provider.id()
+            );
         }
     }
 
