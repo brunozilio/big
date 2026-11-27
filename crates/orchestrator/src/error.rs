@@ -16,6 +16,8 @@ pub enum Error {
     Ended(String),
     #[error("no agent holds this cloud token")]
     UnknownCloudToken,
+    #[error("{0}")]
+    Branch(String),
     #[error("the cloud credentials could not be had: {0}")]
     Cloud(String),
 }

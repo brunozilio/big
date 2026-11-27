@@ -495,6 +495,29 @@ pub async fn rerun(State(ctx): State<Ctx>, Path(id): Path<String>, body: Option<
     Ok(done())
 }
 
+pub async fn branches(
+    State(ctx): State<Ctx>,
+    Path(id): Path<String>,
+    Query(query): Query<HashMap<String, String>>,
+) -> ApiResult<Response> {
+    let id = item_id(&id);
+    known(&ctx, &id)?;
+    let repository = query.get("repository").map_or("", String::as_str);
+    Ok(reply(ctx.backend.orchestrator.base_branches(&id, repository).await?))
+}
+
+pub async fn base(State(ctx): State<Ctx>, Path(id): Path<String>, Json(body): Json<Value>) -> ApiResult<Response> {
+    let id = item_id(&id);
+    known(&ctx, &id)?;
+    let repository = body["repository"].as_str().unwrap_or_default();
+    let base = body["base"].as_str().map(str::trim).filter(|base| !base.is_empty()).ok_or_else(|| {
+        ApiError::bad(said("Say the base branch.", "Indica la rama base.", "Diga a branch base."))
+    })?;
+    let from = body["from"].as_str().map(str::trim).filter(|from| !from.is_empty());
+    ctx.backend.orchestrator.choose_base(&id, repository, base, from).await?;
+    Ok(done())
+}
+
 pub async fn cancel(State(ctx): State<Ctx>, Path(id): Path<String>) -> ApiResult<Response> {
     let id = item_id(&id);
     known(&ctx, &id)?;

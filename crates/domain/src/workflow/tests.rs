@@ -448,3 +448,14 @@ fn a_linked_item_stays_linked_until_released_and_a_new_link_takes_it_back() {
     let closed = reduce(back, &WorkflowEvent::Accepting { on: false });
     assert!(!closed.accepting);
 }
+
+#[test]
+fn a_chosen_base_branch_replaces_the_one_the_flow_gave_only_for_its_repository() {
+    let item = replay(&[
+        created(),
+        WorkflowEvent::BaseChosen { repository: "web".into(), base: "main".into() },
+        WorkflowEvent::BaseChosen { repository: "api".into(), base: "trunk".into() },
+    ]);
+    assert_eq!(item.input["git"]["web"]["base"], "main");
+    assert_eq!(item.input["git"]["api"]["base"], "trunk");
+}

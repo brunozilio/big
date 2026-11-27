@@ -123,6 +123,7 @@ impl From<orchestrator::Error> for ApiError {
             | orchestrator::Error::UnknownItem(_)
             | orchestrator::Error::UnknownCloudToken => ApiError::missing(text),
             orchestrator::Error::Cloud(_) => ApiError::upstream(text),
+            orchestrator::Error::Branch(_) => ApiError::bad(text),
             orchestrator::Error::Store(_) | orchestrator::Error::Script(_) => ApiError::failed(text),
         }
     }

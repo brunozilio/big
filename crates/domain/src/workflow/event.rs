@@ -37,4 +37,5 @@ pub enum WorkflowEvent {
     Linked { item: ItemId },
     Unlinked { item: ItemId },
     Accepting { on: bool },
+    BaseChosen { repository: String, base: String },
 }

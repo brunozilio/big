@@ -285,6 +285,8 @@ export function mockApi(options: MockOptions = {}): Api {
       rerunFrom(it.id, target)
     }),
     cancel: (id) => wait(() => cancelItem(findItem(id).id)),
+    baseBranches: () => wait(() => ({ branches: ['main', 'release'], default: 'main' })),
+    chooseBase: (id) => wait(() => rerunFrom(findItem(id).id, 'develop')),
     archive: (id) => wait(() => archiveItem(findItem(id).id, true)),
     unarchive: (id) => wait(() => archiveItem(findItem(id).id, false)),
     step: (id, step, attempt) => wait(() => {

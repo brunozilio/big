@@ -110,8 +110,19 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
             }
         }
         WorkflowEvent::Accepting { on } => item.accepting = *on,
+        WorkflowEvent::BaseChosen { repository, base } => choose_base(&mut item, repository, base),
     }
     item
+}
+
+fn choose_base(item: &mut WorkItem, repository: &str, base: &str) {
+    if !item.input["git"].is_object() {
+        item.input["git"] = Value::Object(serde_json::Map::new());
+    }
+    if !item.input["git"][repository].is_object() {
+        item.input["git"][repository] = Value::Object(serde_json::Map::new());
+    }
+    item.input["git"][repository]["base"] = Value::String(base.to_owned());
 }
 
 fn run_mut<'a>(item: &'a mut WorkItem, id: &str, branch: Option<&str>) -> &'a mut StepRun {

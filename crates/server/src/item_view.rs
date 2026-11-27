@@ -204,11 +204,32 @@ fn reconnect(known: &Known<'_>, reason: &str) -> Option<Value> {
     Some(mark_of(known.descriptors, &lost.provider))
 }
 
-fn impediment(known: &Known<'_>, summary: &ItemSummary, language: Language) -> Value {
+fn missing_base(item: Option<&WorkItem>, reason: &str, language: Language) -> Option<Value> {
+    let (repository, base) = orchestrator::missing_base(reason)?;
+    let name = item.map_or_else(|| repository.clone(), |item| repository_name(item, &repository));
+    let headline = language.pick(
+        format!("The base branch {base} does not exist in {name}"),
+        format!("La rama base {base} no existe en {name}"),
+        format!("A branch base {base} não existe em {name}"),
+    );
+    let detail = language.pick(
+        format!("Create {base} from another branch, or pick another base for this item."),
+        format!("Crea {base} a partir de otra rama o elige otra base para este ítem."),
+        format!("Crie {base} a partir de outra branch ou escolha outra base para este item."),
+    );
+    let base_said = key("base_missing_in", json!({ "base": base, "name": name }));
+    let shown = json!({ "repository": repository, "name": name, "missing": base });
+    Some(json!({ "reason": headline, "detail": detail, "connect": null, "said": base_said, "base": shown }))
+}
+
+fn impediment(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>, language: Language) -> Value {
     let Some(found) = &summary.impediment else { return Value::Null };
     let reason = found.reason.clone().unwrap_or_else(|| {
         language.pick("the item is impeded", "el ítem está impedido", "o item está impedido").to_owned()
     });
+    if let Some(shown) = missing_base(item, &reason, language) {
+        return shown;
+    }
     let connect = reason
         .strip_prefix(NEEDS_CONNECTION)
         .and_then(|wanted| offering(known.descriptors, wanted.trim()))
@@ -216,7 +237,7 @@ fn impediment(known: &Known<'_>, summary: &ItemSummary, language: Language) -> V
         .or_else(|| reconnect(known, &reason))
         .unwrap_or(Value::Null);
     let said = said(&reason, &connect);
-    json!({ "reason": headline(&reason, &connect, language), "detail": reason, "connect": connect, "said": said })
+    json!({ "reason": headline(&reason, &connect, language), "detail": reason, "connect": connect, "said": said, "base": null })
 }
 
 fn key(key: &str, vars: Value) -> Value {
@@ -233,6 +254,9 @@ pub fn said(reason: &str, connect: &Value) -> Value {
     }
     if orchestrator::is_workflow_changed(reason) {
         return key("workflow_changed", json!({}));
+    }
+    if let Some((_, base)) = orchestrator::missing_base(reason) {
+        return key("base_missing", json!({ "base": base }));
     }
     Value::Null
 }
@@ -257,6 +281,13 @@ pub fn headline(reason: &str, connect: &Value, language: Language) -> String {
     }
     if orchestrator::is_workflow_changed(reason) {
         return language.pick("The workflow changed", "El workflow cambió", "O workflow mudou").to_owned();
+    }
+    if let Some((_, base)) = orchestrator::missing_base(reason) {
+        return language.pick(
+            format!("Base branch {base} missing"),
+            format!("Falta la rama base {base}"),
+            format!("Falta a branch base {base}"),
+        );
     }
     let head = reason.split_once(": ").map_or(reason, |(head, _)| head).trim();
     let mut short: String = head.chars().take(MOST_HEADLINE).collect();
@@ -390,7 +421,7 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "current": summary.current,
         "live": summary.live,
         "activity": activity(known, summary, language),
-        "impediment": impediment(known, summary, language),
+        "impediment": impediment(known, summary, item, language),
         "attention": attention(summary, language),
         "recap": item.and_then(|item| item.recap.as_ref()).map(|recap| recap.text.clone()),
         "createdAt": iso(summary.created_at),
@@ -475,5 +506,22 @@ mod tests {
         assert_eq!(said(&expired, &jira), json!({ "key": "reconnect_named", "vars": { "name": "Jira" } }));
         assert_eq!(said(&expired, &Value::Null), json!({ "key": "reconnect_account", "vars": {} }));
         assert_eq!(said("Develop falhou: x", &Value::Null), Value::Null);
+    }
+
+    #[test]
+    fn a_missing_base_branch_names_the_repository_and_offers_to_fix_it() {
+        let item = WorkItem {
+            input: json!({ "application": { "id": "a", "repositories": [
+                { "id": "r1", "bindings": { "code": { "value": "acme/web" } } }
+            ] } }),
+            ..WorkItem::default()
+        };
+        let reason = orchestrator::blocked_base("r1", "develop");
+        let shown = missing_base(Some(&item), &reason, Language::Portuguese).expect("shown");
+        assert_eq!(shown["reason"], "A branch base develop não existe em acme/web");
+        assert_eq!(shown["base"], json!({ "repository": "r1", "name": "acme/web", "missing": "develop" }));
+        assert_eq!(shown["said"], json!({ "key": "base_missing_in", "vars": { "base": "develop", "name": "acme/web" } }));
+        assert_eq!(said(&reason, &Value::Null)["key"], "base_missing");
+        assert!(missing_base(Some(&item), "something else", Language::English).is_none());
     }
 }

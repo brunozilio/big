@@ -17,6 +17,7 @@ import { SegmentedControl } from '@/ui/form'
 import { Icon } from '@/ui/icon'
 import { springPop } from '@/ui/motion'
 import { Dialog, Menu, MenuContent, MenuItem, MenuTrigger } from '@/ui/overlay'
+import { BaseFix } from './BaseFix'
 import { UsageCard } from './UsageCard'
 import { archiveToggle, ChangeChip, IssueKey, Node, nodeState, report, RowRight, stateLabel } from './parts'
 import { useMinutesSince } from './ticker'
@@ -321,8 +322,9 @@ export function EmptyStep({ it, step }: { it: Item; step: string }) {
     <div className="space-y-3">
       <p className="text-base font-medium text-fg">{stuck.reason}</p>
       {stuck.detail && stuck.detail !== stuck.reason && <p className="whitespace-pre-wrap break-words text-sm text-muted">{stuck.detail}</p>}
+      {stuck.base && <BaseFix it={it} gap={stuck.base} />}
       <div className="flex flex-wrap gap-2">
-        <Button size="sm" variant="primary" icon={<Icon name="refresh" size={15} />} onClick={() => api().rerun(it.id, step).catch(report)}>{t('items.rerunFrom', { step: label })}</Button>
+        {!stuck.base && <Button size="sm" variant="primary" icon={<Icon name="refresh" size={15} />} onClick={() => api().rerun(it.id, step).catch(report)}>{t('items.rerunFrom', { step: label })}</Button>}
         {!it.doneAt && <Button size="sm" variant="secondary" icon={<Icon name="stop" size={15} />} onClick={() => api().cancel(it.id).catch(report)}>{t('items.cancelItem')}</Button>}
       </div>
     </div>

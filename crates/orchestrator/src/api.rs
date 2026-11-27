@@ -285,6 +285,15 @@ impl Orchestrator {
         rewind::rewind(&self.shared, id, step).await
     }
 
+    pub async fn base_branches(&self, id: &ItemId, repository: &str) -> Result<crate::BaseBranches> {
+        crate::bases::branches(&self.shared, id, repository).await
+    }
+
+    pub async fn choose_base(&self, id: &ItemId, repository: &str, base: &str, from: Option<&str>) -> Result<()> {
+        let choice = from.map_or(crate::bases::Choice::Existing, |from| crate::bases::Choice::CreatedFrom(from.to_owned()));
+        crate::bases::choose(&self.shared, id, repository, base, choice).await
+    }
+
     pub fn item_sessions(&self, id: &ItemId) -> Result<Vec<crate::ItemSession>> {
         Ok(self.shared.store.item(id)?.map(|item| crate::context::sessions(&item)).unwrap_or_default())
     }

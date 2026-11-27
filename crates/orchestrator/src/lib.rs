@@ -3,6 +3,7 @@ mod agent;
 mod api;
 mod application;
 mod asks;
+mod bases;
 mod bundle;
 mod calls;
 mod cards;
@@ -43,6 +44,7 @@ mod views;
 
 pub use api::{Handle, Orchestrator};
 pub use asks::PendingAsk;
+pub use bases::{BaseBranches, blocked as blocked_base, missing as missing_base};
 pub use cards::AgentCard;
 pub use cloud::{CREDENTIALS_COMMAND as CLOUD_CREDENTIALS_COMMAND, CREDENTIALS_PATH as CLOUD_CREDENTIALS_PATH};
 pub use config::{Config, Limits, Timeouts, Watch};

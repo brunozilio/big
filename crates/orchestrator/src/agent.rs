@@ -90,7 +90,10 @@ pub async fn worktree(
     let (repo, named) = (checkout.directory.clone(), branch.clone());
     let path = blocking(move || git::worktree(repo.as_deref(), &data, &named, base.as_deref(), &folder))
         .await?
-        .map_err(|error| Failure::Class(ErrorClass::Transient, format!("the worktree could not be made: {error}")))?;
+        .map_err(|error| match git::missing_base(&error) {
+            Some(base) => Failure::Blocked(crate::bases::blocked(&checkout.id, base)),
+            None => Failure::Class(ErrorClass::Transient, format!("the worktree could not be made: {error}")),
+        })?;
     Ok(Worktree { checkout, path, branch })
 }
 

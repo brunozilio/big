@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 
 use domain::workflow::WorkItem;
 
-fn run(dir: &Path, args: &[&str]) -> Option<String> {
+pub(crate) fn run(dir: &Path, args: &[&str]) -> Option<String> {
     let output = platform::git::command(dir).args(args).output().ok()?;
     output.status.success().then(|| String::from_utf8_lossy(&output.stdout).trim().to_owned())
 }
@@ -27,7 +27,7 @@ pub fn origin(dir: &Path) -> Option<String> {
     is_repo(dir).then(|| run(dir, &["remote", "get-url", "origin"])).flatten().filter(|url| !url.is_empty())
 }
 
-fn attempt(dir: &Path, args: &[&str]) -> std::io::Result<String> {
+pub(crate) fn attempt(dir: &Path, args: &[&str]) -> std::io::Result<String> {
     let output = platform::git::command(dir).args(args).output()?;
     if output.status.success() {
         return Ok(String::from_utf8_lossy(&output.stdout).trim().to_owned());
@@ -60,11 +60,11 @@ fn wanted(item: &WorkItem, repo: &str, name: &str) -> Option<String> {
     (!text.is_empty()).then(|| text.to_owned())
 }
 
-fn exists(repo: &Path, reference: &str) -> bool {
+pub(crate) fn exists(repo: &Path, reference: &str) -> bool {
     run(repo, &["rev-parse", "--verify", "--quiet", &format!("{reference}^{{commit}}")]).is_some()
 }
 
-fn default_branch(repo: &Path) -> Option<String> {
+pub(crate) fn default_branch(repo: &Path) -> Option<String> {
     let known = || run(repo, &["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"]);
     let found = known().or_else(|| run(repo, &["remote", "set-head", "origin", "--auto"]).and_then(|_| known()))?;
     found.strip_prefix("refs/remotes/").map(str::to_owned)
@@ -82,7 +82,22 @@ fn start_point(repo: &Path, base: Option<&str>, remote: bool) -> std::io::Result
     if exists(repo, &local) {
         return Ok(local);
     }
-    Err(std::io::Error::other(format!("the base branch {base} does not exist")))
+    Err(std::io::Error::other(MissingBase(base.to_owned())))
+}
+
+#[derive(Debug)]
+pub struct MissingBase(pub String);
+
+impl std::fmt::Display for MissingBase {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "the base branch {} does not exist", self.0)
+    }
+}
+
+impl std::error::Error for MissingBase {}
+
+pub fn missing_base(error: &std::io::Error) -> Option<&str> {
+    error.get_ref()?.downcast_ref::<MissingBase>().map(|missing| missing.0.as_str())
 }
 
 pub fn worktree(
