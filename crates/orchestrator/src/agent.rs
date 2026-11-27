@@ -102,9 +102,9 @@ async fn consulted(shared: &Shared, checkout: Checkout, branch: &str) -> Result<
         Failure::permanent(format!("the read-only repository {} has no folder on this machine", checkout.name))
     })?;
     let (data, named, repo) = (shared.config.data.clone(), repos::folder(branch, &checkout.id), folder.clone());
-    let copy = blocking(move || git::detached(&repo, &data, &named))
-        .await?
-        .map_err(|error| Failure::Class(ErrorClass::Transient, format!("the read-only copy could not be made: {error}")))?;
+    let copy = blocking(move || git::detached(&repo, &data, &named)).await?.map_err(|error| {
+        Failure::Class(ErrorClass::Transient, format!("the read-only copy could not be made: {error}"))
+    })?;
     Ok(Worktree { checkout, path: copy.unwrap_or(folder), branch: String::new() })
 }
 
@@ -180,10 +180,12 @@ pub(crate) fn images_of(input: &Value) -> Vec<domain::Image> {
 fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, resume: Option<&str>) -> PromptRequest {
     let input = &command.args["input"];
     let wanted = command.args["model"].as_str().or(profile.model.as_deref());
-    let option = model(shared, wanted);
+    let tier = wanted.and_then(domain::model_roles::Tier::parse);
+    let option = model(shared, wanted.filter(|_| tier.is_none()));
     let carried = input.get("session").and_then(Value::as_str);
     let text = if resume.is_some() { RESUME.to_owned() } else { prompt_of(input) };
     let mut request = PromptRequest::plain(cwd.to_path_buf(), text, option);
+    request.session.tier = tier;
     if resume.is_none() {
         request.prompt.images = images_of(input);
     }

@@ -221,6 +221,15 @@ impl AgentConfig {
                     .as_ref()
                     .is_none_or(|servers| servers.iter().any(|server| name.starts_with(&format!("mcp__{server}__")))))
     }
+    pub fn model_in(&self, parent: &str, models: &crate::tools::Models) -> Result<String, String> {
+        let Some(named) = &self.model else { return Ok(parent.into()) };
+        let resolved = models.resolved(named, parent);
+        if resolved == parent {
+            return Ok(parent.into());
+        }
+        Self { model: Some(resolved.to_owned()), ..Self::default() }.model(parent, models.model.provider)
+    }
+
     pub fn model(&self, parent: &str, provider: ModelProvider) -> Result<String, String> {
         let Some(model) = &self.model else {
             return Ok(parent.into());
@@ -318,5 +327,23 @@ mod tests {
         assert!(listed.observing().is_some_and(|observing| observing.subagents), "subagents are watched by default");
         assert!(AgentConfig::default().observing().is_none());
         assert!(AgentConfig::parse(&json!({ "observeSubagents": "yes" })).is_err());
+    }
+
+    #[test]
+    fn an_agent_may_name_a_tier_that_resolves_against_the_session_s_models() {
+        let provider = ModelProvider::new("claude-subscription");
+        let mut models =
+            crate::tools::Models::new(domain::ModelOption::new("claude-opus-5-5", "Opus").served_by(provider));
+        models.small_model = Some("claude-haiku-5-5".into());
+        let named = |model: &str| AgentConfig { model: Some(model.into()), ..AgentConfig::default() };
+        assert_eq!(named("small").model_in("claude-opus-5-5", &models).as_deref(), Ok("claude-haiku-5-5"));
+        assert_eq!(named("main").model_in("claude-opus-5-5", &models).as_deref(), Ok("claude-opus-5-5"));
+        assert_eq!(named("plan").model_in("claude-opus-5-5", &models).as_deref(), Ok("claude-opus-5-5"));
+        assert_eq!(AgentConfig::default().model_in("claude-opus-5-5", &models).as_deref(), Ok("claude-opus-5-5"));
+        for path in ["agents/explore.ts", "agents/plan.ts"] {
+            let source = content::builtin_text(path).expect("shipped");
+            let spec = script::exported(path, &source, "spec").expect("spec");
+            assert!(spec["model"].as_str().and_then(domain::model_roles::Tier::parse).is_some(), "{path}");
+        }
     }
 }

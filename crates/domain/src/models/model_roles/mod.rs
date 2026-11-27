@@ -75,6 +75,37 @@ impl ModelRoles {
             _ => None,
         }
     }
+
+    pub fn for_tier<'a>(&'a self, tier: Tier, session: &'a str, small: Option<&'a str>) -> &'a str {
+        match tier {
+            Tier::Main => session,
+            Tier::Plan => self.get(ModelRole::Plan).unwrap_or(session),
+            Tier::Explore => self.get(ModelRole::Explore).or(small).unwrap_or(session),
+            Tier::Small => small.or_else(|| self.get(ModelRole::Small)).unwrap_or(session),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Tier {
+    Main,
+    Plan,
+    Explore,
+    Small,
+}
+
+impl Tier {
+    pub fn parse(text: &str) -> Option<Self> {
+        if text.trim().eq_ignore_ascii_case("main") {
+            return Some(Self::Main);
+        }
+        ModelRole::parse(text).map(|role| match role {
+            ModelRole::Plan => Self::Plan,
+            ModelRole::Explore => Self::Explore,
+            ModelRole::Small => Self::Small,
+        })
+    }
 }
 
 #[cfg(test)]

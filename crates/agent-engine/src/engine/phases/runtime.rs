@@ -117,9 +117,13 @@ impl Job {
     fn settle_model(&mut self, main: &MainAgent, workspace: &mut Workspace) -> Result<(), Stop> {
         self.request.session.effort = main.config.effort.unwrap_or(self.request.session.effort);
         let asked = &self.request.session.model;
-        let chosen = match &main.config.model {
-            Some(_) => main.config.model(&asked.id, asked.provider).map_err(Stop::failed)?,
-            None => workspace.models.roles.for_turn(&asked.id, self.request.policy.permission).to_owned(),
+        let tiered = |tier| workspace.models.roles.for_tier(tier, &asked.id, workspace.models.small_model.as_deref());
+        let chosen = match (self.request.session.tier, &main.config.model) {
+            (Some(tier), _) => tools::subagent_config::AgentConfig { model: Some(tiered(tier).to_owned()), ..Default::default() }
+                .model(&asked.id, asked.provider)
+                .unwrap_or_else(|_| asked.id.clone()),
+            (None, Some(_)) => main.config.model_in(&asked.id, &workspace.models).map_err(Stop::failed)?,
+            (None, None) => workspace.models.roles.for_turn(&asked.id, self.request.policy.permission).to_owned(),
         };
         if chosen != self.request.session.model.id {
             self.request.session.model.id.clone_from(&chosen);

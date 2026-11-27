@@ -49,3 +49,17 @@ fn roles_round_trip_as_an_object_keyed_by_role_name() {
     assert_eq!(json, serde_json::json!({"explore": "e", "small": "s"}));
     assert_eq!(serde_json::from_value::<ModelRoles>(json).expect("deserialize"), set);
 }
+
+#[test]
+fn a_tier_named_by_content_resolves_to_the_role_s_model_or_else_the_session_s() {
+    assert_eq!(Tier::parse(" Main "), Some(Tier::Main));
+    assert_eq!(Tier::parse("small"), Some(Tier::Small));
+    assert_eq!(Tier::parse("claude-haiku-5-5"), None);
+    let set = roles(&[(ModelRole::Plan, "p")]);
+    assert_eq!(set.for_tier(Tier::Main, "main", Some("tiny")), "main");
+    assert_eq!(set.for_tier(Tier::Plan, "main", Some("tiny")), "p");
+    assert_eq!(set.for_tier(Tier::Explore, "main", Some("tiny")), "tiny");
+    assert_eq!(set.for_tier(Tier::Small, "main", Some("tiny")), "tiny");
+    assert_eq!(ModelRoles::default().for_tier(Tier::Small, "main", None), "main");
+    assert_eq!(ModelRoles::default().for_tier(Tier::Plan, "main", None), "main");
+}

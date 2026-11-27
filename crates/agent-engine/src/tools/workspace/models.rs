@@ -12,6 +12,13 @@ impl Models {
         Self { model, fallbacks: Vec::new(), small_model: None, escalation: None, roles: Default::default() }
     }
 
+    pub fn resolved<'a>(&'a self, name: &'a str, parent: &'a str) -> &'a str {
+        match domain::model_roles::Tier::parse(name) {
+            Some(tier) => self.roles.for_tier(tier, parent, self.small_model.as_deref()),
+            None => name,
+        }
+    }
+
     pub fn switch_to(&mut self, id: String) {
         self.model.id = id;
         self.model.capabilities = None;
