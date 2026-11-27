@@ -96,6 +96,7 @@ async function act(ctx, state, config, item, said) {
     case "approve_change":
     case "reject_change":
       if (!env || !canDecideChange(state, env)) return false;
+      state.changes[env.id].by = said.by || null;
       return settleChange(state, config, env, said.action === "approve_change" ? "done" : "rejected");
     case "add_task": {
       if (tasksLocked(envs, state)) return false;

@@ -245,6 +245,10 @@ impl Orchestrator {
     }
 
     pub fn human_input(&self, id: &ItemId, step: &str, action: &str, payload: Value) -> Result<()> {
+        self.human_input_by(id, step, action, payload, "human")
+    }
+
+    pub fn human_input_by(&self, id: &ItemId, step: &str, action: &str, payload: Value, by: &str) -> Result<()> {
         let ledger = Ledger::load(&self.shared.store, id)?;
         let waits: Vec<_> = ledger.open().filter(|request| kind_of(&request.effect) == WAIT_HUMAN).collect();
         let only = if let [only] = waits.as_slice() { Some(only) } else { None };
@@ -257,7 +261,7 @@ impl Orchestrator {
             payload: payload.clone(),
         };
         self.shared.append(id, &[answer])?;
-        let value = json!({ "action": action, "values": payload, "by": "human" });
+        let value = json!({ "action": action, "values": payload, "by": by });
         self.shared.resolve(id, &request.key, EffectOutcome::Ok { value })?;
         Ok(())
     }

@@ -212,8 +212,11 @@ async fn without_a_change_tool_bound_a_person_approves_the_environment_here_and_
     let actions: Vec<Value> = stage(&item, "hext")["actions"].as_array().cloned().unwrap_or_default();
     let ids: Vec<&str> = actions.iter().filter_map(|action| action["id"].as_str()).collect();
     assert_eq!(ids, ["approve_change", "reject_change"]);
-    let item = answer(&kernel, &package, "approve_change", json!({ "env": "hext" })).await;
+    let before = kernel.item(&package).expect("store").expect("item").version;
+    kernel.human_input_by(&package, "promotion", "approve_change", json!({ "env": "hext" }), "Ana").expect("approve");
+    let item = until(&kernel, &package, |item| item.waiting_human() && item.version > before + 2).await;
     assert_eq!(stage(&item, "hext")["state"], "passed");
+    assert_eq!(stage(&item, "hext")["change"]["label"], "executada · Ana");
     assert_eq!(stage(&item, "prod")["picker"], true);
     let reached: Vec<String> = fake.calls.lock().expect("lock").iter().map(|(name, _, _)| name.clone()).filter(|name| name.starts_with("changes.")).collect();
     assert_eq!(reached, Vec::<String>::new());

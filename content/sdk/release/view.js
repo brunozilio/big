@@ -20,6 +20,11 @@ function stageActions(config, state, env) {
   return list;
 }
 
+function statusLabel(config, change) {
+  const said = label(config, `status_${change.status}`, change.status);
+  return change.by ? `${said} · ${change.by}` : said;
+}
+
 function stageOf(config, state, env) {
   const change = state.changes[env.id];
   const shown = visible(config.environments, state, env);
@@ -32,7 +37,7 @@ function stageOf(config, state, env) {
     gate: env.gate.kind,
     window: shown ? state.windows[env.id] || null : null,
     picker: shown && env.gate.kind === "change" && !change,
-    change: change ? { key: change.key, status: change.status, label: label(config, `status_${change.status}`, change.status), url: change.url } : null,
+    change: change ? { key: change.key, status: change.status, label: statusLabel(config, change), url: change.url } : null,
     busy: state.stages[env.id] === "running" ? label(config, state.reverting === env.id ? "reverting" : "working", "…") : null,
     actions: stageActions(config, state, env),
   };

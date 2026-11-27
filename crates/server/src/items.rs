@@ -568,6 +568,7 @@ pub async fn step(
 
 pub async fn human(
     State(ctx): State<Ctx>,
+    Extension(person): Extension<Principal>,
     Path((id, step)): Path<(String, String)>,
     Json(body): Json<Value>,
 ) -> ApiResult<Response> {
@@ -575,6 +576,7 @@ pub async fn human(
     let action = body["action"].as_str().filter(|action| !action.is_empty());
     let action = action.ok_or_else(|| ApiError::bad(said("Say the action.", "Indica la acción.", "Diga a ação.")))?;
     let (action, payload) = blocks::input(action, body["payload"].clone());
-    ctx.backend.orchestrator.human_input(&id, &step, &action, payload)?;
+    let by = [person.name.trim(), person.email.trim()].into_iter().find(|name| !name.is_empty()).unwrap_or("human");
+    ctx.backend.orchestrator.human_input_by(&id, &step, &action, payload, by)?;
     Ok(done())
 }
