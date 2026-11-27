@@ -1,6 +1,33 @@
 use domain::small_model::{Offered, SmallChoice, choose};
 use domain::{ModelOption, ModelProvider};
 
+use crate::model::{BoxFuture, CancellationToken, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
+
+pub struct OrSession<'a> {
+    pub api: &'a dyn ModelApi,
+    pub session: String,
+}
+
+impl ModelApi for OrSession<'_> {
+    fn turn<'b>(
+        &'b self,
+        request: &'b TurnRequest,
+        on: OnDelta<'b>,
+        cancel: &'b CancellationToken,
+    ) -> BoxFuture<'b, Result<Reply, ModelError>> {
+        Box::pin(async move {
+            match self.api.turn(request, &mut *on, cancel).await {
+                Err(error) if error != ModelError::Cancelled && request.model != self.session => {
+                    tracing::warn!(%error, model = %request.model, "the small model failed; the session's model answers");
+                    let again = TurnRequest { model: self.session.clone(), ..request.clone() };
+                    self.api.turn(&again, on, cancel).await
+                }
+                answered => answered,
+            }
+        })
+    }
+}
+
 fn bare(model: &str) -> &str {
     model.rsplit(':').next().unwrap_or(model)
 }
@@ -37,6 +64,42 @@ fn input_rate(provider_vendor: Option<&str>, id: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::model::BlockingTurn;
+    use crate::model::scripted::ScriptedModel;
+    use crate::transcript::{Block, Message};
+
+    fn asked(model: &str) -> TurnRequest {
+        TurnRequest {
+            model: model.into(),
+            system: String::new(),
+            messages: vec![Message::user("hi")],
+            tools: Vec::new(),
+            effort: domain::Effort::Low,
+            max_tokens: 10,
+            intent: crate::model::Intent::ONCE,
+        }
+    }
+
+    #[test]
+    fn a_failed_small_model_hands_the_call_to_the_session_s_model() {
+        let failed = Err(ModelError::Provider("unknown model".into()));
+        let scripted = ScriptedModel::new([failed, ScriptedModel::reply(vec![Block::Text("ok".into())])]);
+        let api = OrSession { api: &scripted, session: "big".into() };
+        let reply = api.turn_blocking(&asked("small"), &mut |_| {}, &CancellationToken::new()).expect("answered");
+        assert_eq!(reply.message.text(), "ok");
+        let models: Vec<String> = scripted.asked().into_iter().map(|request| request.model).collect();
+        assert_eq!(models, ["small", "big"]);
+    }
+
+    #[test]
+    fn the_session_s_own_model_and_a_cancel_are_not_asked_again() {
+        for (model, error) in [("big", ModelError::Provider("down".into())), ("small", ModelError::Cancelled)] {
+            let scripted = ScriptedModel::new([Err(error)]);
+            let api = OrSession { api: &scripted, session: "big".into() };
+            assert!(api.turn_blocking(&asked(model), &mut |_| {}, &CancellationToken::new()).is_err());
+            assert_eq!(scripted.asked().len(), 1);
+        }
+    }
 
     fn offered(provider: ModelProvider, id: &str) -> ModelOption {
         ModelOption::new(id, id).served_by(provider)

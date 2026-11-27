@@ -65,6 +65,21 @@ fn a_title_needs_no_session_and_keeps_none() {
 }
 
 #[test]
+fn a_chore_runs_on_the_small_model_and_marks_nothing_to_cache() {
+    let dir = tempfile::tempdir().expect("dir");
+    let titler = says("{\"title\": \"Login page\"}");
+    let engine =
+        Engine::new(Arc::new(Source(Mutex::new(vec![Arc::clone(&titler)]))), Arc::new(InMemorySessions::default()));
+    let claude = domain::ModelProvider::new("claude-subscription");
+    let mut request = PromptRequest::plain(dir.path().into(), "fix the login", model().served_by(claude));
+    request.session.command = Some(SessionCommand::Title);
+    finish(&engine, &request);
+    let asked = &titler.asked()[0];
+    assert_eq!(asked.model, "claude-haiku-5-5");
+    assert_eq!(asked.intent, agent_engine::model::Intent::ONCE);
+}
+
+#[test]
 fn a_suggestion_reads_the_kept_session() {
     let dir = tempfile::tempdir().expect("dir");
     let sessions = Arc::new(InMemorySessions::default());
