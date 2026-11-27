@@ -25,6 +25,47 @@ pub fn conversation_text(history: &[Message], limit: usize) -> String {
     text.chars().skip(chars.saturating_sub(limit)).collect::<String>().trim().to_owned()
 }
 
+const STEP_CHARS: usize = 300;
+
+fn clipped(text: &str) -> String {
+    let flat = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    if flat.chars().count() <= STEP_CHARS {
+        return flat;
+    }
+    format!("{}…", flat.chars().take(STEP_CHARS).collect::<String>())
+}
+
+fn step(block: &Block) -> Option<String> {
+    match block {
+        Block::Text(text) if !text.trim().is_empty() => Some(text.trim().to_owned()),
+        Block::ToolUse { name, input, .. } => Some(format!("[ran {name} {}]", clipped(&input.to_string()))),
+        Block::ToolResult { content, is_error, .. } | Block::ToolResultRich { content, is_error, .. } => {
+            let kind = if *is_error { "failed" } else { "result" };
+            Some(format!("[{kind}: {}]", clipped(content)))
+        }
+        _ => None,
+    }
+}
+
+pub fn work_text(history: &[Message], limit: usize) -> String {
+    let mut text = String::new();
+    for message in history {
+        let steps: Vec<String> = message.blocks.iter().filter_map(step).collect();
+        if steps.is_empty() {
+            continue;
+        }
+        let who = match message.role {
+            Role::Assistant => "Agent",
+            Role::User if crate::transcript::only_results(message) => "Tool",
+            Role::User => "User",
+        };
+        text.push_str(&format!("{who}: {}\n", steps.join("\n")));
+    }
+    let text = text.trim();
+    let chars = text.chars().count();
+    text.chars().skip(chars.saturating_sub(limit)).collect::<String>().trim().to_owned()
+}
+
 pub(super) fn field(answer: &str, field: &str) -> String {
     let parsed = answer
         .find('{')

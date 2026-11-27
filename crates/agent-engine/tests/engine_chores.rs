@@ -94,8 +94,9 @@ fn a_suggestion_reads_the_kept_session() {
     let events = finish(&engine, &request);
     assert!(events.contains(&EngineEvent::Chore(ChoreAnswer::Suggestion("run the tests".into()))), "{events:?}");
     let asked = &guesser.asked()[0];
-    assert_eq!(&asked.messages[..2], &history[..]);
-    assert!(asked.messages[2].text().starts_with("[SUGGESTION MODE"));
+    assert_eq!(asked.messages.len(), 1, "only the end of the session, read as data");
+    assert_eq!(asked.messages[0].text(), "<conversation>\nUser: fix the bug\nAgent: Fixed it.\n</conversation>");
+    assert!(asked.system.starts_with("[SUGGESTION MODE"));
 }
 
 #[test]

@@ -79,6 +79,14 @@ fn the_conversation_reads_as_plain_lines_from_its_end() {
     ];
     assert_eq!(conversation_text(&history, 1000), "User: first\nAgent: second");
     assert_eq!(conversation_text(&history, 6), "second");
+    let call = Block::ToolUse { id: "1".into(), name: "Bash".into(), input: serde_json::json!({"command": "ls"}) };
+    let done = Block::ToolResult { id: "1".into(), content: "x".repeat(400), is_error: false };
+    let results = Message { role: crate::transcript::Role::User, blocks: vec![done] };
+    let worked = vec![Message::user("go"), Message::assistant(vec![call]), results];
+    let text = work_text(&worked, 10_000);
+    assert!(text.starts_with("User: go\nAgent: [ran Bash {\"command\":\"ls\"}]\nTool: [result: xxx"), "{text}");
+    assert!(text.ends_with("x…]"), "a long result is shortened");
+    assert!(work_text(&worked, 20).chars().count() <= 20, "only the end is kept");
     let model = says("  You are moving   the login page.  Next: run the tests. ");
     let recap = recap(&model, &template(), &history, &no()).expect("recap");
     assert_eq!(recap.as_deref(), Some("You are moving the login page. Next: run the tests."));

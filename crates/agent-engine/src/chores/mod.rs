@@ -5,7 +5,7 @@ use domain::{ChoreAnswer, SessionCommand};
 use platform::Stop;
 
 use self::clean::field;
-pub use self::clean::{clean_suggestion, clean_title, conversation_text, kebab, spoken};
+pub use self::clean::{clean_suggestion, clean_title, conversation_text, kebab, spoken, work_text};
 use crate::model::{BlockingTurn, ModelApi, ModelError, TurnRequest};
 use crate::transcript::Message;
 
@@ -36,6 +36,7 @@ pub fn answer(
 }
 
 const RECAP_TAIL: usize = 12_000;
+const SUGGEST_TAIL: usize = 6_000;
 
 fn ask(
     api: &dyn ModelApi,
@@ -90,9 +91,8 @@ pub fn suggestion(
     history: &[Message],
     stop: &Stop,
 ) -> Result<Option<String>, ModelError> {
-    let mut messages = history.to_vec();
-    messages.push(Message::user(crate::prompt::text("chore-suggest")));
-    let answer = ask(api, template, template.system.clone(), messages, 60, stop)?;
+    let message = Message::user(format!("<conversation>\n{}\n</conversation>", work_text(history, SUGGEST_TAIL)));
+    let answer = ask(api, template, crate::prompt::text("chore-suggest"), vec![message], 60, stop)?;
     Ok(clean_suggestion(&answer))
 }
 
