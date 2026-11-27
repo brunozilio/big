@@ -20,7 +20,21 @@ pub struct BrowserInfo {
 struct Linked {
     connection: u64,
     info: BrowserInfo,
+    owner: Option<String>,
     outbox: UnboundedSender<String>,
+}
+
+type Pairing = (Sender<(String, String)>, Vec<String>);
+
+pub type OwnerOf = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+
+#[derive(Clone)]
+struct Scope(OwnerOf);
+
+impl std::fmt::Debug for Scope {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Scope")
+    }
 }
 
 #[derive(Debug)]
@@ -35,9 +49,10 @@ struct State {
     browsers: Vec<Linked>,
     pending: HashMap<u64, Pending>,
     chosen: HashMap<String, String>,
-    pairing: HashMap<u64, Sender<(String, String)>>,
+    pairing: HashMap<u64, Pairing>,
     captured: HashMap<String, Value>,
-    build: Option<String>,
+    builds: Vec<String>,
+    scope: Option<Scope>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -62,6 +77,10 @@ impl Hub {
     }
 
     pub fn link(&self, info: BrowserInfo, outbox: UnboundedSender<String>) -> u64 {
+        self.link_owned(info, None, outbox)
+    }
+
+    pub fn link_owned(&self, info: BrowserInfo, owner: Option<String>, outbox: UnboundedSender<String>) -> u64 {
         let mut state = self.state();
         state.next += 1;
         let connection = state.next;
@@ -73,7 +92,7 @@ impl Hub {
             .map(|linked| linked.connection)
             .collect();
         state.browsers.retain(|linked| linked.info.device_id != device);
-        state.browsers.push(Linked { connection, info, outbox });
+        state.browsers.push(Linked { connection, info, owner, outbox });
         drop(state);
         for old in stale {
             self.fail_pending(old);
@@ -82,11 +101,59 @@ impl Hub {
     }
 
     pub fn expect(&self, build: &str) {
-        self.state().build = Some(build.to_owned()).filter(|build| !build.is_empty());
+        let mut state = self.state();
+        if !build.is_empty() && !state.builds.iter().any(|known| known == build) {
+            state.builds.push(build.to_owned());
+        }
     }
 
     pub fn outdated(&self, build: &str) -> Option<String> {
-        self.state().build.clone().filter(|expected| expected != build)
+        let state = self.state();
+        if state.builds.iter().any(|known| known == build) {
+            return None;
+        }
+        state.builds.first().cloned()
+    }
+
+    pub fn scoped(&self, owner_of: OwnerOf) {
+        self.state().scope = Some(Scope(owner_of));
+    }
+
+    fn sees(state: &State, key: &str) -> impl Fn(&Linked) -> bool + use<> {
+        let wanted = state.scope.as_ref().map(|scope| (scope.0)(key));
+        move |linked| match &wanted {
+            None => true,
+            Some(owner) => owner.is_some() && linked.owner == *owner,
+        }
+    }
+
+    pub fn visible(&self, key: &str) -> Vec<BrowserInfo> {
+        let state = self.state();
+        let sees = Self::sees(&state, key);
+        state.browsers.iter().filter(|linked| sees(linked)).map(|linked| linked.info.clone()).collect()
+    }
+
+    pub fn owned_by(&self, owner: &str) -> Vec<BrowserInfo> {
+        let state = self.state();
+        state
+            .browsers
+            .iter()
+            .filter(|linked| linked.owner.as_deref() == Some(owner))
+            .map(|linked| linked.info.clone())
+            .collect()
+    }
+
+    pub fn unlink_device(&self, owner: &str, device: &str) {
+        let gone: Vec<u64> = self
+            .state()
+            .browsers
+            .iter()
+            .filter(|linked| linked.owner.as_deref() == Some(owner) && linked.info.device_id == device)
+            .map(|linked| linked.connection)
+            .collect();
+        for connection in gone {
+            self.unlink(connection);
+        }
     }
 
     pub fn unlink(&self, connection: u64) {
@@ -118,7 +185,8 @@ impl Hub {
 
     pub fn choose(&self, session: &str, device: &str) -> bool {
         let mut state = self.state();
-        let known = state.browsers.iter().any(|linked| linked.info.device_id == device);
+        let sees = Self::sees(&state, session);
+        let known = state.browsers.iter().any(|linked| sees(linked) && linked.info.device_id == device);
         if known {
             state.chosen.insert(session.to_owned(), device.to_owned());
         }
@@ -128,14 +196,15 @@ impl Hub {
     pub fn chosen(&self, session: &str) -> Option<String> {
         let state = self.state();
         let device = state.chosen.get(session)?;
-        state.browsers.iter().any(|linked| &linked.info.device_id == device).then(|| device.clone())
+        let sees = Self::sees(&state, session);
+        state.browsers.iter().any(|linked| sees(linked) && &linked.info.device_id == device).then(|| device.clone())
     }
 
     pub fn resolve(&self, session: &str) -> Resolved {
         if let Some(device) = self.chosen(session) {
             return Resolved::Browser(device);
         }
-        let browsers = self.browsers();
+        let browsers = self.visible(session);
         match browsers.as_slice() {
             [] => Resolved::NoneConnected,
             [only] => Resolved::Browser(only.device_id.clone()),
@@ -143,8 +212,14 @@ impl Hub {
         }
     }
 
-    pub fn answer(&self, id: u64, result: Result<Value, String>) {
-        if let Some(pending) = self.state().pending.remove(&id) {
+    pub fn answer(&self, device: &str, id: u64, result: Result<Value, String>) {
+        let mut state = self.state();
+        let Some(pending) = state.pending.get(&id) else { return };
+        let asked = pending.connection;
+        if !state.browsers.iter().any(|linked| linked.connection == asked && linked.info.device_id == device) {
+            return;
+        }
+        if let Some(pending) = state.pending.remove(&id) {
             let _ = pending.reply.send(result);
         }
     }
@@ -188,8 +263,12 @@ impl Hub {
             let mut state = self.state();
             state.next += 1;
             let id = state.next;
-            state.pairing.insert(id, sender);
-            (id, state.browsers.iter().map(|linked| linked.outbox.clone()).collect::<Vec<_>>())
+            let sees = Self::sees(&state, session);
+            let asked: Vec<&Linked> = state.browsers.iter().filter(|linked| sees(linked)).collect();
+            let devices = asked.iter().map(|linked| linked.info.device_id.clone()).collect();
+            let outboxes = asked.iter().map(|linked| linked.outbox.clone()).collect::<Vec<_>>();
+            state.pairing.insert(id, (sender, devices));
+            (id, outboxes)
         };
         if outboxes.is_empty() {
             self.state().pairing.remove(&id);
@@ -231,7 +310,11 @@ impl Hub {
     }
 
     pub fn paired(&self, id: u64, device: &str, name: &str) {
-        if let Some(sender) = self.state().pairing.remove(&id) {
+        let mut state = self.state();
+        if !state.pairing.get(&id).is_some_and(|(_, asked)| asked.iter().any(|known| known == device)) {
+            return;
+        }
+        if let Some((sender, _)) = state.pairing.remove(&id) {
             let _ = sender.send((device.to_owned(), name.to_owned()));
         }
     }
@@ -283,7 +366,8 @@ mod tests {
         let worker = std::thread::spawn(move || {
             let sent: Value = serde_json::from_str(&inbox.blocking_recv().unwrap_or_default()).unwrap_or_default();
             let id = sent["id"].as_u64().unwrap_or_default();
-            answering.answer(id, Ok(json!({ "echo": sent["tool"] })));
+            answering.answer("b", id, Ok(json!({ "echo": "intruder" })));
+            answering.answer("a", id, Ok(json!({ "echo": sent["tool"] })));
             let second: Value = serde_json::from_str(&inbox.blocking_recv().unwrap_or_default()).unwrap_or_default();
             assert!(second["id"].is_u64());
             answering.unlink(connection);
@@ -293,6 +377,40 @@ mod tests {
         let gone = hub.call("a", json!({ "type": "call", "tool": "find" }), Duration::from_secs(5));
         assert_eq!(gone, Err(DISCONNECTED.to_owned()));
         worker.join().unwrap_or_default();
+    }
+
+    #[test]
+    fn with_a_scope_each_session_sees_only_the_browsers_of_its_owner() {
+        let hub = Hub::new();
+        let (a, _ra) = tokio::sync::mpsc::unbounded_channel();
+        hub.link_owned(info("a"), Some("ana".into()), a);
+        let (b, _rb) = tokio::sync::mpsc::unbounded_channel();
+        hub.link_owned(info("b"), Some("bia".into()), b);
+        let (c, _rc) = tokio::sync::mpsc::unbounded_channel();
+        hub.link(info("c"), c);
+        assert!(matches!(hub.resolve("s"), Resolved::Several(list) if list.len() == 3));
+        hub.scoped(Arc::new(|key: &str| match key {
+            "of-ana" => Some("ana".to_owned()),
+            "of-bia" => Some("bia".to_owned()),
+            _ => None,
+        }));
+        assert_eq!(hub.resolve("of-ana"), Resolved::Browser("a".into()));
+        assert_eq!(hub.resolve("of-bia"), Resolved::Browser("b".into()));
+        assert_eq!(hub.resolve("nobody"), Resolved::NoneConnected);
+        assert!(!hub.choose("of-ana", "b"));
+        assert_eq!(hub.owned_by("bia").len(), 1);
+        hub.unlink_device("ana", "a");
+        assert_eq!(hub.resolve("of-ana"), Resolved::NoneConnected);
+    }
+
+    #[test]
+    fn every_expected_build_is_current() {
+        let hub = Hub::new();
+        hub.expect("folder");
+        hub.expect("zip");
+        assert_eq!(hub.outdated("zip"), None);
+        assert_eq!(hub.outdated("folder"), None);
+        assert_eq!(hub.outdated("old"), Some("folder".to_owned()));
     }
 
     #[test]

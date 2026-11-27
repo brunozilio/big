@@ -8,13 +8,15 @@ mod recording;
 mod session;
 mod socket;
 mod spec;
+mod stream;
 
 pub use eval::{Eval, run as evaluate};
-pub use extension::{Installed, install};
-pub use hub::{BrowserInfo, Hub, Resolved, no_browser};
+pub use extension::{Installed, Packaged, install, packaged};
+pub use hub::{BrowserInfo, Hub, OwnerOf, Resolved, no_browser};
 pub use session::{Ask, Session};
 pub use socket::{ROUTE, connect};
 pub use spec::{server_name, tools};
+pub use stream::{hello, open, reply};
 
 #[derive(Debug, Clone)]
 pub struct Settings {

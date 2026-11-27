@@ -3,7 +3,7 @@ mod gate;
 mod mail;
 mod passkey;
 mod password;
-mod session;
+pub mod session;
 pub mod settings;
 mod sso;
 

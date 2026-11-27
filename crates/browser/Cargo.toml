@@ -16,6 +16,7 @@ tracing.workspace = true
 axum = { workspace = true, features = ["ws"] }
 tokio = { workspace = true, features = ["sync", "time", "rt"] }
 futures-util.workspace = true
+zip.workspace = true
 gif = "0.14"
 png = "0.18"
 

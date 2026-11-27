@@ -54,6 +54,7 @@ pub fn app(backend: Backend, bundle: &'static [page::Asset], port: u16) -> (Rout
             crate::sessions::watched(&shared, session, event);
         }
     }));
+    crate::browser_devices::scope(&ctx);
     tokio::spawn(crate::pump::orchestrator_loop(Arc::clone(&ctx)));
     tokio::spawn(crate::pump::health_loop(Arc::clone(&ctx)));
     tokio::spawn(crate::sessions::follow_loop(Arc::clone(&ctx), nudges));

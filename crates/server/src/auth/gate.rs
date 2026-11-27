@@ -14,6 +14,7 @@ fn open(method: &Method, path: &str) -> bool {
         || path.starts_with(crate::workspaces::CREDENTIALS_PATH)
         || path == crate::mcp::route()
         || path == browser::ROUTE
+        || crate::browser_devices::open_path(path)
         || (reads
             && (path == "/api/branding"
                 || path == crate::branding::LOGO_ROUTE

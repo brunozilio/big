@@ -47,7 +47,7 @@ async function trusted(origin) {
   return Array.isArray(stored[TRUSTED_KEY]) && stored[TRUSTED_KEY].includes(origin);
 }
 
-async function trust(origin) {
+export async function trust(origin) {
   const stored = await chrome.storage.local.get(TRUSTED_KEY);
   const known = Array.isArray(stored[TRUSTED_KEY]) ? stored[TRUSTED_KEY] : [];
   if (!known.includes(origin)) await chrome.storage.local.set({ [TRUSTED_KEY]: [...known, origin] });
@@ -81,7 +81,7 @@ async function install(from, to) {
   await chrome.alarms.create(`${ALARM_PREFIX}${id}`, { delayInMinutes: LIFETIME_MINUTES });
 }
 
-function pageOf(sender) {
+export function pageOf(sender) {
   if (sender?.id !== chrome.runtime.id || !sender.tab || sender.frameId !== 0) return null;
   return sender.origin || sender.tab.url || null;
 }

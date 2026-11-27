@@ -164,6 +164,16 @@ const MIGRATIONS: &[&str] = &[
         locked_until INTEGER NOT NULL
     );
 ",
+    "
+    CREATE TABLE browser_devices (
+        token TEXT PRIMARY KEY,
+        device TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        name TEXT NOT NULL,
+        created INTEGER NOT NULL
+    );
+    CREATE INDEX browser_devices_owner ON browser_devices (owner);
+",
 ];
 
 pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {

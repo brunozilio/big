@@ -9,6 +9,7 @@ mod backend;
 mod blocks;
 mod boot;
 mod branding;
+mod browser_devices;
 mod browsers;
 mod btw;
 mod callback_port;

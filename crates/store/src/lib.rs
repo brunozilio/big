@@ -1,6 +1,7 @@
 mod applications;
 mod archive;
 mod branding;
+mod browser_devices;
 mod connections;
 mod connector_memory;
 mod error;
@@ -22,6 +23,7 @@ use std::time::{Duration, Instant};
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 pub use applications::{Application, Binding, Bindings, Choice, Environment, Fields, Repository, watched};
+pub use browser_devices::BrowserDevice;
 pub use connections::ConnectionRecord;
 pub use error::Error;
 pub use factory::Generation;

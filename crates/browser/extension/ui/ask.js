@@ -32,5 +32,13 @@ function relaying() {
   button("Allow", "allow", true);
 }
 
-if (params.get("kind") === "relay") relaying();
-else pairing();
+function connecting() {
+  element("title").textContent = `Connect this Chrome to ${NAME}?`;
+  element("name").value = params.get("name") || "";
+  element("body").textContent = `${params.get("origin") || ""} asked to use this browser. Its agents will act here, in their own tab group, with your sign-ins. You can disconnect it in the app at any time.`;
+  button("Not now", "decline", false);
+  button("Connect", "connect", true);
+}
+
+const kinds = { relay: relaying, server: connecting };
+(kinds[params.get("kind")] || pairing)();

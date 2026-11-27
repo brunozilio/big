@@ -4,7 +4,8 @@ import { computer, shot, viewport } from "./computer.js";
 import { captureFrame, gif } from "./frames.js";
 import { contextOf, frameMatch, frameOf } from "./frame.js";
 import { intercept } from "./intercept.js";
-import { connect, handle, identity, send } from "./link.js";
+import { connect, handle, identity } from "./link.js";
+import { connectServer, reloadFor } from "./servers.js";
 import { readConsole, readNetwork } from "./logs.js";
 import { candidates, formInput, javascript, pageText, putFiles, readPage } from "./page.js";
 import { ToolError, blobToBase64, clip, fail, fromBase64, ok, refuse, sleep } from "./results.js";
@@ -312,7 +313,7 @@ async function call(message) {
   return result;
 }
 
-async function pair(id) {
+async function pair(id, link) {
   const askId = crypto.randomUUID();
   pairings.set(id, askId);
   const me = await identity();
@@ -321,7 +322,7 @@ async function pair(id) {
   if (answer.choice !== "connect") return;
   const name = String(answer.name || "").trim();
   if (name) await chrome.storage.local.set({ deviceName: name });
-  send({ type: "paired", id, name });
+  link.send({ type: "paired", id, name });
 }
 
 function pairEnded(id) {
@@ -329,8 +330,8 @@ function pairEnded(id) {
   if (askId) cancel(askId);
 }
 
-handle({ call, pair, pairEnded, watch: (message) => watch(message).catch(() => {}) });
-listen(send);
+handle({ call, pair, pairEnded, watch: (message, link) => watch(message, link).catch(() => {}) });
+listen();
 
 function fromExtensionPage(sender) {
   return sender?.id === chrome.runtime.id && String(sender.url || "").startsWith(chrome.runtime.getURL(""));
@@ -338,8 +339,9 @@ function fromExtensionPage(sender) {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "ask-answer" && fromExtensionPage(sender)) answered(message.id, message);
-  if (message?.type !== "relay-sign-in") return false;
-  relay(message, sender).then(sendResponse, () => sendResponse({ ok: false, reason: "failed" }));
+  const work = { "relay-sign-in": relay, "browser-connect": connectServer, "browser-reload": reloadFor }[message?.type];
+  if (!work) return false;
+  work(message, sender).then(sendResponse, () => sendResponse({ ok: false, reason: "failed" }));
   return true;
 });
 

@@ -26,6 +26,7 @@ fn fake_extension(hub: &Hub, device: &str, answer: fn(&Value) -> Value) -> std::
     let (outbox, mut inbox) = tokio::sync::mpsc::unbounded_channel::<String>();
     hub.link(browser(device), outbox);
     let answering = hub.clone();
+    let device = device.to_owned();
     std::thread::spawn(move || {
         let mut seen = Vec::new();
         while let Some(text) = inbox.blocking_recv() {
@@ -33,7 +34,7 @@ fn fake_extension(hub: &Hub, device: &str, answer: fn(&Value) -> Value) -> std::
             if message["type"] != "call" {
                 continue;
             }
-            answering.answer(message["id"].as_u64().unwrap_or_default(), Ok(answer(&message)));
+            answering.answer(&device, message["id"].as_u64().unwrap_or_default(), Ok(answer(&message)));
             seen.push(message);
         }
         seen

@@ -40,17 +40,32 @@
     }
   }
 
+  async function ask(data, type) {
+    const answer = { source: MARKER, type: `${data.type}-done`, id: data.id, ok: false };
+    try {
+      const told = await chrome.runtime.sendMessage({ type, server: String(data.server || ""), code: String(data.code || "") });
+      answer.ok = told?.ok === true;
+      if (!answer.ok) answer.reason = told?.reason || "refused";
+    } catch {
+      answer.reason = "unavailable";
+    }
+    window.postMessage(answer, location.origin === "null" ? "*" : location.origin);
+  }
+
   window.addEventListener("message", (event) => {
     if (event.source !== window) return;
     const data = event.data;
-    if (!data || data.source !== MARKER || data.type !== "relay-sign-in") return;
-    forward(data);
+    if (!data || data.source !== MARKER) return;
+    if (data.type === "relay-sign-in") forward(data);
+    if (data.type === "browser-connect") ask(data, "browser-connect");
+    if (data.type === "browser-reload") ask(data, "browser-reload");
   });
 
   function mark() {
     const root = document.documentElement;
     if (!root) return false;
     root.setAttribute("data-sign-in-relay", MARKER);
+    root.setAttribute("data-browser-extension", "{{BUILD}}");
     return true;
   }
 

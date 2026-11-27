@@ -11,7 +11,7 @@ use crate::hub::{BrowserInfo, Hub};
 
 pub const ROUTE: &str = "/api/browser/socket";
 
-const KEEP_ALIVE: Duration = Duration::from_secs(20);
+pub(crate) const KEEP_ALIVE: Duration = Duration::from_secs(20);
 const LARGEST_MESSAGE: usize = 256 * 1024 * 1024;
 
 pub fn connect(hub: Hub, upgrade: WebSocketUpgrade, origin: Option<&str>) -> Response {
@@ -68,7 +68,7 @@ async fn hello(stream: &mut futures_util::stream::SplitStream<WebSocket>) -> Opt
     parse_hello(&hello).map(|info| (info, build))
 }
 
-fn parse_hello(hello: &Value) -> Option<BrowserInfo> {
+pub(crate) fn parse_hello(hello: &Value) -> Option<BrowserInfo> {
     if hello["type"] != "hello" {
         return None;
     }
@@ -90,7 +90,7 @@ async fn write(sink: &mut futures_util::stream::SplitSink<WebSocket, Message>, m
     }
 }
 
-fn receive(hub: &Hub, device: &str, text: &str) {
+pub(crate) fn receive(hub: &Hub, device: &str, text: &str) {
     let Ok(message) = serde_json::from_str::<Value>(text) else { return };
     let id = message["id"].as_u64().unwrap_or_default();
     match message["type"].as_str().unwrap_or_default() {
@@ -99,7 +99,7 @@ fn receive(hub: &Hub, device: &str, text: &str) {
                 Some(error) => Err(error.to_owned()),
                 None => Ok(message["result"].clone()),
             };
-            hub.answer(id, answer);
+            hub.answer(device, id, answer);
         }
         "paired" => hub.paired(id, device, message["name"].as_str().unwrap_or_default()),
         "rename" => hub.rename(device, message["name"].as_str().unwrap_or_default()),

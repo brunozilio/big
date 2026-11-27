@@ -253,3 +253,75 @@ async fn a_sign_in_that_comes_back_to_this_computer_is_relayed_to_the_server() {
     assert!(to.ends_with("/oauth/callback"), "{started}");
     assert_eq!(started["paste"], true);
 }
+
+async fn as_browser(world: &World, token: &str, method: Method, path: &str, body: &str) -> axum::response::Response {
+    let request = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("host", "127.0.0.1:7999")
+        .header("origin", "chrome-extension://abc")
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::from(body.to_owned()))
+        .expect("request");
+    world.router.clone().oneshot(request).await.expect("response")
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cloud_browser_pairs_with_a_one_time_code_and_belongs_to_whoever_paired_it() {
+    let world = shared_world().await;
+    let (ana, bia) = (signed(&world, "ana"), signed(&world, "bia"));
+    let (status, pairing) = send(&world, Some(&ana), Method::POST, "/api/browser/pairing", None).await;
+    assert_eq!(status, StatusCode::OK, "{pairing}");
+    let code = pairing["code"].as_str().unwrap_or_default().to_owned();
+    let claim = json!({ "code": code, "deviceId": "chrome-1", "name": "Ana's laptop" });
+    let (status, claimed) = send(&world, None, Method::POST, "/api/browser/claim", Some(claim.clone())).await;
+    assert_eq!(status, StatusCode::OK, "{claimed}");
+    let token = claimed["token"].as_str().unwrap_or_default().to_owned();
+    let (status, _) = send(&world, None, Method::POST, "/api/browser/claim", Some(claim)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let refused = as_browser(&world, "wrong", Method::GET, "/api/browser/stream?build=x", "").await;
+    assert_eq!(refused.status(), StatusCode::UNAUTHORIZED);
+    let streaming = as_browser(&world, &token, Method::GET, "/api/browser/stream?build=x&platform=mac", "").await;
+    assert_eq!(streaming.status(), StatusCode::OK);
+    let mut body = streaming.into_body();
+    let first = tokio::time::timeout(std::time::Duration::from_secs(5), body.frame()).await.expect("a first event");
+    let first = first.and_then(Result::ok).and_then(|frame| frame.into_data().ok()).unwrap_or_default();
+    assert!(String::from_utf8_lossy(&first).starts_with("data: "));
+
+    let (_, mine) = send(&world, Some(&ana), Method::GET, "/api/browser", None).await;
+    assert_eq!(mine["cloud"], true);
+    assert_eq!(mine["devices"][0]["device"], "chrome-1");
+    assert_eq!(mine["devices"][0]["connected"], true);
+    assert_eq!(mine["browsers"].as_array().map(Vec::len), Some(1));
+    let (_, theirs) = send(&world, Some(&bia), Method::GET, "/api/browser", None).await;
+    assert_eq!(theirs["devices"], json!([]));
+    assert_eq!(theirs["browsers"], json!([]));
+
+    let answered = as_browser(&world, &token, Method::POST, "/api/browser/reply", r#"{"type":"pong"}"#).await;
+    assert_eq!(answered.status(), StatusCode::NO_CONTENT);
+    let (status, _) = send(&world, Some(&bia), Method::DELETE, "/api/browser/devices/chrome-1", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    let (status, _) = send(&world, Some(&ana), Method::DELETE, "/api/browser/devices/chrome-1", None).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+    let gone = as_browser(&world, &token, Method::GET, "/api/browser/stream?build=x", "").await;
+    assert_eq!(gone.status(), StatusCode::UNAUTHORIZED);
+    drop(body);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_signed_in_person_downloads_the_extension_package() {
+    let world = shared_world().await;
+    let ana = signed(&world, "ana");
+    let request = Request::builder()
+        .uri("/api/browser/extension.zip")
+        .header("host", "127.0.0.1:7999")
+        .header("cookie", ana)
+        .body(Body::empty())
+        .expect("request");
+    let response = world.router.clone().oneshot(request).await.expect("response");
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["content-type"], "application/zip");
+    let bytes = response.into_body().collect().await.expect("body").to_bytes();
+    assert!(bytes.starts_with(b"PK"));
+}

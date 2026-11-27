@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-const FILES: [(&str, &str); 24] = [
+const FILES: [(&str, &str); 25] = [
     ("manifest.json", include_str!("../extension/manifest.json")),
     ("config.js", include_str!("../extension/config.js")),
     ("bg/main.js", include_str!("../extension/bg/main.js")),
@@ -20,6 +20,7 @@ const FILES: [(&str, &str); 24] = [
     ("bg/ask.js", include_str!("../extension/bg/ask.js")),
     ("bg/shortcuts.js", include_str!("../extension/bg/shortcuts.js")),
     ("bg/relay.js", include_str!("../extension/bg/relay.js")),
+    ("bg/servers.js", include_str!("../extension/bg/servers.js")),
     ("page/agent.js", include_str!("../extension/page/agent.js")),
     ("page/relay.js", include_str!("../extension/page/relay.js")),
     ("ui/ask.html", include_str!("../extension/ui/ask.html")),
@@ -64,6 +65,36 @@ pub fn install(folder: &Path, port: u16) -> Result<Installed, String> {
         let _ = std::fs::remove_file(folder.join(gone));
     }
     Ok(Installed { folder: folder.to_path_buf(), written, build })
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Packaged {
+    pub name: String,
+    pub bytes: Vec<u8>,
+    pub build: String,
+}
+
+pub fn packaged() -> Result<Packaged, String> {
+    let icon = icon();
+    let rendered = rendered(0, icon.is_none());
+    let build = fingerprint(&rendered, icon);
+    let folder = format!("{}-{}", brand::COMMAND, brand::browser::EXTENSION_FOLDER);
+    let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default();
+    let failed = |error: zip::result::ZipError| error.to_string();
+    let mut entries: Vec<(String, Vec<u8>)> = rendered
+        .into_iter()
+        .map(|(path, text)| (path.to_owned(), text.replace("{{BUILD}}", &build).into_bytes()))
+        .collect();
+    if let Some(bytes) = icon {
+        entries.push((ICON.to_owned(), bytes.to_vec()));
+    }
+    for (path, bytes) in entries {
+        zip.start_file(format!("{folder}/{path}"), options).map_err(failed)?;
+        std::io::Write::write_all(&mut zip, &bytes).map_err(|error| error.to_string())?;
+    }
+    let bytes = zip.finish().map_err(failed)?.into_inner();
+    Ok(Packaged { name: format!("{folder}.zip"), bytes, build })
 }
 
 fn rendered(port: u16, iconless: bool) -> Vec<(&'static str, String)> {
@@ -150,8 +181,24 @@ mod tests {
         assert_eq!(build.len(), 16);
         assert!(config.contains(&build));
         let moved = install(folder.path(), 9999);
-        assert_eq!(moved.as_ref().map(|installed| installed.written), Ok(1));
+        assert_eq!(moved.as_ref().map(|installed| installed.written), Ok(2));
         assert_ne!(moved.map(|installed| installed.build).unwrap_or_default(), build);
+    }
+
+    #[test]
+    fn the_package_holds_every_file_in_one_folder_without_a_local_port() {
+        let made = packaged().unwrap_or_else(|_| unreachable!());
+        let mut archive =
+            zip::ZipArchive::new(std::io::Cursor::new(made.bytes.clone())).unwrap_or_else(|_| unreachable!());
+        assert_eq!(archive.len(), FILES.len() + usize::from(icon().is_some()));
+        let folder = format!("{}-{}", brand::COMMAND, brand::browser::EXTENSION_FOLDER);
+        assert_eq!(made.name, format!("{folder}.zip"));
+        let mut config = String::new();
+        let entry = archive.by_name(&format!("{folder}/config.js"));
+        std::io::Read::read_to_string(&mut entry.unwrap_or_else(|_| unreachable!()), &mut config).unwrap_or_default();
+        assert!(config.contains("PORT = 0;"));
+        assert!(config.contains(&made.build));
+        assert_eq!(packaged().map(|again| again.build), Ok(made.build));
     }
 
     #[test]

@@ -24,7 +24,7 @@ impl Browsers {
             .map_err(|error| error.to_string())?
             .and_then(|record| record.settings["browser"].as_str().map(str::to_owned));
         if let Some(device) = chosen {
-            let browsers = self.hub.browsers();
+            let browsers = self.hub.visible(&session_of(connection));
             if browsers.iter().any(|browser| browser.device_id == device) {
                 return Ok(device);
             }
@@ -38,8 +38,10 @@ impl Browsers {
     }
 }
 
+pub const CONNECTOR_PREFIX: &str = "connector:";
+
 pub fn session_of(connection: &str) -> String {
-    format!("connector:{connection}")
+    format!("{CONNECTOR_PREFIX}{connection}")
 }
 
 fn several(browsers: &[BrowserInfo]) -> String {

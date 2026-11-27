@@ -1,12 +1,13 @@
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use axum::Json;
 use axum::extract::State;
 use axum::extract::ws::WebSocketUpgrade;
 use axum::http::HeaderMap;
 use axum::http::header::ORIGIN;
 use axum::response::Response;
+use axum::{Extension, Json};
+use domain::principal::Principal;
 use serde_json::{Value, json};
 use store::Store;
 
@@ -24,6 +25,10 @@ fn folder(data: &Path) -> PathBuf {
 }
 
 pub fn install(hub: &browser::Hub, data: &Path, port: u16) {
+    match crate::browser_devices::packaged() {
+        Ok(made) => hub.expect(&made.build),
+        Err(error) => tracing::warn!(%error, "the browser extension package could not be made"),
+    }
     match browser::install(&folder(data), port) {
         Ok(installed) => {
             hub.expect(&installed.build);
@@ -53,11 +58,18 @@ pub async fn connect(State(ctx): State<Ctx>, headers: HeaderMap, upgrade: WebSoc
     browser::connect(ctx.backend.browser.clone(), upgrade, origin)
 }
 
-fn status_of(ctx: &Ctx) -> Value {
-    json!({
+fn status_of(ctx: &Ctx, person: &Principal) -> ApiResult<Value> {
+    let cloud = crate::scope::shared_mode();
+    let owner = person.owner();
+    let browsers = if cloud { ctx.backend.browser.owned_by(owner) } else { ctx.backend.browser.browsers() };
+    Ok(json!({
         "enabled": enabled(&ctx.backend.store),
+        "cloud": cloud,
+        "devices": crate::browser_devices::devices_of(ctx, owner)?,
+        "package": crate::browser_devices::PACKAGE,
+        "build": crate::browser_devices::build(),
         "server": browser::server_name(),
-        "browsers": ctx.backend.browser.browsers(),
+        "browsers": browsers,
         "extensionFolder": folder(&ctx.backend.data),
         "mcp": {
             "url": format!("http://127.0.0.1:{}{}", ctx.port, crate::mcp::route()),
@@ -70,14 +82,18 @@ fn status_of(ctx: &Ctx) -> Value {
             ],
         },
         "tools": browser::tools().iter().map(|tool| tool["name"].clone()).collect::<Vec<Value>>(),
-    })
+    }))
 }
 
-pub async fn status(State(ctx): State<Ctx>) -> Json<Value> {
-    Json(status_of(&ctx))
+pub async fn status(State(ctx): State<Ctx>, Extension(person): Extension<Principal>) -> ApiResult<Json<Value>> {
+    Ok(Json(status_of(&ctx, &person)?))
 }
 
-pub async fn set(State(ctx): State<Ctx>, Json(patch): Json<Value>) -> ApiResult<Response> {
+pub async fn set(
+    State(ctx): State<Ctx>,
+    Extension(person): Extension<Principal>,
+    Json(patch): Json<Value>,
+) -> ApiResult<Response> {
     let on = patch.get("enabled").and_then(Value::as_bool).ok_or_else(|| {
         ApiError::bad(said(
             "Send enabled as true or false.",
@@ -86,5 +102,5 @@ pub async fn set(State(ctx): State<Ctx>, Json(patch): Json<Value>) -> ApiResult<
         ))
     })?;
     ctx.backend.store.set_preference(ENABLED, &json!(on))?;
-    Ok(reply(status_of(&ctx)))
+    Ok(reply(status_of(&ctx, &person)?))
 }
