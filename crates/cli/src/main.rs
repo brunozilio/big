@@ -1,15 +1,17 @@
 mod browser_mcp;
 mod cloud;
+mod discovered;
 mod git_credential;
 mod http;
 mod instance;
 mod logging;
 mod teammate;
 
-use std::path::PathBuf;
+use std::ffi::OsString;
+use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, FromArgMatches, Parser, Subcommand};
 
 use instance::Instance;
 
@@ -40,15 +42,31 @@ enum Internal {
 }
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let root = std::env::current_dir().unwrap_or_default();
+    let found = discovered::discover(&discovered::roots(brand::commands::DIRS, &root));
+    let matches = discovered::injected(Cli::command(), &found).get_matches();
+    if let Some((name, given)) = matches.subcommand()
+        && let Some(command) = found.iter().find(|command| command.name == name)
+    {
+        let args = given.get_many::<OsString>(discovered::ARGS).map(|args| args.cloned().collect()).unwrap_or_default();
+        return finish(discovered::run(command, args, &root));
+    }
+    let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
     logging::install(cli.command.is_none());
-    let ended = match cli.command {
+    finish(launched(cli, &root))
+}
+
+fn launched(cli: Cli, root: &Path) -> Result<ExitCode, String> {
+    match cli.command {
         Some(Internal::Teammate(args)) => teammate::run(args),
         Some(Internal::CloudCredentials(args)) => cloud::run(args),
         Some(Internal::GitCredential(args)) => git_credential::run(args),
         Some(Internal::BrowserMcp(args)) => data_dir().and_then(|data| browser_mcp::run(args, data)),
-        None => serve(cli.port.unwrap_or_else(configured_port), !cli.no_open && configured_open()),
-    };
+        None => serve(root, cli.port.unwrap_or_else(configured_port), !cli.no_open && configured_open()),
+    }
+}
+
+fn finish(ended: Result<ExitCode, String>) -> ExitCode {
     match ended {
         Ok(code) => code,
         Err(message) => {
@@ -70,9 +88,8 @@ fn data_dir() -> Result<PathBuf, String> {
     platform::data_dir(brand::NAME, brand::COMMAND).ok_or_else(|| "this user has no data folder".to_owned())
 }
 
-fn serve(port: u16, open: bool) -> Result<ExitCode, String> {
-    let cwd = std::env::current_dir().map_err(|error| error.to_string())?;
-    let repo = std::fs::canonicalize(&cwd).map_err(|error| format!("{}: {error}", cwd.display()))?;
+fn serve(cwd: &Path, port: u16, open: bool) -> Result<ExitCode, String> {
+    let repo = std::fs::canonicalize(cwd).map_err(|error| format!("{}: {error}", cwd.display()))?;
     let data = data_dir()?;
     let held = match instance::claim(&data).map_err(|error| format!("{}: {error}", data.display()))? {
         Instance::Ours(held) => held,
@@ -128,6 +145,8 @@ fn open_in_browser(url: &str) {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::expect_used, reason = "a failed setup step stops the test")]
+
     use clap::Parser;
 
     use super::*;
@@ -153,6 +172,24 @@ mod tests {
     fn the_browser_mcp_command_takes_no_arguments() {
         let cli = Cli::parse_from([brand::COMMAND, brand::browser::MCP_COMMAND]);
         assert!(matches!(cli.command, Some(Internal::BrowserMcp(_))));
+    }
+
+    #[test]
+    fn a_discovered_command_joins_the_launcher_and_keeps_its_arguments() {
+        let found = vec![discovered::Discovered {
+            name: "ship-it".into(),
+            about: "Ship".into(),
+            run: vec!["true".into()],
+            folder: PathBuf::from("."),
+        }];
+        let cli = discovered::injected(Cli::command(), &found);
+        let matches = cli.try_get_matches_from([brand::COMMAND, "ship-it", "--dry", "x"]).expect("parsed");
+        let (name, given) = matches.subcommand().expect("subcommand");
+        let args: Vec<&OsString> = given.get_many::<OsString>(discovered::ARGS).expect("args").collect();
+        assert_eq!((name, args.len()), ("ship-it", 2));
+        let clash = vec![discovered::Discovered { name: server::GIT_CREDENTIAL_COMMAND.into(), ..found[0].clone() }];
+        let kept = discovered::injected(Cli::command(), &clash);
+        assert_eq!(kept.get_subcommands().count(), Cli::command().get_subcommands().count());
     }
 
     #[test]

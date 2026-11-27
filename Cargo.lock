@@ -743,6 +743,7 @@ dependencies = [
  "clap",
  "domain",
  "platform",
+ "serde",
  "serde_json",
  "server",
  "tempfile",

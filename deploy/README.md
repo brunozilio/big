@@ -33,3 +33,13 @@ Edite antes `deploy/shared.toml`: `public_url`, domínios, admins, SSO e SMTP.
 - Postgres/RDS no lugar do SQLite (o `Store` ainda é SQLite direto).
 - Várias tasks: estado de fluxos, feed ao vivo e agendador fora da memória.
 - Sandbox por execução do agente (shell, git e rede do agente rodam na task do servidor).
+
+## Comandos descobertos
+
+O CLI acha comandos extras sozinho: toda pasta dentro de `[commands] dirs` (no `config.toml`, relativo à pasta onde o CLI roda) que tenha um `commands.json` vira subcomando, sem mexer no Rust.
+
+```json
+{ "install-x": { "about": "Cria tudo", "run": ["bun", "x.ts", "install"] } }
+```
+
+O programa roda dentro da pasta do manifesto, recebe os argumentos que vierem depois do nome e as variáveis `COMMAND_EXE` (o próprio CLI), `COMMAND_NAME` e `COMMAND_ROOT` (a pasta de onde o CLI foi chamado). Um nome igual a um subcomando embutido é ignorado.

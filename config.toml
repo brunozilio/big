@@ -196,6 +196,9 @@ disabled = "providers/llamacpp"
 [content]
 install = true
 
+[commands]
+dirs = "deploy"
+
 [server]
 port = 7420
 bind = "127.0.0.1"
