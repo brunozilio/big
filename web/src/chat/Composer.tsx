@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { cn } from '@/ui/cn'
 import { Icon } from '@/ui/icon'
 import { Button } from '@/ui/button'
@@ -8,6 +8,7 @@ import { AttachmentStrip, useAttachments } from './Attachments'
 import type { Effort } from '@/api/contract'
 import { DEFAULT_EFFORT, ModelPicker, useModels } from './ModelPicker'
 import { useRememberedModel, useRememberedTuning } from './remembered'
+import { onFirstLine, onLastLine, usePromptHistory } from './promptHistory'
 import { useT } from '@/i18n'
 
 export interface Tuning {
@@ -89,6 +90,28 @@ export function Composer({
   const wanted = model === undefined ? ownModel : model
   const chosen = wanted && models.loaded && !models.list.some((m) => m.id === wanted) ? null : wanted
   const chooseModel = onModel ?? setOwnModel
+  const history = usePromptHistory()
+  const caretToEnd = useRef(false)
+
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el || !caretToEnd.current) return
+    caretToEnd.current = false
+    el.setSelectionRange(text.length, text.length)
+  }, [text])
+
+  const browse = (e: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.altKey || e.metaKey || e.ctrlKey || e.shiftKey || e.nativeEvent.isComposing) return
+    const { selectionStart, selectionEnd } = e.currentTarget
+    const recall =
+      e.key === 'ArrowUp' && onFirstLine(text, selectionStart, selectionEnd) ? history.older(text)
+      : e.key === 'ArrowDown' && onLastLine(text, selectionStart, selectionEnd) ? history.newer()
+      : null
+    if (!recall) return
+    e.preventDefault()
+    caretToEnd.current = true
+    setText(recall.text)
+  }
 
   useEffect(() => {
     const el = ref.current
@@ -110,12 +133,14 @@ export function Composer({
         return
       }
       onBtw(btw)
+      history.record(text)
       setText('')
       setRefusal(null)
       return
     }
     if (!aside || !hasText || disabled) return
     onAside(text.trim())
+    history.record(text)
     setText('')
   }
 
@@ -126,6 +151,7 @@ export function Composer({
     }
     if (!ready) return
     onSubmit({ text: text.trim(), attachments: attachments.serverIds, model: chosen, effort, fast })
+    history.record(text)
     setText('')
     setRefusal(null)
     attachments.clear()
@@ -175,7 +201,9 @@ export function Composer({
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               submit()
+              return
             }
+            browse(e)
           }}
           onPaste={(e) => {
             const pasted = Array.from(e.clipboardData.files)
