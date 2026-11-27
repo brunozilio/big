@@ -112,3 +112,12 @@ describe('primeira vez', () => {
     expect(getState().applications?.[0]?.repositories[0]?.directory.endsWith('/projetos/web')).toBe(true)
   })
 })
+
+describe('portão do onboarding', () => {
+  test('enquanto não sabe se há aplicações, não decide pela caixa de entrada', async () => {
+    const { deciding } = await import('../src/app/gate')
+    expect(deciding(false, null)).toBe(true)
+    expect(deciding(true, null)).toBe(true)
+    expect(deciding(true, [])).toBe(false)
+  })
+})

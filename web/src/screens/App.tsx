@@ -5,7 +5,7 @@ import { retry, useStore } from '@/api/store'
 import { CommandPalette } from '@/app/CommandPalette'
 import { ConnectionIndicator } from '@/app/connection'
 import { hotkeyLabel, useEscapeBack, useHotkey } from '@/app/escape'
-import { needsOnboarding, returnedTo } from '@/app/gate'
+import { deciding, needsOnboarding, returnedTo } from '@/app/gate'
 import { itemPath } from '@/app/palette'
 import { settingsTab } from '@/app/settingsNav'
 import { useBrandTitle, useThemeSync } from '@/app/theme'
@@ -43,10 +43,14 @@ export function App() {
   const onboarding = useStore((s) => s.onboarding)
   const [, setSettled] = useState(0)
   const resumed = returnedTo(location.pathname, location.search)
-  const gated = (resumed || !location.pathname.startsWith('/settings')) && needsOnboarding(ready, applications, onboarding)
+  const gatedPath = resumed || !location.pathname.startsWith('/settings')
+  const gated = gatedPath && needsOnboarding(ready, applications, onboarding)
+  const waiting = gatedPath && deciding(ready, applications)
   return (
     <>
-      {gated ? (
+      {waiting ? (
+        <div className="h-full bg-subtle" aria-busy="true" />
+      ) : gated ? (
         <div className="scrollbar-thin h-full overflow-y-auto">
           <Suspense fallback={<div className="mx-auto w-full max-w-xl px-5 py-16"><ListSkeleton /></div>}>
             <Onboarding resumed={resumed} onResumed={() => resumed && navigate('/', { replace: true })} onDone={() => {

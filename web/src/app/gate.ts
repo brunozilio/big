@@ -9,6 +9,10 @@ export function needsOnboarding(ready: boolean, applications: Application[] | nu
   return ready && applications !== null && applications.length === 0 && !onboarding?.skipped
 }
 
+export function deciding(ready: boolean, applications: Application[] | null): boolean {
+  return !ready || applications === null
+}
+
 export function returnedTo(path: string, search: string): Resumed | null {
   if (!path.startsWith('/settings/connections')) return null
   const params = new URLSearchParams(search)
