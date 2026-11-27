@@ -1,14 +1,12 @@
 use domain::ModelOption;
 use domain::billing::TokenRates;
 
+use crate::Provider;
+use crate::model::Cache;
+
 pub trait Vendor: Sync {
     fn id(&self) -> &'static str;
     fn owns(&self, model: &str) -> bool;
-    fn rates(&self, model: &str, prompt_tokens: u64) -> Option<TokenRates>;
-
-    fn search_price(&self) -> Option<u64> {
-        None
-    }
 
     fn alias(&self, _name: &str) -> Option<&'static str> {
         None
@@ -29,22 +27,14 @@ pub fn owner(model: &str) -> Option<&'static dyn Vendor> {
     crate::vendors::ALL.iter().copied().find(|vendor| vendor.owns(model))
 }
 
-pub fn rates(vendor_id: &str, model: &str, prompt_tokens: u64) -> Option<TokenRates> {
-    let model = bare(model);
-    vendor(vendor_id).filter(|vendor| vendor.owns(model)).and_then(|vendor| vendor.rates(model, prompt_tokens))
+pub fn priced(provider: &dyn Provider, model: &str, prompt_tokens: u64, cache: Cache) -> Option<TokenRates> {
+    crate::prices::overridden(provider.id(), model, prompt_tokens)
+        .or_else(|| provider.prices().rates(model, prompt_tokens, cache))
 }
 
-pub fn priced(provider: &str, vendor_id: &str, model: &str, prompt_tokens: u64) -> Option<TokenRates> {
-    match crate::prices::source(provider) {
-        Some(sources) => {
-            sources.split_whitespace().find_map(|source| crate::prices::listed(source, model, prompt_tokens))
-        }
-        None => rates(vendor_id, model, prompt_tokens),
-    }
-}
-
-pub fn search_price(vendor_id: &str) -> Option<u64> {
-    vendor(vendor_id).and_then(Vendor::search_price)
+pub fn later_discount(provider: &dyn Provider, model: &str) -> Option<f64> {
+    let declared = provider.prices().price(model).and_then(|price| price.later_discount);
+    declared.or_else(|| provider.later_discount()).filter(|discount| (0.0..=1.0).contains(discount))
 }
 
 pub const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];

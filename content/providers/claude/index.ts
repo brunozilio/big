@@ -32,6 +32,7 @@ import {
   jsonLines,
   messagesStream,
 } from "sdk/providers/index.ts";
+import { ANTHROPIC } from "../prices/anthropic.ts";
 
 const HOURS_5 = 18_000;
 const WEEK = 604_800;
@@ -56,6 +57,8 @@ export function provider() {
     wire: "messages",
     path: "/messages",
     laterDiscount: 0.5,
+    prices: ANTHROPIC,
+    searchPrice: 0.01,
   };
 }
 

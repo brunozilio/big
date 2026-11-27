@@ -22,6 +22,7 @@ import {
   tryPost,
   unauthorized,
 } from "sdk/providers/index.ts";
+import { XAI } from "../prices/xai.ts";
 
 const GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const SKIPPED = ["imagine", "image", "embedding", "tts", "video"];
@@ -44,6 +45,7 @@ export function provider() {
     window: 500_000,
     wire: "responses",
     path: "/responses",
+    prices: XAI,
   };
 }
 

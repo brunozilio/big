@@ -23,6 +23,9 @@ import {
   unauthorized,
   window,
 } from "sdk/providers/index.ts";
+import { OPENAI } from "../prices/openai.ts";
+import { ANTHROPIC } from "../prices/anthropic.ts";
+import { VERTEX } from "../prices/vertex.ts";
 
 const GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const MAX_INTERVAL = 60;
@@ -52,6 +55,7 @@ export function provider() {
     window: 131_072,
     wire: "chat",
     path: "/chat/completions",
+    prices: { ...OPENAI, ...ANTHROPIC, ...VERTEX },
   };
 }
 

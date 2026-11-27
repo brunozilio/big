@@ -17,6 +17,7 @@ pub use bridge::Script;
 use bridge::{WRAPPER, wrapper};
 use host::Local;
 
+use crate::prices::Prices;
 use crate::web_search::Hit;
 use crate::{Call, Config, Host, Page, Provider, ProviderError, TokenRequest, Tokens};
 
@@ -67,6 +68,10 @@ struct Declared {
     needs: Vec<String>,
     #[serde(default)]
     later_discount: Option<f64>,
+    #[serde(default)]
+    prices: Prices,
+    #[serde(default)]
+    search_price: Option<f64>,
 }
 
 #[derive(Debug)]
@@ -89,6 +94,8 @@ pub struct ScriptedProvider {
     serves_all: bool,
     needs: Vec<String>,
     later_discount: Option<f64>,
+    prices: Prices,
+    search_price: Option<u64>,
 }
 
 fn section(name: &str) -> Value {
@@ -161,6 +168,8 @@ impl ScriptedProvider {
             serves_all: declared.serves_all,
             needs: declared.needs,
             later_discount: declared.later_discount.filter(|discount| (0.0..=1.0).contains(discount)),
+            prices: declared.prices,
+            search_price: declared.search_price.filter(|usd| *usd >= 0.0).map(|usd| (usd * 1_000_000.0).round() as u64),
         })
     }
 
@@ -330,6 +339,12 @@ impl Provider for ScriptedProvider {
     }
     fn later_discount(&self) -> Option<f64> {
         self.later_discount
+    }
+    fn prices(&self) -> &Prices {
+        &self.prices
+    }
+    fn search_price(&self) -> Option<u64> {
+        self.search_price
     }
     fn batches(&self) -> bool {
         crate::batch::STEPS.iter().all(|step| self.offers(step))

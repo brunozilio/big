@@ -19,7 +19,7 @@ mod vendor;
 pub mod vendors;
 pub mod web_search;
 
-pub use vendor::{EFFORTS, Vendor, efforts, owner, priced, rates, search_price, vendor};
+pub use vendor::{EFFORTS, Vendor, efforts, later_discount, owner, priced, vendor};
 
 use domain::{Access, ModelOption};
 use serde_json::Value;
@@ -99,6 +99,14 @@ pub trait Provider: Sync {
     }
 
     fn later_discount(&self) -> Option<f64> {
+        None
+    }
+
+    fn prices(&self) -> &prices::Prices {
+        &prices::NONE
+    }
+
+    fn search_price(&self) -> Option<u64> {
         None
     }
 

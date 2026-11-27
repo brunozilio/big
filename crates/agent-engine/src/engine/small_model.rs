@@ -28,10 +28,6 @@ impl ModelApi for OrSession<'_> {
     }
 }
 
-fn bare(model: &str) -> &str {
-    model.rsplit(':').next().unwrap_or(model)
-}
-
 pub fn pick(provider: ModelProvider, session: &str, configured: Option<&str>, catalog: &[ModelOption]) -> SmallChoice {
     if let Some(elsewhere) = configured.filter(|name| super::roles::elsewhere(name, provider)) {
         return SmallChoice { model: Some(elsewhere.to_owned()), ..SmallChoice::default() };
@@ -43,22 +39,14 @@ pub fn pick(provider: ModelProvider, session: &str, configured: Option<&str>, ca
     let offered: Vec<Offered> = catalog
         .iter()
         .filter(|model| model.provider == provider)
-        .map(|model| Offered { id: &model.id, input_rate: input_rate(found.map(|p| p.vendor()), &model.id) })
+        .map(|model| Offered { id: &model.id, input_rate: input_rate(found, &model.id) })
         .collect();
     choose(session, configured, declared, &offered)
 }
 
-fn input_rate(provider_vendor: Option<&str>, id: &str) -> Option<u64> {
-    let model = bare(id);
-    let dashed = model.replace('.', "-");
-    [model, dashed.as_str()]
-        .into_iter()
-        .find_map(|name| {
-            provider_vendor
-                .and_then(|vendor| llm_providers::rates(vendor, name, 0))
-                .or_else(|| llm_providers::owner(name).and_then(|owner| llm_providers::rates(owner.id(), name, 0)))
-        })
-        .map(|rates| rates.input)
+fn input_rate(provider: Option<&dyn llm_providers::Provider>, id: &str) -> Option<u64> {
+    let priced = llm_providers::priced(provider?, id, 0, llm_providers::model::Cache::default());
+    priced.map(|rates| rates.input)
 }
 
 #[cfg(test)]

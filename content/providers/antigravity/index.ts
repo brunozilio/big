@@ -1,4 +1,5 @@
 import { type Config, type Model, type Tokens, browser, callback, capabilities, form, formRequest, option, parsed, positive, refreshable, standard, unauthorized, words } from "sdk/providers/index.ts";
+import { VERTEX } from "../prices/vertex.ts";
 
 const FREE_TIER = "free-tier";
 const ONBOARD_ATTEMPTS = 10;
@@ -18,6 +19,7 @@ export function provider() {
     wire: "cloud_code",
     path: "/v1internal:streamGenerateContent?alt=sse",
     servesAll: true,
+    prices: VERTEX,
   };
 }
 

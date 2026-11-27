@@ -12,6 +12,7 @@ mod kiro_client;
 mod kiro_sign_in;
 #[cfg(feature = "local-models")]
 mod llamacpp;
+mod prices;
 mod smoke;
 
 use domain::ModelProvider;

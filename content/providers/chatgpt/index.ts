@@ -31,6 +31,7 @@ import {
   unauthorized,
   window,
 } from "sdk/providers/index.ts";
+import { OPENAI } from "../prices/openai.ts";
 
 const USAGE = "/wham/usage";
 const WINDOWS: [string, string][] = [
@@ -51,6 +52,8 @@ export function provider() {
     window: 400_000,
     wire: "responses",
     path: "/codex/responses",
+    prices: OPENAI,
+    searchPrice: 0.01,
   };
 }
 

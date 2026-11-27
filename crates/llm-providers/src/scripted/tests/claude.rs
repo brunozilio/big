@@ -203,7 +203,7 @@ fn an_empty_catalog_falls_back_to_the_current_priced_family() {
     assert!(crate::catalog::collect(claude(), |_| Ok::<_, ProviderError>(json!({}))).is_err());
     for model in &models {
         let id = model.id.rsplit(':').next().unwrap_or_default();
-        assert!(crate::rates(claude().vendor(), id, 0).is_some(), "{id}");
+        assert!(claude().prices().price(id).is_some(), "{id}");
     }
 }
 

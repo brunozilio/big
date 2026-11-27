@@ -18,6 +18,28 @@ export type Model = {
   window?: number | null;
   capabilities?: Record<string, unknown> | null;
 };
+export type CacheWrite = number | { long?: number; short?: number };
+export type Rates = { input: number; output: number; cacheRead: number; cacheWrite: CacheWrite };
+export type Tier = Rates & { above: number };
+export type Price = Rates & { tiers: Tier[]; laterDiscount?: number };
+export type Prices = Record<string, Price>;
+
+export const over = (above: number, input: number, output: number, cacheRead: number, cacheWrite: CacheWrite): Tier => ({
+  above,
+  input,
+  output,
+  cacheRead,
+  cacheWrite,
+});
+
+export const usd = (input: number, output: number, cacheRead: number, cacheWrite: CacheWrite, ...tiers: Tier[]): Price => ({
+  input,
+  output,
+  cacheRead,
+  cacheWrite,
+  tiers,
+});
+
 export type Window = { id: string; label: string; used_percent: number; resets_at: string | null; starts_at?: string | null };
 export type Reached = { status: number; body: string };
 

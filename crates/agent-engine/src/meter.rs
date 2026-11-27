@@ -2,6 +2,7 @@ use crate::RunGate;
 use crate::model::{BoxFuture, CancellationToken, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
 use domain::billing::{ModelUsage, PRICE_DATE};
 use domain::{EngineEvent, ModelProvider};
+use llm_providers::model::Cache;
 use llm_providers::priced;
 use std::sync::{Arc, Mutex};
 
@@ -58,7 +59,7 @@ impl Metered {
         }
         let u = reply.usage;
         let provider = crate::providers::find(self.provider);
-        let cost = estimate(
+        let cost = estimate_cached(
             self.provider.id(),
             &ModelUsage {
                 model: request.model.clone(),
@@ -69,8 +70,9 @@ impl Metered {
                 searches: u.searches,
                 ..ModelUsage::default()
             },
+            request.intent.cache,
         );
-        let discount = provider.filter(|_| reply.batched).and_then(|p| p.later_discount());
+        let discount = provider.filter(|_| reply.batched).and_then(|p| llm_providers::later_discount(p, &request.model));
         let cost = crate::model::intent::discounted(cost, request.intent, discount);
         self.ledger.costs.lock().map_err(|_| ModelError::Provider("usage ledger unavailable".into()))?.push(cost);
         let served = self.served_by(request, reply);
@@ -108,12 +110,15 @@ impl Metered {
     }
 }
 pub fn estimate(provider: &str, usage: &ModelUsage) -> Option<f64> {
-    let vendor =
-        crate::providers::all().into_iter().find(|known| known.id() == provider).map_or("", |known| known.vendor());
+    estimate_cached(provider, usage, Cache::default())
+}
+
+pub fn estimate_cached(provider: &str, usage: &ModelUsage, cache: Cache) -> Option<f64> {
+    let provider = crate::providers::all().into_iter().find(|known| known.id() == provider)?;
     let searched =
-        llm_providers::search_price(vendor).map_or(0.0, |price| domain::billing::searches_cost(price, usage.searches));
+        provider.search_price().map_or(0.0, |price| domain::billing::searches_cost(price, usage.searches));
     let prompt = usage.input + usage.cache_read + usage.cache_write;
-    priced(provider, vendor, &usage.model, prompt)
+    priced(provider, &usage.model, prompt, cache)
         .map(|rate| rate.estimate(usage.input, usage.output, usage.cache_read, usage.cache_write) + searched)
 }
 

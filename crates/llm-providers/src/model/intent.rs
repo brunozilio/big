@@ -12,6 +12,16 @@ pub enum Cache {
     None,
 }
 
+impl Cache {
+    pub fn lifetime(self) -> &'static str {
+        match self {
+            Cache::Long => "long",
+            Cache::Short => "short",
+            Cache::None => "none",
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Priority {
