@@ -216,9 +216,11 @@ pub fn discover_in(root: Option<&std::path::Path>) -> Vec<ScriptedProvider> {
             .and_then(|rest| rest.strip_suffix(ENTRY))
             .is_some_and(|name| name.matches('/').count() == 1 && name.ends_with('/'))
     });
+    let entries: Vec<&String> = entries.collect();
+    let loaded = platform::parallel::ordered(&entries, |entry| ScriptedProvider::load_in(root, entry));
     let mut found: Vec<ScriptedProvider> = Vec::new();
-    for entry in entries {
-        match ScriptedProvider::load_in(root, entry) {
+    for (entry, loaded) in entries.into_iter().zip(loaded) {
+        match loaded {
             Ok(provider) if !provider.runs_here() => tracing::debug!(entry, "a provider needs what this build lacks"),
             Ok(provider) if found.iter().all(|known| known.id != provider.id) => found.push(provider),
             Ok(provider) => tracing::error!(entry, id = provider.id, "a provider repeats another's id"),

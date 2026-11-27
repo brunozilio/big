@@ -75,3 +75,20 @@ fn the_presentation_runs_the_script_once_per_language() {
     assert_eq!(provider.shown.lock().map(|shown| shown.len()).unwrap_or_default(), 1);
     assert_ne!(provider.presentation(Language::English), first);
 }
+
+#[test]
+fn connectors_load_together_in_the_listed_order() {
+    let started = std::time::Instant::now();
+    let together: Vec<ProviderKey> = discover().iter().map(|provider| provider.descriptor().key).collect();
+    let took_together = started.elapsed();
+    let started = std::time::Instant::now();
+    let one_by_one: Vec<ProviderKey> = entries()
+        .iter()
+        .filter_map(|entry| ScriptedProvider::load(entry).ok())
+        .map(|provider| provider.descriptor().key)
+        .collect();
+    let took_alone = started.elapsed();
+    eprintln!("{} connectors: together {took_together:?}, one by one {took_alone:?}", together.len());
+    assert!(!together.is_empty());
+    assert_eq!(together, one_by_one);
+}

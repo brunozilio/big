@@ -11,6 +11,7 @@ pub mod guard;
 pub mod keychain;
 pub mod named;
 pub mod network;
+pub mod parallel;
 pub mod passkey;
 pub mod private_file;
 pub mod runtime;

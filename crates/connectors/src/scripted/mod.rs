@@ -222,16 +222,24 @@ fn creds_of(creds: &Credentials) -> Value {
     json!({ "connection": creds.connection, "token": creds.access_token, "settings": creds.settings })
 }
 
-pub fn discover() -> Vec<Arc<dyn Provider>> {
+fn entries() -> Vec<String> {
     let entries = content::listed(FOLDER);
-    let entries = entries.iter().filter(|path| {
-        path.strip_prefix(FOLDER)
-            .and_then(|rest| rest.strip_suffix(ENTRY))
-            .is_some_and(|name| name.matches('/').count() == 1 && name.ends_with('/'))
-    });
+    entries
+        .into_iter()
+        .filter(|path| {
+            path.strip_prefix(FOLDER)
+                .and_then(|rest| rest.strip_suffix(ENTRY))
+                .is_some_and(|name| name.matches('/').count() == 1 && name.ends_with('/'))
+        })
+        .collect()
+}
+
+pub fn discover() -> Vec<Arc<dyn Provider>> {
+    let entries = entries();
+    let loaded = platform::parallel::ordered(&entries, |entry| ScriptedProvider::load(entry));
     let mut found: Vec<Arc<dyn Provider>> = Vec::new();
-    for entry in entries {
-        match ScriptedProvider::load(entry) {
+    for (entry, loaded) in entries.iter().zip(loaded) {
+        match loaded {
             Ok(provider) => found.push(Arc::new(provider)),
             Err(error) => tracing::error!(%error, entry, "a connector could not be loaded"),
         }
