@@ -59,6 +59,10 @@ export function provider() {
     laterDiscount: 0.5,
     prices: ANTHROPIC,
     searchPrice: 0.01,
+    owns: ["claude-"],
+    makers: [["claude", "claude"]],
+    aliases: { sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5", haiku: "claude-haiku-5-5" },
+    smallModel: "claude-haiku-5-5",
   };
 }
 

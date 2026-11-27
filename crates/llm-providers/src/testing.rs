@@ -25,7 +25,17 @@ pub static BROWSER: Stand = Stand {
 pub static DEVICE: Stand =
     Stand { id: "device-sub", name: "Device Subscription", vendor: "device-sub", access: Access::Code, rank: 203 };
 pub static FAMILY: Stand =
-    Stand { id: "family-key", name: "Family Key", vendor: "anthropic", access: Access::Key, rank: 204 };
+    Stand { id: "family-key", name: "Family Key", vendor: "family-key", access: Access::Key, rank: 204 };
+
+const FAMILY_OWNS: &[&str] = &["claude-"];
+const FAMILY_ALIASES: [(&str, &str); 3] =
+    [("haiku", "claude-haiku-5-5"), ("sonnet", "claude-sonnet-5-5"), ("opus", "claude-opus-5-5")];
+
+impl Stand {
+    fn family(&self) -> bool {
+        std::ptr::eq(self, &FAMILY)
+    }
+}
 
 pub fn install() {
     crate::providers::install(&[&KEYED, &KEYED_TOO, &BROWSER, &DEVICE, &FAMILY]);
@@ -46,6 +56,15 @@ impl Provider for Stand {
     }
     fn rank(&self) -> u8 {
         self.rank
+    }
+    fn owns(&self) -> &[&'static str] {
+        if self.family() { FAMILY_OWNS } else { &[] }
+    }
+    fn alias(&self, name: &str) -> Option<&'static str> {
+        FAMILY_ALIASES.iter().find(|(short, _)| self.family() && *short == name).map(|(_, full)| *full)
+    }
+    fn small_model(&self) -> Option<&'static str> {
+        self.alias("haiku")
     }
     fn slot(&self) -> u128 {
         0x7465_7374_0000_0000_0000_0000_0000_0000 + u128::from(self.rank)

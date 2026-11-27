@@ -46,6 +46,8 @@ export function provider() {
     wire: "responses",
     path: "/responses",
     prices: XAI,
+    owns: ["grok"],
+    makers: [["grok", "grok"]],
   };
 }
 

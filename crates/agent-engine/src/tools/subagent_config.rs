@@ -236,8 +236,7 @@ impl AgentConfig {
         };
         let routed_elsewhere = crate::engine::roles::elsewhere(model, provider);
         let provider = crate::providers::find(provider);
-        let vendor = provider.and_then(|provider| llm_providers::vendor(provider.vendor()));
-        if let Some(full) = vendor.and_then(|vendor| vendor.alias(model)) {
+        if let Some(full) = provider.and_then(|provider| provider.alias(model)) {
             return Ok(full.into());
         }
         match provider {

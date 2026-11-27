@@ -15,11 +15,10 @@ pub mod sign_in;
 #[cfg(any(test, feature = "test-support"))]
 pub mod testing;
 pub mod transcript;
-mod vendor;
-pub mod vendors;
+mod owners;
 pub mod web_search;
 
-pub use vendor::{EFFORTS, Vendor, efforts, later_discount, owner, priced, vendor};
+pub use owners::{EFFORTS, efforts, later_discount, maker, owner, owns, priced, serves};
 
 use domain::{Access, ModelOption};
 use serde_json::Value;
@@ -89,13 +88,24 @@ pub trait Provider: Sync {
 
     fn bind(&self, _config: &Config, _body: &mut Value) {}
 
+    fn owns(&self) -> &[&'static str] {
+        &[]
+    }
+
+    fn makers(&self) -> &[(&'static str, &'static str)] {
+        &[]
+    }
+
+    fn alias(&self, _name: &str) -> Option<&'static str> {
+        None
+    }
+
     fn serves(&self, model: &str) -> bool {
-        let model = model.rsplit(':').next().unwrap_or(model);
-        vendor(self.vendor()).map_or_else(|| owner(model).is_some(), |vendor| vendor.owns(model))
+        serves(self, model)
     }
 
     fn small_model(&self) -> Option<&'static str> {
-        vendor(self.vendor()).and_then(Vendor::small)
+        None
     }
 
     fn later_discount(&self) -> Option<f64> {

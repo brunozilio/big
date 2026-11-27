@@ -33,8 +33,7 @@ pub fn pick(provider: ModelProvider, session: &str, configured: Option<&str>, ca
         return SmallChoice { model: Some(elsewhere.to_owned()), ..SmallChoice::default() };
     }
     let found = crate::providers::find(provider);
-    let vendor = found.and_then(|provider| llm_providers::vendor(provider.vendor()));
-    let configured = configured.map(|name| vendor.and_then(|vendor| vendor.alias(name)).unwrap_or(name));
+    let configured = configured.map(|name| found.and_then(|provider| provider.alias(name)).unwrap_or(name));
     let declared = found.and_then(|provider| provider.small_model());
     let offered: Vec<Offered> = catalog
         .iter()

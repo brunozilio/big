@@ -29,23 +29,8 @@ pub fn listing(models: &[app::Model]) -> Value {
     json!({ "models": listed.collect::<Vec<_>>(), "default": models.first().map(|model| &model.id) })
 }
 
-const MAKERS: [(&str, &str); 7] = [
-    ("claude", "claude"),
-    ("gpt", "openai"),
-    ("codex", "openai"),
-    ("o3", "openai"),
-    ("o4", "openai"),
-    ("grok", "grok"),
-    ("gemini", "google"),
-];
-
 pub fn logo_of(model: &str, provider: &str) -> String {
-    let id = model.to_ascii_lowercase();
-    let words: Vec<&str> = id.split(|letter: char| !letter.is_ascii_alphanumeric()).collect();
-    MAKERS
-        .iter()
-        .find(|(prefix, _)| words.iter().any(|word| word.starts_with(prefix)))
-        .map_or_else(|| provider.trim_end_matches("-subscription").to_owned(), |(_, logo)| (*logo).to_owned())
+    app::maker(model).map_or_else(|| provider.trim_end_matches("-subscription").to_owned(), str::to_owned)
 }
 
 fn unknown_effort() -> Spoken {

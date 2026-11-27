@@ -150,7 +150,10 @@ fn a_refused_side_call_tells_what_the_provider_said_and_only_a_lost_session_asks
         Err(ModelError::Unauthorized("token revoked".into()))
     );
     assert_eq!(limits(429, refused("rate_limit_error", "slow down")), Err(ModelError::Overloaded("slow down".into())));
-    assert_eq!(limits(403, json!("blocked")), Err(ModelError::Provider("provider returned HTTP 403: \"blocked\"".into())));
+    assert_eq!(
+        limits(403, json!("blocked")),
+        Err(ModelError::Provider("provider returned HTTP 403: \"blocked\"".into()))
+    );
     assert_eq!(limits(401, json!({})), Err(ModelError::Unauthorized("provider returned HTTP 401: {}".into())));
 }
 
@@ -216,8 +219,7 @@ fn it_needs_both_tokens() {
 }
 
 fn thought(model: &str, effort: &str, chosen: Option<&ModelOption>) -> Result<Value, ProviderError> {
-    let mut body =
-        json!({"model": format!("claude-subscription:{model}"), "output_config": {"effort": effort}, "max_tokens": 4096});
+    let mut body = json!({"model": format!("claude-subscription:{model}"), "output_config": {"effort": effort}, "max_tokens": 4096});
     crate::request::shape(claude(), chosen, &mut body).map(|()| body)
 }
 
@@ -240,11 +242,8 @@ fn modern_claude_models_think_adaptively_with_the_effort() {
 #[test]
 fn an_effort_the_catalog_does_not_list_is_refused_and_adaptive_follows_the_catalog() {
     let mut model = ModelOption::new("claude-subscription:claude-next", "Next");
-    model.capabilities = Some(ModelCapabilities {
-        adaptive_thinking: true,
-        reasoning_levels: vec!["low".into()],
-        ..Default::default()
-    });
+    model.capabilities =
+        Some(ModelCapabilities { adaptive_thinking: true, reasoning_levels: vec!["low".into()], ..Default::default() });
     assert!(thought("claude-next", "high", Some(&model)).is_err_and(|e| e.to_string().contains("does not support")));
     let body = thought("claude-next", "low", Some(&model)).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(body["thinking"], json!({"type": "adaptive"}));

@@ -54,6 +54,9 @@ export function provider() {
     path: "/codex/responses",
     prices: OPENAI,
     searchPrice: 0.01,
+    owns: ["gpt-", "o1", "o3", "o4"],
+    makers: [["gpt", "openai"], ["codex", "openai"], ["o3", "openai"], ["o4", "openai"]],
+    smallModel: "gpt-6-luna",
   };
 }
 

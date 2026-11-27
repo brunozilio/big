@@ -20,6 +20,7 @@ export function provider() {
     path: "/v1internal:streamGenerateContent?alt=sse",
     servesAll: true,
     prices: VERTEX,
+    makers: [["gemini", "google"]],
   };
 }
 

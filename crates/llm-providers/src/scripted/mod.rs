@@ -72,6 +72,12 @@ struct Declared {
     prices: Prices,
     #[serde(default)]
     search_price: Option<f64>,
+    #[serde(default)]
+    owns: Vec<String>,
+    #[serde(default)]
+    makers: Vec<(String, String)>,
+    #[serde(default)]
+    aliases: std::collections::BTreeMap<String, String>,
 }
 
 #[derive(Debug)]
@@ -96,6 +102,9 @@ pub struct ScriptedProvider {
     later_discount: Option<f64>,
     prices: Prices,
     search_price: Option<u64>,
+    owns: Vec<&'static str>,
+    makers: Vec<(&'static str, &'static str)>,
+    aliases: Vec<(String, &'static str)>,
 }
 
 fn section(name: &str) -> Value {
@@ -169,6 +178,9 @@ impl ScriptedProvider {
             needs: declared.needs,
             later_discount: declared.later_discount.filter(|discount| (0.0..=1.0).contains(discount)),
             prices: declared.prices,
+            owns: declared.owns.iter().map(|prefix| intern(prefix)).collect(),
+            makers: declared.makers.iter().map(|(word, logo)| (intern(word), intern(logo))).collect(),
+            aliases: declared.aliases.into_iter().map(|(short, full)| (short, intern(&full))).collect(),
             search_price: declared.search_price.filter(|usd| *usd >= 0.0).map(|usd| (usd * 1_000_000.0).round() as u64),
         })
     }
@@ -331,11 +343,19 @@ impl Provider for ScriptedProvider {
         if self.serves_all {
             return true;
         }
-        let model = model.rsplit(':').next().unwrap_or(model);
-        crate::vendor(self.vendor).map_or_else(|| crate::owner(model).is_some(), |vendor| vendor.owns(model))
+        crate::serves(self, model)
     }
     fn small_model(&self) -> Option<&'static str> {
-        self.small.or_else(|| crate::vendor(self.vendor).and_then(crate::Vendor::small))
+        self.small
+    }
+    fn owns(&self) -> &[&'static str] {
+        &self.owns
+    }
+    fn makers(&self) -> &[(&'static str, &'static str)] {
+        &self.makers
+    }
+    fn alias(&self, name: &str) -> Option<&'static str> {
+        self.aliases.iter().find(|(short, _)| short == name).map(|(_, full)| *full)
     }
     fn later_discount(&self) -> Option<f64> {
         self.later_discount
