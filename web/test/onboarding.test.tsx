@@ -5,6 +5,7 @@ import type { Api } from '../src/api/contract'
 import { mockApi } from '../src/api/mock'
 import { boot, getState, stop } from '../src/api/store'
 import { needsOnboarding, Onboarding, returnedTo, stageOf } from '../src/screens/onboarding/Onboarding'
+import { INSTALLED_KEY } from '../src/screens/onboarding/Shell'
 import { TooltipProvider } from '../src/ui/overlay'
 
 async function started() {
@@ -16,7 +17,10 @@ async function started() {
   })
 }
 
-beforeEach(() => localStorage.clear())
+beforeEach(() => {
+  localStorage.clear()
+  sessionStorage.clear()
+})
 afterEach(() => {
   cleanup()
   stop()
@@ -40,6 +44,24 @@ describe('primeira vez', () => {
     const providers = [{ key: 'jira' }, { key: 'claude-subscription', ai: true }]
     expect(stageOf('jira', providers)).toBe('connections')
     expect(stageOf('claude-subscription', providers)).toBe('ai')
+  })
+
+  test('sem a marca do instalador as etapas são as de sempre', async () => {
+    await started()
+    render(<TooltipProvider><Onboarding onDone={() => undefined} /></TooltipProvider>)
+    const steps = Array.from(document.querySelectorAll<HTMLElement>('[data-step]')).map((el) => [el.textContent, el.dataset.step])
+    expect(steps).toEqual([['1Conexões', 'current'], ['2IA', 'next'], ['3Aplicação', 'next']])
+  })
+
+  test('depois da instalação o servidor e o administrador aparecem concluídos', async () => {
+    sessionStorage.setItem(INSTALLED_KEY, '1')
+    await started()
+    render(<TooltipProvider><Onboarding onDone={() => undefined} /></TooltipProvider>)
+    const steps = Array.from(document.querySelectorAll<HTMLElement>('[data-step]')).map((el) => [el.textContent, el.dataset.step])
+    expect(steps).toEqual([['Servidor', 'done'], ['Administrador', 'done'], ['3Conexões', 'current'], ['4IA', 'next'], ['5Aplicação', 'next']])
+    fireEvent.click(screen.getByText('Continuar'))
+    await screen.findByText('Conecte um provedor de IA')
+    expect(document.querySelector('[data-step="current"]')?.textContent).toBe('4IA')
   })
 
   test('primeiro as conexões, depois a aplicação, que só nasce com nome e pasta', async () => {

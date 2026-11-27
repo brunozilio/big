@@ -11,6 +11,7 @@ import { Button } from '@/ui/button'
 import { ProductMark } from '@/ui/domain'
 import { Input, Select } from '@/ui/form'
 import { Icon, type IconName } from '@/ui/icon'
+import { journeyLabels, markInstalled, OnboardingShell, StageHeading } from '../onboarding/Shell'
 
 type Stage = { kind: 'email' } | { kind: 'code'; email: string }
 
@@ -42,13 +43,14 @@ function Divider({ children }: { children: ReactNode }) {
   )
 }
 
-export function LoginLanguage() {
+export function LoginLanguage({ className }: { className?: string }) {
   const t = useT()
   const language = useLanguage()
   return (
     <Select
       size="sm"
       label={t('common.language')}
+      className={className}
       value={language}
       leading={<Icon name="globe" size={14} className="text-muted" />}
       options={LANGUAGES.map((l) => ({ value: l.value, label: l.label }))}
@@ -227,33 +229,39 @@ function SetupStage({ token }: { token: string }) {
     setBusy(true)
     setError(null)
     setUpAdmin(token, login.trim(), password)
-      .then(() => finish(location.search))
+      .then(() => {
+        markInstalled()
+        finish(location.search)
+      })
       .catch((err: unknown) => setError(messageOf(err, t('auth.setupFailed'))))
       .finally(() => setBusy(false))
   }
   return (
-    <form onSubmit={submit} className="space-y-3">
-      <div className="mb-2 text-center">
-        <p className="text-md font-medium text-fg">{t('auth.setupTitle')}</p>
-        <p className="mt-1 text-sm text-muted">{t('auth.setupHint')}</p>
-      </div>
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.login')}</span>
-        <Input autoComplete="username" autoCapitalize="none" spellCheck={false} value={login} onChange={(e) => setLogin(e.target.value)} placeholder={t('auth.loginPlaceholder')} />
-      </label>
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.password')}</span>
-        <Input type="password" autoComplete="new-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('auth.passwordPlaceholder')} />
-      </label>
-      <label className="block">
-        <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.setupConfirm')}</span>
-        <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
-      </label>
-      {error && <p className="text-sm text-danger-fg">{error}</p>}
-      <Button type="submit" variant="primary" size="lg" className="w-full" loading={busy} disabled={!ready}>
-        {t('auth.setupSubmit')}
-      </Button>
-    </form>
+    <OnboardingShell labels={journeyLabels(t)} current={1} className="min-h-dvh" language={<LoginLanguage className="w-36" />}>
+      <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
+        <StageHeading title={t('auth.setupTitle')} text={t('auth.setupHint')} />
+        <div className="scrollbar-thin -mx-1 min-h-0 flex-1 space-y-4 overflow-y-auto px-1 pb-2">
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.login')}</span>
+            <Input autoComplete="username" autoCapitalize="none" spellCheck={false} value={login} onChange={(e) => setLogin(e.target.value)} placeholder={t('auth.loginPlaceholder')} />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.password')}</span>
+            <Input type="password" autoComplete="new-password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder={t('auth.passwordPlaceholder')} />
+          </label>
+          <label className="block">
+            <span className="mb-1.5 block text-sm font-medium text-fg2">{t('auth.setupConfirm')}</span>
+            <Input type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          </label>
+        </div>
+        {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
+        <div className="mt-6 flex items-center gap-2">
+          <Button type="submit" variant="primary" className="ml-auto" loading={busy} disabled={!ready}>
+            {t('auth.setupSubmit')}
+          </Button>
+        </div>
+      </form>
+    </OnboardingShell>
   )
 }
 
@@ -281,10 +289,7 @@ function SignIn({ methods }: { methods: AuthMethods }) {
 
 function Entry({ methods }: { methods: AuthMethods }) {
   const t = useT()
-  const location = useLocation()
-  const token = new URLSearchParams(location.search).get('setup') ?? ''
   if (!methods.setup) return <SignIn methods={methods} />
-  if (token) return <SetupStage token={token} />
   return <p className="rounded-card bg-inset px-4 py-3 text-center text-sm text-fg2">{t('auth.setupWaiting')}</p>
 }
 
@@ -303,6 +308,8 @@ export function Login() {
   const name = useStore((s) => s.branding?.name) ?? ''
   const methods = useBrandingAndMethods()
   const failed = new URLSearchParams(location.search).get('error') === 'sso'
+  const token = new URLSearchParams(location.search).get('setup') ?? ''
+  if (methods?.setup && token) return <SetupStage token={token} />
   return (
     <div className="flex min-h-dvh flex-col bg-bg px-4">
       <main className="mx-auto flex w-full max-w-[392px] flex-1 flex-col justify-center py-16">

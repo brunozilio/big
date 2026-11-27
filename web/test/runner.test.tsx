@@ -7,7 +7,8 @@ import { mockApi } from '../src/api/mock'
 import { AUTH } from '../src/api/auth'
 import { Login } from '../src/screens/login/Login'
 import { Run } from '../src/screens/run/Run'
-import { EMPTY_RUN, LOG_LIMIT, parseRunEvent, runPhase, runReducer, RUNNER, type RunInput, type RunState } from '../src/screens/run/runner'
+import { INSTALLED_KEY } from '../src/screens/onboarding/Shell'
+import { EMPTY_RUN, localize, parseRunEvent, runPhase, runReducer, RUNNER, type RunInput, type RunState } from '../src/screens/run/runner'
 
 const realFetch = globalThis.fetch
 
@@ -70,11 +71,22 @@ describe('eventos do instalador', () => {
     expect(runReducer(next, { type: 'answered', form: 'f1' }).answered).toBe(false)
   })
 
-  test('o log guarda só as últimas linhas', () => {
-    const lines: RunInput[] = Array.from({ length: LOG_LIMIT + 20 }, (_, i) => ({ type: 'log', text: `linha ${i}` }))
-    const state = feed(...lines)
-    expect(state.logs.length).toBe(LOG_LIMIT)
-    expect(state.logs[state.logs.length - 1]).toBe(`linha ${LOG_LIMIT + 19}`)
+  test('o log é ignorado', () => {
+    expect(parseRunEvent('{"type":"log","text":"olá"}')).toBeNull()
+    expect('logs' in EMPTY_RUN).toBe(false)
+  })
+
+  test('textos vêm simples ou por idioma, com o inglês de reserva', () => {
+    const titled = { 'pt-BR': 'Rede', en: 'Network', es: 'Red' }
+    expect(localize(titled, 'pt-BR')).toBe('Rede')
+    expect(localize(titled, 'es')).toBe('Red')
+    expect(localize({ en: 'Network' }, 'pt-BR')).toBe('Network')
+    expect(localize({ es: 'Red' }, 'pt-BR')).toBe('Red')
+    expect(localize('Rede', 'en')).toBe('Rede')
+    expect(localize(undefined, 'en')).toBe('')
+    expect(parseRunEvent(JSON.stringify({ type: 'step', id: 'a', title: titled, state: 'done' }))).toEqual({ type: 'step', id: 'a', title: titled, state: 'done' })
+    const parsed = parseRunEvent(JSON.stringify({ type: 'form', id: 'f', title: { en: 'Account' }, fields: [{ key: 'r', kind: 'select', label: { en: 'Region' }, options: [{ value: 'x', label: { en: 'X', 'pt-BR': 'Xis' } }] }], actions: [{ id: 'go', label: { en: 'Go' }, primary: true }] }))
+    expect(parsed).toMatchObject({ title: { en: 'Account' }, fields: [{ label: { en: 'Region' }, options: [{ label: { en: 'X', 'pt-BR': 'Xis' } }] }], actions: [{ label: { en: 'Go' } }] })
   })
 
   test('finish vence o exit e o exit sem finish com erro falha', () => {
@@ -118,10 +130,13 @@ describe('tela do instalador', () => {
     const view = render(<Run open={source.open} />)
     expect(source.urls).toEqual([RUNNER.events])
     source.emit({ type: 'step', id: 's', title: 'Criar rede', state: 'running' })
+    expect(view.getByText('Criar rede')).toBeTruthy()
+    expect(view.getByLabelText('Em andamento')).toBeTruthy()
     source.emit({ type: 'log', text: 'olá' })
     source.emit(form('f1'))
-    expect(view.getByText('Criar rede')).toBeTruthy()
-    expect(view.getByText('olá')).toBeTruthy()
+    expect(view.queryByText('olá')).toBeNull()
+    expect(view.queryByRole('log')).toBeNull()
+    expect(view.getByRole('heading', { name: 'Conta' })).toBeTruthy()
     expect(view.getByText('1234')).toBeTruthy()
     const go = view.getByRole('button', { name: 'Instalar' }) as HTMLButtonElement
     expect(go.disabled).toBe(true)
@@ -129,7 +144,7 @@ describe('tela do instalador', () => {
     fireEvent.change(view.getByLabelText('Segredo'), { target: { value: 's3' } })
     expect(go.disabled).toBe(false)
     fireEvent.click(go)
-    expect(await view.findByText('Resposta enviada. Aguardando o instalador…', {}, wait)).toBeTruthy()
+    expect(await view.findByText('Recebido. Seguindo…', {}, wait)).toBeTruthy()
     expect(calls.find((c) => c.method === 'POST' && c.path === RUNNER.answer)?.body).toEqual({ form: 'f1', action: 'go', values: { region: 'us-east-1', name: 'prod', secret: 's3' } })
     expect((view.getByRole('button', { name: 'Instalar' }) as HTMLButtonElement).disabled).toBe(true)
     source.emit(form('f2', 'Confirmar'))
@@ -137,28 +152,58 @@ describe('tela do instalador', () => {
     expect((view.getByRole('button', { name: 'Voltar' }) as HTMLButtonElement).disabled).toBe(false)
   }, 20000)
 
-  test('o fim mostra continuar e a falha manda olhar o log', async () => {
+  test('o andamento mostra cada passo sem log, em português ou no idioma do evento', () => {
     const source = fakeSource()
     const view = render(<Run open={source.open} />)
-    source.emit({ type: 'error', message: 'Sem permissão na conta' })
+    expect(view.getByText('Começando…')).toBeTruthy()
+    source.emit({ type: 'step', id: 'a', title: { 'pt-BR': 'Rede', en: 'Network' }, state: 'done' })
+    source.emit({ type: 'step', id: 'b', title: { en: 'Database' }, state: 'running' })
+    source.emit({ type: 'step', id: 'c', title: 'Página', state: 'waiting' })
+    source.emit({ type: 'log', text: 'terraform apply' })
+    expect(view.getByRole('heading', { name: 'Preparando o servidor' })).toBeTruthy()
+    expect(view.getByText('Rede')).toBeTruthy()
+    expect(view.getByText('Database')).toBeTruthy()
+    expect(view.getByLabelText('Concluída')).toBeTruthy()
+    expect(view.getByLabelText('Em andamento')).toBeTruthy()
+    expect(view.getByLabelText('Na fila')).toBeTruthy()
+    expect(view.queryByText('terraform apply')).toBeNull()
+    expect(document.querySelector('[data-step="current"]')?.textContent).toContain('Servidor')
+    source.emit({ type: 'step', id: 'b', title: { en: 'Database' }, state: 'failed' })
+    expect(view.getByLabelText('Falhou')).toBeTruthy()
+  })
+
+  test('a falha mostra a mensagem e pede para rodar de novo', () => {
+    const source = fakeSource()
+    const view = render(<Run open={source.open} />)
+    source.emit({ type: 'error', message: { 'pt-BR': 'Sem permissão na conta', en: 'No permission' } })
     expect(view.getByText('Sem permissão na conta')).toBeTruthy()
     source.emit({ type: 'exit', code: 1 })
-    expect(view.getByText('A instalação falhou. Veja o log para entender o motivo.')).toBeTruthy()
-    cleanup()
-    const ok = fakeSource()
-    const done = render(<Run open={ok.open} />)
-    ok.emit({ type: 'finish', next: '/login?setup=T', message: 'Servidor no ar' })
-    ok.emit({ type: 'exit', code: 0 })
-    expect(done.getByText('Servidor no ar')).toBeTruthy()
-    expect(done.getByRole('button', { name: 'Continuar' })).toBeTruthy()
-    expect(done.queryByText('Conexão com o instalador perdida. Confira o terminal onde ele está rodando.')).toBeNull()
+    expect(view.getByRole('heading', { name: 'Não deu para terminar' })).toBeTruthy()
+    expect(view.getByText('Corrija o que for preciso e rode o comando de novo.')).toBeTruthy()
+  })
+
+  test('o fim marca a instalação e segue sozinho para o próximo passo', async () => {
+    sessionStorage.clear()
+    const went: string[] = []
+    const go = (url: string) => went.push(url)
+    const source = fakeSource()
+    const view = render(<Run open={source.open} go={go} />)
+    source.emit({ type: 'finish', next: '/login?setup=T', message: 'Servidor no ar' })
+    source.emit({ type: 'exit', code: 0 })
+    expect(view.getByText('Servidor no ar')).toBeTruthy()
+    expect(sessionStorage.getItem(INSTALLED_KEY)).toBe('1')
+    expect(view.queryByText('Conexão com o instalador perdida. Confira o terminal onde ele está rodando.')).toBeNull()
+    await waitFor(() => expect(went).toEqual(['/login?setup=T']), wait)
+    fireEvent.click(view.getByRole('button', { name: 'Continuar' }))
+    expect(went).toEqual(['/login?setup=T', '/login?setup=T'])
+    sessionStorage.clear()
   }, 20000)
 
   test('a conexão perdida aparece', () => {
     const source = fakeSource()
     const view = render(<Run open={source.open} />)
     source.fail()
-    expect(view.getByText('Conexão com o instalador perdida. Confira o terminal onde ele está rodando.')).toBeTruthy()
+    expect(view.getByText('A conexão com o instalador caiu. Confira o terminal onde ele está rodando.')).toBeTruthy()
   })
 })
 
@@ -172,7 +217,10 @@ describe('primeiro administrador', () => {
       [`POST ${AUTH.setup}`]: { status: 200, body: { user: 'u', email: 'admin', name: '' } },
     })
     const view = render(<MemoryRouter initialEntries={['/login?setup=TOK']}><Login /></MemoryRouter>)
-    expect(await view.findByText('Criar o administrador', {}, wait)).toBeTruthy()
+    sessionStorage.clear()
+    expect(await view.findByRole('heading', { name: 'Crie o administrador' }, wait)).toBeTruthy()
+    expect(document.querySelector('[data-step="current"]')?.textContent).toContain('Administrador')
+    expect(document.querySelectorAll('[data-step="done"]').length).toBe(1)
     expect((view.getByLabelText('Usuário') as HTMLInputElement).value).toBe('admin')
     fireEvent.change(view.getByLabelText('Senha'), { target: { value: 'curta' } })
     fireEvent.change(view.getByLabelText('Confirme a senha'), { target: { value: 'curta' } })
@@ -185,6 +233,8 @@ describe('primeiro administrador', () => {
     fireEvent.change(view.getByLabelText('Confirme a senha'), { target: { value: 'segredo123' } })
     fireEvent.click(view.getByRole('button', { name: 'Criar e entrar' }))
     await waitFor(() => expect(calls.find((c) => c.method === 'POST' && c.path === AUTH.setup)?.body).toEqual({ token: 'TOK', login: 'admin', password: 'segredo123' }), wait)
+    await waitFor(() => expect(sessionStorage.getItem(INSTALLED_KEY)).toBe('1'), wait)
+    sessionStorage.clear()
   }, 20000)
 
   test('sem o token o login avisa que o servidor espera o instalador', async () => {

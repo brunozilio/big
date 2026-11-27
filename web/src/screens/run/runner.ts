@@ -1,52 +1,55 @@
+import type { Language } from '@/api/contract'
+
+export type Localized = string | Partial<Record<string, string>>
+
 export type StepState = 'waiting' | 'running' | 'done' | 'failed'
 export type FieldKind = 'text' | 'password' | 'select' | 'info'
 
 export interface RunStep {
   id: string
-  title: string
+  title: Localized
   state: StepState
 }
 
 export interface FieldOption {
   value: string
-  label: string
-  hint?: string
+  label: Localized
+  hint?: Localized
 }
 
 export interface RunField {
   key: string
-  label: string
+  label: Localized
   kind: FieldKind
   value?: string
-  hint?: string
+  hint?: Localized
   required?: boolean
   options?: FieldOption[]
 }
 
 export interface RunAction {
   id: string
-  label: string
+  label: Localized
   primary?: boolean
 }
 
 export interface RunForm {
   id: string
-  title: string
-  description?: string
+  title: Localized
+  description?: Localized
   fields: RunField[]
   actions: RunAction[]
 }
 
 export interface RunFinish {
   next: string
-  message?: string
+  message?: Localized
 }
 
 export type RunEvent =
-  | { type: 'log'; text: string }
   | ({ type: 'step' } & RunStep)
   | ({ type: 'form' } & RunForm)
-  | { type: 'error'; message: string }
+  | { type: 'error'; message: Localized }
   | { type: 'connect'; url: string }
   | ({ type: 'finish' } & RunFinish)
   | { type: 'exit'; code: number }
@@ -54,11 +57,10 @@ export type RunEvent =
 export type RunInput = RunEvent | { type: 'answered'; form: string } | { type: 'lost' } | { type: 'reset' }
 
 export interface RunState {
-  logs: string[]
   steps: RunStep[]
   form: RunForm | null
   answered: boolean
-  errors: string[]
+  errors: Localized[]
   url: string | null
   finish: RunFinish | null
   exit: number | null
@@ -68,11 +70,9 @@ export interface RunState {
 
 export type RunPhase = 'running' | 'finished' | 'failed' | 'ended'
 
-export const LOG_LIMIT = 500
-
 export const RUNNER = { events: '/api/runner/events', answer: '/api/runner/answer' }
 
-export const EMPTY_RUN: RunState = { logs: [], steps: [], form: null, answered: false, errors: [], url: null, finish: null, exit: null, lost: false, seq: 0 }
+export const EMPTY_RUN: RunState = { steps: [], form: null, answered: false, errors: [], url: null, finish: null, exit: null, lost: false, seq: 0 }
 
 const STATES: readonly string[] = ['waiting', 'running', 'done', 'failed']
 const KINDS: readonly string[] = ['text', 'password', 'select', 'info']
@@ -85,11 +85,25 @@ function text(value: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined
 }
 
+function localizedOf(value: unknown): Localized | undefined {
+  if (typeof value === 'string') return value
+  const o = record(value)
+  if (!o) return undefined
+  const entries = Object.entries(o).filter((e): e is [string, string] => typeof e[1] === 'string')
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
+export function localize(value: Localized | undefined, language: Language): string {
+  if (value === undefined) return ''
+  if (typeof value === 'string') return value
+  return value[language] ?? value.en ?? Object.values(value).find((v) => v !== undefined) ?? ''
+}
+
 function option(value: unknown): FieldOption | null {
   const o = record(value)
   const v = text(o?.value)
   if (!o || v === undefined) return null
-  return { value: v, label: text(o.label) ?? v, hint: text(o.hint) }
+  return { value: v, label: localizedOf(o.label) ?? v, hint: localizedOf(o.hint) }
 }
 
 function field(value: unknown): RunField | null {
@@ -98,14 +112,14 @@ function field(value: unknown): RunField | null {
   const kind = text(f?.kind)
   if (!f || key === undefined || kind === undefined || !KINDS.includes(kind)) return null
   const options = Array.isArray(f.options) ? f.options.map(option).filter((o): o is FieldOption => o !== null) : undefined
-  return { key, label: text(f.label) ?? key, kind: kind as FieldKind, value: text(f.value), hint: text(f.hint), required: f.required === true, options }
+  return { key, label: localizedOf(f.label) ?? key, kind: kind as FieldKind, value: text(f.value), hint: localizedOf(f.hint), required: f.required === true, options }
 }
 
 function action(value: unknown): RunAction | null {
   const a = record(value)
   const id = text(a?.id)
   if (!a || id === undefined) return null
-  return { id, label: text(a.label) ?? id, primary: a.primary === true }
+  return { id, label: localizedOf(a.label) ?? id, primary: a.primary === true }
 }
 
 function form(e: Record<string, unknown>): RunEvent | null {
@@ -113,32 +127,30 @@ function form(e: Record<string, unknown>): RunEvent | null {
   if (id === undefined) return null
   const fields = Array.isArray(e.fields) ? e.fields.map(field).filter((f): f is RunField => f !== null) : []
   const actions = Array.isArray(e.actions) ? e.actions.map(action).filter((a): a is RunAction => a !== null) : []
-  return { type: 'form', id, title: text(e.title) ?? '', description: text(e.description), fields, actions }
+  return { type: 'form', id, title: localizedOf(e.title) ?? '', description: localizedOf(e.description), fields, actions }
 }
 
 function step(e: Record<string, unknown>): RunEvent | null {
   const id = text(e.id)
   const state = text(e.state)
   if (id === undefined || state === undefined || !STATES.includes(state)) return null
-  return { type: 'step', id, title: text(e.title) ?? id, state: state as StepState }
+  return { type: 'step', id, title: localizedOf(e.title) ?? id, state: state as StepState }
 }
 
 export function toRunEvent(value: unknown): RunEvent | null {
   const e = record(value)
   if (!e) return null
   switch (e.type) {
-    case 'log':
-      return { type: 'log', text: text(e.text) ?? '' }
     case 'step':
       return step(e)
     case 'form':
       return form(e)
     case 'error':
-      return { type: 'error', message: text(e.message) ?? '' }
+      return { type: 'error', message: localizedOf(e.message) ?? '' }
     case 'connect':
       return typeof e.url === 'string' ? { type: 'connect', url: e.url } : null
     case 'finish':
-      return typeof e.next === 'string' ? { type: 'finish', next: e.next, message: text(e.message) } : null
+      return typeof e.next === 'string' ? { type: 'finish', next: e.next, message: localizedOf(e.message) } : null
     case 'exit':
       return typeof e.code === 'number' ? { type: 'exit', code: e.code } : null
     default:
@@ -162,8 +174,6 @@ export function runReducer(state: RunState, input: RunInput): RunState {
   switch (input.type) {
     case 'reset':
       return EMPTY_RUN
-    case 'log':
-      return { ...state, logs: [...state.logs, input.text].slice(-LOG_LIMIT) }
     case 'step':
       return { ...state, steps: withStep(state.steps, { id: input.id, title: input.title, state: input.state }) }
     case 'form':

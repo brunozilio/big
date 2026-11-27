@@ -4,11 +4,8 @@ import { api } from '@/api'
 import { useAdmin } from '@/api/me'
 import { errorText, setOnboarding, useStore } from '@/api/store'
 import { Button } from '@/ui/button'
-import { cn } from '@/ui/cn'
-import { ProductMark } from '@/ui/domain'
 import { Icon } from '@/ui/icon'
 import { tweenClose } from '@/ui/motion'
-import { LanguagePicker } from '@/i18n/LanguagePicker'
 import { useT, type T } from '@/i18n'
 import { groupName } from '@/i18n/server'
 import { ConnectDialog } from '../settings/ConnectDialog'
@@ -17,6 +14,7 @@ import { accountsOf } from '../settings/Settings'
 import { ApplicationEditor } from '../settings/ApplicationEditor'
 import { GridSkeleton } from '@/ui/display'
 import { needsOnboarding, returnedTo, type Resumed } from '@/app/gate'
+import { installerLabels, OnboardingShell, StageHeading, wasInstalled } from './Shell'
 
 export { needsOnboarding, returnedTo }
 export type { Resumed }
@@ -30,24 +28,6 @@ const STAGES = (t: T): { stage: Stage; label: string; title: string; text: strin
   { stage: 'ai', label: t('app.stageAiLabel'), title: t('app.stageAiTitle'), text: t('app.stageAiText') },
   { stage: 'application', label: t('app.stageApplicationLabel'), title: t('app.stageApplicationTitle'), text: t('app.stageApplicationText') },
 ]
-
-function Steps({ stage }: { stage: Stage }) {
-  const t = useT()
-  const at = ORDER.indexOf(stage)
-  return (
-    <div className="mb-6 flex items-center gap-2 text-sm text-muted">
-      {STAGES(t).map(({ label }, i) => (
-        <span key={label} className="flex items-center gap-2">
-          {i > 0 && <span className="h-px w-6 bg-border" />}
-          <span className={cn('flex size-5 items-center justify-center rounded-full text-xs tabular-nums', i < at ? 'bg-success text-white' : i === at ? 'bg-fg text-bg' : 'bg-inset text-faint')}>
-            {i < at ? <Icon name="check" size={11} strokeWidth={2.6} /> : i + 1}
-          </span>
-          <span className={i === at ? 'text-fg' : undefined}>{label}</span>
-        </span>
-      ))}
-    </div>
-  )
-}
 
 function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider: string) => void }) {
   const t = useT()
@@ -98,6 +78,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
       .finally(() => setBusy(false))
   }
   const t = useT()
+  const [installed] = useState(wasInstalled)
   const at = ORDER.indexOf(stage)
   const current = STAGES(t)[at]
   const steps = (
@@ -106,44 +87,35 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
       <Button variant="ghost" disabled={busy} onClick={skip}>{t('app.skipForNow')}</Button>
     </>
   )
+  const connect = (
+    <ConnectDialog provider={connecting} {...resumeProps(flow)} onClose={() => {
+      setConnecting(null)
+      setFlow(null)
+      onResumed?.()
+    }} />
+  )
+  const labels = STAGES(t).map((s) => s.label)
   return (
-    <div className="flex min-h-full flex-col items-center bg-subtle px-4 py-10">
-      <div className="mb-8 flex w-full max-w-[560px] items-center justify-between">
-        <ProductMark />
-        <LanguagePicker className="w-36" />
-      </div>
-      <div className="w-full max-w-[560px] rounded-card bg-bg shadow-card">
-        <div className="flex max-h-[calc(100dvh-160px)] min-h-[520px] flex-col p-6 md:p-8">
-          <Steps stage={stage} />
-          <>
-            <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
-              <h1 className="text-2xl font-medium tracking-tighter2 text-fg">{current.title}</h1>
-              <p className="mb-6 mt-1.5 text-base text-muted">{current.text}</p>
-              <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
-                {stage !== 'application' ? (
-                  <ConnectionsStage ai={stage === 'ai'} onConnect={setConnecting} />
-                ) : (
-                  <div className="rounded-card bg-surface shadow-card">
-                    <ApplicationEditor bare needsFolder application={null} saveLabel={t('app.createApplication')} actions={steps} onSaved={onDone} />
-                  </div>
-                )}
-              </div>
-            </motion.div>
-          </>
-          {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
-          {stage !== 'application' && (
-            <div className="mt-6 flex items-center gap-2">
-              {steps}
-              <Button variant="primary" className="ml-auto" onClick={() => setStage(ORDER[at + 1])}>{t('app.continue')}</Button>
+    <OnboardingShell labels={installed ? [...installerLabels(t), ...labels] : labels} current={installed ? at + 2 : at} outside={connect}>
+      <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
+        <StageHeading title={current.title} text={current.text} />
+        <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+          {stage !== 'application' ? (
+            <ConnectionsStage ai={stage === 'ai'} onConnect={setConnecting} />
+          ) : (
+            <div className="rounded-card bg-surface shadow-card">
+              <ApplicationEditor bare needsFolder application={null} saveLabel={t('app.createApplication')} actions={steps} onSaved={onDone} />
             </div>
           )}
         </div>
-      </div>
-      <ConnectDialog provider={connecting} {...resumeProps(flow)} onClose={() => {
-        setConnecting(null)
-        setFlow(null)
-        onResumed?.()
-      }} />
-    </div>
+      </motion.div>
+      {error && <p role="alert" className="mt-3 text-sm text-danger-fg">{error}</p>}
+      {stage !== 'application' && (
+        <div className="mt-6 flex items-center gap-2">
+          {steps}
+          <Button variant="primary" className="ml-auto" onClick={() => setStage(ORDER[at + 1])}>{t('app.continue')}</Button>
+        </div>
+      )}
+    </OnboardingShell>
   )
 }
