@@ -535,7 +535,7 @@ export type ConnectionCall =
   | { action: 'security.findings'; args: { project: string; open?: boolean; limit?: number }; result: Record<string, unknown>[] }
   | { action: 'security.status'; args: { project: string; since?: string }; result: { status: string; scannedAt: string | null; running?: boolean } }
   | { action: 'quality.report'; args: { project: string; pullRequest?: string; branch?: string }; result: Record<string, unknown> & { status: string } }
-  | { action: `${string}.options`; args: { query?: string; field?: string; chosen?: Record<string, string>; names?: string[] }; result: BindingOption[] }
+  | { action: `${string}.options`; args: { query?: string; field?: string; chosen?: Record<string, string>; names?: string[]; page?: number }; result: BindingOption[] }
 
 export interface McpTool {
   name: string

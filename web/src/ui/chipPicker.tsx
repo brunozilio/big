@@ -114,8 +114,15 @@ export interface PickerProps<T extends string> {
   actions?: PickerAction[]
   side?: 'top' | 'bottom'
   onSearch?: (query: string) => void
+  onMore?: () => void
   hint?: string
   many?: readonly string[]
+}
+
+const NEAR_END_PX = 96
+
+function nearEnd(list: HTMLElement): boolean {
+  return list.scrollHeight - list.scrollTop - list.clientHeight <= NEAR_END_PX
 }
 
 function joined<T extends string>(options: ChipOption<T>[], many: readonly string[]): ChipOption<string> | undefined {
@@ -123,7 +130,7 @@ function joined<T extends string>(options: ChipOption<T>[], many: readonly strin
   return picked.length === 0 ? undefined : { value: picked.map((o) => o.value).join(','), label: picked.map(textOf).join(', ') }
 }
 
-export function ChipPicker<T extends string>({ value, options, onChange, label, placeholder, empty, look = 'chip', size = 'sm', leading, className, actions = [], side, onSearch, hint, many }: PickerProps<T>) {
+export function ChipPicker<T extends string>({ value, options, onChange, label, placeholder, empty, look = 'chip', size = 'sm', leading, className, actions = [], side, onSearch, onMore, hint, many }: PickerProps<T>) {
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState('')
   const [lit, setLit] = useState(0)
@@ -179,7 +186,7 @@ export function ChipPicker<T extends string>({ value, options, onChange, label, 
         <input autoFocus aria-label={searchLabel} placeholder={searchLabel} value={query} onChange={(e) => { setQuery(e.target.value); onSearch?.(e.target.value); setLit(0) }} onKeyDown={keyed} className="min-w-0 flex-1 bg-transparent text-base text-fg outline-none placeholder:text-muted" />
         {numbered && <Kbd>1–{options.length}</Kbd>}
       </div>
-      <div role="listbox" aria-label={label} className="flex max-h-80 flex-col overflow-y-auto p-1.5">
+      <div role="listbox" aria-label={label} onScroll={(e) => nearEnd(e.currentTarget) && onMore?.()} className="flex max-h-80 flex-col overflow-y-auto p-1.5">
         {shown.map((option) => (
           <Choice key={option.value} option={option} at={options.indexOf(option)} numbered={numbered} chosen={isChosen(option)} lit={shown[lit] === option} onPick={() => pick(option)} onHover={() => setLit(shown.indexOf(option))} />
         ))}

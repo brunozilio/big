@@ -427,7 +427,7 @@ pub fn changes() -> Vec<ActionSpec> {
         ActionSpec::write(changes::CANCEL, change_ref, change_output(), Idempotency::Native),
         ActionSpec::read(
             &options_of(CHANGES),
-            object(&[], &[("query", "string"), ("field", "string"), ("chosen", "object")]),
+            object(&[], &[("query", "string"), ("field", "string"), ("chosen", "object"), ("page", "integer")]),
             json!({ "type": "array", "items": option }),
         ),
     ]

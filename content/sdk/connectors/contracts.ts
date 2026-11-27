@@ -391,7 +391,7 @@ export function bindingField(key: string, label: string, required = false): Bind
 
 export function options(capability: string): Action {
   const option = object([["value", "string"], ["label", "string"]], [["detail", "string"]]);
-  return read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"], ["names", "array"]]), listOf(option));
+  return read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"], ["names", "array"], ["page", "integer"]]), listOf(option));
 }
 
 export type Option = { value: string; label: string };

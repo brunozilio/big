@@ -86,8 +86,8 @@ export interface SelectOption {
   text?: string
 }
 
-export function Select({ value, onValueChange, options, placeholder, className, size = 'md', label, leading, look, onSearch, hint }: { value: string; onValueChange: (v: string) => void; options: SelectOption[]; placeholder?: string; className?: string; size?: 'sm' | 'md'; label?: string; leading?: ReactNode; look?: PickerLook; onSearch?: (query: string) => void; hint?: string }) {
-  return <ChipPicker value={value} onChange={onValueChange} options={options} label={label ?? placeholder ?? ''} empty={placeholder} size={size} look={look ?? (size === 'sm' ? 'chip' : 'field')} leading={leading} className={className} onSearch={onSearch} hint={hint} />
+export function Select({ value, onValueChange, options, placeholder, className, size = 'md', label, leading, look, onSearch, onMore, hint }: { value: string; onValueChange: (v: string) => void; options: SelectOption[]; placeholder?: string; className?: string; size?: 'sm' | 'md'; label?: string; leading?: ReactNode; look?: PickerLook; onSearch?: (query: string) => void; onMore?: () => void; hint?: string }) {
+  return <ChipPicker value={value} onChange={onValueChange} options={options} label={label ?? placeholder ?? ''} empty={placeholder} size={size} look={look ?? (size === 'sm' ? 'chip' : 'field')} leading={leading} className={className} onSearch={onSearch} onMore={onMore} hint={hint} />
 }
 
 export function MultiSelect({ values, onToggle, options, placeholder, className, label, onSearch, hint }: { values: readonly string[]; onToggle: (v: string) => void; options: SelectOption[]; placeholder?: string; className?: string; label?: string; onSearch?: (query: string) => void; hint?: string }) {

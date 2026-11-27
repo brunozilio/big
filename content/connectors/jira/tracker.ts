@@ -13,7 +13,7 @@ import { adfToMarkdown } from "./adf.ts";
 import { type Api, browse, jqlKey, jqlText, projectOf, search as searchJql, tool } from "./api.ts";
 import { extra, kindOf } from "./metadata.ts";
 import { TRANSITIONS, foundList, idOf, read as readOperation } from "./operations.ts";
-import { visibleProjects } from "./projects.ts";
+import { projectPage, visibleProjects } from "./projects.ts";
 import { PHASES, phaseOf, schema } from "./schema.ts";
 
 const ISSUE_FIELDS = [
@@ -244,3 +244,8 @@ export function setImpediment(api: Api, args: Args, key: string) {
 }
 
 export const projects = (api: Api, args: Args) => visibleProjects(api, optionalText(args, "query"));
+
+export function projectOptionsPage(api: Api, args: Args) {
+  const page = typeof args.page === "number" && args.page > 0 ? Math.floor(args.page) : 0;
+  return projectPage(api, page, optionalText(args, "query"));
+}

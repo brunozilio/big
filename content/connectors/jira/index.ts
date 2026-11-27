@@ -8,7 +8,7 @@ import { fields, statuses } from "./metadata.ts";
 import { schema } from "./schema.ts";
 import { visibleProjects } from "./projects.ts";
 import { search } from "./search.ts";
-import { comment, createIssue, issue, projects, setImpediment, transition, transitions } from "./tracker.ts";
+import { comment, createIssue, issue, projectOptionsPage, projects, setImpediment, transition, transitions } from "./tracker.ts";
 
 export { poll } from "./events.ts";
 
@@ -82,7 +82,7 @@ export function call({ action, args, creds, idempotencyKey }: Input, ctx) {
     case "tracker.projects":
       return projects(api, args);
     case "tracker.options":
-      return projectOptions(projects(api, args));
+      return projectOptions(projectOptionsPage(api, args));
     case "tracker.update_issue":
       return updateIssue(api, args);
     case "tracker.link_issues":

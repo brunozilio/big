@@ -22,6 +22,11 @@ function inputs(page: number, query?: string) {
   return sent;
 }
 
+export function projectPage(api: Api, page: number, query?: string) {
+  const [, answer] = read(api, PROJECTS, inputs(page, query));
+  return foundList(answer, ["values", "projects"]).map(shownProject).filter((project) => project.key !== "");
+}
+
 export function visibleProjects(api: Api, query?: string) {
   let [name, answer] = read(api, PROJECTS, inputs(0, query));
   const found: ReturnType<typeof shownProject>[] = [];

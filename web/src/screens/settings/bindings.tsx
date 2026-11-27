@@ -102,11 +102,12 @@ export interface Search {
   search: (query: string) => void
   hint: string | undefined
   complete: boolean
+  more: () => void
 }
 
 type Listed = { found: Found; failed: string | null }
 
-type Asked = { query: string; field?: string; chosen?: Record<string, string>; names?: string[] }
+type Asked = { query: string; field?: string; chosen?: Record<string, string>; names?: string[]; page?: number }
 
 type Kept = { at: number; listed: Listed }
 
@@ -123,7 +124,7 @@ function shelf<T>(all: WeakMap<Api, Map<string, T>>): Map<string, T> {
 }
 
 function keyOf(connections: string[], action: string, args: Asked): string {
-  return JSON.stringify([connections, action, args.field ?? '', args.chosen ?? {}, args.query, args.names ?? []])
+  return JSON.stringify([connections, action, args.field ?? '', args.chosen ?? {}, args.query, args.names ?? [], args.page ?? 0])
 }
 
 function recalled(key: string): Listed | null {
@@ -166,6 +167,45 @@ function lookup(connections: string[], action: `${string}.options`, args: Asked)
 type Shown = { scope: string; found: Found; failed: string | null }
 
 const NOTHING: Found = {}
+
+type Paged = { from: string; page: number; found: Found; done: boolean; loading: boolean }
+
+const UNPAGED: Paged = { from: '', page: 0, found: NOTHING, done: false, loading: false }
+
+function joinedFound(first: Found, later: Found): Found {
+  const keys = [...new Set([...Object.keys(first), ...Object.keys(later)])]
+  return Object.fromEntries(
+    keys.map((key) => {
+      const known = first[key] ?? []
+      const seen = new Set(known.map((o) => o.value))
+      return [key, [...known, ...(later[key] ?? []).filter((o) => !seen.has(o.value))]]
+    }),
+  )
+}
+
+function grew(before: Found, after: Found): boolean {
+  return Object.keys(after).some((key) => (after[key]?.length ?? 0) > (before[key]?.length ?? 0))
+}
+
+function usePages(from: string, ready: boolean, base: Found, ask: (page: number) => Promise<Listed>) {
+  const [paged, setPaged] = useState<Paged>(UNPAGED)
+  const current = paged.from === from ? paged : { ...UNPAGED, from }
+  const found = useMemo(() => joinedFound(base, current.found), [base, current.found])
+  const more = useCallback(() => {
+    if (!ready || current.done || current.loading) return
+    const page = current.page + 1
+    setPaged({ ...current, loading: true })
+    void ask(page).then((listed) => {
+      setPaged((now) => {
+        if (now.from !== from) return now
+        const next = joinedFound(now.found, listed.found)
+        const done = Boolean(listed.failed) || !grew(joinedFound(base, now.found), joinedFound(base, next))
+        return { from, page, found: next, done, loading: false }
+      })
+    })
+  }, [ready, current, ask, from, base])
+  return { found, more, loading: current.loading }
+}
 
 export function useSearch(connections: string[], capability: string, field?: string, eager = false, chosen?: Record<string, string>): Search {
   const t = useT()
@@ -213,12 +253,19 @@ export function useSearch(connections: string[], capability: string, field?: str
     setActive(true)
     setQuery(next)
   }, [eager])
-  const found = shown.scope === scope ? shown.found : NOTHING
+  const base = shown.scope === scope ? shown.found : NOTHING
   const failed = shown.scope === scope ? shown.failed : null
+  const typed = query.trim()
+  const ask = useCallback((page: number) => {
+    const args: Asked = { query: typed, page, ...(field ? { field } : {}), ...(given ? { chosen: JSON.parse(given) as Record<string, string> } : {}) }
+    return lookup(wanted.split('|'), `${capability}.options`, args)
+  }, [typed, field, given, wanted, capability])
+  const ready = active && !busy && !failed && wanted !== '' && (eager || typed !== '') && Object.values(base).some((listed) => listed.length > 0)
+  const { found, more, loading } = usePages(`${scope} ${typed}`, ready, base, ask)
   const empty = Object.values(found).every((listed) => listed.length === 0)
-  const hint = busy ? t('settings.search_busy') : failed && empty ? failed : query.trim() === '' && !eager ? t('settings.search_type') : empty ? t('settings.search_empty') : undefined
+  const hint = busy || loading ? t('settings.search_busy') : failed && empty ? failed : query.trim() === '' && !eager ? t('settings.search_type') : empty ? t('settings.search_empty') : undefined
   const complete = active && eager && !busy && shown.scope === scope && !failed && query.trim() === ''
-  return { found, search, hint, complete }
+  return { found, search, hint, complete, more }
 }
 
 export function withBinding(bindings: Bindings | undefined, capability: string, next: Binding | null): Bindings {
@@ -288,7 +335,7 @@ export async function suggested(ref: string | null, fields: BindingField[], curr
 
 export function BindingSelect({ field, value, onChange }: { field: BindingField; value: Binding | undefined; onChange: (next: Binding | null) => void }) {
   const t = useT()
-  const { found: listed, search, hint } = useSearch(field.sources.map((s) => s.connection.id), field.capability)
+  const { found: listed, search, hint, more } = useSearch(field.sources.map((s) => s.connection.id), field.capability, undefined, true)
   const choices = [
     { value: NONE, label: t('settings.none') },
     ...field.sources.flatMap((s) => (listed[s.connection.id] ?? []).map((o) => ({ value: choiceKey(s.connection.id, o.value), label: o.label, icon: <ProviderLogo logo={s.provider.logo} name={s.provider.name} size={15} /> }))),
@@ -298,7 +345,7 @@ export function BindingSelect({ field, value, onChange }: { field: BindingField;
   const labelOf = (connection: string, key: string) => (listed[connection] ?? []).find((o) => o.value === key)?.label
   return (
     <Field label={field.label}>
-      <Select label={field.label} className="w-full" value={current} options={choices} onSearch={search} hint={hint} onValueChange={(v) => {
+      <Select label={field.label} className="w-full" value={current} options={choices} onSearch={search} onMore={more} hint={hint} onValueChange={(v) => {
         const picked = fromKey(v)
         onChange(picked ? { connection: picked.connection, value: picked.key, label: labelOf(picked.connection, picked.key) ?? picked.key } : null)
       }} />
@@ -314,7 +361,7 @@ export function withChoices(binding: Binding, more: BindingChoice[]): Binding {
 
 function MoreChoices({ field, value, onChange }: { field: BindingField; value: Binding; onChange: (next: Binding) => void }) {
   const t = useT()
-  const { found, search, hint } = useSearch([value.connection], field.capability)
+  const { found, search, hint, more: further } = useSearch([value.connection], field.capability, undefined, true)
   const listed = found[value.connection] ?? []
   const more = value.more ?? []
   const taken = new Set([value.value, ...more.map((c) => c.value)])
@@ -330,7 +377,7 @@ function MoreChoices({ field, value, onChange }: { field: BindingField; value: B
         const choices = choicesFor(current)
         if (current !== NONE && !choices.some((o) => o.value === current)) choices.push({ value: current, label: more[at]?.label || current })
         return (
-          <Select key={`${at}:${current}`} label={field.label} className="mt-2 w-full" value={current} options={choices} onSearch={search} hint={hint} onValueChange={(v) => {
+          <Select key={`${at}:${current}`} label={field.label} className="mt-2 w-full" value={current} options={choices} onSearch={search} onMore={further} hint={hint} onValueChange={(v) => {
             const next = [...more]
             if (v === NONE) next.splice(at, 1)
             else next[at] = { value: v, label: labelOf(v) }

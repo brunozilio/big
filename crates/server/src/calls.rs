@@ -206,6 +206,9 @@ async fn options(caller: &Caller<'_>, action: &str, args: &Value) -> ApiResult<V
     if !names.is_empty() {
         wanted["names"] = json!(names);
     }
+    if let Some(page) = args["page"].as_u64().filter(|page| *page > 0) {
+        wanted["page"] = json!(page);
+    }
     let found = caller.call(action, wanted).await?;
     let listed: Vec<Value> = items(&found)
         .iter()
