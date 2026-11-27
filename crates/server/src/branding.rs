@@ -21,7 +21,7 @@ pub fn current_for(store: &Store, owner: &str) -> ApiResult<Value> {
     let style =
         kept.get("output_style").and_then(Value::as_str).filter(|key| styles.iter().any(|style| style.key == *key));
     Ok(json!({
-        "name": brand::NAME, "logo": LOGO_ROUTE, "favicon": FAVICON_ROUTE, "editor": crate::editor::editor_name(), "theme": theme, "language": store.language_for(owner)?.code(),
+        "name": brand::NAME, "logo": LOGO_ROUTE, "favicon": FAVICON_ROUTE, "editor": if crate::scope::shared_mode() { "" } else { crate::editor::editor_name() }, "theme": theme, "language": store.language_for(owner)?.code(),
         "output_style": style, "output_styles": styles,
     }))
 }

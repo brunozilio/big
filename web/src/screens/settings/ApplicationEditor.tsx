@@ -14,6 +14,7 @@ import { useKinds } from './applicationFacts'
 import { saveApplication, saveOptimistically } from './applicationSave'
 import { BindingFields, groupedBySection, missingOf, suggested, useBindingFields, type BindingField, type BindingProblem, type FieldGroup } from './bindings'
 import { FolderPopover } from './FolderDialog'
+import { useAdmin } from '@/api/me'
 import { useFlows } from './flows'
 import { RepositoryCard } from './RepositoryEditor'
 
@@ -265,6 +266,7 @@ interface RepositoriesProps {
 function Repositories({ rows, opened, fields, flows, kinds, problem, change, onToggle, onFolder, onAdded }: RepositoriesProps) {
   const t = useT()
   const [adding, setAdding] = useState(false)
+  const admin = useAdmin()
   const last = [...rows].reverse().find((r) => r.value.directory)?.value.directory
   const added = (paths: string[]) => {
     setAdding(false)
@@ -275,7 +277,11 @@ function Repositories({ rows, opened, fields, flows, kinds, problem, change, onT
       {rows.map((row, i) => (
         <RepositoryCard key={row.key} row={row} index={i} removable={rows.length > 1} open={opened.has(row.key)} fields={fields} flows={flows} kinds={kinds} problem={problem?.row === row.key ? (problem.binding ?? null) : null} change={change} onToggle={onToggle} onFolder={onFolder} />
       ))}
-      <FolderPopover open={adding} onOpenChange={setAdding} start={last ? parentOf(last) : null} trigger={<Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />}>{t('settings.app_addRepository')}</Button>} onChoose={(listing) => added([listing.path])} onChooseMany={added} />
+      {admin ? (
+        <FolderPopover open={adding} onOpenChange={setAdding} start={last ? parentOf(last) : null} trigger={<Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />}>{t('settings.app_addRepository')}</Button>} onChoose={(listing) => added([listing.path])} onChooseMany={added} />
+      ) : (
+        <Button variant="ghost" size="sm" icon={<Icon name="plus" size={15} />} onClick={() => change({ type: 'blank' })}>{t('settings.app_addRepository')}</Button>
+      )}
     </div>
   )
 }
@@ -406,7 +412,7 @@ export function ApplicationEditor(props: EditorProps) {
     if (confirming) stay()
     else leave()
   }
-  const ready = !props.needsFolder || (editing.name.trim() !== '' && Boolean(editing.repositories[0]?.value.directory))
+  const ready = !props.needsFolder || (editing.name.trim() !== '' && Boolean(editing.repositories[0]?.value.directory || editing.repositories[0]?.value.remote))
   const body = (
     <div ref={root} tabIndex={-1} onKeyDown={keyed} className="outline-none" data-testid="application-editor">
       {!bare && <h3 className="px-4 pb-1 pt-3.5 text-md font-medium text-fg">{application ? t('settings.app_edit') : t('settings.app_new')}</h3>}

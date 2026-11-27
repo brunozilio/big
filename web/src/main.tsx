@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client'
 import { RouterProvider } from 'react-router-dom'
 import { loadApi } from './api'
 import { whoAmI } from './api/auth'
+import { setMe } from './api/me'
 import { boot } from './api/store'
 import { createRouter } from './app/router'
 import { TooltipProvider } from './ui/overlay'
@@ -15,6 +16,7 @@ if (root) {
   void loadApi().then(async (api) => {
     const signedIn = await whoAmI().catch(() => undefined)
     const onLogin = window.location.pathname === '/login'
+    if (signedIn) setMe(signedIn)
     if (signedIn === null && !onLogin) {
       window.location.replace(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
       return

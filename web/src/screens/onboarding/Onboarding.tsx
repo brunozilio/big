@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion'
 import { useState } from 'react'
 import { api } from '@/api'
+import { useAdmin } from '@/api/me'
 import { errorText, setOnboarding, useStore } from '@/api/store'
 import { Button } from '@/ui/button'
 import { cn } from '@/ui/cn'
@@ -51,8 +52,9 @@ function Steps({ stage }: { stage: Stage }) {
 function ConnectionsStage({ ai, onConnect }: { ai: boolean; onConnect: (provider: string) => void }) {
   const t = useT()
   const data = useStore((s) => s.connections)
+  const admin = useAdmin()
   if (!data) return <GridSkeleton groups={1} cards={2} />
-  const providers = data.providers.filter((p) => !!p.ai === ai)
+  const providers = data.providers.filter((p) => !!p.ai === ai && (admin || !p.ai))
   const groups = [...new Set(providers.map((p) => p.group))]
   return (
     <div className="space-y-5">

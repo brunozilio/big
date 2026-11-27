@@ -3,7 +3,8 @@ import { useSearchParams } from 'react-router-dom'
 import { api } from '@/api'
 import type { BrandingPatch, Connection, Language, OutputStyle, Provider, Theme } from '@/api/contract'
 import { errorText, setBranding, useStore } from '@/api/store'
-import { SETTINGS_GROUPS, type SettingsTab } from '@/app/settingsNav'
+import { SETTINGS_GROUPS, tabShown, type SettingsTab } from '@/app/settingsNav'
+import { useAdmin, useShared } from '@/api/me'
 import { cn } from '@/ui/cn'
 import { Card, GridSkeleton, ListSkeleton } from '@/ui/display'
 import { SegmentedControl, Select } from '@/ui/form'
@@ -21,6 +22,7 @@ const ApplicationsView = lazy(() => import('./Applications').then((m) => ({ defa
 const MemoryView = lazy(() => import('./Memory').then((m) => ({ default: m.MemoryView })))
 const PermissionsView = lazy(() => import('./Permissions').then((m) => ({ default: m.PermissionsView })))
 const UsageView = lazy(() => import('./Usage').then((m) => ({ default: m.UsageView })))
+const PeopleView = lazy(() => import('./People').then((m) => ({ default: m.PeopleView })))
 
 export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTab: (t: SettingsTab) => void; onConnect: (provider: string) => void }) {
   return (
@@ -28,7 +30,7 @@ export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTa
       <SettingsNav tab={tab} onTab={onTab} />
       <FadeIn key={tab} className="min-w-0">
         <Suspense fallback={<ListSkeleton />}>
-          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'memory' ? <MemoryView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : tab === 'account' ? <AccountPanel /> : <CustomView />}
+          {tab === 'connections' ? <ConnectionsView onConnect={onConnect} /> : tab === 'browser' ? <BrowserView /> : tab === 'permissions' ? <PermissionsView /> : tab === 'memory' ? <MemoryView /> : tab === 'applications' ? <ApplicationsView /> : tab === 'usage' ? <UsageView /> : tab === 'account' ? <AccountPanel /> : tab === 'people' ? <PeopleView /> : <CustomView />}
         </Suspense>
       </FadeIn>
     </div>
@@ -36,6 +38,8 @@ export function SettingsView({ tab, onTab, onConnect }: { tab: SettingsTab; onTa
 }
 
 function SettingsNav({ tab, onTab }: { tab: SettingsTab; onTab: (t: SettingsTab) => void }) {
+  const shared = useShared()
+  const admin = useAdmin()
   const t = useT()
   const nav = useRef<HTMLElement>(null)
   useEffect(() => {
@@ -43,7 +47,7 @@ function SettingsNav({ tab, onTab }: { tab: SettingsTab; onTab: (t: SettingsTab)
   }, [tab])
   return (
     <nav ref={nav} aria-label={t('app.settings')} className="no-scrollbar -mx-5 mb-6 flex gap-1 overflow-x-auto border-b px-5 pb-2 md:sticky md:top-6 md:mx-0 md:mb-0 md:flex-col md:gap-5 md:self-start md:overflow-visible md:border-b-0 md:px-0 md:pb-0">
-      {SETTINGS_GROUPS.map((group) => (
+      {SETTINGS_GROUPS.map((group) => ({ ...group, tabs: group.tabs.filter((value) => tabShown(value, shared, admin)) })).filter((group) => group.tabs.length > 0).map((group) => (
         <div key={group.key} role="group" aria-label={t(`app.settingsGroup_${group.key}`)} className="contents md:block">
           <p aria-hidden className="mb-1 hidden px-2.5 text-xs font-medium text-faint md:block">{t(`app.settingsGroup_${group.key}`)}</p>
           <div className="contents md:flex md:flex-col md:gap-0.5">
@@ -145,6 +149,7 @@ export function accountsOf(provider: Provider, connections: Connection[]) {
 function ConnectionsView({ onConnect }: { onConnect: (provider: string) => void }) {
   const t = useT()
   const data = useStore((s) => s.connections)
+  const admin = useAdmin()
   const [search] = useSearchParams()
   const focus = search.get('group')
   const loaded = !!data
@@ -154,14 +159,15 @@ function ConnectionsView({ onConnect }: { onConnect: (provider: string) => void 
     el?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [focus, loaded])
   if (!data) return <GridSkeleton />
-  const groups = [...new Set(data.providers.map((p) => p.group))]
+  const providers = data.providers.filter((p) => admin || !p.ai)
+  const groups = [...new Set(providers.map((p) => p.group))]
   return (
     <div className="space-y-8">
       {groups.map((g) => (
         <section key={g} data-group={g}>
           <h2 className={cn('mb-2.5 text-base font-medium transition-colors', focus === g ? 'text-fg' : 'text-muted')}>{groupName(t, g)}</h2>
           <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
-            {data.providers.filter((p) => p.group === g).map((p) => <ConnectionCard key={p.key} provider={p} accounts={accountsOf(p, data.connections)} onConnect={onConnect} />)}
+            {providers.filter((p) => p.group === g).map((p) => <ConnectionCard key={p.key} provider={p} accounts={accountsOf(p, data.connections)} onConnect={onConnect} />)}
           </div>
         </section>
       ))}

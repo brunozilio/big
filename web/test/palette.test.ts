@@ -6,7 +6,7 @@ const labels: PaletteLabels = {
   deliveries: 'Entregas',
   security: 'Segurança',
   settings: 'Configurações',
-  tab: (tab) => ({ connections: 'Conexões', applications: 'Aplicações', permissions: 'Permissões', memory: 'Memória', browser: 'Navegador', usage: 'Uso', appearance: 'Personalização', account: 'Conta' })[tab],
+  tab: (tab) => ({ connections: 'Conexões', applications: 'Aplicações', permissions: 'Permissões', memory: 'Memória', browser: 'Navegador', usage: 'Uso', appearance: 'Personalização', account: 'Conta', people: 'Pessoas' })[tab],
   title: (it) => it.title,
 }
 
@@ -16,7 +16,7 @@ const entries = paletteEntries([item('a', 'Corrigir login com SSO', 'PAY-12'), i
 
 describe('paleta de comandos', () => {
   test('lista páginas, cada aba das configurações e os itens não arquivados', () => {
-    expect(entries.filter((e) => e.kind === 'page').map((e) => e.to)).toEqual(['/', '/security', '/settings/connections', '/settings/applications', '/settings/permissions', '/settings/memory', '/settings/browser', '/settings/usage', '/settings/appearance', '/settings/account'])
+    expect(entries.filter((e) => e.kind === 'page').map((e) => e.to)).toEqual(['/', '/security', '/settings/connections', '/settings/applications', '/settings/permissions', '/settings/memory', '/settings/browser', '/settings/usage', '/settings/appearance', '/settings/account', '/settings/people'])
     expect(entries.filter((e) => e.kind === 'item').map((e) => e.to)).toEqual(['/items/a', '/items/b', '/items/d'])
   })
 

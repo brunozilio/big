@@ -94,6 +94,7 @@ export type Change =
   | { type: 'repository'; key: string; change: (repository: ApplicationRepository) => ApplicationRepository }
   | { type: 'remove'; key: string }
   | { type: 'folders'; paths: string[]; kind?: string }
+  | { type: 'blank'; kind?: string }
   | { type: 'suggested'; path: string; bindings: Bindings }
 
 function withFolderRows(rows: Row[], paths: string[], kind?: string): Row[] {
@@ -105,6 +106,8 @@ export function reduce(state: Editing, change: Change): Editing {
   switch (change.type) {
     case 'name':
       return { ...state, name: change.name }
+    case 'blank':
+      return { ...state, repositories: [...state.repositories, rowOf(blankRepository('', change.kind))] }
     case 'named':
       return state.name.trim() ? state : { ...state, name: folderName(change.path) }
     case 'bindings':

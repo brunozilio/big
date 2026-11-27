@@ -19,6 +19,7 @@ import { PlanBlock } from './PlanCard'
 import { SideAnswers, useSideQuestions } from './SideQuestions'
 import { AgentMark, AgentsContext, emptyThinking, AssistantMessage, StatusLine, ThinkingSteps, ToolRunSummary, TurnHeader, UserMessage } from './events'
 import type { StopJob } from './jobs'
+import { useShared } from '@/api/me'
 
 interface Turn {
   user: Extract<SessionEvent, { type: 'user' }> | null
@@ -145,6 +146,7 @@ function Chat({ session, composer, dock, hidePlans }: { session: Session; compos
   const running = session.status === 'running'
   const scroll = useChatScroll(id, running, session.events[session.events.length - 1], session.events.length + side.asked.length)
   const respond = useCallback<Respond>((event, response) => api().respond(id, event, response), [id])
+  const shared = useShared()
   const openFile = useCallback((file: FileRef) => void api().openFile(id, file).catch((e: unknown) => toast.error(errorText(e))), [id])
   const stopJob = useCallback<StopJob>((job) => api().stopJob(id, job), [id])
   const dismiss = useStable(side.dismiss)
@@ -152,7 +154,7 @@ function Chat({ session, composer, dock, hidePlans }: { session: Session; compos
   return (
     <AgentsContext.Provider value={session.agents}>
     <JobsContext.Provider value={stopJob}>
-    <OpenFileContext.Provider value={openFile}>
+    <OpenFileContext.Provider value={shared ? null : openFile}>
       <div className="flex h-full min-h-0 flex-col">
         <div ref={scroll.scroller} onScroll={scroll.onScroll} className="scrollbar-thin relative min-h-0 flex-1 overflow-y-auto">
           <div ref={scroll.content} role="log" aria-live="polite" aria-label={t('plan.messages')} className="mx-auto w-full max-w-[760px] px-5 pb-10 pt-8 sm:px-8">

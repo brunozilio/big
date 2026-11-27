@@ -938,6 +938,7 @@ export interface ApplicationRepository {
   bindings?: Bindings
   flow?: string
   readOnly?: boolean
+  remote?: string
 }
 
 export interface Application {

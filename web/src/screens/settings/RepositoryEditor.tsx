@@ -2,7 +2,8 @@ import { memo, useCallback, useMemo, useState } from 'react'
 import type { ApplicationRepository, Bindings, DirListing, Flows, RepositoryKind } from '@/api/contract'
 import { IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
-import { Field, Select, Switch } from '@/ui/form'
+import { Field, Input, Select, Switch } from '@/ui/form'
+import { useAdmin, useShared } from '@/api/me'
 import { Icon } from '@/ui/icon'
 import { Collapse } from '@/ui/motion'
 import { useT } from '@/i18n'
@@ -55,6 +56,17 @@ export function DirectoryField({ value, onChoose }: { value: string; onChoose: (
   )
 }
 
+export function RemoteField({ value, onChange }: { value: string; onChange: (remote: string) => void }) {
+  const t = useT()
+  return (
+    <label className="block space-y-2">
+      <span className="block text-base font-medium text-fg">{t('settings.app_remote')}</span>
+      <Input type="url" inputMode="url" value={value} placeholder={t('settings.app_remotePlaceholder')} onChange={(e) => onChange(e.target.value.trim())} className="font-mono text-sm" />
+      <span className="block text-sm text-muted">{t('settings.app_remoteHint')}</span>
+    </label>
+  )
+}
+
 interface BodyProps {
   value: ApplicationRepository
   fields: BindingField[]
@@ -69,10 +81,13 @@ function RepositoryBody({ value, fields, flows, kinds, problem, edit, onChoose }
   const t = useT()
   const groups = useMemo(() => groupedBySection(fields), [fields])
   const bound = useCallback((bindings: Bindings) => edit((r) => ({ ...r, bindings })), [edit])
+  const shared = useShared()
+  const admin = useAdmin()
   return (
     <div className="space-y-5 border-t px-3 py-4">
       <div className="grid gap-4 sm:grid-cols-2">
-        <DirectoryField value={value.directory} onChoose={onChoose} />
+        {shared && <RemoteField value={value.remote ?? ''} onChange={(remote) => edit((r) => ({ ...r, remote }))} />}
+        {admin && <DirectoryField value={value.directory} onChoose={onChoose} />}
         <BindingFields fields={groups[0].fields} bindings={value.bindings} problem={problem} onChange={bound} />
         <KindSelect value={value.kind} kinds={kinds} onChange={(kind) => edit((r) => ({ ...r, kind }))} />
         {!value.readOnly && <FlowSelect value={value.flow} flows={flows} onChange={(flow) => edit((r) => withFlow(r, flow))} />}
