@@ -614,9 +614,26 @@ export function ShapedBinding({ field, shape, value, error, onChange }: { field:
   )
 }
 
-function summaryText(binding: Binding, key: string): string {
-  const chosen = [...(binding.profiles ?? []), binding.fields ?? {}].map((p) => p[key]?.label || p[key]?.value || '').filter(Boolean)
-  return [...new Set(chosen)].join(' · ')
+const PLACEHOLDER = /\{([^{}]+)\}/g
+const LOOSE_EDGES = /^[\s·•|,;:/-]+|[\s·•|,;:/-]+$/g
+
+function rendered(template: string, pick: (key: string) => string): string {
+  const keys = [...template.matchAll(PLACEHOLDER)].map((m) => m[1].trim())
+  if (keys.length > 0 && keys.every((key) => !pick(key))) return ''
+  const parts = template.split(PLACEHOLDER).map((part, i) => (i % 2 === 1 ? pick(part.trim()) : part))
+  return parts.filter((_, i) => i % 2 === 1 || (parts[i - 1] !== '' && parts[i + 1] !== '')).join('').replace(LOOSE_EDGES, '')
+}
+
+export function summaryText(binding: Binding, template: string): string {
+  const own = (key: string) => (key === 'value' ? binding.value : key === 'label' ? binding.label || binding.value : '')
+  const choice = (sources: Record<string, BindingChoice>[]) => (key: string) => {
+    const found = sources.map((source) => source[key]).find(Boolean)
+    return found?.label || found?.value || own(key)
+  }
+  const fields = binding.fields ?? {}
+  const profiles = binding.profiles ?? []
+  const lines = profiles.length > 0 ? profiles.map((p) => rendered(template, choice([p, fields]))) : [rendered(template, choice([fields]))]
+  return [...new Set(lines.filter(Boolean))].join(' · ')
 }
 
 export function boundText(binding: Binding, each: BindingEach | undefined, summary?: string): string {

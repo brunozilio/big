@@ -53,7 +53,7 @@ function cloudBinding(language: Language) {
       bindingField(ROLE, pick(language, "Role", "Rol", "Papel"), true, true),
     ],
   };
-  return binding("cloud", "application", "AWS", { each, summary: ACCOUNT, section: pick(language, "Cloud", "Nube", "Nuvem"), order: 70 });
+  return binding("cloud", "application", "AWS", { each, summary: `{${ACCOUNT}}`, section: pick(language, "Cloud", "Nube", "Nuvem"), order: 70 });
 }
 
 function accessKeys(language: Language) {

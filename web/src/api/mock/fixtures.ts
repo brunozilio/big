@@ -32,7 +32,7 @@ export const providers = (): MockProvider[] => [
       ],
     }], accounts: ['acme.atlassian.net'], choose: { title: say('jiraSite'), options: [{ id: 'acme', label: 'acme.atlassian.net', detail: say('projectsAppOps') }, { id: 'labs', label: 'acme-labs.atlassian.net', detail: say('projectLab') }] } },
   {
-    key: 'aws', name: 'AWS', group: 'cloud', description: say('yourAccount', { name: 'AWS' }), logo: 'aws', button: say('signInWith', { name: 'AWS' }), site: say('siteAws'), signIn: 'oauth', fields: [], multiple: true, bindings: [{ capability: 'cloud', scope: 'application', label: say('bindCloud'), each: { key: 'environment', label: say('changesEnvironment'), fields: [{ key: 'account', label: say('bindCloudAccount'), required: true }, { key: 'role', label: say('bindCloudRole'), required: true, skippable: true }] }, summary: 'account', section: say('sectionCloud'), order: 70 }], capabilities: ['cloud'], accounts: [say('awsAccount')],
+    key: 'aws', name: 'AWS', group: 'cloud', description: say('yourAccount', { name: 'AWS' }), logo: 'aws', button: say('signInWith', { name: 'AWS' }), site: say('siteAws'), signIn: 'oauth', fields: [], multiple: true, bindings: [{ capability: 'cloud', scope: 'application', label: say('bindCloud'), each: { key: 'environment', label: say('changesEnvironment'), fields: [{ key: 'account', label: say('bindCloudAccount'), required: true }, { key: 'role', label: say('bindCloudRole'), required: true, skippable: true }] }, summary: '{account}', section: say('sectionCloud'), order: 70 }], capabilities: ['cloud'], accounts: [say('awsAccount')],
     alternatives: [{
       key: 'sso', label: say('useCompanySso'), button: say('continue'), site: say('siteIdentityCenter'), signIn: 'sso',
       fields: [
