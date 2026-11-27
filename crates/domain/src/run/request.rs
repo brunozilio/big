@@ -37,6 +37,8 @@ pub struct SessionConfig {
     pub cwd: PathBuf,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub add_dirs: Vec<PathBuf>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub read_dirs: Vec<PathBuf>,
     pub model: ModelOption,
     pub effort: Effort,
     pub resume: Option<SessionId>,
@@ -133,6 +135,7 @@ impl SessionConfig {
         Self {
             cwd,
             add_dirs: Vec::new(),
+            read_dirs: Vec::new(),
             model,
             effort: Effort::Medium,
             resume: None,

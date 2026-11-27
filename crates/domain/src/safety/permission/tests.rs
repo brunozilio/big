@@ -139,6 +139,24 @@ fn a_guarded_write_names_its_guard_and_unattended_asks_are_denied() {
 }
 
 #[test]
+fn a_write_into_a_read_only_folder_is_denied_even_when_listed_but_reading_it_is_allowed() {
+    let bounds = bounds().consulting(vec![PathBuf::from("/src/config")]);
+    let none = Remembered::default();
+    let write = [Effect::WritePath(place("/src/config/app.yml"))];
+    let call = Call { tool: "Write", subject: "app.yml", effects: &write };
+    let allowed = Allowed::of([Grant::Tool("Write".into())]);
+    let cx = PolicyContext { allowed: Some(&allowed), ..context(PermissionMode::Auto, &none, &bounds) };
+    let judged = PolicyEngine::judge(&call, &cx);
+    assert!(matches!(&judged.verdict, Verdict::Deny(why) if why.contains("read-only")), "{:?}", judged.verdict);
+    let read = [Effect::ReadPath(place("/src/config/app.yml"))];
+    let reading = Call { tool: "Read", subject: "app.yml", effects: &read };
+    assert_eq!(PolicyEngine::decide(&reading, &context(PermissionMode::Auto, &none, &bounds)), Verdict::Allow);
+    let own = [Effect::WritePath(place("/work/rocket/src/main.rs"))];
+    let editing = Call { tool: "Write", subject: "main.rs", effects: &own };
+    assert_eq!(PolicyEngine::decide(&editing, &context(PermissionMode::Auto, &none, &bounds)), Verdict::Allow);
+}
+
+#[test]
 fn the_ceiling_caps_the_mode() {
     let bounds = bounds();
     let none = Remembered::default();

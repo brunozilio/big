@@ -105,7 +105,7 @@ export interface Search {
 
 type Listed = { found: Found; failed: string | null }
 
-type Asked = { query: string; field?: string; chosen?: Record<string, string> }
+type Asked = { query: string; field?: string; chosen?: Record<string, string>; names?: string[] }
 
 type Kept = { at: number; listed: Listed }
 
@@ -122,7 +122,7 @@ function shelf<T>(all: WeakMap<Api, Map<string, T>>): Map<string, T> {
 }
 
 function keyOf(connections: string[], action: string, args: Asked): string {
-  return JSON.stringify([connections, action, args.field ?? '', args.chosen ?? {}, args.query])
+  return JSON.stringify([connections, action, args.field ?? '', args.chosen ?? {}, args.query, args.names ?? []])
 }
 
 function recalled(key: string): Listed | null {
@@ -246,8 +246,26 @@ function namesOf(ref: string | null, also: string[]): string[] {
   return [...new Set(given)]
 }
 
+function suggests(source: Source, capability: string): boolean {
+  return (source.provider.bindings ?? []).some((spec) => spec.capability === capability && spec.suggests === true)
+}
+
+async function declared(field: BindingField, names: string[]): Promise<Binding | null> {
+  const connections = field.sources.filter((s) => suggests(s, field.capability)).map((s) => s.connection.id)
+  if (connections.length === 0) return null
+  const { found } = await lookup(connections, `${field.capability}.options`, { query: '', names })
+  for (const connection of connections) {
+    const first = found[connection]?.[0]
+    if (first) return { connection, value: first.value, label: first.label }
+  }
+  return null
+}
+
 async function suggestion(field: BindingField, names: string[]): Promise<Binding | null> {
-  const connections = field.sources.map((s) => s.connection.id)
+  const own = await declared(field, names)
+  if (own) return own
+  const connections = field.sources.filter((s) => !suggests(s, field.capability)).map((s) => s.connection.id)
+  if (connections.length === 0) return null
   const answers = await Promise.all(names.map((query) => lookup(connections, `${field.capability}.options`, { query })))
   for (const { found: listed } of answers) {
     for (const [connection, options] of Object.entries(listed)) {

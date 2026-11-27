@@ -106,4 +106,17 @@ describe('sugestão pelo nome', () => {
     expect(await suggested('acme/checkout-api', fields, {})).toEqual({ security: { connection: 'c-v', value: 'guid-1', label: 'checkout-api' } })
     expect(asked).toEqual(['acme/checkout-api', 'checkout-api'])
   })
+
+  test('o conector que declara a própria sugestão recebe os nomes e decide sozinho', async () => {
+    const sonar = { key: 'sonar', name: 'SonarQube', group: 'quality', description: '', logo: '', signIn: 'token' as const, fields: [], multiple: true, bindings: [{ capability: 'quality', scope: 'repository' as const, label: 'SonarQube', suggests: true }] }
+    const connection = { id: 'c-s', provider: 'sonar', label: 'SonarQube', account: '', capabilities: ['quality'], status: 'ok' as const }
+    const fields = [{ capability: 'quality', label: 'SonarQube', sources: [{ connection, provider: sonar }] }]
+    const asked: unknown[] = []
+    setApi({ ...fresh(), call: (async (_c: string, _a: string, args: unknown) => {
+      asked.push(args)
+      return [{ value: 'acme_checkout-api', label: 'Checkout API' }]
+    }) as Api['call'] })
+    expect(await suggested('acme/checkout-api', fields, {}, ['checkout-api'])).toEqual({ quality: { connection: 'c-s', value: 'acme_checkout-api', label: 'Checkout API' } })
+    expect(asked).toEqual([{ query: '', names: ['acme/checkout-api', 'checkout-api'] }])
+  })
 })

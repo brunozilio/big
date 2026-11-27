@@ -483,6 +483,18 @@ async fn the_repositories_can_be_filtered_by_name() {
 }
 
 #[tokio::test]
+async fn the_suggestion_for_a_folder_is_the_exact_remote_or_else_the_repository_named_like_it() {
+    let http = FakeHttp::new().always(Method::Get, "/user/repos?per_page=100&page=1&", 200, &repos_page(0, 12));
+    let exact = call(&http, "code.options", json!({ "names": ["acme/r10", "r1"] }), "k").await;
+    assert_eq!(exact, Ok(json!([{ "value": "acme/r10", "label": "acme/r10" }])));
+    let short = call(&http, "code.options", json!({ "names": ["other/r11", "r11"] }), "k").await;
+    assert_eq!(short, Ok(json!([{ "value": "acme/r11", "label": "acme/r11" }])));
+    let none = call(&http, "code.options", json!({ "names": ["nada"] }), "k").await;
+    assert_eq!(none, Ok(json!([])));
+    assert_eq!(http.sent().len(), 3);
+}
+
+#[tokio::test]
 async fn the_open_pull_requests_of_a_repository_are_listed() {
     let http = FakeHttp::new().once(
         Method::Get,

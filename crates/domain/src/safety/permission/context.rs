@@ -21,6 +21,7 @@ pub struct Bounds {
     pub roots: Vec<PathBuf>,
     pub readable: Vec<PathBuf>,
     pub protected: Vec<Protected>,
+    pub read_only: Vec<PathBuf>,
 }
 
 impl Bounds {
@@ -29,7 +30,17 @@ impl Bounds {
             Protected { name: ".git".to_owned(), guard: Guard::GitFolder },
             Protected { name: brand::DIR.to_owned(), guard: Guard::OwnConfiguration },
         ];
-        Self { roots, readable, protected }
+        Self { roots, readable, protected, read_only: Vec::new() }
+    }
+
+    pub fn consulting(mut self, folders: Vec<PathBuf>) -> Self {
+        self.readable.extend(folders.iter().cloned());
+        self.read_only = folders;
+        self
+    }
+
+    pub fn read_only_holding(&self, real: &Path) -> Option<&PathBuf> {
+        self.read_only.iter().find(|folder| real.starts_with(folder))
     }
 
     fn root_holding(&self, real: &Path) -> Option<&PathBuf> {

@@ -41,6 +41,7 @@ impl Job {
         workspace.services.search = self.source.searcher(&self.request).map(tools::WebSearcher);
         workspace.added_dirs =
             crate::brief::added_dirs(&self.request.session, &settings.added_dirs, workspace.home.as_deref());
+        workspace.read_dirs = self.request.session.read_dirs.clone();
         workspace.hooks.extend(&main.config.hooks);
         workspace.interceptors.extend(&main.config.intercept);
         for script in toolbox.tools.iter().filter_map(|tool| tool.script()) {

@@ -44,6 +44,7 @@ struct Wanted {
     verify: Option<Vec<String>>,
     e2e: Option<Vec<String>>,
     e2e_directory: Option<String>,
+    read_only: Option<bool>,
 }
 
 fn text(input: &Value, name: &str) -> Option<String> {
@@ -88,6 +89,7 @@ fn wanted(input: &Value, workspace: &Workspace) -> Result<Wanted, String> {
         verify: lines(input, "verify"),
         e2e: lines(input, "e2e"),
         e2e_directory: inside(input)?,
+        read_only: input["readOnly"].as_bool(),
     })
 }
 
@@ -139,7 +141,18 @@ fn apply(application: &mut Application, mut wanted: Wanted) -> bool {
     if let Some(folder) = wanted.e2e_directory {
         repository.e2e_directory = folder;
     }
+    if wanted.read_only == Some(true) {
+        repository.read_only = true;
+    }
     added
+}
+
+const KEPT_READ_ONLY: &str = "is read only, and only the person can make it writable, in the application's \
+     settings; leave out `readOnly` to update its other fields.";
+
+fn unlocks(application: &Application, wanted: &Wanted, directory: &str) -> Option<String> {
+    let locked = application.repositories.iter().any(|repository| repository.directory == directory && repository.read_only);
+    (locked && wanted.read_only == Some(false)).then(|| format!("{directory} {KEPT_READ_ONLY}"))
 }
 
 fn described(application: &Application, directory: &str, added: bool) -> String {
@@ -155,6 +168,9 @@ fn described(application: &Application, directory: &str, added: bool) -> String 
         }
         if !repository.e2e.is_empty() {
             let _ = write!(text, "\nE2E: {}{}", repository.e2e.join(", "), folder_note(&repository.e2e_directory));
+        }
+        if repository.read_only {
+            text.push_str("\nRead only: later steps consult it and never edit, branch, commit or push in it.");
         }
     }
     text.push_str(
@@ -172,6 +188,9 @@ fn save(store: &Store, application: &str, input: &Value, workspace: &Workspace) 
     let found = store.application(application).map_err(|error| error.to_string())?;
     let mut application = found.ok_or("The application of this task no longer exists.")?;
     let directory = original(&application, &wanted.directory).unwrap_or_else(|| wanted.directory.clone());
+    if let Some(refused) = unlocks(&application, &wanted, &directory) {
+        return Err(refused);
+    }
     let added = apply(&mut application, wanted);
     store.save_application(&application).map_err(|error| error.to_string())?;
     Ok(described(&application, &directory, added))
@@ -206,5 +225,24 @@ mod tests {
         assert_eq!(application.repositories[0].directory, "/code/demo");
         assert_eq!(application.repositories[0].run, ["npm start"]);
         assert_eq!(application.repositories[0].kind, "tests");
+    }
+
+    #[test]
+    fn the_agent_can_mark_a_repository_read_only_but_never_make_it_writable_again() {
+        let mut application = Application {
+            repositories: vec![Repository { id: "cfg".into(), directory: "/code/cfg".into(), ..Repository::default() }],
+            ..Application::default()
+        };
+        let locking = Wanted { directory: "/code/cfg".into(), read_only: Some(true), ..Wanted::default() };
+        assert!(unlocks(&application, &locking, "/code/cfg").is_none());
+        apply(&mut application, locking);
+        assert!(application.repositories[0].read_only);
+        assert!(described(&application, "/code/cfg", false).contains("Read only"));
+        let unlocking = Wanted { directory: "/code/cfg".into(), read_only: Some(false), ..Wanted::default() };
+        assert!(unlocks(&application, &unlocking, "/code/cfg").is_some_and(|why| why.contains("only the person")));
+        let other = Wanted { directory: "/code/cfg".into(), run: Some(vec!["make".into()]), ..Wanted::default() };
+        assert!(unlocks(&application, &other, "/code/cfg").is_none());
+        apply(&mut application, other);
+        assert!(application.repositories[0].read_only);
     }
 }

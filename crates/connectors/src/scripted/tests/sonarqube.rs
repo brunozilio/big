@@ -56,6 +56,7 @@ fn the_provider_signs_in_with_an_address_an_organization_and_a_token_and_binds_r
     let bound: Vec<(&str, &str)> =
         look.bindings.iter().map(|binding| (binding.capability.as_str(), binding.scope.as_str())).collect();
     assert_eq!(bound, [("quality", "repository")]);
+    assert!(look.bindings[0].suggests);
 }
 
 #[tokio::test]
@@ -111,6 +112,16 @@ async fn an_analysis_of_an_older_commit_is_still_pending() {
         .once(Method::Get, "/api/issues/search", 200, ISSUES);
     let args = json!({ "project": "acme_web", "pullRequest": "12", "commit": "aaa111ffff" });
     assert_eq!(call(&http, json!({}), "quality.report", args).await.map(|found| found["gate"].clone()), Ok(json!("failed")));
+}
+
+#[tokio::test]
+async fn the_suggestion_for_a_repository_is_the_project_keyed_by_its_name_with_or_without_the_owner() {
+    let http = FakeHttp::new()
+        .once(Method::Get, "/api/components/search", 200, r#"{"components":[]}"#)
+        .once(Method::Get, "/api/components/search", 200, r#"{"components":[{"key":"acme_webapp"},{"key":"acme_web"}]}"#);
+    let names = json!({ "names": ["acme/web", "web"] });
+    let found = call(&http, json!({ "organization": "acme" }), "quality.options", names).await;
+    assert_eq!(found, Ok(json!([{ "value": "acme_web", "label": "acme_web" }])));
 }
 
 #[tokio::test]

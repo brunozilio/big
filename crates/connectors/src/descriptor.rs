@@ -196,6 +196,8 @@ pub struct BindingSpec {
     pub section: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub order: Option<serde_json::Number>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub suggests: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]

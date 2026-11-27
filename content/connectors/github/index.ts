@@ -1,5 +1,5 @@
 import { type Creds, type Language, pick, words, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
-import { binding, code, options, pipelines } from "sdk/connectors/contracts.ts";
+import { bestMatch, binding, code, namesOf, options, pipelines } from "sdk/connectors/contracts.ts";
 import { api, get } from "./api.ts";
 import * as reviews from "./code.ts";
 import * as runs from "./pipelines.ts";
@@ -31,7 +31,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "GitHub", "de GitHub", "do GitHub"),
     choose_title: pick(language, "Organization", "Organización", "Organização"),
     hidden: false,
-    bindings: [binding("code", "repository", "GitHub", { section: pick(language, "Code", "Código", "Código"), order: 30 })],
+    bindings: [binding("code", "repository", "GitHub", { section: pick(language, "Code", "Código", "Código"), order: 30, suggests: true })],
   };
 }
 
@@ -57,7 +57,7 @@ const ACTIONS: Record<string, (connection: any, args: Record<string, any>, key: 
   "code.resolve_thread": reviews.resolveThread,
   "code.merge": reviews.merge,
   "code.repos": reviews.repos,
-  "code.options": (connection, args) => reviews.repos(connection, args).map((repo: any) => ({ value: repo.ref, label: repo.ref })),
+  "code.options": codeOptions,
   "code.pull_requests": reviews.pullRequests,
   "code.branches": reviews.branches,
   "code.merge_branches": reviews.mergeBranches,
@@ -74,6 +74,14 @@ function gitCredentials(creds: Creds, args: Record<string, any>, ctx) {
   const host = api.hostname.replace(/^api\./, "");
   if (wanted.hostname !== host && wanted.hostname !== api.hostname) return { username: "", password: "" };
   return { username: "x-access-token", password: creds.token };
+}
+
+const repoOptions = (connection, args) => reviews.repos(connection, args).map((repo: any) => ({ value: repo.ref, label: repo.ref }));
+
+function codeOptions(connection, args) {
+  const names = namesOf(args);
+  if (names.length === 0) return repoOptions(connection, args);
+  return bestMatch(repoOptions(connection, {}), names, (option) => [option.value, option.value.split("/").pop() ?? ""]);
 }
 
 export function call({ action, args, creds, idempotencyKey }: { action: string; args: Record<string, any>; creds: Creds; idempotencyKey: string }, ctx) {

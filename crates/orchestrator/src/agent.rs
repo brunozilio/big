@@ -83,7 +83,7 @@ pub async fn worktree(
     base: Option<String>,
 ) -> Result<Worktree, Failure> {
     if checkout.read_only {
-        return consulted(checkout);
+        return consulted(shared, checkout, branch).await;
     }
     let (data, branch) = (shared.config.data.clone(), branch.to_owned());
     let folder = repos::folder(&branch, &checkout.id);
@@ -94,11 +94,15 @@ pub async fn worktree(
     Ok(Worktree { checkout, path, branch })
 }
 
-fn consulted(checkout: Checkout) -> Result<Worktree, Failure> {
-    let path = checkout.directory.clone().filter(|folder| folder.is_dir()).ok_or_else(|| {
+async fn consulted(shared: &Shared, checkout: Checkout, branch: &str) -> Result<Worktree, Failure> {
+    let folder = checkout.directory.clone().filter(|folder| folder.is_dir()).ok_or_else(|| {
         Failure::permanent(format!("the read-only repository {} has no folder on this machine", checkout.name))
     })?;
-    Ok(Worktree { checkout, path, branch: String::new() })
+    let (data, named, repo) = (shared.config.data.clone(), repos::folder(branch, &checkout.id), folder.clone());
+    let copy = blocking(move || git::detached(&repo, &data, &named))
+        .await?
+        .map_err(|error| Failure::Class(ErrorClass::Transient, format!("the read-only copy could not be made: {error}")))?;
+    Ok(Worktree { checkout, path: copy.unwrap_or(folder), branch: String::new() })
 }
 
 pub async fn worktrees(shared: &Shared, item: &ItemId, wanted: Option<&str>) -> Result<Vec<Worktree>, Failure> {
@@ -296,7 +300,13 @@ impl AgentEffect<'_> {
         environment.extend(cloud.as_ref().map(|lease| lease.environment.clone()).unwrap_or_default());
         request.host.environment = environment;
         request.host.owner = Some(crate::owners::of(&self.shared.store, &state));
-        request.session.add_dirs = trees.iter().skip(1).map(|tree| tree.path.clone()).collect();
+        let (consulted, writable): (Vec<&Worktree>, Vec<&Worktree>) =
+            trees.iter().skip(1).partition(|tree| tree.checkout.read_only);
+        request.session.add_dirs = writable.into_iter().map(|tree| tree.path.clone()).collect();
+        request.session.read_dirs = consulted.into_iter().map(|tree| tree.path.clone()).collect();
+        if first.checkout.read_only {
+            request.session.read_dirs.insert(0, cwd.clone());
+        }
         if let Some(text) = repos::described(&trees) {
             let system = request.session.append_system.take().unwrap_or_default();
             request.session.append_system = Some(if system.is_empty() { text } else { format!("{system}\n\n{text}") });

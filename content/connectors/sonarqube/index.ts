@@ -21,7 +21,7 @@ import {
   tokenField,
   unknownAction,
 } from "sdk/connectors/index.ts";
-import { binding, options, quality } from "sdk/connectors/contracts.ts";
+import { binding, namesOf, options, quality, suggestBy } from "sdk/connectors/contracts.ts";
 
 export const URL_SETTING = "url";
 export const ORGANIZATION = "organization";
@@ -114,7 +114,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "SonarQube", "de SonarQube", "do SonarQube"),
     choose_title: pick(language, "SonarQube account", "Cuenta de SonarQube", "Conta do SonarQube"),
     hidden: false,
-    bindings: [binding("quality", "repository", "SonarQube", { section: pick(language, "Quality and security", "Calidad y seguridad", "Qualidade e segurança"), order: 40 })],
+    bindings: [binding("quality", "repository", "SonarQube", { section: pick(language, "Quality and security", "Calidad y seguridad", "Qualidade e segurança"), order: 40, suggests: true })],
   };
 }
 
@@ -357,8 +357,16 @@ function targetOf(args: Record<string, unknown>): Target {
 export function call({ action, args, creds }: { action: string; args: Record<string, unknown>; creds: Creds }, ctx: Ctx) {
   const api = apiOf(ctx, creds);
   if (action === "quality.report") return report(api, targetOf(args ?? {}));
-  if (action === "quality.options") return projects(api, (optionalText(args ?? {}, "query") ?? "").trim());
+  if (action === "quality.options") return qualityOptions(api, args ?? {});
   return unknownAction(action);
+}
+
+const withoutOwner = (key: string) => key.replace(/^[^_:]+[_:]/, "");
+
+function qualityOptions(api: Api, args: Record<string, unknown>) {
+  const names = namesOf(args);
+  if (names.length === 0) return projects(api, (optionalText(args, "query") ?? "").trim());
+  return suggestBy(names, (query) => projects(api, query), (option) => [option.value, withoutOwner(option.value), option.label]);
 }
 
 function direct(api: Api, path: string) {

@@ -377,7 +377,7 @@ export type BindingField = { key: string; label: string; required?: boolean };
 
 export type BindingEach = { key: string; label: string; fields: BindingField[] };
 
-export type BindingShape = { multiple?: boolean; fields?: BindingField[]; each?: BindingEach; section?: string; order?: number };
+export type BindingShape = { multiple?: boolean; fields?: BindingField[]; each?: BindingEach; section?: string; order?: number; suggests?: boolean };
 
 export type BindingSpec = { capability: string; scope: BindingScope; label: string } & BindingShape;
 
@@ -391,7 +391,35 @@ export function bindingField(key: string, label: string, required = false): Bind
 
 export function options(capability: string): Action {
   const option = object([["value", "string"], ["label", "string"]], [["detail", "string"]]);
-  return read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"]]), listOf(option));
+  return read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"], ["names", "array"]]), listOf(option));
+}
+
+export type Option = { value: string; label: string };
+
+export function namesOf(args: Record<string, unknown> | undefined): string[] {
+  const given = Array.isArray(args?.names) ? args.names : [];
+  const names = given.filter((name): name is string => typeof name === "string").map((name) => name.trim()).filter(Boolean);
+  return [...new Set(names)];
+}
+
+export function plainName(text: string): string {
+  return text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+}
+
+export function bestMatch<T extends Option>(options: T[], names: string[], piecesOf: (option: T) => string[] = (option) => [option.value, option.label]): T[] {
+  for (const name of names.map(plainName).filter(Boolean)) {
+    const found = options.find((option) => piecesOf(option).some((piece) => plainName(piece) === name));
+    if (found) return [found];
+  }
+  return [];
+}
+
+export function suggestBy<T extends Option>(names: string[], search: (query: string) => T[], piecesOf?: (option: T) => string[]): T[] {
+  for (const query of names) {
+    const found = bestMatch(search(query), names, piecesOf);
+    if (found.length > 0) return found;
+  }
+  return [];
 }
 
 export function projectOptions(found: unknown): { value: string; label: string }[] {

@@ -17,13 +17,10 @@ type Edit = (change: (repository: ApplicationRepository) => ApplicationRepositor
 function AccessSwitch({ value, onChange }: { value: boolean; onChange: (next: boolean) => void }) {
   const t = useT()
   return (
-    <div className="flex items-start gap-3 sm:col-span-2">
+    <label title={t('settings.app_readOnlyHint')} className="flex shrink-0 cursor-pointer items-center gap-2 rounded-control-sm px-1.5 py-1 text-sm text-fg2 hover:bg-hover">
       <Switch checked={value} label={t('settings.app_readOnly')} onCheckedChange={onChange} />
-      <div className="min-w-0 space-y-0.5">
-        <p className="text-base font-medium text-fg">{t('settings.app_readOnly')}</p>
-        <p className="text-sm text-muted">{t('settings.app_readOnlyHint')}</p>
-      </div>
-    </div>
+      <span>{t('settings.app_readOnly')}</span>
+    </label>
   )
 }
 
@@ -111,6 +108,7 @@ interface BodyProps {
 }
 
 function RepositoryBody({ value, fields, flows, kinds, problem, edit, onChoose }: BodyProps) {
+  const t = useT()
   const groups = useMemo(() => groupedBySection(fields), [fields])
   const bound = useCallback((bindings: Bindings) => edit((r) => ({ ...r, bindings })), [edit])
   return (
@@ -120,8 +118,8 @@ function RepositoryBody({ value, fields, flows, kinds, problem, edit, onChoose }
         <BindingFields fields={groups[0].fields} bindings={value.bindings} problem={problem} onChange={bound} />
         <KindSelect value={value.kind} kinds={kinds} onChange={(kind) => edit((r) => ({ ...r, kind }))} />
         {!value.readOnly && <FlowSelect value={value.flow} flows={flows} onChange={(flow) => edit((r) => withFlow(r, flow))} />}
-        <AccessSwitch value={value.readOnly === true} onChange={(readOnly) => edit((r) => withAccess(r, readOnly))} />
       </div>
+      {value.readOnly && <p className="text-sm text-muted">{t('settings.app_readOnlyHint')}</p>}
       {groups.slice(1).map((group) => (
         <div key={group.section} className="space-y-3" data-testid={`repository-section-${group.section}`}>
           <p className="text-sm font-medium text-muted">{group.section}</p>
@@ -169,6 +167,7 @@ export const RepositoryCard = memo(function RepositoryCard({ row, index, removab
             <RepositoryFacts repository={value} />
           </div>
         )}
+        <AccessSwitch value={value.readOnly === true} onChange={(readOnly) => edit((r) => withAccess(r, readOnly))} />
         {removable && <IconButton tooltip={t('settings.app_removeRepository')} size="sm" onClick={() => change({ type: 'remove', key })}><Icon name="trash" size={15} /></IconButton>}
       </div>
       <Collapse open={open}>

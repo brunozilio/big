@@ -80,7 +80,7 @@ async fn an_item_of_an_application_gets_a_worktree_per_repository_and_its_own_wo
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_read_only_repository_is_consulted_in_its_own_folder_without_a_worktree() {
+async fn a_read_only_repository_is_consulted_in_a_detached_copy_the_agent_cannot_write() {
     let mut world = World::new();
     world.init_git();
     let first = world.dir.path().join("web");
@@ -108,7 +108,12 @@ async fn a_read_only_repository_is_consulted_in_its_own_folder_without_a_worktre
 
     let request = &world.engine.requests()[0];
     assert!(request.session.cwd.to_string_lossy().ends_with("--web"));
-    assert_eq!(request.session.add_dirs, std::slice::from_ref(&second));
+    assert!(request.session.add_dirs.is_empty(), "{:?}", request.session.add_dirs);
+    let copy = request.session.read_dirs.first().expect("consulted").clone();
+    assert!(copy.to_string_lossy().ends_with("--api") && copy != second, "{copy:?}");
+    assert!(copy.join("CFG.txt").exists());
+    let attached = platform::git::command(&copy).args(["symbolic-ref", "-q", "HEAD"]).output().expect("git");
+    assert!(!attached.status.success(), "the copy is on no branch");
     let system = request.session.append_system.clone().unwrap_or_default();
     assert!(system.contains("Read only"), "{system}");
     let branches = platform::git::command(&second).args(["branch", "--list"]).output().expect("git");

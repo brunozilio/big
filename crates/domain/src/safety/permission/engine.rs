@@ -20,6 +20,13 @@ impl PolicyEngine {
 
     pub fn judge(call: &Call<'_>, cx: &PolicyContext<'_>) -> Judgement {
         let stood = standing(call, cx);
+        if let Some(folder) = read_only_write(call, cx) {
+            let verdict = Verdict::Deny(format!(
+                "{} is a read-only repository: read it, but never create, change or delete files in it.",
+                folder.display()
+            ));
+            return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
+        }
         if let Some(verdict) = by_the_list(call, cx, stood.standing) {
             return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
         }
@@ -40,6 +47,13 @@ impl PolicyEngine {
         };
         Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded }
     }
+}
+
+fn read_only_write<'a>(call: &Call<'_>, cx: &'a PolicyContext<'_>) -> Option<&'a std::path::PathBuf> {
+    call.effects.iter().find_map(|effect| match effect {
+        Effect::WritePath(place) => cx.bounds.read_only_holding(&place.real),
+        _ => None,
+    })
 }
 
 fn by_the_list(call: &Call<'_>, cx: &PolicyContext<'_>, standing: Standing) -> Option<Verdict> {

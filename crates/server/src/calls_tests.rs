@@ -72,3 +72,10 @@ fn the_open_pulls_and_the_branches_take_the_page_s_shape() {
     let listed = branches(&json!([{ "name": "main", "default": true }, { "name": "" }]));
     assert_eq!(listed, json!([{ "name": "main", "default": true }]));
 }
+
+#[test]
+fn the_names_for_a_suggestion_are_trimmed_unique_and_few() {
+    let given = json!([" acme/web ", "web", "", 3, "web", "a", "b", "c", "d", "e", "f", "g"]);
+    assert_eq!(names_of(&given), ["acme/web", "web", "a", "b", "c", "d", "e", "f"]);
+    assert!(names_of(&json!(null)).is_empty());
+}

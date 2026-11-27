@@ -119,6 +119,19 @@ pub fn worktree(
     Ok(path)
 }
 
+pub fn detached(repo: &Path, data: &Path, folder: &str) -> std::io::Result<Option<PathBuf>> {
+    let Some(commit) = head(repo) else { return Ok(None) };
+    let path = data.join("worktrees").join(folder);
+    if path.exists() {
+        attempt(&path, &["checkout", "--quiet", "--detach", "--force", &commit])?;
+        return Ok(Some(path));
+    }
+    std::fs::create_dir_all(data.join("worktrees"))?;
+    let place = path.to_string_lossy().into_owned();
+    attempt(repo, &["worktree", "add", "--quiet", "--detach", &place, &commit])?;
+    Ok(Some(path))
+}
+
 pub fn remove_worktree(repo: &Path, path: &Path) -> std::io::Result<()> {
     let place = path.to_string_lossy().into_owned();
     attempt(repo, &["worktree", "remove", &place]).map(|_| ())

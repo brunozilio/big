@@ -41,6 +41,10 @@ export const spec = {
       "e2eDirectory": {
         "description": "The folder of the end-to-end suite, relative to the repository root. Empty when it is the root.",
         "type": "string"
+      },
+      "readOnly": {
+        "description": "true when the repository must only be consulted (shared configuration, another team's code): later steps read it, but never edit, branch, commit or push in it. Only the person can make a read-only repository writable again.",
+        "type": "boolean"
       }
     },
     "required": [
@@ -51,7 +55,7 @@ export const spec = {
   description: `Add a repository to the application this task belongs to, or update the one already registered at that directory. Call it whenever you create a new repository or service for the application, or learn what it holds, how it is run, verified or how its end-to-end suite runs, so the next steps of this task and later tasks in {{NAME}} work in it too. Fields you leave out keep their current value.`,
 };
 
-type Input = { directory?: string; repo?: string; kind?: string; run?: string[]; verify?: string[]; e2e?: string[]; e2eDirectory?: string };
+type Input = { directory?: string; repo?: string; kind?: string; run?: string[]; verify?: string[]; e2e?: string[]; e2eDirectory?: string; readOnly?: boolean };
 
 export function effects(_input: Input | null) {
   return [{ edits: true }];

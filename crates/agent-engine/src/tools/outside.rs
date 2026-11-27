@@ -73,6 +73,7 @@ impl Workspace {
             std::iter::once(brand::INSTRUCTIONS).chain(SHARED_FOLDERS).map(move |part| settled(&folder.join(part)))
         });
         domain::permission::Bounds::of(roots.collect(), std::iter::once(saved).chain(own).chain(shared).collect())
+            .consulting(self.read_dirs.iter().map(|dir| settled(dir)).collect())
     }
 
     pub fn place(&self, path: &str) -> domain::permission::Place {

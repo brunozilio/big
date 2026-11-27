@@ -17,7 +17,7 @@ import {
   tokenField,
   unknownAction,
 } from "sdk/connectors/index.ts";
-import { binding, options, projectOptions, security, securityStatus } from "sdk/connectors/contracts.ts";
+import { binding, namesOf, options, projectOptions, security, securityStatus, suggestBy } from "sdk/connectors/contracts.ts";
 import { type Filter, chosen, filterOf } from "./findings.ts";
 import { type Keys, header, readKeys } from "./sign.ts";
 
@@ -61,7 +61,7 @@ export function presentation({ language }: { language: Language }) {
     site: pick(language, "Veracode", "de Veracode", "do Veracode"),
     choose_title: pick(language, "Veracode account", "Cuenta de Veracode", "Conta do Veracode"),
     hidden: false,
-    bindings: [binding("security", "repository", "Veracode", { section: pick(language, "Quality and security", "Calidad y seguridad", "Qualidade e segurança"), order: 50 })],
+    bindings: [binding("security", "repository", "Veracode", { section: pick(language, "Quality and security", "Calidad y seguridad", "Qualidade e segurança"), order: 50, suggests: true })],
   };
 }
 
@@ -190,8 +190,14 @@ export function call({ action, args, creds }: { action: string; args: Record<str
   if (action === "security.status") return lastScan(api, args);
   if (action === "security.projects") return projects(api, args);
   if (action === "security.findings") return securityFindings(api, args);
-  if (action === "security.options") return projectOptions(projects(api, args));
+  if (action === "security.options") return securityOptions(api, args ?? {});
   return unknownAction(action);
+}
+
+function securityOptions(api: Api, args: Record<string, unknown>) {
+  const names = namesOf(args);
+  if (names.length === 0) return projectOptions(projects(api, args));
+  return suggestBy(names, (query) => projectOptions(projects(api, { query })), (option) => [option.label]);
 }
 
 export function accounts({ creds }: { creds: Creds }, ctx: Ctx) {

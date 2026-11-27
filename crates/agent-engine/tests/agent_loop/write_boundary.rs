@@ -93,6 +93,21 @@ fn an_edit_in_an_added_folder_does_not_ask() {
 }
 
 #[test]
+fn an_edit_in_a_read_only_folder_is_refused_without_asking_even_when_bypassing() {
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
+    let consulted = tempfile::tempdir().expect("dir");
+    std::fs::write(consulted.path().join("app.yml"), "a: 1").expect("write");
+    rig.workspace.read_dirs = vec![consulted.path().to_path_buf()];
+    let changed = consulted.path().join("app.yml");
+    let created = consulted.path().join("new.yml");
+    let asked = run_answering(&rig, &writes(&[&changed, &created]), Vec::new());
+    assert!(asked.is_empty(), "{asked:?}");
+    assert_eq!(std::fs::read_to_string(&changed).expect("read"), "a: 1");
+    assert!(!created.exists());
+    assert!(rig.workspace.may_read(&changed));
+}
+
+#[test]
 fn an_edit_to_a_git_hook_asks_even_when_edits_are_accepted() {
     let rig = Rig::new(domain::Reviewer::Human);
     let asked = run_answering(&rig, &writes(&[Path::new(".git/hooks/pre-commit")]), vec![Decision::Deny]);
