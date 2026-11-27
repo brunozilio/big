@@ -16,8 +16,21 @@ function button(label, choice, primary) {
   element("actions").append(made);
 }
 
-element("title").textContent = `Use this browser for ${NAME}?`;
-element("body").textContent = "An agent asked to pick a browser. Connect this one and its browser tools will act here, in their own tab group.";
-element("name").value = params.get("name") || "";
-button("Not this one", "decline", false);
-button("Connect", "connect", true);
+function pairing() {
+  element("title").textContent = `Use this browser for ${NAME}?`;
+  element("body").textContent = "An agent asked to pick a browser. Connect this one and its browser tools will act here, in their own tab group.";
+  element("name").value = params.get("name") || "";
+  button("Not this one", "decline", false);
+  button("Connect", "connect", true);
+}
+
+function relaying() {
+  element("title").textContent = `${NAME} sign-in`;
+  element("body").textContent = `Let ${params.get("origin") || ""} receive your sign-ins that come back to this computer?`;
+  element("name").hidden = true;
+  button("Not now", "decline", false);
+  button("Allow", "allow", true);
+}
+
+if (params.get("kind") === "relay") relaying();
+else pairing();

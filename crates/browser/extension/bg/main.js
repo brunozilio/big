@@ -10,6 +10,7 @@ import { candidates, formInput, javascript, pageText, putFiles, readPage } from 
 import { ToolError, blobToBase64, clip, fail, fromBase64, ok, refuse, sleep } from "./results.js";
 import { ensure } from "./sites.js";
 import { answered, ask, cancel } from "./ask.js";
+import { relay, watchRelays } from "./relay.js";
 import * as shortcuts from "./shortcuts.js";
 import { context, create, groupOf, listing, loaded, newTab, owned, tabsOf } from "./tabs.js";
 
@@ -331,10 +332,18 @@ function pairEnded(id) {
 handle({ call, pair, pairEnded, watch: (message) => watch(message).catch(() => {}) });
 listen(send);
 
-chrome.runtime.onMessage.addListener((message) => {
-  if (message?.type === "ask-answer") answered(message.id, message);
-  return false;
+function fromExtensionPage(sender) {
+  return sender?.id === chrome.runtime.id && String(sender.url || "").startsWith(chrome.runtime.getURL(""));
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type === "ask-answer" && fromExtensionPage(sender)) answered(message.id, message);
+  if (message?.type !== "relay-sign-in") return false;
+  relay(message, sender).then(sendResponse, () => sendResponse({ ok: false, reason: "failed" }));
+  return true;
 });
+
+watchRelays();
 
 chrome.alarms.create("link", { periodInMinutes: 0.5 });
 chrome.alarms.onAlarm.addListener((alarm) => {

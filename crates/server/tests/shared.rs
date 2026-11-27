@@ -239,3 +239,17 @@ async fn the_first_admin_is_claimed_once_with_the_setup_token() {
             .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_sign_in_that_comes_back_to_this_computer_is_relayed_to_the_server() {
+    let world = shared_world().await;
+    let ana = signed(&world, "ana");
+    let (status, started) =
+        send(&world, Some(&ana), Method::POST, "/api/connections/web/start", Some(json!({ "fields": {} }))).await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    let from = started["relay"]["from"].as_str().unwrap_or_default();
+    let to = started["relay"]["to"].as_str().unwrap_or_default();
+    assert!(from.starts_with("http://127.0.0.1:") && !from.contains('?'), "{started}");
+    assert!(to.ends_with("/oauth/callback"), "{started}");
+    assert_eq!(started["paste"], true);
+}

@@ -179,13 +179,20 @@ pub async fn start(
                 let flow = shared.flows.granted(provider, grant, method, fields.clone())?;
                 return Ok(json!({ "flow": flow, "kind": "token" }));
             }
-            if let Some(port) = sign_in.0.callback_port().filter(|port| *port != shared.port) {
+            let shared_mode = crate::scope::shared_mode();
+            if let Some(port) = sign_in.0.callback_port().filter(|port| *port != shared.port && !shared_mode) {
                 crate::callback_port::open(shared, port).await?;
             }
             let authorization = sign_in.0.begin(http, shared.port).await?;
             let url = authorization.url.clone();
+            let relay = crate::relay::for_connector(shared.port, &authorization.redirect_uri);
             let flow = opened(Waiting::Redirect { sign_in, authorization })?;
-            Ok(json!({ "flow": flow, "kind": "redirect", "url": url, "paste": false, "returns": true }))
+            let mut answer =
+                json!({ "flow": flow, "kind": "redirect", "url": url, "paste": relay.is_some(), "returns": true });
+            if let Some(relay) = relay {
+                answer["relay"] = relay;
+            }
+            Ok(answer)
         }
         AuthSpec::Device(app) => {
             let code = app.start(http).await?;

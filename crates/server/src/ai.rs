@@ -113,6 +113,9 @@ fn run(client: &app::Client, asked: Asked, flow: &AiFlow, language: Language) {
         )),
         Err(error) => Err(error.to_string()),
     };
+    if let Some((url, _)) = held(&flow.progress).authorize.clone() {
+        crate::relay::forget(&url);
+    }
     held(&flow.progress).ended = Some(ended);
 }
 
@@ -122,6 +125,9 @@ fn is_local(host: &str) -> bool {
 }
 
 fn origin(shared: &Shared, host: Option<&str>) -> String {
+    if crate::scope::shared_mode() {
+        return crate::auth::settings::public_base(shared.port);
+    }
     match host.filter(|host| is_local(host)) {
         Some(host) => format!("http://{host}"),
         None => format!("http://127.0.0.1:{}", shared.port),
@@ -141,6 +147,7 @@ pub fn start(shared: &Shared, provider: &str, fields: Value, host: Option<&str>)
         .name("ai-sign-in".into())
         .spawn(move || run(&client, asked, &running, language))
         .map_err(ApiError::failed)?;
+    let shared_port = shared.port;
     let began = Instant::now();
     while began.elapsed() < FIRST_STEP {
         let (authorize, ended) = {
@@ -157,7 +164,14 @@ pub fn start(shared: &Shared, provider: &str, fields: Value, host: Option<&str>)
                 Some(code) => {
                     json!({ "flow": id, "kind": "device", "url": url, "code": code, "expiresIn": 900, "interval": 2 })
                 }
-                None => json!({ "flow": id, "kind": "redirect", "url": url, "paste": false, "returns": true }),
+                None => {
+                    let mut answer =
+                        json!({ "flow": id, "kind": "redirect", "url": url, "returns": true, "paste": false });
+                    if let Some(relay) = crate::relay::for_ai(shared_port, &url) {
+                        answer["relay"] = relay;
+                    }
+                    answer
+                }
             });
         }
         std::thread::sleep(Duration::from_millis(50));

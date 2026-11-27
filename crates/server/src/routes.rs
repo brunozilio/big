@@ -38,6 +38,7 @@ fn api() -> Router<Ctx> {
         .route("/api/connections", get(connections::list))
         .route("/api/connections/oauth/callback", get(connections::callback))
         .route("/oauth/callback", get(connections::callback))
+        .route(crate::relay::LOOPBACK_ROUTE, get(crate::relay::returned))
         .route("/api/connections/device/poll", post(connections::poll))
         .route("/api/connections/{id}", delete(connections::remove))
         .route("/api/connections/{id}/start", post(connections::start))

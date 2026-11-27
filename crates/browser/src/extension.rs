@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-const FILES: [(&str, &str); 22] = [
+const FILES: [(&str, &str); 24] = [
     ("manifest.json", include_str!("../extension/manifest.json")),
     ("config.js", include_str!("../extension/config.js")),
     ("bg/main.js", include_str!("../extension/bg/main.js")),
@@ -19,7 +19,9 @@ const FILES: [(&str, &str); 22] = [
     ("bg/sites.js", include_str!("../extension/bg/sites.js")),
     ("bg/ask.js", include_str!("../extension/bg/ask.js")),
     ("bg/shortcuts.js", include_str!("../extension/bg/shortcuts.js")),
+    ("bg/relay.js", include_str!("../extension/bg/relay.js")),
     ("page/agent.js", include_str!("../extension/page/agent.js")),
+    ("page/relay.js", include_str!("../extension/page/relay.js")),
     ("ui/ask.html", include_str!("../extension/ui/ask.html")),
     ("ui/ask.js", include_str!("../extension/ui/ask.js")),
     ("ui/style.css", include_str!("../extension/ui/style.css")),
@@ -169,6 +171,27 @@ mod tests {
         }
         let missing: Vec<&String> = found.iter().filter(|path| !FILES.iter().any(|(known, _)| known == path)).collect();
         assert!(missing.is_empty(), "not installed: {missing:?}");
+    }
+
+    #[test]
+    fn the_sign_in_relay_is_packaged_and_declared() {
+        let packaged: Vec<&str> = FILES.iter().map(|(path, _)| *path).collect();
+        assert!(packaged.contains(&"page/relay.js"));
+        assert!(packaged.contains(&"bg/relay.js"));
+        let manifest: serde_json::Value = serde_json::from_str(&render(FILES[0].1, 4321)).unwrap_or_default();
+        let permissions = manifest["permissions"].as_array().cloned().unwrap_or_default();
+        assert!(permissions.iter().any(|permission| permission == "declarativeNetRequest"));
+        let scripts = manifest["content_scripts"].as_array().cloned().unwrap_or_default();
+        let relay = scripts.iter().find(|script| script["js"].as_array().is_some_and(|js| js.iter().any(|file| file == "page/relay.js")));
+        let relay = relay.cloned().unwrap_or_default();
+        assert_eq!(relay["matches"][0], "<all_urls>");
+        assert_eq!(relay["run_at"], "document_start");
+        assert_eq!(relay["all_frames"], false);
+        let marker = format!("{}:relay", brand::NAME);
+        let script = FILES.iter().find(|(path, _)| *path == "page/relay.js").map(|(_, source)| render(source, 4321)).unwrap_or_default();
+        assert!(script.contains(&format!("\"{marker}\"")));
+        let main = FILES.iter().find(|(path, _)| *path == "bg/main.js").map(|(_, source)| *source).unwrap_or_default();
+        assert!(main.contains("from \"./relay.js\""));
     }
 
     #[test]

@@ -2,6 +2,7 @@ import { motion } from 'framer-motion'
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { api, isMock } from '@/api'
 import type { Connection, FormField, Provider, SignInPoll } from '@/api/contract'
+import { askRelay } from '@/api/relay'
 import { errorText, useStore } from '@/api/store'
 import { Button } from '@/ui/button'
 import { Icon } from '@/ui/icon'
@@ -28,7 +29,7 @@ type Step =
   | { kind: 'start' }
   | { kind: 'resume'; flow: string }
   | { kind: 'device'; start: DeviceStart }
-  | { kind: 'browser'; start: RedirectStart }
+  | { kind: 'browser'; start: RedirectStart; relaying?: boolean }
   | { kind: 'choose'; flow: string; poll: ChoosePoll }
   | { kind: 'done'; connection: Connection }
 
@@ -48,7 +49,7 @@ function wayOf(provider: Provider, method: string | null, t: T): Way {
 function flowOf(step: Step): string | null {
   if (step.kind === 'resume') return step.flow
   if (step.kind === 'device') return step.start.flow
-  if (step.kind === 'browser' && !step.start.paste) return step.start.flow
+  if (step.kind === 'browser' && (!step.start.paste || step.start.relay)) return step.start.flow
   return null
 }
 
@@ -71,8 +72,10 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
   const [choice, setChoice] = useState<string | null>(null)
   const [pasted, setPasted] = useState('')
   const opened = useRef<Window | null>(null)
+  const current = useRef<string | null>(null)
   const key = provider?.key
   useEffect(() => {
+    current.current = null
     setStep(firstStep(resume))
     setBusy(false)
     setError(null)
@@ -102,11 +105,21 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
     setPasted('')
     setChoice(null)
     run(api().startSignIn(provider.key, fields, way.method).then((start) => {
+      current.current = start.flow
       if (start.kind === 'token') return setStep({ kind: 'resume', flow: start.flow })
+      if (start.kind === 'redirect' && start.relay) return relayThenLeave(start, start.relay)
       if (start.kind === 'redirect' && !start.paste && !isMock()) leave(start, opened)
       if (start.kind === 'device' && !start.code && !start.opened && !isMock()) opened.current = openApart(start.url)
       setStep(start.kind === 'device' ? { kind: 'device', start } : { kind: 'browser', start })
     }))
+  }
+  const relayThenLeave = (start: RedirectStart, relay: NonNullable<RedirectStart['relay']>) => {
+    setStep({ kind: 'browser', start, relaying: true })
+    void askRelay(relay).then(() => {
+      if (current.current !== start.flow) return
+      setStep({ kind: 'browser', start })
+      if (!isMock()) leave(start, opened)
+    })
   }
   const send = (flowId: string, extra: { code?: string; choice?: string }) => {
     setError(null)
@@ -155,7 +168,7 @@ function Body({ signIn, way, accounts, fields, onField, toggle }: { signIn: Retu
   const { step } = signIn
   if (step.kind === 'resume') return <Resuming />
   if (step.kind === 'device') return <DeviceCode site={way.site} start={step.start} />
-  if (step.kind === 'browser') return <BrowserWait site={way.site} start={step.start} pasted={signIn.pasted} onPasted={signIn.setPasted} />
+  if (step.kind === 'browser') return <BrowserWait site={way.site} start={step.start} relaying={step.relaying} pasted={signIn.pasted} onPasted={signIn.setPasted} />
   if (step.kind === 'choose') return <AccountChoice poll={step.poll} choice={signIn.choice} onChoice={signIn.setChoice} />
   if (step.kind === 'done') return <SignedIn connection={step.connection} />
   return (

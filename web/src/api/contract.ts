@@ -826,8 +826,13 @@ export interface UsageLimits {
   accounts: UsageLimitAccount[]
 }
 
+export interface SignInRelay {
+  from: string
+  to: string
+}
+
 export type SignInStart =
-  | { flow: string; kind: 'redirect'; url: string; paste: boolean; returns?: boolean }
+  | { flow: string; kind: 'redirect'; url: string; paste: boolean; returns?: boolean; relay?: SignInRelay }
   | { flow: string; kind: 'device'; url: string; code: string; expiresIn: number; interval: number; opened?: boolean }
   | { flow: string; kind: 'token' }
 
