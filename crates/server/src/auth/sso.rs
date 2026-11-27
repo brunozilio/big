@@ -50,7 +50,7 @@ async fn discovery() -> ApiResult<Discovery> {
 }
 
 fn redirect_uri(shared: &Shared) -> String {
-    format!("{}{CALLBACK}", settings::public_origin(shared.port))
+    format!("{}{CALLBACK}", settings::public_base(shared.port))
 }
 
 pub fn safe_next(next: Option<&String>) -> String {
@@ -69,7 +69,7 @@ fn moved(to: &str, extra: Option<HeaderMap>) -> Response {
 
 fn failed(reason: &str) -> Response {
     tracing::warn!(target: "audit", reason, "auth.sso_failed");
-    moved("/login?error=sso", None)
+    moved(&format!("{}/login?error=sso", settings::base_path()), None)
 }
 
 pub async fn start(State(ctx): State<Ctx>, Query(query): Query<HashMap<String, String>>) -> Response {
@@ -108,7 +108,7 @@ pub async fn callback(State(ctx): State<Ctx>, Query(query): Query<HashMap<String
         return failed(query.get("error").map_or("no code", String::as_str));
     };
     match finish(&ctx, code, state).await {
-        Ok((headers, next)) => moved(&next, Some(headers)),
+        Ok((headers, next)) => moved(&format!("{}{next}", settings::base_path()), Some(headers)),
         Err(error) => failed(&error.message),
     }
 }

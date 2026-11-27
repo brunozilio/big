@@ -180,7 +180,7 @@ pub async fn poll(State(ctx): State<Ctx>, Json(body): Json<Value>) -> ApiResult<
 }
 
 pub async fn callback(State(ctx): State<Ctx>, Query(query): Query<HashMap<String, String>>) -> Response {
-    answered(&ctx, &query, "").await
+    answered(&ctx, &query, &crate::auth::settings::base_path()).await
 }
 
 pub async fn answered(ctx: &Shared, query: &HashMap<String, String>, base: &str) -> Response {

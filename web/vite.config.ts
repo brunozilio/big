@@ -22,6 +22,7 @@ function vendorChunk(id: string): string | undefined {
 }
 
 export default defineConfig({
+  base: './',
   plugins: [react()],
   resolve: { alias: { '@': fileURLToPath(new URL('./src', import.meta.url)) } },
   define: { 'import.meta.env.VITE_MOCK': JSON.stringify(mock) },

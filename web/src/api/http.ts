@@ -1,3 +1,4 @@
+import { at, appPath, toLogin } from './base'
 import { isLiveEvent } from './guards'
 import { currentLanguage, translate } from '@/i18n'
 import { ROUTES, type Api, type CallAction, type CallArgs, type CallResult, type LiveEvent } from './contract'
@@ -13,7 +14,7 @@ export type Fetcher = (input: string, init?: RequestInit) => Promise<Response>
 export async function request<T>(method: string, path: string, body?: unknown, fetcher: Fetcher = fetch): Promise<T> {
   let res: Response
   try {
-    res = await fetcher(path, {
+    res = await fetcher(at(path), {
       method,
       headers: body === undefined ? { accept: 'application/json' } : { accept: 'application/json', 'content-type': 'application/json' },
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -32,8 +33,8 @@ export async function request<T>(method: string, path: string, body?: unknown, f
 }
 
 function signedOut() {
-  if (typeof window === 'undefined' || window.location.pathname === '/login') return
-  window.location.assign(`/login?next=${encodeURIComponent(window.location.pathname + window.location.search)}`)
+  if (typeof window === 'undefined' || appPath() === '/login') return
+  window.location.assign(toLogin())
 }
 
 function safeJson(text: string): unknown {
@@ -45,7 +46,7 @@ function safeJson(text: string): unknown {
 }
 
 export interface LiveSource {
-  onmessage: ((e: { data: string }) => void) | null
+  onmessage: ((e: { data: string; lastEventId?: string }) => void) | null
   onopen: (() => void) | null
   onerror: (() => void) | null
   close(): void
@@ -56,16 +57,15 @@ export function followLive(open: (url: string) => LiveSource, onEvent: (e: LiveE
   let delay = 500
   let timer: ReturnType<typeof setTimeout> | null = null
   let stopped = false
-  let seen = false
+  let last = ''
   const connect = () => {
-    source = open(ROUTES.live)
+    source = open(at(last ? `${ROUTES.live}?after=${encodeURIComponent(last)}` : ROUTES.live))
     source.onopen = () => {
-      if (seen) onEvent({ type: 'resync' })
-      seen = true
       delay = 500
       onState(true)
     }
     source.onmessage = (e) => {
+      if (e.lastEventId) last = e.lastEventId
       const parsed = safeJson(e.data)
       if (isLiveEvent(parsed)) onEvent(parsed)
     }
@@ -135,7 +135,7 @@ export function httpApi(fetcher: Fetcher = (input, init) => fetch(input, init), 
     upload: async (file) => {
       const form = new FormData()
       form.append('file', file)
-      const res = await fetcher(ROUTES.attachments, { method: 'POST', body: form })
+      const res = await fetcher(at(ROUTES.attachments), { method: 'POST', body: form })
       if (!res.ok) throw new ApiError(res.status, 'upload', translate(currentLanguage(), 'app.uploadFailed'))
       return (await res.json()) as { id: string; name: string; size: number }
     },

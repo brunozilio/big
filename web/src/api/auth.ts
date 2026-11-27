@@ -1,3 +1,4 @@
+import { at } from './base'
 import { isMock } from '.'
 import { ApiError, request } from './http'
 
@@ -79,7 +80,7 @@ export function logout(): Promise<null> {
 }
 
 export function ssoUrl(next: string): string {
-  return AUTH.sso(next)
+  return at(AUTH.sso(next))
 }
 
 export function nextPath(search: string): string {

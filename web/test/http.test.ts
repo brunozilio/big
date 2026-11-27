@@ -62,22 +62,27 @@ describe('cliente HTTP', () => {
     await expect(httpApi(fetcher).items()).rejects.toMatchObject({ status: 404, code: 'missing', message: 'Item não existe' })
   })
 
-  test('o feed ignora eventos fora do contrato e pede resync ao reconectar', () => {
+  test('o feed ignora eventos fora do contrato e ao reconectar pede o que perdeu desde o último', async () => {
     const sources: LiveSource[] = []
+    const urls: string[] = []
     const got: LiveEvent[] = []
-    const open = () => {
+    const open = (url: string) => {
       const s: LiveSource = { onmessage: null, onopen: null, onerror: null, close: () => undefined }
       sources.push(s)
+      urls.push(url)
       return s
     }
     const stop = followLive(open, (e) => got.push(e), () => undefined)
     sources[0].onopen?.()
-    sources[0].onmessage?.({ data: JSON.stringify({ type: 'item.removed', id: '3' }) })
+    sources[0].onmessage?.({ data: JSON.stringify({ type: 'item.removed', id: '3' }), lastEventId: 'e1:7' })
     sources[0].onmessage?.({ data: JSON.stringify({ type: 'nada' }) })
     sources[0].onmessage?.({ data: 'não é json' })
     expect(got).toEqual([{ type: 'item.removed', id: '3' }])
-    sources[0].onopen?.()
-    expect(got[1]).toEqual({ type: 'resync' })
+    sources[0].onerror?.()
+    await new Promise((done) => setTimeout(done, 600))
+    expect(urls).toEqual(['/api/live', '/api/live?after=e1%3A7'])
+    sources[1].onopen?.()
+    expect(got).toHaveLength(1)
     stop()
   })
 })

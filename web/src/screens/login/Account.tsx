@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '@/api'
 import { addPasskey, logout, passkeys, passkeysWork, removePasskey, whoAmI, type Me, type PasskeyInfo } from '@/api/auth'
+import { at } from '@/api/base'
 import { ApiError } from '@/api/http'
 import { getState, setBranding } from '@/api/store'
 import { useLocale, useT } from '@/i18n'
@@ -71,7 +72,7 @@ export function AccountPanel() {
   useEffect(() => {
     whoAmI().then(setMe).catch(() => undefined)
   }, [])
-  const out = () => void logout().then(() => window.location.replace('/login'))
+  const out = () => void logout().then(() => window.location.replace(at('/login')))
   const local = me?.mode === 'local'
   return (
     <div className="space-y-8">

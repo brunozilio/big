@@ -1,7 +1,8 @@
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
 use axum::Router;
-use axum::extract::{DefaultBodyLimit, State};
+use axum::extract::{DefaultBodyLimit, Query, State};
 use axum::http::{StatusCode, Uri};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{any, delete, get, post, put};
@@ -97,11 +98,13 @@ fn api() -> Router<Ctx> {
 async fn live(
     State(ctx): State<Ctx>,
     axum::Extension(person): axum::Extension<domain::principal::Principal>,
+    Query(query): Query<HashMap<String, String>>,
 ) -> Response {
+    let after = query.get("after").map(String::as_str);
     if !crate::scope::shared_mode() {
-        return ctx.live.response();
+        return ctx.live.response(after);
     }
-    ctx.live.response_for(crate::scope::live_filter(&ctx, person.owner()))
+    ctx.live.response_for(crate::scope::live_filter(&ctx, person.owner()), after)
 }
 
 fn chosen_folder() -> Option<PathBuf> {
@@ -109,7 +112,24 @@ fn chosen_folder() -> Option<PathBuf> {
 }
 
 fn from_folder(api: Router<Ctx>, dist: &Path) -> Router<Ctx> {
-    api.fallback_service(ServeDir::new(dist).fallback(ServeFile::new(dist.join("index.html"))))
+    let base = crate::auth::settings::base_path();
+    if base.is_empty() {
+        return api.fallback_service(ServeDir::new(dist).fallback(ServeFile::new(dist.join("index.html"))));
+    }
+    let index = dist.join("index.html");
+    let page = get(move || {
+        let (index, base) = (index.clone(), base.clone());
+        async move {
+            match std::fs::read(&index) {
+                Ok(bytes) => {
+                    ([(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")], page::based(&bytes, &base))
+                        .into_response()
+                }
+                Err(_) => (StatusCode::SERVICE_UNAVAILABLE, Html(page::MISSING)).into_response(),
+            }
+        }
+    });
+    api.fallback_service(ServeDir::new(dist).append_index_html_on_directories(false).fallback(page))
 }
 
 pub fn router(ctx: Ctx) -> Router {
@@ -117,7 +137,10 @@ pub fn router(ctx: Ctx) -> Router {
     let api = api();
     let app = match chosen_folder() {
         Some(dist) => from_folder(api, &dist),
-        None if page::has_index(bundle) => api.fallback(move |uri: Uri| async move { page::serve(bundle, &uri) }),
+        None if page::has_index(bundle) => {
+            let base = crate::auth::settings::base_path();
+            api.fallback(move |uri: Uri| async move { page::serve_at(bundle, &uri, &base) })
+        }
         None => api.fallback(|| async { (StatusCode::SERVICE_UNAVAILABLE, Html(page::MISSING)).into_response() }),
     };
     app.layer(axum::middleware::from_fn_with_state(ctx.clone(), crate::auth::gate))

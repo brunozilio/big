@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { api } from '@/api'
 import { authMethods, nextPath, passkeysWork, sendCode, signInWithPasskey, ssoUrl, verifyCode, type AuthMethods } from '@/api/auth'
+import { at } from '@/api/base'
 import { ApiError } from '@/api/http'
 import { getState, setBranding, useStore } from '@/api/store'
 import { isLanguage, LANGUAGES, useLanguage, useT } from '@/i18n'
@@ -62,7 +63,7 @@ function LoginLanguage() {
 }
 
 function finish(search: string) {
-  window.location.replace(nextPath(search))
+  window.location.replace(at(nextPath(search)))
 }
 
 function EmailStage({ onSent }: { onSent: (email: string) => void }) {

@@ -36,6 +36,28 @@ pub fn content_type(asset: &Asset) -> String {
     mime_guess::from_path(asset.path).first_or_octet_stream().to_string()
 }
 
+pub const BASE_TAG: &str = "<base href=\"/\"";
+
+pub fn based(index: &[u8], base: &str) -> Vec<u8> {
+    let text = String::from_utf8_lossy(index);
+    let wanted = format!("<base href=\"{base}/\"");
+    text.replacen(BASE_TAG, &wanted, 1).into_bytes()
+}
+
+pub fn serve_at(bundle: &'static [Asset], uri: &Uri, base: &str) -> Response {
+    let Some(asset) = resolve(bundle, uri) else {
+        return (StatusCode::SERVICE_UNAVAILABLE, Html(MISSING)).into_response();
+    };
+    if base.is_empty() || asset.path != "index.html" {
+        return serve(bundle, uri);
+    }
+    (
+        [(header::CONTENT_TYPE, content_type(asset)), (header::CACHE_CONTROL, "no-cache".to_owned())],
+        based(asset.bytes, base),
+    )
+        .into_response()
+}
+
 pub fn serve(bundle: &'static [Asset], uri: &Uri) -> Response {
     let Some(asset) = resolve(bundle, uri) else {
         return (StatusCode::SERVICE_UNAVAILABLE, Html(MISSING)).into_response();
@@ -43,4 +65,14 @@ pub fn serve(bundle: &'static [Asset], uri: &Uri) -> Response {
     let cache = if asset.path.starts_with("assets/") { "public, max-age=31536000, immutable" } else { "no-cache" };
     ([(header::CONTENT_TYPE, content_type(asset)), (header::CACHE_CONTROL, cache.to_owned())], asset.bytes)
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn the_page_learns_the_path_it_is_served_under() {
+        let index = b"<head><base href=\"/\" /><link rel=\"icon\" href=\"api/x\" /></head>";
+        let based = String::from_utf8(super::based(index, "/app")).unwrap_or_default();
+        assert_eq!(based, "<head><base href=\"/app/\" /><link rel=\"icon\" href=\"api/x\" /></head>");
+    }
 }

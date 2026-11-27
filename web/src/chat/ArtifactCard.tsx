@@ -1,3 +1,4 @@
+import { at } from '@/api/base'
 import { useEffect, useState } from 'react'
 import { ROUTES, type ArtifactKind, type SessionEvent } from '@/api/contract'
 import { useT } from '@/i18n'
@@ -26,7 +27,7 @@ export function ArtifactCard({ event }: { event: ArtifactEvent }) {
             <span className="block truncate text-sm text-muted">{t(`chat.artifact_${kind}`)} · {event.name}</span>
           </span>
         </button>
-        <IconLink tooltip={t('chat.artifactDownload')} href={ROUTES.artifactContent(event.artifactId, true)} download={event.name} icon="download" />
+        <IconLink tooltip={t('chat.artifactDownload')} href={at(ROUTES.artifactContent(event.artifactId, true))} download={event.name} icon="download" />
         <Button size="sm" onClick={() => setOpen(true)}>{t('chat.artifactOpen')}</Button>
       </div>
       <ArtifactViewer event={event} open={open} onOpenChange={setOpen} />
@@ -52,14 +53,14 @@ function IconLink({ tooltip, href, icon, download, newTab }: { tooltip: string; 
 
 function ArtifactViewer({ event, open, onOpenChange }: { event: ArtifactEvent; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT()
-  const source = ROUTES.artifactContent(event.artifactId)
+  const source = at(ROUTES.artifactContent(event.artifactId))
   return (
     <Dialog open={open} onOpenChange={onOpenChange} size="xl" bare title={event.title}>
       <div className="flex h-[84dvh] flex-col">
         <div className="flex items-center gap-2 border-b px-4 py-3">
           <span className="min-w-0 flex-1 truncate text-md font-medium text-fg">{event.title}</span>
           <IconLink tooltip={t('chat.artifactNewTab')} href={source} icon="external" newTab />
-          <IconLink tooltip={t('chat.artifactDownload')} href={ROUTES.artifactContent(event.artifactId, true)} download={event.name} icon="download" />
+          <IconLink tooltip={t('chat.artifactDownload')} href={at(ROUTES.artifactContent(event.artifactId, true))} download={event.name} icon="download" />
           <IconButton tooltip={t('editor.close')} onClick={() => onOpenChange(false)}><Icon name="close" size={18} /></IconButton>
         </div>
         <div className="min-h-0 flex-1 overflow-auto bg-bg">{open && <ArtifactBody kind={event.kind ?? 'text'} source={source} title={event.title} />}</div>

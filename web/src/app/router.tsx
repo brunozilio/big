@@ -1,4 +1,5 @@
 import { createBrowserRouter, Navigate } from 'react-router-dom'
+import { basePath } from '@/api/base'
 import { App } from '@/screens/App'
 import { Account } from '@/screens/login/Account'
 import { Login } from '@/screens/login/Login'
@@ -16,5 +17,5 @@ export const routes = [
 ]
 
 export function createRouter() {
-  return createBrowserRouter(routes)
+  return createBrowserRouter(routes, { basename: basePath() || undefined })
 }

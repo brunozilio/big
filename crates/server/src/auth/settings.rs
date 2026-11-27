@@ -96,9 +96,29 @@ pub fn public_origin(port: u16) -> String {
     origin_of(brand::server::PUBLIC_URL, port)
 }
 
-pub fn origin_of(configured: &str, port: u16) -> String {
+pub fn public_base(port: u16) -> String {
+    base_of(brand::server::PUBLIC_URL, port)
+}
+
+pub fn base_path() -> String {
+    path_of(brand::server::PUBLIC_URL)
+}
+
+pub fn base_of(configured: &str, port: u16) -> String {
     let configured = configured.trim().trim_end_matches('/');
     if configured.is_empty() { format!("http://127.0.0.1:{port}") } else { configured.to_owned() }
+}
+
+pub fn origin_of(configured: &str, port: u16) -> String {
+    let base = base_of(configured, port);
+    let path = path_of(&base);
+    base.strip_suffix(&path).map_or_else(|| base.clone(), str::to_owned)
+}
+
+pub fn path_of(configured: &str) -> String {
+    let configured = configured.trim().trim_end_matches('/');
+    let rest = configured.split_once("://").map_or("", |(_, rest)| rest);
+    rest.find('/').map_or_else(String::new, |start| rest[start..].to_owned())
 }
 
 pub fn host_of(origin: &str) -> String {
@@ -132,6 +152,16 @@ mod tests {
         assert_eq!(origin_of("", 7420), "http://127.0.0.1:7420");
         assert_eq!(origin_of("https://app.acme.com/", 7420), "https://app.acme.com");
         assert_eq!(host_of("https://app.acme.com"), "app.acme.com");
+    }
+
+    #[test]
+    fn a_public_address_with_a_path_keeps_the_origin_apart_from_the_base() {
+        let url = "https://abc.execute-api.us-east-2.amazonaws.com/app/";
+        assert_eq!(origin_of(url, 1), "https://abc.execute-api.us-east-2.amazonaws.com");
+        assert_eq!(base_of(url, 1), "https://abc.execute-api.us-east-2.amazonaws.com/app");
+        assert_eq!(path_of(url), "/app");
+        assert_eq!(path_of("https://app.acme.com"), "");
+        assert_eq!(path_of(""), "");
         assert_eq!(host_of("http://localhost:7420/x"), "localhost");
     }
 }
