@@ -98,7 +98,7 @@ function FolderList({ folders, compact }: { folders: Folders; compact?: boolean 
         ))}
         {shown && shown.entries.length === 0 && <li className="px-2.5 py-3 text-base text-faint">{t('settings.folder_empty')}</li>}
       </ul>
-      {many && <p className="mt-2 text-sm text-muted">{picked.length > 0 ? t('settings.folder_picked', { n: picked.length }) : t('settings.folder_pickHint')}</p>}
+      {many && picked.length === 0 && <p className="mt-2 text-sm text-muted">{t('settings.folder_pickHint')}</p>}
       {error && <p role="alert" className="mt-2 text-sm text-danger-fg">{error}</p>}
     </>
   )
