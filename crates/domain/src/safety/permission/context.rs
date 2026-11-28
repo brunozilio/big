@@ -1,5 +1,6 @@
 use std::path::{Path, PathBuf};
 
+use super::hard::Floor;
 use super::{Allowed, Effect, Guard, Remembered};
 use crate::PermissionMode;
 
@@ -22,6 +23,7 @@ pub struct Bounds {
     pub readable: Vec<PathBuf>,
     pub protected: Vec<Protected>,
     pub read_only: Vec<PathBuf>,
+    pub hard: Floor,
 }
 
 impl Bounds {
@@ -30,12 +32,19 @@ impl Bounds {
             Protected { name: ".git".to_owned(), guard: Guard::GitFolder },
             Protected { name: brand::DIR.to_owned(), guard: Guard::OwnConfiguration },
         ];
-        Self { roots, readable, protected, read_only: Vec::new() }
+        let mut hard = Floor::within(roots.clone());
+        hard.govern(Vec::new(), [brand::DIR.to_owned()]);
+        Self { roots, readable, protected, read_only: Vec::new(), hard }
     }
 
     pub fn consulting(mut self, folders: Vec<PathBuf>) -> Self {
         self.readable.extend(folders.iter().cloned());
         self.read_only = folders;
+        self
+    }
+
+    pub fn hardened(mut self, floor: Floor) -> Self {
+        self.hard.extend(floor);
         self
     }
 

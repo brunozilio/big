@@ -33,6 +33,7 @@ pub enum Reason {
     Flagged(String),
     Outside(PathBuf),
     Guarded { path: PathBuf, guard: Guard },
+    Hard(super::hard::Category),
 }
 
 impl Reason {
@@ -41,12 +42,15 @@ impl Reason {
     }
 
     pub fn reviewable(&self) -> bool {
-        !matches!(self, Self::Hook | Self::Listed | Self::Flagged(_))
+        !matches!(self, Self::Hook | Self::Listed | Self::Flagged(_) | Self::Hard(_))
     }
 
     pub fn unattended(&self, tool: &str) -> String {
         match self {
             Self::Flagged(why) => format!("{tool} was blocked. {why} Find a safer way to do this or ask the user."),
+            Self::Hard(category) => {
+                format!("{tool} was blocked: {}. Find a safer way to do this or ask the user.", category.why())
+            }
             _ => format!("{tool} requires permission; dontAsk denies unapproved actions."),
         }
     }

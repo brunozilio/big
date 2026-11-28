@@ -28,10 +28,14 @@ impl Asking<'_> {
             Some((path, guard)) => format!("{}\n{}", guard.why(), path.display()),
             None => self.shown.unwrap_or(&self.judgement.subject).to_owned(),
         };
-        match reason {
+        let shown = match reason {
             Reason::Flagged(why) => format!("{why}\n{subject}"),
+            Reason::Hard(category) if *category != domain::permission::hard::Category::Hidden => {
+                format!("This is always asked because {}:\n{subject}", category.why())
+            }
             _ => subject,
-        }
+        };
+        domain::permission::hard::warned(&shown)
     }
 }
 
@@ -98,6 +102,7 @@ impl Agent<'_> {
         let Asking { id, tool, called, .. } = *asking;
         let Called { name, input, .. } = *called;
         let verdict = self.screened(asking, verdict);
+        let verdict = self.workspace.bounds().hard.tightened(&called.call(), verdict);
         let verdict = if self.control.no_prompts() { verdict.without_the_user(name) } else { verdict };
         match verdict {
             Verdict::Allow => self.went_ahead(id, tool, input),

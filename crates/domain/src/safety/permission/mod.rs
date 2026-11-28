@@ -2,6 +2,7 @@ pub mod allowed;
 mod context;
 mod effect;
 mod engine;
+pub mod hard;
 mod info;
 mod kind;
 mod remembered;
@@ -10,6 +11,9 @@ mod verdict;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod hard_tests;
 
 pub use allowed::{Allowed, Behavior, Grant, Rule};
 pub use context::{Bounds, Call, PolicyContext, Protected};

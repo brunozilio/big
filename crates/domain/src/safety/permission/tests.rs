@@ -58,7 +58,6 @@ fn place(path: &str) -> Place {
 }
 
 fn cases() -> Vec<(&'static str, &'static str, Vec<Effect>, Access)> {
-    let settings = format!("/work/rocket/{}/settings.json", brand::DIR);
     vec![
         ("Read", "src/a.rs", vec![Effect::ReadPath(place("/work/rocket/src/a.rs"))], Access::Reads),
         ("Read", "/etc/hosts", vec![Effect::ReadPath(place("/etc/hosts"))], Access::ReadsOutside),
@@ -67,7 +66,7 @@ fn cases() -> Vec<(&'static str, &'static str, Vec<Effect>, Access)> {
         ("Write", "src/a.rs", vec![Effect::WritePath(place("/work/rocket/src/a.rs"))], Access::Edits),
         ("Write", "/home/ana/.zshrc", vec![Effect::WritePath(place("/home/ana/.zshrc"))], Access::EditsGuarded),
         ("Edit", "config", vec![Effect::WritePath(place("/work/rocket/.git/config"))], Access::EditsGuarded),
-        ("Write", "settings", vec![Effect::WritePath(Place::at(settings))], Access::EditsGuarded),
+        ("Write", "hook", vec![Effect::WritePath(place("/work/rocket/.git/hooks/pre-commit"))], Access::EditsGuarded),
         ("Bash", "ls -la", vec![Effect::exec("ls -la")], Access::Commands),
         ("Bash", "cargo build", vec![Effect::exec("cargo build")], Access::Commands),
         ("WebFetch", "https://docs.rs/x", vec![Effect::Fetch { host: Some("docs.rs".into()) }], Access::Fetches),

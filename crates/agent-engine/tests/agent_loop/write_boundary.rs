@@ -117,14 +117,21 @@ fn an_edit_to_a_git_hook_asks_even_when_edits_are_accepted() {
 }
 
 #[test]
-fn an_edit_to_the_project_s_own_settings_asks_even_when_edits_are_accepted() {
-    let rig = Rig::new(domain::Reviewer::Human);
+fn an_edit_to_the_project_s_own_settings_is_refused_by_every_reviewer_and_after_always() {
     let settings = Path::new(brand::DIR).join("settings.local.json");
     let hook = Path::new(brand::DIR).join("hooks/start.js");
-    let asked = run_answering(&rig, &writes(&[&settings, &hook]), vec![Decision::Deny, Decision::Deny]);
-    assert_eq!(asked.len(), 2, "{asked:?}");
-    assert!(!rig.dir.path().join(&settings).exists());
-    assert!(!rig.dir.path().join(&hook).exists());
+    for reviewer in [domain::Reviewer::Human, domain::Reviewer::Model, domain::Reviewer::Nobody] {
+        let rig = Rig::new(reviewer);
+        let human = reviewer == domain::Reviewer::Human;
+        let earlier = Path::new(".git/hooks/x");
+        let paths: Vec<&Path> = if human { vec![earlier, &settings, &hook] } else { vec![&settings, &hook] };
+        let always = vec![Decision::AllowAlways; 3];
+        let asked = run_answering(&rig, &writes(&paths), always);
+        assert!(asked.iter().all(|subject| !subject.contains(brand::DIR)), "{reviewer:?}: {asked:?}");
+        assert_eq!(asked.len(), usize::from(human), "{reviewer:?}: {asked:?}");
+        assert!(!rig.dir.path().join(&settings).exists(), "{reviewer:?}");
+        assert!(!rig.dir.path().join(&hook).exists(), "{reviewer:?}");
+    }
 }
 
 #[test]
@@ -174,4 +181,27 @@ fn an_edit_through_a_link_that_leaves_the_project_asks() {
     let asked = run_answering(&rig, &writes(&[Path::new("link/a.txt")]), vec![Decision::Deny]);
     assert_eq!(asked.len(), 1, "{asked:?}");
     assert!(!elsewhere.path().join("a.txt").exists());
+}
+
+#[test]
+fn a_command_with_a_direction_override_is_asked_with_a_warning_and_never_always() {
+    let rig = Rig::new(domain::Reviewer::Nobody);
+    let command = "echo safe\u{202E}txt.exe > shown.txt";
+    let model = ScriptedModel::new([
+        ScriptedModel::reply(vec![tool_use("b", "Bash", json!({ "command": command }))]),
+        ScriptedModel::reply(vec![Block::Text("Ok.".into())]),
+    ]);
+    let asked = run_answering(&rig, &model, vec![Decision::Deny]);
+    assert_eq!(asked.len(), 1, "{asked:?}");
+    assert!(asked[0].starts_with("Warning:") && asked[0].contains("U+202E"), "{asked:?}");
+    assert!(asked[0].contains("safe<U+202E>txt.exe") && !asked[0].contains('\u{202E}'), "{asked:?}");
+    let rememberable = rig.events().into_iter().find_map(|event| match event {
+        EngineEvent::Asked(ask) => match ask.kind {
+            AskKind::Permission { rememberable, .. } => Some(rememberable),
+            _ => None,
+        },
+        _ => None,
+    });
+    assert_eq!(rememberable, Some(false));
+    assert!(!rig.dir.path().join("shown.txt").exists());
 }

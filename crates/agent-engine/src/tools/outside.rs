@@ -74,6 +74,7 @@ impl Workspace {
         });
         domain::permission::Bounds::of(roots.collect(), std::iter::once(saved).chain(own).chain(shared).collect())
             .consulting(self.read_dirs.iter().map(|dir| settled(dir)).collect())
+            .hardened(super::hard_floor::floor(self.home.as_deref()))
     }
 
     pub fn place(&self, path: &str) -> domain::permission::Place {

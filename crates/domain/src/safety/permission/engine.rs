@@ -19,34 +19,40 @@ impl PolicyEngine {
     }
 
     pub fn judge(call: &Call<'_>, cx: &PolicyContext<'_>) -> Judgement {
-        let stood = standing(call, cx);
-        if let Some(folder) = read_only_write(call, cx) {
-            let verdict = Verdict::Deny(format!(
-                "{} is a read-only repository: read it, but never create, change or delete files in it.",
-                folder.display()
-            ));
-            return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
-        }
-        if let Some(verdict) = by_the_list(call, cx, stood.standing) {
-            return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
-        }
-        let planned = cx.mode() == PermissionMode::Plan && (only_commands(call) || super::only_fetch(call.effects));
-        let browses = cx.mode() == PermissionMode::Plan && super::only_browser(call.effects);
-        let mode = if browses { PermissionMode::Auto } else { cx.mode() };
-        let decided = by_mode(mode, stood.standing, call.tool, &stood.subject, cx.remembered);
-        let verdict = match if planned { Verdict::Allow } else { decided } {
-            Verdict::Ask { .. } => {
-                let reason = match (&stood.guarded, stood.standing) {
-                    (Some((path, guard)), _) => Reason::Guarded { path: path.clone(), guard: *guard },
-                    (None, Standing::ReadsOutside) => Reason::Outside(stood.subject.clone().into()),
-                    (None, _) => Reason::Mode,
-                };
-                Verdict::Ask { rememberable: reason.rememberable(), reason }
-            }
-            settled => settled,
-        };
-        Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded }
+        let mut judgement = weighed(call, cx);
+        judgement.verdict = cx.bounds.hard.tightened(call, judgement.verdict);
+        judgement
     }
+}
+
+fn weighed(call: &Call<'_>, cx: &PolicyContext<'_>) -> Judgement {
+    let stood = standing(call, cx);
+    if let Some(folder) = read_only_write(call, cx) {
+        let verdict = Verdict::Deny(format!(
+            "{} is a read-only repository: read it, but never create, change or delete files in it.",
+            folder.display()
+        ));
+        return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
+    }
+    if let Some(verdict) = by_the_list(call, cx, stood.standing) {
+        return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
+    }
+    let planned = cx.mode() == PermissionMode::Plan && (only_commands(call) || super::only_fetch(call.effects));
+    let browses = cx.mode() == PermissionMode::Plan && super::only_browser(call.effects);
+    let mode = if browses { PermissionMode::Auto } else { cx.mode() };
+    let decided = by_mode(mode, stood.standing, call.tool, &stood.subject, cx.remembered);
+    let verdict = match if planned { Verdict::Allow } else { decided } {
+        Verdict::Ask { .. } => {
+            let reason = match (&stood.guarded, stood.standing) {
+                (Some((path, guard)), _) => Reason::Guarded { path: path.clone(), guard: *guard },
+                (None, Standing::ReadsOutside) => Reason::Outside(stood.subject.clone().into()),
+                (None, _) => Reason::Mode,
+            };
+            Verdict::Ask { rememberable: reason.rememberable(), reason }
+        }
+        settled => settled,
+    };
+    Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded }
 }
 
 fn read_only_write<'a>(call: &Call<'_>, cx: &'a PolicyContext<'_>) -> Option<&'a std::path::PathBuf> {
