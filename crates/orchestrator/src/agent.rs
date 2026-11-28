@@ -86,6 +86,7 @@ pub async fn worktree(
     checkout: Checkout,
     branch: &str,
     base: Option<String>,
+    owner: String,
 ) -> Result<Worktree, Failure> {
     if checkout.read_only {
         return consulted(shared, checkout, branch).await;
@@ -93,7 +94,7 @@ pub async fn worktree(
     let (data, branch) = (shared.config.data.clone(), branch.to_owned());
     let folder = repos::folder(&branch, &checkout.id);
     let (repo, named) = (checkout.directory.clone(), branch.clone());
-    let path = blocking(move || git::worktree(repo.as_deref(), &data, &named, base.as_deref(), &folder))
+    let path = blocking(move || git::worktree(repo.as_deref(), &data, &named, base.as_deref(), &folder, &owner))
         .await?
         .map_err(|error| match git::missing_base(&error) {
             Some(base) => Failure::Blocked(crate::bases::blocked(&checkout.id, base)),
@@ -122,7 +123,7 @@ pub async fn worktrees(shared: &Shared, item: &ItemId, wanted: Option<&str>) -> 
     for checkout in checkouts {
         let branch = chosen.map_or_else(|| git::head_of(&state, &checkout.id), str::to_owned);
         let base = git::base_of(&state, &checkout.id);
-        made.push(worktree(shared, checkout, &branch, base).await?);
+        made.push(worktree(shared, checkout, &branch, base, crate::owners::of(&shared.store, &state)).await?);
     }
     made.sort_by_key(|tree| tree.checkout.read_only);
     Ok(made)

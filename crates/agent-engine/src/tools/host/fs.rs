@@ -56,7 +56,8 @@ fn write(reach: &Reach<'_>, arguments: &Value) -> Result<Value, String> {
     reach.fence.writes(&place.real)?;
     let body = text(arguments, "text")?;
     if let Some(parent) = place.real.parent() {
-        std::fs::create_dir_all(parent).map_err(|error| format!("Could not create {}: {error}", parent.display()))?;
+        platform::confine::dirs_like_ancestor(parent)
+            .map_err(|error| format!("Could not create {}: {error}", parent.display()))?;
     }
     platform::atomic::write(&place.real, body.as_bytes()).map_err(|error| error.to_string())?;
     Ok(Value::Null)

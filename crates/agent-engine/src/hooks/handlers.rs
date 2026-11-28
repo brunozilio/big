@@ -33,7 +33,7 @@ fn failed(error: impl std::fmt::Display) -> HookRunError {
 }
 
 pub fn command(handler: &Handler, input: &Value, workspace: &Workspace) -> Result<CommandOutput, HookRunError> {
-    let mut cmd = workspace.launched(platform::script_shell(&handler.command));
+    let mut cmd = workspace.launched(platform::script_shell(&handler.command)).map_err(failed)?;
     cmd.env(concat!(brand::env_prefix!(), "_PROJECT_DIR"), &workspace.cwd);
     cmd.current_dir(&workspace.cwd);
     let input = Some(serde_json::to_vec(input).map_err(failed)?);

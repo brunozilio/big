@@ -23,17 +23,17 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let cloud = crate::cloud_db::cloud();
     let providers = connectors::providers::all();
     let redactor = connectors::redaction::redactor(providers.iter().map(AsRef::as_ref));
-    let (store, services) = if cloud {
+    let store = if cloud {
         let store =
             Store::with_database(crate::cloud_db::connect(&providers)?, every).map_err(|error| error.to_string())?;
-        let services =
-            app::LocalServices::detect_redacting(Some(crate::cloud_db::connect(&providers)?), Arc::clone(&redactor));
         crate::cloud_db::copy_local(&launch.data, &store);
-        (Arc::new(store), services)
+        Arc::new(store)
     } else {
-        let store = Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?;
-        (Arc::new(store), app::LocalServices::detect_redacting(None, Arc::clone(&redactor)))
+        Arc::new(Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?)
     };
+    confined(&launch.data, &store)?;
+    let apps = if cloud { Some(crate::cloud_db::connect(&providers)?) } else { None };
+    let services = app::LocalServices::detect_redacting(apps, Arc::clone(&redactor));
     let lease = crate::cloud_db::lease();
     if cloud {
         crate::cloud_db::take_turn(&store, &lease).await;
@@ -102,4 +102,14 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
         crate::cloud_db::release(&kept, &lease);
     }
     served.map_err(|error| error.to_string())
+}
+
+#[cfg(unix)]
+fn confined(data: &std::path::Path, store: &Arc<Store>) -> Result<(), String> {
+    crate::isolation::prepare(data, store)
+}
+
+#[cfg(not(unix))]
+fn confined(_data: &std::path::Path, _store: &Arc<Store>) -> Result<(), String> {
+    Ok(())
 }

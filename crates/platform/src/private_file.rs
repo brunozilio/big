@@ -27,7 +27,7 @@ fn replace_through(
     create: impl FnOnce(&mut OpenOptions, &Path) -> io::Result<File>,
 ) -> io::Result<()> {
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
+        crate::confine::dirs_like_ancestor(parent)?;
     }
     let temporary = temporary_beside(path);
     let written = (|| {

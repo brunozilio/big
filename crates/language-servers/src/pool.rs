@@ -92,6 +92,9 @@ impl LspPool {
         dir: PathBuf,
         installer: impl Installer + 'static,
     ) -> Self {
+        if let Err(error) = platform::confine::open_to_all(&dir) {
+            tracing::warn!(%error, "the installed language servers stay closed to the agents");
+        }
         Self::with(Box::new(starter), idle, Some(Installs::new(dir, Arc::new(installer))))
     }
 

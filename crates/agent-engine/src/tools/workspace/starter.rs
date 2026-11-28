@@ -6,12 +6,18 @@ use super::Workspace;
 pub struct Starter {
     launch: super::Launch,
     environment: Vec<(String, String)>,
+    owner: Option<String>,
 }
 
 impl Starter {
-    pub fn launched(&self, command: Command) -> Command {
-        self.launch.0.launch(with_environment(command, &self.environment))
+    pub fn launched(&self, command: Command) -> std::io::Result<Command> {
+        confined(self.launch.0.launch(with_environment(command, &self.environment)), self.owner.as_deref())
     }
+}
+
+fn confined(mut command: Command, owner: Option<&str>) -> std::io::Result<Command> {
+    platform::confine::as_owner(&mut command, owner)?;
+    Ok(command)
 }
 
 fn with_environment(mut command: Command, environment: &[(String, String)]) -> Command {
@@ -21,11 +27,15 @@ fn with_environment(mut command: Command, environment: &[(String, String)]) -> C
 
 impl Workspace {
     pub fn starter(&self) -> Starter {
-        Starter { launch: self.services.launch.clone(), environment: self.environment.clone() }
+        Starter {
+            launch: self.services.launch.clone(),
+            environment: self.environment.clone(),
+            owner: self.owner.clone(),
+        }
     }
 
-    pub fn launched(&self, command: Command) -> Command {
-        self.services.launch.0.launch(with_environment(command, &self.environment))
+    pub fn launched(&self, command: Command) -> std::io::Result<Command> {
+        confined(self.services.launch.0.launch(with_environment(command, &self.environment)), self.owner.as_deref())
     }
 }
 
@@ -48,17 +58,17 @@ mod tests {
     #[test]
     fn a_shell_the_workspace_starts_sees_the_variables_of_the_request() {
         let workspace = with_cloud();
-        let shell = workspace.launched(platform::shell("printf %s \"$CLOUD_PROFILE_PROBE\""));
+        let shell = workspace.launched(platform::shell("printf %s \"$CLOUD_PROFILE_PROBE\"")).expect("launched");
         assert_eq!(printed(shell), "run-1");
     }
 
     #[test]
     fn scripts_and_forked_workspaces_carry_the_same_variables() {
         let workspace = with_cloud();
-        let script = workspace.starter().launched(platform::shell("printf %s \"$CLOUD_PROFILE_PROBE\""));
+        let script = workspace.starter().launched(platform::shell("printf %s \"$CLOUD_PROFILE_PROBE\"")).expect("launched");
         assert_eq!(printed(script), "run-1");
         let child = workspace.fork(Arc::default());
-        assert_eq!(printed(child.launched(platform::shell("printf %s \"$CLOUD_PROFILE_PROBE\""))), "run-1");
+        assert_eq!(printed(child.launched(platform::shell("printf %s \"$CLOUD_PROFILE_PROBE\"")).expect("launched")), "run-1");
     }
 
     #[test]

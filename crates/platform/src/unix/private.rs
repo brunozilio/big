@@ -13,7 +13,12 @@ pub fn restrict(file: &File, _path: &Path) -> io::Result<()> {
 
 pub fn keep_owner(file: &File, path: &Path) -> io::Result<()> {
     use std::os::unix::fs::MetadataExt;
-    let Ok(old) = std::fs::metadata(path) else { return Ok(()) };
+    let Ok(old) = std::fs::metadata(path) else {
+        return match path.parent().and_then(crate::confine::owner_of) {
+            Some(uid) => crate::system::give_file(file, uid),
+            None => Ok(()),
+        };
+    };
     let new = file.metadata()?;
     if (old.uid(), old.gid()) == (new.uid(), new.gid()) {
         return Ok(());

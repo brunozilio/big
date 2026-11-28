@@ -96,6 +96,7 @@ impl LspClient {
         command.args(&spec.args).envs(&spec.env).current_dir(root);
         command.stdin(Stdio::piped()).stdout(Stdio::piped());
         let server = || spec.name.clone();
+        platform::confine::confined_in(&mut command, root).map_err(|source| StartError::Spawn { server: server(), source })?;
         let child = Child::spawn_with(&mut command, Spawn { stderr: Stderr::Tail, ..Spawn::default() })
             .map_err(|source| StartError::Spawn { server: server(), source })?;
         let input = child.take_stdin().ok_or_else(|| StartError::NoPipe { server: server(), pipe: "input" })?;

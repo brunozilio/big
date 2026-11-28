@@ -43,7 +43,7 @@ impl McpPool {
         }
         let missing: Vec<&ServerSpec> =
             picked.iter().filter(|(_, reused)| reused.is_none()).map(|(spec, _)| spec).collect();
-        let mut opened = super::opened_all(&missing, http, stop).into_iter();
+        let mut opened = super::opened_all(&missing, http, stop, request.host.owner.as_deref()).into_iter();
         for (spec, reused) in picked {
             let server = match reused {
                 Some(server) => Some(server),

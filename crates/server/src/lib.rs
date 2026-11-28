@@ -1,5 +1,7 @@
 mod access;
 mod ai;
+#[cfg(unix)]
+mod isolation;
 mod applications;
 mod archive;
 mod artifacts;

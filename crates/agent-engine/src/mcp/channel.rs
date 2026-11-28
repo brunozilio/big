@@ -34,7 +34,7 @@ pub fn open(spec: &ServerSpec, http: &Arc<dyn Http>, client: u64) -> Result<Arc<
                 given_up.store(true, Ordering::Relaxed);
             }
         });
-        let server = McpServer::open_listening(spec, http, given_up, Some(listener))
+        let server = McpServer::open_listening(spec, http, given_up, Some(listener), None)
             .and_then(|server| server.initialize_stopped(given_up).map(|()| server));
         drop(opened);
         server

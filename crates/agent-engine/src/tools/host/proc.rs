@@ -30,7 +30,7 @@ fn spawn(reach: &Reach<'_>, arguments: &Value) -> Result<Value, String> {
     let command = text(arguments, "command")?;
     reach.fence.runs(command)?;
     let workspace = reach.workspace;
-    let mut shell = workspace.launched(platform::shell(command));
+    let mut shell = workspace.launched(platform::shell(command)).map_err(|error| error.to_string())?;
     shell.current_dir(&workspace.cwd).stdin(Stdio::null());
     if flag(arguments, "git") {
         let inherited = std::env::var("GIT_CONFIG_COUNT").ok();

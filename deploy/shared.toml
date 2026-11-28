@@ -24,3 +24,6 @@ key_file = "/run/secrets/secrets.key"
 
 [content]
 install = true
+
+[isolation]
+mode = "user"

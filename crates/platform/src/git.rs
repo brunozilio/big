@@ -98,6 +98,7 @@ fn hardened(cwd: &Path) -> Command {
     }
     command.arg("-c").arg(format!("core.hooksPath={NOWHERE}"));
     command.current_dir(cwd).env("GIT_TERMINAL_PROMPT", "0").env("GIT_OPTIONAL_LOCKS", "0");
+    crate::confine::as_owner_of(&mut command, cwd);
     command
 }
 

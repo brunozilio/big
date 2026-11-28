@@ -105,14 +105,18 @@ pub fn worktree(
     branch: &str,
     base: Option<&str>,
     folder: &str,
+    owner: &str,
 ) -> std::io::Result<PathBuf> {
     let path = data.join("worktrees").join(folder);
     if path.exists() {
+        if !platform::confine::belongs_to(&path, Some(owner))? {
+            return Err(std::io::Error::other(format!("{} belongs to someone else", path.display())));
+        }
         return Ok(path);
     }
-    std::fs::create_dir_all(data.join("worktrees"))?;
+    platform::confine::shared_dir(&data.join("worktrees"))?;
     let Some(repo) = repo.filter(|repo| is_repo(repo)) else {
-        std::fs::create_dir_all(&path)?;
+        platform::confine::dir_for(&path, Some(owner))?;
         return Ok(path);
     };
     started(repo)?;
@@ -140,7 +144,7 @@ pub fn detached(repo: &Path, data: &Path, folder: &str) -> std::io::Result<Optio
         attempt(&path, &["checkout", "--quiet", "--detach", "--force", &commit])?;
         return Ok(Some(path));
     }
-    std::fs::create_dir_all(data.join("worktrees"))?;
+    platform::confine::shared_dir(&data.join("worktrees"))?;
     let place = path.to_string_lossy().into_owned();
     attempt(repo, &["worktree", "add", "--quiet", "--detach", &place, &commit])?;
     Ok(Some(path))
@@ -183,7 +187,7 @@ mod tests {
         git(repo.path(), &["config", "user.name", "T"]);
         git(repo.path(), &["config", "user.email", "t@example.com"]);
 
-        let made = worktree(Some(repo.path()), data.path(), "big/x", None, "big_x").expect("worktree");
+        let made = worktree(Some(repo.path()), data.path(), "big/x", None, "big_x", "ana").expect("worktree");
 
         assert!(is_repo(&made), "the worktree is a git checkout");
         assert_eq!(git(&made, &["branch", "--show-current"]), "big/x");
@@ -197,8 +201,8 @@ mod tests {
         git(repo.path(), &["init", "-q", "-b", "main"]);
         git(repo.path(), &["config", "user.name", "T"]);
         git(repo.path(), &["config", "user.email", "t@example.com"]);
-        let clean = worktree(Some(repo.path()), data.path(), "big/a", None, "big_a").expect("clean");
-        let dirty = worktree(Some(repo.path()), data.path(), "big/b", None, "big_b").expect("dirty");
+        let clean = worktree(Some(repo.path()), data.path(), "big/a", None, "big_a", "ana").expect("clean");
+        let dirty = worktree(Some(repo.path()), data.path(), "big/b", None, "big_b", "ana").expect("dirty");
         std::fs::write(dirty.join("draft.txt"), "wip").expect("draft");
 
         remove_worktree(repo.path(), &clean).expect("removed");
@@ -207,7 +211,7 @@ mod tests {
         assert!(!clean.exists());
         assert!(exists(repo.path(), "refs/heads/big/a"), "the branch outlives its worktree");
         assert!(kept.is_err() && dirty.join("draft.txt").exists(), "unsaved work is never thrown away");
-        let again = worktree(Some(repo.path()), data.path(), "big/a", None, "big_a").expect("again");
+        let again = worktree(Some(repo.path()), data.path(), "big/a", None, "big_a", "ana").expect("again");
         assert_eq!(git(&again, &["branch", "--show-current"]), "big/a");
     }
 
@@ -221,7 +225,7 @@ mod tests {
             &["-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-q", "--allow-empty", "-m", "c"],
         );
 
-        let refused = worktree(Some(repo.path()), data.path(), "main", None, "taken");
+        let refused = worktree(Some(repo.path()), data.path(), "main", None, "taken", "ana");
 
         assert!(refused.is_err(), "main is already checked out");
         assert!(!data.path().join("worktrees/taken").exists());
@@ -280,7 +284,7 @@ mod tests {
         git(&local, &["remote", "set-head", "origin", "-d"]);
         let tip = remote.pushed("trunk", "second");
 
-        let made = worktree(Some(&local), data.path(), "big/x", None, "big_x").expect("worktree");
+        let made = worktree(Some(&local), data.path(), "big/x", None, "big_x", "ana").expect("worktree");
 
         assert_eq!(git(&made, &["branch", "--show-current"]), "big/x");
         assert_eq!(git(&made, &["rev-parse", "HEAD"]), tip);
@@ -293,10 +297,10 @@ mod tests {
         let data = tempfile::tempdir().expect("data");
         let tip = remote.pushed("release", "release work");
 
-        let made = worktree(Some(&remote.local()), data.path(), "big/y", Some("release"), "big_y").expect("worktree");
+        let made = worktree(Some(&remote.local()), data.path(), "big/y", Some("release"), "big_y", "ana").expect("worktree");
 
         assert_eq!(git(&made, &["rev-parse", "HEAD"]), tip);
-        assert!(worktree(Some(&remote.local()), data.path(), "big/z", Some("missing"), "big_z").is_err());
+        assert!(worktree(Some(&remote.local()), data.path(), "big/z", Some("missing"), "big_z", "ana").is_err());
     }
 
     #[test]
@@ -305,7 +309,7 @@ mod tests {
         let data = tempfile::tempdir().expect("data");
         let tip = remote.pushed("feature/pr", "pull request work");
 
-        let made = worktree(Some(&remote.local()), data.path(), "feature/pr", Some("trunk"), "pr").expect("worktree");
+        let made = worktree(Some(&remote.local()), data.path(), "feature/pr", Some("trunk"), "pr", "ana").expect("worktree");
 
         assert_eq!(git(&made, &["branch", "--show-current"]), "feature/pr");
         assert_eq!(git(&made, &["rev-parse", "HEAD"]), tip);
@@ -321,7 +325,7 @@ mod tests {
         let tip = commit(&local, "mine");
         git(&local, &["checkout", "-q", "trunk"]);
 
-        let made = worktree(Some(&local), data.path(), "mine", None, "mine").expect("worktree");
+        let made = worktree(Some(&local), data.path(), "mine", None, "mine", "ana").expect("worktree");
 
         assert_eq!(git(&made, &["rev-parse", "HEAD"]), tip);
     }

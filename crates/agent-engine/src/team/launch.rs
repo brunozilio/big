@@ -59,6 +59,9 @@ fn program() -> Result<PathBuf, String> {
 }
 
 pub fn launch(launching: &Launching<'_>) -> Result<(), String> {
+    if platform::confine::active() {
+        return Err("teammates do not run while each person's agents run as their own user".to_owned());
+    }
     launching.team.send(launching.name, LEAD, launching.prompt, None)?;
     let planned = planned(launching, program()?);
     let (path, spec) = &planned.spec;

@@ -2,6 +2,7 @@ pub mod address;
 pub mod atomic;
 pub mod bounded;
 pub mod child;
+pub mod confine;
 pub mod crypto;
 pub mod editor;
 pub mod environment;

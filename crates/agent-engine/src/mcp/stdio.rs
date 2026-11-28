@@ -81,7 +81,7 @@ fn line(output: &mut impl BufRead, into: &mut Vec<u8>) -> Result<bool, String> {
 
 impl StdioTransport {
     pub fn spawn(name: &str, command: &str, args: &[String], env: &[(String, String)]) -> Result<Self, String> {
-        Self::spawn_listening(name, command, args, env, None)
+        Self::spawn_listening(name, command, args, env, None, None)
     }
 
     pub fn spawn_listening(
@@ -90,9 +90,11 @@ impl StdioTransport {
         args: &[String],
         env: &[(String, String)],
         listener: Option<Listener>,
+        owner: Option<&str>,
     ) -> Result<Self, String> {
         let mut process = platform::command(command);
         process.args(args).envs(env.iter().cloned());
+        platform::confine::as_owner(&mut process, owner).map_err(|error| format!("{name} could not start: {error}"))?;
         process.stdin(Stdio::piped()).stdout(Stdio::piped());
         let child = Child::spawn_with(&mut process, Spawn { stderr: Stderr::Tail, ..Spawn::default() })
             .map_err(|error| format!("{name} could not start: {error}"))?;

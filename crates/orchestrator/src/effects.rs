@@ -292,13 +292,16 @@ pub(crate) async fn worktree_of(shared: &Shared, item: &WorkItem, command: &Comm
     let chosen = checkouts.iter().find(|checkout| checkout.id == wanted).or(checkouts.first()).cloned();
     let checkout = chosen.ok_or_else(|| Failure::permanent("the item has no repository"))?;
     let (branch, base) = (git::head_of(item, &checkout.id), git::base_of(item, &checkout.id));
-    Ok(worktree(shared, checkout, &branch, base).await?.path)
+    Ok(worktree(shared, checkout, &branch, base, crate::owners::of(&shared.store, item)).await?.path)
 }
 
 async fn exec(shared: &Shared, item: &WorkItem, command: &Command) -> Result<Value, Failure> {
     let worktree = worktree_of(shared, item, command).await?;
     let cwd = command.args["cwd"].as_str().map_or_else(|| worktree.clone(), |dir| worktree.join(dir));
-    let mut process = tokio::process::Command::from(platform::shell(&command.text("command")));
+    let mut shell = platform::shell(&command.text("command"));
+    platform::confine::as_owner(&mut shell, Some(&crate::owners::of(&shared.store, item)))
+        .map_err(|error| Failure::Class(ErrorClass::Transient, format!("the command could not start: {error}")))?;
+    let mut process = tokio::process::Command::from(shell);
     process.current_dir(&cwd).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     process.envs(crate::application::environment(&shared.store, &item.input));
     if let Some(env) = command.args["env"].as_object() {

@@ -114,3 +114,35 @@ pub fn local_data_dir_in(
         .or_else(|| home.map(|home| home.join("AppData\\Local")))
         .map(|dir| dir.join(name))
 }
+
+pub fn may_confine() -> Result<(), String> {
+    Err("agents run as their own users only on Linux and macOS".to_owned())
+}
+
+pub fn narrow_umask() {}
+
+pub fn set_mode(_path: &Path, _mode: u32) -> std::io::Result<()> {
+    Ok(())
+}
+
+pub fn open_entry(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+pub fn passable(_path: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+pub fn owner(_path: &Path) -> std::io::Result<u32> {
+    Err(std::io::Error::other("files have no numeric owner here"))
+}
+
+pub fn give(_path: &Path, _uid: u32) -> std::io::Result<()> {
+    Ok(())
+}
+
+pub fn give_file(_file: &File, _uid: u32) -> std::io::Result<()> {
+    Ok(())
+}
+
+pub fn switch_to(_command: &mut Command, _uid: u32, _ceiling: crate::confine::Ceiling) {}

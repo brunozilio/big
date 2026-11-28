@@ -33,7 +33,9 @@ fn settle(home: &Path, program: &Path, fill: impl FnOnce(&Path) -> Result<(), St
     let replaced = parent.join(format!(".{name}.replaced-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&staging);
     std::fs::create_dir_all(&staging).map_err(|error| format!("cannot create {}: {error}", staging.display()))?;
-    let placed = fill(&staging).and_then(|()| place(&staging, home, program, &replaced));
+    let placed = fill(&staging)
+        .and_then(|()| place(&staging, home, program, &replaced))
+        .and_then(|()| platform::confine::open_to_all(home).map_err(|error| error.to_string()));
     let _ = std::fs::remove_dir_all(&staging);
     placed
 }

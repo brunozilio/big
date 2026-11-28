@@ -18,7 +18,7 @@ pub fn exec(cwd: &Path, arguments: &Value, stop: &AtomicBool, starter: &Starter)
     let command =
         arguments["command"].as_str().filter(|command| !command.trim().is_empty()).ok_or("ctx.exec needs a command")?;
     let seconds = arguments["timeout"].as_u64().unwrap_or(120);
-    let mut process = starter.launched(platform::script_shell(command));
+    let mut process = starter.launched(platform::script_shell(command)).map_err(|error| error.to_string())?;
     process.current_dir(cwd);
     let input = arguments["input"].as_str().map(|text| text.as_bytes().to_vec());
     let bounds = Bounds { timeout: Duration::from_secs(seconds), max_output: OUTPUT, stop, input };

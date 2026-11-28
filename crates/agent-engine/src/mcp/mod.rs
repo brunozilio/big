@@ -126,7 +126,7 @@ impl McpServer {
     }
 
     pub fn open_stopped(spec: &ServerSpec, http: &Arc<dyn Http>, stop: &platform::Stop) -> Result<Self, McpError> {
-        Self::open_listening(spec, http, stop, None)
+        Self::open_listening(spec, http, stop, None, None)
     }
 
     pub fn open_listening(
@@ -134,6 +134,7 @@ impl McpServer {
         http: &Arc<dyn Http>,
         stop: &platform::Stop,
         listener: Option<Listener>,
+        owner: Option<&str>,
     ) -> Result<Self, McpError> {
         if stop.load(Ordering::Relaxed) {
             return Err(McpError::Cancelled);
@@ -150,7 +151,7 @@ impl McpServer {
                 Box::new(LocalTransport::new(Arc::new(server)))
             }
             ServerSpec::Stdio { name, command, args, env } => {
-                Box::new(StdioTransport::spawn_listening(name, command, args, env, listener)?)
+                Box::new(StdioTransport::spawn_listening(name, command, args, env, listener, owner)?)
             }
         };
         Ok(Self::new(spec.name(), transport))
@@ -340,19 +341,24 @@ pub fn connect_stopped(
     let mut connected = in_process(request, stop);
     let specs = wanted(request, sources);
     let specs: Vec<&ServerSpec> = specs.iter().collect();
-    connected.extend(opened_all(&specs, http, stop).into_iter().flatten());
+    connected.extend(opened_all(&specs, http, stop, request.host.owner.as_deref()).into_iter().flatten());
     connected
 }
 
 pub const OPENED_TOGETHER: usize = 8;
 
-fn opened_all(specs: &[&ServerSpec], http: &Arc<dyn Http>, stop: &platform::Stop) -> Vec<Option<Arc<McpServer>>> {
+fn opened_all(
+    specs: &[&ServerSpec],
+    http: &Arc<dyn Http>,
+    stop: &platform::Stop,
+    owner: Option<&str>,
+) -> Vec<Option<Arc<McpServer>>> {
     let mut opened = Vec::with_capacity(specs.len());
     for batch in specs.chunks(OPENED_TOGETHER) {
         std::thread::scope(|scope| {
             let handles: Vec<_> = batch
                 .iter()
-                .map(|spec| scope.spawn(move || ready(spec.name(), McpServer::open_stopped(spec, http, stop), stop)))
+                .map(|spec| scope.spawn(move || ready(spec.name(), McpServer::open_listening(spec, http, stop, None, owner), stop)))
                 .collect();
             opened.extend(handles.into_iter().map(|handle| handle.join().ok().flatten()));
         });

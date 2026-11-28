@@ -361,6 +361,17 @@ capture_content = false
 capture_prompts = false
 capture_limit = 16384
 
+[isolation]
+mode = "none"
+first_uid = "200000"
+uids = "100000"
+homes = "agent-homes"
+kept_env = "PATH,LANG,LC_ALL,TERM,TZ,SSL_CERT_FILE,SSL_CERT_DIR"
+cpu_seconds = "0"
+memory_mb = "0"
+processes = "1024"
+file_mb = "8192"
+
 [secrets]
 backend = "file"
 key_file = ""

@@ -51,14 +51,14 @@ mod tests {
         workspace.services.launch = Launch(Arc::new(InABox));
         let mut command = Command::new("ls");
         command.arg("-l");
-        let launched = workspace.launched(command);
+        let launched = workspace.launched(command).expect("launched");
         assert_eq!(launched.get_program(), "box");
         assert_eq!(launched.get_args().collect::<Vec<_>>(), ["ls", "-l"]);
     }
 
     #[test]
     fn by_default_a_command_runs_on_this_machine_as_given() {
-        let launched = Workspace::new(std::env::temp_dir()).launched(Command::new("ls"));
+        let launched = Workspace::new(std::env::temp_dir()).launched(Command::new("ls")).expect("launched");
         assert_eq!(launched.get_program(), "ls");
     }
 }

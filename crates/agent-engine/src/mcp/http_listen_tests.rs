@@ -98,7 +98,7 @@ fn listened(server: &Arc<Streamable>) -> (McpServer, Arc<Mutex<Vec<String>>>) {
         kept.lock().expect("heard").push(params["content"].as_str().unwrap_or_default().to_owned());
     });
     let http: Arc<dyn Http> = Arc::clone(server) as Arc<dyn Http>;
-    let opened = McpServer::open_listening(&spec(), &http, &platform::Stop::new(), Some(listener)).expect("open");
+    let opened = McpServer::open_listening(&spec(), &http, &platform::Stop::new(), Some(listener), None).expect("open");
     opened.initialize_stopped(&platform::Stop::new()).expect("initialize");
     (opened, heard)
 }

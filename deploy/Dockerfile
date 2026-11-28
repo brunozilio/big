@@ -25,7 +25,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && curl -fsSLo /usr/local/share/rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 COPY --from=build /app /usr/local/bin/app
 COPY --from=build /logic /usr/local/share/logic
-USER app
 ENV HOME=/data XDG_CONFIG_HOME=/data
 WORKDIR /data
 EXPOSE 7420

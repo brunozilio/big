@@ -58,9 +58,9 @@ fn helper(shared: &Shared, owner: &str, connection: Option<&str>) -> ApiResult<S
     Ok(format!("!\"{}\" {HELPER_COMMAND} \"{url}\"", exe.display()))
 }
 
-fn clone(remote: &str, folder: &Path, helper: &str) -> ApiResult<()> {
+fn clone(remote: &str, folder: &Path, helper: &str, owner: &str) -> ApiResult<()> {
     let parent = folder.parent().ok_or_else(|| ApiError::failed("the workspace has no parent folder"))?;
-    std::fs::create_dir_all(parent).map_err(ApiError::failed)?;
+    platform::confine::dir_for(parent, Some(owner)).map_err(ApiError::failed)?;
     let mut command = platform::git::command(parent);
     if !helper.is_empty() {
         command.args(["-c", &format!("credential.helper={helper}")]);
@@ -99,7 +99,9 @@ pub async fn cloned(shared: &Shared, owner: &str, mut application: Application) 
         }
     }
     for (remote, folder, helper) in work {
-        tokio::task::spawn_blocking(move || clone(&remote, &folder, &helper)).await.map_err(ApiError::failed)??;
+        let owner = owner.to_owned();
+        let cloning = move || clone(&remote, &folder, &helper, &owner);
+        tokio::task::spawn_blocking(cloning).await.map_err(ApiError::failed)??;
     }
     Ok(application)
 }

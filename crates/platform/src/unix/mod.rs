@@ -1,3 +1,4 @@
+mod confine;
 mod cpu;
 mod ports;
 mod private;
@@ -7,6 +8,7 @@ use std::fs::OpenOptions;
 use std::path::Path;
 use std::process::Command;
 
+pub use confine::{give, give_file, may_confine, narrow_umask, open_entry, owner, passable, set_mode, switch_to};
 pub use cpu::cpu_time;
 pub use ports::{port_holder, terminate};
 pub use private::{LOCK_FILES_CAN_BE_REMOVED, is_file_at, keep_owner, open_with_mode_of, restrict, restrict_open};
