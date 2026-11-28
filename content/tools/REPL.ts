@@ -43,6 +43,7 @@ A script that is still running after about 30 seconds is dispatched: the call re
 Limits: the script's own JavaScript may run for \`timeout\` without a break (30 seconds unless you ask for more; time waiting on tools does not count), the whole script stops after 10 minutes, tool calls included, and one script makes at most 1,000 tool calls.
 
 Use REPL for work that would take many tool calls or that reads more than you need to see: searching across many files, applying the same edit in many places, collecting facts and returning a summary. A single call to one tool is simpler made directly.`,
+  profile: { effects: ["write", "send-external"], risk: "high", reversible: false, untrusted: true, sensitive: true },
 };
 
 type Input = { code?: unknown; description?: unknown; timeout?: unknown };

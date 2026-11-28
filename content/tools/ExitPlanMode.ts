@@ -15,6 +15,7 @@ export const spec = {
     "type": "object"
   },
   description: `In planning mode, present your finished plan to the user for approval. The user reads it and either approves it, which ends planning so you start implementing it right away, or keeps planning and tells you what to change. Pass the whole plan, in markdown, as \`plan\`; do not also write it as a message. Use it only when the task needs code changes and the plan is complete; to clarify requirements or choose between approaches, ask with AskUserQuestion first. Never ask in text whether the plan is fine: this tool is that question.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { plan?: unknown };

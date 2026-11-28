@@ -34,12 +34,33 @@ impl Contract {
 
     fn migrations(self) -> &'static [Migration] {
         match self {
-            Self::Connector | Self::Workflow | Self::Package | Self::Trigger | Self::Policy => &[stamped],
+            Self::Connector => &[stamped, profiled],
+            Self::Workflow | Self::Package | Self::Trigger | Self::Policy => &[stamped],
         }
     }
 }
 
 fn stamped(_: &mut Value) {}
+
+fn profiled(connector: &mut Value) {
+    for action in connector["actions"].as_array_mut().into_iter().flatten() {
+        let Some(fields) = action.as_object_mut() else { continue };
+        if fields.contains_key("effects") {
+            continue;
+        }
+        let writes = fields.get("writes").and_then(Value::as_bool) == Some(true);
+        let hidden = fields.get("secret").and_then(Value::as_bool) == Some(true);
+        let (effect, risk, reversible) = if writes { ("write", "medium", false) } else { ("read", "low", true) };
+        fields.insert("effects".into(), Value::from(vec![effect]));
+        fields.entry("risk").or_insert_with(|| Value::from(risk));
+        fields.entry("reversible").or_insert_with(|| Value::from(reversible));
+        fields.entry("untrusted").or_insert(Value::Bool(true));
+        fields.entry("sensitive").or_insert(Value::Bool(true));
+        if hidden {
+            fields.entry("visibility").or_insert_with(|| Value::from("host"));
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SchemaError {
@@ -133,6 +154,24 @@ mod tests {
             assert_eq!((read.found, read.migrated()), (None, true));
             assert_eq!(old[FIELD], json!(current));
         }
+    }
+
+    #[test]
+    fn a_first_version_connector_gets_the_profile_its_writes_had() {
+        let mut old = json!({ FIELD: 1, "actions": [
+            { "name": "x.send", "writes": true },
+            { "name": "x.get", "writes": false, "secret": true },
+            { "name": "x.mine", "writes": true, "effects": ["send-external"], "risk": "high" },
+        ] });
+        read(Contract::Connector, &mut old, "connectors/x/index.ts").expect("migrated");
+        assert_eq!(old[FIELD], 2);
+        let actions = &old["actions"];
+        assert_eq!(
+            (&actions[0]["effects"], &actions[0]["risk"], &actions[0]["reversible"]),
+            (&json!(["write"]), &json!("medium"), &json!(false))
+        );
+        assert_eq!((&actions[1]["effects"], &actions[1]["visibility"]), (&json!(["read"]), &json!("host")));
+        assert_eq!((&actions[2]["effects"], actions[2].get("untrusted")), (&json!(["send-external"]), None));
     }
 
     #[test]

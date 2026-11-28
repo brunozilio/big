@@ -16,6 +16,7 @@ export const spec = {
     "type": "object"
   },
   description: `Collect a background agent's report. block defaults to true; false polls without waiting.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: true, sensitive: false },
 };
 
 type Input = { task_id?: string; block?: boolean };

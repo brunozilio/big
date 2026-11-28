@@ -248,11 +248,11 @@ impl TeammateAsk {
 
     pub fn ask(&self) -> crate::AgentAsk {
         let kind = match &self.asked {
-            Asked::Permission { tool_name, description, rememberable } => crate::AskKind::Permission {
-                tool: format!("{tool_name} (teammate {})", self.teammate),
-                subject: description.clone(),
-                rememberable: *rememberable,
-            },
+            Asked::Permission { tool_name, description, rememberable } => crate::AskKind::permission(
+                format!("{tool_name} (teammate {})", self.teammate),
+                description.clone(),
+                *rememberable,
+            ),
             Asked::Plan { plan } => {
                 crate::AskKind::Plan { plan: format!("Plan from teammate {}:\n\n{plan}", self.teammate) }
             }
@@ -418,7 +418,7 @@ mod tests {
         assert_eq!(question.id.0, "teammate-ask:team-1:tester:p1");
         assert!(matches!(
             &question.kind,
-            crate::AskKind::Permission { tool, subject, rememberable: true }
+            crate::AskKind::Permission { tool, subject, rememberable: true, .. }
                 if tool == "Bash (teammate tester)" && subject == "npm run deploy"
         ));
         for decision in [

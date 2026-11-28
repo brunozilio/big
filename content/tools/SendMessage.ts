@@ -43,6 +43,7 @@ export const spec = {
 - An agent still running in the background cannot take a message: collect it with TaskOutput first.
 - Agents last for this request only; start a new one for later requests.
 - \`to\` can also name another of the user's open sessions (ListSessions lists them): the message waits in its inbox and reaches its agent; any answer comes back to you as an event.`,
+  profile: { effects: ["write"], risk: "low", reversible: false, untrusted: false, sensitive: false },
 };
 
 type Input = { to?: string; message?: unknown; summary?: string };

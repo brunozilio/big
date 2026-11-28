@@ -28,7 +28,7 @@ function tokenFields(language: Language) {
 
 export function provider(_args: { language?: Language }, _ctx: Ctx) {
   const auth = { kind: "steps", using: "session" };
-  return { schema_version: 1, name: "Figma", logo: "logo.svg", capabilities: ["design"], auth, actions: design() };
+  return { schema_version: 2, name: "Figma", logo: "logo.svg", capabilities: ["design"], auth, actions: design() };
 }
 
 export function alternatives({ language }: { language: Language }, _ctx: Ctx) {

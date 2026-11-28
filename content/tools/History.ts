@@ -23,6 +23,7 @@ export const spec = {
     type: "object",
   },
   description: (ctx) => `Look into what ${ctx.brand.NAME} itself kept on this computer: past conversations (chats and work-item steps alike), across every project, including those kept under a former name of the app. Use it whenever the user mentions something said or done in an earlier session, before guessing or searching files by hand: \`search\` with a few distinctive words, then \`read\` the session around the turn it found. \`places\` names where the app keeps its data, logs and settings here.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: true, sensitive: true },
 };
 
 type Input = {

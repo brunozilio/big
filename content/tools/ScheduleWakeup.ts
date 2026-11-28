@@ -24,6 +24,7 @@ export const spec = {
     "type": "object"
   },
   description: `Send a prompt to this session once, after a delay (60 to 3600 seconds), to pick up work later: check on a long build, a deploy, or repeat a task at your own pace by scheduling the next wakeup each time. It fires only while the session is idle. Each wakeup is a model turn: to wait until a tool's result meets a fixed condition (an issue reaching a status, a file changing), use Watch, which checks without you; to follow a command's output, Monitor.`,
+  profile: { effects: ["consumes-budget"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { delaySeconds: number; prompt: string; reason?: string };

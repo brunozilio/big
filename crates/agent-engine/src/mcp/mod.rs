@@ -89,6 +89,8 @@ struct Listed {
     name: String,
     spec: ToolSpec,
     marked_read_only: bool,
+    annotations: Value,
+    declared: Option<domain::operation::Declaration>,
 }
 
 pub struct McpServer {
@@ -242,13 +244,22 @@ impl McpServer {
         };
         Ok(listed
             .into_iter()
-            .map(|Listed { name, spec, marked_read_only }| McpTool {
+            .map(|Listed { name, spec, marked_read_only, annotations, declared }| McpTool {
                 server: Arc::clone(self),
                 name,
                 spec,
                 marked_read_only,
+                annotations,
+                declared,
             })
             .collect())
+    }
+
+    fn declared(&self, tool: &Value) -> Option<domain::operation::Declaration> {
+        if self.name != domain::mcp::connectors_server() {
+            return None;
+        }
+        serde_json::from_value(tool["_meta"][domain::operation::META].clone()).ok()
     }
 
     fn fetched_tools(&self, stop: &platform::Stop) -> Result<Vec<Listed>, McpError> {
@@ -274,7 +285,8 @@ impl McpServer {
                     schema: tool.get("inputSchema").cloned().unwrap_or_else(|| json!({"type":"object"})),
                 };
                 let marked_read_only = tool["annotations"]["readOnlyHint"].as_bool() == Some(true);
-                tools.push(Listed { name, spec, marked_read_only });
+                let declared = self.declared(tool);
+                tools.push(Listed { name, spec, marked_read_only, annotations: tool["annotations"].clone(), declared });
             }
             match listed.get("nextCursor") {
                 None | Some(Value::Null) => return Ok(tools),

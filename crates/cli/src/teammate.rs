@@ -138,7 +138,7 @@ impl Mailbox {
         let request_id = format!("{}-{nanos:x}", self.me.name);
         let from = self.me.name.clone();
         let (request, summary) = match &ask.kind {
-            app::AskKind::Permission { tool, subject, rememberable } => (
+            app::AskKind::Permission { tool, subject, rememberable, .. } => (
                 Protocol::PermissionRequest {
                     request_id: request_id.clone(),
                     from,
@@ -245,11 +245,7 @@ mod tests {
         let (_home, team, mailbox) = rig();
         let ask = app::AgentAsk {
             id: app::AskId("ask-1".into()),
-            kind: app::AskKind::Permission {
-                tool: "Bash".into(),
-                subject: "npm run deploy".into(),
-                rememberable: true,
-            },
+            kind: app::AskKind::permission("Bash", "npm run deploy", true),
         };
         let answered = |decision: app::Decision| {
             let lead = team.clone();
@@ -298,10 +294,7 @@ mod tests {
         let (_home, team, mailbox) = rig();
         let asked = Protocol::ShutdownRequest { request_id: "r1".into(), from: LEAD.into(), reason: None };
         team.send("tester", LEAD, &asked.text(), None).expect("send");
-        let ask = app::AgentAsk {
-            id: app::AskId("ask-1".into()),
-            kind: app::AskKind::Permission { tool: "Bash".into(), subject: "x".into(), rememberable: false },
-        };
+        let ask = app::AgentAsk { id: app::AskId("ask-1".into()), kind: app::AskKind::permission("Bash", "x", false) };
 
         assert_eq!(mailbox.forward(&ask), Some(app::Decision::Deny));
         assert!(team.shutting_down("tester"), "the request is left for the mailbox to act on");

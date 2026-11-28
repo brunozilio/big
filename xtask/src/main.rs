@@ -5,6 +5,7 @@ mod crate_graph;
 mod environment;
 mod git_commands;
 mod lint;
+mod provider_names;
 mod web;
 
 use std::path::PathBuf;

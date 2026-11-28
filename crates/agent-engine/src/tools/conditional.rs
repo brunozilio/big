@@ -19,6 +19,9 @@ pub fn tool(name: &str, data: &Value) -> Option<ScriptTool> {
     let capabilities = Capabilities::read(&shape)
         .inspect_err(|error| tracing::error!(%error, name, "a tool offered only in some sessions does not load"))
         .ok()?;
+    let profile = super::script_tool::profile_of(&path, &shape)
+        .inspect_err(|error| tracing::error!(%error, name, "a tool offered only in some sessions does not load"))
+        .ok()?;
     let has = |export: &str| script::exports(&path, &source, export);
     let exports =
         Exports { effects: has("effects"), summary: has("summary"), shown: has("shown"), offered: has("offered") };
@@ -35,6 +38,7 @@ pub fn tool(name: &str, data: &Value) -> Option<ScriptTool> {
         trusted: true,
         skills: Vec::new(),
         interceptors: Vec::new(),
+        profile,
     })
 }
 

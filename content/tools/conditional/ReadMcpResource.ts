@@ -10,6 +10,7 @@ export const spec = {
     additionalProperties: false,
   },
   description: `Read a resource of an MCP server by its URI (ListMcpResources lists them).`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: true, sensitive: false },
 };
 
 type Input = { server?: string; uri?: string };

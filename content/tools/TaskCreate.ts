@@ -20,6 +20,7 @@ export const spec = {
     "type": "object"
   },
   description: `Create a task with a subject and description. Returns its task_id. The list belongs to the session and lasts across its turns; in a team, the lead and every teammate share it.`,
+  profile: { effects: ["write"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { subject?: string; description?: string; activeForm?: string };

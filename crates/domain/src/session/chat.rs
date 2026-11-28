@@ -99,10 +99,7 @@ mod tests {
         for at in 0..SHOWN_ENTRIES + 5 {
             transcript.push(Entry::Notice(format!("n{at}")));
         }
-        let ask = AgentAsk {
-            id: AskId("a1".into()),
-            kind: AskKind::Permission { tool: "Bash".into(), subject: "ls".into(), rememberable: true },
-        };
+        let ask = AgentAsk { id: AskId("a1".into()), kind: AskKind::permission("Bash", "ls", true) };
         transcript.begin();
         transcript.apply(&EngineEvent::Asked(ask));
 

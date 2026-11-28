@@ -16,6 +16,10 @@ pub fn browser_server() -> String {
     format!("{}_browser", brand::COMMAND.replace('-', "_"))
 }
 
+pub fn connectors_server() -> String {
+    format!("{}_connectors", brand::COMMAND.replace('-', "_"))
+}
+
 pub type RpcError = (i64, String);
 
 pub fn respond(

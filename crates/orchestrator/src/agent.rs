@@ -554,11 +554,9 @@ impl AgentEffect<'_> {
     fn teammates_asked(&self, client: u64, collected: &Collected) {
         for asked in agent_engine::team::lead_inbox::take_asks(client) {
             let kind = match &asked.asked {
-                domain::team::Asked::Permission { tool_name, description, rememberable } => AskKind::Permission {
-                    tool: tool_name.clone(),
-                    subject: description.clone(),
-                    rememberable: *rememberable,
-                },
+                domain::team::Asked::Permission { tool_name, description, rememberable } => {
+                    AskKind::permission(tool_name.clone(), description.clone(), *rememberable)
+                }
                 domain::team::Asked::Plan { plan } => AskKind::Plan { plan: plan.clone() },
             };
             let id = domain::AskId(format!("teammate-{}-{}", asked.teammate, asked.request_id));

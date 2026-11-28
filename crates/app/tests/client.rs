@@ -61,10 +61,7 @@ fn a_session_streams_a_run_and_the_next_prompt_resumes_it() {
 #[test]
 fn a_question_is_answered_through_the_run() {
     let data = tempfile::tempdir().expect("data");
-    let ask = AgentAsk {
-        id: AskId("a-1".into()),
-        kind: AskKind::Permission { tool: "Bash".into(), subject: "ls".into(), rememberable: false },
-    };
+    let ask = AgentAsk { id: AskId("a-1".into()), kind: AskKind::permission("Bash", "ls", false) };
     let engine = FakeEngine::new(vec![model()], script(vec![EngineEvent::Asked(ask)]))
         .with_delay(std::time::Duration::from_millis(40));
     let client = build(&engine, data.path());

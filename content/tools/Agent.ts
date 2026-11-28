@@ -87,6 +87,7 @@ Brief it like the peer it is: state the goal and what you already ruled out, poi
     }
     return text;
   },
+  profile: { effects: ["consumes-budget"], risk: "low", reversible: false, untrusted: false, sensitive: false },
 };
 
 export function effects(_input: Input | null) {

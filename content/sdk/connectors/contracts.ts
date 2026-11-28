@@ -1,5 +1,27 @@
 export type Schema = Record<string, unknown>;
 
+export type Effect = "read" | "write" | "send-external" | "money" | "pii" | "legal" | "destructive" | "memory" | "consumes-budget";
+
+export type Risk = "low" | "medium" | "high";
+
+export type Reversible = boolean | "compensate";
+
+export type Visibility = "model" | "host";
+
+export type Permission = { default: "ask" | "allow"; alwaysAsk: boolean };
+
+export type Profile = {
+  effects: Effect[];
+  risk: Risk;
+  reversible: Reversible;
+  untrusted: boolean;
+  sensitive: boolean;
+  recipients?: string[];
+  freeText?: string[];
+  visibility?: Visibility;
+  permission?: Permission;
+};
+
 export type Action = {
   name: string;
   input_schema: Schema;
@@ -8,7 +30,111 @@ export type Action = {
   idempotent: "native" | "lookup";
   description?: string;
   secret?: boolean;
+} & Profile;
+
+export const EFFECTS: Effect[] = ["read", "write", "send-external", "money", "pii", "legal", "destructive", "memory", "consumes-budget"];
+
+const REQUIRED = ["effects", "risk", "reversible", "untrusted", "sensitive"] as const;
+
+const INERT: Effect[] = ["read", "pii", "consumes-budget"];
+
+export const looks = (untrusted = false, sensitive = false, more: Effect[] = []): Profile => ({
+  effects: ["read", ...more],
+  risk: "low",
+  reversible: true,
+  untrusted,
+  sensitive,
+});
+
+export const alters = (risk: Risk, reversible: Reversible, more: Partial<Profile> = {}): Profile => ({
+  effects: ["write"],
+  risk,
+  reversible,
+  untrusted: false,
+  sensitive: false,
+  ...more,
+});
+
+const ALWAYS_ASK: Permission = { default: "ask", alwaysAsk: true };
+
+const PROFILES: Record<string, Profile> = {
+  "tracker.create_issue": alters("low", "compensate"),
+  "tracker.issue": looks(true),
+  "tracker.comment": alters("low", "compensate", { freeText: ["body"] }),
+  "tracker.statuses": looks(),
+  "tracker.transition": alters("low", true),
+  "tracker.schema": looks(),
+  "tracker.set_impediment": alters("low", true, { freeText: ["reason"] }),
+  "tracker.search": looks(true),
+  "tracker.projects": looks(),
+  "tracker.fields": looks(),
+  "tracker.update_issue": alters("medium", "compensate", { freeText: ["title", "description"] }),
+  "tracker.link_issues": alters("low", true),
+  "tracker.attach": alters("medium", "compensate", { sensitive: true }),
+  "code.open_pull_request": alters("low", "compensate", { freeText: ["title", "body"] }),
+  "code.pull_request": looks(true),
+  "code.files_diff": looks(true),
+  "code.review_comments": looks(true),
+  "code.submit_review": alters("medium", "compensate", { freeText: ["body"] }),
+  "code.resolve_thread": alters("low", true),
+  "code.merge": alters("high", "compensate"),
+  "code.repos": looks(),
+  "code.pull_requests": looks(true),
+  "code.branches": looks(),
+  "code.merge_branches": alters("high", "compensate"),
+  "code.git_credentials": { ...looks(false, true), visibility: "host" },
+  "pipelines.runs": looks(),
+  "pipelines.run": looks(),
+  "pipelines.job_log": looks(true),
+  "pipelines.pending_deployments": looks(),
+  "pipelines.review_deployment": alters("high", false, { permission: ALWAYS_ASK, freeText: ["comment"] }),
+  "cloud.identity": { ...looks(false, true), visibility: "host" },
+  "cloud.accounts_and_roles": looks(),
+  "cloud.last_deployment": looks(),
+  "changes.create": alters("medium", "compensate", { freeText: ["title", "description"] }),
+  "changes.update": alters("medium", true, { freeText: ["title", "description"] }),
+  "changes.get": looks(),
+  "changes.cancel": alters("medium", false),
+  "tests.create_case": alters("low", "compensate"),
+  "tests.cases": looks(),
+  "tests.create_cycle": alters("low", "compensate"),
+  "tests.record": alters("low", true),
+  "tests.finish_cycle": alters("low", true),
+  "tests.projects": looks(),
+  "security.status": looks(),
+  "security.projects": looks(),
+  "security.findings": looks(false, true),
+  "mcp.tools": looks(true),
+  "quality.report": looks(),
+  "email.list_messages": looks(true, true, ["pii"]),
+  "email.message": looks(true, true, ["pii"]),
+  "email.send": alters("high", false, { effects: ["send-external", "pii"], sensitive: true, recipients: ["to", "cc"], freeText: ["subject", "body"], permission: ALWAYS_ASK }),
+  "email.reply": alters("high", false, { effects: ["send-external", "pii"], sensitive: true, freeText: ["body"], permission: ALWAYS_ASK }),
+  "email.list_events": looks(true, true, ["pii"]),
+  "email.create_event": alters("medium", "compensate", { effects: ["write", "send-external", "pii"], sensitive: true, recipients: ["attendees"], freeText: ["subject", "body"] }),
+  "files.list": looks(false, true),
+  "files.search": looks(true, true),
+  "files.download": looks(true, true),
+  "files.sites": looks(),
+  "messaging.list_chats": looks(false, true, ["pii"]),
+  "messaging.list_messages": looks(true, true, ["pii"]),
+  "messaging.send_message": alters("medium", "compensate", { effects: ["send-external"], recipients: ["chat"], freeText: ["text"] }),
+  "design.frame": looks(true),
+  "assistant.ask": { ...looks(true, false, ["consumes-budget"]), freeText: ["question", "context"] },
 };
+
+export function checked(name: string, profile: Partial<Profile> | undefined, writes: boolean): Profile {
+  if (!profile) throw new TypeError(`${name} declares no effects, risk, reversible, untrusted nor sensitive`);
+  for (const key of REQUIRED) if (profile[key] === undefined) throw new TypeError(`${name} declares no ${key}`);
+  const effects = profile.effects ?? [];
+  if (effects.length === 0) throw new TypeError(`${name} declares an empty effects list`);
+  const unknown = effects.find((effect) => !EFFECTS.includes(effect));
+  if (unknown) throw new TypeError(`${name} declares the unknown effect ${unknown}`);
+  if (writes && effects.every((effect) => INERT.includes(effect))) throw new TypeError(`${name} writes, so it declares what it changes in effects`);
+  if (effects.includes("pii") && profile.sensitive !== true) throw new TypeError(`${name} touches personal data, so it is sensitive`);
+  return profile as Profile;
+}
+
 
 type Fields = [string, string | string[]][];
 
@@ -87,19 +213,20 @@ const DESCRIPTIONS: Record<string, string> = {
   "assistant.ask": "Ask the connected assistant a question.",
 };
 
-const SECRET = new Set(["code.git_credentials", "cloud.identity"]);
+type Plain = Omit<Action, keyof Profile>;
 
-function described(action: Action): Action {
+function described(action: Plain, given?: Profile): Action {
   const description = action.description ?? DESCRIPTIONS[action.name];
   const shown = description ? { ...action, description } : action;
-  return SECRET.has(action.name) ? { ...shown, secret: true } : shown;
+  const profile = checked(action.name, given ?? PROFILES[action.name], action.writes);
+  return profile.visibility === "host" ? { ...shown, ...profile, secret: true } : { ...shown, ...profile };
 }
 
-export const read = (name: string, input: Schema, output: Schema): Action =>
-  described({ name, input_schema: input, output_schema: output, writes: false, idempotent: "native" });
+export const read = (name: string, input: Schema, output: Schema, profile?: Profile): Action =>
+  described({ name, input_schema: input, output_schema: output, writes: false, idempotent: "native" }, profile);
 
-export const write = (name: string, input: Schema, output: Schema, idempotent: "native" | "lookup"): Action =>
-  described({ name, input_schema: input, output_schema: output, writes: true, idempotent });
+export const write = (name: string, input: Schema, output: Schema, idempotent: "native" | "lookup", profile?: Profile): Action =>
+  described({ name, input_schema: input, output_schema: output, writes: true, idempotent }, profile);
 
 const issueOutput = () =>
   object(
@@ -475,7 +602,7 @@ export function bindingField(key: string, label: string, required = false, skipp
 
 export function options(capability: string): Action {
   const option = object([["value", "string"], ["label", "string"]], [["detail", "string"]]);
-  const action = read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"], ["names", "array"], ["page", "integer"]]), listOf(option));
+  const action = read(`${capability}.options`, object([], [["query", "string"], ["field", "string"], ["chosen", "object"], ["names", "array"], ["page", "integer"]]), listOf(option), looks());
   return { ...action, description: `List the choices for a ${capability} field, optionally matching a query.` };
 }
 

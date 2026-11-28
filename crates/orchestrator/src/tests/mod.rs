@@ -7,9 +7,9 @@ mod links;
 mod package;
 mod repos;
 mod restart;
-mod versions;
 mod triggers;
 mod unbound;
+mod versions;
 
 use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};

@@ -339,3 +339,54 @@ fn a_loose_grant_for_everything_is_never_kept_but_a_denial_for_everything_is() {
     assert!(list.add(Grant::Site("*.gov.br".into())));
     assert!(!Rule::from(Grant::Command("git *".into())).loose());
 }
+
+fn declared(effects: &[crate::operation::Kind], risk: crate::operation::Risk) -> crate::operation::Operation {
+    crate::operation::Operation {
+        server: "connectors".into(),
+        effects: effects.to_vec(),
+        risk,
+        recipients: vec!["ana@example.com".into()],
+        permission: crate::operation::Permission::default(),
+    }
+}
+
+#[test]
+fn what_an_operation_declares_sets_how_it_is_asked() {
+    use crate::operation::{Initial, Kind, Permission, Risk};
+    let bounds = bounds();
+    let none = Remembered::default();
+    let list = Allowed::of([Grant::Tool("mcp__connectors__*".into())]);
+    let judged = |operation: crate::operation::Operation, mode, allowed: Option<&Allowed>| {
+        let effects = [Effect::Operation(operation)];
+        let call = Call { tool: "mcp__connectors__mail_send", subject: "", effects: &effects };
+        PolicyEngine::decide(&call, &PolicyContext { allowed, ..context(mode, &none, &bounds) })
+    };
+    let comment = declared(&[Kind::Write], Risk::Low);
+    assert_eq!(
+        judged(comment.clone(), PermissionMode::Auto, None),
+        Verdict::Ask { reason: Reason::Mode, rememberable: true }
+    );
+    assert_eq!(judged(comment.clone(), PermissionMode::Auto, Some(&list)), Verdict::Allow);
+    let send = declared(&[Kind::SendExternal, Kind::Pii], Risk::Medium);
+    let strict = Verdict::Ask { reason: Reason::Declared("declares pii, send-external".into()), rememberable: false };
+    assert_eq!(judged(send.clone(), PermissionMode::Auto, None), strict);
+    assert_eq!(judged(send.clone(), PermissionMode::Auto, Some(&list)), strict, "the list never waives a declared ask");
+    assert!(judged(send, PermissionMode::Plan, None).denies());
+    let risky = declared(&[Kind::Write], Risk::High);
+    assert!(matches!(judged(risky, PermissionMode::Auto, None), Verdict::Ask { reason: Reason::Declared(_), .. }));
+    let always = crate::operation::Operation {
+        permission: Permission { default: Initial::Ask, always_ask: true },
+        ..comment.clone()
+    };
+    assert!(matches!(
+        judged(always, PermissionMode::Auto, Some(&list)),
+        Verdict::Ask { reason: Reason::Declared(_), .. }
+    ));
+    let free = crate::operation::Operation {
+        permission: Permission { default: Initial::Allow, always_ask: false },
+        ..comment
+    };
+    assert_eq!(judged(free.clone(), PermissionMode::Auto, None), Verdict::Allow);
+    assert!(judged(free, PermissionMode::Plan, None).denies());
+    assert!(!Reason::Declared(String::new()).reviewable());
+}

@@ -11,6 +11,7 @@ export const spec = {
   },
   description: (ctx) =>
     `List the resources (files, records, documents) MCP servers offer: ${ctx.servers.join(", ")}. Read one with ReadMcpResource.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { server?: string };

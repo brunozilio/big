@@ -60,13 +60,13 @@ fn plans_and_permissions_take_the_page_s_decisions() {
     assert_eq!(decision(&plan, &approve), Some(Decision::Approve(PermissionMode::Auto)));
     let revise = json!({ "kind": "plan", "decision": "revise", "feedback": "menor" });
     assert_eq!(decision(&plan, &revise), Some(Decision::DenyWith("menor".into())));
-    let permission = AskKind::Permission { tool: "Bash".into(), subject: "ls".into(), rememberable: true };
+    let permission = AskKind::permission("Bash", "ls", true);
     assert_eq!(
         decision(&permission, &json!({ "kind": "permission", "decision": "always" })),
         Some(Decision::AllowAlways)
     );
     assert_eq!(decision(&permission, &json!({ "kind": "nope" })), None);
-    let listed = AskKind::Permission { tool: "Bash".into(), subject: "git push".into(), rememberable: false };
+    let listed = AskKind::permission("Bash", "git push", false);
     assert_eq!(decision(&listed, &json!({ "kind": "permission", "decision": "always" })), Some(Decision::Allow));
     assert_eq!(decision(&listed, &json!({ "kind": "permission", "decision": "denied" })), Some(Decision::Deny));
     let asked = ask_event(&AgentAsk { id: domain::AskId("a".into()), kind: listed }, 0);

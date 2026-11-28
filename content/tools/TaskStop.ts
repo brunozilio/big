@@ -13,6 +13,7 @@ export const spec = {
     "type": "object"
   },
   description: `Cancel a background agent and wait for its tools to stop.`,
+  profile: { effects: ["write"], risk: "low", reversible: false, untrusted: false, sensitive: false },
 };
 
 type Input = { task_id?: string };

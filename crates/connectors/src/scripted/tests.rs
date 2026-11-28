@@ -104,3 +104,34 @@ fn every_shipped_action_says_what_it_does_and_credentials_are_kept_secret() {
         }
     }
 }
+#[test]
+fn every_shipped_connector_loads_at_the_current_contract_and_declares_each_action_s_effects() {
+    use domain::operation::{Kind, Visibility};
+    for entry in entries() {
+        let provider = ScriptedProvider::load(&entry).unwrap_or_else(|error| panic!("{entry}: {error}"));
+        for action in &provider.descriptor().actions {
+            assert!(!action.profile.effects.is_empty(), "{entry}: {} declares no effects", action.name);
+            assert_eq!(action.writes, action.profile.acts(), "{entry}: {}", action.name);
+            assert_eq!(action.hidden(), action.visibility == Visibility::Host, "{entry}: {}", action.name);
+            if action.profile.effects.contains(&Kind::Pii) {
+                assert!(action.profile.sensitive, "{entry}: {}", action.name);
+            }
+        }
+    }
+    let mail = loaded("microsoft");
+    let send = mail.descriptor().action("email.send").cloned().expect("email.send");
+    assert!(send.profile.effects.contains(&Kind::SendExternal));
+    assert_eq!(send.recipients, ["to", "cc"]);
+    assert!(send.permission.always_ask);
+}
+
+#[test]
+fn a_connector_whose_write_declares_no_effects_does_not_load() {
+    let folder = tempfile::tempdir().expect("folder");
+    let dir = folder.path().join("connectors/bare");
+    std::fs::create_dir_all(&dir).expect("dir");
+    let source = "export function provider() {\n  return { schema_version: 2, name: \"Bare\", capabilities: [\"x\"], auth: { kind: \"token\", fields: [] },\n    actions: [{ name: \"x.send\", input_schema: { type: \"object\" }, output_schema: {}, writes: true, idempotent: \"native\", risk: \"high\", reversible: false, untrusted: false, sensitive: false }] };\n}\nexport function call() { return null; }\n";
+    std::fs::write(dir.join("index.ts"), source).expect("index");
+    let refused = ScriptedProvider::load_in(Some(folder.path()), "connectors/bare/index.ts").err().unwrap_or_default();
+    assert!(refused.contains("x.send writes but declares no effects"), "{refused}");
+}

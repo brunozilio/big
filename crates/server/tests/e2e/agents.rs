@@ -117,7 +117,7 @@ fn plan(turn: &Turn, number: usize) {
 
 fn develop(turn: &Turn, script: &Script, places: &[PathBuf], number: usize) {
     if script.ask_develop.swap(false, Ordering::SeqCst) {
-        let kind = AskKind::Permission { tool: "Bash".into(), subject: "rm -rf build".into(), rememberable: false };
+        let kind = AskKind::permission("Bash", "rm -rf build", false);
         if turn.ask(format!("perm-{number}"), kind).is_none() {
             return;
         }

@@ -193,12 +193,15 @@ fn subagent(session: &str, index: usize, status: &AgentStatus) {
 }
 
 fn asked(session: &str, agent: Option<usize>, ask: &AgentAsk) {
-    let (kind, tool) = match &ask.kind {
-        AskKind::Permission { tool, .. } => ("permission", Some(tool.as_str())),
-        AskKind::Questions(_) => ("questions", None),
-        AskKind::Plan { .. } => ("plan", None),
+    let (kind, tool, effects, recipients) = match &ask.kind {
+        AskKind::Permission { tool, disclosed, .. } => {
+            let effects: Vec<&str> = disclosed.effects.iter().map(|effect| effect.word()).collect();
+            ("permission", Some(tool.as_str()), effects.join(","), disclosed.recipients.len())
+        }
+        AskKind::Questions(_) => ("questions", None, String::new(), 0),
+        AskKind::Plan { .. } => ("plan", None, String::new(), 0),
     };
-    tracing::event!(target: "audit", tracing::Level::INFO, session.id = session, agent.index = agent, ask.id = ?ask.id, ask.kind = kind, gen_ai.tool.name = tool, "agent.ask");
+    tracing::event!(target: "audit", tracing::Level::INFO, session.id = session, agent.index = agent, ask.id = ?ask.id, ask.kind = kind, gen_ai.tool.name = tool, ask.effects = effects, ask.recipients = recipients, "agent.ask");
 }
 
 fn ended(session: &str, agent: Option<usize>, event: &EngineEvent) -> bool {

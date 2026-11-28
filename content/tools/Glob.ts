@@ -12,6 +12,7 @@ export const spec = {
     type: "object",
   },
   description: `Find files by name with a glob pattern such as \`**/*.rs\` or \`src/**/mod.rs\`, searching the working directory or \`path\`. Files ignored by git are skipped. Returns up to ${LIMIT} paths, most recently modified first. Use Grep to search file contents.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { pattern: string; path?: string };

@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::operation::Disclosed;
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct AskId(pub String);
 
@@ -9,11 +11,42 @@ pub struct AgentAsk {
     pub kind: AskKind,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AskKind {
-    Permission { tool: String, subject: String, rememberable: bool },
+    Permission {
+        tool: String,
+        subject: String,
+        rememberable: bool,
+        #[serde(default, skip_serializing_if = "Disclosed::is_empty")]
+        disclosed: Disclosed,
+    },
     Questions(Vec<Question>),
-    Plan { plan: String },
+    Plan {
+        plan: String,
+    },
+}
+
+impl std::fmt::Debug for AskKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Permission { tool, subject, rememberable, disclosed } => {
+                let mut shown = f.debug_struct("Permission");
+                shown.field("tool", tool).field("subject", subject).field("rememberable", rememberable);
+                if !disclosed.is_empty() {
+                    shown.field("disclosed", disclosed);
+                }
+                shown.finish()
+            }
+            Self::Questions(questions) => f.debug_tuple("Questions").field(questions).finish(),
+            Self::Plan { plan } => f.debug_struct("Plan").field("plan", plan).finish(),
+        }
+    }
+}
+
+impl AskKind {
+    pub fn permission(tool: impl Into<String>, subject: impl Into<String>, rememberable: bool) -> Self {
+        Self::Permission { tool: tool.into(), subject: subject.into(), rememberable, disclosed: Disclosed::default() }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

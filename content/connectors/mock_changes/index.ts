@@ -172,7 +172,7 @@ const nameField = (language: Language) =>
 
 export function provider() {
   return {
-    schema_version: 1,
+    schema_version: 2,
     key: KEY,
     name: "Change requests (mock)",
     logo: "logo.svg",

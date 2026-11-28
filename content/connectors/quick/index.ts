@@ -6,7 +6,7 @@ import { heldBy } from "./login.ts";
 export { signIn } from "./login.ts";
 
 export function provider() {
-  return { schema_version: 1, name: "Amazon Quick", logo: "logo.svg", capabilities: ["assistant"], auth: { kind: "loopback" }, actions: assistant() };
+  return { schema_version: 2, name: "Amazon Quick", logo: "logo.svg", capabilities: ["assistant"], auth: { kind: "loopback" }, actions: assistant() };
 }
 
 export function presentation({ language }: { language: Language }) {

@@ -14,7 +14,7 @@ export { poll } from "./events.ts";
 
 export function provider() {
   return {
-    schema_version: 1,
+    schema_version: 2,
     name: "Jira",
     logo: "logo.svg",
     capabilities: ["tracker"],

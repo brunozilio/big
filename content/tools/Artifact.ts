@@ -22,6 +22,7 @@ export const spec = {
 Before writing the file, load the \`artifact-design\` skill with the Skill tool and follow its page contract: author an .html page, self-contained (inline CSS and JS, images as data: URIs), with a \`<title>\` and both light and dark themes.
 
 Write the file with Write first (in the working directory, or a scratch folder), then call this tool with its path. The artifact is a snapshot: change the file and publish the same path again to replace it; the person always sees the latest one published from that path in this session. The page is read-only for the person: it has no database, no comments and no way to save changes. After publishing, say in one line what the document is; the chat already shows it, so don't paste its content or a link.`,
+  profile: { effects: ["write"], risk: "low", reversible: "compensate", untrusted: false, sensitive: true },
 };
 
 type Input = { file_path?: unknown; title?: unknown };

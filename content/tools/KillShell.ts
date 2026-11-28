@@ -12,6 +12,7 @@ export const spec = {
     type: "object",
   },
   description: `Stop a background command (and everything it started), a monitor, or a watch.`,
+  profile: { effects: ["write"], risk: "medium", reversible: false, untrusted: false, sensitive: false },
 };
 
 type Input = { shell_id?: string };

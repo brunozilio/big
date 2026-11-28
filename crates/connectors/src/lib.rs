@@ -7,6 +7,7 @@ pub mod http;
 pub mod hub;
 pub mod idempotency;
 pub mod limiter;
+pub mod manifest;
 pub mod mcp;
 pub mod memory;
 pub mod oauth;

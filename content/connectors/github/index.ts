@@ -8,7 +8,7 @@ export { poll } from "./events.ts";
 
 export function provider(_: unknown, ctx) {
   return {
-    schema_version: 1,
+    schema_version: 2,
     name: "GitHub",
     logo: "logo.svg",
     capabilities: ["code", "pipelines"],

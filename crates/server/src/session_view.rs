@@ -304,9 +304,11 @@ fn stamped(mut event: Value, id: String, at: i64) -> Value {
 
 pub fn ask_event(ask: &AgentAsk, at: i64) -> Value {
     let event = match &ask.kind {
-        AskKind::Permission { tool, subject, rememberable } => json!({
-            "type": "permission", "tool": tool, "detail": subject, "risk": "medium", "resolution": "pending",
-            "rememberable": rememberable,
+        AskKind::Permission { tool, subject, rememberable, disclosed } => json!({
+            "type": "permission", "tool": tool, "detail": subject, "resolution": "pending",
+            "risk": disclosed.risk.map_or("medium", domain::operation::Risk::word), "rememberable": rememberable,
+            "effects": disclosed.effects.iter().map(|kind| kind.word()).collect::<Vec<_>>(),
+            "recipients": disclosed.recipients,
         }),
         AskKind::Questions(questions) => {
             let asked: Vec<Value> = questions

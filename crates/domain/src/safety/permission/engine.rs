@@ -3,6 +3,7 @@ use std::path::Path;
 use super::allowed::Behavior;
 use super::{Call, Effect, Guard, Judgement, PolicyContext, Reason, Remembered, Standing, Verdict};
 use crate::PermissionMode;
+use crate::operation::Operation;
 
 #[derive(Debug, Clone, Copy)]
 pub struct PolicyEngine;
@@ -34,7 +35,7 @@ fn weighed(call: &Call<'_>, cx: &PolicyContext<'_>) -> Judgement {
         ));
         return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
     }
-    if let Some(verdict) = by_the_list(call, cx, stood.standing) {
+    if let Some(verdict) = declared(call, cx, by_the_list(call, cx, stood.standing)) {
         return Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded };
     }
     let planned = cx.mode() == PermissionMode::Plan && (only_commands(call) || super::only_fetch(call.effects));
@@ -53,6 +54,46 @@ fn weighed(call: &Call<'_>, cx: &PolicyContext<'_>) -> Judgement {
         settled => settled,
     };
     Judgement { verdict, standing: stood.standing, subject: stood.subject, guarded: stood.guarded }
+}
+
+fn operations<'a>(call: &'a Call<'_>) -> impl Iterator<Item = &'a Operation> {
+    call.effects.iter().filter_map(|effect| match effect {
+        Effect::Operation(operation) => Some(operation),
+        _ => None,
+    })
+}
+
+fn strictly(call: &Call<'_>) -> Option<String> {
+    let strict: Vec<&Operation> = operations(call).filter(|operation| operation.strict()).collect();
+    if strict.is_empty() {
+        return None;
+    }
+    let mut kinds: Vec<&str> =
+        strict.iter().flat_map(|operation| operation.effects.iter()).map(|kind| kind.word()).collect();
+    kinds.sort_unstable();
+    kinds.dedup();
+    Some(format!("declares {}", kinds.join(", ")))
+}
+
+fn free(call: &Call<'_>) -> bool {
+    let acting: Vec<&Effect> = call.effects.iter().filter(|effect| effect.acts()).collect();
+    !acting.is_empty() && acting.iter().all(|effect| matches!(effect, Effect::Operation(operation) if operation.free()))
+}
+
+fn declared(call: &Call<'_>, cx: &PolicyContext<'_>, listed: Option<Verdict>) -> Option<Verdict> {
+    if matches!(listed, Some(Verdict::Deny(_))) || cx.mode() == PermissionMode::Plan {
+        return listed;
+    }
+    if let Some(why) = strictly(call) {
+        return Some(Verdict::Ask { reason: Reason::Declared(why), rememberable: false });
+    }
+    if matches!(listed, Some(Verdict::Ask { reason: Reason::Listed, .. })) {
+        return listed;
+    }
+    if free(call) {
+        return Some(Verdict::Allow);
+    }
+    listed
 }
 
 fn read_only_write<'a>(call: &Call<'_>, cx: &'a PolicyContext<'_>) -> Option<&'a std::path::PathBuf> {

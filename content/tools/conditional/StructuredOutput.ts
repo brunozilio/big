@@ -7,6 +7,7 @@ export const spec = {
     additionalProperties: false,
   }),
   description: `Deliver the final structured result. All fields must satisfy this schema. Call after doing the requested work and before completing the response. Validation errors must be corrected.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { result?: unknown };

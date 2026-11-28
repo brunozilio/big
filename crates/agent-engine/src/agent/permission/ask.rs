@@ -1,5 +1,6 @@
 use crossbeam_channel::RecvError;
-use domain::permission::{Allowed, Judgement, Standing};
+use domain::operation::Disclosed;
+use domain::permission::{Allowed, Effect, Judgement, Standing};
 use domain::{AgentAsk, AskId, AskKind, Decision, EngineEvent};
 use serde_json::Value;
 
@@ -10,12 +11,16 @@ use crate::tools::Outcome;
 impl Agent<'_> {
     pub(super) fn ask_permission(&self, asking: &Asking<'_>, shown: &str, rememberable: bool) -> Outcome {
         let Asking { id, tool, called, .. } = *asking;
-        let Called { name, input, .. } = *called;
+        let Called { name, input, effects, .. } = *called;
         self.notify(
             "permission_prompt",
             &format!("{brand_name} needs your permission to use {name}", brand_name = brand::NAME),
         );
-        let kind = AskKind::Permission { tool: name.to_owned(), subject: shown.to_owned(), rememberable };
+        let disclosed = Disclosed::of(effects.iter().filter_map(|effect| match effect {
+            Effect::Operation(operation) => Some(operation),
+            _ => None,
+        }));
+        let kind = AskKind::Permission { tool: name.to_owned(), subject: shown.to_owned(), rememberable, disclosed };
         match self.asked_relaying(id, kind, Some(input)) {
             Ok(Decision::Allow | Decision::Answer(_) | Decision::Approve(_)) => self.went_ahead(id, tool, input),
             Ok(Decision::AllowAlways) => {

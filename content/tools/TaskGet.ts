@@ -13,6 +13,7 @@ export const spec = {
     "type": "object"
   },
   description: `Read a planning task's description, status and dependencies.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { task_id?: string };

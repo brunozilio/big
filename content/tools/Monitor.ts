@@ -18,6 +18,7 @@ export const spec = {
     "type": "object"
   },
   description: `Start a background monitor: a shell command whose every line of output reaches you as an event, while you go on working or when the chat is idle. Use it to follow a log (\`tail -f app.log | grep --line-buffered ERROR\`), a watcher, or a loop that prints when something changes (\`while sleep 30; do gh pr checks 12 | grep -q fail && echo failed; done\`). Print only what matters: every line wakes you. It runs until the command ends or you stop it with KillShell; you are told when it ends. To wait on what a tool returns (an MCP tool, a file), use Watch instead: no shell or credentials needed.`,
+  profile: { effects: ["write", "consumes-budget"], risk: "medium", reversible: false, untrusted: true, sensitive: false },
 };
 
 type Input = { command: string; description?: string };

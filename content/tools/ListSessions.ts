@@ -7,6 +7,7 @@ export const spec = {
     "type": "object"
   },
   description: (ctx) => `List the user's other ${ctx.brand.NAME} sessions open on this computer: their names and folders. Send one a message with SendMessage (\`to\` its name); its answer reaches you as an event.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Peer = { name: string; cwd: string; me: boolean };

@@ -14,6 +14,7 @@ export const spec = {
     "type": "object"
   },
   description: `Sends one note to the agent you watch. It reaches that agent between its steps as advice from its observer, never as the user's words. Use it only for something worth interrupting for: a mistake about to compound, a constraint the agent missed, prior art it does not know about. Most of the time, say nothing.`,
+  profile: { effects: ["write"], risk: "low", reversible: false, untrusted: false, sensitive: false },
 };
 
 type Input = { message?: string };

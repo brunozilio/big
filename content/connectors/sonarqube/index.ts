@@ -95,7 +95,7 @@ export const signIn = signInWith(baseOf, siteFields);
 
 export function provider() {
   return {
-    schema_version: 1,
+    schema_version: 2,
     name: "SonarQube",
     logo: "logo.svg",
     capabilities: ["quality"],

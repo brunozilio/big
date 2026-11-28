@@ -3,6 +3,7 @@ use std::sync::Arc;
 use connectors::{ActionSpec, Connectors};
 use domain::connection::{Capability, ProviderKey};
 use domain::mcp::{LocalMcp, McpEndpoint, respond, slug, text_result};
+use domain::operation::Kind;
 use serde_json::{Value, json};
 use store::ConnectionRecord;
 
@@ -35,7 +36,7 @@ impl Wanted<'_> {
         let offered =
             Capability::of_action(&action.name).is_some_and(|capability| connection(record).offers(&capability));
         offered
-            && !action.secret
+            && !action.hidden()
             && (self.writes || !action.writes)
             && (self.actions.is_empty() || self.actions.iter().any(named))
     }
@@ -68,7 +69,12 @@ fn definition(name: &str, provider: &str, record: &ConnectionRecord, action: &Ac
         "name": name,
         "description": format!("{what} Through the {provider} connection \"{}\".{changes}", record.label),
         "inputSchema": schema,
-        "annotations": { "readOnlyHint": !action.writes },
+        "annotations": {
+            "readOnlyHint": !action.writes,
+            "destructiveHint": action.profile.effects.contains(&Kind::Destructive),
+            "openWorldHint": action.profile.effects.contains(&Kind::SendExternal),
+        },
+        "_meta": { domain::operation::META: action.declaration() },
     })
 }
 
@@ -96,7 +102,7 @@ pub fn local(ctx: &Ctx, wanted: &Wanted<'_>, runtime: tokio::runtime::Handle) ->
 }
 
 fn server() -> String {
-    format!("{}_connectors", brand::COMMAND.replace('-', "_"))
+    domain::mcp::connectors_server()
 }
 
 impl ConnectorTools {
@@ -134,6 +140,7 @@ impl McpEndpoint for ConnectorTools {
 #[cfg(test)]
 mod tests {
     use connectors::Idempotency;
+    use domain::operation::Visibility;
 
     use super::*;
 
@@ -163,6 +170,9 @@ mod tests {
         assert!(writing.takes(&record(), &create));
         let secret = ActionSpec::read("tracker.token", json!({}), json!({})).secret();
         assert!(!writing.takes(&record(), &secret));
+        let host_only =
+            ActionSpec { visibility: Visibility::Host, ..ActionSpec::read("tracker.sync", json!({}), json!({})) };
+        assert!(!writing.takes(&record(), &host_only), "an action meant for the host never reaches the model");
         let only = ["tracker.issue".to_owned()];
         assert!(!Wanted { provider: "jira", actions: &only, writes: true, connection: None }.takes(&record(), &create));
     }
@@ -196,5 +206,29 @@ mod tests {
     fn a_tool_is_named_by_its_connection_and_action_within_the_limit() {
         assert_eq!(tool_name("Jira Prod", "tracker.issue"), "jira-prod_tracker_issue");
         assert_eq!(tool_name(&"x".repeat(80), "a.b").len(), NAME_LIMIT);
+    }
+
+    #[test]
+    fn the_approval_card_of_a_sent_email_shows_its_effects_and_recipients() {
+        use connectors::Provider;
+        let mail = connectors::scripted::ScriptedProvider::load("connectors/microsoft/index.ts").expect("mail");
+        let send = mail.descriptor().action("email.send").cloned().expect("email.send");
+        let tool = definition("mail_email_send", "Mail", &record(), &send);
+        assert_eq!(tool["annotations"]["openWorldHint"], true);
+        let declared: domain::operation::Declaration =
+            serde_json::from_value(tool["_meta"][domain::operation::META].clone()).expect("declared");
+        let input = json!({ "to": ["ana@example.com"], "cc": ["rui@example.com"], "subject": "Oi", "body": "…" });
+        let operation = declared.operation(&server(), &input).expect("sending acts");
+        let disclosed = domain::operation::Disclosed::of([&operation]);
+        let kind = domain::AskKind::Permission {
+            tool: "mail_email_send".into(),
+            subject: "Oi".into(),
+            rememberable: false,
+            disclosed,
+        };
+        let card = crate::session_view::ask_event(&domain::AgentAsk { id: domain::AskId("a".into()), kind }, 0);
+        assert_eq!(card["effects"], json!(["send-external", "pii"]));
+        assert_eq!(card["recipients"], json!(["ana@example.com", "rui@example.com"]));
+        assert_eq!(card["risk"], "high");
     }
 }

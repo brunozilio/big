@@ -31,6 +31,7 @@ pub enum Reason {
     Hook,
     Listed,
     Flagged(String),
+    Declared(String),
     Outside(PathBuf),
     Guarded { path: PathBuf, guard: Guard },
     Hard(super::hard::Category),
@@ -42,7 +43,7 @@ impl Reason {
     }
 
     pub fn reviewable(&self) -> bool {
-        !matches!(self, Self::Hook | Self::Listed | Self::Flagged(_) | Self::Hard(_))
+        !matches!(self, Self::Hook | Self::Listed | Self::Flagged(_) | Self::Hard(_) | Self::Declared(_))
     }
 
     pub fn unattended(&self, tool: &str) -> String {
@@ -53,6 +54,9 @@ impl Reason {
                     "{tool} was blocked because {}. The safety floor has a person approve that every time, and this run has no one to ask, so it was refused. Find a safer way to do this or ask the user.",
                     category.why()
                 )
+            }
+            Self::Declared(why) => {
+                format!("{tool} {why}, so a person approves it every time; it does not run unattended.")
             }
             _ => format!("{tool} requires permission; dontAsk denies unapproved actions."),
         }

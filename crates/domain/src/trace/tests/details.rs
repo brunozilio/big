@@ -110,10 +110,7 @@ fn a_prompt_knows_how_its_run_was_set_up_and_old_sessions_say_they_are_partial()
 #[test]
 fn a_permission_ask_belongs_to_the_tool_it_was_about() {
     let ask = |tool: &str| {
-        EngineEvent::Asked(AgentAsk {
-            id: AskId("a".into()),
-            kind: AskKind::Permission { tool: tool.into(), subject: "rm -rf build".into(), rememberable: true },
-        })
+        EngineEvent::Asked(AgentAsk { id: AskId("a".into()), kind: AskKind::permission(tool, "rm -rf build", true) })
     };
     let trace = build(vec![
         at(1, usage(1)),

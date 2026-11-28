@@ -54,8 +54,13 @@ fn resolve(resources: &Resources, from: Option<&str>, spec: &str) -> Result<Stri
     };
     let candidates = if base == SDK { script_candidates("sdk/index") } else { script_candidates(&base) };
     let importer = from.unwrap_or(spec);
-    content::retired::resolve(&content::retired::table(), &candidates, &|candidate| resources.find(candidate).is_some(), importer)
-        .ok_or_else(|| format!("the import {spec} was not found"))
+    content::retired::resolve(
+        &content::retired::table(),
+        &candidates,
+        &|candidate| resources.find(candidate).is_some(),
+        importer,
+    )
+    .ok_or_else(|| format!("the import {spec} was not found"))
 }
 
 fn normalized(path: &Path) -> Option<String> {

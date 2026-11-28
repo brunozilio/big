@@ -2,6 +2,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use domain::Language;
 use domain::connection::{Capability, ProviderKey};
+use domain::operation::{Declaration, Kind, Permission, Profile, Reversible, Risk, Visibility};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -29,6 +30,36 @@ pub struct ActionSpec {
     pub description: String,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub secret: bool,
+    #[serde(flatten)]
+    pub profile: Profile,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub recipients: Vec<String>,
+    #[serde(default, rename = "freeText", skip_serializing_if = "Vec::is_empty")]
+    pub free_text: Vec<String>,
+    #[serde(default)]
+    pub visibility: Visibility,
+    #[serde(default)]
+    pub permission: Permission,
+}
+
+fn reads() -> Profile {
+    Profile {
+        effects: vec![Kind::Read],
+        risk: Risk::Low,
+        reversible: Reversible::Yes,
+        untrusted: false,
+        sensitive: false,
+    }
+}
+
+fn changes() -> Profile {
+    Profile {
+        effects: vec![Kind::Write],
+        risk: Risk::Medium,
+        reversible: Reversible::No,
+        untrusted: false,
+        sensitive: false,
+    }
 }
 
 fn native() -> Idempotency {
@@ -45,6 +76,11 @@ impl ActionSpec {
             idempotent: Idempotency::Native,
             description: String::new(),
             secret: false,
+            profile: reads(),
+            recipients: Vec::new(),
+            free_text: Vec::new(),
+            visibility: Visibility::Model,
+            permission: Permission::default(),
         }
     }
 
@@ -57,12 +93,31 @@ impl ActionSpec {
             idempotent,
             description: String::new(),
             secret: false,
+            profile: changes(),
+            recipients: Vec::new(),
+            free_text: Vec::new(),
+            visibility: Visibility::Model,
+            permission: Permission::default(),
         }
     }
 
     pub fn secret(mut self) -> ActionSpec {
         self.secret = true;
+        self.visibility = Visibility::Host;
         self
+    }
+
+    pub fn hidden(&self) -> bool {
+        self.secret || self.visibility == Visibility::Host
+    }
+
+    pub fn declaration(&self) -> Declaration {
+        Declaration {
+            profile: self.profile.clone(),
+            recipients: self.recipients.clone(),
+            free_text: self.free_text.clone(),
+            permission: self.permission,
+        }
     }
 
     pub fn capability(&self) -> Option<Capability> {

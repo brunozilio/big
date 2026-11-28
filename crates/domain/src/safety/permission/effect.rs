@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::operation::Operation;
 use crate::shell::ShellCommand;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -47,6 +48,7 @@ pub enum Effect {
     Session { to: String },
     Resource { server: String, uri: String },
     Remote { server: String },
+    Operation(Operation),
     Declared(Declared),
     Install { server: String, what: String },
 }
@@ -58,6 +60,7 @@ impl Effect {
 
     pub fn acts(&self) -> bool {
         match self {
+            Self::Operation(operation) => operation.acts(),
             Self::ReadPath(_)
             | Self::ReadTree(_)
             | Self::WritePath(_)

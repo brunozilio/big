@@ -34,7 +34,7 @@ const chosenSite = (ctx: Ctx, state: { site?: string }) => siteOf(ctx, state?.si
 
 export function provider() {
   return {
-    schema_version: 1,
+    schema_version: 2,
     name: "Datadog",
     logo: "logo.svg",
     capabilities: ["mcp"],

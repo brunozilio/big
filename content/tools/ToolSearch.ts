@@ -19,6 +19,7 @@ export const spec = {
     "type": "object"
   },
   description: `Load the schemas of tools that are listed in a system reminder but not yet callable, then call them. Query \`select:name1,name2\` for tools you know by name, or keywords to find them.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { query: string };

@@ -7,6 +7,7 @@ export const spec = {
     "type": "object"
   },
   description: `List the session's tasks (shared by the team, with owners and what blocks what) and the background agents of this run.`,
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 export function effects(_input: unknown) {

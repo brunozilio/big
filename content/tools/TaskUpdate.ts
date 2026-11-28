@@ -33,6 +33,7 @@ export const spec = {
     "type": "object"
   },
   description: `Update a task. Status is pending, in_progress or completed; a task cannot start or end while a task in its blocked_by is open. blocked_by lists the task_ids that must be completed first (each task shows the ones it blocks). owner claims a task: a task someone else holds cannot be claimed, except by the lead, and a teammate that stops hands its open tasks back.`,
+  profile: { effects: ["write"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 const STATUSES = ["pending", "in_progress", "completed"];

@@ -2,6 +2,8 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+use domain::operation::Profile;
+
 use super::names::ToolName;
 use super::{Declared, Effect, Outcome, Tool, Workspace};
 use crate::model::ToolSpec;
@@ -274,6 +276,19 @@ pub struct ScriptTool {
     pub top_level_only: bool,
     pub skills: Vec<super::skill::FoundSkill>,
     pub interceptors: Vec<crate::intercept::Interceptor>,
+    pub profile: Profile,
+}
+
+pub fn profile_of(shown: &str, spec: &Value) -> Result<Profile, String> {
+    match spec.get("profile") {
+        None | Some(Value::Null) => {
+            tracing::warn!(tool = shown, "a tool declares no spec.profile; it is treated as the riskiest kind");
+            Ok(Profile::conservative())
+        }
+        Some(declared) => {
+            domain::operation::checked(declared).map_err(|problem| format!("{shown}: spec.profile {problem}"))
+        }
+    }
 }
 
 fn declared_by(access: Option<&str>) -> Option<Declared> {
@@ -298,6 +313,7 @@ pub(crate) fn parse_source(path: &Path, source: String, trusted: bool) -> Result
         .ok_or_else(|| format!("{shown}: spec.name is missing"))?;
     let declared = if trusted { declared_by(spec["access"].as_str()) } else { Some(Declared::Executes) };
     let capabilities = Capabilities::read(&spec).map_err(|error| format!("{shown}: {error}"))?;
+    let profile = profile_of(&shown, &spec)?;
     let runs_from = if path.is_relative() { crate::hooks::runs_from(&shown) } else { shown.clone() };
     let interceptors =
         crate::intercept::of_tool(name, &runs_from, &shown, &source).map_err(|error| format!("{shown}: {error}"))?;
@@ -318,6 +334,7 @@ pub(crate) fn parse_source(path: &Path, source: String, trusted: bool) -> Result
         trusted,
         skills: Vec::new(),
         interceptors,
+        profile,
     })
 }
 

@@ -60,6 +60,7 @@ Choose by what the check needs:
 The first check runs now, as an ordinary call of that tool, so it follows the permission mode and rules like one: a rule or an earlier "always allow" for that tool covers the watch, a deny rule refuses it, and otherwise the user is asked, seeing what the watch waits for. If the condition already holds, nothing is watched. Load an MCP tool with ToolSearch before watching it. Stop a watch with KillShell and its id.
 
 Once a watch is started, end your turn: its event arrives as a new message even while the chat is idle. Do not add ScheduleWakeup or a second watch for the same thing, and leave whatever the user asked to happen afterwards ("then commit", "then deploy") until the event says the condition was met.`,
+  profile: { effects: ["read", "consumes-budget"], risk: "low", reversible: true, untrusted: true, sensitive: false },
 };
 
 type Input = { tool?: unknown; input?: unknown; description?: unknown };

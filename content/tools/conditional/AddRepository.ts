@@ -53,6 +53,7 @@ export const spec = {
     "type": "object"
   },
   description: `Add a repository to the application this task belongs to, or update the one already registered at that directory. Call it whenever you create a new repository or service for the application, or learn what it holds, how it is run, verified or how its end-to-end suite runs, so the next steps of this task and later tasks in {{NAME}} work in it too. Fields you leave out keep their current value.`,
+  profile: { effects: ["write"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = { directory?: string; repo?: string; kind?: string; run?: string[]; verify?: string[]; e2e?: string[]; e2eDirectory?: string; readOnly?: boolean };

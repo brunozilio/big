@@ -92,6 +92,8 @@ pub struct McpTool {
     pub(super) name: String,
     pub(super) spec: ToolSpec,
     pub(super) marked_read_only: bool,
+    pub(super) annotations: Value,
+    pub(super) declared: Option<domain::operation::Declaration>,
 }
 
 impl std::fmt::Debug for McpTool {
@@ -109,7 +111,16 @@ impl Tool for McpTool {
         if self.server.name == domain::mcp::browser_server() {
             return domain::browser_sites::effects(&self.server.name, &self.name, input);
         }
-        if self.marked_read_only { Vec::new() } else { remote_effects(&self.server.name, &self.name) }
+        if let Some(declared) = &self.declared {
+            return declared.operation(&self.server.name, input).map(Effect::Operation).into_iter().collect();
+        }
+        if self.marked_read_only {
+            return Vec::new();
+        }
+        match domain::operation::hinted(&self.server.name, &self.annotations) {
+            Some(operation) => vec![Effect::Operation(operation)],
+            None => remote_effects(&self.server.name, &self.name),
+        }
     }
 
     fn summary(&self, input: &Value) -> String {

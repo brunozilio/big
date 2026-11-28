@@ -20,7 +20,7 @@ export function spaced(account: string): string {
 
 export function provider() {
   return {
-    schema_version: 1,
+    schema_version: 2,
     name: "AWS",
     logo: "logo.svg",
     capabilities: ["cloud"],
