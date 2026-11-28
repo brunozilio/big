@@ -101,6 +101,35 @@ fn the_report_shows_the_known_part_and_how_many_calls_had_no_price() {
     assert_eq!(listed["byModel"][0]["unpricedCalls"], 1);
 }
 
+#[test]
+fn the_report_splits_the_spend_by_origin_and_counts_what_no_item_owns() {
+    use domain::origin::{Attribution, Origin};
+    let window = window(jiff::civil::date(2026, 11, 23), 7);
+    let mut tally = UsageTally::new(&window, &["claude-subscription"]);
+    let call = |cost, attribution| {
+        EngineEvent::Usage(ModelUsage {
+            model: "claude-opus-4-5".into(),
+            estimated_cost_usd: Some(cost),
+            provider: "claude-subscription".into(),
+            attribution,
+            ..ModelUsage::default()
+        })
+    };
+    tally.add("s1", "2026-11-23", &call(1.0, Attribution::of_step("i1", "develop", Origin::Step)));
+    tally.add("s1", "2026-11-23", &call(0.5, Attribution::of_step("i1", "develop", Origin::Summary)));
+    tally.add("chat", "2026-11-23", &call(0.25, Attribution { origin: Origin::Title, ..Attribution::default() }));
+    let listed = listing(7, &window, &tally.report(), &[], domain::Language::default());
+    let origins: Vec<(&str, f64)> = listed["byOrigin"]
+        .as_array()
+        .expect("byOrigin")
+        .iter()
+        .map(|row| (row["id"].as_str().unwrap_or_default(), row["costUsd"].as_f64().unwrap_or_default()))
+        .collect();
+    assert_eq!(origins, [("step", 1.0), ("summary", 0.5), ("title", 0.25)]);
+    assert_eq!(listed["unattributed"]["costUsd"], 0.25);
+    assert_eq!(listed["unattributed"]["calls"], 1);
+}
+
 fn unpriced(model: &str, provider: &str) -> EngineEvent {
     EngineEvent::Usage(ModelUsage {
         model: model.into(),

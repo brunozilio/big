@@ -127,3 +127,29 @@ fn a_record_saved_before_provider_and_account_existed_still_reads() {
     let usage: ModelUsage = serde_json::from_str(old).expect("old record");
     assert_eq!((usage.provider.as_str(), usage.account.as_str()), ("", ""));
 }
+
+#[test]
+fn use_is_split_by_origin_and_what_no_item_owns_is_counted_apart() {
+    let agents = [("s1".to_owned(), "dev".to_owned())].into();
+    let mut tally = UsageTally::new(&window(), &KNOWN).with_agents(agents);
+    let charged = |origin, item: Option<&str>, cost| match spent("claude-subscription", "a", "opus", Some(cost)) {
+        EngineEvent::Usage(usage) => EngineEvent::Usage(ModelUsage {
+            attribution: crate::origin::Attribution { item: item.map(str::to_owned), step: None, origin },
+            ..usage
+        }),
+        other => other,
+    };
+    tally.add("s1", "2026-11-22", &charged(Origin::Step, None, 1.0));
+    tally.add("s1", "2026-11-22", &charged(Origin::Summary, None, 0.25));
+    tally.add("s9", "2026-11-22", &charged(Origin::Title, Some("i1"), 0.5));
+    tally.add("chat", "2026-11-23", &charged(Origin::Step, None, 2.0));
+    tally.add("chat", "2026-11-23", &charged(Origin::Filter, None, 0.125));
+    let report = tally.report();
+    let origins: Vec<(Origin, u64)> =
+        report.by_origin.iter().map(|(origin, tally)| (*origin, tally.cost.known_micros)).collect();
+    assert_eq!(
+        origins,
+        [(Origin::Step, 3_000_000), (Origin::Title, 500_000), (Origin::Summary, 250_000), (Origin::Filter, 125_000)]
+    );
+    assert_eq!((report.unattributed.calls, report.unattributed.cost.known_micros), (2, 2_125_000));
+}

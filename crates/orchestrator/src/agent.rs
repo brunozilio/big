@@ -309,6 +309,7 @@ impl AgentEffect<'_> {
         environment.extend(cloud.as_ref().map(|lease| lease.environment.clone()).unwrap_or_default());
         request.host.environment = environment;
         request.host.owner = Some(crate::owners::of(&self.shared.store, &state));
+        request.host.attribution = crate::spend::attribution(self.item, &self.key.step, self.command);
         let (consulted, writable): (Vec<&Worktree>, Vec<&Worktree>) =
             trees.iter().skip(1).partition(|tree| tree.checkout.read_only);
         request.session.add_dirs = writable.into_iter().map(|tree| tree.path.clone()).collect();

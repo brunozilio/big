@@ -166,6 +166,34 @@ async fn a_rate_limited_call_holds_the_connection() {
 }
 
 #[tokio::test]
+async fn every_call_that_reaches_the_connector_is_counted_for_its_connection_and_origin() {
+    let kept = Arc::new(crate::calls::kept::Kept::default());
+    let http = FakeHttp::new().always(Method::Get, "/echo", 200, "{}");
+    let hub =
+        hub(http, Some(Grant::bearer("tok"))).await.with_calls(Arc::clone(&kept) as Arc<dyn crate::calls::CallSink>);
+    let step = domain::origin::Attribution::of_step("i1", "develop", domain::origin::Origin::Step);
+    let only_x = connection(&["x"]);
+    assert!(hub.call_for(Some(&step), &only_x, &json!({}), "x.read", &json!({"a": "1"}), "k").await.is_ok());
+    assert!(hub.call(&only_x, &json!({}), "x.read", &json!({"a": "1"}), "k").await.is_ok());
+    assert!(hub.call(&only_x, &json!({}), "x.read", &json!({}), "k").await.is_err(), "refused before it is made");
+    assert!(hub.poll(&connection(&["y"]), &json!({}), None, &[]).await.is_ok());
+    let rows = kept.0.lock().expect("rows").clone();
+    let seen: Vec<(&str, &str, Option<domain::origin::Origin>, bool)> = rows
+        .iter()
+        .map(|(connection, action, charged, ok)| {
+            (connection.as_str(), action.as_str(), charged.as_ref().map(|c| c.origin), *ok)
+        })
+        .collect();
+    let trigger = Some(domain::origin::Origin::Trigger);
+    let step_origin = Some(domain::origin::Origin::Step);
+    assert_eq!(
+        seen,
+        [("c1", "x.read", step_origin, true), ("c1", "x.read", None, true), ("c1", super::POLL, trigger, true)]
+    );
+    assert_eq!(rows[0].2.as_ref().and_then(|charged| charged.item.as_deref()), Some("i1"));
+}
+
+#[tokio::test]
 async fn polling_keeps_only_events_of_capabilities_the_connection_offers() {
     let hub = hub(FakeHttp::new(), Some(Grant::bearer("tok"))).await;
     let batch = hub.poll(&connection(&["y"]), &json!({}), Some("c"), &[]).await;

@@ -101,6 +101,8 @@ pub struct HostContext {
     pub environment: Vec<(String, String)>,
     #[serde(skip)]
     pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "crate::origin::Attribution::is_unset")]
+    pub attribution: crate::origin::Attribution,
 }
 
 #[derive(Debug, Clone, Copy)]

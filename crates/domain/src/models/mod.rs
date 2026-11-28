@@ -4,6 +4,7 @@ pub mod data_policy;
 pub mod fallback;
 pub mod model;
 pub mod model_roles;
+pub mod origin;
 pub mod routing;
 pub mod small_model;
 pub mod usage_report;

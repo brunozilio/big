@@ -264,7 +264,7 @@ impl Agent<'_> {
     }
 
     fn script_llm(&self, arguments: &Value) -> Result<Value, String> {
-        crate::tools::script_bridge::ask_model(self.api, &self.request, arguments, self.control.stop_flag())
+        crate::tools::script_bridge::ask_model(self.api, &self.request, arguments, self.control.stop_flag(), None)
     }
 }
 

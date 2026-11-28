@@ -104,7 +104,7 @@ fn bridged(
         )
     };
     hosted("the hook script stopped unexpectedly", run, |function, arguments| match function {
-        "llm" => ask_model(api, template, &arguments, &workspace.stop),
+        "llm" => ask_model(api, template, &arguments, &workspace.stop, Some(domain::origin::Origin::Hook)),
         "tool" => read_only_tool(&arguments, workspace),
         other => script::Host::call(standalone, other, arguments),
     })

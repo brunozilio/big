@@ -15,6 +15,9 @@ use crate::shared::Shared;
 pub const CREDENTIALS_COMMAND: &str = "cloud-credentials";
 pub const CREDENTIALS_PATH: &str = "/api/cloud/credentials/";
 
+const STEP: domain::origin::Attribution =
+    domain::origin::Attribution { item: None, step: None, origin: domain::origin::Origin::Step };
+
 #[derive(Debug, Default)]
 pub struct Leases(Mutex<HashMap<String, (String, Call)>>);
 
@@ -152,7 +155,7 @@ pub async fn lease(shared: &Arc<Shared>, command: &Command, input: &Value) -> Re
     let call = Call { connection: Some(connection.id.to_string()), ..call };
     let token = token();
     let identity =
-        connector(shared, &owner, &call, &format!("{}:{CREDENTIALS_COMMAND}:{token}", brand::COMMAND)).await?;
+        connector(shared, &owner, &call, &format!("{}:{CREDENTIALS_COMMAND}:{token}", brand::COMMAND), &STEP).await?;
     let region = identity["region"].as_str().filter(|region| !region.is_empty()).map(str::to_owned);
     let url = format!("{}{CREDENTIALS_PATH}{token}", base.trim_end_matches('/'));
     let text = profile_text(&url, region.as_deref())?;
@@ -185,7 +188,7 @@ pub fn process_credentials(identity: &Value) -> Value {
 pub async fn credentials(shared: &Shared, token: &str) -> crate::error::Result<Value> {
     let (owner, call) = shared.clouds.call(token).ok_or(crate::error::Error::UnknownCloudToken)?;
     let key = format!("{}:{CREDENTIALS_COMMAND}:{}", brand::COMMAND, uuid::Uuid::new_v4().simple());
-    match connector(shared, &owner, &call, &key).await {
+    match connector(shared, &owner, &call, &key, &STEP).await {
         Ok(identity) => Ok(process_credentials(&identity)),
         Err(Failure::Class(_, message) | Failure::Blocked(message)) => Err(crate::error::Error::Cloud(message)),
     }

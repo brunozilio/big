@@ -83,8 +83,7 @@ fn a_streak_stops_after_the_most_switches() {
 
 #[test]
 fn failures_have_stable_labels_for_hooks() {
-    let labels: Vec<_> =
-        [
+    let labels: Vec<_> = [
         Failure::Overloaded,
         Failure::Unauthorized,
         Failure::Network,

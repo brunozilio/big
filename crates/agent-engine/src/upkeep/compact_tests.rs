@@ -59,3 +59,39 @@ fn a_model_that_calls_a_tool_instead_is_asked_again_without_tools() {
     assert!(model.asked()[1].tools.is_empty());
     assert!(history[0].text().ends_with("done"));
 }
+
+#[test]
+fn a_session_s_compaction_is_metered_as_a_summary_of_its_item_and_step() {
+    use domain::origin::{Attribution, Origin};
+    use std::sync::{Arc, Mutex};
+
+    let heard: Arc<Mutex<Vec<domain::EngineEvent>>> = Arc::default();
+    let kept = Arc::clone(&heard);
+    let sink: Arc<dyn crate::EventSink> = Arc::new(move |_run: domain::RunId, event: domain::EngineEvent| {
+        kept.lock().expect("heard").push(event);
+    });
+    let scripted = ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("<summary>done</summary>".into())])]);
+    let metered = crate::meter::Metered {
+        api: Arc::new(scripted),
+        ledger: Arc::default(),
+        provider: domain::ModelProvider::named("scripted"),
+        gate: crate::RunGate::new(domain::RunId::new(), sink),
+        model: domain::ModelOption::new("m", "M"),
+        calls: None,
+        budget: None,
+        account: String::new(),
+        attribution: Attribution::of_step("i1", "develop", Origin::Step),
+    };
+    let mut history = vec![Message::user("a"), Message::user("b")];
+    compact(&metered, &last_turn(), &mut history, &platform::Stop::new()).expect("compact");
+    let spent: Vec<Attribution> = heard
+        .lock()
+        .expect("heard")
+        .iter()
+        .filter_map(|event| match event {
+            domain::EngineEvent::Usage(usage) => Some(usage.attribution.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(spent, [Attribution::of_step("i1", "develop", Origin::Summary)]);
+}

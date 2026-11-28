@@ -41,6 +41,7 @@ mod running;
 mod schedules;
 mod scripts;
 mod shared;
+mod spend;
 mod sink;
 mod steering;
 mod texts;

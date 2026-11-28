@@ -93,6 +93,16 @@ impl SessionCommand {
     pub fn stands_alone(self) -> bool {
         matches!(self, Self::Title | Self::Permissions | Self::Answer)
     }
+
+    pub const fn origin(self) -> crate::origin::Origin {
+        use crate::origin::Origin;
+        match self {
+            Self::Title | Self::Rename => Origin::Title,
+            Self::Recap | Self::Compact => Origin::Summary,
+            Self::Permissions | Self::Learn => Origin::Review,
+            _ => Origin::Step,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -147,6 +157,16 @@ mod tests {
         assert_eq!(compact_tokens(6_000), "6k");
         assert_eq!(compact_tokens(164_800), "165k");
         assert_eq!(compact_tokens(1_000_000), "1m");
+    }
+
+    #[test]
+    fn a_chore_is_charged_to_what_it_does_and_the_rest_to_the_step() {
+        use crate::origin::Origin;
+        assert_eq!(SessionCommand::Title.origin(), Origin::Title);
+        assert_eq!(SessionCommand::Recap.origin(), Origin::Summary);
+        assert_eq!(SessionCommand::Compact.origin(), Origin::Summary);
+        assert_eq!(SessionCommand::Permissions.origin(), Origin::Review);
+        assert_eq!(SessionCommand::Side.origin(), Origin::Step);
     }
 
     #[test]

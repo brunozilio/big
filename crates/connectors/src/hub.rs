@@ -3,8 +3,10 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use domain::Language;
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
+use domain::origin::{Attribution, Origin};
 use serde_json::{Map, Value};
 
+use crate::calls::{CallSink, Called};
 use crate::descriptor::{AlternateAuth, Presentation, ProviderDescriptor};
 use crate::error::{ActionError, ErrorClass, RECONNECT};
 use crate::http::Http;
@@ -28,7 +30,10 @@ pub struct Connectors {
     limiter: RateLimiter,
     learned: Mutex<HashMap<ConnectionId, Value>>,
     sink: Option<Arc<dyn SettingsSink>>,
+    calls: Option<Arc<dyn CallSink>>,
 }
+
+pub const POLL: &str = "events.poll";
 
 fn present(value: Option<&Value>) -> bool {
     match value {
@@ -71,11 +76,17 @@ impl Connectors {
                 provider,
             })
             .collect();
-        Connectors { entries, http, keeper, limiter: RateLimiter::new(), learned: Mutex::default(), sink: None }
+        let learned = Mutex::default();
+        Connectors { entries, http, keeper, limiter: RateLimiter::new(), learned, sink: None, calls: None }
     }
 
     pub fn with_sink(mut self, sink: Arc<dyn SettingsSink>) -> Connectors {
         self.sink = Some(sink);
+        self
+    }
+
+    pub fn with_calls(mut self, calls: Arc<dyn CallSink>) -> Connectors {
+        self.calls = Some(calls);
         self
     }
 
@@ -167,6 +178,18 @@ impl Connectors {
         args: &Value,
         idempotency_key: &str,
     ) -> Result<Value, ActionError> {
+        self.call_for(None, connection, settings, action, args, idempotency_key).await
+    }
+
+    pub async fn call_for(
+        &self,
+        attribution: Option<&Attribution>,
+        connection: &Connection,
+        settings: &Value,
+        action: &str,
+        args: &Value,
+        idempotency_key: &str,
+    ) -> Result<Value, ActionError> {
         let entry = self.entry(&connection.provider)?;
         let spec = entry.descriptor.action(action).ok_or_else(|| unknown_action(action))?;
         let capability = Capability::of_action(action).ok_or_else(|| unknown_action(action))?;
@@ -198,7 +221,15 @@ impl Connectors {
         if let Err(error) = &result {
             self.limiter.learn(&connection.id, error);
         }
+        self.counted(connection, action, attribution, result.is_ok());
         result
+    }
+
+    fn counted(&self, connection: &Connection, action: &str, attribution: Option<&Attribution>, ok: bool) {
+        if let Some(calls) = &self.calls {
+            let provider = &connection.provider;
+            calls.called(&Called { connection: &connection.id, provider, action, attribution, ok });
+        }
     }
 
     pub async fn poll(
@@ -213,10 +244,10 @@ impl Connectors {
         let settings = self.completed(entry, connection, settings).await;
         let creds = self.credentials(entry, connection, &settings).await?;
         let metered = Metered { inner: self.http.as_ref(), limiter: &self.limiter, connection: &connection.id };
-        let mut batch = source
-            .poll(&metered, &creds, cursor, watch)
-            .await
-            .inspect_err(|error| self.limiter.learn(&connection.id, error))?;
+        let polled = source.poll(&metered, &creds, cursor, watch).await;
+        let trigger = Attribution { origin: Origin::Trigger, ..Attribution::default() };
+        self.counted(connection, POLL, Some(&trigger), polled.is_ok());
+        let mut batch = polled.inspect_err(|error| self.limiter.learn(&connection.id, error))?;
         batch.events.retain(|event| connection.offers(&event.capability));
         Ok(Some(batch))
     }

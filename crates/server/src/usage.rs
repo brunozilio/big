@@ -76,7 +76,25 @@ fn gather(shared: &Shared, days: i64, only: Option<&str>) -> ApiResult<Value> {
             }
         }
     }
-    Ok(listing(days, &window, &tally.report(), &providers, shared.language()))
+    let mut listed = listing(days, &window, &tally.report(), &providers, shared.language());
+    connector_calls(shared, &mut listed, start, only);
+    Ok(listed)
+}
+
+fn connector_calls(shared: &Shared, listed: &mut Value, start: u64, only: Option<&str>) {
+    let store = &shared.backend.store;
+    let since = i64::try_from(start.saturating_mul(1000)).unwrap_or(i64::MAX);
+    let rows = store.connector_calls_since(since).unwrap_or_else(|error| {
+        tracing::warn!(%error, "the connector calls could not be read for usage");
+        Vec::new()
+    });
+    let records = store.connections().unwrap_or_default();
+    let theirs: Option<Vec<String>> =
+        only.map(|owner| store.connections_of(owner).unwrap_or_default().into_iter().map(|record| record.id).collect());
+    let mine = |id: &str| theirs.as_ref().is_none_or(|ids| ids.iter().any(|known| known == id));
+    let (by_connection, unowned) = crate::usage_calls::by_connection(&rows, &records, mine);
+    listed["byConnection"] = json!(by_connection);
+    listed["unattributed"]["connectorCalls"] = json!(unowned.calls);
 }
 
 pub fn priced(event: &mut EngineEvent) {
@@ -112,6 +130,10 @@ fn counted(mut fields: Value, tally: &Tally) -> Value {
     fields["tokens"] = json!(tally.tokens);
     fields["calls"] = json!(tally.calls);
     fields
+}
+
+fn by_origin(report: &UsageReport) -> Vec<Value> {
+    report.by_origin.iter().map(|(origin, tally)| counted(json!({ "id": origin.word() }), tally)).collect()
 }
 
 pub fn listing(
@@ -164,7 +186,7 @@ pub fn listing(
             "calls": totals.calls, "sessions": totals.sessions,
         },
         "daily": daily, "byProvider": by_provider, "byModel": by_model, "byAccount": by_account,
-        "byAgent": by_agent,
+        "byAgent": by_agent, "byOrigin": by_origin(report), "unattributed": counted(json!({}), &report.unattributed),
     })
 }
 

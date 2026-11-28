@@ -188,7 +188,7 @@ impl Spans {
         until: u64,
         text: &str,
         thinking: &str,
-        spent: &Option<ModelUsage>,
+        spent: &Option<Box<ModelUsage>>,
         call: &Option<ModelCall>,
     ) {
         let name = call
@@ -196,12 +196,12 @@ impl Spans {
             .map(|c| shown(&c.model, c.served.as_deref()))
             .or_else(|| spent.as_ref().map(|u| u.model.clone()));
         let id = self.add(parent, SpanKind::Llm, name.unwrap_or_else(|| "model".into()), at, until);
-        let context = call.as_ref().zip(spent.as_ref()).map(|(call, spent)| self.context(call, spent));
+        let context = call.as_ref().zip(spent.as_deref()).map(|(call, spent)| self.context(call, spent));
         let sent = call.as_ref().map(|call| self.messages.sent(parent, call)).unwrap_or_default();
         let span = self.span(id);
         (span.request, span.reply, span.system_id, span.tools_id) = (sent.request, sent.reply, sent.system, sent.tools);
         (span.output, span.thinking) = (text.into(), thinking.into());
-        span.usage = spent.as_ref().map(usage);
+        span.usage = spent.as_deref().map(usage);
         span.context = context;
         if let Some(call) = call {
             span.stop = Some(call.stop.clone());

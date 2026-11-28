@@ -184,6 +184,7 @@ impl Builder<'_> {
             return;
         }
         let draft = self.draft.take().unwrap_or_default();
+        let usage = usage.map(Box::new);
         let turn = Kind::Turn { text: draft.text, thinking: draft.thinking, usage, call: self.asked.take() };
         self.steps
             .push(Step { nodes: vec![Node { at_ms: self.since, until_ms: Some(at), failed: false, kind: turn }] });

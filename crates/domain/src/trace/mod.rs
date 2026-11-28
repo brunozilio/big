@@ -146,7 +146,7 @@ pub enum Kind {
     Turn {
         text: String,
         thinking: String,
-        usage: Option<ModelUsage>,
+        usage: Option<Box<ModelUsage>>,
         call: Option<ModelCall>,
     },
     Tool {

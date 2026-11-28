@@ -80,8 +80,9 @@ impl Job {
             Err(error) => return Stop::Model(error),
         };
         let ledger = Arc::new(Ledger::default());
-        let api =
-            Metered { calls: None, budget: None, ..self.metered(api, &ledger, self.request.session.model.clone()) };
+        let metered = self.metered(api, &ledger, self.request.session.model.clone());
+        let attribution = metered.attribution.as_origin(command.origin());
+        let api = Metered { calls: None, budget: None, attribution, ..metered };
         let emit = |event: EngineEvent| {
             self.gate.emit(event);
         };

@@ -9,6 +9,7 @@ use crate::tools::repl::reachable;
 use crate::transcript::Message;
 
 const ADAPTED_TOKENS: u32 = 16_000;
+const ORIGIN: domain::origin::Origin = domain::origin::Origin::Filter;
 
 impl Agent<'_> {
     pub(super) fn answer_from_bank(&self, function: &str, input: &Value) -> Option<Result<Value, String>> {
@@ -43,6 +44,7 @@ impl Agent<'_> {
             models.small_model.as_deref(),
             &self.request,
             models.model.provider,
+            ORIGIN,
         );
         let request = TurnRequest {
             system,

@@ -10,6 +10,9 @@ use crate::error::Error;
 use crate::policy::FieldPolicy;
 use crate::runner::{ReconcileReport, Synchronizer, observed, reconciled};
 
+const TRIGGERED: domain::origin::Attribution =
+    domain::origin::Attribution { item: None, step: None, origin: domain::origin::Origin::Trigger };
+
 struct Divergence {
     field: &'static str,
     policy: FieldPolicy,
@@ -97,7 +100,7 @@ impl Synchronizer {
     }
 
     async fn read(&self, entry: &Entry, action: &str, args: Value) -> Result<Value, Error> {
-        Ok(self.connectors.call(&entry.connection, &entry.settings, action, &args, "").await?)
+        Ok(self.connectors.call_for(Some(&TRIGGERED), &entry.connection, &entry.settings, action, &args, "").await?)
     }
 
     async fn reconcile_issue(&self, entry: &Entry, item: &Desired, issue: &str) -> Result<usize, Error> {
@@ -214,7 +217,7 @@ impl Synchronizer {
             return Ok("observed");
         };
         let key = format!("{}/reconcile/{}", item.item, divergence.field);
-        self.connectors.call(&entry.connection, &entry.settings, action, args, &key).await?;
+        self.connectors.call_for(Some(&TRIGGERED), &entry.connection, &entry.settings, action, args, &key).await?;
         Ok("reapplied")
     }
 

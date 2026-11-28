@@ -6,7 +6,12 @@ use crate::transcript::Message;
 const ANSWER_TOKENS: u32 = 4096;
 const READ_WHOLE: usize = 6_000;
 
-pub fn reader(small_model: Option<&str>, parent: &TurnRequest, provider: domain::ModelProvider) -> TurnRequest {
+pub fn reader(
+    small_model: Option<&str>,
+    parent: &TurnRequest,
+    provider: domain::ModelProvider,
+    origin: domain::origin::Origin,
+) -> TurnRequest {
     let config =
         crate::tools::subagent_config::AgentConfig { model: small_model.map(str::to_owned), ..Default::default() };
     TurnRequest {
@@ -16,7 +21,7 @@ pub fn reader(small_model: Option<&str>, parent: &TurnRequest, provider: domain:
         tools: Vec::new(),
         effort: parent.effort,
         max_tokens: parent.max_tokens,
-        intent: Default::default(),
+        intent: crate::model::Intent::default().with_origin(origin),
     }
 }
 
@@ -80,6 +85,8 @@ mod tests {
     use crate::model::scripted::ScriptedModel;
     use crate::transcript::Block;
 
+    const FILTER: domain::origin::Origin = domain::origin::Origin::Filter;
+
     fn template() -> TurnRequest {
         TurnRequest {
             model: "m".into(),
@@ -96,15 +103,16 @@ mod tests {
     fn the_page_goes_to_the_small_model_when_one_is_set() {
         let provider = domain::ModelProvider::new("claude-subscription");
         let parent = template();
-        assert_eq!(reader(None, &parent, provider).model, "m");
-        assert_eq!(reader(Some("haiku"), &parent, provider).model, "claude-haiku-5-5");
+        assert_eq!(reader(None, &parent, provider, FILTER).model, "m");
+        assert_eq!(reader(Some("haiku"), &parent, provider, FILTER).model, "claude-haiku-5-5");
         let unknown = domain::ModelProvider::new("nobody");
         assert_eq!(
-            reader(Some("elsewhere"), &parent, unknown).model,
+            reader(Some("elsewhere"), &parent, unknown, FILTER).model,
             "m",
             "a model the provider cannot serve falls back"
         );
-        assert!(reader(None, &parent, provider).messages.is_empty(), "the conversation is not copied");
+        assert!(reader(None, &parent, provider, FILTER).messages.is_empty(), "the conversation is not copied");
+        assert_eq!(reader(None, &parent, provider, FILTER).intent.origin, Some(FILTER), "and its cost is the filter's");
     }
 
     #[test]

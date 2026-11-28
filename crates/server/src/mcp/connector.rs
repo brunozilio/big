@@ -114,7 +114,8 @@ impl ConnectorTools {
         let record = &tool.record;
         let arguments = if arguments.is_null() { json!({}) } else { arguments.clone() };
         let connection = connection(record);
-        let called = self.hub.call(&connection, &record.settings, &tool.action, &arguments, &key);
+        let charged = domain::origin::Attribution::default();
+        let called = self.hub.call_for(Some(&charged), &connection, &record.settings, &tool.action, &arguments, &key);
         match self.runtime.block_on(called) {
             Ok(Value::String(text)) => text_result(text, false),
             Ok(value) => text_result(serde_json::to_string_pretty(&value).unwrap_or_default(), false),

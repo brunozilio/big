@@ -59,15 +59,17 @@ pub(crate) fn ask_model(
     template: &TurnRequest,
     arguments: &Value,
     stop: &Stop,
+    origin: Option<domain::origin::Origin>,
 ) -> Result<Value, String> {
     let field = |key: &str| arguments.get(key).and_then(Value::as_str).map(str::to_owned);
     let prompt = field("prompt").ok_or("ctx.llm needs a prompt")?;
+    let once = crate::model::Intent::ONCE;
     let request = TurnRequest {
         model: field("model").unwrap_or_else(|| template.model.clone()),
         system: field("system").unwrap_or_default(),
         messages: vec![Message::user(prompt)],
         tools: Vec::new(),
-        intent: crate::model::Intent::ONCE,
+        intent: origin.map_or(once, |origin| once.with_origin(origin)),
         ..template.clone()
     };
     let reply = api.turn_blocking(&request, &mut |_| {}, stop.token()).map_err(|error| error.to_string())?;

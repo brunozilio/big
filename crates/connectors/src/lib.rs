@@ -1,4 +1,5 @@
 pub mod browser;
+pub mod calls;
 pub mod clock;
 pub mod contracts;
 pub mod descriptor;

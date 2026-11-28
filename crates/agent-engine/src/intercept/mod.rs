@@ -224,7 +224,7 @@ fn layered(
             layered(rest, arguments, workspace, model, &mut *terminal)
         }
         "llm" => match model {
-            Some((api, template)) => ask_model(api, template, &arguments, &workspace.stop),
+            Some((api, template)) => ask_model(api, template, &arguments, &workspace.stop, Some(domain::origin::Origin::Hook)),
             None => Err("ctx.llm is not available here".into()),
         },
         "tool" => read_only_tool(&arguments, workspace),

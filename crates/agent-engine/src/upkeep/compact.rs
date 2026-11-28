@@ -47,7 +47,8 @@ pub fn compact_on(
         Some(focus) => format!("{}\n\nThe user asks the summary to focus on: {focus}", crate::prompt::text("compact")),
         None => crate::prompt::text("compact"),
     }));
-    let request = TurnRequest { messages: asked, ..template.clone() };
+    let intent = template.intent.with_origin(domain::origin::Origin::Summary);
+    let request = TurnRequest { messages: asked, intent, ..template.clone() };
     let answered = match api.turn_blocking(&request, &mut |_| {}, stop.token()) {
         Ok(reply) if summary_text(&reply.message.text()).is_empty() && !request.tools.is_empty() => {
             api.turn_blocking(&TurnRequest { tools: Vec::new(), ..request }, &mut |_| {}, stop.token())
@@ -126,7 +127,7 @@ fn bounded_summary(
                 ))],
                 tools: Vec::new(),
                 max_tokens: template.max_tokens.min(4096),
-                intent: crate::model::Intent::ONCE,
+                intent: crate::model::Intent::ONCE.with_origin(domain::origin::Origin::Summary),
                 ..template.clone()
             };
             match api.turn_blocking(&request, &mut |_| {}, stop.token()) {

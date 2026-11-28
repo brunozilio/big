@@ -50,6 +50,7 @@ mod stamps;
 mod state;
 mod usage;
 mod usage_cache;
+mod usage_calls;
 mod vault;
 mod watched;
 mod workspaces;

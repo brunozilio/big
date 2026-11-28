@@ -73,7 +73,7 @@ fn reviewed(agent: &Agent<'_>, brief: &str) -> Result<Vec<domain::review::Findin
         request: TurnRequest {
             system: format!("{}\n\n{}", agent.request.system, crate::prompt::text("reviewer")),
             tools: specs.collect(),
-            intent: crate::model::Intent::default(),
+            intent: crate::model::Intent::default().with_origin(domain::origin::Origin::Review),
             ..agent.request.clone()
         },
         agents: &[],

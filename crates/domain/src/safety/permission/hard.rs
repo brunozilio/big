@@ -3,8 +3,8 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-pub use super::env::EnvRule;
 use super::env;
+pub use super::env::EnvRule;
 use super::hidden::{hidden, revealed};
 use super::{Call, Effect, Reason, Verdict};
 use crate::shell::SimpleCommand;

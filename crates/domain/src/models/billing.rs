@@ -126,6 +126,8 @@ pub struct ModelUsage {
     pub provider: String,
     #[serde(default)]
     pub account: String,
+    #[serde(default, flatten)]
+    pub attribution: crate::origin::Attribution,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -201,6 +203,7 @@ mod tests {
             price_date: String::new(),
             provider: String::new(),
             account: String::new(),
+            attribution: crate::origin::Attribution::default(),
         }
     }
 
@@ -246,6 +249,23 @@ mod tests {
         assert_eq!(Basis::of("api-reference-estimate"), Basis::Api);
         assert_eq!(Basis::of(Basis::Api.label()), Basis::Api);
         assert_eq!(Basis::of(""), Basis::Unknown);
+    }
+
+    #[test]
+    fn a_recorded_call_without_an_origin_reads_as_a_step_and_keeps_its_item_when_it_has_one() {
+        let old: ModelUsage = serde_json::from_str(
+            r#"{"model":"m","input":1,"output":1,"cache_read":0,"cache_write":0,"estimated_cost_usd":null,"basis":"","price_date":""}"#,
+        )
+        .expect("old record");
+        assert_eq!(old.attribution, crate::origin::Attribution::default());
+        let summary = ModelUsage {
+            attribution: crate::origin::Attribution::of_step("i1", "develop", crate::origin::Origin::Summary),
+            ..old
+        };
+        let json = serde_json::to_value(&summary).expect("json");
+        let read = (json["origin"].as_str(), json["item"].as_str(), json["step"].as_str());
+        assert_eq!(read, (Some("summary"), Some("i1"), Some("develop")));
+        assert_eq!(serde_json::from_value::<ModelUsage>(json).expect("back"), summary);
     }
 
     #[test]

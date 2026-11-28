@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::EngineEvent;
 use crate::billing::{Cost, ModelUsage};
+use crate::origin::Origin;
 
 pub const UNKNOWN: &str = "unknown";
 
@@ -60,6 +61,8 @@ pub struct UsageReport {
     pub by_model: Vec<Ranked>,
     pub by_account: Vec<AccountRanked>,
     pub by_agent: Vec<Ranked>,
+    pub by_origin: Vec<(Origin, Tally)>,
+    pub unattributed: Tally,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -73,6 +76,8 @@ pub struct UsageTally {
     accounts: BTreeMap<(String, String), Tally>,
     agent_of: HashMap<String, String>,
     agents: BTreeMap<String, Tally>,
+    origins: BTreeMap<Origin, Tally>,
+    unattributed: Tally,
 }
 
 impl UsageTally {
@@ -115,8 +120,11 @@ impl UsageTally {
         self.providers.entry(provider.clone()).or_default().add(usage);
         self.models.entry(model).or_default().add(usage);
         self.accounts.entry((provider, usage.account.clone())).or_default().add(usage);
-        if let Some(agent) = self.agent_of.get(session) {
-            self.agents.entry(agent.clone()).or_default().add(usage);
+        self.origins.entry(usage.attribution.origin).or_default().add(usage);
+        match self.agent_of.get(session) {
+            Some(agent) => self.agents.entry(agent.clone()).or_default().add(usage),
+            None if usage.attribution.item.is_none() => self.unattributed.add(usage),
+            None => {}
         }
     }
 
@@ -132,6 +140,8 @@ impl UsageTally {
             .map(|((provider, account), tally)| AccountRanked { provider, account, tally })
             .collect();
         by_account.sort_by(|a, b| ranking(&a.tally, &b.tally));
+        let mut by_origin: Vec<(Origin, Tally)> = self.origins.into_iter().collect();
+        by_origin.sort_by(|a, b| ranking(&a.1, &b.1));
         UsageReport {
             totals: Totals { sessions: self.sessions.len() as u64, ..self.totals },
             daily: self.daily,
@@ -139,6 +149,8 @@ impl UsageTally {
             by_model: ranked(self.models),
             by_account,
             by_agent: ranked(self.agents),
+            by_origin,
+            unattributed: self.unattributed,
         }
     }
 }

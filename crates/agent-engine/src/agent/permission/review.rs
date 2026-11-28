@@ -13,6 +13,7 @@ const KEPT: usize = 60_000;
 const ENTRY: usize = 4_000;
 const ACTION: usize = 20_000;
 const ANSWER_TOKENS: u32 = 1024;
+const ORIGIN: domain::origin::Origin = domain::origin::Origin::Review;
 
 impl Agent<'_> {
     pub(super) fn screened(&self, asking: &Asking<'_>, verdict: Verdict) -> Verdict {
@@ -49,6 +50,7 @@ impl Agent<'_> {
             models.small_model.as_deref(),
             &self.request,
             models.model.provider,
+            ORIGIN,
         );
         let instructions = self.workspace.prompt_context.as_ref().map(|context| context.instructions.as_slice());
         let action = transcript(asking.parent, asking.called.name, asking.called.input);

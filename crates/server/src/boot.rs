@@ -40,7 +40,8 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let tokens = Arc::new(VaultTokens::new(Arc::clone(&services.secrets)));
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
     let sink = Arc::new(StoredSettings(Arc::clone(&store)));
-    let connectors = Arc::new(Connectors::new(http, keeper).with_sink(sink));
+    let calls = Arc::new(crate::usage_calls::StoredCalls(Arc::clone(&store)));
+    let connectors = Arc::new(Connectors::new(http, keeper).with_sink(sink).with_calls(calls));
     connectors::memory::install(Arc::new(crate::connector_memory::StoredMemory(Arc::clone(&store))));
     let runtime = tokio::runtime::Handle::current();
     let connected = crate::connected_mcp::for_runs(Arc::clone(&store), Arc::clone(&connectors), runtime);

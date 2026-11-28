@@ -6,6 +6,7 @@ use std::time::Duration;
 use connectors::contracts;
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use domain::effect::{Call, Effect, EffectOutcome, EffectRequest, ErrorClass, IdempotencyKey, next_retry};
+use domain::origin::{Attribution, Origin};
 use domain::workflow::{ItemId, WorkItem, WorkflowEvent};
 use serde_json::{Value, json};
 use sync::Pushed;
@@ -181,6 +182,7 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
     let state = shared.item(item).map_err(|error| Failure::permanent(error.to_string()))?;
     let key = format!("{}:{}", brand::connectors::MARKER, launch.key);
     let owner = crate::owners::of(&shared.store, &state);
+    let charged = Attribution::of_step(launch.key.item.clone(), launch.key.step.clone(), Origin::Step);
     match launch.command.kind.as_str() {
         AGENT => {
             let effect =
@@ -192,8 +194,8 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
         CALL if launch.command.call().capability == crate::links::CAPABILITY => {
             crate::links::call(shared, item, &launch.command.call())
         }
-        CALL => call(shared, &owner, &launch.command, &key).await,
-        WAIT_POLL => poll(shared, &owner, &launch.command, &key).await,
+        CALL => call(shared, &owner, &launch.command, &key, &charged).await,
+        WAIT_POLL => poll(shared, &owner, &launch.command, &key, &charged).await,
         STATUS | IMPEDIMENT => push(shared, &state, &launch.command, &launch.key).await,
         other => Err(Failure::permanent(format!("the kernel does not know the command {other}"))),
     }
@@ -236,7 +238,13 @@ pub fn connection_of(shared: &Shared, owner: &str, call: &Call) -> Result<(Conne
     Ok((connection, record.settings))
 }
 
-async fn call(shared: &Shared, owner: &str, command: &Command, key: &str) -> Result<Value, Failure> {
+async fn call(
+    shared: &Shared,
+    owner: &str,
+    command: &Command,
+    key: &str,
+    charged: &Attribution,
+) -> Result<Value, Failure> {
     let mut call = command.call();
     let store = crate::kept::store(&shared.config.data);
     let mut args = std::mem::take(&mut call.args);
@@ -252,12 +260,19 @@ async fn call(shared: &Shared, owner: &str, command: &Command, key: &str) -> Res
             Ok(_) => {}
         }
     }
-    connector(shared, owner, &call, key).await
+    connector(shared, owner, &call, key, charged).await
 }
 
-pub async fn connector(shared: &Shared, owner: &str, call: &Call, key: &str) -> Result<Value, Failure> {
+pub async fn connector(
+    shared: &Shared,
+    owner: &str,
+    call: &Call,
+    key: &str,
+    charged: &Attribution,
+) -> Result<Value, Failure> {
     let (connection, settings) = connection_of(shared, owner, call)?;
-    shared.config.connectors.call(&connection, &settings, &call.action, &call.args, key).await.map_err(|error| {
+    let called = shared.config.connectors.call_for(Some(charged), &connection, &settings, &call.action, &call.args, key);
+    called.await.map_err(|error| {
         match error.blocker() {
             Some(reason) => Failure::Blocked(reason.to_owned()),
             None => Failure::Class(error.class, error.message),
@@ -265,11 +280,17 @@ pub async fn connector(shared: &Shared, owner: &str, call: &Call, key: &str) -> 
     })
 }
 
-async fn poll(shared: &Shared, owner: &str, command: &Command, key: &str) -> Result<Value, Failure> {
+async fn poll(
+    shared: &Shared,
+    owner: &str,
+    command: &Command,
+    key: &str,
+    charged: &Attribution,
+) -> Result<Value, Failure> {
     let every = Duration::from_millis(command.args["every"].as_u64().unwrap_or(30_000).max(10));
     let until = &command.args["until"];
     loop {
-        let wait = match connector(shared, owner, &command.call(), key).await {
+        let wait = match connector(shared, owner, &command.call(), key, charged).await {
             Ok(value) if matches(until, &value) => return Ok(value),
             Ok(_) => every,
             Err(Failure::Class(ErrorClass::Permanent, message)) => return Err(Failure::permanent(message)),

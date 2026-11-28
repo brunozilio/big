@@ -70,6 +70,7 @@ impl Job {
             calls: self.recorder.as_ref().map(|recorder| recorder.calls()),
             budget: self.request.policy.budget,
             account: self.request.host.credentials.model_accounts.first().cloned().unwrap_or_default(),
+            attribution: self.request.host.attribution.clone(),
         }
     }
 

@@ -1,6 +1,7 @@
 use crate::RunGate;
 use crate::model::{BoxFuture, CancellationToken, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
 use domain::billing::{Basis, Cost, ModelUsage};
+use domain::origin::Attribution;
 use domain::{EngineEvent, ModelProvider};
 use llm_providers::model::Cache;
 use llm_providers::priced;
@@ -31,6 +32,7 @@ pub struct Metered {
     pub calls: Option<Calls>,
     pub budget: Option<domain::budget::Budget>,
     pub account: String,
+    pub attribution: Attribution,
 }
 impl ModelApi for Metered {
     fn turn<'a>(
@@ -91,9 +93,14 @@ impl Metered {
                 price_date: provider.map_or("", |provider| provider.price_date()).into(),
                 provider: served.0,
                 account: served.1,
+                attribution: self.attribution(request),
             },
         ));
         Ok(())
+    }
+
+    fn attribution(&self, request: &TurnRequest) -> Attribution {
+        request.intent.origin.map_or_else(|| self.attribution.clone(), |origin| self.attribution.as_origin(origin))
     }
 
     fn served_by(&self, request: &TurnRequest, reply: &Reply) -> (String, String) {
@@ -167,6 +174,7 @@ mod tests {
             calls: None,
             budget,
             account: "a@x.io".into(),
+            attribution: Attribution::default(),
         }
     }
 

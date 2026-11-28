@@ -36,12 +36,18 @@ pub struct Intent {
     pub cache: Cache,
     #[serde(default)]
     pub priority: Priority,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub origin: Option<domain::origin::Origin>,
 }
 
 impl Intent {
-    pub const SESSION: Self = Self { cache: Cache::Long, priority: Priority::Now };
-    pub const ONCE: Self = Self { cache: Cache::None, priority: Priority::Now };
-    pub const LATER: Self = Self { cache: Cache::None, priority: Priority::Later };
+    pub const SESSION: Self = Self { cache: Cache::Long, priority: Priority::Now, origin: None };
+    pub const ONCE: Self = Self { cache: Cache::None, priority: Priority::Now, origin: None };
+    pub const LATER: Self = Self { cache: Cache::None, priority: Priority::Later, origin: None };
+
+    pub const fn with_origin(self, origin: domain::origin::Origin) -> Self {
+        Self { origin: Some(origin), ..self }
+    }
 }
 
 pub fn discounted(cost: Option<f64>, intent: Intent, discount: Option<f64>) -> Option<f64> {

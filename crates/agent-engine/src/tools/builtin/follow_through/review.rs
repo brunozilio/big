@@ -48,7 +48,12 @@ impl Review for FollowThrough {
 fn judge_request(agent: &Agent<'_>, request: &str, answer: &str) -> TurnRequest {
     let small = agent.workspace.models.small_model.as_deref();
     let template =
-        crate::tools::builtin::web::guarded::reader(small, &agent.request, agent.workspace.models.model.provider);
+        crate::tools::builtin::web::guarded::reader(
+        small,
+        &agent.request,
+        agent.workspace.models.model.provider,
+        domain::origin::Origin::Review,
+    );
     TurnRequest {
         system: crate::prompt::text("follow-through"),
         messages: vec![Message::user(format!(
@@ -56,7 +61,7 @@ fn judge_request(agent: &Agent<'_>, request: &str, answer: &str) -> TurnRequest 
         ))],
         effort: domain::Effort::Low,
         max_tokens: template.max_tokens.min(JUDGE_TOKENS),
-        intent: crate::model::Intent::ONCE,
+        intent: crate::model::Intent::ONCE.with_origin(domain::origin::Origin::Review),
         ..template
     }
 }

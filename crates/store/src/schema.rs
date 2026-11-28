@@ -182,6 +182,18 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX items_by_seq ON items (seq);
     CREATE INDEX factory_findings_by_seq ON factory_findings (seq);
 ",
+    "
+    CREATE TABLE connector_calls (
+        at INTEGER NOT NULL,
+        connection TEXT NOT NULL,
+        action TEXT NOT NULL,
+        origin TEXT,
+        item TEXT,
+        step TEXT,
+        ok INTEGER NOT NULL
+    );
+    CREATE INDEX connector_calls_by_at ON connector_calls (at);
+",
 ];
 
 const ORDERED: [&str; 4] = ["connections", "applications", "factory_findings", "items"];
