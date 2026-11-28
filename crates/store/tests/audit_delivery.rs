@@ -39,18 +39,40 @@ fn each_sink_reads_the_trail_from_its_own_cursor(fresh: Fresh) {
     assert_eq!(listed, ["a"]);
 }
 
+fn forgotten(store: &store::Store, sinks: &[&str], max_lag: Option<Duration>) -> (usize, u64) {
+    let sinks: Vec<String> = sinks.iter().map(|sink| (*sink).to_owned()).collect();
+    let done = store.forget_audit_delivered(Duration::from_secs(1), &sinks, max_lag).expect("forget");
+    (done.records, done.dropped)
+}
+
 fn retention_keeps_what_an_active_sink_has_not_taken(fresh: Fresh) {
     let place = fresh();
     let store = place.open(0);
     store.append_audit(&events(1_000, 4)).expect("append");
     assert!(store.audit_delivered("a", 0, 3, 0).expect("a"));
     assert!(store.audit_delivered("b", 0, 1, 0).expect("b"));
-    let sinks = ["a".to_owned(), "b".to_owned()];
-    assert_eq!(store.forget_audit_delivered(Duration::from_secs(1), &sinks).expect("forget"), 1);
+    assert_eq!(forgotten(&store, &["a", "b"], None), (1, 0));
     assert!(store.audit_delivered("b", 1, 4, 0).expect("b"));
-    assert_eq!(store.forget_audit_delivered(Duration::from_secs(1), &sinks).expect("forget"), 2);
-    assert_eq!(store.forget_audit_delivered(Duration::from_secs(1), &["c".to_owned()]).expect("none"), 0);
+    assert_eq!(forgotten(&store, &["a", "b"], None), (2, 0));
+    assert_eq!(forgotten(&store, &["stuck"], None), (0, 0), "with no cap a stuck sink holds the trail");
+    assert_eq!(store.audit_delivery("stuck").expect("stuck").dropped, 0);
     assert_eq!(store.verify_audit().expect("verify").broken, None);
+}
+
+fn a_sink_lagging_past_the_cap_no_longer_holds_the_retention(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
+    store.append_audit(&events(1_000, 4)).expect("append");
+    assert!(store.audit_delivered("a", 0, 4, 0).expect("a"));
+    assert!(store.audit_delivered("stuck", 0, 1, 0).expect("stuck"));
+    let far = Some(Duration::from_secs(3_650 * 24 * 3600 * 100));
+    assert_eq!(forgotten(&store, &["a", "stuck"], far), (1, 0), "inside the cap the lagging sink still holds");
+    assert_eq!(forgotten(&store, &["a", "stuck", "never"], Some(Duration::from_secs(1))), (2, 4));
+    assert_eq!(store.audit_delivery("stuck").expect("stuck").dropped, 2);
+    assert_eq!(store.audit_delivery("never").expect("never").dropped, 2);
+    assert_eq!(seqs(&store, "stuck"), [4], "the newest record stays as the anchor of the sequence");
+    store.append_audit(&events(i64::MAX / 4, 1)).expect("append");
+    assert_eq!(seqs(&store, "stuck"), [4, 5], "the sink goes on after the gap");
 }
 
 fn several_instances_open_the_store_at_once(fresh: Fresh) {
@@ -72,5 +94,6 @@ fn several_instances_open_the_store_at_once(fresh: Fresh) {
 scenarios!(
     each_sink_reads_the_trail_from_its_own_cursor,
     retention_keeps_what_an_active_sink_has_not_taken,
+    a_sink_lagging_past_the_cap_no_longer_holds_the_retention,
     several_instances_open_the_store_at_once,
 );

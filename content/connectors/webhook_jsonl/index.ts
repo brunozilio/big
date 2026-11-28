@@ -17,7 +17,7 @@ export function lines(events: Event[]): string {
 
 export function batchOf(value: unknown): number {
   const parsed = Math.floor(Number(value));
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : 100;
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : Number(config.batch.default);
 }
 
 export function headersOf(sent: Event[], token: string): Record<string, string> {

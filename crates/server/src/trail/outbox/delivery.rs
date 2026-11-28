@@ -1,16 +1,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use connectors::{ActionError, ErrorClass};
+use connectors::ActionError;
 use serde_json::Value;
-use store::{AuditRecord, Store};
+use store::Store;
 
+use super::backoff::Pace;
+use super::event::event_of;
 use super::sink::Sink;
-
-pub const OFFER: usize = 500;
-pub const IDLE: Duration = Duration::from_secs(1);
-const FIRST_WAIT: Duration = Duration::from_secs(1);
-const MOST_WAIT: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -23,35 +20,18 @@ pub enum Step {
 pub struct Outbox {
     store: Arc<Store>,
     sink: Arc<dyn Sink>,
+    pace: Pace,
     failures: u32,
 }
 
-pub fn backoff(failures: u32) -> Duration {
-    let doubled = FIRST_WAIT.saturating_mul(2_u32.saturating_pow(failures.saturating_sub(1)));
-    doubled.min(MOST_WAIT)
-}
-
-pub fn event_of(record: &AuditRecord) -> Result<Value, ActionError> {
-    let mut event = serde_json::to_value(record).map_err(ActionError::decode)?;
-    event["id"] = Value::from(record.hash.clone());
-    Ok(event)
-}
-
-fn rate_limited(class: &ErrorClass) -> Option<Duration> {
-    match class {
-        ErrorClass::RateLimited { retry_after } => Some((*retry_after).min(MOST_WAIT)),
-        _ => None,
-    }
-}
-
 impl Outbox {
-    pub fn new(store: Arc<Store>, sink: Arc<dyn Sink>) -> Outbox {
-        Outbox { store, sink, failures: 0 }
+    pub fn new(store: Arc<Store>, sink: Arc<dyn Sink>, pace: Pace) -> Outbox {
+        Outbox { store, sink, pace, failures: 0 }
     }
 
     pub async fn step(&mut self) -> Step {
         let name = self.sink.name().to_owned();
-        let (delivery, pending) = match self.store.audit_outbox(&name, OFFER) {
+        let (delivery, pending) = match self.store.audit_outbox(&name, self.pace.offer) {
             Ok(found) => found,
             Err(error) => return self.failed(&error.to_string(), None),
         };
@@ -65,7 +45,7 @@ impl Outbox {
         let ack = match self.sink.deliver(&events, &key).await {
             Ok(ack) if ack.taken() > 0 => ack,
             Ok(_) => return self.failed("the sink took no event", None),
-            Err(error) => return self.failed(&error.message, rate_limited(&error.class)),
+            Err(error) => return self.failed(&error.message, self.pace.rate_limited(&error.class)),
         };
         let Some(taken) = pending.get(ack.taken() - 1) else {
             return self.failed("the sink took more than offered", None);
@@ -91,7 +71,7 @@ impl Outbox {
         if let Err(error) = self.store.audit_undelivered(name, why) {
             tracing::warn!(sink = name, %error, "the audit delivery failure could not be recorded");
         }
-        let wait = backoff(self.failures).max(at_least.unwrap_or_default());
+        let wait = self.pace.backoff(self.failures).max(at_least.unwrap_or_default());
         tracing::warn!(
             sink = name,
             why,
@@ -106,7 +86,7 @@ impl Outbox {
         loop {
             match self.step().await {
                 Step::Delivered { .. } => tokio::task::yield_now().await,
-                Step::Idle => tokio::time::sleep(IDLE).await,
+                Step::Idle => tokio::time::sleep(self.pace.idle).await,
                 Step::Failed { wait } => tokio::time::sleep(wait).await,
             }
         }

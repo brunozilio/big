@@ -49,7 +49,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let calls = Arc::new(crate::usage_calls::StoredCalls(Arc::clone(&store)));
     let connectors = Connectors::from_providers(providers, http, keeper).with_redactor(redactor);
     let connectors = Arc::new(connectors.with_sink(sink).with_calls(calls));
-    crate::trail::deliver(&store, &connectors);
+    crate::trail::deliver(&store, &connectors)?;
     app::install_spend(Arc::new(crate::usage_calls::StoredSpend(Arc::clone(&store))));
     connectors::memory::install(Arc::new(crate::connector_memory::StoredMemory(Arc::clone(&store))));
     let runtime = tokio::runtime::Handle::current();

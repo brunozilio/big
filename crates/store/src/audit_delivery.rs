@@ -1,6 +1,4 @@
-use std::time::Duration;
-
-use database::{Conn, Param, Row, args};
+use database::{Conn, Row, args};
 use serde::Serialize;
 
 use crate::audit::{AuditFilter, AuditPage, AuditRecord};
@@ -19,7 +17,7 @@ pub struct AuditDelivery {
 
 const COLUMNS: &str = "sink, delivered, dropped, attempts, failure, at";
 
-const OPENED: &str = "INSERT INTO audit_delivery (sink, delivered, dropped, attempts, failure, at)
+pub(crate) const OPENED: &str = "INSERT INTO audit_delivery (sink, delivered, dropped, attempts, failure, at)
      VALUES (?1, 0, 0, 0, NULL, ?2) ON CONFLICT (sink) DO NOTHING";
 
 const ADVANCED: &str = "UPDATE audit_delivery SET delivered = ?3, dropped = dropped + ?4, attempts = 0,
@@ -38,20 +36,12 @@ fn delivery_of(row: &Row) -> Result<AuditDelivery> {
     })
 }
 
-fn found(conn: &mut dyn Conn, sink: &str) -> Result<AuditDelivery> {
+pub(crate) fn found(conn: &mut dyn Conn, sink: &str) -> Result<AuditDelivery> {
     let row = conn.row(&format!("SELECT {COLUMNS} FROM audit_delivery WHERE sink = ?1"), args![sink])?;
     match row {
         Some(row) => delivery_of(&row),
         None => Ok(AuditDelivery { sink: sink.to_owned(), ..AuditDelivery::default() }),
     }
-}
-
-fn kept_from(conn: &mut dyn Conn, sinks: &[String]) -> Result<u64> {
-    let mut lowest = u64::MAX;
-    for sink in sinks {
-        lowest = lowest.min(found(conn, sink)?.delivered);
-    }
-    Ok(lowest)
 }
 
 impl Store {
@@ -87,16 +77,6 @@ impl Store {
             conn.execute(OPENED, args![sink, at])?;
             conn.execute(FAILED, args![sink, failure, at])?;
             Ok(())
-        })
-    }
-
-    pub fn forget_audit_delivered(&self, older_than: Duration, sinks: &[String]) -> Result<usize> {
-        let cutoff = now().saturating_sub(i64::try_from(older_than.as_millis()).unwrap_or(i64::MAX));
-        self.write(|conn| {
-            let kept = signed(kept_from(conn, sinks)?.min(i64::MAX.unsigned_abs()))?;
-            let sql = "DELETE FROM audit_trail WHERE at < ?1 AND seq <= ?2";
-            let forgotten = conn.execute(sql, &[cutoff.value(), kept.value()])?;
-            Ok(usize::try_from(forgotten).unwrap_or(usize::MAX))
         })
     }
 }

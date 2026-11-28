@@ -39,7 +39,7 @@ pub use error::Error;
 pub use factory::Generation;
 pub use identity::{CodeCheck, Passkey, Person};
 pub use ownership::OwnedIds;
-pub use retention::Forgotten;
+pub use retention::{AuditForgotten, Forgotten};
 pub use roles::HeldRole;
 pub use spend::Spent;
 

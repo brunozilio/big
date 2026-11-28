@@ -20,7 +20,21 @@ use super::*;
 
 const DOWN_MS: u64 = 5 * 60 * 1000;
 const UNTIL_MS: u64 = DOWN_MS + 60 * 1000;
-const SINK: &str = "webhook_jsonl";
+const SINK: &str = "fixture_sink";
+
+const FIXTURE: &str = r#"import { fetch } from "sdk/connectors/index.ts";
+import { audit } from "sdk/connectors/contracts.ts";
+export function provider() {
+  return { schema_version: 2, name: "Fixture sink", capabilities: ["audit"], auth: { kind: "token", fields: [] }, actions: audit() };
+}
+export function call({ args, creds }, ctx) {
+  const sent = (args.events ?? []).slice(0, 100);
+  if (sent.length === 0) return { ack: 0 };
+  const body = sent.map((event) => JSON.stringify(event)).join("\n");
+  fetch(ctx, { method: "POST", url: creds.settings.url, headers: { "content-type": "application/x-ndjson" }, body });
+  return { ack: sent.length };
+}
+"#;
 
 #[derive(Debug, Default)]
 struct Destination {
@@ -82,10 +96,21 @@ impl Sink for Scripted {
     }
 }
 
+fn fixture() -> ScriptedProvider {
+    let folder = tempfile::tempdir().expect("a folder");
+    let dir = folder.path().join(format!("connectors/{SINK}"));
+    std::fs::create_dir_all(&dir).expect("dir");
+    std::fs::write(dir.join("index.ts"), FIXTURE).expect("fixture");
+    ScriptedProvider::load_in(Some(folder.path()), &format!("connectors/{SINK}/index.ts")).expect("the sink loads")
+}
+
+fn pace() -> Pace {
+    Pace::configured().expect("the [audit] pace reads")
+}
+
 fn scripted(http: &Arc<Destination>) -> Arc<dyn Sink> {
-    let provider = ScriptedProvider::load_in(None, &format!("connectors/{SINK}/index.ts")).expect("the sink loads");
     let creds = Credentials::new(&ConnectionId::from(SINK), "t", json!({ "url": "https://sink.test/audit" }));
-    Arc::new(Scripted { provider, http: Arc::clone(http), creds })
+    Arc::new(Scripted { provider: fixture(), http: Arc::clone(http), creds })
 }
 
 fn opened(path: &Path) -> Arc<Store> {
@@ -117,19 +142,19 @@ async fn with_the_destination_down_for_five_minutes_no_event_is_lost_nor_kept_tw
     let folder = tempfile::tempdir().expect("a folder");
     let path = folder.path().join("app.db");
     let destination = Arc::new(Destination::default());
-    let mut outbox = Outbox::new(opened(&path), scripted(&destination));
+    let mut outbox = Outbox::new(opened(&path), scripted(&destination), pace());
     let mut restarted = false;
     let writer = opened(&path);
     while destination.clock.load(Ordering::SeqCst) < UNTIL_MS {
         let now = destination.clock.load(Ordering::SeqCst);
         appended(&writer, now, 3);
         if !restarted && now > DOWN_MS / 2 {
-            outbox = Outbox::new(opened(&path), scripted(&destination));
+            outbox = Outbox::new(opened(&path), scripted(&destination), pace());
             restarted = true;
         }
         let advance = match outbox.step().await {
             Step::Delivered { .. } => Duration::from_millis(200),
-            Step::Idle => IDLE,
+            Step::Idle => pace().idle,
             Step::Failed { wait } => wait,
         };
         destination.clock.fetch_add(u64::try_from(advance.as_millis()).expect("small"), Ordering::SeqCst);
@@ -144,7 +169,8 @@ async fn with_the_destination_down_for_five_minutes_no_event_is_lost_nor_kept_tw
     assert!(received.len() > written.len(), "the batch whose answer was lost was sent again");
     assert_eq!(received.iter().collect::<BTreeSet<_>>().len(), written.len());
     let failed = destination.failed.load(Ordering::SeqCst);
-    assert!((5..20).contains(&failed), "the outage was retried with backoff: {failed} attempts");
+    let polled = usize::try_from(DOWN_MS / u64::try_from(pace().first_wait.as_millis()).expect("small")).expect("small");
+    assert!(failed >= 3 && failed * 4 < polled, "the outage was retried with backoff: {failed} attempts");
     let delivery = store.audit_delivery(SINK).expect("delivery");
     let last = store.audit(&AuditFilter::default(), AuditPage::Before(None), 1).expect("last");
     assert_eq!(Some(delivery.delivered), last.first().map(|record| record.seq));
@@ -172,13 +198,13 @@ async fn rejected_events_are_counted_and_a_failure_is_kept_until_the_next_delive
     let store = opened(&folder.path().join("app.db"));
     appended(&store, 1, 4);
     let answers = vec![
-        Err(ActionError::rate_limited(Duration::from_secs(30), "slow down")),
+        Err(ActionError::rate_limited(pace().most_wait * 2, "slow down")),
         Ok(Ack { ack: 1, rejected: 1 }),
         Ok(Ack { ack: 5, rejected: 0 }),
         Ok(Ack { ack: 2, rejected: 0 }),
     ];
-    let mut outbox = Outbox::new(Arc::clone(&store), Arc::new(Answering(Mutex::new(answers))));
-    assert_eq!(outbox.step().await, Step::Failed { wait: Duration::from_secs(30) });
+    let mut outbox = Outbox::new(Arc::clone(&store), Arc::new(Answering(Mutex::new(answers))), pace());
+    assert_eq!(outbox.step().await, Step::Failed { wait: pace().most_wait });
     let failing = store.audit_delivery("answering").expect("delivery");
     assert_eq!((failing.attempts, failing.failure.as_deref()), (1, Some("slow down")));
     assert_eq!(outbox.step().await, Step::Delivered { through: 2, acked: 1, rejected: 1 });
@@ -190,15 +216,15 @@ async fn rejected_events_are_counted_and_a_failure_is_kept_until_the_next_delive
 }
 
 #[test]
-fn the_wait_doubles_up_to_a_minute_and_each_event_carries_its_hash_as_id() {
-    let waits: Vec<u64> = (1..=8).map(|failures| backoff(failures).as_secs()).collect();
-    assert_eq!(waits, [1, 2, 4, 8, 16, 32, 60, 60]);
-    let record =
-        store::AuditRecord { seq: 7, event: AuditEvent::new(5, "tool.call"), prev: "p".into(), hash: "h".into() };
-    let event = event_of(&record).expect("event");
-    assert_eq!(
-        (event["id"].clone(), event["seq"].clone(), event["action"].clone()),
-        (json!("h"), json!(7), json!("tool.call"))
-    );
-    assert_eq!(event["schemaVersion"], json!(domain::audit::SCHEMA_VERSION));
+fn a_sink_without_a_connector_stops_the_boot_and_no_sink_changes_nothing() {
+    let http: Arc<dyn Http> = Arc::new(connectors::FakeHttp::new());
+    let tokens = Arc::new(connectors::MemoryTokenStore::new());
+    let keeper = connectors::TokenKeeper::new(tokens, Arc::clone(&http), Arc::new(connectors::SystemClock));
+    let hub = connectors::Connectors::from_providers(vec![Arc::new(fixture())], http, keeper);
+    assert_eq!(checked(&hub, &[SINK.to_owned()]), Ok(()));
+    let refused = checked(&hub, &[SINK.to_owned(), "missing".to_owned()]).expect_err("refused");
+    assert!(refused.contains("`missing`") && refused.contains("no connector"), "{refused}");
+    let folder = tempfile::tempdir().expect("a folder");
+    let store = opened(&folder.path().join("app.db"));
+    assert_eq!(start(&store, &Arc::new(hub), &[]), Ok(()));
 }

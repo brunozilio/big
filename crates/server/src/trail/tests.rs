@@ -59,7 +59,7 @@ fn the_writer_keeps_the_captured_events_and_tells_what_was_dropped() {
         tracing::warn!(target: "audit", agent = "dev", "policy.blocked");
     });
     let writer =
-        Writer { store: Arc::clone(&store), redactor: Arc::default(), queue, retention: None, sinks: Vec::new() };
+        Writer { store: Arc::clone(&store), redactor: Arc::default(), queue, retention: None, sinks: Vec::new(), max_lag: None };
     let mut pending = got.into_iter().map(|captured| entry::draft_of(captured, &writer.redactor)).collect();
     writer.write(&mut pending);
     assert!(pending.is_empty());
@@ -83,5 +83,9 @@ fn the_settings_keep_the_trail_unless_a_retention_is_declared() {
     assert_eq!((forgets.level, forgets.capacity), (Level::WARN, 5));
     assert_eq!(forgets.retention, Some(Duration::from_secs(30 * DAY)));
     assert!(forgets.sinks.is_empty());
-    assert_eq!(forgets.with_sinks("one, two").sinks, ["one", "two"]);
+    assert_eq!(forgets.max_lag, None);
+    let capped = forgets.with_sinks("one, two").with_max_lag("2");
+    assert_eq!(capped.sinks, ["one", "two"]);
+    assert_eq!(capped.max_lag, Some(Duration::from_secs(2 * DAY)));
+    assert_eq!(capped.with_max_lag("").max_lag, None);
 }

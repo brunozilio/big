@@ -335,6 +335,11 @@ skip = "http.server.request http.client.request"
 queue = "10000"
 retention_days = ""
 sinks = ""
+max_lag_days = ""
+offer = "500"
+idle_ms = "1000"
+first_wait_ms = "1000"
+most_wait_ms = "60000"
 
 [webhook_jsonl]
 url = ""

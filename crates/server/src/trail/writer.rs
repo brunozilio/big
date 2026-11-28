@@ -22,6 +22,7 @@ pub struct Writer {
     pub queue: Arc<Queue>,
     pub retention: Option<Duration>,
     pub sinks: Vec<String>,
+    pub max_lag: Option<Duration>,
 }
 
 enum Next {
@@ -100,7 +101,7 @@ impl Writer {
         let forgotten = if self.sinks.is_empty() {
             self.store.forget_audit(older_than)
         } else {
-            self.store.forget_audit_delivered(older_than, &self.sinks)
+            self.store.forget_audit_delivered(older_than, &self.sinks, self.max_lag).map(|done| done.records)
         };
         match forgotten {
             Ok(0) => {}
