@@ -164,7 +164,7 @@ pub async fn start(
         }
         return Ok(reply(started));
     }
-    if !crate::scope::is_admin(&person) {
+    if !crate::scope::is_admin(&ctx, &person) {
         return Err(crate::scope::admin_only());
     }
     let shared = Arc::clone(&ctx);

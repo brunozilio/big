@@ -99,6 +99,8 @@ fn api() -> Router<Ctx> {
         .route("/api/admin/audit/verify", get(crate::audit::verify))
         .route("/api/admin/people", get(crate::people::list).post(crate::auth::add_person))
         .route("/api/admin/people/{id}/password", put(crate::auth::reset_password))
+        .route("/api/admin/people/{id}/roles", put(crate::people::assign))
+        .route("/api/admin/roles", get(crate::people::roles))
         .route("/api/admin/people/{id}/sessions", delete(crate::people::sign_out))
         .route("/api/live", get(live))
         .route(

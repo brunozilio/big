@@ -48,6 +48,7 @@ mod people;
 mod permissions;
 mod pump;
 mod relay;
+mod roles;
 mod routes;
 mod scope;
 mod server;

@@ -122,6 +122,22 @@ fn a_password_belongs_to_its_user_and_too_many_failures_lock_the_login(fresh: Fr
     assert!(!store.login_locked("ana", 11).expect("cleared"));
 }
 
+fn roles_are_kept_per_source_and_replaced_as_a_whole(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
+    let ana = ana().user;
+    let bia = UserId("u-bia".into());
+    store.set_roles(&ana, "assigned", &["author".into()]).expect("assigned");
+    store.set_roles(&ana, "sso", &["member".into(), "member".into()]).expect("sso");
+    store.set_roles(&bia, "sso", &["admin".into()]).expect("other");
+    let held: Vec<(String, String)> =
+        store.roles_of(&ana).expect("read").into_iter().map(|role| (role.source, role.role)).collect();
+    assert_eq!(held, [("assigned".into(), "author".into()), ("sso".into(), "member".into())]);
+    store.set_roles(&ana, "sso", &[]).expect("cleared");
+    assert_eq!(store.roles_of(&ana).expect("read").len(), 1);
+    assert_eq!(store.all_roles().expect("all").len(), 2);
+}
+
 scenarios!(
     a_user_is_kept_once_per_email_and_keeps_the_first_id,
     a_session_lasts_until_it_expires_or_is_closed,
@@ -131,4 +147,5 @@ scenarios!(
     what_nobody_claimed_belongs_to_the_local_user,
     each_person_keeps_their_own_language_over_the_shared_one,
     a_password_belongs_to_its_user_and_too_many_failures_lock_the_login,
+    roles_are_kept_per_source_and_replaced_as_a_whole,
 );

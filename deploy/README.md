@@ -25,6 +25,7 @@ Edite antes `deploy/shared.toml`: `public_url`, domínios, admins, SSO e SMTP.
 - Toda rota `/api` exige sessão; pedidos que alteram dados vindos de outra origem são recusados.
 - Itens, sessões, conexões, aplicações, anexos e o feed ao vivo são separados por usuário.
 - Branding, permissões, memórias, navegação de pastas do servidor e provedores de IA exigem admin (`[auth] admins`).
+- Papéis em `[roles]` e `[access]`: `use` roda workflows e conversa com agentes, `author` edita a biblioteca (agentes, conectores, workflows), `admin` tudo. Quem entra recebe `[access] default_role`; os grupos do SSO viram papéis por `sso_groups` (`"grupo=papel, outro=papel"`, lidos da claim `sso_claim`).
 - Conectores não chamam loopback nem link-local (`[network] blocked`), o que barra o endpoint de metadados da AWS.
 - Repositórios são clonados pelo servidor só por `https://`, com credenciais pedidas ao conector `code` (`code.git_credentials`).
 

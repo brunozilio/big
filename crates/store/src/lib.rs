@@ -17,6 +17,7 @@ pub mod ownership;
 mod passwords;
 mod preferences;
 mod retention;
+mod roles;
 mod schema;
 mod spend;
 mod sync;
@@ -38,6 +39,7 @@ pub use factory::Generation;
 pub use identity::{CodeCheck, Passkey, Person};
 pub use ownership::OwnedIds;
 pub use retention::Forgotten;
+pub use roles::HeldRole;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

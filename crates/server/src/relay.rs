@@ -3,7 +3,7 @@ use std::sync::{Mutex, PoisonError};
 
 use axum::Extension;
 use axum::body::Body;
-use axum::extract::{Path, RawQuery};
+use axum::extract::{Path, RawQuery, State};
 use axum::http::StatusCode;
 use axum::http::header::{CONTENT_TYPE, LOCATION};
 use axum::response::{IntoResponse, Response};
@@ -75,12 +75,13 @@ fn listening(port: u16) -> bool {
 }
 
 pub async fn returned(
+    State(ctx): State<crate::state::Ctx>,
     Extension(person): Extension<Principal>,
     Path(params): Path<HashMap<String, String>>,
     RawQuery(query): RawQuery,
 ) -> Response {
     let port = params.get("port").and_then(|port| port.parse::<u16>().ok());
-    let Some(port) = port.filter(|port| listening(*port) && crate::scope::is_admin(&person)) else {
+    let Some(port) = port.filter(|port| listening(*port) && crate::scope::is_admin(&ctx, &person)) else {
         return StatusCode::NOT_FOUND.into_response();
     };
     let rest = params.get("rest").map(String::as_str).unwrap_or_default();

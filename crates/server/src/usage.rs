@@ -202,7 +202,7 @@ pub async fn report(
 ) -> ApiResult<Response> {
     let shared = Arc::clone(&ctx);
     let days = days_of(&query);
-    let only = (!crate::scope::is_admin(&person)).then(|| person.owner().to_owned());
+    let only = (!crate::scope::is_admin(&ctx, &person)).then(|| person.owner().to_owned());
     let listed = tokio::task::spawn_blocking(move || gather(&shared, days, only.as_deref()))
         .await
         .map_err(ApiError::failed)??;

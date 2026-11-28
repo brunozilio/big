@@ -225,6 +225,17 @@ sso_client_id = ""
 sso_client_secret = ""
 sso_scopes = "openid email profile"
 
+[access]
+default_role = "member"
+admin_role = "admin"
+sso_claim = "groups"
+sso_groups = ""
+
+[roles]
+admin = "use author admin"
+author = "use author"
+member = "use"
+
 [editor]
 kind = "vscode"
 name = "VS Code"

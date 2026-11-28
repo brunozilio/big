@@ -243,6 +243,14 @@ const MIGRATIONS: &[&str] = &[
     ALTER TABLE audit_trail ADD COLUMN agent TEXT;
     CREATE INDEX audit_trail_by_operation ON audit_trail (operation, at);
 ",
+    "
+    CREATE TABLE user_roles (
+        \"user\" TEXT NOT NULL,
+        source TEXT NOT NULL,
+        role TEXT NOT NULL,
+        PRIMARY KEY (\"user\", source, role)
+    );
+",
 ];
 
 const SQLITE_GUARD: &str = "CREATE TRIGGER IF NOT EXISTS audit_trail_only_grows BEFORE UPDATE ON audit_trail
