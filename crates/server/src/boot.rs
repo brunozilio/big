@@ -47,7 +47,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
     let sink = Arc::new(StoredSettings(Arc::clone(&store)));
     let calls = Arc::new(crate::usage_calls::StoredCalls(Arc::clone(&store)));
-    let connectors = Connectors::from_providers(providers, http, keeper).with_redactor(redactor);
+    let connectors = Connectors::from_providers(providers, http, keeper).with_redactor(Arc::clone(&redactor));
     let connectors = Arc::new(connectors.with_sink(sink).with_calls(calls));
     crate::trail::deliver(&store, &connectors)?;
     app::install_spend(Arc::new(crate::usage_calls::StoredSpend(Arc::clone(&store))));
@@ -64,7 +64,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let services = services
         .with_applications(crate::memories::applications(Arc::clone(&store)))
         .with_connected_mcp(connected)
-        .with_ledger(Arc::new(crate::worklog::StoredWorklog::configured(Arc::clone(&store))))
+        .with_ledger(Arc::new(crate::worklog::StoredWorklog::configured(Arc::clone(&store), Arc::clone(&redactor))))
         .with_browser_mcp(crate::browsers::for_runs(&hub, &launch.data, Arc::clone(&store)));
     crate::browsers::install(&hub, &launch.data, address.port());
     if let Err(error) = crate::mcp::token(&launch.data) {

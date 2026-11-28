@@ -9,8 +9,9 @@ Answer from the **Worklog** tool only, never from memory or a guess.
    user names another: pass `days`, or `since` and `until` as ISO dates. For
    a Monday standup, `days: 3` covers the weekend.
 2. Asked about someone else? Pass `person` (user id or e-mail). When the
-   tool says it is not allowed, tell the user they need the admin grant to
-   read other people's work, and stop; do not look for it another way.
+   tool says it is not allowed, tell the user that reading other people's
+   work needs the admin grant, or the team grant and a team in common, and
+   stop; do not look for it another way.
 3. Write three short sections, one line per item, naming the item by its
    title:
    - **Done**: what each item's `done:` lines say happened in the period

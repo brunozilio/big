@@ -492,7 +492,10 @@ impl World {
         let connected = server::connected_mcp(Arc::clone(&store), Arc::clone(&connectors), runtime);
         let services = services
             .with_connected_mcp(connected)
-            .with_ledger(Arc::new(server::StoredWorklog::configured(Arc::clone(&store))));
+            .with_ledger(Arc::new(server::StoredWorklog::configured(
+                Arc::clone(&store),
+                connectors::redaction::redactor(std::iter::empty::<&dyn Provider>()),
+            )));
         let client = app::Client::builder().services(services.clone()).build().expect("client");
         let keyed = Arc::new(app::KeyedEngine::new(services.clone()));
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();

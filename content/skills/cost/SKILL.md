@@ -10,7 +10,7 @@ Answer from the **Worklog** tool only.
    ISO dates for a month or a sprint.
 2. Asked about someone else? Pass `person`. When the tool says it is not
    allowed, tell the user that reading other people's cost needs the admin
-   grant, and stop.
+   grant, or the team grant and a team in common, and stop.
 3. Give the total first, then the items from the most expensive, each with
    its costliest steps, then conversations. Keep the dollar amounts as the
    tool gives them.

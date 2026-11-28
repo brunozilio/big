@@ -271,6 +271,10 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX IF NOT EXISTS inbox_claims_by_item ON inbox_claims (item);
 ",
+    "
+    CREATE INDEX IF NOT EXISTS work_events_by_at ON work_events (at);
+    CREATE INDEX IF NOT EXISTS spend_by_item ON spend (item);
+",
 ];
 
 const SQLITE_GUARD: &str = "CREATE TRIGGER IF NOT EXISTS audit_trail_only_grows BEFORE UPDATE ON audit_trail

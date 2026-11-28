@@ -164,3 +164,23 @@ pub fn item_view(
         cost: Spend::of(spend.iter().filter(|line| line.item == item.id.as_str())),
     }
 }
+
+impl ItemView {
+    pub fn redacted(mut self, clean: &dyn Fn(&str) -> String) -> Self {
+        self.title = clean(&self.title);
+        self.recap = self.recap.as_deref().map(clean);
+        self.status = self.status.as_deref().map(clean);
+        for done in &mut self.checkpoint.work_done {
+            match done {
+                Done::Status { status: text, .. } | Done::Cancelled { reason: text, .. } => *text = clean(text),
+                Done::Step { .. } | Done::Answered { .. } | Done::Finished { .. } => {}
+            }
+        }
+        for next in &mut self.checkpoint.next_steps {
+            if let Next::Impediment { reason: Some(reason) } = next {
+                *reason = clean(reason);
+            }
+        }
+        self
+    }
+}

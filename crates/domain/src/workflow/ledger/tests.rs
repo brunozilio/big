@@ -102,3 +102,22 @@ fn the_cost_view_adds_up_per_item_and_step_and_keeps_conversations_apart() {
     assert_eq!(shown["usd"], 1.45);
     assert_eq!(shown["since_ms"], 0);
 }
+
+#[test]
+fn the_free_text_of_a_view_goes_through_the_cleaner() {
+    let events = timed(vec![
+        (10, created()),
+        (11, WorkflowEvent::StatusSet("token sk-1".into())),
+        (12, WorkflowEvent::ImpedimentSet { on: true, reason: Some("sk-2 expirou".into()) }),
+        (13, WorkflowEvent::Cancelled { reason: "sk-3 vazou".into() }),
+    ]);
+    let all: Vec<WorkflowEvent> = events.iter().map(|(_, _, event)| event.clone()).collect();
+    let mut item = replay(&all);
+    item.ending = None;
+    item.recap = Some(crate::workflow::ItemRecap { text: "usei sk-4".into(), after: String::new() });
+    let view = item_view(&item, "u-ana", &events, Window { since_ms: 0, until_ms: 100 }, &[]);
+    let clean = view.redacted(&|text: &str| text.replace("sk-", "[redacted]-"));
+    let shown = serde_json::to_string(&clean).expect("json");
+    assert!(!shown.contains("sk-"), "{shown}");
+    assert!(shown.contains("[redacted]-2 expirou"), "{shown}");
+}

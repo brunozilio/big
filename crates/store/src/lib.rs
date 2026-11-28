@@ -41,7 +41,7 @@ pub use connector_calls::{ConnectorCall, ConnectorCalls};
 pub use error::Error;
 pub use factory::Generation;
 pub use identity::{CodeCheck, Passkey, Person};
-pub use ledger::SpendRow;
+pub use ledger::{SpendOf, SpendRow};
 pub use ownership::OwnedIds;
 pub use retention::{AuditForgotten, Forgotten};
 pub use roles::HeldRole;

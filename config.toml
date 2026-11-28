@@ -235,6 +235,7 @@ sso_groups = ""
 admin = "use author admin"
 author = "use author"
 member = "use"
+lead = "use team"
 
 [editor]
 kind = "vscode"
@@ -309,6 +310,9 @@ autonomy = "near"
 [store]
 snapshot_every = "200"
 ended_retention_days = "0"
+
+[worklog]
+max_days = "31"
 
 [history]
 former = "Cortex=cortex|Superfik=superfik|Superfik Lite=superfik-lite"

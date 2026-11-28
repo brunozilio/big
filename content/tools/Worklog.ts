@@ -11,7 +11,7 @@ export const spec = {
         enum: ["items", "item", "cost"],
         type: "string",
       },
-      person: { description: "items, cost: whose work, by user id or e-mail; the person you work for if omitted. Reading someone else's needs the admin grant.", type: "string" },
+      person: { description: "items, cost: whose work, by user id or e-mail; the person you work for if omitted. Reading someone else's needs the admin grant, or the team grant and a team in common.", type: "string" },
       days: { description: "the last this many days (1 if omitted; for `item`, its whole life).", type: "integer" },
       since: { description: "start of the period, an ISO date or date-time; overrides days.", type: "string" },
       until: { description: "end of the period, an ISO date or date-time (now if omitted).", type: "string" },

@@ -11,9 +11,10 @@ pub enum Grant {
     Use,
     Author,
     Admin,
+    Team,
 }
 
-const ALL: [Grant; 3] = [Grant::Use, Grant::Author, Grant::Admin];
+const ALL: [Grant; 4] = [Grant::Use, Grant::Author, Grant::Admin, Grant::Team];
 
 impl Grant {
     pub fn key(self) -> &'static str {
@@ -21,6 +22,7 @@ impl Grant {
             Grant::Use => "use",
             Grant::Author => "author",
             Grant::Admin => "admin",
+            Grant::Team => "team",
         }
     }
 
@@ -31,12 +33,12 @@ impl Grant {
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Grants {
-    held: [bool; 3],
+    held: [bool; 4],
 }
 
 impl Grants {
     pub fn everything() -> Self {
-        Self { held: [true; 3] }
+        Self { held: [true; 4] }
     }
 
     fn add(&mut self, grant: Grant) {
@@ -67,6 +69,7 @@ pub struct Roles {
     groups: Vec<(String, String)>,
 }
 
+#[derive(Debug)]
 pub struct Access<'a> {
     pub default_role: &'a str,
     pub admin_role: &'a str,
@@ -222,7 +225,7 @@ mod tests {
         let roles = roles("");
         let held = roles.held(true, &[]);
         assert_eq!(held, ["admin"]);
-        assert_eq!(roles.grants(&held).keys(), ["use", "author", "admin"]);
+        assert_eq!(roles.grants(&held).keys(), ["use", "author", "admin", "team"]);
     }
 
     #[test]
