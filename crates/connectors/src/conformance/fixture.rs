@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use serde::Deserialize;
 use serde_json::{Map, Value};
 
@@ -13,7 +15,15 @@ pub struct Fixture {
     pub creds: Given,
     #[serde(default)]
     pub config: Map<String, Value>,
+    #[serde(default)]
+    pub handles: BTreeMap<String, Vec<u16>>,
     pub cases: Vec<Case>,
+}
+
+impl Fixture {
+    pub fn handled(&self, action: &str) -> &[u16] {
+        self.handles.get(action).map_or(&[], Vec::as_slice)
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -41,12 +51,6 @@ pub struct Case {
     pub sent: Vec<String>,
     #[serde(default)]
     pub next: Option<Next>,
-    #[serde(default = "typed")]
-    pub typed: bool,
-}
-
-fn typed() -> bool {
-    true
 }
 
 #[derive(Debug, Clone, Deserialize)]

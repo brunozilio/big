@@ -5,9 +5,12 @@ mod contracts;
 mod crate_graph;
 mod environment;
 mod git_commands;
+mod harness;
+mod history;
 mod lint;
 mod provider_names;
 mod published;
+mod routes;
 mod test_blocks;
 mod web;
 

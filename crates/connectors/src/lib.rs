@@ -15,6 +15,7 @@ pub mod memory;
 pub mod oauth;
 pub mod provider;
 pub mod providers;
+mod published;
 pub mod redaction;
 pub mod scripted;
 pub mod texts;

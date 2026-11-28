@@ -4,6 +4,6 @@
     { "from": "packages/config.ts", "to": "packages/dev/release.ts" }
   ],
   "ids": [
-    { "from": "route:/mcp/browser" }
+    { "from": "route:/mcp/browser", "to": null, "reason": "the browser is a resource of the generic MCP route, asked for in the mcp-resources header" }
   ]
 }

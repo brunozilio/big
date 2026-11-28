@@ -1,7 +1,7 @@
 use domain::connection::ConnectionId;
 use serde_json::{Value, json};
 
-use super::fixture::{ACCOUNTS, Answer, Case, Expect, Given};
+use super::fixture::{ACCOUNTS, Case, Expect, Fixture, Given};
 use super::mock::Mock;
 use crate::error::{ActionError, ErrorClass};
 use crate::provider::{Credentials, Provider};
@@ -73,8 +73,8 @@ fn cursor_of(answer: &Result<Value, ActionError>, pointer: &str) -> Option<Value
     (!empty).then(|| found.clone())
 }
 
-pub async fn run(provider: &dyn Provider, defaults: &Given, case: &Case) -> Vec<String> {
-    let creds = creds_of(case.creds.as_ref().unwrap_or(defaults));
+pub async fn run(provider: &dyn Provider, fixture: &Fixture, case: &Case) -> Vec<String> {
+    let creds = creds_of(case.creds.as_ref().unwrap_or(&fixture.creds));
     let http = Mock::of(&case.http);
     let answer = called(provider, &http, &creds, &case.action, &case.args).await;
     let mut found = judged(provider, &case.action, &answer, &case.expect);
@@ -88,8 +88,8 @@ pub async fn run(provider: &dyn Provider, defaults: &Given, case: &Case) -> Vec<
     if let Some(next) = &case.next {
         found.extend(paged(provider, &creds, case, next, &answer).await);
     }
-    if case.typed && case.expect.ok.is_some() && !case.http.is_empty() {
-        found.extend(typed(provider, &creds, case, &case.http).await);
+    if case.expect.ok.is_some() && !case.http.is_empty() {
+        found.extend(typed(provider, &creds, case, fixture.handled(&case.action)).await);
     }
     found
 }
@@ -119,10 +119,10 @@ async fn paged(
     found
 }
 
-async fn typed(provider: &dyn Provider, creds: &Credentials, case: &Case, answers: &[Answer]) -> Vec<String> {
+async fn typed(provider: &dyn Provider, creds: &Credentials, case: &Case, handled: &[u16]) -> Vec<String> {
     let mut found = Vec::new();
-    for (status, class) in TYPED {
-        let http = Mock::failing(answers, status);
+    for (status, class) in TYPED.into_iter().filter(|(status, _)| !handled.contains(status)) {
+        let http = Mock::failing(&case.http, status);
         let answer = called(provider, &http, creds, &case.action, &case.args).await;
         match answer {
             Ok(value) => found.push(format!("with every answer at {status} it still answered {value}")),

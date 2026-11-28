@@ -79,7 +79,7 @@ pub async fn connector(content: &Path, name: &str) -> (Vec<String>, BTreeSet<Str
         Err(error) => return (vec![format!("does not load: {error}")], BTreeSet::new()),
     };
     let mut found = declared(&provider);
-    let ids = published(&provider);
+    let ids = provider.descriptor().published();
     match fixture {
         Err(why) => found.push(why),
         Ok(fixture) => found.extend(exercised(&loader, &provider, &fixture).await),
@@ -97,14 +97,6 @@ fn declared(provider: &dyn Provider) -> Vec<String> {
         .collect()
 }
 
-fn published(provider: &dyn Provider) -> BTreeSet<String> {
-    let descriptor = provider.descriptor();
-    let key = descriptor.key.to_string();
-    let mut ids = BTreeSet::from([format!("connector:{key}")]);
-    ids.extend(descriptor.actions.iter().map(|action| format!("action:{key}/{}", action.name)));
-    ids
-}
-
 async fn exercised(loader: &Loader<'_>, provider: &dyn Provider, fixture: &Fixture) -> Vec<String> {
     let descriptor = provider.descriptor();
     let mut found = Vec::new();
@@ -116,10 +108,13 @@ async fn exercised(loader: &Loader<'_>, provider: &dyn Provider, fixture: &Fixtu
         }
         covered.insert(case.action.clone());
         let problems = match loader.load() {
-            Ok(fresh) => cases::run(&fresh, &fixture.creds, case).await,
+            Ok(fresh) => cases::run(&fresh, fixture, case).await,
             Err(error) => vec![format!("does not load again: {error}")],
         };
         found.extend(problems.into_iter().map(|why| format!("{}: {why}", case.name)));
+    }
+    for action in fixture.handles.keys().filter(|action| *action != ACCOUNTS && descriptor.action(action).is_none()) {
+        found.push(format!("handles names {action}, which the connector does not offer"));
     }
     let shown = descriptor.actions.iter().filter(|action| !action.hidden());
     for action in shown.filter(|action| !covered.contains(&action.name)) {

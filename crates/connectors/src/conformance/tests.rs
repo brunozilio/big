@@ -144,3 +144,23 @@ fn a_connector_that_hides_a_failed_answer_breaks_the_typed_errors() {
         "{found:?}"
     );
 }
+
+#[test]
+fn an_action_that_declares_the_statuses_it_handles_skips_only_those_replays() {
+    let swallowing = LISTS.replace("EFFECTS", "[\"write\"]").replace(
+        "return fetchJson(ctx, { method: \"POST\"",
+        "try { return fetchJson(ctx, { method: \"POST\", url: \"https://things.example/add\" }); } catch (_) { return { id: \"t1\" }; }\n  return fetchJson(ctx, { method: \"POST\"",
+    );
+    let mut fixture = passing();
+    fixture["handles"] = json!({ "things.add": [401] });
+    let handled = root("[\"write\"]", Some(fixture));
+    std::fs::write(handled.path().join("connectors/things/index.ts"), swallowing)
+        .unwrap_or_else(|error| panic!("{error}"));
+    let found = findings(&handled);
+    assert!(found.iter().any(|finding| finding.contains("adds: with every answer at 503")), "{found:?}");
+    assert!(!found.iter().any(|finding| finding.contains("at 401")), "{found:?}");
+    let mut unknown = passing();
+    unknown["handles"] = json!({ "things.remove": [404] });
+    let found = findings(&root("[\"write\"]", Some(unknown)));
+    assert_eq!(found, ["conformance connectors/things: handles names things.remove, which the connector does not offer"]);
+}
