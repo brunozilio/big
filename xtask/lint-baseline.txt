@@ -24,5 +24,8 @@ provider-name crates/orchestrator/src/cloud.rs: aws: ("AWS_PROFILE".to_owned(), 
 provider-name crates/orchestrator/src/cloud.rs: aws: ("AWS_SDK_LOAD_CONFIG".to_owned(), "1".to_owned()),
 provider-name crates/orchestrator/src/cloud.rs: aws: environment.push(("AWS_DEFAULT_REGION".to_owned(), region.to_owned()));
 provider-name crates/orchestrator/src/cloud.rs: aws: environment.push(("AWS_REGION".to_owned(), region.to_owned()));
+provider-name crates/platform/src/aws.rs: aws: let path = std::env::var("AWS_CONTAINER_CREDENTIALS_RELATIVE_URI")
+provider-name crates/platform/src/lib.rs: aws: pub mod aws;
+provider-name crates/server/src/cloud_db.rs: aws: Ok(Some(Arc::new(move || platform::aws::secret_string(&region, &arn).map(|secret| password_in(&secret)))))
 provider-name crates/server/src/discover.rs: claude: ("CLAUDE.md", read(folder, "CLAUDE.md")),
 provider-name crates/server/src/discover.rs: github: let listed = std::fs::read_dir(folder.join(".github/workflows")).ok()?;
