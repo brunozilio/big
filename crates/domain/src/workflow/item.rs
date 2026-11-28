@@ -174,6 +174,22 @@ impl WorkItem {
         self.effects.values().filter(|entry| entry.outcome.is_none()).map(|entry| &entry.request)
     }
 
+    pub fn running_agents(&self) -> Vec<String> {
+        if self.is_ended() {
+            return Vec::new();
+        }
+        let mut agents: Vec<String> = self
+            .pending_effects()
+            .filter_map(|request| match &request.effect {
+                crate::effect::Effect::AgentRun { agent, .. } => Some(agent.clone()),
+                _ => None,
+            })
+            .collect();
+        agents.sort();
+        agents.dedup();
+        agents
+    }
+
     pub fn waiting_human(&self) -> bool {
         self.steps.iter().any(|step| step.state == StepState::WaitingHuman)
     }

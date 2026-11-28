@@ -825,5 +825,5 @@ async fn the_kill_switch_answers_for_an_item_and_for_an_agent() {
     assert_eq!(missing.1["error"]["code"], "not_found");
     let none = world.send(Method::POST, "/api/agents/nobody/kill", Some(json!({}))).await;
     assert_eq!(none.0, StatusCode::OK, "{}", none.1);
-    assert_eq!(none.1, json!({ "stopped": [] }));
+    assert_eq!(none.1, json!({ "stopped": [], "failed": [] }));
 }

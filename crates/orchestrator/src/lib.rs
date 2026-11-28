@@ -61,6 +61,7 @@ pub use config::{Config, Limits, Timeouts, Watch};
 pub use context::ItemSession;
 pub use editor::ItemFolders;
 pub use effects::{NEEDS_CONNECTION, NEEDS_RECONNECT};
+pub use kill::Killed;
 pub use error::{Error, Result};
 pub use events::OrchestratorEvent;
 pub use factory::{Autonomy, ESCAPED as FACTORY_ESCAPED, Factory, RECURRING as FACTORY_RECURRING};

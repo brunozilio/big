@@ -411,3 +411,22 @@ async fn the_browser_logic_is_served_to_the_extension_without_a_session() {
     let bytes = response.into_body().collect().await.expect("body").to_bytes();
     assert!(String::from_utf8_lossy(&bytes).contains("globalThis.__logic"));
 }
+#[tokio::test(flavor = "multi_thread")]
+async fn only_the_owner_kills_an_item_and_killing_an_agent_needs_an_administrator() {
+    let world = shared_world().await;
+    let (ana, bia) = (signed(&world, "ana"), signed(&world, "bia"));
+    let made = json!({ "text": "Corrigir o login", "issue": null, "model": "auto", "attachments": [] });
+    let (status, item) = send(&world, Some(&ana), Method::POST, "/api/items", Some(made)).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    let path = format!("/api/items/{}/kill", item["id"].as_str().expect("id"));
+    let (status, _) = send(&world, Some(&bia), Method::POST, &path, Some(json!({}))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "someone else's item stays hidden");
+    let (_, still) = send(&world, Some(&ana), Method::GET, "/api/items", None).await;
+    let open = still.as_array().and_then(|items| items.iter().find(|found| found["id"] == item["id"]).cloned());
+    assert!(open.is_some_and(|found| found["doneAt"].is_null()), "{still}");
+    let (status, body) = send(&world, Some(&bia), Method::POST, "/api/agents/worker/kill", Some(json!({}))).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["error"]["code"], "admin_only");
+    let (status, _) = send(&world, Some(&ana), Method::POST, &path, Some(json!({}))).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+}

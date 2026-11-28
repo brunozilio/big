@@ -176,6 +176,7 @@ pub struct EngineState {
     pub keeps_going: AtomicBool,
     pub limited: AtomicBool,
     pub cancels: std::sync::atomic::AtomicUsize,
+    pub hold_resumed: AtomicBool,
     pub write: Mutex<Option<String>>,
     pub answers: Mutex<Vec<(AskId, Decision)>>,
 }
@@ -272,11 +273,13 @@ impl AgentEngine for FakeEngine {
                 sink.emit(run, EngineEvent::Completed { duration_ms: 0, cost_usd: None });
                 return;
             }
-            let held = state.hold.load(Ordering::SeqCst) && request.prompt.text != crate::agent::RESUME;
+            let resumed = request.prompt.text == crate::agent::RESUME;
+            let holding = || (if resumed { &state.hold_resumed } else { &state.hold }).load(Ordering::SeqCst);
+            let held = holding();
             if let Some(name) = state.write.lock().expect("lock").clone() {
                 commit_file(&request.session.cwd, &name);
             }
-            while held && state.hold.load(Ordering::SeqCst) && !stop.load(Ordering::SeqCst) {
+            while held && holding() && !stop.load(Ordering::SeqCst) {
                 std::thread::sleep(Duration::from_millis(10));
             }
             if state.ask.load(Ordering::SeqCst) {

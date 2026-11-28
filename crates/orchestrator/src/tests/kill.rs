@@ -83,7 +83,9 @@ async fn killing_an_agent_stops_every_run_of_it_and_leaves_the_others() {
     for id in [&first, &second, &third] {
         running(&kernel, id).await;
     }
-    let mut killed = kernel.kill_agent("worker").expect("kill");
+    let found = kernel.kill_agent("worker").expect("kill");
+    assert!(found.failed.is_empty(), "{found:?}");
+    let mut killed = found.stopped;
     killed.sort_by(|a, b| a.as_str().cmp(b.as_str()));
     let mut wanted = vec![first.clone(), second.clone()];
     wanted.sort_by(|a, b| a.as_str().cmp(b.as_str()));
@@ -94,7 +96,38 @@ async fn killing_an_agent_stops_every_run_of_it_and_leaves_the_others() {
     }
     let spared = kernel.item(&third).expect("read").expect("item");
     assert!(!spared.is_ended());
-    assert!(kernel.kill_agent("worker").expect("again").is_empty());
+    assert_eq!(kernel.kill_agent("worker").expect("again"), crate::Killed::default());
     world.engine.state.hold.store(false, Ordering::SeqCst);
     assert!(output(&ended(&kernel, &third).await).as_str().is_some_and(|text| text.starts_with("feito")));
+}
+
+const PARENT: &str = r#"
+import { workflow } from "sdk";
+export default workflow({
+  name: "parent",
+  async run(ctx) {
+    const [made, kid] = await Promise.all([ctx.agent("worker", "faça"), ctx.child("worker", {})]);
+    return { made: made.text, kid };
+  },
+});
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_child_that_dies_with_its_parent_is_not_listed_as_stopped_on_its_own() {
+    let world = World::new();
+    world.engine.state.hold.store(true, Ordering::SeqCst);
+    world.workflow("worker", &alone("worker"));
+    world.workflow("parent", PARENT);
+    let kernel = world.start().await;
+    let id = kernel.create_item("parent", json!({})).expect("parent");
+    let item = until(&kernel, &id, |item| !item.children.is_empty()).await;
+    let child = item.children[0].id.clone();
+    running(&kernel, &id).await;
+    running(&kernel, &child).await;
+    let killed = kernel.kill_agent("worker").expect("kill");
+    assert_eq!(killed, crate::Killed { stopped: vec![id.clone()], failed: Vec::new() });
+    for gone in [&id, &child] {
+        let item = kernel.item(gone).expect("read").expect("item");
+        assert!(item.is_ended() && open(&item) == 0, "{gone:?}");
+    }
 }

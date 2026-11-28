@@ -226,6 +226,23 @@ fn timers_are_pending_until_fired() {
 }
 
 #[test]
+fn the_running_agents_are_the_open_agent_runs_of_a_live_item() {
+    let run = |agent: &str| Effect::AgentRun { agent: agent.into(), input: json!({}) };
+    let events = [
+        created(),
+        requested("a", 1, run("dev")),
+        requested("a", 2, run("dev")),
+        requested("b", 3, run("review")),
+        resolved("b", 3, json!(null)),
+        requested("c", 4, exec()),
+    ];
+    assert_eq!(replay(&events).running_agents(), ["dev"]);
+    let mut ended = events.to_vec();
+    ended.push(WorkflowEvent::Cancelled { reason: "parado".into() });
+    assert!(replay(&ended).running_agents().is_empty());
+}
+
+#[test]
 fn finishing_and_cancelling_end_the_item() {
     let done = replay(&[created(), WorkflowEvent::Finished { output: json!(1), delivered: None }]);
     assert!(done.is_finished() && done.is_ended() && !done.is_cancelled());

@@ -552,7 +552,7 @@ impl AgentEffect<'_> {
 
     pub(crate) fn note(&self, data: Value) {
         let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data };
-        if let Err(error) = self.shared.append(self.item, &[progress]) {
+        if let Err(error) = self.shared.append_open(self.item, &[progress], || {}) {
             tracing::warn!(%error, "an ask could not be kept in the log");
         }
     }

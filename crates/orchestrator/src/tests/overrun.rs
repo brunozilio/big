@@ -1,3 +1,5 @@
+use std::sync::atomic::Ordering;
+
 use domain::quota::Scope;
 use serde_json::json;
 
@@ -85,7 +87,7 @@ async fn a_routine_has_no_one_to_ask_so_the_overrun_is_refused() {
     let (kernel, id) = started(&world, "\"ask\"", "", input).await;
     let item = until(&kernel, &id, |item| item.impediment.is_some()).await;
     assert_eq!(impeded_by(&item), REACHED);
-    assert_eq!(overrun_of(&item), json!({ "action": "ask", "scope": "run", "went": false }));
+    assert_eq!(overrun_of(&item), json!({ "action": "ask", "scope": "run", "went": false, "granted": [] }));
     assert!(kernel.asks().is_empty());
     assert_eq!(world.engine.runs(), 1);
 }
@@ -104,7 +106,8 @@ async fn falling_to_a_smaller_model_resumes_the_run_on_it_once() {
     assert_eq!(resumed.session.model.id, "keyed-too:small");
     assert_eq!(resumed.prompt.text, crate::agent::RESUME);
     assert_eq!(resumed.policy.budgets.first().map(|b| b.limit_usd), Some(0.6));
-    assert_eq!(overrun_of(&item)["model"], json!("keyed-too:small"));
+    assert_eq!(overrun_of(&item)["fell"], json!("keyed-too:small"));
+    assert_eq!(overrun_of(&item)["granted"], json!([{ "scope": "run", "usd": 0.3 }]));
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -119,4 +122,55 @@ async fn a_smaller_model_outside_the_data_policy_is_never_asked_and_the_run_stay
     assert_eq!(told["went"], json!(false));
     assert_eq!(told["skipped"], json!("keyed:small: region us-east-1 is not eu"));
     assert_eq!(world.engine.runs(), 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_extension_is_the_exact_ceiling_and_not_its_rounded_text() {
+    agent_engine::providers::install_testing();
+    let world = World::new();
+    world.workflow("overrunning", &overrunning("{ model: \"keyed-too:small\" }", "").replace("0.3", "0.333"));
+    let kernel = world.start().await;
+    let id = kernel.create_item("overrunning", json!({})).expect("item");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(overrun_of(&item)["granted"], json!([{ "scope": "run", "usd": 0.333 }]));
+    let limit = world.engine.requests().last().and_then(|asked| asked.policy.budgets.first().map(|b| b.limit_usd));
+    assert!(limit.is_some_and(|limit| (limit - 0.666).abs() < 1e-9), "{limit:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_restart_after_the_fall_keeps_the_smaller_model_and_gets_no_new_extension() {
+    agent_engine::providers::install_testing();
+    let world = World::new();
+    world.engine.state.hold_resumed.store(true, Ordering::SeqCst);
+    let (kernel, id) = started(&world, "{ model: \"keyed-too:small\" }", "", json!({})).await;
+    until(&kernel, &id, |item| overrun_of(item)["fell"] == json!("keyed-too:small")).await;
+    eventually(|| (world.engine.requests().len() == 2).then_some(())).await.expect("resumed on the smaller model");
+    crash(kernel).await;
+    world.engine.state.hold_resumed.store(false, Ordering::SeqCst);
+    let kernel = world.start().await;
+    let item = ended(&kernel, &id).await;
+    let requests = world.engine.requests();
+    assert_eq!(requests.len(), 3);
+    let after = &requests[2];
+    assert_eq!(after.session.model.id, "keyed-too:small", "the fall survives the restart");
+    let limits: Vec<f64> = after.policy.budgets.iter().map(|b| b.limit_usd).collect();
+    assert_eq!(limits, [0.6], "the extension given before the restart is the only one");
+    assert_eq!(overrun_of(&item)["granted"], json!([{ "scope": "run", "usd": 0.3 }]));
+    assert!(kernel.asks().is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_kill_while_the_overrun_waits_for_a_person_leaves_no_ask_behind() {
+    let world = World::new();
+    let (kernel, id) = started(&world, "\"ask\"", "", json!({})).await;
+    first_ask(&kernel).await;
+    kernel.kill(&id).expect("kill");
+    assert!(kernel.asks().is_empty(), "{:?}", kernel.asks());
+    let killed = kernel.item(&id).expect("read").expect("item");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let key = killed.effects.values().next().map(|entry| entry.request.key.clone()).expect("key");
+    let late = crate::asking::Asking { shared: &kernel.shared, item: &id, key: &key, id: AskId("budget-late".into()) };
+    assert_eq!(late.decided(AskKind::permission("budget", "late", false)).await, None);
+    assert!(kernel.asks().is_empty(), "an ask opened after the kill never reaches anyone");
+    assert_eq!(kernel.item(&id).expect("read").expect("item").version, killed.version);
 }

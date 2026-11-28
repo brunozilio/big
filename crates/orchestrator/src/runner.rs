@@ -65,21 +65,22 @@ fn mark_waiting(shared: &Shared, item: &WorkItem, step: Option<(&str, &str)>) ->
         state: StepState::WaitingHuman,
         output: run.output.clone(),
     };
-    shared.append(&item.id, &[finished]).map(|_| ())
+    shared.append_open(&item.id, &[finished], || {}).map(|_| ())
 }
 
 fn impede(shared: &Shared, item: &WorkItem, reason: &str) -> Result<()> {
     if item.impediment.as_ref().is_some_and(|found| found.reason.as_deref() == Some(reason)) {
         return Ok(());
     }
-    shared.append(&item.id, &[WorkflowEvent::ImpedimentSet { on: true, reason: Some(reason.to_owned()) }]).map(|_| ())
+    let impeded = WorkflowEvent::ImpedimentSet { on: true, reason: Some(reason.to_owned()) };
+    shared.append_open(&item.id, &[impeded], || {}).map(|_| ())
 }
 
 pub fn block(shared: &Shared, item: &ItemId, key: &IdempotencyKey, reason: &str) -> Result<()> {
     let state = shared.item(item)?;
     let timeout = crate::shared::timeout_timer(key);
     if state.timers.contains_key(&timeout) {
-        shared.append(item, &[WorkflowEvent::TimerFired { id: timeout }])?;
+        shared.append_open(item, &[WorkflowEvent::TimerFired { id: timeout }], || {})?;
     }
     impede(shared, &state, reason)?;
     let branch = key.branch.clone().unwrap_or_default();

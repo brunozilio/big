@@ -1,26 +1,10 @@
 use axum::extract::{Path, State};
 use axum::response::Response;
-use domain::effect::Effect;
-use domain::workflow::{ItemId, WorkItem};
+use domain::workflow::ItemId;
 use serde_json::json;
 
 use crate::error::{ApiError, ApiResult, done, json as reply, said};
 use crate::state::Ctx;
-
-pub fn running(item: &WorkItem) -> Vec<String> {
-    let mut agents: Vec<String> = item
-        .effects
-        .values()
-        .filter(|entry| entry.outcome.is_none() && !item.is_ended())
-        .filter_map(|entry| match &entry.request.effect {
-            Effect::AgentRun { agent, .. } => Some(agent.clone()),
-            _ => None,
-        })
-        .collect();
-    agents.sort();
-    agents.dedup();
-    agents
-}
 
 pub async fn item(State(ctx): State<Ctx>, Path(id): Path<String>) -> ApiResult<Response> {
     let id = ItemId::from(id.as_str());
@@ -32,7 +16,9 @@ pub async fn item(State(ctx): State<Ctx>, Path(id): Path<String>) -> ApiResult<R
 }
 
 pub async fn agent(State(ctx): State<Ctx>, Path(name): Path<String>) -> ApiResult<Response> {
-    let stopped = ctx.backend.orchestrator.kill_agent(&name)?;
-    let items: Vec<&str> = stopped.iter().map(ItemId::as_str).collect();
-    Ok(reply(json!({ "stopped": items })))
+    let killed = ctx.backend.orchestrator.kill_agent(&name)?;
+    let stopped: Vec<&str> = killed.stopped.iter().map(ItemId::as_str).collect();
+    let failed: Vec<_> =
+        killed.failed.iter().map(|(id, error)| json!({ "item": id.as_str(), "error": error })).collect();
+    Ok(reply(json!({ "stopped": stopped, "failed": failed })))
 }

@@ -71,11 +71,18 @@ impl Asking<'_> {
             ask: AgentAsk { id: self.id.clone(), kind },
             since: now_ms(),
         };
-        self.shared.asks.restore(pending.clone(), self.key.clone());
         let data = json!({ "asks": { self.id.0.clone(): serde_json::to_value(&pending).unwrap_or(Value::Null) } });
         let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data };
-        if let Err(error) = self.shared.append(self.item, &[progress]) {
-            tracing::warn!(%error, "an ask could not be kept in the log");
+        let kept = self.shared.append_open(self.item, &[progress], || {
+            self.shared.asks.restore(pending.clone(), self.key.clone());
+        });
+        match kept {
+            Ok(true) => {}
+            Ok(false) => return,
+            Err(error) => {
+                tracing::warn!(%error, "an ask could not be kept in the log");
+                self.shared.asks.restore(pending.clone(), self.key.clone());
+            }
         }
         let PendingAsk { item, step, session, ask, .. } = pending;
         self.shared.emit(OrchestratorEvent::Asked { item, step, session, ask });

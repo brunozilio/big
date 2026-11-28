@@ -30,7 +30,9 @@ impl crate::agent::AgentEffect<'_> {
         let application = crate::application::id_of(&state.input);
         let owner = crate::owners::of(&self.shared.store, state);
         let charge = Charge::new(self.item, &self.key.step, name, application, &owner);
-        let _ = self.charge.set(charge.with_agent_ceiling(budget_usd));
+        let progress = state.effects.get(&self.key.to_string()).map(|entry| &entry.progress);
+        let granted = progress.map(crate::overrun::granted_of).unwrap_or_default();
+        let _ = self.charge.set(charge.with_agent_ceiling(budget_usd).with_granted(granted));
     }
 
     pub(crate) fn budgeted(&self, request: &domain::PromptRequest) -> domain::PromptRequest {
@@ -77,6 +79,14 @@ impl Charge {
     pub fn extend(&self, scope: Scope, reached_usd: f64) {
         let once = (reached_usd - self.extra(scope)).max(0.0);
         self.extended.lock().unwrap_or_else(PoisonError::into_inner).push((scope, once));
+    }
+
+    pub fn with_granted(self, granted: Vec<(Scope, f64)>) -> Self {
+        Self { extended: Mutex::new(granted), ..self }
+    }
+
+    pub fn granted(&self) -> Vec<(Scope, f64)> {
+        self.extended.lock().unwrap_or_else(PoisonError::into_inner).clone()
     }
 
     pub fn extensions(&self) -> usize {
