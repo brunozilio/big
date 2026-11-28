@@ -832,7 +832,7 @@ export interface SignInRelay {
 }
 
 export type SignInStart =
-  | { flow: string; kind: 'redirect'; url: string; paste: boolean; returns?: boolean; relay?: SignInRelay }
+  | { flow: string; kind: 'redirect'; url: string; paste: boolean; returns?: boolean; opened?: boolean; relay?: SignInRelay }
   | { flow: string; kind: 'device'; url: string; code: string; expiresIn: number; interval: number; opened?: boolean }
   | { flow: string; kind: 'token' }
 

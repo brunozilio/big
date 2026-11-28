@@ -335,3 +335,63 @@ async fn the_ai_sign_in_return_needs_a_session_and_an_open_sign_in() {
     let (status, _) = send(&world, Some(&ana), Method::GET, "/oauth/loopback/1455/auth/callback?code=x", None).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
+
+async fn paired_chrome(world: &World, cookie: &str, device: &str) -> String {
+    let (_, pairing) = send(world, Some(cookie), Method::POST, "/api/browser/pairing", None).await;
+    let claim = json!({ "code": pairing["code"], "deviceId": device, "name": device });
+    let (_, claimed) = send(world, None, Method::POST, "/api/browser/claim", Some(claim)).await;
+    claimed["token"].as_str().expect("token").to_owned()
+}
+
+async fn next_event(body: &mut Body) -> Value {
+    let frame = tokio::time::timeout(std::time::Duration::from_secs(5), body.frame()).await.expect("an event");
+    let data = frame.and_then(Result::ok).and_then(|frame| frame.into_data().ok()).unwrap_or_default();
+    let text = String::from_utf8_lossy(&data);
+    serde_json::from_str(text.trim().trim_start_matches("data: ")).unwrap_or(Value::Null)
+}
+
+async fn relayed(world: &World, token: &str, flow: &str, origin: &str, method: &str, body: &str) -> Value {
+    let url = format!("http://localhost:{}/api/token", support::handoff_port());
+    let sent = json!({ "flow": flow, "origin": origin, "request": { "method": method, "url": url, "body": body } });
+    let answered = as_browser(world, token, Method::POST, "/api/browser/loopback", &sent.to_string()).await;
+    assert_eq!(answered.status(), StatusCode::OK);
+    let bytes = answered.into_body().collect().await.expect("body").to_bytes();
+    serde_json::from_slice(&bytes).unwrap_or(Value::Null)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn on_a_shared_server_the_paired_chrome_opens_the_page_and_relays_what_it_sends_to_the_local_port() {
+    let world = shared_world().await;
+    let (ana, bia) = (signed(&world, "ana"), signed(&world, "bia"));
+    let start = json!({ "fields": {} });
+    let (status, _) = send(&world, Some(&ana), Method::POST, "/api/connections/handoff/start", Some(start.clone())).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "no Chrome is paired yet");
+    let token = paired_chrome(&world, &ana, "chrome-ana").await;
+    let other = paired_chrome(&world, &bia, "chrome-bia").await;
+    let streaming = as_browser(&world, &token, Method::GET, "/api/browser/stream?build=x&platform=mac", "").await;
+    let mut events = streaming.into_body();
+    let _ = next_event(&mut events).await;
+    let (status, started) = send(&world, Some(&ana), Method::POST, "/api/connections/handoff/start", Some(start)).await;
+    assert_eq!(status, StatusCode::OK, "{started}");
+    assert_eq!((started["opened"].clone(), started["returns"].clone()), (json!(true), json!(false)), "{started}");
+    let flow = started["flow"].as_str().expect("flow").to_owned();
+    let mut watched = next_event(&mut events).await;
+    while watched["type"] == "ping" {
+        watched = next_event(&mut events).await;
+    }
+    assert_eq!((watched["type"].clone(), watched["flow"].clone()), (json!("watch"), json!(flow)), "{watched}");
+    assert_eq!((watched["url"].clone(), watched["listen"].clone()), (started["url"].clone(), json!(support::handoff_port())));
+    let origin = support::HANDOFF_ORIGIN;
+    let stranger = relayed(&world, &token, &flow, "https://evil.test", "GET", "").await;
+    assert_eq!(stranger["status"], 403, "{stranger}");
+    let theirs = relayed(&world, &other, &flow, origin, "POST", r#"{"token":"stolen"}"#).await;
+    assert_eq!(theirs["status"], 403, "{theirs}");
+    let status = relayed(&world, &token, &flow, origin, "GET", "").await;
+    assert_eq!(status, json!({ "status": 200, "body": { "needsToken": true }, "done": false }));
+    let given = relayed(&world, &token, &flow, origin, "POST", r#"{"token":"squ_cloud"}"#).await;
+    assert_eq!(given, json!({ "status": 200, "body": "OK", "done": true }));
+    let poll = json!({ "flow": flow });
+    let (_, done) = send(&world, Some(&ana), Method::POST, "/api/connections/device/poll", Some(poll)).await;
+    assert_eq!((done["state"].clone(), done["connection"]["label"].clone()), (json!("done"), json!("handoff:squ_cloud")), "{done}");
+    drop(events);
+}

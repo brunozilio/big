@@ -45,9 +45,89 @@ async function caught(tabId, params) {
   await backToApp(watch.homes);
 }
 
+const BINDING = "__signInLoopback";
+const RESOLVER = "__signInLoopbackAnswer";
+const SETTLES_MS = 1500;
+
+export function shim(port) {
+  return `(() => {
+  if (globalThis.${RESOLVER}) return;
+  const port = ${JSON.stringify(String(port))};
+  const hosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+  const pending = new Map();
+  let next = 0;
+  const ours = (given) => {
+    try {
+      const url = new URL(String(given), location.href);
+      return url.protocol === "http:" && hosts.has(url.hostname) && url.port === port ? url : null;
+    } catch {
+      return null;
+    }
+  };
+  Object.defineProperty(globalThis, ${JSON.stringify(RESOLVER)}, {
+    value: (id, answer) => {
+      const done = pending.get(id);
+      pending.delete(id);
+      if (done) done(answer || {});
+    },
+  });
+  const original = globalThis.fetch;
+  globalThis.fetch = async function (input, init) {
+    const request = input instanceof Request ? input : null;
+    const url = ours(request ? request.url : input);
+    if (!url) return original.apply(this, arguments);
+    const method = String(init?.method || request?.method || "GET").toUpperCase();
+    const given = init?.body ?? (request ? await request.text() : "");
+    const body = typeof given === "string" ? given : given == null ? "" : String(given);
+    const answer = await new Promise((resolve) => {
+      const id = ++next;
+      pending.set(id, resolve);
+      globalThis[${JSON.stringify(BINDING)}](JSON.stringify({ id, method, url: url.href, body }));
+    });
+    const status = Number.isInteger(answer.status) && answer.status >= 200 && answer.status <= 599 ? answer.status : 502;
+    const empty = answer.body == null || status === 204 || status === 304;
+    const text = typeof answer.body === "string";
+    const content = empty ? null : text ? answer.body : JSON.stringify(answer.body);
+    return new Response(content, { status, headers: { "content-type": text ? "text/plain" : "application/json" } });
+  };
+})();`;
+}
+
+async function originOf(tabId) {
+  const tab = await chrome.tabs.get(tabId).catch(() => null);
+  try {
+    return new URL(String(tab?.url || "")).origin;
+  } catch {
+    return "";
+  }
+}
+
+async function relayed(tabId, params) {
+  const watch = watches.get(tabId);
+  if (!watch?.ask || params.name !== BINDING) return;
+  let sent;
+  try {
+    sent = JSON.parse(params.payload);
+  } catch {
+    return;
+  }
+  const request = { method: String(sent.method || "GET"), url: String(sent.url || ""), body: String(sent.body || "") };
+  const answer = await watch.ask({ flow: watch.flow, origin: await originOf(tabId), request }).catch(() => ({ status: 502, body: null }));
+  const reply = JSON.stringify({ status: answer?.status, body: answer?.body ?? null });
+  const expression = `globalThis[${JSON.stringify(RESOLVER)}]?.(${Number(sent.id)}, ${reply})`;
+  await command(tabId, "Runtime.evaluate", { expression, contextId: params.executionContextId }).catch(() => {});
+  if (answer?.done !== true) return;
+  setTimeout(() => {
+    ended(tabId, true)
+      .then(() => backToApp(watch.homes))
+      .catch(() => {});
+  }, SETTLES_MS);
+}
+
 export function listen() {
   onEvent((tabId, method, params) => {
     if (method === "Fetch.requestPaused" && watches.has(tabId)) caught(tabId, params).catch(() => ended(tabId, false));
+    if (method === "Runtime.bindingCalled" && watches.has(tabId)) relayed(tabId, params).catch(() => {});
   });
   chrome.tabs.onRemoved.addListener((tabId) => {
     const watch = watches.get(tabId);
@@ -90,7 +170,25 @@ export function renamer(rules) {
 })();`;
 }
 
+async function listening(message, link) {
+  const url = String(message.url || "");
+  const port = Number(message.listen);
+  if (!/^https:\/\//i.test(url) || !Number.isInteger(port) || port <= 0 || port > 65535 || !link.ask) return;
+  const tab = await chrome.tabs.create({ url: "about:blank", active: true });
+  const timer = setTimeout(() => ended(tab.id, false), LASTS_MS);
+  watches.set(tab.id, { flow: String(message.flow || ""), timer, report: link.send, ask: link.ask, homes: link.homes });
+  try {
+    await attach(tab.id);
+    await command(tab.id, "Runtime.addBinding", { name: BINDING });
+    await command(tab.id, "Page.addScriptToEvaluateOnNewDocument", { source: shim(port) });
+  } catch {
+    await ended(tab.id, false);
+  }
+  await chrome.tabs.update(tab.id, { url });
+}
+
 export async function watch(message, link) {
+  if (message.listen !== undefined) return listening(message, link);
   const patterns = (Array.isArray(message.capture) ? message.capture : []).map(String).filter(Boolean);
   const url = String(message.url || "");
   if (!/^https:\/\//i.test(url) || patterns.length === 0) return;

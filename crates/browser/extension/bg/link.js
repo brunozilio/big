@@ -121,6 +121,10 @@ function serverLink(server) {
   link.send = (message) => {
     fetch(`${link.base}/api/browser/reply`, { method: "POST", headers: { ...headers(), "content-type": "application/json" }, body: JSON.stringify(message) }).catch(() => {});
   };
+  link.ask = async (message) => {
+    const response = await fetch(`${link.base}/api/browser/loopback`, { method: "POST", headers: { ...headers(), "content-type": "application/json" }, body: JSON.stringify(message) });
+    return response.ok ? response.json() : { status: 502, body: null };
+  };
   link.open = async () => {
     if (link.running || link.gone) return;
     link.running = true;

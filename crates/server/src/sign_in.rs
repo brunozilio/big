@@ -197,12 +197,15 @@ pub async fn start(
                 let flow = shared.flows.granted(provider, grant, method, fields.clone())?;
                 return Ok(json!({ "flow": flow, "kind": "token" }));
             }
-            let authorization = redirected(shared, &sign_in).await?;
+            let (authorization, watcher) = redirected(shared, &sign_in, owner).await?;
             let url = authorization.url.clone();
             let relay = crate::relay::for_connector(shared.port, &authorization.redirect_uri);
+            let returns = !sign_in.0.listens();
             let flow = opened(Waiting::Redirect { sign_in, authorization })?;
-            let mut answer =
-                json!({ "flow": flow, "kind": "redirect", "url": url, "paste": relay.is_some(), "returns": true });
+            let watched = watcher.is_some_and(|(device, port)| shared.backend.browser.watch_listening(&device, &flow, &url, port));
+            let mut answer = json!({
+                "flow": flow, "kind": "redirect", "url": url, "paste": relay.is_some(), "returns": returns, "opened": watched,
+            });
             if let Some(relay) = relay {
                 answer["relay"] = relay;
             }
@@ -239,23 +242,65 @@ pub async fn start(
 
 fn here_only(language: Language) -> String {
     language.pick(
-        "This sign-in hands the account to the app on this computer, so it does not work on a shared server. Use the token instead.",
-        "Este inicio de sesión entrega la cuenta a la app en esta computadora, así que no funciona en un servidor compartido. Usa el token.",
-        "Esta entrada entrega a conta ao app neste computador, então não funciona num servidor compartilhado. Use o token.",
+        "This sign-in hands the account to the app through your Chrome. Connect one Chrome with the extension in Settings, or use the token instead.",
+        "Este inicio de sesión entrega la cuenta a la app a través de tu Chrome. Conecta un Chrome con la extensión en Configuración, o usa el token.",
+        "Esta entrada entrega a conta ao app pelo seu Chrome. Conecte um Chrome com a extensão em Configurações, ou use o token.",
     )
     .to_owned()
 }
 
-async fn redirected(shared: &crate::state::Ctx, sign_in: &Loopback) -> ApiResult<Authorization> {
-    let shared_mode = crate::scope::shared_mode();
-    if shared_mode && sign_in.0.listens() {
-        return Err(ApiError::bad(here_only(shared.language())));
+type Watcher = Option<(String, u16)>;
+
+async fn redirected(shared: &crate::state::Ctx, sign_in: &Loopback, owner: &str) -> ApiResult<(Authorization, Watcher)> {
+    let http = shared.backend.connectors.http();
+    if crate::scope::shared_mode() && sign_in.0.listens() {
+        let device = listening_browser(shared, owner)?;
+        let port = sign_in.0.callback_ports().map_or(shared.port, |(from, _)| from);
+        let authorization = sign_in.0.begin_at(http, shared.port, Some(port)).await?;
+        return Ok((authorization, Some((device, port))));
     }
     let mut callback = None;
+    let shared_mode = crate::scope::shared_mode();
     if let Some((from, to)) = sign_in.0.callback_ports().filter(|(from, _)| *from != shared.port && !shared_mode) {
         callback = Some(crate::callback_port::open(shared, from, to).await?);
     }
-    Ok(sign_in.0.begin_at(shared.backend.connectors.http(), shared.port, callback).await?)
+    Ok((sign_in.0.begin_at(http, shared.port, callback).await?, None))
+}
+
+fn listening_browser(shared: &Shared, owner: &str) -> ApiResult<String> {
+    match shared.backend.browser.resolve(&crate::browser_devices::of_owner(owner)) {
+        browser::Resolved::Browser(device) => Ok(device),
+        browser::Resolved::NoneConnected | browser::Resolved::Several(_) => Err(ApiError::bad(here_only(shared.language()))),
+    }
+}
+
+pub fn request_of(method: &str, path: &str, query: &Value, origin: &str, body: &str) -> Value {
+    json!({
+        "method": method.to_ascii_uppercase(),
+        "path": path,
+        "query": query,
+        "origin": origin,
+        "body": serde_json::from_str::<Value>(body).unwrap_or_else(|_| json!(body)),
+    })
+}
+
+fn relayed_request(origin: &str, sent: &Value) -> Option<Value> {
+    let url = url::Url::parse(sent["url"].as_str()?).ok()?;
+    let query: serde_json::Map<String, Value> = url.query_pairs().map(|(name, value)| (name.into_owned(), json!(value))).collect();
+    let method = sent["method"].as_str().unwrap_or("GET");
+    Some(request_of(method, url.path(), &Value::Object(query), origin, sent["body"].as_str().unwrap_or_default()))
+}
+
+pub async fn relayed(shared: &Shared, id: &str, owner: &str, origin: &str, sent: &Value) -> (u16, Value, bool) {
+    let belongs = shared.flows.get(id).is_some_and(|flow| {
+        flow.owner == owner
+            && matches!(&flow.stage, Stage::Waiting(Waiting::Redirect { sign_in, authorization })
+                if sign_in.0.listens() && origin_of(&authorization.url).is_some_and(|opened| opened == origin))
+    });
+    let Some(request) = relayed_request(origin, sent).filter(|_| belongs) else {
+        return (403, Value::Null, false);
+    };
+    answered(shared, id, &request).await
 }
 
 pub async fn answered(shared: &Shared, id: &str, request: &Value) -> (u16, Value, bool) {

@@ -108,7 +108,7 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
       current.current = start.flow
       if (start.kind === 'token') return setStep({ kind: 'resume', flow: start.flow })
       if (start.kind === 'redirect' && start.relay) return relayThenLeave(start, start.relay)
-      if (start.kind === 'redirect' && !start.paste && !isMock()) leave(start, opened)
+      if (start.kind === 'redirect' && !start.paste && !start.opened && !isMock()) leave(start, opened)
       if (start.kind === 'device' && !start.code && !start.opened && !isMock()) opened.current = openApart(start.url)
       setStep(start.kind === 'device' ? { kind: 'device', start } : { kind: 'browser', start })
     }))

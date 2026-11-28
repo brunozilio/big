@@ -308,6 +308,13 @@ impl Hub {
         linked.outbox.send(message.to_string()).is_ok()
     }
 
+    pub fn watch_listening(&self, device: &str, flow: &str, url: &str, port: u16) -> bool {
+        let state = self.state();
+        let Some(linked) = state.browsers.iter().find(|linked| linked.info.device_id == device) else { return false };
+        let message = json!({ "type": "watch", "flow": flow, "url": url, "listen": port });
+        linked.outbox.send(message.to_string()).is_ok()
+    }
+
     pub fn captured(&self, flow: &str, found: Value) {
         self.state().captured.insert(flow.to_owned(), found);
     }

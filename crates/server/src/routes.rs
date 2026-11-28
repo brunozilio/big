@@ -83,6 +83,7 @@ fn api() -> Router<Ctx> {
         .route(crate::browser_devices::CLAIM, post(crate::browser_devices::claim))
         .route(crate::browser_devices::STREAM, get(crate::browser_devices::stream))
         .route(crate::browser_devices::REPLY, post(crate::browser_devices::answer))
+        .route(crate::browser_devices::LOOPBACK, post(crate::browser_devices::loopback))
         .route(crate::browser_devices::PACKAGE, get(crate::browser_devices::package))
         .route(crate::browser_devices::DEVICES, get(crate::browser_devices::devices))
         .route(crate::browser_devices::DEVICE, delete(crate::browser_devices::forget))

@@ -25,6 +25,7 @@ pub const PAIRING: &str = "/api/browser/pairing";
 pub const CLAIM: &str = "/api/browser/claim";
 pub const STREAM: &str = "/api/browser/stream";
 pub const REPLY: &str = "/api/browser/reply";
+pub const LOOPBACK: &str = "/api/browser/loopback";
 pub const PACKAGE: &str = "/api/browser/extension.zip";
 pub const DEVICES: &str = "/api/browser/devices";
 pub const DEVICE: &str = "/api/browser/devices/{device}";
@@ -51,7 +52,7 @@ pub fn of_owner(owner: &str) -> String {
 }
 
 pub fn open_path(path: &str) -> bool {
-    path == CLAIM || path == STREAM || path == REPLY
+    path == CLAIM || path == STREAM || path == REPLY || path == LOOPBACK
 }
 
 fn issue(owner: &str) -> ApiResult<String> {
@@ -155,6 +156,15 @@ pub async fn answer(State(ctx): State<Ctx>, headers: HeaderMap, body: String) ->
     Ok(StatusCode::NO_CONTENT.into_response())
 }
 
+pub async fn loopback(State(ctx): State<Ctx>, headers: HeaderMap, body: String) -> ApiResult<Response> {
+    let device = paired(&ctx, &headers)?;
+    let sent: Value = serde_json::from_str(&body).unwrap_or_default();
+    let flow = sent["flow"].as_str().unwrap_or_default();
+    let origin = sent["origin"].as_str().unwrap_or_default();
+    let (status, body, done) = crate::sign_in::relayed(&ctx, flow, &device.owner, origin, &sent["request"]).await;
+    Ok(reply(json!({ "status": status, "body": body, "done": done })))
+}
+
 pub async fn package() -> ApiResult<Response> {
     let made = packaged().map_err(ApiError::failed)?;
     let disposition = format!("attachment; filename=\"{}\"", made.name);
@@ -232,7 +242,7 @@ mod tests {
 
     #[test]
     fn only_the_browser_routes_that_carry_their_own_proof_are_open() {
-        assert!(open_path(CLAIM) && open_path(STREAM) && open_path(REPLY));
+        assert!(open_path(CLAIM) && open_path(STREAM) && open_path(REPLY) && open_path(LOOPBACK));
         assert!(!open_path(PAIRING) && !open_path(DEVICES) && !open_path(PACKAGE));
     }
 }

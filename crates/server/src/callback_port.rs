@@ -57,13 +57,8 @@ async fn asked(
         return (allowed(StatusCode::NO_CONTENT.into_response(), origin, headers), false);
     }
     let text = String::from_utf8_lossy(body);
-    let request = json!({
-        "method": method.as_str(),
-        "path": uri.path(),
-        "query": query,
-        "origin": origin.to_str().unwrap_or_default(),
-        "body": serde_json::from_str::<Value>(&text).unwrap_or_else(|_| json!(text)),
-    });
+    let from = origin.to_str().unwrap_or_default();
+    let request = crate::sign_in::request_of(method.as_str(), uri.path(), &json!(query), from, &text);
     let (status, body, finished) = crate::sign_in::answered(ctx, flow, &request).await;
     let status = StatusCode::from_u16(status).unwrap_or(StatusCode::OK);
     let response = match body {
