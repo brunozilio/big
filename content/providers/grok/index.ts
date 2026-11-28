@@ -23,6 +23,7 @@ import {
   unauthorized,
 } from "sdk/providers/index.ts";
 import { XAI } from "../prices/xai.ts";
+import { PRICE_DATE } from "../prices/date.ts";
 
 const GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const SKIPPED = ["imagine", "image", "embedding", "tts", "video"];
@@ -45,6 +46,7 @@ export function provider() {
     wire: "responses",
     path: "/responses",
     prices: XAI,
+    priceDate: PRICE_DATE,
     owns: ["grok"],
     makers: [["grok", "logo.svg"]],
   };

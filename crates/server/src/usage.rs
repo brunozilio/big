@@ -107,7 +107,8 @@ fn named(id: &str, providers: &[ProviderSummary], language: Language) -> (Value,
 }
 
 fn counted(mut fields: Value, tally: &Tally) -> Value {
-    fields["costUsd"] = json!(tally.cost_usd);
+    fields["costUsd"] = json!(tally.cost.known_usd());
+    fields["unpricedCalls"] = json!(tally.cost.unpriced_calls);
     fields["tokens"] = json!(tally.tokens);
     fields["calls"] = json!(tally.calls);
     fields
@@ -157,7 +158,8 @@ pub fn listing(
     json!({
         "days": days, "from": window.first(), "to": window.last(),
         "totals": {
-            "costUsd": totals.cost_usd, "input": totals.input, "output": totals.output,
+            "costUsd": totals.cost.known_usd(), "unpricedCalls": totals.cost.unpriced_calls,
+            "basis": totals.cost.basis, "input": totals.input, "output": totals.output,
             "cacheRead": totals.cache_read, "cacheWrite": totals.cache_write,
             "calls": totals.calls, "sessions": totals.sessions,
         },

@@ -1,20 +1,20 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use crate::EngineEvent;
-use crate::billing::ModelUsage;
+use crate::billing::{Cost, ModelUsage};
 
 pub const UNKNOWN: &str = "unknown";
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Tally {
-    pub cost_usd: f64,
+    pub cost: Cost,
     pub tokens: u64,
     pub calls: u64,
 }
 
 impl Tally {
     fn add(&mut self, usage: &ModelUsage) {
-        self.cost_usd += usage.estimated_cost_usd.unwrap_or(0.0);
+        self.cost.add(Cost::of(usage));
         self.tokens += usage.input + usage.output + usage.cache_read + usage.cache_write;
         self.calls += 1;
     }
@@ -22,7 +22,7 @@ impl Tally {
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct Totals {
-    pub cost_usd: f64,
+    pub cost: Cost,
     pub input: u64,
     pub output: u64,
     pub cache_read: u64,
@@ -101,11 +101,11 @@ impl UsageTally {
             return;
         };
         let (provider, model) = served(usage, &self.known);
-        let cost = usage.estimated_cost_usd.unwrap_or(0.0);
+        let cost = Cost::of(usage);
         day.tally.add(usage);
-        *day.by_provider.entry(provider.clone()).or_default() += cost;
-        *day.by_model.entry(model.clone()).or_default() += cost;
-        self.totals.cost_usd += cost;
+        *day.by_provider.entry(provider.clone()).or_default() += cost.known_usd();
+        *day.by_model.entry(model.clone()).or_default() += cost.known_usd();
+        self.totals.cost.add(cost);
         self.totals.input += usage.input;
         self.totals.output += usage.output;
         self.totals.cache_read += usage.cache_read;
@@ -123,8 +123,7 @@ impl UsageTally {
     pub fn report(self) -> UsageReport {
         let ranked = |tallies: BTreeMap<String, Tally>| {
             let mut ranked: Vec<Ranked> = tallies.into_iter().map(|(id, tally)| Ranked { id, tally }).collect();
-            ranked
-                .sort_by(|a, b| b.tally.cost_usd.total_cmp(&a.tally.cost_usd).then(b.tally.calls.cmp(&a.tally.calls)));
+            ranked.sort_by(|a, b| ranking(&a.tally, &b.tally));
             ranked
         };
         let mut by_account: Vec<AccountRanked> = self
@@ -132,8 +131,7 @@ impl UsageTally {
             .into_iter()
             .map(|((provider, account), tally)| AccountRanked { provider, account, tally })
             .collect();
-        by_account
-            .sort_by(|a, b| b.tally.cost_usd.total_cmp(&a.tally.cost_usd).then(b.tally.calls.cmp(&a.tally.calls)));
+        by_account.sort_by(|a, b| ranking(&a.tally, &b.tally));
         UsageReport {
             totals: Totals { sessions: self.sessions.len() as u64, ..self.totals },
             daily: self.daily,
@@ -143,6 +141,10 @@ impl UsageTally {
             by_agent: ranked(self.agents),
         }
     }
+}
+
+fn ranking(a: &Tally, b: &Tally) -> std::cmp::Ordering {
+    b.cost.known_micros.cmp(&a.cost.known_micros).then(b.calls.cmp(&a.calls))
 }
 
 fn served(usage: &ModelUsage, known: &[String]) -> (String, String) {

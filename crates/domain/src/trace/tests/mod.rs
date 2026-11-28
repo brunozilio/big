@@ -26,6 +26,10 @@ fn usage(output: u64) -> EngineEvent {
     })
 }
 
+fn unpriced() -> EngineEvent {
+    EngineEvent::Usage(ModelUsage { model: "local".into(), output: 1, ..ModelUsage::default() })
+}
+
 fn tool(id: &str, name: &str) -> EngineEvent {
     EngineEvent::ToolStarted(ToolCall::new(id, name, id).with_input(json!({"id": id})))
 }

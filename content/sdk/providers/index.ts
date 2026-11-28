@@ -23,6 +23,7 @@ export type Rates = { input: number; output: number; cacheRead: number; cacheWri
 export type Tier = Rates & { above: number };
 export type Price = Rates & { tiers: Tier[]; laterDiscount?: number };
 export type Prices = Record<string, Price>;
+export type Basis = "subscription" | "api";
 
 export const over = (above: number, input: number, output: number, cacheRead: number, cacheWrite: CacheWrite): Tier => ({
   above,

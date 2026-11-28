@@ -35,7 +35,7 @@ fn use_outside_the_window_is_left_out() {
     tally.add("s1", "2026-11-20", &spent("claude-subscription", "a", "opus", Some(1.0)));
     tally.add("s1", "2026-11-22", &spent("claude-subscription", "a", "opus", Some(0.5)));
     let report = tally.report();
-    assert!((report.totals.cost_usd - 0.5).abs() < f64::EPSILON);
+    assert_eq!(report.totals.cost.known_micros, 500_000);
     assert_eq!(report.totals.calls, 1);
     assert_eq!(report.daily[1].tally.calls, 1);
     assert_eq!(report.daily[1].tally.tokens, 1115);
@@ -53,7 +53,20 @@ fn use_is_ranked_by_the_agent_that_ran_the_session_and_a_plain_chat_has_none() {
     let ranked: Vec<(&str, u64)> =
         report.by_agent.iter().map(|ranked| (ranked.id.as_str(), ranked.tally.calls)).collect();
     assert_eq!(ranked, [("dev", 2), ("planner", 1)]);
-    assert!((report.by_agent[0].tally.cost_usd - 1.5).abs() < f64::EPSILON);
+    assert_eq!(report.by_agent[0].tally.cost.known_micros, 1_500_000);
+}
+
+#[test]
+fn a_call_without_a_price_is_counted_apart_and_the_known_part_stays_a_partial() {
+    let mut tally = UsageTally::new(&window(), &KNOWN);
+    tally.add("s1", "2026-11-23", &spent("claude-subscription", "a", "opus", Some(0.5)));
+    tally.add("s1", "2026-11-23", &spent("claude-subscription", "a", "opus", Some(0.25)));
+    tally.add("s1", "2026-11-23", &spent("claude-subscription", "a", "local", None));
+    let report = tally.report();
+    assert_eq!((report.totals.cost.known_micros, report.totals.cost.unpriced_calls), (750_000, 1));
+    assert_eq!(report.daily[2].tally.cost.unpriced_calls, 1);
+    let local = report.by_model.iter().find(|ranked| ranked.id == "local").expect("local");
+    assert_eq!((local.tally.cost.known_micros, local.tally.cost.unpriced_calls), (0, 1));
 }
 
 #[test]

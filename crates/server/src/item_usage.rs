@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use axum::extract::{Path, State};
 use axum::response::Response;
+use domain::billing::Cost;
 use domain::trace::Record;
 use domain::workflow::ItemId;
 use domain::{EngineEvent, SessionId};
@@ -12,8 +13,7 @@ use crate::state::{Ctx, Shared};
 
 #[derive(Debug, Default, Clone, PartialEq)]
 pub struct Spent {
-    pub cost_usd: f64,
-    pub priced: bool,
+    pub cost: Cost,
     pub input: u64,
     pub output: u64,
     pub cache_read: u64,
@@ -31,10 +31,7 @@ impl Spent {
     fn add(&mut self, event: &EngineEvent) {
         match event {
             EngineEvent::Usage(usage) => {
-                if let Some(cost) = usage.estimated_cost_usd {
-                    self.cost_usd += cost;
-                    self.priced = true;
-                }
+                self.cost.add(Cost::of(usage));
                 self.input += usage.input;
                 self.output += usage.output;
                 self.cache_read += usage.cache_read;
@@ -46,9 +43,15 @@ impl Spent {
         }
     }
 
+    pub fn priced(&self) -> bool {
+        self.calls > self.cost.unpriced_calls
+    }
+
     fn json(&self) -> Value {
         json!({
-            "costUsd": self.priced.then_some(self.cost_usd),
+            "costUsd": self.priced().then(|| self.cost.known_usd()),
+            "unpricedCalls": self.cost.unpriced_calls,
+            "basis": self.cost.basis,
             "input": self.input, "output": self.output,
             "cacheRead": self.cache_read, "cacheWrite": self.cache_write,
             "calls": self.calls,
@@ -98,8 +101,7 @@ fn spent_of(events: &[EngineEvent]) -> Spent {
 }
 
 fn merged(into: &mut Spent, more: &Spent) {
-    into.cost_usd += more.cost_usd;
-    into.priced |= more.priced;
+    into.cost.add(more.cost);
     into.input += more.input;
     into.output += more.output;
     into.cache_read += more.cache_read;

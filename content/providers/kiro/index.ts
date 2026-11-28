@@ -1,6 +1,7 @@
 import { type Config, type Tokens, account, invalid, refreshable, regional, unauthorized } from "sdk/providers/index.ts";
 import { BEDROCK } from "../prices/bedrock.ts";
 import { OPENAI } from "../prices/openai.ts";
+import { PRICE_DATE } from "../prices/date.ts";
 import { pickEffort, page as pageOf } from "./models.ts";
 import { tokens as socialTokens, refresh as socialRefresh } from "./auth.ts";
 import { tokens as organizationTokens, refresh as organizationRefresh, clientOf } from "./idc.ts";
@@ -28,6 +29,7 @@ export function provider() {
     wire: "event_stream",
     path: "/",
     prices: { ...BEDROCK, ...OPENAI },
+    priceDate: PRICE_DATE,
   };
 }
 

@@ -70,7 +70,7 @@ fn flags_set_no_code_mode_detach() {
 #[test]
 fn a_budget_is_kept_only_while_its_flag_is_on() {
     let mut request = request();
-    request.policy.budget = Some(domain::budget::Budget { limit_usd: 2.0, spent_usd: 0.5 });
+    request.policy.budget = Some(domain::budget::Budget { limit_usd: 2.0, spent: domain::billing::Cost::priced(Some(0.5), domain::billing::Basis::Api) });
     let kept = budget(&request);
     assert_eq!(kept, request.policy.budget.filter(|_| on(flags::BUDGET)));
 }

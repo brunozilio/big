@@ -83,6 +83,7 @@ pub struct Totals {
     pub cache_read: u64,
     pub cache_write: u64,
     pub cost_usd: f64,
+    pub unpriced_calls: u64,
     pub started_ms: u64,
     pub ended_ms: u64,
 }
@@ -93,7 +94,10 @@ impl Totals {
         self.output += usage.output;
         self.cache_read += usage.cache_read;
         self.cache_write += usage.cache_write;
-        self.cost_usd += usage.estimated_cost_usd.unwrap_or_default();
+        match usage.estimated_cost_usd {
+            Some(cost) => self.cost_usd += cost,
+            None => self.unpriced_calls += 1,
+        }
     }
 }
 

@@ -117,6 +117,21 @@
     {
       "alternatives": [],
       "bindings": [],
+      "button": "Entrar com Handoff",
+      "custom": false,
+      "description": "Sua conta Handoff",
+      "fields": [],
+      "group": "tracker",
+      "key": "handoff",
+      "logo": "<svg/>",
+      "multiple": true,
+      "name": "Handoff",
+      "signIn": "oauth",
+      "site": "do Handoff"
+    },
+    {
+      "alternatives": [],
+      "bindings": [],
       "button": "Conectar",
       "custom": true,
       "description": "Conecte o seu próprio servidor MCP",

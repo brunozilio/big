@@ -69,6 +69,10 @@ struct Declared {
     #[serde(default)]
     prices: Prices,
     #[serde(default)]
+    price_date: String,
+    #[serde(default)]
+    basis: Option<domain::billing::Basis>,
+    #[serde(default)]
     search_price: Option<f64>,
     #[serde(default)]
     owns: Vec<String>,
@@ -98,6 +102,8 @@ pub struct ScriptedProvider {
     needs: Vec<String>,
     later_discount: Option<f64>,
     prices: Prices,
+    price_date: &'static str,
+    basis: Option<domain::billing::Basis>,
     search_price: Option<u64>,
     owns: Vec<&'static str>,
     makers: Vec<(&'static str, &'static str)>,
@@ -174,6 +180,8 @@ impl ScriptedProvider {
             needs: declared.needs,
             later_discount: declared.later_discount.filter(|discount| (0.0..=1.0).contains(discount)),
             prices: declared.prices,
+            price_date: intern(declared.price_date.trim()),
+            basis: declared.basis,
             owns: declared.owns.iter().map(|prefix| intern(prefix)).collect(),
             makers: declared.makers.iter().map(|(word, logo)| (intern(word), intern(&logo_of(root, &folder, logo)))).collect(),
             aliases: declared.aliases.into_iter().map(|(short, full)| (short, intern(&full))).collect(),
@@ -359,6 +367,12 @@ impl Provider for ScriptedProvider {
     }
     fn prices(&self) -> &Prices {
         &self.prices
+    }
+    fn price_date(&self) -> &'static str {
+        self.price_date
+    }
+    fn basis(&self) -> domain::billing::Basis {
+        self.basis.unwrap_or_else(|| if self.access.subscription() { domain::billing::Basis::Subscription } else { domain::billing::Basis::Api })
     }
     fn search_price(&self) -> Option<u64> {
         self.search_price

@@ -1,5 +1,6 @@
 import { type Config, type Model, type Tokens, browser, callback, capabilities, form, formRequest, option, parsed, positive, refreshable, standard, unauthorized, words } from "sdk/providers/index.ts";
 import { VERTEX } from "../prices/vertex.ts";
+import { PRICE_DATE } from "../prices/date.ts";
 
 const FREE_TIER = "free-tier";
 const ONBOARD_ATTEMPTS = 10;
@@ -19,6 +20,7 @@ export function provider() {
     path: "/v1internal:streamGenerateContent?alt=sse",
     servesAll: true,
     prices: VERTEX,
+    priceDate: PRICE_DATE,
     makers: [["gemini", "google.svg"]],
   };
 }

@@ -1,6 +1,93 @@
 use serde::{Deserialize, Serialize};
 
-pub const PRICE_DATE: &str = "2026-11-23";
+const MICROS: f64 = 1_000_000.0;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Basis {
+    #[default]
+    Unknown,
+    Api,
+    Subscription,
+    Mixed,
+}
+
+impl Basis {
+    pub fn of(recorded: &str) -> Self {
+        let recorded = recorded.trim().to_ascii_lowercase();
+        if recorded.starts_with("subscription") {
+            Self::Subscription
+        } else if recorded.starts_with("api") {
+            Self::Api
+        } else if recorded == "mixed" {
+            Self::Mixed
+        } else {
+            Self::Unknown
+        }
+    }
+
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Unknown => "",
+            Self::Api => "api",
+            Self::Subscription => "subscription",
+            Self::Mixed => "mixed",
+        }
+    }
+
+    pub fn joined(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Unknown, other) => other,
+            (kept, Self::Unknown) => kept,
+            (kept, other) if kept == other => kept,
+            _ => Self::Mixed,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Cost {
+    pub known_micros: u64,
+    pub unpriced_calls: u64,
+    pub basis: Basis,
+}
+
+impl Cost {
+    pub fn priced(usd: Option<f64>, basis: Basis) -> Self {
+        match usd {
+            Some(usd) => Self { known_micros: micros(usd), unpriced_calls: 0, basis },
+            None => Self { known_micros: 0, unpriced_calls: 1, basis },
+        }
+    }
+
+    pub fn of(usage: &ModelUsage) -> Self {
+        Self::priced(usage.estimated_cost_usd, Basis::of(&usage.basis))
+    }
+
+    pub fn add(&mut self, other: Self) {
+        self.known_micros = self.known_micros.saturating_add(other.known_micros);
+        self.unpriced_calls = self.unpriced_calls.saturating_add(other.unpriced_calls);
+        self.basis = self.basis.joined(other.basis);
+    }
+
+    pub fn plus(mut self, other: Self) -> Self {
+        self.add(other);
+        self
+    }
+
+    pub fn known_usd(&self) -> f64 {
+        self.known_micros as f64 / MICROS
+    }
+
+    pub const fn is_partial(&self) -> bool {
+        self.unpriced_calls > 0
+    }
+}
+
+pub fn micros(usd: f64) -> u64 {
+    if usd.is_finite() && usd > 0.0 { (usd * MICROS).round() as u64 } else { 0 }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TokenRates {
@@ -137,6 +224,28 @@ mod tests {
         session.add(&call("opus", 1, 0, Some(0.01)));
         session.add(&call("opus", 1, 0, Some(0.01)));
         assert_eq!(session.models[0].searches, 2);
+    }
+
+    #[test]
+    fn a_cost_keeps_what_is_known_apart_from_the_calls_without_a_price() {
+        let priced = |cost: f64| ModelUsage { basis: "subscription".into(), ..call("opus", 1, 0, Some(cost)) };
+        let mut cost = Cost::default();
+        cost.add(Cost::of(&priced(0.5)));
+        cost.add(Cost::of(&priced(0.25)));
+        cost.add(Cost::of(&call("local", 1, 0, None)));
+        assert_eq!((cost.known_micros, cost.unpriced_calls), (750_000, 1));
+        assert!(cost.is_partial());
+        assert!((cost.known_usd() - 0.75).abs() < f64::EPSILON);
+        assert_eq!(cost.basis, Basis::Subscription);
+        assert_eq!(cost.plus(Cost::priced(Some(0.1), Basis::Api)).basis, Basis::Mixed);
+    }
+
+    #[test]
+    fn the_basis_reads_both_the_declared_word_and_the_older_recorded_label() {
+        assert_eq!(Basis::of("subscription-api-equivalent"), Basis::Subscription);
+        assert_eq!(Basis::of("api-reference-estimate"), Basis::Api);
+        assert_eq!(Basis::of(Basis::Api.label()), Basis::Api);
+        assert_eq!(Basis::of(""), Basis::Unknown);
     }
 
     #[test]

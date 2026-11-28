@@ -93,6 +93,8 @@ pub enum ModelError {
     Oversized(usize),
     #[error("cancelled")]
     Cancelled,
+    #[error("{0}")]
+    Quota(domain::quota::QuotaError),
 }
 
 impl From<llm_providers::ProviderError> for ModelError {
@@ -110,6 +112,7 @@ impl From<&ModelError> for domain::FailureKind {
     fn from(error: &ModelError) -> Self {
         match error {
             ModelError::Overloaded(_) => Self::Unavailable,
+            ModelError::Quota(quota) => Self::from(quota),
             _ => Self::Other,
         }
     }
@@ -134,7 +137,7 @@ impl ModelError {
             Self::TooLong(_) => Some(Failure::TooLong),
             Self::Provider(_) | Self::Oversized(_) => Some(Failure::Provider),
             Self::Network(_) | Self::Stalled(_) => Some(Failure::Network),
-            Self::Cancelled => None,
+            Self::Cancelled | Self::Quota(_) => None,
         }
     }
 }

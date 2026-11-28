@@ -13,6 +13,7 @@ pub mod git_offer;
 pub mod image;
 pub mod interception;
 pub mod observer;
+pub mod quota;
 pub mod request;
 pub mod review;
 pub mod session_run;

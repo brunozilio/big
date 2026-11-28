@@ -26,6 +26,7 @@ import {
 import { OPENAI } from "../prices/openai.ts";
 import { ANTHROPIC } from "../prices/anthropic.ts";
 import { VERTEX } from "../prices/vertex.ts";
+import { PRICE_DATE } from "../prices/date.ts";
 
 const GRANT = "urn:ietf:params:oauth:grant-type:device_code";
 const MAX_INTERVAL = 60;
@@ -55,6 +56,7 @@ export function provider() {
     wire: "chat",
     path: "/chat/completions",
     prices: { ...OPENAI, ...ANTHROPIC, ...VERTEX },
+    priceDate: PRICE_DATE,
   };
 }
 

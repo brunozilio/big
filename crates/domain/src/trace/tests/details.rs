@@ -173,8 +173,10 @@ fn the_trace_totals_what_the_session_cost() {
         at(3, tool("x", "Agent")),
         at(4, usage(6)),
         at(5, result("x", "done", false)),
+        at(5, unpriced()),
     ]);
-    assert_eq!(trace.totals.output, 11);
+    assert_eq!(trace.totals.unpriced_calls, 1, "a call without a price is counted, not summed as zero");
+    assert_eq!(trace.totals.output, 12);
     assert_eq!(trace.totals.input, 20);
     assert!((trace.totals.cost_usd - 0.02).abs() < 1e-9);
     assert_eq!((trace.totals.started_ms, trace.totals.ended_ms), (1, 5));

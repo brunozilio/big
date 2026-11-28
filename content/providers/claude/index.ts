@@ -33,6 +33,7 @@ import {
   messagesStream,
 } from "sdk/providers/index.ts";
 import { ANTHROPIC } from "../prices/anthropic.ts";
+import { PRICE_DATE } from "../prices/date.ts";
 
 const HOURS_5 = 18_000;
 const WEEK = 604_800;
@@ -57,6 +58,7 @@ export function provider() {
     path: "/messages",
     laterDiscount: 0.5,
     prices: ANTHROPIC,
+    priceDate: PRICE_DATE,
     searchPrice: 0.01,
     owns: ["claude-"],
     makers: [["claude", "logo.svg"]],

@@ -115,6 +115,14 @@ pub trait Provider: Sync {
         &prices::NONE
     }
 
+    fn price_date(&self) -> &'static str {
+        ""
+    }
+
+    fn basis(&self) -> domain::billing::Basis {
+        if self.access().subscription() { domain::billing::Basis::Subscription } else { domain::billing::Basis::Api }
+    }
+
     fn search_price(&self) -> Option<u64> {
         None
     }

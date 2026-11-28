@@ -70,11 +70,35 @@ fn the_report_names_providers_and_counts_every_day() {
     assert_eq!(listed["totals"]["sessions"], 1);
     assert_eq!(
         listed["byProvider"][0],
-        json!({ "id": "claude-subscription", "name": "Claude", "logo": "claude", "costUsd": 0.5, "tokens": 15, "calls": 1 })
+        json!({ "id": "claude-subscription", "name": "Claude", "logo": "claude", "costUsd": 0.5, "unpricedCalls": 0, "tokens": 15, "calls": 1 })
     );
     assert_eq!(listed["byProvider"][1]["name"], UNRECORDED);
     assert_eq!(listed["byAccount"][0]["id"], "claude-subscription:fulano@x.com");
     assert_eq!(listed["byModel"][0]["name"], "claude-opus-4-5");
+}
+
+#[test]
+fn the_report_shows_the_known_part_and_how_many_calls_had_no_price() {
+    let window = window(jiff::civil::date(2026, 11, 23), 7);
+    let mut tally = UsageTally::new(&window, &["claude-subscription"]);
+    let call = |cost| {
+        EngineEvent::Usage(ModelUsage {
+            model: "claude-opus-4-5".into(),
+            estimated_cost_usd: cost,
+            provider: "claude-subscription".into(),
+            basis: "subscription".into(),
+            ..ModelUsage::default()
+        })
+    };
+    for cost in [Some(0.5), Some(0.25), None] {
+        tally.add("s", "2026-11-23", &call(cost));
+    }
+    let listed = listing(7, &window, &tally.report(), &[], domain::Language::default());
+    assert_eq!(listed["totals"]["costUsd"], 0.75);
+    assert_eq!(listed["totals"]["unpricedCalls"], 1);
+    assert_eq!(listed["totals"]["basis"], "subscription");
+    assert_eq!(listed["daily"][6]["unpricedCalls"], 1);
+    assert_eq!(listed["byModel"][0]["unpricedCalls"], 1);
 }
 
 fn unpriced(model: &str, provider: &str) -> EngineEvent {

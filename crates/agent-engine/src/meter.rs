@@ -1,6 +1,6 @@
 use crate::RunGate;
 use crate::model::{BoxFuture, CancellationToken, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
-use domain::billing::{ModelUsage, PRICE_DATE};
+use domain::billing::{Basis, Cost, ModelUsage};
 use domain::{EngineEvent, ModelProvider};
 use llm_providers::model::Cache;
 use llm_providers::priced;
@@ -15,8 +15,9 @@ impl Ledger {
         self.costs.lock().ok()?.iter().copied().sum()
     }
 
-    pub fn known_cost(&self) -> f64 {
-        self.costs.lock().map(|costs| costs.iter().flatten().sum()).unwrap_or(0.0)
+    pub fn spent(&self) -> Result<Cost, ModelError> {
+        let costs = self.costs.lock().map_err(|_| ModelError::Provider("usage ledger unavailable".into()))?;
+        Ok(costs.iter().fold(Cost::default(), |spent, cost| spent.plus(Cost::priced(*cost, Basis::Unknown))))
     }
 }
 pub type Calls = Arc<dyn Fn(&TurnRequest, &Reply) + Send + Sync>;
@@ -40,10 +41,9 @@ impl ModelApi for Metered {
     ) -> BoxFuture<'a, Result<Reply, ModelError>> {
         Box::pin(async move {
             if let Some(budget) = &self.budget {
-                let run_cost = self.ledger.known_cost();
-                if !budget.allows(run_cost) {
-                    return Err(ModelError::Provider(budget.refusal(run_cost)));
-                }
+                budget
+                    .check(self.ledger.spent()?, domain::budget::Unpriced::configured())
+                    .map_err(ModelError::Quota)?;
             }
             let reply = self.api.turn(request, on, cancel).await?;
             self.record(request, &reply)?;
@@ -87,13 +87,8 @@ impl Metered {
                 cache_write: u.cache_write,
                 searches: u.searches,
                 estimated_cost_usd: cost,
-                basis: if provider.is_some_and(|provider| provider.access().subscription()) {
-                    "subscription-api-equivalent"
-                } else {
-                    "api-reference-estimate"
-                }
-                .into(),
-                price_date: PRICE_DATE.into(),
+                basis: provider.map_or(Basis::Unknown, |provider| provider.basis()).label().into(),
+                price_date: provider.map_or("", |provider| provider.price_date()).into(),
                 provider: served.0,
                 account: served.1,
             },
@@ -139,6 +134,7 @@ impl std::fmt::Debug for Metered {
 #[cfg(test)]
 mod tests {
     use domain::budget::Budget;
+    use domain::quota::{QuotaError, Scope};
 
     use super::*;
     use crate::boundary::EventSink;
@@ -158,7 +154,7 @@ mod tests {
         assert_eq!(spent_by(None, usage.clone()), EngineEvent::Usage(usage.clone()));
         let wrapped = spent_by(Some(2), usage.clone());
         assert_eq!(wrapped, EngineEvent::AgentEvent { index: 2, event: Box::new(EngineEvent::Usage(usage)) });
-        assert!((domain::budget::spent(&wrapped) - 0.25).abs() < f64::EPSILON);
+        assert_eq!(domain::budget::spent(&wrapped).known_micros, 250_000);
     }
 
     fn metered(budget: Option<Budget>) -> Metered {
@@ -193,6 +189,10 @@ mod tests {
         assert_eq!(meter.served_by(&request, &pooled), ("scripted".to_owned(), "b@x.io".to_owned()));
     }
 
+    fn spent(usd: f64) -> Cost {
+        Cost::priced(Some(usd), Basis::Api)
+    }
+
     #[test]
     fn a_spent_budget_stops_the_next_call_before_it_is_made() {
         let request = TurnRequest {
@@ -206,13 +206,52 @@ mod tests {
         };
         let stop = CancellationToken::new();
 
-        let spent = metered(Some(Budget { limit_usd: 1.0, spent_usd: 1.0 }));
-        let refused = spent.turn_blocking(&request, &mut |_| {}, &stop).expect_err("refused");
+        let used_up = metered(Some(Budget { limit_usd: 1.0, spent: spent(1.0) }));
+        let refused = used_up.turn_blocking(&request, &mut |_| {}, &stop).expect_err("refused");
+        assert!(matches!(refused, ModelError::Quota(QuotaError::Budget { .. })), "{refused}");
         assert!(refused.to_string().contains("budget"), "{refused}");
 
-        let within = metered(Some(Budget { limit_usd: 1.0, spent_usd: 0.5 }));
+        let within = metered(Some(Budget { limit_usd: 1.0, spent: spent(0.5) }));
         assert!(within.turn_blocking(&request, &mut |_| {}, &stop).is_ok());
         assert!(metered(None).turn_blocking(&request, &mut |_| {}, &stop).is_ok());
+    }
+
+    #[test]
+    fn with_unpriced_calls_blocked_a_call_without_a_price_stops_the_next_one() {
+        assert_eq!(domain::budget::Unpriced::configured(), domain::budget::Unpriced::Block);
+        let request = TurnRequest {
+            model: "m".into(),
+            system: String::new(),
+            messages: Vec::new(),
+            tools: Vec::new(),
+            effort: domain::Effort::Medium,
+            max_tokens: 100,
+            intent: Default::default(),
+        };
+        let stop = CancellationToken::new();
+        let meter = metered(Some(Budget { limit_usd: 10.0, spent: spent(0.5) }));
+        assert!(
+            meter.turn_blocking(&request, &mut |_| {}, &stop).is_ok(),
+            "the first call has nothing unpriced before it"
+        );
+        assert_eq!(meter.ledger.spent().expect("ledger").unpriced_calls, 1, "the scripted model has no price");
+        let refused = meter.turn_blocking(&request, &mut |_| {}, &stop).expect_err("blocked");
+        let ModelError::Quota(QuotaError::Budget { scope, spent, .. }) = &refused else {
+            panic!("not a budget refusal: {refused:?}");
+        };
+        assert_eq!((*scope, spent.known_micros, spent.unpriced_calls), (Scope::Session, 500_000, 1));
+        assert_eq!(domain::FailureKind::from(&refused), domain::FailureKind::UsageLimit { resets_at: None });
+    }
+
+    #[test]
+    fn every_provider_with_a_price_table_declares_its_date_and_basis() {
+        let priced: Vec<_> =
+            crate::providers::all().into_iter().filter(|provider| !provider.prices().is_empty()).collect();
+        assert!(!priced.is_empty());
+        for provider in priced {
+            assert!(!provider.price_date().is_empty(), "{} declares no price date", provider.id());
+            assert_ne!(provider.basis(), Basis::Unknown, "{}", provider.id());
+        }
     }
 
     #[test]

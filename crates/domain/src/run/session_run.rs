@@ -115,7 +115,7 @@ mod tests {
 
         assert_eq!(carried.id, Some(SessionId("s".into())));
         assert_eq!(carried.mode, PermissionMode::Plan);
-        assert!((carried.spending.spent_usd - 0.5).abs() < f64::EPSILON);
+        assert!((carried.spending.spent.known_usd() - 0.5).abs() < f64::EPSILON);
     }
 
     #[test]
@@ -133,7 +133,7 @@ mod tests {
 
         assert_eq!(carried.id, resumed.id, "the session it was asked about stays the session");
         assert_eq!(carried.mode, resumed.mode);
-        assert!((carried.spending.spent_usd - 0.25).abs() < f64::EPSILON, "but its model calls cost");
+        assert!((carried.spending.spent.known_usd() - 0.25).abs() < f64::EPSILON, "but its model calls cost");
     }
 
     #[test]

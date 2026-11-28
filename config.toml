@@ -342,6 +342,10 @@ code_map = true
 memory_scorecard = true
 memory_search = true
 
+[budget]
+unpriced = "block"
+unpriced_usd = "0.05"
+
 [sonarqube]
 url = "https://sonarcloud.io"
 cloud = "sonarcloud.io sonarqube.us"

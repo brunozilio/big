@@ -93,7 +93,7 @@ fn a_declared_price_reaches_the_rates_of_a_provider_loaded_from_its_folder() {
     std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
     let declared = r#"import { usd } from "sdk/providers/index.ts";
 export function provider() {
-  return { id: "cheap", name: "Cheap", laterDiscount: 0.5, searchPrice: 0.02,
+  return { id: "cheap", name: "Cheap", laterDiscount: 0.5, searchPrice: 0.02, priceDate: "2026-01-02", basis: "api",
     prices: { "tiny-1": { ...usd(1, 2, 0.1, { short: 1.25, long: 2 }), laterDiscount: 0.75 } } };
 }"#;
     std::fs::write(folder.join("index.ts"), declared).unwrap_or_else(|error| panic!("{error}"));
@@ -105,4 +105,6 @@ export function provider() {
     assert_eq!(crate::Provider::search_price(&cheap), Some(20_000));
     assert_eq!(crate::later_discount(&cheap, "tiny-1"), Some(0.75));
     assert_eq!(crate::later_discount(&cheap, "other"), Some(0.5));
+    assert_eq!(crate::Provider::price_date(&cheap), "2026-01-02");
+    assert_eq!(crate::Provider::basis(&cheap), domain::billing::Basis::Api);
 }

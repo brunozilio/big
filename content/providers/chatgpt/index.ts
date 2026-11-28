@@ -32,6 +32,7 @@ import {
   window,
 } from "sdk/providers/index.ts";
 import { OPENAI } from "../prices/openai.ts";
+import { PRICE_DATE } from "../prices/date.ts";
 
 const USAGE = "/wham/usage";
 const WINDOWS: [string, string][] = [
@@ -52,6 +53,7 @@ export function provider() {
     wire: "responses",
     path: "/codex/responses",
     prices: OPENAI,
+    priceDate: PRICE_DATE,
     searchPrice: 0.01,
     owns: ["gpt-", "o1", "o3", "o4"],
     makers: [["gpt", "openai.svg"], ["codex", "openai.svg"], ["o3", "openai.svg"], ["o4", "openai.svg"]],
