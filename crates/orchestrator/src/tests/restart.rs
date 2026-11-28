@@ -62,7 +62,7 @@ async fn an_agent_killed_midway_resumes_its_session_and_is_told_to_continue() {
     let body =
         "const r = await ctx.agent(\"worker\", \"faça\"); return ctx.pass({ session: r.session, text: r.text });";
     world.workflow("agent", &single("agent", body));
-    let started = |item: &WorkItem| item.effects.values().any(|entry| !entry.progress.is_null());
+    let started = |item: &WorkItem| item.effects.values().any(|entry| entry.progress["session"].is_string());
     let (kernel, id) = interrupted(&world, "agent", started).await;
     let item = ended(&kernel, &id).await;
     assert_eq!(output(&item)["data"], json!({ "session": "s1", "text": "feito 2" }));
@@ -78,8 +78,9 @@ async fn an_agent_resumed_after_its_branch_got_a_name_keeps_the_folder_its_sessi
     world.engine.state.hold.store(true, Ordering::SeqCst);
     let body = "const r = await ctx.agent(\"worker\", \"faça\", { worktree: ctx.item.branch }); return ctx.pass({ session: r.session });";
     world.workflow("agent", &single("agent", body));
-    let started =
-        |item: &WorkItem| item.branch.is_some() && item.effects.values().any(|entry| !entry.progress.is_null());
+    let started = |item: &WorkItem| {
+        item.branch.is_some() && item.effects.values().any(|entry| entry.progress["session"].is_string())
+    };
     let (kernel, id) = interrupted(&world, "agent", started).await;
     ended(&kernel, &id).await;
     let requests = world.engine.requests();
