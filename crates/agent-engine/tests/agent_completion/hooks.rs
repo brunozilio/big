@@ -48,6 +48,7 @@ fn hook_timeout_kills_a_running_process_tree() {
         kind: agent_engine::hooks::HandlerKind::Command,
         command: "sleep 120".into(),
         timeout: 1,
+        fail_closed: true,
         status_message: (),
         prompt: None,
         model: None,

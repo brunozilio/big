@@ -136,6 +136,10 @@ fn hook() -> Value {
             "headers": map_of(text.clone(), "Request headers of an http hook."),
             "allowed_env_vars": list_of(text.clone()),
             "timeout": { "type": "integer", "minimum": shortest, "maximum": longest, "description": "Seconds." },
+            "failClosed": {
+                "type": "boolean",
+                "description": "On PreToolUse and PermissionRequest a failing hook blocks the action; false lets it through."
+            },
             "status_message": { "description": "Accepted; not shown." }
         },
         "required": ["type"],

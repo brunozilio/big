@@ -11,9 +11,14 @@ const SHOWN_AT_MOST: usize = 60;
 pub struct Checked {
     pub value: Value,
     pub problems: Vec<String>,
+    pub broken: Vec<String>,
 }
 
 impl Checked {
+    pub fn broke(&self, key: &str) -> bool {
+        self.broken.iter().any(|broken| broken == key)
+    }
+
     pub fn located(&self, file: &Path) -> Vec<String> {
         self.problems.iter().map(|problem| format!("{}: {problem}", file.display())).collect()
     }
@@ -48,8 +53,9 @@ impl Whole {
 }
 
 pub(super) fn checked(validator: Option<&jsonschema::Validator>, whole: Whole, value: Value) -> Checked {
-    let Some(validator) = validator else { return Checked { value, problems: Vec::new() } };
+    let Some(validator) = validator else { return Checked { value, problems: Vec::new(), broken: Vec::new() } };
     let mut problems = Vec::new();
+    let mut broken: Vec<String> = Vec::new();
     let mut doomed = Vec::new();
     for error in validator.iter_errors(&value) {
         let at = steps(&value, error.instance_path.as_str());
@@ -65,6 +71,11 @@ pub(super) fn checked(validator: Option<&jsonschema::Validator>, whole: Whole, v
             }
         };
         for (shown, left_out, what) in found {
+            if let Some(Step::Key(top)) = shown.first()
+                && !broken.contains(top)
+            {
+                broken.push(top.clone());
+            }
             let problem = line(&shown, &what);
             if !problems.contains(&problem) {
                 problems.push(problem);
@@ -72,7 +83,7 @@ pub(super) fn checked(validator: Option<&jsonschema::Validator>, whole: Whole, v
             doomed.push(left_out);
         }
     }
-    Checked { value: pruned(value, doomed), problems }
+    Checked { value: pruned(value, doomed), problems, broken }
 }
 
 pub fn logged_once(problems: &[String]) -> usize {

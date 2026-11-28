@@ -72,6 +72,16 @@ pub fn load(scope: &Scope) -> Result<Settings, String> {
         };
         let checked = crate::config_schema::checked_settings(value);
         problems.extend(checked.located(&path));
+        if honoured && checked.broke("hooks") {
+            let why: Vec<&String> = checked.problems.iter().filter(|problem| problem.starts_with("hooks")).collect();
+            let why = why.iter().map(|problem| problem.as_str()).collect::<Vec<_>>().join("; ");
+            let error = format!("{}: a hook is invalid, so the whole file is refused ({why})", path.display());
+            if owners {
+                return Err(error);
+            }
+            skipped.push((path, error));
+            continue;
+        }
         let value = checked.value;
         let layer = Layer { path: &path, value: &value, owners, runs_hooks: honoured };
         if owners {

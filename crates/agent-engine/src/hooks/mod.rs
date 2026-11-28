@@ -47,11 +47,16 @@ pub struct Handler {
     pub allowed_env_vars: Vec<String>,
     #[serde(default = "default_timeout")]
     pub timeout: u64,
+    #[serde(default = "fails_closed", rename = "failClosed")]
+    pub fail_closed: bool,
     #[serde(default, skip_serializing, deserialize_with = "accepted_and_dropped")]
     pub status_message: (),
 }
 fn default_timeout() -> u64 {
     600
+}
+pub fn fails_closed() -> bool {
+    true
 }
 fn accepted_and_dropped<'de, D: serde::Deserializer<'de>>(written: D) -> Result<(), D::Error> {
     serde::de::IgnoredAny::deserialize(written).map(|_| ())
@@ -212,7 +217,7 @@ impl Hooks {
             }
             for handler in &group.hooks {
                 let result = handler.runs(&input, workspace, model)?;
-                if absorbed(event, result, &mut decision, &mut input)? == Handled::Blocked {
+                if absorbed(event, handler.fail_closed, result, &mut decision, &mut input)? == Handled::Blocked {
                     return Ok(decision);
                 }
             }
@@ -223,12 +228,17 @@ impl Hooks {
 
 fn absorbed(
     event: HookEvent,
+    fail_closed: bool,
     result: CommandOutput,
     decision: &mut HookOutcome,
     input: &mut Value,
 ) -> Result<Handled, String> {
     if result.code == Some(2) {
         decision.blocked = Some(result.stderr);
+        return Ok(Handled::Blocked);
+    }
+    if result.code != Some(0) && fail_closed && event.decides() {
+        decision.blocked = Some(failed_closed(event, &result));
         return Ok(Handled::Blocked);
     }
     if result.code != Some(0) {
@@ -243,6 +253,15 @@ fn absorbed(
         Err(_) => {}
     }
     Ok(if decision.blocked.is_some() { Handled::Blocked } else { Handled::GoOn })
+}
+
+fn failed_closed(event: HookEvent, result: &CommandOutput) -> String {
+    let code = result.code.map_or_else(|| "no exit code".to_owned(), |code| format!("exit {code}"));
+    let said = result.stderr.trim();
+    let said = if said.is_empty() { String::new() } else { format!(": {said}") };
+    format!(
+        "A {event} hook failed ({code}){said}. A failing decision hook blocks the action; fix the hook, or declare failClosed: false on it to let actions through when it fails."
+    )
 }
 
 fn answered(event: HookEvent, value: &Value, decision: &mut HookOutcome, input: &mut Value) -> Result<(), String> {

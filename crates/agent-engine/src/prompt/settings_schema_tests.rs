@@ -43,15 +43,15 @@ fn a_key_of_the_wrong_type_is_reported_and_the_rest_of_the_file_still_applies() 
 }
 
 #[test]
-fn a_value_outside_its_choices_is_reported_with_the_choices() {
+fn a_hook_value_outside_its_choices_refuses_the_whole_file() {
     let (home, repo) = folders();
-    let hooks = json!({ "hooks": { "Stop": [
+    let hooks = json!({ "smallModel": "small", "hooks": { "Stop": [
         { "hooks": [{ "type": "shell", "command": "true" }] },
         { "hooks": [{ "type": "command", "command": "echo kept" }] }
     ] } });
-    let path = write(home.path(), "settings.json", &hooks);
+    let path = write(repo.path(), "settings.json", &hooks);
 
-    let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
+    let settings = load(repo.path(), Some(home.path())).expect("the run goes on without the file");
 
     let expected = format!(
         "{}: hooks.Stop[0].hooks[0].type: expected one of \"command\", \"script\", \"http\", \"prompt\", \"agent\", \
@@ -59,8 +59,21 @@ fn a_value_outside_its_choices_is_reported_with_the_choices() {
         path.display()
     );
     assert!(settings.notices.contains(&expected), "{:?}", settings.notices);
-    let listed = settings.hooks.listed();
-    assert_eq!(listed.len(), 1, "{listed:?}");
+    assert!(settings.hooks.listed().is_empty(), "no hook of the refused file runs");
+    assert_eq!(settings.small_model, None, "nothing else of the refused file applies");
+    assert_eq!(settings.skipped_files, [path]);
+}
+
+#[test]
+fn the_owner_s_file_with_an_invalid_hook_stops_the_load() {
+    let (home, repo) = folders();
+    let hooks = json!({ "hooks": { "PreToolUse": [{ "hooks": [{ "type": "command", "command": "x", "timeout": 0 }] }] } });
+    write(home.path(), "settings.json", &hooks);
+
+    let error = load(repo.path(), Some(home.path())).expect_err("refused");
+
+    assert!(error.contains("a hook is invalid, so the whole file is refused"), "{error}");
+    assert!(error.contains("timeout"), "{error}");
 }
 
 #[test]
@@ -97,18 +110,18 @@ fn a_leftover_auto_memory_switch_is_named_once_and_ignored() {
 }
 
 #[test]
-fn an_unknown_hook_event_is_named_and_the_other_hooks_still_run() {
+fn an_unknown_hook_event_refuses_the_file_and_its_other_hooks() {
     let (home, repo) = folders();
     let hooks = json!({ "hooks": {
         "OnSave": [{ "hooks": [{ "type": "command", "command": "true" }] }],
         "Stop": [{ "hooks": [{ "type": "command", "command": "echo kept" }] }]
     } });
-    let path = write(home.path(), "settings.json", &hooks);
+    let path = write(repo.path(), "settings.json", &hooks);
 
-    let settings = load(repo.path(), Some(home.path())).expect("the run goes on");
+    let settings = load(repo.path(), Some(home.path())).expect("the run goes on without the file");
 
     assert!(settings.notices.contains(&format!("{}: hooks.OnSave: unknown key, ignored", path.display())));
-    assert_eq!(settings.hooks.listed().len(), 1);
+    assert!(settings.hooks.listed().is_empty());
 }
 
 #[test]

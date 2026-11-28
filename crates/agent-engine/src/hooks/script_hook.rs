@@ -167,27 +167,29 @@ export default function (input, ctx) {
     }
 
     #[test]
-    fn a_script_hook_that_runs_out_of_time_fails_alone_and_the_run_goes_on() {
+    fn a_script_hook_that_runs_out_of_time_blocks_unless_it_declares_it_fails_open() {
         let dir = tempfile::tempdir().expect("dir");
         std::fs::write(dir.path().join("slow.js"), "export default function () { for (;;) {} }").expect("hook");
-        let mut workspace = Workspace::new(dir.path());
         let command = dir.path().join("slow.js").display().to_string();
-        workspace.hooks = super::super::Hooks::parse(&json!({"PreToolUse": [{"matcher": "Bash", "hooks": [
-            {"type": "script", "command": command, "timeout": 1}
-        ]}]}))
-        .expect("hooks");
         let input = json!({"tool_name": "Bash", "tool_input": {"command": "ls"}});
         let model = ScriptedModel::new([]);
-        for model in [None, Some((&model as &dyn ModelApi, &template()))] {
-            let decision = workspace.hooks.run_with_model(
-                super::super::HookEvent::PreToolUse,
-                "Bash",
-                input.clone(),
-                &workspace,
-                model,
-            );
-            assert_eq!(decision.expect("ran").blocked, None, "a failing hook does not block");
-            assert!(!workspace.stop.load(std::sync::atomic::Ordering::Relaxed), "the run was not cancelled");
+        for fail_closed in [true, false] {
+            let mut workspace = Workspace::new(dir.path());
+            workspace.hooks = super::super::Hooks::parse(&json!({"PreToolUse": [{"matcher": "Bash", "hooks": [
+                {"type": "script", "command": command, "timeout": 1, "failClosed": fail_closed}
+            ]}]}))
+            .expect("hooks");
+            for model in [None, Some((&model as &dyn ModelApi, &template()))] {
+                let decision = workspace.hooks.run_with_model(
+                    super::super::HookEvent::PreToolUse,
+                    "Bash",
+                    input.clone(),
+                    &workspace,
+                    model,
+                );
+                assert_eq!(decision.expect("ran").blocked.is_some(), fail_closed, "failClosed {fail_closed}");
+                assert!(!workspace.stop.load(std::sync::atomic::Ordering::Relaxed), "the run was not cancelled");
+            }
         }
     }
 }

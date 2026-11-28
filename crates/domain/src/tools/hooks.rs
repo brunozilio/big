@@ -107,6 +107,10 @@ impl HookEvent {
         matches!(self, Self::SessionStart | Self::RunStart | Self::UserPromptSubmit)
     }
 
+    pub fn decides(self) -> bool {
+        matches!(self, Self::PreToolUse | Self::PermissionRequest)
+    }
+
     pub fn fails_quietly(self) -> bool {
         matches!(self, Self::Brief | Self::ModelRequest | Self::ModelResponse | Self::ModelError)
     }

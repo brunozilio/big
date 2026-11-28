@@ -13,7 +13,7 @@ fn exited(code: i32, stderr: &str) -> CommandOutput {
 fn absorb(event: &str, result: CommandOutput) -> (Result<Handled, String>, HookOutcome, Value) {
     let (mut decision, mut input) = (HookOutcome::default(), json!({"tool_input": {"command": "ls"}}));
     let event = super::HookEvent::named(event).expect("a hook event");
-    let handled = absorbed(event, result, &mut decision, &mut input);
+    let handled = absorbed(event, false, result, &mut decision, &mut input);
     (handled, decision, input)
 }
 
@@ -35,7 +35,24 @@ fn exit_code_two_blocks_with_what_the_hook_wrote_to_stderr() {
 }
 
 #[test]
-fn any_other_failure_is_told_as_context_and_the_next_handler_still_runs() {
+fn a_decision_hook_that_fails_blocks_unless_it_declares_otherwise() {
+    let event = super::HookEvent::PreToolUse;
+    for code in [Some(1), Some(127), None] {
+        let (mut decision, mut input) = (HookOutcome::default(), json!({}));
+        let result = CommandOutput { code, stdout: String::new(), stderr: "crashed".into() };
+        assert_eq!(absorbed(event, true, result, &mut decision, &mut input), Ok(Handled::Blocked), "{code:?}");
+        let blocked = decision.blocked.unwrap_or_default();
+        assert!(blocked.contains("PreToolUse hook failed") && blocked.contains("crashed"), "{blocked}");
+    }
+    let (mut decision, mut input) = (HookOutcome::default(), json!({}));
+    let handled = absorbed(super::HookEvent::PermissionRequest, true, exited(1, "x"), &mut decision, &mut input);
+    assert_eq!(handled, Ok(Handled::Blocked));
+    let (mut decision, mut input) = (HookOutcome::default(), json!({}));
+    assert_eq!(absorbed(super::HookEvent::Stop, true, exited(1, "x"), &mut decision, &mut input), Ok(Handled::GoOn));
+}
+
+#[test]
+fn a_failure_declared_open_is_told_as_context_and_the_next_handler_still_runs() {
     let (handled, decision, _) = absorb("PreToolUse", exited(1, "crashed"));
     assert_eq!(handled, Ok(Handled::GoOn));
     assert_eq!(decision.blocked, None);

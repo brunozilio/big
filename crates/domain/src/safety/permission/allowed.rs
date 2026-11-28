@@ -75,6 +75,20 @@ impl Rule {
     pub fn new(grant: Grant, behavior: Behavior) -> Self {
         Self { grant, behavior }
     }
+
+    pub fn loose(&self) -> bool {
+        self.behavior != Behavior::Deny && self.grant.clone().tidy().is_some_and(|grant| grant.everything())
+    }
+}
+
+impl Grant {
+    fn everything(&self) -> bool {
+        match self {
+            Self::Command(rule) => rule == "*",
+            Self::Site(rule) => rule == "*" || rule.strip_prefix("*.").is_some_and(|parent| !parent.contains('.')),
+            Self::Tool(_) => false,
+        }
+    }
 }
 
 impl From<Grant> for Rule {
@@ -123,6 +137,9 @@ impl Allowed {
     }
 
     fn put(&mut self, rule: Rule, first: bool) -> bool {
+        if rule.loose() {
+            return false;
+        }
         let Some(grant) = rule.grant.tidy() else { return false };
         if let Some(known) = self.rules.iter_mut().find(|known| known.grant == grant) {
             let changed = known.behavior != rule.behavior;

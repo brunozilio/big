@@ -96,6 +96,7 @@ impl Hooks {
                 .and_then(|value| value.as_u64())
                 .filter(|seconds| (1..=600).contains(seconds))
                 .unwrap_or(60);
+            let fail_closed = read("failClosed").ok().and_then(|value| value.as_bool()).unwrap_or(true);
             for named in events {
                 let Some(event) = HookEvent::named(&named) else {
                     tracing::warn!(file = shown, event = named, "a hook script names an unknown event");
@@ -110,6 +111,7 @@ impl Hooks {
                     headers: BTreeMap::new(),
                     allowed_env_vars: Vec::new(),
                     timeout,
+                    fail_closed,
                     status_message: (),
                 };
                 hooks.0.entry(event).or_default().push(Group { matcher: matcher.clone(), hooks: vec![handler] });

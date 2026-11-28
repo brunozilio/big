@@ -327,3 +327,16 @@ fn deny_beats_ask_beats_allow_and_an_ask_rule_cannot_be_remembered() {
     let old: Allowed = serde_json::from_value(serde_json::json!([{ "kind": "site", "value": "gov.br" }])).expect("old");
     assert_eq!(old.rules(), [Rule::from(Grant::Site("gov.br".into()))]);
 }
+
+#[test]
+fn a_loose_grant_for_everything_is_never_kept_but_a_denial_for_everything_is() {
+    let mut list = Allowed::default();
+    for grant in [Grant::Site("*".into()), Grant::Command(" * ".into()), Grant::Site("*.com".into())] {
+        assert!(!list.add(grant.clone()), "{grant:?}");
+        assert!(!list.add(Rule::new(grant.clone(), Behavior::Ask)), "{grant:?}");
+        assert!(list.add(Rule::new(grant, Behavior::Deny)));
+    }
+    assert!(list.rules().iter().all(|rule| rule.behavior == Behavior::Deny));
+    assert!(list.add(Grant::Site("*.gov.br".into())));
+    assert!(!Rule::from(Grant::Command("git *".into())).loose());
+}

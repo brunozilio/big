@@ -12,6 +12,10 @@
         "command": {
           "type": "string"
         },
+        "failClosed": {
+          "description": "On PreToolUse and PermissionRequest a failing hook blocks the action; false lets it through.",
+          "type": "boolean"
+        },
         "headers": {
           "additionalProperties": {
             "type": "string"
