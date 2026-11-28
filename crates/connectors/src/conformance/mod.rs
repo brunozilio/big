@@ -66,7 +66,8 @@ struct Loader<'a> {
 
 impl Loader<'_> {
     fn load(&self) -> Result<ScriptedProvider, String> {
-        ScriptedProvider::configured(Some(self.content), &self.entry, &self.config)
+        let built = crate::config::Configuration::built();
+        ScriptedProvider::configured(Some(self.content), &self.entry, &built, &self.config)
     }
 }
 

@@ -1,4 +1,4 @@
-import { type Creds, type Language, type SecretPatterns, checked, fail, json, pick, send, siteOf, text, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type ConfigSchema, type Creds, type Language, type SecretPatterns, checked, fail, json, pick, send, siteOf, text, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { design } from "sdk/connectors/contracts.ts";
 import { base, heldBy, userOf } from "./login.ts";
 
@@ -11,6 +11,11 @@ const MOST_PICTURE = 5 * 1024 * 1024;
 const KINDS = new Set(["file", "design", "proto", "board", "slides", "buzz", "make"]);
 
 type Ctx = { config: { host: string } } & Record<string, any>;
+
+export const config: ConfigSchema = {
+  host: { required: true, description: "The Figma domain the links and the API live on" },
+  protocol: { description: "The scheme of the desktop app's links; the first label of the host by default" },
+};
 
 type Api = { ctx: Ctx; headers: Record<string, string>; base: string };
 

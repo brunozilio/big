@@ -6,6 +6,10 @@ export type Creds = { connection: string; token: string; settings: Record<string
 
 export type Field = { name: string; label: string; help?: string; secret?: boolean; setting?: boolean; value?: string; optional?: boolean };
 
+export type ConfigField = { type?: "string" | "integer" | "number" | "boolean" | "list"; required?: boolean; default?: unknown; choices?: string[]; description?: string };
+
+export type ConfigSchema = Record<string, ConfigField>;
+
 export type Response = { status: number; headers: Record<string, string>; body: string; base64?: string };
 
 export type Request = {

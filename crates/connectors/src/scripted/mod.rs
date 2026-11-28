@@ -20,6 +20,7 @@ use sessions::McpSessions;
 pub use sign_in::ScriptedSignIn;
 use sign_in::{SIGN_IN, redirect};
 
+use crate::config::{self, Configuration};
 use crate::descriptor::{ActionSpec, AlternateAuth, AuthSpec, Presentation, ProviderDescriptor, TokenSpec};
 use crate::error::ActionError;
 use crate::http::Http;
@@ -80,16 +81,25 @@ struct ScriptedEvents {
     sessions: Arc<McpSessions>,
 }
 
-fn config_of(key: &str) -> Value {
-    json!({ "config": section(key), "connectors": section("connectors"), "brand": { "NAME": brand::NAME, "COMMAND": brand::COMMAND } })
+fn data_of(config: Map<String, Value>, configuration: &Configuration) -> Value {
+    let brand = json!({ "NAME": brand::NAME, "COMMAND": brand::COMMAND });
+    json!({ "config": config, "connectors": configuration.section("connectors"), "brand": brand })
 }
 
-fn section(name: &str) -> Value {
-    brand::section(name)
-        .iter()
-        .map(|(name, value)| ((*name).to_owned(), json!(value)))
-        .collect::<Map<String, Value>>()
-        .into()
+fn script_of(
+    modules: Vec<(String, String)>,
+    named: &str,
+    configuration: &Configuration,
+    overrides: &Map<String, Value>,
+) -> Result<Script, String> {
+    let mut given = configuration.section(named);
+    given.extend(overrides.clone());
+    let mut script = Script { modules: Arc::new(modules), data: data_of(given.clone(), configuration) };
+    let schema = script.invoke_here(config::EXPORT, &json!({}), Arc::new(Local)).map_err(|error| error.message)?;
+    if !schema.is_null() {
+        script.data["config"] = Value::Object(config::applied(named, &schema, &given)?);
+    }
+    Ok(script)
 }
 
 fn auth_of(script: &Script, key: &str, auth: &Value) -> Result<AuthSpec, String> {
@@ -122,27 +132,32 @@ fn logo_of(root: Option<&std::path::Path>, folder: &str, logo: &str) -> String {
 
 impl ScriptedProvider {
     pub fn load(entry: &str) -> Result<ScriptedProvider, String> {
-        ScriptedProvider::load_in(content::folder().as_deref(), entry)
+        ScriptedProvider::load_with(content::folder().as_deref(), entry, &Configuration::read())
     }
 
     pub fn load_in(root: Option<&std::path::Path>, entry: &str) -> Result<ScriptedProvider, String> {
-        ScriptedProvider::configured(root, entry, &Map::new())
+        ScriptedProvider::load_with(root, entry, &Configuration::built())
+    }
+
+    pub fn load_with(
+        root: Option<&std::path::Path>,
+        entry: &str,
+        configuration: &Configuration,
+    ) -> Result<ScriptedProvider, String> {
+        ScriptedProvider::configured(root, entry, configuration, &Map::new())
     }
 
     pub(crate) fn configured(
         root: Option<&std::path::Path>,
         entry: &str,
+        configuration: &Configuration,
         overrides: &Map<String, Value>,
     ) -> Result<ScriptedProvider, String> {
         let mut modules = content::modules_in(root, entry)?;
         modules.push((WRAPPER.to_owned(), wrapper(entry)));
         let folder = entry.rsplit_once('/').map_or(String::new(), |(folder, _)| format!("{folder}/"));
         let named = folder.trim_end_matches('/').rsplit('/').next().unwrap_or_default().to_owned();
-        let mut data = config_of(&named);
-        if let Some(config) = data["config"].as_object_mut() {
-            config.extend(overrides.clone());
-        }
-        let script = Script { modules: Arc::new(modules), data };
+        let script = script_of(modules, &named, configuration, overrides)?;
         let local: Arc<dyn script::Host> = Arc::new(Local);
         let declared = script.invoke_here("provider", &json!({}), local).map_err(|error| error.message)?;
         let mut declared = crate::manifest::migrated(root, declared).map_err(|error| error.to_string())?;
@@ -216,7 +231,7 @@ pub fn evaluate(root: Option<&std::path::Path>, entry: &str, function: &str, inp
     modules.push((WRAPPER.to_owned(), wrapper(entry)));
     let script = Script {
         modules: Arc::new(modules),
-        data: json!({ "brand": { "COMMAND": brand::COMMAND }, "connectors": section("connectors") }),
+        data: json!({ "brand": { "COMMAND": brand::COMMAND }, "connectors": Configuration::built().section("connectors") }),
     };
     if script.kind(function) != "function" {
         return Ok(Value::Null);
@@ -242,7 +257,10 @@ fn entries() -> Vec<String> {
 
 pub fn discover() -> Vec<Arc<dyn Provider>> {
     let entries = entries();
-    let loaded = platform::parallel::ordered(&entries, |entry| ScriptedProvider::load(entry));
+    let root = content::folder();
+    let configuration = Configuration::read();
+    let loaded =
+        platform::parallel::ordered(&entries, |entry| ScriptedProvider::load_with(root.as_deref(), entry, &configuration));
     let mut found: Vec<Arc<dyn Provider>> = Vec::new();
     for (entry, loaded) in entries.iter().zip(loaded) {
         match loaded {

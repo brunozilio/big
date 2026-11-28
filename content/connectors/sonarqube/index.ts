@@ -1,4 +1,5 @@
 import {
+  type ConfigSchema,
   type Creds,
   type Language,
   type Response,
@@ -49,6 +50,13 @@ const IMPACT_TYPES: Record<string, string> = { RELIABILITY: "bug", SECURITY: "vu
 const IMPACT_SEVERITIES: Record<string, string> = { BLOCKER: "blocker", HIGH: "critical", MEDIUM: "major", LOW: "minor", INFO: "info" };
 
 type Ctx = { config: { url: string; cloud?: string } } & Record<string, any>;
+
+export const config: ConfigSchema = {
+  url: { required: true, description: "The server used when none is entered" },
+  cloud: { description: "The cloud hosts, separated by spaces" },
+  loopback_from: { required: true, description: "The first port the sign-in listens on" },
+  loopback_to: { required: true, description: "The last port the sign-in listens on" },
+};
 
 type Scheme = "bearer" | "basic";
 

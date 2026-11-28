@@ -6,6 +6,7 @@ use super::*;
 use crate::http::{FakeHttp, HttpResponse, Method};
 
 mod aws;
+mod configured;
 mod datadog;
 mod figma;
 mod github;

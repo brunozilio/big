@@ -1,9 +1,15 @@
-import { type Creds, type Language, entries, fail, pick, settingField, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type ConfigSchema, type Creds, type Language, entries, fail, pick, settingField, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { mcp } from "sdk/connectors/contracts.ts";
 
 export const SITE = "site";
 
 type Ctx = { config: { site: string; sites: string; mcp_url: string } } & Record<string, any>;
+
+export const config: ConfigSchema = {
+  mcp_url: { required: true, description: "The MCP server, with {site} for the chosen site" },
+  site: { required: true, description: "The site used when none is entered" },
+  sites: { required: true, description: "The known sites as site=label, separated by spaces" },
+};
 
 export const sites = (ctx: Ctx): string[][] => entries(ctx.config.sites);
 

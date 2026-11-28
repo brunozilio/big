@@ -1,4 +1,4 @@
-import { type Creds, type Language, optionalText, pick, setting, text, textAt, tokenAlternative, tokenField, unknownAction, useApiToken, words } from "sdk/connectors/index.ts";
+import { type ConfigSchema, type Creds, type Language, optionalText, pick, setting, text, textAt, tokenAlternative, tokenField, unknownAction, useApiToken, words } from "sdk/connectors/index.ts";
 import { binding, options, projectOptions, tests } from "sdk/connectors/contracts.ts";
 import { items } from "sdk/connectors/mcp.ts";
 import { cases, createCase, createCycle, finishCycle, record } from "./cases.ts";
@@ -9,6 +9,12 @@ export { messages } from "sdk/connectors/index.ts";
 export const API_TOKEN = "api_token";
 
 type Ctx = { config: { mcp_url: string; oauth_redirect: string; scopes: string } } & Record<string, any>;
+
+export const config: ConfigSchema = {
+  mcp_url: { required: true, description: "The Zephyr MCP server" },
+  oauth_redirect: { required: true, description: "Where the sign-in returns, on this computer" },
+  scopes: { required: true, description: "The OAuth scopes, separated by spaces" },
+};
 
 export function provider() {
   return { schema_version: 2, name: "Zephyr", logo: "logo.svg", capabilities: ["tests"], auth: { kind: "loopback" }, actions: [...tests(), options("tests")] };

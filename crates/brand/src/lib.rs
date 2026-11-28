@@ -1,3 +1,5 @@
+pub mod pairs;
+
 include!(concat!(env!("OUT_DIR"), "/brand.rs"));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

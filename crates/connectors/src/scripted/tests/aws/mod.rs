@@ -8,7 +8,8 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::scripted::bridge::{Script, WRAPPER, wrapper};
-use crate::scripted::config_of;
+use crate::config::Configuration;
+use crate::scripted::data_of;
 use crate::scripted::host::Local;
 
 const HARNESS: &str = "tests/aws/harness.js";
@@ -25,7 +26,8 @@ pub fn harness() -> Script {
     let mut modules = content::modules_in(None, "connectors/aws/index.ts").unwrap_or_else(|error| panic!("{error}"));
     modules.push((HARNESS.to_owned(), BODY.to_owned()));
     modules.push((WRAPPER.to_owned(), wrapper(HARNESS)));
-    Script { modules: Arc::new(modules), data: config_of("aws") }
+    let built = Configuration::built();
+    Script { modules: Arc::new(modules), data: data_of(built.section("aws"), &built) }
 }
 
 pub fn here(name: &str, input: &Value) -> Value {

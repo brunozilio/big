@@ -1,4 +1,5 @@
 import {
+  type ConfigSchema,
   type Creds,
   type Language,
   NO_PROJECT,
@@ -32,6 +33,11 @@ const FINDING_PAGE = "500";
 const MOST_PAGES = 10;
 
 type Ctx = { config: { region: string; regions: string } } & Record<string, any>;
+
+export const config: ConfigSchema = {
+  region: { required: true, description: "The region used when none is entered" },
+  regions: { required: true, description: "The known regions as region=host=label, separated by spaces" },
+};
 
 type Api = { ctx: Ctx; keys: Keys; host: string; label: string; region: string; project?: string };
 
