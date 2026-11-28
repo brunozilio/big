@@ -11,12 +11,21 @@ const SHOWN_AT_MOST: usize = 60;
 pub struct Checked {
     pub value: Value,
     pub problems: Vec<String>,
-    pub broken: Vec<String>,
+    pub faults: Vec<String>,
+    pub unknown: Vec<String>,
 }
 
 impl Checked {
-    pub fn broke(&self, key: &str) -> bool {
-        self.broken.iter().any(|broken| broken == key)
+    pub fn faulted_under(&self, key: &str) -> bool {
+        self.faults.iter().any(|fault| within_key(fault, key))
+    }
+
+    pub fn unknown_in(&self, key: &str) -> Vec<&str> {
+        self.unknown
+            .iter()
+            .filter_map(|path| path.strip_prefix(key).and_then(|rest| rest.strip_prefix('.')))
+            .filter(|rest| !rest.contains(['.', '[']))
+            .collect()
     }
 
     pub fn located(&self, file: &Path) -> Vec<String> {
@@ -53,12 +62,15 @@ impl Whole {
 }
 
 pub(super) fn checked(validator: Option<&jsonschema::Validator>, whole: Whole, value: Value) -> Checked {
-    let Some(validator) = validator else { return Checked { value, problems: Vec::new(), broken: Vec::new() } };
+    let Some(validator) = validator else {
+        return Checked { value, problems: Vec::new(), faults: Vec::new(), unknown: Vec::new() };
+    };
     let mut problems = Vec::new();
-    let mut broken: Vec<String> = Vec::new();
+    let (mut faults, mut unknown) = (Vec::new(), Vec::new());
     let mut doomed = Vec::new();
     for error in validator.iter_errors(&value) {
         let at = steps(&value, error.instance_path.as_str());
+        let unexpected = matches!(error.kind, ValidationErrorKind::AdditionalProperties { .. });
         let found: Vec<(Vec<Step>, Vec<Step>, String)> = match &error.kind {
             ValidationErrorKind::AdditionalProperties { unexpected } => unexpected
                 .iter()
@@ -71,11 +83,8 @@ pub(super) fn checked(validator: Option<&jsonschema::Validator>, whole: Whole, v
             }
         };
         for (shown, left_out, what) in found {
-            if let Some(Step::Key(top)) = shown.first()
-                && !broken.contains(top)
-            {
-                broken.push(top.clone());
-            }
+            let kept = if unexpected { &mut unknown } else { &mut faults };
+            kept.push(path(&shown));
             let problem = line(&shown, &what);
             if !problems.contains(&problem) {
                 problems.push(problem);
@@ -83,7 +92,7 @@ pub(super) fn checked(validator: Option<&jsonschema::Validator>, whole: Whole, v
             doomed.push(left_out);
         }
     }
-    Checked { value: pruned(value, doomed), problems, broken }
+    Checked { value: pruned(value, doomed), problems, faults, unknown }
 }
 
 pub fn logged_once(problems: &[String]) -> usize {
@@ -117,10 +126,18 @@ fn steps(value: &Value, pointer: &str) -> Vec<Step> {
     steps
 }
 
+fn within_key(path: &str, key: &str) -> bool {
+    path.strip_prefix(key).is_some_and(|rest| rest.is_empty() || rest.starts_with(['.', '[']))
+}
+
 fn line(at: &[Step], what: &str) -> String {
     if at.is_empty() {
         return what.to_owned();
     }
+    format!("{}: {what}", path(at))
+}
+
+fn path(at: &[Step]) -> String {
     let mut shown = String::new();
     for step in at {
         match step {
@@ -132,7 +149,7 @@ fn line(at: &[Step], what: &str) -> String {
             Step::Index(index) => shown.push_str(&format!("[{index}]")),
         }
     }
-    format!("{shown}: {what}")
+    shown
 }
 
 fn line_about(kind: &ValidationErrorKind, instance: &Value, otherwise: &str) -> String {

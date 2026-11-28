@@ -154,6 +154,29 @@ export default function (input) {
     }
 
     #[test]
+    fn a_hook_script_fails_closed_unless_it_exports_fail_closed_false() {
+        let dir = tempfile::tempdir().expect("dir");
+        let folder = dir.path().join("hooks");
+        std::fs::create_dir_all(&folder).expect("hooks");
+        let broken = "export const event = \"PreToolUse\";\nexport default function () { throw new Error(\"boom\"); }";
+        std::fs::write(folder.join("closed.js"), broken).expect("hook");
+        std::fs::write(folder.join("open.js"), format!("{broken}\nexport const failClosed = false;")).expect("hook");
+        let hooks = Hooks::from_scripts(&folder);
+        let declared: Vec<(String, bool)> = hooks.0[&HookEvent::PreToolUse]
+            .iter()
+            .map(|group| {
+                (group.hooks[0].command.rsplit('/').next().unwrap_or_default().to_owned(), group.hooks[0].fail_closed)
+            })
+            .collect();
+        assert!(declared.contains(&("closed.js".to_owned(), true)), "{declared:?}");
+        assert!(declared.contains(&("open.js".to_owned(), false)), "{declared:?}");
+        let workspace = Workspace::new(dir.path());
+        let input = serde_json::json!({ "tool_name": "Bash", "tool_input": { "command": "ls" } });
+        let ran = hooks.run(HookEvent::PreToolUse, "Bash", input, &workspace).expect("run");
+        assert!(ran.blocked.is_some_and(|why| why.contains("PreToolUse hook failed")));
+    }
+
+    #[test]
     fn a_built_in_hook_runs_from_content_unless_the_user_has_one_of_the_same_name() {
         let hook: &[u8] = br#"export const event = "PreToolUse";
 export const matcher = "Bash";

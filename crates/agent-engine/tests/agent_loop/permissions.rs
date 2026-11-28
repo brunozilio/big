@@ -118,3 +118,25 @@ fn asks_the_user_questions_on_the_card_even_while_planning() {
         Some("The user answered: \"Which database?\" = \"Postgres\". Go on with these answers in mind.")
     );
 }
+
+#[test]
+fn a_tool_hook_that_cannot_run_keeps_the_tool_from_running() {
+    for broken in ["matcher", "http"] {
+        let mut rig = Rig::new(domain::Reviewer::Nobody);
+        let hook = json!({"type": "http", "url": "http://127.0.0.1:9/hook", "timeout": 2});
+        let parsed = agent_engine::hooks::Hooks::parse(&json!({"PreToolUse": [{"hooks": [hook]}]}));
+        let mut hooks = parsed.expect("hooks");
+        if broken == "matcher" {
+            for groups in hooks.0.values_mut() {
+                groups[0].matcher = "(".into();
+            }
+        }
+        rig.workspace.hooks = hooks;
+        let model = ScriptedModel::new([
+            ScriptedModel::reply(vec![tool_use("b1", "Bash", json!({"command": "echo hi > out.txt"}))]),
+            ScriptedModel::reply(vec![Block::Text("Ok.".into())]),
+        ]);
+        rig.run(&model, &mut vec![Message::user("write")]).expect("run");
+        assert!(!rig.dir.path().join("out.txt").exists(), "{broken}: the tool ran past a failing hook");
+    }
+}

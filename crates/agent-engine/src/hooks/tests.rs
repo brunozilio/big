@@ -126,3 +126,33 @@ fn a_tool_s_output_and_a_model_s_reply_are_rewritten_only_by_their_own_event() {
     let (_, response, _) = absorb("ModelResponse", printed(rewrite()));
     assert_eq!((response.model, response.text.as_deref()), (None, Some("said")));
 }
+
+#[test]
+fn a_decision_hook_that_cannot_run_blocks_unless_it_declares_otherwise() {
+    let dir = tempfile::tempdir().expect("dir");
+    let workspace = crate::tools::Workspace::new(dir.path());
+    let asked = |event: &str, fail_closed: bool| {
+        let hook = json!({"type": "prompt", "prompt": "Is it safe?", "failClosed": fail_closed});
+        let hooks = super::Hooks::parse(&json!({ event: [{"hooks": [hook]}] })).expect("hooks");
+        let event = super::HookEvent::named(event).expect("event");
+        hooks.run(event, "Bash", json!({"tool_input": {"command": "ls"}}), &workspace)
+    };
+    let blocked = asked("PreToolUse", true).expect("decided").blocked.unwrap_or_default();
+    assert!(blocked.contains("PreToolUse hook failed to run") && blocked.contains("model"), "{blocked}");
+    let through = asked("PermissionRequest", false).expect("decided");
+    assert_eq!(through.blocked, None);
+    assert!(through.context.starts_with("Hook failed:"), "{}", through.context);
+    assert!(asked("Stop", true).is_err(), "elsewhere the error still reaches the caller");
+}
+
+#[test]
+fn a_matcher_that_is_no_pattern_fails_the_run_for_the_caller_to_refuse() {
+    let dir = tempfile::tempdir().expect("dir");
+    let workspace = crate::tools::Workspace::new(dir.path());
+    let parsed = super::Hooks::parse(&json!({"PreToolUse": [{"hooks": [{"type": "command", "command": "true"}]}]}));
+    let mut hooks = parsed.expect("hooks");
+    for groups in hooks.0.values_mut() {
+        groups[0].matcher = "(".into();
+    }
+    assert!(hooks.run(super::HookEvent::PreToolUse, "Bash", json!({}), &workspace).is_err());
+}

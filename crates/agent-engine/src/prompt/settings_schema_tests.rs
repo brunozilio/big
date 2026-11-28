@@ -67,7 +67,8 @@ fn a_hook_value_outside_its_choices_refuses_the_whole_file() {
 #[test]
 fn the_owner_s_file_with_an_invalid_hook_stops_the_load() {
     let (home, repo) = folders();
-    let hooks = json!({ "hooks": { "PreToolUse": [{ "hooks": [{ "type": "command", "command": "x", "timeout": 0 }] }] } });
+    let hooks =
+        json!({ "hooks": { "PreToolUse": [{ "hooks": [{ "type": "command", "command": "x", "timeout": 0 }] }] } });
     write(home.path(), "settings.json", &hooks);
 
     let error = load(repo.path(), Some(home.path())).expect_err("refused");
@@ -107,6 +108,22 @@ fn a_leftover_auto_memory_switch_is_named_once_and_ignored() {
     assert!(settings.notices.contains(&format!("{}: autoMemoryEnabled: unknown key, ignored", path.display())));
     assert!(settings.skipped_files.is_empty(), "{:?}", settings.skipped_files);
     assert_eq!(settings.small_model.as_deref(), Some("small"));
+}
+
+#[test]
+fn an_unknown_key_inside_a_hook_is_only_a_warning_even_in_the_owner_s_file() {
+    let (home, repo) = folders();
+    let hooks = json!({ "hooks": { "PreToolUse": [{ "matcher": "Bash", "hooks": [
+        { "type": "command", "command": "./check.sh", "status": "Checking" }
+    ] }] } });
+    let path = write(home.path(), "settings.json", &hooks);
+
+    let settings = load(repo.path(), Some(home.path())).expect("a warning does not stop the load");
+
+    let warning = format!("{}: hooks.PreToolUse[0].hooks[0].status: unknown key, ignored", path.display());
+    assert!(settings.notices.contains(&warning), "{:?}", settings.notices);
+    assert_eq!(settings.hooks.listed().len(), 1, "the hook still runs without the unknown key");
+    assert!(settings.skipped_files.is_empty());
 }
 
 #[test]

@@ -1,4 +1,6 @@
+mod answers;
 mod brief;
+mod failing;
 mod handlers;
 mod model;
 mod rewrites;
@@ -6,7 +8,9 @@ mod script_hook;
 mod scripts;
 mod validate;
 
+use self::answers::absorbed;
 pub use self::brief::Briefed;
+pub use self::failing::fails_closed;
 pub use self::handlers::{HookRunError, command, http};
 pub(crate) use self::script_hook::declared;
 pub use self::script_hook::script;
@@ -54,9 +58,6 @@ pub struct Handler {
 }
 fn default_timeout() -> u64 {
     600
-}
-pub fn fails_closed() -> bool {
-    true
 }
 fn accepted_and_dropped<'de, D: serde::Deserializer<'de>>(written: D) -> Result<(), D::Error> {
     serde::de::IgnoredAny::deserialize(written).map(|_| ())
@@ -216,7 +217,20 @@ impl Hooks {
                 continue;
             }
             for handler in &group.hooks {
-                let result = handler.runs(&input, workspace, model)?;
+                let result = match handler.runs(&input, workspace, model) {
+                    Ok(result) => result,
+                    Err(error) => match failing::errored(event, handler.fail_closed, error) {
+                        failing::Failed::Stops(error) => return Err(error),
+                        failing::Failed::Blocks(why) => {
+                            decision.blocked = Some(why);
+                            return Ok(decision);
+                        }
+                        failing::Failed::GoesOn(error) => {
+                            rewrites::failed(event, &error, &mut decision);
+                            continue;
+                        }
+                    },
+                };
                 if absorbed(event, handler.fail_closed, result, &mut decision, &mut input)? == Handled::Blocked {
                     return Ok(decision);
                 }
@@ -224,119 +238,6 @@ impl Hooks {
         }
         Ok(decision)
     }
-}
-
-fn absorbed(
-    event: HookEvent,
-    fail_closed: bool,
-    result: CommandOutput,
-    decision: &mut HookOutcome,
-    input: &mut Value,
-) -> Result<Handled, String> {
-    if result.code == Some(2) {
-        decision.blocked = Some(result.stderr);
-        return Ok(Handled::Blocked);
-    }
-    if result.code != Some(0) && fail_closed && event.decides() {
-        decision.blocked = Some(failed_closed(event, &result));
-        return Ok(Handled::Blocked);
-    }
-    if result.code != Some(0) {
-        rewrites::failed(event, &result.stderr, decision);
-        return Ok(Handled::GoOn);
-    }
-    match serde_json::from_str::<Value>(&result.stdout) {
-        Ok(value) => answered(event, &value, decision, input)?,
-        Err(_) if event.takes_plain_text_as_context() => {
-            decision.context.push_str(&result.stdout);
-        }
-        Err(_) => {}
-    }
-    Ok(if decision.blocked.is_some() { Handled::Blocked } else { Handled::GoOn })
-}
-
-fn failed_closed(event: HookEvent, result: &CommandOutput) -> String {
-    let code = result.code.map_or_else(|| "no exit code".to_owned(), |code| format!("exit {code}"));
-    let said = result.stderr.trim();
-    let said = if said.is_empty() { String::new() } else { format!(": {said}") };
-    format!(
-        "A {event} hook failed ({code}){said}. A failing decision hook blocks the action; fix the hook, or declare failClosed: false on it to let actions through when it fails."
-    )
-}
-
-fn answered(event: HookEvent, value: &Value, decision: &mut HookOutcome, input: &mut Value) -> Result<(), String> {
-    let specific = &value["hookSpecificOutput"];
-    if let Some(reason) = blocking(value) {
-        decision.blocked = Some(reason);
-    }
-    permission_answered(event, specific, decision)?;
-    if event == HookEvent::PostToolUse {
-        decision.updated_output = specific.get("updatedToolOutput").cloned();
-    }
-    if decision.model.is_none() && matches!(event, HookEvent::ModelRequest | HookEvent::ModelError) {
-        decision.model = specific["model"].as_str().filter(|m| !m.trim().is_empty()).map(Into::into);
-    }
-    if decision.effort.is_none() && event == HookEvent::ModelRequest {
-        decision.effort = specific["effort"].as_str().and_then(domain::interception::effort);
-    }
-    rewrites::absorb(event, value, decision, input);
-    if decision.text.is_none() && event == HookEvent::ModelResponse {
-        decision.text = specific["text"].as_str().map(Into::into);
-    }
-    for text in [value["systemMessage"].as_str(), specific["additionalContext"].as_str()].into_iter().flatten() {
-        decision.context.push_str(text);
-        decision.context.push('\n');
-    }
-    input_updated(event, specific, decision, input)
-}
-
-fn blocking(value: &Value) -> Option<String> {
-    let specific = &value["hookSpecificOutput"];
-    let blocks = value["continue"] == false || value["decision"] == "block" || specific["permissionDecision"] == "deny";
-    blocks.then(|| {
-        value["reason"]
-            .as_str()
-            .or_else(|| value["stopReason"].as_str())
-            .or_else(|| specific["permissionDecisionReason"].as_str())
-            .unwrap_or("Blocked by configured hook")
-            .into()
-    })
-}
-
-fn permission_answered(event: HookEvent, specific: &Value, decision: &mut HookOutcome) -> Result<(), String> {
-    let permission = if event == HookEvent::PermissionRequest {
-        specific["decision"]["behavior"].as_str()
-    } else {
-        specific["permissionDecision"].as_str()
-    };
-    let Some(permission) = permission else { return Ok(()) };
-    let permission = PermissionDecision::named(permission).ok_or("invalid permission decision from hook")?;
-    decision.permission = Some(permission);
-    if permission == PermissionDecision::Deny {
-        let reason = specific["permissionDecisionReason"].as_str().unwrap_or("Permission hook denied the action");
-        decision.blocked = Some(reason.into());
-    }
-    Ok(())
-}
-
-fn input_updated(
-    event: HookEvent,
-    specific: &Value,
-    decision: &mut HookOutcome,
-    input: &mut Value,
-) -> Result<(), String> {
-    let updated = match event {
-        HookEvent::PermissionRequest => specific["decision"].get("updatedInput"),
-        HookEvent::PreToolUse => specific.get("updatedInput"),
-        _ => None,
-    };
-    let Some(updated) = updated else { return Ok(()) };
-    if !updated.is_object() {
-        return Err("hook updatedInput must be an object".into());
-    }
-    decision.updated_input = Some(updated.clone());
-    input["tool_input"] = updated.clone();
-    Ok(())
 }
 
 #[cfg(test)]
