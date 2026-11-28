@@ -201,23 +201,38 @@ fn a_watched_run_is_exported_under_the_session_it_started_or_resumed() {
     assert!(sent.to_string().contains("\"old\"") && !sent.to_string().contains("no session"));
 }
 
+fn project_secrets() -> Secrets {
+    Arc::new(agent_engine::tools::env_secrets)
+}
+
 #[test]
-fn content_is_captured_only_when_the_config_turns_it_on_and_leaves_redacted() {
+fn capture_starts_off_and_a_limit_that_is_not_a_positive_number_keeps_it_off() {
     assert_eq!(brand::traces::CAPTURE_CONTENT, "false", "capture starts off");
-    let secrets = || Arc::new(domain::redact::Redactor::default());
-    assert!(Content::from(brand::traces::CAPTURE_CONTENT, brand::traces::CAPTURE_LIMIT, secrets).is_none());
+    let redactor = || Arc::new(domain::redact::Redactor::default());
+    let (on, limit) = (brand::traces::CAPTURE_CONTENT, brand::traces::CAPTURE_LIMIT);
+    assert!(Content::from(on, limit, redactor, project_secrets()).is_none());
+    assert!(Content::from("true", limit, redactor, project_secrets()).is_some(), "the shipped limit is valid");
+    for broken in ["", "0", "-3", "many"] {
+        assert!(Content::from("true", broken, redactor, project_secrets()).is_none(), "{broken:?}");
+    }
+}
+
+#[test]
+fn turned_on_the_content_leaves_without_personal_data_or_the_project_s_secrets() {
+    let project = tempfile::tempdir().expect("project");
+    std::fs::write(project.path().join(".env"), "API_TOKEN=projectsecret42\n").expect("env");
     let collector = collector(200);
     let traced: Traced = Arc::new(|_: &Path, session: &SessionId| {
         let mut said = run(&session.0, 0, Status::Ok);
-        said.spans[0].input = "call me at ana@example.com".into();
+        said.spans[0].input = "call me at ana@example.com, the key is projectsecret42".into();
         Ok(vec![said])
     });
     let exporter = Exporter::start(otlp(&collector.url), traced, Arc::new(NetHttp)).expect("exporter");
     let personal = || agent_engine::tools::personal(&domain::redact::Redactor::default());
-    exporter.capturing(Content::from("true", "", personal));
-    exporter.finished(Path::new("/repo"), &SessionId("s".into()));
+    exporter.capturing(Content::from("true", "4096", personal, project_secrets()));
+    exporter.finished(project.path(), &SessionId("s".into()));
     let (sent, _) = collector.received.recv_timeout(WAIT).expect("export");
     let sent = sent.to_string();
-    assert!(sent.contains("gen_ai.input.messages") && sent.contains("call me at [redacted]"), "{sent}");
-    assert!(!sent.contains("ana@example.com"));
+    assert!(sent.contains("call me at [redacted], the key is [redacted]"), "{sent}");
+    assert!(!sent.contains("ana@example.com") && !sent.contains("projectsecret42"));
 }

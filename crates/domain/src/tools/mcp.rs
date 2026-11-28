@@ -275,6 +275,9 @@ impl std::fmt::Debug for RemoteMcp {
 mod bundle_tests;
 
 #[cfg(test)]
+mod trace_tests;
+
+#[cfg(test)]
 mod remote_tests {
     use super::*;
 

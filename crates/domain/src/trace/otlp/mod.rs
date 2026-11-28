@@ -92,7 +92,7 @@ fn shaped(ids: &Ids, run: &Run, span: &Span, capture: Option<Capture<'_>>) -> Va
         "endTimeUnixNano": nanos(run.started_at_ms + span.end_ms),
         "attributes": attributes,
     });
-    let parent = if span.parent == 0 && run.attribution.item.is_some() { WORKFLOW_SPAN } else { span.parent };
+    let parent = if span.parent == 0 && genai::item(run).is_some() { WORKFLOW_SPAN } else { span.parent };
     if let Some(parent) = ids.span(parent).filter(|_| parent != 0) {
         shaped["parentSpanId"] = json!(parent);
     }
@@ -148,3 +148,6 @@ mod tests;
 
 #[cfg(test)]
 mod conventions_tests;
+
+#[cfg(test)]
+mod content_tests;

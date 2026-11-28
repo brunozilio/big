@@ -5,7 +5,7 @@ use std::time::{Duration, Instant};
 
 use agent_engine::model::http::Http;
 use crossbeam_channel::{Receiver, Sender, TrySendError};
-use domain::redact::Redactor;
+use domain::redact::{Known, Redactor};
 use domain::trace::otlp::Capture;
 use domain::trace::runs::{Run, Status};
 use domain::{EngineEvent, SessionId};
@@ -14,7 +14,6 @@ use platform::sync::Locked;
 const QUEUED_AT_MOST: usize = 256;
 const BATCH_WAIT: Duration = Duration::from_secs(2);
 const BATCH_MOST: usize = 64;
-const CAPTURED_AT_MOST: usize = 16_384;
 
 pub type Traced = Arc<dyn Fn(&Path, &SessionId) -> Result<Vec<Run>, String> + Send + Sync>;
 
@@ -39,20 +38,31 @@ impl Otlp {
     }
 }
 
-#[derive(Debug, Clone)]
+pub type Secrets = Arc<dyn Fn(&Path) -> Known + Send + Sync>;
+
+#[derive(Clone)]
 pub struct Content {
     pub redactor: Arc<Redactor>,
+    pub secrets: Secrets,
     pub limit: usize,
 }
 
 impl Content {
-    pub fn from(on: &str, limit: &str, redactor: impl FnOnce() -> Arc<Redactor>) -> Option<Self> {
-        let limit = limit.trim().parse().unwrap_or(CAPTURED_AT_MOST);
-        (on.trim() == "true").then(|| Self { redactor: redactor(), limit })
+    pub fn from(on: &str, limit: &str, redactor: impl FnOnce() -> Arc<Redactor>, secrets: Secrets) -> Option<Self> {
+        if on.trim() != "true" {
+            return None;
+        }
+        match limit.trim().parse::<usize>() {
+            Ok(limit) if limit > 0 => Some(Self { redactor: redactor(), secrets, limit }),
+            _ => {
+                tracing::warn!(limit, "[traces] capture_limit is not a positive number; content is not captured");
+                None
+            }
+        }
     }
 
-    fn capture(&self) -> Capture<'_> {
-        Capture { redactor: &self.redactor, limit: self.limit }
+    fn known(&self, folders: &[PathBuf]) -> Known {
+        folders.iter().fold(Known::default(), |known, folder| known.joined(&(self.secrets)(folder)))
     }
 }
 
@@ -180,8 +190,9 @@ impl Worker {
                 }
             }
             let runs: Vec<Run> = batch.iter().flat_map(|job| self.fresh(job)).collect();
+            let folders: Vec<PathBuf> = batch.into_iter().map(|job| job.cwd).collect();
             if !runs.is_empty() {
-                self.send(&runs);
+                self.send(&runs, &folders);
             }
         }
     }
@@ -200,9 +211,10 @@ impl Worker {
         done.into_iter().filter(|run| run.index >= from).collect()
     }
 
-    fn send(&self, runs: &[Run]) {
+    fn send(&self, runs: &[Run], folders: &[PathBuf]) {
         let content = self.content.locked().clone();
-        let capture = content.as_ref().map(Content::capture);
+        let known = content.as_ref().map(|content| content.known(folders)).unwrap_or_default();
+        let capture = content.as_ref().map(|content| Capture { redactor: &content.redactor, known: &known, limit: content.limit });
         let body = domain::trace::otlp::request_with(runs, env!("CARGO_PKG_VERSION"), capture).to_string();
         match self.http.post(&self.otlp.url, &self.otlp.headers, &body) {
             Ok(answer) if (200..300).contains(&answer.status) => {}

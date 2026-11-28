@@ -5,13 +5,11 @@ use serde_json::{Value, json};
 use super::*;
 use crate::billing::ModelUsage;
 use crate::origin::{Attribution, Origin};
-use crate::redact::{Redactor, layer};
 use crate::trace::runs::runs;
-use crate::trace::{Record, RunInfo, build};
+use crate::trace::{ModelCall, Record, RunInfo, build};
 use crate::{AgentStatus, EngineEvent, ToolCall};
 
-const TRACE: &str = "4bf92f3577b34da6a3ce929d0e0e4736";
-const PERSONAL: &str = include_str!("../../../../../content/safety/personal.json");
+pub(super) const TRACE: &str = "4bf92f3577b34da6a3ce929d0e0e4736";
 
 fn at(at_ms: u64, event: EngineEvent) -> Record {
     Record::Event { at_ms, event }
@@ -40,7 +38,12 @@ fn finished(id: &str, output: &str) -> EngineEvent {
     EngineEvent::ToolResult { id: id.into(), output: output.into(), failed: false }
 }
 
-fn execution() -> Vec<Record> {
+fn asked() -> ModelCall {
+    let said = json!({ "role": "User", "blocks": [{ "Text": "fix the totals, ask ana.souza@example.com" }] });
+    ModelCall { model: "sonnet".into(), added: Some(vec![said]), ..ModelCall::default() }
+}
+
+pub(super) fn execution() -> Vec<Record> {
     let info = RunInfo {
         model: "sonnet".into(),
         provider: "acme".into(),
@@ -58,10 +61,11 @@ fn execution() -> Vec<Record> {
     vec![
         Record::Prompted { at_ms: 1_000, prompt: "fix the totals, ask ana.souza@example.com".into() },
         Record::Opened { at_ms: 1_000, run: info },
-        at(1_100, EngineEvent::TextDelta("Looking.".into())),
+        Record::Called { at_ms: 1_050, agent: None, call: asked() },
+        at(1_100, EngineEvent::TextDelta("Looking, I will mail bob@example.org.".into())),
         at(1_200, spent("sonnet", 100, 10)),
-        at(1_300, started("toolu_mcp", "mcp__docs__search", json!({"query": "rounding"}))),
-        at(1_400, finished("toolu_mcp", "use banker's rounding")),
+        at(1_300, started("toolu_mcp", "mcp__docs__search", json!({"query": "rounding", "owner": "carla@example.net"}))),
+        at(1_400, finished("toolu_mcp", "use banker's rounding, asked dan@example.com with supersecretvalue1")),
         at(1_500, spent("sonnet", 200, 20)),
         at(1_600, started("toolu_agent", "Agent", json!({"prompt": "find"}))),
         at(1_610, spawned),
@@ -77,33 +81,33 @@ fn execution() -> Vec<Record> {
     ]
 }
 
-fn spans(sent: &Value) -> Vec<Value> {
+pub(super) fn spans(sent: &Value) -> Vec<Value> {
     sent["resourceSpans"][0]["scopeSpans"][0]["spans"].as_array().cloned().unwrap_or_default()
 }
 
-fn attribute<'a>(span: &'a Value, key: &str) -> Option<&'a Value> {
+pub(super) fn attribute<'a>(span: &'a Value, key: &str) -> Option<&'a Value> {
     let all = span["attributes"].as_array()?;
     all.iter().find(|one| one["key"] == key).map(|one| &one["value"])
 }
 
-fn said(span: &Value, key: &str) -> String {
+pub(super) fn said(span: &Value, key: &str) -> String {
     attribute(span, key).and_then(|value| value["stringValue"].as_str()).unwrap_or_default().to_owned()
 }
 
-fn count(span: &Value, key: &str) -> u64 {
+pub(super) fn count(span: &Value, key: &str) -> u64 {
     attribute(span, key).and_then(|value| value["intValue"].as_str()).and_then(|v| v.parse().ok()).unwrap_or(u64::MAX)
 }
 
-fn named<'a>(all: &'a [Value], name: &str) -> &'a Value {
+pub(super) fn named<'a>(all: &'a [Value], name: &str) -> &'a Value {
     let found = all.iter().find(|span| span["name"] == name);
     found.unwrap_or_else(|| panic!("no span {name} in {:?}", all.iter().map(|s| &s["name"]).collect::<Vec<_>>()))
 }
 
-fn hex(text: &Value, length: usize) -> bool {
+pub(super) fn hex(text: &Value, length: usize) -> bool {
     text.as_str().is_some_and(|text| text.len() == length && text.bytes().all(|byte| byte.is_ascii_hexdigit()))
 }
 
-fn exported() -> Vec<Value> {
+pub(super) fn exported() -> Vec<Value> {
     spans(&request(&runs("s-9", &build(execution())), "1.0.0"))
 }
 
@@ -157,7 +161,7 @@ fn the_sub_agent_sits_under_its_tool_and_the_lead_agent_under_the_workflow() {
 }
 
 #[test]
-fn each_model_call_carries_its_tokens_and_each_agent_the_tokens_of_everything_below_it() {
+fn tokens_sit_only_on_model_calls_and_each_agent_keeps_its_total_under_its_own_name() {
     let all = exported();
     let workflow = named(&all, "invoke_workflow develop");
     let lead = named(&all, "invoke_agent dev");
@@ -173,10 +177,17 @@ fn each_model_call_carries_its_tokens_and_each_agent_the_tokens_of_everything_be
     );
     assert_eq!(said(chats[0], "gen_ai.request.model"), "sonnet");
     assert_eq!(said(chats[0], "gen_ai.provider.name"), "acme");
-    assert_eq!((count(explore, "gen_ai.usage.input_tokens"), count(explore, "gen_ai.usage.output_tokens")), (40, 4));
-    assert_eq!((count(lead, "gen_ai.usage.input_tokens"), count(lead, "gen_ai.usage.output_tokens")), (640, 64));
-    assert_eq!(count(lead, "gen_ai.usage.cache_read_input_tokens"), 20);
-    assert_eq!(count(workflow, "gen_ai.usage.output_tokens"), 64);
+    let total = |key: &str| all.iter().filter_map(|span| attribute(span, key)).count();
+    assert_eq!(total("gen_ai.usage.input_tokens"), 4, "only the four model calls carry gen_ai.usage");
+    let sum = |key: &str| all.iter().filter(|span| attribute(span, key).is_some()).map(|span| count(span, key)).sum::<u64>();
+    assert_eq!((sum("gen_ai.usage.input_tokens"), sum("gen_ai.usage.output_tokens")), (640, 64), "nothing counted twice");
+    assert_eq!(sum("gen_ai.usage.cache_read_input_tokens"), 20);
+    for span in [workflow, lead, explore, task, mcp, read] {
+        assert!(attribute(span, "gen_ai.usage.input_tokens").is_none(), "{}", span["name"]);
+    }
+    let own_total = |span: &Value| (count(span, &own("usage.input_tokens")), count(span, &own("usage.output_tokens")));
+    assert_eq!((own_total(explore), own_total(lead), own_total(workflow)), ((40, 4), (640, 64), (640, 64)));
+    assert_eq!(count(explore_chat, "gen_ai.usage.input_tokens"), 40);
     assert_eq!((said(lead, "gen_ai.agent.name"), said(explore, "gen_ai.agent.name")), ("dev".into(), "Explore".into()));
     assert_eq!((said(workflow, &own("item")), said(workflow, &own("step"))), ("item-7".into(), "develop".into()));
 
@@ -188,7 +199,6 @@ fn each_model_call_carries_its_tokens_and_each_agent_the_tokens_of_everything_be
     assert_eq!(said(lead, &own("span.name")), "run", "the old span name and kind stay as attributes");
     assert_eq!(said(lead, &own("span.kind")), "run");
     assert_eq!(said(lead, "session.id"), "s-9");
-    let _ = (task, explore_chat);
 }
 
 #[test]
@@ -225,25 +235,12 @@ fn the_traceparent_sent_to_an_mcp_server_points_at_the_tool_span_that_called_it(
 }
 
 #[test]
-fn content_stays_home_unless_capture_is_on_and_then_it_leaves_redacted() {
-    let traced = runs("s-9", &build(execution()));
-    let quiet = request(&traced, "1").to_string();
-    for content in ["gen_ai.input.messages", "gen_ai.tool.call.arguments", "ana.souza", "banker"] {
-        assert!(!quiet.contains(content), "{content} left without capture");
+fn an_empty_item_opens_no_workflow_and_leaves_the_lead_agent_as_the_root() {
+    let mut records = execution();
+    if let Some(Record::Opened { run, .. }) = records.get_mut(1) {
+        run.attribution.item = Some(String::new());
     }
-
-    let redactor = Redactor::compiled(layer(PERSONAL).unwrap_or_else(|error| panic!("{error}"))).0;
-    let all = spans(&request_with(&traced, "1", Some(Capture { redactor: &redactor, limit: 64 })));
-    let lead = named(&all, "invoke_agent dev");
-    let asked: Value = serde_json::from_str(&said(lead, "gen_ai.input.messages")).unwrap_or_default();
-    assert_eq!(asked[0]["role"], "user");
-    assert_eq!(asked[0]["parts"][0]["content"], "fix the totals, ask [redacted]");
-    let mcp = named(&all, "execute_tool mcp__docs__search");
-    assert_eq!(said(mcp, "gen_ai.tool.call.result"), "use banker's rounding");
-    assert!(said(mcp, "gen_ai.tool.call.arguments").contains("rounding"));
-    let answer = said(named(&all, "chat haiku"), "gen_ai.output.messages");
-    assert!(answer.contains("Searching."), "{answer}");
-    let long = request_with(&traced, "1", Some(Capture { redactor: &redactor, limit: 8 })).to_string();
-    assert!(long.contains(" …"), "a captured text is cut at the limit");
-    assert!(!long.contains("ana.souza"));
+    let all = spans(&request(&runs("s-9", &build(records)), "1"));
+    assert!(all.iter().all(|span| !span["name"].as_str().unwrap_or_default().starts_with(INVOKE_WORKFLOW)));
+    assert!(named(&all, "invoke_agent dev").get("parentSpanId").is_none(), "no parent that is not in the trace");
 }

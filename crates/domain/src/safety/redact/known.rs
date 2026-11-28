@@ -11,6 +11,13 @@ impl Known {
         Self(values)
     }
 
+    pub fn joined(mut self, more: &Known) -> Self {
+        self.0.extend(more.0.iter().cloned());
+        self.0.sort_by_key(|value| std::cmp::Reverse(value.len()));
+        self.0.dedup();
+        self
+    }
+
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
     }

@@ -74,6 +74,19 @@ fn tokens(usage: &Usage) -> [Value; 4] {
     ]
 }
 
+fn totals(usage: &Usage) -> [Value; 4] {
+    [
+        whole(&super::own("usage.input_tokens"), usage.input),
+        whole(&super::own("usage.output_tokens"), usage.output),
+        whole(&super::own("usage.cache_read_input_tokens"), usage.cache_read),
+        whole(&super::own("usage.cache_creation_input_tokens"), usage.cache_write),
+    ]
+}
+
+pub fn item(run: &Run) -> Option<&str> {
+    run.attribution.item.as_deref().filter(|item| !item.trim().is_empty())
+}
+
 fn provider(run: &Run) -> Option<&str> {
     run.spans.first().and_then(|root| root.attr("provider")).filter(|name| !name.is_empty())
 }
@@ -90,7 +103,7 @@ pub fn attributes(run: &Run, span: &Span) -> Vec<Value> {
             if span.kind == SpanKind::Run {
                 attributes.push(text("gen_ai.request.model", &run.model));
             }
-            attributes.extend(tokens(&below(run, span.id)));
+            attributes.extend(totals(&below(run, span.id)));
         }
         SpanKind::Tool => {
             let name = tool_name(span);
@@ -115,7 +128,7 @@ pub fn attributes(run: &Run, span: &Span) -> Vec<Value> {
 }
 
 pub fn workflow(run: &Run) -> Option<(String, Vec<Value>)> {
-    let item = run.attribution.item.as_deref().filter(|item| !item.is_empty())?;
+    let item = item(run)?;
     let step = run.attribution.step.as_deref().unwrap_or_default();
     let name = if step.is_empty() { INVOKE_WORKFLOW.to_owned() } else { format!("{INVOKE_WORKFLOW} {step}") };
     let mut attributes = vec![
@@ -127,6 +140,6 @@ pub fn workflow(run: &Run) -> Option<(String, Vec<Value>)> {
     if !step.is_empty() {
         attributes.push(text(&super::own("step"), step));
     }
-    attributes.extend(tokens(&below(run, 1)));
+    attributes.extend(totals(&below(run, 1)));
     Some((name, attributes))
 }

@@ -92,7 +92,8 @@ fn exporter(sessions: &Arc<FileSessions>, secrets: &Redactor) -> Option<crate::f
 
 fn content(secrets: &Redactor) -> Option<crate::features::trace::export::Content> {
     let (on, limit) = (brand::traces::CAPTURE_CONTENT, brand::traces::CAPTURE_LIMIT);
-    crate::features::trace::export::Content::from(on, limit, || agent_engine::tools::personal(secrets))
+    let folder_secrets: crate::features::trace::export::Secrets = Arc::new(agent_engine::tools::env_secrets);
+    crate::features::trace::export::Content::from(on, limit, || agent_engine::tools::personal(secrets), folder_secrets)
 }
 
 impl std::fmt::Debug for LocalServices {
