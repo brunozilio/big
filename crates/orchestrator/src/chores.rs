@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use agent_engine::EventSink;
 use domain::effect::{Effect, EffectOutcome};
-use domain::workflow::{HeadsUpNote, ItemId, ItemRecap, WorkItem, WorkflowEvent};
+use domain::workflow::{ItemId, ItemRecap, WorkItem, WorkflowEvent};
 use domain::{ChoreAnswer, EngineEvent, ModelOption, PromptRequest, RunId, SessionCommand, SessionId};
 use tokio::sync::mpsc;
 
@@ -137,26 +137,6 @@ pub fn recap(shared: &Arc<Shared>, item: &ItemId, moment: &str) {
     });
 }
 
-pub fn heads_up(shared: &Arc<Shared>, item: &ItemId, step: &str, session: String, cwd: PathBuf) {
-    let Ok(state) = shared.item(item) else { return };
-    let (shared, item, step) = (Arc::clone(shared), item.clone(), step.to_owned());
-    let held = Arc::clone(&shared);
-    held.spawn(async move {
-        let chore = Chore {
-            command: SessionCommand::HeadsUp,
-            text: String::new(),
-            cwd,
-            model: wanted_model(&state),
-            resume: Some(session),
-        };
-        let Some(ChoreAnswer::HeadsUp(found)) = answer(&shared, chore).await else { return };
-        let note = HeadsUpNote { title: found.title, explain: found.explain, urgent: found.urgent };
-        if let Err(error) = shared.append(&item, &[WorkflowEvent::HeadsUp { step, note }]) {
-            tracing::warn!(%error, "a heads-up could not be kept");
-        }
-    });
-}
-
 fn source_text(item: &WorkItem) -> Option<String> {
     let input = &item.input;
     let issue = input["issue"]["key"].as_str().or(input["issue"].as_str());
@@ -221,7 +201,7 @@ mod tests {
 
     #[test]
     fn a_recap_waits_as_long_as_its_batch_may_take_and_other_chores_do_not() {
-        assert_eq!(waited_for(SessionCommand::HeadsUp), WAIT);
+        assert_eq!(waited_for(SessionCommand::Title), WAIT);
         assert!(waited_for(SessionCommand::Recap) > WAIT);
     }
 }

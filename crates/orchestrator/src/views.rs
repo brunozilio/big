@@ -250,7 +250,6 @@ pub struct StepView {
     pub attempt: u32,
     pub attempts: Vec<Attempt>,
     pub session: Option<String>,
-    pub heads_up: Option<domain::workflow::HeadsUpNote>,
     pub blocks: Value,
 }
 

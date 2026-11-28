@@ -319,9 +319,6 @@ impl AgentEffect<'_> {
         }
         self.note(json!({ "worktree": cwd.to_string_lossy() }));
         let collected = self.drive(&request).await?;
-        if let Some(session) = collected.session.clone() {
-            crate::chores::heads_up(self.shared, self.item, &self.key.step, session, cwd.clone());
-        }
         let pushed: Vec<(PathBuf, String)> = trees
             .iter()
             .filter(|tree| !here && !tree.checkout.read_only)

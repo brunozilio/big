@@ -411,22 +411,16 @@ fn items_saved_before_observations_existed_still_load() {
 }
 
 #[test]
-fn the_first_branch_sticks_and_the_latest_recap_and_heads_up_per_step_win() {
-    let note = |title: &str| HeadsUpNote { title: title.into(), explain: "porque".into(), urgent: false };
+fn the_first_branch_sticks_and_the_latest_recap_wins() {
     let item = replay(&[
         created(),
         WorkflowEvent::Branched { name: "big/primeira".into() },
         WorkflowEvent::Branched { name: "big/segunda".into() },
         WorkflowEvent::Recapped { recap: ItemRecap { text: "antes".into(), after: "k1".into() } },
         WorkflowEvent::Recapped { recap: ItemRecap { text: "agora".into(), after: "k2".into() } },
-        WorkflowEvent::HeadsUp { step: "develop".into(), note: note("velho") },
-        WorkflowEvent::HeadsUp { step: "develop".into(), note: note("novo") },
-        WorkflowEvent::HeadsUp { step: "review".into(), note: note("outro") },
     ]);
     assert_eq!(item.branch.as_deref(), Some("big/primeira"));
     assert_eq!(item.recap.as_ref().map(|recap| recap.text.as_str()), Some("agora"));
-    assert_eq!(item.heads_up.get("develop").map(|note| note.title.as_str()), Some("novo"));
-    assert_eq!(item.heads_up.len(), 2);
 }
 
 #[test]

@@ -97,7 +97,6 @@ mod tests {
             SessionCommand::Suggest,
             SessionCommand::Recap,
             SessionCommand::Side,
-            SessionCommand::HeadsUp,
             SessionCommand::Rename,
             SessionCommand::Learn,
             SessionCommand::Permissions,

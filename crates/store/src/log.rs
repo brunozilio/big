@@ -96,7 +96,13 @@ impl Store {
                 .map(|row| Ok((row.get::<i64>(0)?, row.get::<i64>(1)?, row.get::<String>(2)?)))
                 .collect::<database::Result<Vec<_>>>()?)
         })?;
-        rows.into_iter().map(|(seq, at, text)| Ok((unsigned(seq)?, at, serde_json::from_str(&text)?))).collect()
+        rows.into_iter()
+            .filter_map(|(seq, at, text)| match WorkflowEvent::read(&text) {
+                Ok(Some(event)) => Some(unsigned(seq).map(|seq| (seq, at, event))),
+                Ok(None) => None,
+                Err(error) => Some(Err(error.into())),
+            })
+            .collect()
     }
 
     pub fn snapshot_versions(&self, item: &ItemId) -> Result<Vec<u64>> {
@@ -125,7 +131,11 @@ fn rebuilt(conn: &mut dyn Conn, item: &ItemId) -> Result<Option<WorkItem>> {
     if base.is_none() && events.is_empty() {
         return Ok(None);
     }
-    Ok(Some(events.iter().map(|(_, event)| event).fold(base.unwrap_or_default(), reduce)))
+    let mut state = events.iter().map(|(_, event)| event).fold(base.unwrap_or_default(), reduce);
+    let last: i64 =
+        conn.one("SELECT COALESCE(MAX(seq), 0) FROM work_events WHERE item = ?1", args![item.as_str()])?.unwrap_or(0);
+    state.version = state.version.max(unsigned(last)?);
+    Ok(Some(state))
 }
 
 fn latest_snapshot(conn: &mut dyn Conn, item: &ItemId) -> Result<Option<WorkItem>> {
@@ -166,11 +176,60 @@ fn events_after(conn: &mut dyn Conn, item: &ItemId, after: u64) -> Result<Vec<(u
         "SELECT seq, event FROM work_events WHERE item = ?1 AND seq > ?2 ORDER BY seq",
         args![item.as_str(), signed(after)?],
     )?;
-    rows.iter().map(|row| Ok((unsigned(row.get(0)?)?, serde_json::from_str(&row.get::<String>(1)?)?))).collect()
+    rows.iter()
+        .map(|row| Ok((row.get::<i64>(0)?, row.get::<String>(1)?)))
+        .collect::<database::Result<Vec<_>>>()?
+        .into_iter()
+        .filter_map(|(seq, text)| match WorkflowEvent::read(&text) {
+            Ok(Some(event)) => Some(unsigned(seq).map(|seq| (seq, event))),
+            Ok(None) => None,
+            Err(error) => Some(Err(error.into())),
+        })
+        .collect()
 }
 
 pub(crate) fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |elapsed| i64::try_from(elapsed.as_millis()).unwrap_or(i64::MAX))
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn an_item_kept_with_a_retired_heads_up_still_loads() {
+        let store = Store::in_memory(0).expect("store");
+        let id = ItemId::from("old-1");
+        let created =
+            WorkflowEvent::ItemCreated { id: id.clone(), workflow: "flow".into(), parent: None, input: json!({}) };
+        store.append(&id, &[created]).expect("created");
+        let retired = json!({ "type": "heads_up", "data": {
+            "step": "develop", "note": { "title": "Migração", "explain": "Altera tabelas.", "urgent": true }
+        } });
+        store
+            .write(|conn| {
+                conn.execute(
+                    "INSERT INTO work_events (item, seq, event, at) VALUES (?1, 2, ?2, 0)",
+                    args![id.as_str(), retired.to_string()],
+                )?;
+                let state: String =
+                    conn.one("SELECT state FROM items WHERE id = ?1", args![id.as_str()])?.unwrap_or_default();
+                let mut state: serde_json::Value = serde_json::from_str(&state)?;
+                state["heads_up"] = json!({ "develop": { "title": "Migração", "explain": "x", "urgent": true } });
+                state["version"] = json!(2);
+                conn.execute("UPDATE items SET state = ?1 WHERE id = ?2", args![state.to_string(), id.as_str()])?;
+                Ok(())
+            })
+            .expect("an old event and state");
+        assert_eq!(store.events(&id, 0).expect("events").len(), 1, "the retired event is skipped");
+        assert_eq!(store.timed_events(&id, 0).expect("timed").len(), 1);
+        assert_eq!(store.item(&id).expect("item").map(|item| item.workflow), Some("flow".to_owned()));
+        assert_eq!(store.load(&id).expect("rebuilt").map(|item| item.version), Some(2), "the old event still counts");
+        let named = WorkflowEvent::Named { title: "novo".into() };
+        assert!(store.append(&id, &[named]).is_ok(), "the item keeps going after the old event");
+    }
 }

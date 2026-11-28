@@ -45,7 +45,7 @@ pub use run::failure::FailureKind;
 pub use run::image::{Image, MAX_IMAGE_BYTES};
 pub use run::request::{Folder, HostContext, MainAgentSpec, Policy, Prompt, PromptRequest, SessionConfig};
 pub use session::usage::{
-    ChoreAnswer, Compaction, ContextShare, ContextSlice, ContextUsage, HeadsUp, SessionCommand, compact_tokens,
+    ChoreAnswer, Compaction, ContextShare, ContextSlice, ContextUsage, SessionCommand, compact_tokens,
 };
 pub use tools::agents::{AgentStatus, CustomAgent};
 pub use tools::extensions::Extensions;

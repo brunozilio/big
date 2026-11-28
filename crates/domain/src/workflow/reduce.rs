@@ -94,9 +94,6 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
             item.branch.get_or_insert_with(|| name.clone());
         }
         WorkflowEvent::Recapped { recap } => item.recap = Some(recap.clone()),
-        WorkflowEvent::HeadsUp { step, note } => {
-            item.heads_up.insert(step.clone(), note.clone());
-        }
         WorkflowEvent::Linked { item: member } => {
             item.released.retain(|known| known != member);
             if !item.links.contains(member) {

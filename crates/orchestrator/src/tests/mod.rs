@@ -255,12 +255,6 @@ impl AgentEngine for FakeEngine {
                     Some(domain::SessionCommand::Recap) => {
                         Some(domain::ChoreAnswer::Recap("Plano pronto; falta aprovar.".into()))
                     }
-                    Some(domain::SessionCommand::HeadsUp) => Some(domain::ChoreAnswer::HeadsUp(domain::HeadsUp {
-                        urgent: false,
-                        learn: "migração".into(),
-                        title: "A migração apaga a coluna antiga".into(),
-                        explain: "Rode o backup antes do deploy.".into(),
-                    })),
                     _ => None,
                 };
                 if let Some(answer) = answer {

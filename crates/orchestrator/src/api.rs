@@ -242,7 +242,6 @@ impl Orchestrator {
             attempt: chosen.map_or(latest, |chosen| chosen.n),
             attempts: tried.clone(),
             session: crate::views::session_of(&ledger, step, chosen.map(|chosen| chosen.n)),
-            heads_up: item.heads_up.get(step).cloned(),
             blocks,
         })
     }

@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::item::{HeadsUpNote, ItemId, ItemRecap, Observed, StepState};
+use super::item::{ItemId, ItemRecap, Observed, StepState};
 use crate::effect::{EffectOutcome, EffectRequest, IdempotencyKey};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -93,10 +93,6 @@ pub enum WorkflowEvent {
     Recapped {
         recap: ItemRecap,
     },
-    HeadsUp {
-        step: String,
-        note: HeadsUpNote,
-    },
     Linked {
         item: ItemId,
     },
@@ -110,4 +106,16 @@ pub enum WorkflowEvent {
         repository: String,
         base: String,
     },
+}
+
+const RETIRED: &[&str] = &["heads_up"];
+
+impl WorkflowEvent {
+    pub fn read(text: &str) -> serde_json::Result<Option<Self>> {
+        let value: Value = serde_json::from_str(text)?;
+        if value["type"].as_str().is_some_and(|kind| RETIRED.contains(&kind)) {
+            return Ok(None);
+        }
+        serde_json::from_value(value).map(Some)
+    }
 }

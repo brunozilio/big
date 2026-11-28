@@ -563,7 +563,6 @@ pub async fn step(
     }
     Ok(reply(json!({
         "item": id.as_str(), "step": step, "attempt": view.attempt, "attempts": attempts, "blocks": blocks,
-        "headsUp": view.heads_up.map(|note| json!({ "title": note.title, "explain": note.explain, "urgent": note.urgent })),
     })))
 }
 

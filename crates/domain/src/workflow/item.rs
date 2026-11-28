@@ -74,13 +74,6 @@ pub struct ItemRecap {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HeadsUpNote {
-    pub title: String,
-    pub explain: String,
-    pub urgent: bool,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Impediment {
     pub reason: Option<String>,
 }
@@ -155,8 +148,6 @@ pub struct WorkItem {
     pub branch: Option<String>,
     #[serde(default)]
     pub recap: Option<ItemRecap>,
-    #[serde(default)]
-    pub heads_up: BTreeMap<String, HeadsUpNote>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub links: Vec<ItemId>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

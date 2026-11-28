@@ -67,7 +67,6 @@ pub enum SessionCommand {
     Suggest,
     Recap,
     Side,
-    HeadsUp,
     Rename,
     Rewind(u32),
     Branch(u32),
@@ -84,7 +83,6 @@ impl SessionCommand {
                 | Self::Suggest
                 | Self::Recap
                 | Self::Side
-                | Self::HeadsUp
                 | Self::Rename
                 | Self::Learn
                 | Self::Permissions
@@ -98,20 +96,11 @@ impl SessionCommand {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HeadsUp {
-    pub urgent: bool,
-    pub learn: String,
-    pub title: String,
-    pub explain: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub enum ChoreAnswer {
     Title(String),
     Suggestion(String),
     Recap(String),
     Side(String),
-    HeadsUp(HeadsUp),
     Learned(crate::learning::Proposal),
     Permissions(Vec<crate::permission::Suggested>),
     Answer(String),

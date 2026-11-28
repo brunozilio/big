@@ -1,5 +1,4 @@
 mod clean;
-mod heads_up;
 
 use domain::{ChoreAnswer, SessionCommand};
 use platform::Stop;
@@ -23,7 +22,6 @@ pub fn answer(
         SessionCommand::Suggest => suggestion(api, template, history, stop)?.map(ChoreAnswer::Suggestion),
         SessionCommand::Recap => recap(api, template, history, stop)?.map(ChoreAnswer::Recap),
         SessionCommand::Side => Some(ChoreAnswer::Side(side_answer(api, template, history, prompt, stop)?)),
-        SessionCommand::HeadsUp => heads_up::look(api, template, history, stop)?.map(ChoreAnswer::HeadsUp),
         SessionCommand::Rename => branch_name(prompt, history).map(|name| ChoreAnswer::Title(spoken(&name))),
         SessionCommand::Learn => lesson(api, template, history, prompt, stop)?.map(ChoreAnswer::Learned),
         SessionCommand::Permissions => Some(ChoreAnswer::Permissions(permissions(api, template, prompt, stop)?)),

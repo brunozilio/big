@@ -84,11 +84,6 @@ pub enum Entry {
         conversation: bool,
     },
     Branched,
-    HeadsUp {
-        urgent: bool,
-        title: String,
-        explain: String,
-    },
     Recap(String),
     Lesson {
         proposal: crate::learning::Proposal,
