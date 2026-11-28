@@ -79,7 +79,7 @@ impl Memories {
         self
     }
 
-    pub fn redactor(&self) -> &Redactor {
+    pub fn redactor(&self) -> &Arc<Redactor> {
         &self.redactor
     }
 

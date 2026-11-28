@@ -62,6 +62,18 @@ fn secrets_are_read_from_the_folder_s_env_files_while_redaction_is_on() {
 }
 
 #[test]
+fn the_engine_s_redactor_is_the_one_every_session_redacts_with() {
+    let rules = serde_json::json!({ "prefixes": [{ "name": "echo", "prefix": "echo_", "min": 12 }] });
+    let (redactor, _) = Redactor::compiled(domain::redact::Rules::read(&rules).unwrap_or_default());
+    let redactor = Arc::new(redactor);
+    let policy = flagged(&Settings::default(), Path::new("/nowhere"), &redactor);
+    assert!(Arc::ptr_eq(&policy.redactor, &redactor));
+    assert!(Arc::ptr_eq(&policy.fork().redactor, &redactor), "a sub-agent redacts the same way");
+    let said = policy.redactor.redact("key echo_0123456789", &domain::redact::Known::default());
+    assert_eq!(said.text, "key [redacted]");
+}
+
+#[test]
 fn flags_set_no_code_mode_detach() {
     let policy = policy();
     assert_eq!(policy.code_mode_detach, None);

@@ -21,14 +21,17 @@ pub struct Launch {
 pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static) -> Result<(), String> {
     let every = brand::store::SNAPSHOT_EVERY.trim().parse().unwrap_or(0);
     let cloud = crate::cloud_db::cloud();
+    let providers = connectors::providers::all();
+    let redactor = connectors::redaction::redactor(providers.iter().map(AsRef::as_ref));
     let (store, services) = if cloud {
         let store = Store::with_database(crate::cloud_db::connect()?, every).map_err(|error| error.to_string())?;
-        let services = app::LocalServices::detect_on(crate::cloud_db::connect()?);
+        let services =
+            app::LocalServices::detect_redacting(Some(crate::cloud_db::connect()?), Arc::clone(&redactor));
         crate::cloud_db::copy_local(&launch.data, &store);
         (Arc::new(store), services)
     } else {
         let store = Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?;
-        (Arc::new(store), app::LocalServices::detect())
+        (Arc::new(store), app::LocalServices::detect_redacting(None, Arc::clone(&redactor)))
     };
     let lease = crate::cloud_db::lease();
     if cloud {
@@ -41,7 +44,8 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(SystemClock));
     let sink = Arc::new(StoredSettings(Arc::clone(&store)));
     let calls = Arc::new(crate::usage_calls::StoredCalls(Arc::clone(&store)));
-    let connectors = Arc::new(Connectors::new(http, keeper).with_sink(sink).with_calls(calls));
+    let connectors = Connectors::from_providers(providers, http, keeper).with_redactor(redactor);
+    let connectors = Arc::new(connectors.with_sink(sink).with_calls(calls));
     app::install_spend(Arc::new(crate::usage_calls::StoredSpend(Arc::clone(&store))));
     connectors::memory::install(Arc::new(crate::connector_memory::StoredMemory(Arc::clone(&store))));
     let runtime = tokio::runtime::Handle::current();

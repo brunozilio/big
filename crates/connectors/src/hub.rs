@@ -130,6 +130,11 @@ impl Connectors {
         said.unwrap_or_else(|| text.to_owned())
     }
 
+    pub fn with_redactor(mut self, redactor: Arc<Redactor>) -> Connectors {
+        self.redactor = redactor;
+        self
+    }
+
     pub fn redactor(&self) -> Arc<Redactor> {
         Arc::clone(&self.redactor)
     }

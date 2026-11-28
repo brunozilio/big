@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use agent_engine::AgentEngine;
 use agent_engine::sessions::FileSessions;
+use domain::redact::Redactor;
 
 use crate::data_root::DataRoot;
 use crate::extensions::Extensions;
@@ -95,20 +96,35 @@ impl std::fmt::Debug for LocalServices {
 
 impl LocalServices {
     pub fn detect() -> Self {
-        Self::detected(None)
+        Self::detected(None, None)
     }
 
     pub fn detect_on(database: database::Database) -> Self {
-        Self::detected(Some(database))
+        Self::detected(Some(database), None)
     }
 
-    fn detected(database: Option<database::Database>) -> Self {
+    pub fn detect_redacting(database: Option<database::Database>, redactor: Arc<Redactor>) -> Self {
+        Self::detected(database, Some(redactor))
+    }
+
+    fn detected(database: Option<database::Database>, redactor: Option<Arc<Redactor>>) -> Self {
         let root = DataRoot::system();
         let stores = root.stores_on(database);
-        let engine = crate::engine::build(Arc::clone(&stores.sessions), Arc::clone(&stores.catalog), &root);
+        let mut engine = crate::engine::build(Arc::clone(&stores.sessions), Arc::clone(&stores.catalog), &root);
+        if let Some(redactor) = &redactor {
+            engine = engine.with_redactor(Arc::clone(redactor));
+        }
         let mut services = Self::of(Arc::new(engine), root, stores);
         services.homes = Arc::new(crate::OwnerHome::system());
-        services
+        match redactor {
+            Some(redactor) => services.with_redactor(redactor),
+            None => services,
+        }
+    }
+
+    pub fn with_redactor(mut self, redactor: Arc<Redactor>) -> Self {
+        self.memories = self.memories.with_redactor(redactor);
+        self
     }
 
     pub fn gate(&self, cwd: &Path) -> agent_engine::scope::Scope {
@@ -178,7 +194,7 @@ impl LocalServices {
             root,
             settings: stores.settings,
             catalog: stores.catalog,
-            memories: stores.memories,
+            memories: stores.memories.with_redactor(Arc::clone(self.memories.redactor())),
             database: stores.database,
             exporter: exporter(&stores.sessions),
             sessions: stores.sessions,
@@ -232,6 +248,26 @@ mod tests {
         assert_eq!(crate::features::memory::of(&reopened).load(Path::new("/work")).memories.len(), 1);
         assert!(data.path().join("secrets.json").is_file() && data.path().join("secrets.key").is_file());
         assert!(services.root.folders().iter().all(|folder| folder.starts_with(data.path())));
+    }
+
+    #[test]
+    fn the_redactor_handed_in_reaches_the_memory_and_survives_a_move_of_the_data() {
+        let rules = serde_json::json!({ "prefixes": [{ "name": "echo", "prefix": "echo_", "min": 12 }] });
+        let (redactor, _) = Redactor::compiled(domain::redact::Rules::read(&rules).unwrap_or_default());
+        let data = tempfile::tempdir().expect("temp dir");
+        let services = LocalServices::with_engine(engine()).with_redactor(Arc::new(redactor)).kept_in(data.path());
+        let remember = domain::MemoryEdit::Remember {
+            kind: domain::MemoryKind::Semantic,
+            text: "The hook key is echo_0123456789".into(),
+            tags: Vec::new(),
+            touches: Vec::new(),
+            scope: Default::default(),
+        };
+        let by = domain::Provenance { author: domain::Author::User, now: 5, origin: None };
+        let memories = crate::features::memory::of(&services);
+        memories.edit(Path::new("/work"), &[remember], by).expect("memory");
+        let kept: Vec<String> = memories.load(Path::new("/work")).memories.into_iter().map(|memory| memory.text).collect();
+        assert_eq!(kept, ["The hook key is [redacted]"]);
     }
 
     #[test]
