@@ -10,7 +10,7 @@ pub mod checked;
 pub mod clients;
 pub mod conditional;
 pub mod contract;
-mod hard_floor;
+pub(crate) mod hard_floor;
 pub mod host;
 pub mod hosted;
 pub mod inbox;

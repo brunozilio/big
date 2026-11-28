@@ -28,7 +28,7 @@ impl MemoryPolicy {
         serde_json::from_value(value).unwrap_or_else(|_| Self::refusing())
     }
 
-    fn refusing() -> Self {
+    pub fn refusing() -> Self {
         Self { base: MemoryRules { read: Some(Vec::new()), write: Some(BTreeMap::new()) }, ..Self::default() }
     }
 

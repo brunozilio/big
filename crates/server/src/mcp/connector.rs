@@ -109,7 +109,8 @@ fn refused(tool: &Tool, arguments: &Value) -> Option<String> {
     let name = served_name(&server, tool.definition["name"].as_str().unwrap_or_default());
     let effects: Vec<Effect> = tool.declared.operation(&server, arguments).map(Effect::Operation).into_iter().collect();
     let asked = Asked { surface: Surface::Mcp, stage: STAGE, owner: domain::principal::LOCAL_USER };
-    match policy_gate::decide(asked, &Call { tool: &name, subject: &tool.action, effects: &effects }) {
+    let subject = policy_gate::subject(&tool.action, arguments);
+    match policy_gate::decide(asked, &Call { tool: &name, subject: &subject, effects: &effects }) {
         Verdict::Allow => None,
         Verdict::Deny(reason) => Some(policy_gate::refusal(&reason)),
         Verdict::Ask { .. } => Some(policy_gate::unasked(asked, &name)),

@@ -40,6 +40,7 @@ pub struct Workspace {
     pub observing: Option<domain::observer::Observing>,
     pub teammate: Option<crate::team::Me>,
     pub session_id: String,
+    pub owner: Option<String>,
     pub rules: Vec<crate::prompt::rules::Rule>,
     pub anchored_memories: Vec<domain::Memory>,
     pub blast_radius: bool,
@@ -69,6 +70,7 @@ impl Workspace {
             observing: None,
             teammate: None,
             session_id: uuid::Uuid::new_v4().to_string(),
+            owner: None,
             rules: Vec::new(),
             anchored_memories: Vec::new(),
             blast_radius: false,
@@ -94,6 +96,7 @@ impl Workspace {
             credentials: request.host.credentials.clone(),
             environment: request.host.environment.clone(),
             models: Models::new(request.session.model.clone()),
+            owner: request.host.owner.clone(),
             ..Self::new(&request.session.cwd)
         }
     }
@@ -116,6 +119,7 @@ impl Workspace {
             observing: self.observing.as_ref().and_then(domain::observer::Observing::inherited),
             teammate: self.teammate.clone(),
             session_id: self.session_id.clone(),
+            owner: self.owner.clone(),
             rules: self.rules.clone(),
             anchored_memories: self.anchored_memories.clone(),
             blast_radius: self.blast_radius,

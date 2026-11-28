@@ -106,3 +106,61 @@ async fn the_autonomous_merge_runs_under_the_shipped_list_and_a_rule_that_allows
         assert!(kernel.asks().is_empty(), "the merge never asks");
     }
 }
+
+const HIDING: &str = r#"
+import { workflow } from "sdk";
+export default workflow({
+  name: "hiding",
+  async run(ctx) {
+    try {
+      await ctx.call("tracker", "comment", { issue: "K-1", text: "ok\u202Eexe" });
+      return "sent";
+    } catch (error) {
+      return { kind: error.kind, message: error.message };
+    }
+  },
+});
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cancelling_the_item_ends_the_wait_for_a_person() {
+    listing(vec![Rule::new(Grant::Tool(tool("tracker.link_issues")), Behavior::Ask)]);
+    let world = World::new();
+    let (kernel, id) = linked(&world).await;
+    first_ask(&kernel).await;
+    kernel.cancel(&id).expect("cancel");
+    let item = ended(&kernel, &id).await;
+    assert!(matches!(item.ending, Some(domain::workflow::Ending::Cancelled { .. })), "{:?}", item.ending);
+    let cleared = eventually(|| kernel.asks().is_empty().then_some(())).await;
+    assert!(cleared.is_some(), "the ask leaves with the item");
+    assert_eq!(world.provider.count("tracker.link_issues"), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_routine_has_no_one_to_ask_so_an_ask_rule_refuses() {
+    listing(vec![Rule::new(Grant::Tool(tool("tracker.link_issues")), Behavior::Ask)]);
+    let world = World::new();
+    world.workflow("linking", LINKING);
+    let kernel = world.start().await;
+    let input = json!({ "schedule": { "subject": "schedule:linking:-:x" } });
+    let id = kernel.create_item("linking", input).expect("item");
+    let answer = output(&ended(&kernel, &id).await);
+    let message = answer["message"].as_str().unwrap_or_default();
+    assert!(message.contains("blocked_by_policy") && message.contains("asks a person first"), "{answer}");
+    assert!(kernel.asks().is_empty());
+    assert_eq!(world.provider.count("tracker.link_issues"), 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_safety_floor_bars_a_workflow_call_no_one_can_approve() {
+    listing(Vec::new());
+    let world = World::new();
+    world.workflow("hiding", HIDING);
+    let kernel = world.start().await;
+    let id = kernel.create_item("hiding", json!({})).expect("item");
+    let answer = output(&ended(&kernel, &id).await);
+    let message = answer["message"].as_str().unwrap_or_default();
+    assert!(message.contains("blocked_by_policy") && message.contains("safety floor"), "{answer}");
+    assert!(kernel.asks().is_empty());
+    assert_eq!(world.provider.count("tracker.comment"), 0);
+}

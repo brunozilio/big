@@ -1,18 +1,15 @@
-use std::time::Duration;
-
 use agent_engine::policy_gate::{self, Asked};
 use domain::effect::{Call, IdempotencyKey};
-use domain::permission::{Call as Judged, Effect, Surface, Verdict};
+use domain::permission::{Call as Judged, Effect, Layer, Surface, Verdict};
 use domain::workflow::WorkItem;
 use domain::{AgentAsk, AskId, AskKind, Decision};
 use serde_json::{Value, json};
+use tokio::sync::broadcast::error::RecvError;
 
 use crate::agent::Failure;
 use crate::asks::PendingAsk;
 use crate::events::OrchestratorEvent;
 use crate::shared::{Shared, now_ms};
-
-const WAIT: Duration = Duration::from_millis(200);
 
 pub fn surface_of(item: &WorkItem) -> Surface {
     if item.input["schedule"].is_object() { Surface::Routine } else { Surface::Workflow }
@@ -23,6 +20,11 @@ pub struct Gated<'a> {
     pub item: &'a WorkItem,
     pub key: &'a IdempotencyKey,
     pub owner: &'a str,
+}
+
+enum Waited {
+    Decided(Decision),
+    Gone,
 }
 
 impl Gated<'_> {
@@ -37,9 +39,13 @@ impl Gated<'_> {
         });
         let effects: Vec<Effect> = declared.map(Effect::Operation).into_iter().collect();
         let asked = Asked { surface: surface_of(self.item), stage: &self.key.step, owner: self.owner };
-        match policy_gate::decide(asked, &Judged { tool: &tool, subject: &call.action, effects: &effects }) {
+        let subject = policy_gate::subject(&call.action, &call.args);
+        match policy_gate::decide(asked, &Judged { tool: &tool, subject: &subject, effects: &effects }) {
             Verdict::Allow => Ok(()),
             Verdict::Deny(reason) => Err(Failure::permanent(policy_gate::refusal(&reason))),
+            Verdict::Ask { .. } if asked.surface == Surface::Routine => {
+                Err(Failure::permanent(policy_gate::unasked(asked, &tool)))
+            }
             Verdict::Ask { .. } => self.approved(asked, &tool, &call.action).await,
         }
     }
@@ -50,16 +56,51 @@ impl Gated<'_> {
 
     async fn approved(&self, asked: Asked<'_>, tool: &str, subject: &str) -> Result<(), Failure> {
         let kind = AskKind::permission(tool, subject, false);
-        if let Some(decision) = self.answered() {
-            return settled(asked, tool, &decision);
-        }
-        self.open(kind.clone());
-        loop {
-            if let Some(decision) = self.shared.asks.take_early(self.key, &kind) {
-                return settled(asked, tool, &decision);
+        let waited = match self.answered() {
+            Some(decision) => Waited::Decided(decision),
+            None => {
+                let events = self.shared.events.subscribe();
+                self.open(kind.clone());
+                self.waited(events, &kind).await
             }
-            tokio::time::sleep(WAIT).await;
+        };
+        match waited {
+            Waited::Decided(decision) => settled(asked, tool, &decision),
+            Waited::Gone => {
+                let reason = format!("{tool} was waiting for a person, and the item stopped first.");
+                policy_gate::blocked(asked, tool, &reason, Layer::List);
+                Err(Failure::permanent(policy_gate::refusal(&reason)))
+            }
         }
+    }
+
+    async fn waited(&self, mut events: tokio::sync::broadcast::Receiver<OrchestratorEvent>, kind: &AskKind) -> Waited {
+        loop {
+            if let Some(decision) = self.shared.asks.take_early(self.key, kind) {
+                return Waited::Decided(decision);
+            }
+            if self.gone() {
+                return Waited::Gone;
+            }
+            match events.recv().await {
+                Ok(event) if self.concerns(&event) => {}
+                Ok(_) | Err(RecvError::Lagged(_)) => continue,
+                Err(RecvError::Closed) => return Waited::Gone,
+            }
+        }
+    }
+
+    fn concerns(&self, event: &OrchestratorEvent) -> bool {
+        match event {
+            OrchestratorEvent::ItemChanged { item, .. }
+            | OrchestratorEvent::ItemEnded { item }
+            | OrchestratorEvent::AskClosed { item, .. } => *item == self.item.id,
+            OrchestratorEvent::Session { .. } | OrchestratorEvent::Asked { .. } => false,
+        }
+    }
+
+    fn gone(&self) -> bool {
+        self.shared.item(&self.item.id).map_or(true, |state| state.is_ended())
     }
 
     fn answered(&self) -> Option<Decision> {
@@ -96,7 +137,7 @@ fn settled(asked: Asked<'_>, tool: &str, decision: &Decision) -> Result<(), Fail
         Decision::Allow | Decision::AllowAlways | Decision::Approve(_) => Ok(()),
         Decision::Deny | Decision::DenyWith(_) | Decision::Answer(_) => {
             let reason = format!("{tool} was refused by the person asked.");
-            policy_gate::blocked(asked, tool, &reason, domain::permission::Layer::List);
+            policy_gate::blocked(asked, tool, &reason, Layer::List);
             Err(Failure::permanent(policy_gate::refusal(&reason)))
         }
     }

@@ -31,7 +31,7 @@ pub use self::servers::{ServerSpec, parse_config, servers};
 pub use self::stdio::StdioTransport;
 #[doc(hidden)]
 pub use self::tool::outcome;
-pub use self::tool::{McpTool, remote_effects};
+pub use self::tool::{McpTool, remote_effects, summary_of};
 use crate::model::ToolSpec;
 use crate::model::http::Http;
 use crate::tools::{Outcome, Tool};

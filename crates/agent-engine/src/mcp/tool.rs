@@ -129,13 +129,7 @@ impl Tool for McpTool {
         {
             return sites;
         }
-        ["query", "url", "command", "item", "id", "text", "title"]
-            .into_iter()
-            .find_map(|key| field(input, key))
-            .unwrap_or_default()
-            .chars()
-            .take(80)
-            .collect()
+        summary_of(input)
     }
 
     fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
@@ -145,6 +139,16 @@ impl Tool for McpTool {
     fn kept(&self) -> Option<Arc<dyn Tool>> {
         Some(Arc::new(self.clone()))
     }
+}
+
+pub fn summary_of(input: &Value) -> String {
+    ["query", "url", "command", "item", "id", "text", "title"]
+        .into_iter()
+        .find_map(|key| field(input, key))
+        .unwrap_or_default()
+        .chars()
+        .take(80)
+        .collect()
 }
 
 pub fn remote_effects(server: &str, name: &str) -> Vec<Effect> {
