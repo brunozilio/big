@@ -291,6 +291,7 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
             "sdk/steps/index.js",
             "sdk/steps/context.js",
             "sdk/steps/given.js",
+            "sdk/steps/general.js",
             "packages/dev/steps/index.js",
             "packages/dev/steps/e2e.js",
             "workflows/default.ts",
@@ -311,7 +312,7 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
     assert!(super::builtin_files("packages/dev/steps/").len() >= shipped("packages/dev/steps/"));
     let index = super::builtin_text("packages/dev/steps/index.js").expect("index");
     assert!(STEPS.iter().all(|step| index.contains(&format!("default as {step} "))));
-    let base = super::builtin_text("sdk/steps/index.js").expect("index");
+    let base = super::builtin_text("sdk/steps/general.js").expect("general");
     assert!(
         GENERIC.iter().all(|step| base.contains(&format!("as {} ", match *step { "assess" => "review", "criterion" => "verify", other => other })))
     );

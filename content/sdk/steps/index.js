@@ -1,12 +1,7 @@
-export { default as draft } from "./draft.js";
-export { default as review } from "./assess.js";
-export { default as act } from "./act.js";
-export { default as verify } from "./criterion.js";
-export { default as wait } from "./wait.js";
-export { default as deliver } from "./deliver.js";
+export { draft, act, verify, wait, deliver } from "./general.js";
 export { default as aside } from "./aside.js";
 export { default as ask } from "./ask.js";
 export { default as command } from "./command.js";
 export { default as agent } from "./agent.js";
 export { default as script } from "./script.js";
-export { plan, ticket, cases, develop, checks, repoChecks, e2e, verifier, pr, ci, quality, provision, merge, release, security, findings } from "../../packages/dev/steps/index.js";
+export { plan, ticket, cases, develop, checks, repoChecks, e2e, verifier, pr, ci, quality, review, provision, merge, release, security, findings } from "../../packages/dev/steps/index.js";

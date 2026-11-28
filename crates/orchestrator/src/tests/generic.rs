@@ -5,7 +5,7 @@ use super::*;
 
 const ANSWER: &str = r#"
 import { workflow } from "sdk";
-import { draft, review, act, deliver } from "sdk/steps";
+import { draft, review, act, deliver } from "sdk/steps/general.js";
 
 export default workflow({
   name: "resposta",

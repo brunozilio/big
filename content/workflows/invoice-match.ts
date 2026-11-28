@@ -1,5 +1,5 @@
 import { workflow } from "sdk";
-import { wait, act, verify, review, deliver } from "sdk/steps";
+import { wait, act, verify, review, deliver } from "sdk/steps/general.js";
 
 type Party = { document: string; name: string };
 type Line = { code: string; description: string; quantity: number; unit_price: number; received?: number };

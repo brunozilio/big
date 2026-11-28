@@ -354,7 +354,7 @@ const AREAS = [
     key: "general",
     label: (language: Language) => pick(language, "General", "General", "Geral"),
     source: (slug: string) =>
-      workflowSource(slug, `import { draft, review, deliver } from "sdk/steps";`, ["text"], [
+      workflowSource(slug, `import { draft, review, deliver } from "sdk/steps/general.js";`, ["text"], [
         `draft({ agent: "drafter", status: { category: "doing" } })`,
         `review({ onChanges: "draft" })`,
         `deliver({ doneStatus: { category: "done" } })`,
