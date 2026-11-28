@@ -47,6 +47,18 @@ describe('tela de uso', () => {
     expect(within(view.getByText('Por modelo').closest('div') as HTMLElement).getByText('claude-opus-4-5')).toBeTruthy()
   })
 
+  test('o custo com chamadas sem preço mostra o parcial e quantas ficaram de fora', async () => {
+    const base = mockApi({ tickMs: 0, delayMs: 0 })
+    const partial = async (d: Parameters<Api['usage']>[0]) => {
+      const found = await base.usage(d)
+      const [first, ...rest] = found.byModel
+      return { ...found, totals: { ...found.totals, unpricedCalls: 2 }, byModel: first ? [{ ...first, unpricedCalls: 2 }, ...rest] : rest }
+    }
+    const view = await started({ ...base, usage: partial })
+    await waitFor(() => expect(view.getByText('+ 2 sem preço')).toBeTruthy())
+    expect(view.getAllByText(/ \+ 2 sem preço$/).length).toBeGreaterThan(0)
+  })
+
   test('troca a janela e atualiza os limites', async () => {
     const seen: number[] = []
     let limits = 0

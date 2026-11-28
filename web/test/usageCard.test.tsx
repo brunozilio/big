@@ -51,6 +51,12 @@ describe('quadro de uso do item', () => {
     expect(screen.queryByRole('group', { name: 'Custo por agente' })).toBeNull()
   })
 
+  test('com chamadas sem preço, mostra o parcial conhecido e quantas ficaram sem preço', async () => {
+    fake(usage({ spent: { costUsd: 0.75, unpricedCalls: 1, input: 3, output: 3, cacheRead: 0, cacheWrite: 0, calls: 3 } }))
+    render(<UsageCard it={item(false)} />)
+    expect(await screen.findByText(/US\$\s0,75 \+ 1 sem preço/)).toBeTruthy()
+  })
+
   test('sem conversa ainda, avisa em vez de mostrar a barra', async () => {
     fake(usage({ context: null }))
     render(<UsageCard it={item(false)} />)

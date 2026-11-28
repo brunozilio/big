@@ -720,8 +720,12 @@ export interface Connections {
 
 export type UsageDays = 7 | 30 | 90
 
+export type CostBasis = 'unknown' | 'api' | 'subscription' | 'mixed'
+
 export interface UsageTotals {
   costUsd: number
+  unpricedCalls?: number
+  basis?: CostBasis
   input: number
   output: number
   cacheRead: number
@@ -733,6 +737,7 @@ export interface UsageTotals {
 export interface UsageDay {
   date: string
   costUsd: number
+  unpricedCalls?: number
   tokens: number
   calls: number
   byProvider: Record<string, number>
@@ -743,6 +748,7 @@ export interface UsageRow {
   id: string
   name: string
   costUsd: number
+  unpricedCalls?: number
   tokens: number
   calls: number
 }
@@ -756,6 +762,7 @@ export interface UsageAccountRow {
   provider: string
   account: string
   costUsd: number
+  unpricedCalls?: number
   tokens: number
   calls: number
 }
@@ -774,6 +781,8 @@ export interface Usage {
 
 export interface ItemSpent {
   costUsd: number | null
+  unpricedCalls?: number
+  basis?: CostBasis
   input: number
   output: number
   cacheRead: number

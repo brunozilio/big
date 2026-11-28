@@ -15,6 +15,10 @@ export const axis = { stroke: 'rgb(var(--text-muted))', fontSize: 12, tickLine: 
 
 export const usd = (v: number) => money(v, 'USD')
 
+export function withUnpriced(cost: string, unpriced?: number): string {
+  return unpriced ? translate(currentLanguage(), 'settings.usage_withUnpriced', { cost, n: unpriced }) : cost
+}
+
 export const axisUsd = (v: number) => (Number.isInteger(v) || v >= 10 ? `$${Math.round(v)}` : `$${v.toFixed(v < 1 ? 2 : 1)}`)
 
 export function compact(n: number): string {
@@ -114,6 +118,7 @@ export interface RankRow {
   name: string
   detail?: string
   cost: number
+  unpriced?: number
   avatar: ReactNode
 }
 
@@ -133,7 +138,7 @@ export function RankCard({ title, rows, index }: { title: string; rows: RankRow[
                   {r.name}
                   {r.detail && <span className="ml-1.5 text-sm text-faint">{r.detail}</span>}
                 </span>
-                <span className="tabular-nums text-fg">{usd(r.cost)}</span>
+                <span className="tabular-nums text-fg">{withUnpriced(usd(r.cost), r.unpriced)}</span>
               </div>
               <div className="h-1 overflow-hidden rounded-full bg-inset">
                 <motion.div className="h-full origin-left rounded-full bg-fg/70" initial={false} animate={{ scaleX: r.cost / max }} transition={tween} />

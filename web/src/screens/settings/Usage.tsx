@@ -101,7 +101,7 @@ function UsageBody({ usage: raw }: { usage: Usage }) {
   return (
     <>
       <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <StatCard index={0} icon="dollar" label={tr('settings.usage_cost')} value={<Counter value={t.costUsd} format={usd} />} />
+        <StatCard index={0} icon="dollar" label={tr('settings.usage_cost')} value={<Counter value={t.costUsd} format={usd} />} hint={t.unpricedCalls ? tr('settings.usage_unpriced', { n: t.unpricedCalls }) : undefined} />
         <StatCard index={1} icon="cpu" label={tr('settings.usage_tokens')} value={<Counter value={tokens} format={compact} />} hint={tr('settings.usage_cache', { n: compact(t.cacheRead) })} />
         <StatCard index={2} icon="flash" label={tr('settings.usage_calls')} value={<Counter value={t.calls} />} />
         <StatCard index={3} icon="chat" label={tr('settings.usage_sessions')} value={<Counter value={t.sessions} />} />
@@ -165,22 +165,22 @@ function UsageRanks({ usage }: { usage: Usage }) {
   }
   return (
     <div className="grid gap-4 lg:grid-cols-3">
-      <RankCard index={0} title={t('settings.usage_bySubscription')} rows={usage.byProvider.slice(0, 6).map((p) => ({ id: p.id, name: p.name, cost: p.costUsd, avatar: logo(p.id) }))} />
+      <RankCard index={0} title={t('settings.usage_bySubscription')} rows={usage.byProvider.slice(0, 6).map((p) => ({ id: p.id, name: p.name, cost: p.costUsd, unpriced: p.unpricedCalls, avatar: logo(p.id) }))} />
       <RankCard
         index={1}
         title={t('settings.usage_byAccount')}
-        rows={usage.byAccount.slice(0, 6).map((a) => ({ id: a.id, name: accountLabel(a.account) || provider(a.provider)?.name || a.provider, detail: accountLabel(a.account) ? provider(a.provider)?.name : undefined, cost: a.costUsd, avatar: logo(a.provider) }))}
+        rows={usage.byAccount.slice(0, 6).map((a) => ({ id: a.id, name: accountLabel(a.account) || provider(a.provider)?.name || a.provider, detail: accountLabel(a.account) ? provider(a.provider)?.name : undefined, cost: a.costUsd, unpriced: a.unpricedCalls, avatar: logo(a.provider) }))}
       />
       <RankCard
         index={2}
         title={t('settings.usage_byModel')}
-        rows={usage.byModel.slice(0, 6).map((m) => ({ id: m.id, name: m.name, cost: m.costUsd, avatar: <Icon name="cpu" size={18} className="text-muted" /> }))}
+        rows={usage.byModel.slice(0, 6).map((m) => ({ id: m.id, name: m.name, cost: m.costUsd, unpriced: m.unpricedCalls, avatar: <Icon name="cpu" size={18} className="text-muted" /> }))}
       />
       {usage.byAgent && usage.byAgent.length > 0 && (
         <RankCard
           index={3}
           title={t('settings.usage_byAgent')}
-          rows={usage.byAgent.slice(0, 6).map((a) => ({ id: a.id, name: a.name, cost: a.costUsd, avatar: <Icon name="bot" size={18} className="text-muted" /> }))}
+          rows={usage.byAgent.slice(0, 6).map((a) => ({ id: a.id, name: a.name, cost: a.costUsd, unpriced: a.unpricedCalls, avatar: <Icon name="bot" size={18} className="text-muted" /> }))}
         />
       )}
     </div>

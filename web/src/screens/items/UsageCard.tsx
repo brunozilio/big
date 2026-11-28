@@ -5,7 +5,7 @@ import { useT } from '@/i18n'
 import { money } from '@/ui/cn'
 import { Card, ProgressBar, Skeleton } from '@/ui/display'
 import { Icon } from '@/ui/icon'
-import { compact as short } from '../settings/usageCards'
+import { compact as short, withUnpriced } from '../settings/usageCards'
 
 const LIVE_REFRESH_MS = 15_000
 
@@ -32,7 +32,7 @@ export function UsageCard({ it }: { it: Item }) {
       <div className="space-y-0.5">
         <div className="flex items-baseline justify-between gap-2 text-sm">
           <span className="text-fg2">{t('items.costLabel')}</span>
-          <span className="tabular-nums text-fg">{spent.costUsd === null ? t('items.costUnknown') : money(spent.costUsd, 'USD')}</span>
+          <span className="tabular-nums text-fg">{spent.costUsd === null ? t('items.costUnknown') : withUnpriced(money(spent.costUsd, 'USD'), spent.unpricedCalls)}</span>
         </div>
         <p className="flex items-center gap-3 truncate text-xs tabular-nums text-faint">
           <span className="inline-flex items-center gap-1" title={t('items.tokensIn')}>
@@ -47,8 +47,8 @@ export function UsageCard({ it }: { it: Item }) {
           </span>
         </p>
       </div>
-      <Breakdown title={t('items.costByStep')} rows={(data.byStep ?? []).map((row) => ({ id: `${row.step}/${row.agent}`, name: stepLabel(it, row.step), detail: row.agent, costUsd: row.costUsd }))} />
-      <Breakdown title={t('items.costByAgent')} rows={(data.byAgent ?? []).map((row) => ({ id: row.agent, name: row.agent, costUsd: row.costUsd }))} />
+      <Breakdown title={t('items.costByStep')} rows={(data.byStep ?? []).map((row) => ({ id: `${row.step}/${row.agent}`, name: stepLabel(it, row.step), detail: row.agent, costUsd: row.costUsd, unpriced: row.unpricedCalls }))} />
+      <Breakdown title={t('items.costByAgent')} rows={(data.byAgent ?? []).map((row) => ({ id: row.agent, name: row.agent, costUsd: row.costUsd, unpriced: row.unpricedCalls }))} />
     </Card>
   )
 }
@@ -58,6 +58,7 @@ interface Share {
   name: string
   detail?: string
   costUsd: number | null
+  unpriced?: number
 }
 
 function stepLabel(it: Item, step: string): string {
@@ -77,7 +78,7 @@ function Breakdown({ title, rows }: { title: string; rows: Share[] }) {
               {row.name}
               {row.detail && row.detail !== row.name && <span className="text-faint"> · {row.detail}</span>}
             </span>
-            <span className="shrink-0 tabular-nums text-fg">{row.costUsd === null ? t('items.costUnknown') : money(row.costUsd, 'USD')}</span>
+            <span className="shrink-0 tabular-nums text-fg">{row.costUsd === null ? t('items.costUnknown') : withUnpriced(money(row.costUsd, 'USD'), row.unpriced)}</span>
           </li>
         ))}
       </ul>
