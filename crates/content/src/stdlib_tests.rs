@@ -29,7 +29,8 @@ const STEPS: [&str; 13] = [
     "security",
 ];
 
-const GENERIC: [&str; 6] = ["draft", "assess", "act", "criterion", "wait", "deliver"];
+const GENERIC: [&str; 9] =
+    ["draft", "assess", "act", "criterion", "wait", "deliver", "approve", "request-info", "handoff"];
 
 const PROVIDERS: [&str; 12] = [
     "jira",
@@ -319,6 +320,7 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
         match *step {
             "assess" => "review",
             "criterion" => "verify",
+            "request-info" => "requestInfo",
             other => other,
         }
     ))));
@@ -1627,6 +1629,9 @@ mod input;
 
 #[path = "stdlib_generic_tests.rs"]
 mod generic;
+
+#[path = "stdlib_human_tests.rs"]
+mod human;
 
 #[path = "stdlib_verify_tests.rs"]
 mod verify;

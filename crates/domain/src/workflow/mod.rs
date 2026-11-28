@@ -1,3 +1,4 @@
+mod assignee;
 mod binding;
 mod deliverable;
 mod event;
@@ -5,6 +6,7 @@ mod item;
 mod reduce;
 mod slug;
 
+pub use assignee::Assignee;
 pub use binding::Binding;
 pub use deliverable::{Audience, Delivered, Found, Output, text};
 pub use event::WorkflowEvent;

@@ -1,5 +1,5 @@
 use domain::effect::IdempotencyKey;
-use domain::workflow::{ItemId, WorkflowEvent};
+use domain::workflow::{Assignee, ItemId, WorkflowEvent};
 use domain::{AgentAsk, AskId, AskKind, Decision};
 use serde_json::{Value, json};
 use tokio::sync::broadcast::{Receiver, error::RecvError};
@@ -17,11 +17,15 @@ pub struct Asking<'a> {
 
 impl Asking<'_> {
     pub async fn decided(&self, kind: AskKind) -> Option<Decision> {
+        self.decided_by(kind, None).await
+    }
+
+    pub async fn decided_by(&self, kind: AskKind, assign: Option<Assignee>) -> Option<Decision> {
         if let Some(decision) = self.answered() {
             return Some(decision);
         }
         let events = self.shared.events.subscribe();
-        self.open(kind.clone());
+        self.open(kind.clone(), assign);
         self.waited(events, &kind).await
     }
 
@@ -68,7 +72,7 @@ impl Asking<'_> {
         u64::try_from(waited).ok()
     }
 
-    fn open(&self, kind: AskKind) {
+    fn open(&self, kind: AskKind, assign: Option<Assignee>) {
         if self.shared.asks.of_key(self.key).iter().any(|pending| pending.ask.id == self.id) {
             return;
         }
@@ -78,6 +82,7 @@ impl Asking<'_> {
             session: None,
             ask: AgentAsk { id: self.id.clone(), kind },
             since: now_ms(),
+            assign,
         };
         let data = json!({ "asks": { self.id.0.clone(): serde_json::to_value(&pending).unwrap_or(Value::Null) } });
         let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data };

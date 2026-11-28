@@ -3,6 +3,7 @@ mod ai;
 mod applications;
 mod archive;
 mod artifacts;
+mod assignees;
 mod attachments;
 mod auth;
 mod backend;

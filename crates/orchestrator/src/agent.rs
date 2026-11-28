@@ -584,6 +584,7 @@ impl AgentEffect<'_> {
                 session: collected.session.clone(),
                 ask: AgentAsk { id: id.clone(), kind },
                 since: now_ms(),
+                assign: None,
             };
             if !self.shared.asks.open_teammate(pending.clone(), self.key.clone(), client, asked) {
                 continue;
@@ -619,6 +620,7 @@ impl AgentEffect<'_> {
             session: collected.session.clone(),
             ask: ask.clone(),
             since: now_ms(),
+            assign: None,
         };
         let replaced = self.shared.asks.open(pending.clone(), self.key.clone(), Arc::clone(run));
         let mut asks = serde_json::Map::new();

@@ -54,6 +54,7 @@ async fn asking_puts_the_overrun_on_the_item_and_the_run_goes_on_once_a_person_a
         panic!("the overrun asks a permission: {asked:?}");
     };
     assert_eq!((tool.as_str(), subject.as_str(), *rememberable), ("budget", REACHED, false));
+    assert_eq!(asked.assign, Some(domain::workflow::Assignee::Admins), "the overrun is a request to the admins");
     assert_eq!(world.engine.runs(), 1, "nothing runs past the ceiling before the answer");
     kernel.answer_ask(&asked.ask.id, &Decision::Allow).expect("answer");
     let item = ended(&kernel, &id).await;

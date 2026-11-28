@@ -2,6 +2,7 @@ use domain::data_policy::Requires;
 use domain::overrun::Overrun;
 use domain::permission::Surface;
 use domain::quota::Scope;
+use domain::workflow::Assignee;
 use domain::{AskId, AskKind, Decision, ModelOption, Prompt, PromptRequest, SessionId};
 use serde_json::{Value, json};
 
@@ -90,7 +91,7 @@ impl AgentEffect<'_> {
         let asked = self.charge.get().map_or(0, crate::spend::Charge::extensions);
         let id = AskId(format!("{ASK_TOOL}-{}-{asked}", self.key));
         let asking = Asking { shared: self.shared, item: self.item, key: self.key, id };
-        let decided = asking.decided(AskKind::permission(ASK_TOOL, reason, false)).await;
+        let decided = asking.decided_by(AskKind::permission(ASK_TOOL, reason, false), Some(Assignee::Admins)).await;
         matches!(decided, Some(Decision::Allow | Decision::AllowAlways | Decision::Approve(_)))
     }
 

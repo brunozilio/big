@@ -88,6 +88,23 @@ export const actions = (buttons) =>
 
 const blocks = (view) => (view === undefined || view === null ? [] : Array.isArray(view) ? view : [view]);
 
+const named = (kind, called) => (name) => {
+  const text = String(name === undefined || name === null ? "" : name).trim();
+  if (!text) throw new TypeError(`${called ?? kind}() needs a name`);
+  return Object.freeze({ [kind]: text });
+};
+export const role = named("role");
+export const person = named("person");
+export const inGroup = named("group", "inGroup");
+export const admins = () => "admins";
+
+const assigneeOf = (value) => {
+  if (value === "admins") return value;
+  if (value === null || typeof value !== "object") return undefined;
+  const kind = ["role", "person", "group"].find((key) => typeof value[key] === "string" && value[key].trim());
+  return kind ? { [kind]: value[kind].trim() } : undefined;
+};
+
 export const TRIGGER_SCHEMA = 1;
 
 export const on = (kind, filter, options) =>
@@ -330,7 +347,11 @@ class Ctx {
   }
 
   waitHuman(view, options) {
-    return this.runtime.issue(this, "wait.human", { view: blocks(view) }, options);
+    const { assignTo, ...rest } = options || {};
+    const args = { view: blocks(view) };
+    const assigned = assigneeOf(assignTo);
+    if (assigned !== undefined) args.assignTo = assigned;
+    return this.runtime.issue(this, "wait.human", args, rest);
   }
 
   poll(call, every, options) {

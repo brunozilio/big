@@ -161,7 +161,7 @@ fn requested_effects_stay_pending_until_resolved_and_then_answer_replay() {
 #[test]
 fn waiting_for_a_human_marks_the_step_and_shows_the_view_until_answered() {
     let view = json!([{"block": "text"}]);
-    let item = replay(&[created(), started("s"), requested("s", 1, Effect::WaitHuman { view: view.clone() })]);
+    let item = replay(&[created(), started("s"), requested("s", 1, Effect::WaitHuman { view: view.clone(), assign: None })]);
     assert_eq!(item.steps[0].state, StepState::WaitingHuman);
     assert_eq!(item.steps[0].view, view);
     assert!(item.waiting_human());
@@ -175,11 +175,25 @@ fn waiting_for_a_human_marks_the_step_and_shows_the_view_until_answered() {
 }
 
 #[test]
+fn a_wait_assigned_to_a_role_keeps_the_assignee_on_the_step_and_the_next_wait_replaces_it() {
+    let role = Some(super::Assignee::Role("controller".into()));
+    let item = replay(&[
+        created(),
+        started("s"),
+        requested("s", 1, Effect::WaitHuman { view: json!([]), assign: role.clone() }),
+    ]);
+    assert_eq!(item.steps[0].assign, role);
+    let item = reduce(item, &resolved("s", 1, json!("ok")));
+    let item = reduce(item, &requested("s", 2, Effect::WaitHuman { view: json!([]), assign: None }));
+    assert_eq!(item.steps[0].assign, None);
+}
+
+#[test]
 fn resolving_a_human_wait_also_resumes_the_step() {
     let item = replay(&[
         created(),
         started("s"),
-        requested("s", 1, Effect::WaitHuman { view: json!(null) }),
+        requested("s", 1, Effect::WaitHuman { view: json!(null), assign: None }),
         resolved("s", 1, json!("ok")),
     ]);
     assert_eq!(item.steps[0].state, StepState::Running);

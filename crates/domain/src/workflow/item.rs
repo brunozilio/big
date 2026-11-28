@@ -61,6 +61,8 @@ pub struct StepRun {
     pub attempt: u32,
     pub view: Value,
     pub output: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assign: Option<super::Assignee>,
 }
 
 impl StepRun {

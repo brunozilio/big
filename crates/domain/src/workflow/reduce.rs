@@ -159,10 +159,11 @@ fn start(item: &mut WorkItem, id: &str, branch: Option<&str>) {
 }
 
 fn request_effect(item: &mut WorkItem, request: &EffectRequest) {
-    if let Effect::WaitHuman { view } = &request.effect {
+    if let Effect::WaitHuman { view, assign } = &request.effect {
         let run = run_mut(item, &request.key.step, request.key.branch.as_deref());
         run.state = StepState::WaitingHuman;
         run.view = view.clone();
+        run.assign.clone_from(assign);
     }
     item.effects.insert(
         request.key.to_string(),

@@ -280,7 +280,7 @@ async fn an_item_takes_new_workflow_code_that_still_replays_its_history_and_show
     let shown = |item: &WorkItem| {
         item.effects
             .values()
-            .any(|entry| matches!(&entry.request.effect, Effect::WaitHuman { view } if view[0]["text"] == "depois"))
+            .any(|entry| matches!(&entry.request.effect, Effect::WaitHuman { view, .. } if view[0]["text"] == "depois"))
     };
     let waiting = until(&kernel, &id, shown).await;
     let ask =

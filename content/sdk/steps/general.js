@@ -4,3 +4,6 @@ export { default as act } from "./act.js";
 export { default as verify } from "./criterion.js";
 export { default as wait } from "./wait.js";
 export { default as deliver } from "./deliver.js";
+export { default as approve } from "./approve.js";
+export { default as requestInfo } from "./request-info.js";
+export { default as handoff } from "./handoff.js";

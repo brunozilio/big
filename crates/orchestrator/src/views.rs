@@ -305,7 +305,7 @@ pub fn live_blocks(ledger: &Ledger, step: &str) -> Option<Value> {
     if open.is_empty() {
         return None;
     }
-    if let Some(Effect::WaitHuman { view }) =
+    if let Some(Effect::WaitHuman { view, .. }) =
         open.iter().rev().map(|request| &request.effect).find(|effect| kind_of(effect) == WAIT_HUMAN)
     {
         return Some(view.clone());
@@ -382,7 +382,7 @@ mod tests {
         let mut ledger = Ledger::default();
         let agent = || Effect::AgentRun { agent: "dev".into(), input: Value::Null };
         effect(&mut ledger, 1, agent(), (0, Some(60_000)));
-        effect(&mut ledger, 2, Effect::WaitHuman { view: Value::Null }, (60_000, Some(3_600_000)));
+        effect(&mut ledger, 2, Effect::WaitHuman { view: Value::Null, assign: None }, (60_000, Some(3_600_000)));
         effect(&mut ledger, 3, Effect::Exec { command: "make".into(), cwd: None }, (3_600_000, Some(3_630_000)));
         effect(&mut ledger, 4, agent(), (3_610_000, Some(3_640_000)));
         effect(&mut ledger, 5, agent(), (4_000_000, None));

@@ -1,18 +1,25 @@
+mod answer;
+mod claims;
+
 use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::extract::State;
 use axum::response::Response;
-use axum::{Extension, Json};
+use axum::Extension;
 use domain::principal::Principal;
-use domain::workflow::{ItemId, StepState, WorkItem};
+use domain::workflow::{Assignee, ItemId, StepState, WorkItem};
 use domain::{AskKind, Language};
 use orchestrator::{ItemSummary, PendingAsk};
 use serde_json::{Value, json};
-use store::ConnectionRecord;
+use store::{Claim, ConnectionRecord};
 
+pub use answer::{batch, guard_wait, respond};
+pub use claims::{claim, release};
+
+use crate::assignees::Reader;
 use crate::blocks::{self, Place};
-use crate::error::{ApiError, ApiResult, done, json as reply, said};
+use crate::error::{ApiResult, json as reply};
 use crate::item_view::{self, Known};
 use crate::marks::iso;
 use crate::session_view;
@@ -22,16 +29,18 @@ const DEEPEST: usize = 16;
 
 struct Inbox<'a> {
     shared: &'a Shared,
-    owner: Option<&'a str>,
+    reader: &'a Reader<'a>,
     connections: Vec<ConnectionRecord>,
+    claims: HashMap<String, Claim>,
     items: HashMap<ItemId, Option<(WorkItem, ItemSummary)>>,
     described: HashMap<String, Value>,
 }
 
 impl<'a> Inbox<'a> {
-    fn new(shared: &'a Shared, owner: Option<&'a str>) -> ApiResult<Inbox<'a>> {
+    fn new(shared: &'a Shared, reader: &'a Reader<'a>) -> ApiResult<Inbox<'a>> {
         let connections = shared.backend.store.connections()?;
-        Ok(Inbox { shared, owner, connections, items: HashMap::new(), described: HashMap::new() })
+        let claims = shared.backend.store.inbox_claims()?.into_iter().map(|held| (held.target.clone(), held)).collect();
+        Ok(Inbox { shared, reader, connections, claims, items: HashMap::new(), described: HashMap::new() })
     }
 
     fn known(&mut self, id: &ItemId) -> ApiResult<Option<(WorkItem, ItemSummary)>> {
@@ -47,10 +56,10 @@ impl<'a> Inbox<'a> {
         Ok(found)
     }
 
-    fn mine(&mut self, id: &ItemId) -> ApiResult<Option<(WorkItem, ItemSummary)>> {
+    fn seen(&mut self, id: &ItemId, assign: Option<&Assignee>) -> ApiResult<Option<(WorkItem, ItemSummary)>> {
         let Some((item, summary)) = self.known(id)? else { return Ok(None) };
-        let owned = self.owner.is_none_or(|owner| orchestrator::owners::of(&self.shared.backend.store, &item) == owner);
-        Ok((owned && !item.is_ended()).then_some((item, summary)))
+        let owner = orchestrator::owners::of(&self.shared.backend.store, &item);
+        Ok((self.reader.sees(&owner, assign) && !item.is_ended()).then_some((item, summary)))
     }
 
     fn root(&mut self, summary: &ItemSummary) -> ApiResult<ItemId> {
@@ -93,22 +102,29 @@ impl<'a> Inbox<'a> {
         }))
     }
 
+    fn routed(&self, entry: &mut Value, id: &str, assign: Option<&Assignee>) {
+        entry["assignedTo"] = assign.map_or(Value::Null, Assignee::shown);
+        entry["claim"] = self.claims.get(id).map_or(Value::Null, |held| {
+            json!({ "by": held.name, "at": iso(held.at), "mine": held.person == self.reader.person.owner() })
+        });
+    }
+
     fn ask(&mut self, pending: &PendingAsk) -> ApiResult<Option<Value>> {
-        let Some((item, summary)) = self.mine(&pending.item)? else { return Ok(None) };
+        let Some((item, summary)) = self.seen(&pending.item, pending.assign.as_ref())? else { return Ok(None) };
         let shown = self.place(&item, &summary, &pending.step)?;
-        Ok(Some(json!({
+        let mut entry = json!({
             "id": pending.ask.id.0,
             "kind": ask_kind(&pending.ask.kind),
             "item": shown,
             "session": pending.session,
             "since": iso(pending.since),
             "event": session_view::ask_event(&pending.ask, pending.since),
-        })))
+        });
+        self.routed(&mut entry, &pending.ask.id.0, pending.assign.as_ref());
+        Ok(Some(entry))
     }
 
     fn waits(&mut self, item: &WorkItem) -> ApiResult<Vec<Value>> {
-        let Some((item, summary)) = self.mine(&item.id)? else { return Ok(Vec::new()) };
-        let language = language_of(self.shared, &item);
         let mut seen: Vec<&str> = Vec::new();
         let mut found = Vec::new();
         for run in item.steps.iter().filter(|run| run.state == StepState::WaitingHuman) {
@@ -116,20 +132,29 @@ impl<'a> Inbox<'a> {
                 continue;
             }
             seen.push(&run.id);
+            let Some((item, summary)) = self.seen(&item.id, run.assign.as_ref())? else { continue };
+            let language = language_of(self.shared, &item);
             let place = Place { connections: &self.connections, waiting: true, language };
             let shown = blocks::normalized(&place, &run.view);
             let since = summary.steps.iter().find(|step| step.id == run.id).and_then(|step| step.since);
-            found.push(json!({
-                "id": format!("{}:{}", item.id.as_str(), run.id),
+            let id = wait_id(&item.id, &run.id);
+            let mut entry = json!({
+                "id": id,
                 "kind": wait_kind(&shown),
                 "item": self.place(&item, &summary, &run.id)?,
                 "session": null,
                 "since": iso(since.unwrap_or(summary.updated_at)),
                 "blocks": shown,
-            }));
+            });
+            self.routed(&mut entry, &id, run.assign.as_ref());
+            found.push(entry);
         }
         Ok(found)
     }
+}
+
+pub fn wait_id(item: &ItemId, step: &str) -> String {
+    format!("{}:{step}", item.as_str())
 }
 
 fn language_of(shared: &Shared, item: &WorkItem) -> Language {
@@ -154,8 +179,8 @@ fn wait_kind(shown: &[Value]) -> &'static str {
     if plain { "notice" } else { "review" }
 }
 
-pub fn pending(shared: &Shared, owner: Option<&str>) -> ApiResult<Vec<Value>> {
-    let mut inbox = Inbox::new(shared, owner)?;
+fn pending(shared: &Shared, reader: &Reader<'_>) -> ApiResult<Vec<Value>> {
+    let mut inbox = Inbox::new(shared, reader)?;
     let mut found = Vec::new();
     for pending in shared.backend.orchestrator.asks() {
         found.extend(inbox.ask(&pending)?);
@@ -170,58 +195,8 @@ pub fn pending(shared: &Shared, owner: Option<&str>) -> ApiResult<Vec<Value>> {
 
 pub async fn list(State(ctx): State<Ctx>, Extension(person): Extension<Principal>) -> ApiResult<Response> {
     let shared = Arc::clone(&ctx);
-    let owner = crate::scope::shared_mode().then(|| person.owner().to_owned());
-    let found = crate::sessions::blocking(move || pending(&shared, owner.as_deref())).await?;
+    let found = crate::sessions::blocking(move || pending(&shared, &Reader::of(&shared, &person))).await?;
     Ok(reply(found))
-}
-
-fn gone() -> ApiError {
-    ApiError::missing(said(
-        "That request was already answered or does not exist.",
-        "Esa solicitud ya fue respondida o no existe.",
-        "Esse pedido já foi respondido ou não existe.",
-    ))
-}
-
-fn answer_here(shared: &Shared, pending: &PendingAsk, response: &Value) -> ApiResult<()> {
-    let decision = session_view::decision(&pending.ask.kind, response).ok_or_else(|| {
-        ApiError::bad(said(
-            "That answer does not fit that request.",
-            "Esa respuesta no sirve para esa solicitud.",
-            "Essa resposta não serve a esse pedido.",
-        ))
-    })?;
-    let resolved = session_view::resolved(session_view::ask_event(&pending.ask, pending.since), response);
-    shared.backend.orchestrator.answer_ask_with(&pending.ask.id, &decision, resolved)?;
-    Ok(())
-}
-
-fn open_ask(shared: &Shared, person: &Principal, id: &str) -> ApiResult<PendingAsk> {
-    let asks = shared.backend.orchestrator.asks();
-    let pending = asks.into_iter().find(|pending| pending.ask.id.0 == id).ok_or_else(gone)?;
-    let owner = crate::scope::item_owner(shared, pending.item.as_str())?;
-    let theirs = crate::scope::shared_mode() && owner.as_deref() != Some(person.owner());
-    if theirs { Err(gone()) } else { Ok(pending) }
-}
-
-pub async fn respond(
-    State(ctx): State<Ctx>,
-    Extension(person): Extension<Principal>,
-    Json(body): Json<Value>,
-) -> ApiResult<Response> {
-    let id = body["ask"].as_str().unwrap_or_default().to_owned();
-    let pending = open_ask(&ctx, &person, &id)?;
-    let shared = Arc::clone(&ctx);
-    let response = body["response"].clone();
-    match pending.session.clone() {
-        Some(session) => {
-            let asked = session.clone();
-            crate::sessions::blocking(move || crate::sessions::answer_now(&shared, &asked, &id, &response)).await?;
-            ctx.follow(&session);
-        }
-        None => crate::sessions::blocking(move || answer_here(&shared, &pending, &response)).await?,
-    }
-    Ok(done())
 }
 
 #[cfg(test)]

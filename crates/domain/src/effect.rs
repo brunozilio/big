@@ -52,6 +52,8 @@ pub enum Effect {
     ConnectorCall(Call),
     WaitHuman {
         view: Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        assign: Option<crate::workflow::Assignee>,
     },
     WaitPoll {
         call: Call,

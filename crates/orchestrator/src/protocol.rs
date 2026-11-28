@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use domain::audit::OperationTag;
 use domain::effect::{Call, Effect, EffectOutcome, ErrorClass, RetryPolicy};
+use domain::workflow::Assignee;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -101,7 +102,7 @@ impl Command {
                 command: self.text("command"),
                 cwd: self.args.get("cwd").and_then(Value::as_str).map(str::to_owned),
             },
-            WAIT_HUMAN => Effect::WaitHuman { view: self.args["view"].clone() },
+            WAIT_HUMAN => Effect::WaitHuman { view: self.args["view"].clone(), assign: Assignee::read(&self.args["assignTo"]) },
             WAIT_POLL => Effect::WaitPoll { call: self.call(), every: millis(&self.args["every"]) },
             EVENT => Effect::WaitEvent {
                 kind: self.text("kind"),

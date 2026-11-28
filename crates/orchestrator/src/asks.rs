@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use agent_engine::RunHandle;
 use domain::effect::IdempotencyKey;
 use domain::team::TeammateAsk;
-use domain::workflow::ItemId;
+use domain::workflow::{Assignee, ItemId};
 use domain::{AgentAsk, AskId, AskKind, Decision};
 use serde::{Deserialize, Serialize};
 
@@ -17,6 +17,8 @@ pub struct PendingAsk {
     pub session: Option<String>,
     pub ask: AgentAsk,
     pub since: i64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub assign: Option<Assignee>,
 }
 
 struct OpenAsk {
@@ -211,6 +213,7 @@ mod tests {
             session: None,
             ask: AgentAsk { id: id.clone(), kind },
             since: 0,
+            assign: None,
         };
         asks.restore(pending, key());
         id
@@ -253,6 +256,7 @@ mod tests {
             session: None,
             ask: AgentAsk { id: id.clone(), kind: AskKind::Plan { plan: "p".into() } },
             since: 0,
+            assign: None,
         };
         let run: SharedRun = Arc::new(Mutex::new(Box::new(EndsWhenAnswered(Arc::clone(&asks)))));
         asks.open(pending, key(), run);

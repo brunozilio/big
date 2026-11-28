@@ -1,4 +1,4 @@
-export { draft, act, verify, wait, deliver } from "./general.js";
+export { draft, act, verify, wait, deliver, approve, requestInfo, handoff } from "./general.js";
 export { default as aside } from "./aside.js";
 export { default as ask } from "./ask.js";
 export { default as command } from "./command.js";

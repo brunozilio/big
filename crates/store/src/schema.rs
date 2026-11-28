@@ -261,6 +261,14 @@ const MIGRATIONS: &[&str] = &[
         at INTEGER NOT NULL
     );
 ",
+    "
+    CREATE TABLE IF NOT EXISTS inbox_claims (
+        target TEXT PRIMARY KEY,
+        person TEXT NOT NULL,
+        name TEXT NOT NULL,
+        at INTEGER NOT NULL
+    );
+",
 ];
 
 const SQLITE_GUARD: &str = "CREATE TRIGGER IF NOT EXISTS audit_trail_only_grows BEFORE UPDATE ON audit_trail

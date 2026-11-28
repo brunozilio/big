@@ -89,7 +89,7 @@ fn effects_round_trip_through_json_with_a_type_tag() {
         Effect::AgentRun { agent: "any".into(), input: json!({}) },
         Effect::Exec { command: "make".into(), cwd: None },
         Effect::ConnectorCall(call.clone()),
-        Effect::WaitHuman { view: json!([]) },
+        Effect::WaitHuman { view: json!([]), assign: None },
         Effect::WaitPoll { call, every: Duration::from_millis(1500) },
         Effect::WaitEvent { kind: "x.y".into(), filter: json!({}), timeout: Some(Duration::from_secs(1)) },
         Effect::Sleep { duration: Duration::from_secs(3) },

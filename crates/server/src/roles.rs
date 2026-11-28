@@ -141,6 +141,10 @@ impl Roles {
         grants
     }
 
+    pub fn of_group(&self, group: &str) -> Vec<String> {
+        self.groups.iter().filter(|(known, _)| known == group).map(|(_, role)| role.clone()).collect()
+    }
+
     pub fn roles_in(&self, claims: &Value) -> Vec<String> {
         let found = self.claim.split('.').filter(|part| !part.is_empty()).fold(claims, |value, part| &value[part]);
         let groups: Vec<&str> = match found {

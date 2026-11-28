@@ -322,7 +322,7 @@ export async function eachOf(ctx, targets, work) {
 }
 
 export function waitOptions(opts) {
-  return defined({ timeout: opts.waitTimeout });
+  return defined({ timeout: opts.waitTimeout, assignTo: opts.assignTo });
 }
 
 function comment(entry) {
