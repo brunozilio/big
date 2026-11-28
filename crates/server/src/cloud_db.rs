@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use connectors::{Http, Provider, ReqwestHttp};
 use database::{Database, Lease, Target};
 use store::Store;
 
@@ -30,32 +31,67 @@ pub fn draining() -> bool {
     DRAINING.load(Ordering::SeqCst)
 }
 
-fn region_of(arn: &str) -> Option<String> {
-    arn.split(':').nth(3).filter(|region| !region.is_empty()).map(str::to_owned)
-}
+pub type Reach = Arc<dyn Fn() -> Result<Arc<dyn Http>, String> + Send + Sync>;
 
-pub fn password_in(secret: &str) -> String {
+pub fn password_in(secret: &str, field: &str) -> String {
+    if field.is_empty() {
+        return secret.to_owned();
+    }
     serde_json::from_str::<serde_json::Value>(secret)
         .ok()
-        .and_then(|value| value["password"].as_str().map(str::to_owned))
+        .and_then(|value| value[field].as_str().map(str::to_owned))
         .unwrap_or_else(|| secret.to_owned())
 }
 
-fn password() -> Result<Option<database::Password>, String> {
-    let Some(file) = configured(brand::database::PASSWORD_SECRET_FILE) else { return Ok(None) };
-    let arn = read(&file)?;
-    let region = region_of(&arn).ok_or_else(|| format!("{file}: not a secret ARN"))?;
-    Ok(Some(Arc::new(move || platform::aws::secret_string(&region, &arn).map(|secret| password_in(&secret)))))
+fn reader(named: &str, providers: &[Arc<dyn Provider>]) -> Result<Arc<dyn Provider>, String> {
+    let found = providers.iter().find(|provider| provider.descriptor().key.as_str() == named);
+    let provider = found.ok_or_else(|| format!("no connector is called {named}"))?;
+    if provider.secrets().is_none() {
+        return Err(format!("the connector {named} does not read secrets"));
+    }
+    Ok(Arc::clone(provider))
 }
 
-pub fn connect() -> Result<Database, String> {
-    let file = configured(brand::database::URL_FILE).ok_or("no database configured")?;
-    let target = Target { url: read(&file)?, ca_file: configured(brand::database::CA_FILE).unwrap_or_default() };
-    let opened = match password()? {
-        Some(password) => Database::postgres_with_password(&target, password),
-        None => Database::postgres(&target),
+pub fn read_with(provider: Arc<dyn Provider>, reference: String, field: String, reach: Reach) -> database::Password {
+    Arc::new(move || {
+        let secrets = provider.secrets().ok_or("the connector does not read secrets")?;
+        let http = reach()?;
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|error| error.to_string())?;
+        let secret = runtime.block_on(secrets.secret(http.as_ref(), &reference)).map_err(|error| error.message)?;
+        Ok(password_in(&secret, &field))
+    })
+}
+
+fn reached() -> Result<Arc<dyn Http>, String> {
+    let http = ReqwestHttp::blocking(brand::database::PASSWORD_BLOCKED).map_err(|error| error.message)?;
+    Ok(Arc::new(http))
+}
+
+fn password(providers: &[Arc<dyn Provider>]) -> Result<Option<database::Password>, String> {
+    let Some(file) = configured(brand::database::PASSWORD_SECRET_FILE) else { return Ok(None) };
+    let reference = read(&file)?;
+    let named = configured(brand::database::PASSWORD_CONNECTOR)
+        .ok_or_else(|| format!("{file}: no connector is configured to read the password"))?;
+    let provider = reader(&named, providers)?;
+    let field = brand::database::PASSWORD_FIELD.trim().to_owned();
+    Ok(Some(read_with(provider, reference, field, Arc::new(reached))))
+}
+
+pub fn opened(target: &Target, password: Option<database::Password>) -> Result<Database, String> {
+    let opened = match password {
+        Some(password) => Database::postgres_with_password(target, password),
+        None => Database::postgres(target),
     };
     opened.map_err(|error| format!("the database could not be opened: {error}"))
+}
+
+pub fn connect(providers: &[Arc<dyn Provider>]) -> Result<Database, String> {
+    let file = configured(brand::database::URL_FILE).ok_or("no database configured")?;
+    let target = Target { url: read(&file)?, ca_file: configured(brand::database::CA_FILE).unwrap_or_default() };
+    opened(&target, password(providers)?)
 }
 
 pub fn copy_local(data: &Path, store: &Store) {
@@ -130,6 +166,9 @@ pub fn release(store: &Store, lease: &Lease) {
 }
 
 #[cfg(test)]
+mod secret_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -164,16 +203,5 @@ mod tests {
         assert!(waited.is_ok(), "the new server never got the turn");
         assert!(stepped.load(Ordering::SeqCst));
         assert!(draining());
-    }
-
-    #[test]
-    fn the_password_comes_from_the_managed_secret_or_is_the_secret_itself() {
-        assert_eq!(password_in(r#"{"username":"app","password":"s3cr3t"}"#), "s3cr3t");
-        assert_eq!(password_in("plain"), "plain");
-        assert_eq!(
-            region_of("arn:aws:secretsmanager:us-east-1:123456789012:secret:rds!db-1"),
-            Some("us-east-1".to_owned())
-        );
-        assert_eq!(region_of("nope"), None);
     }
 }

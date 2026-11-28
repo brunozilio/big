@@ -31,7 +31,9 @@ pub use http::{FakeHttp, Http, HttpRequest, HttpResponse, Method, Part, ReqwestH
 pub use hub::Connectors;
 pub use limiter::RateLimiter;
 pub use oauth::{
-    Answered, Authorization, DeviceApp, DeviceCode, DeviceSignIn, Grant, Loopback, LoopbackSignIn, MemoryTokenStore, Polled,
-    Proceeded, RegisteredClient, Started, Stepped, TokenKeeper, TokenStore,
+    Answered, Authorization, DeviceApp, DeviceCode, DeviceSignIn, Grant, Loopback, LoopbackSignIn, MemoryTokenStore,
+    Polled, Proceeded, RegisteredClient, Started, Stepped, TokenKeeper, TokenStore,
 };
-pub use provider::{AccountOption, Args, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SettingsSink};
+pub use provider::{
+    AccountOption, Args, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SecretSource, SettingsSink,
+};

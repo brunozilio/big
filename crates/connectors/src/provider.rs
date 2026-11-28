@@ -74,6 +74,11 @@ pub trait EventSource: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
+pub trait SecretSource: Send + Sync + std::fmt::Debug {
+    async fn secret(&self, http: &dyn Http, reference: &str) -> Result<String, ActionError>;
+}
+
+#[async_trait]
 pub trait Provider: Send + Sync + std::fmt::Debug {
     fn descriptor(&self) -> ProviderDescriptor;
 
@@ -89,6 +94,10 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
     async fn accounts(&self, http: &dyn Http, creds: &Credentials) -> Result<Vec<AccountOption>, ActionError>;
 
     fn events(&self) -> Option<&dyn EventSource> {
+        None
+    }
+
+    fn secrets(&self) -> Option<&dyn SecretSource> {
         None
     }
 

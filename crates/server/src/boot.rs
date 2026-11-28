@@ -24,9 +24,9 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let providers = connectors::providers::all();
     let redactor = connectors::redaction::redactor(providers.iter().map(AsRef::as_ref));
     let (store, services) = if cloud {
-        let store = Store::with_database(crate::cloud_db::connect()?, every).map_err(|error| error.to_string())?;
+        let store = Store::with_database(crate::cloud_db::connect(&providers)?, every).map_err(|error| error.to_string())?;
         let services =
-            app::LocalServices::detect_redacting(Some(crate::cloud_db::connect()?), Arc::clone(&redactor));
+            app::LocalServices::detect_redacting(Some(crate::cloud_db::connect(&providers)?), Arc::clone(&redactor));
         crate::cloud_db::copy_local(&launch.data, &store);
         (Arc::new(store), services)
     } else {

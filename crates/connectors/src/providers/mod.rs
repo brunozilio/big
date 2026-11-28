@@ -38,6 +38,10 @@ impl Provider for Shared {
         self.0.events()
     }
 
+    fn secrets(&self) -> Option<&dyn crate::provider::SecretSource> {
+        self.0.secrets()
+    }
+
     fn presentation(&self, language: domain::Language) -> crate::descriptor::Presentation {
         self.0.presentation(language)
     }

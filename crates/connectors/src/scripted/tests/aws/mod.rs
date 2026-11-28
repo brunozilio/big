@@ -1,5 +1,6 @@
 mod login;
 mod provider;
+mod secret;
 mod sigv4;
 mod sso;
 
@@ -7,8 +8,8 @@ use std::sync::Arc;
 
 use serde_json::Value;
 
-use crate::scripted::bridge::{Script, WRAPPER, wrapper};
 use crate::config::Configuration;
+use crate::scripted::bridge::{Script, WRAPPER, wrapper};
 use crate::scripted::data_of;
 use crate::scripted::host::Local;
 

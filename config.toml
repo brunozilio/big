@@ -50,6 +50,8 @@ portal_url = "https://portal.sso.{region}.amazonaws.com"
 sts_url = "https://sts.{region}.amazonaws.com/"
 sso_scopes = "sso:account:access"
 client_name = "botocore-client-default"
+task_credentials_url = "http://169.254.170.2{path}"
+secrets_url = "https://secretsmanager.{region}.amazonaws.com/"
 
 [datadog]
 mcp_url = "https://mcp.{site}/v1/mcp"
@@ -235,6 +237,9 @@ limit_mb = "10"
 url_file = ""
 ca_file = ""
 password_secret_file = ""
+password_connector = "aws"
+password_field = "password"
+password_blocked = ""
 
 [browser]
 call_seconds = "150"

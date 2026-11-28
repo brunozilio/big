@@ -196,19 +196,24 @@ pub async fn fetch_json(http: &dyn Http, request: HttpRequest) -> Result<Value, 
 #[derive(Debug, Clone)]
 pub struct ReqwestHttp {
     client: reqwest::Client,
+    ranges: Vec<platform::guard::Range>,
 }
 
 impl ReqwestHttp {
     pub fn new() -> Result<ReqwestHttp, ActionError> {
+        ReqwestHttp::blocking(brand::network::BLOCKED)
+    }
+
+    pub fn blocking(blocked: &str) -> Result<ReqwestHttp, ActionError> {
         let network =
             platform::network::Settings::shared(platform::network::Configured::from_pairs(brand::network::PAIRS));
-        let ranges = platform::guard::ranges_of(brand::network::BLOCKED);
-        let client = platform::guard::guarded(network.applied(reqwest::Client::builder()), ranges)
+        let ranges = platform::guard::ranges_of(blocked);
+        let client = platform::guard::guarded(network.applied(reqwest::Client::builder()), ranges.clone())
             .user_agent(brand::connectors::USER_AGENT)
             .timeout(TIMEOUT)
             .build()
             .map_err(|error| ActionError::permanent(error.to_string()))?;
-        Ok(ReqwestHttp { client })
+        Ok(ReqwestHttp { client, ranges })
     }
 
     fn method(method: Method) -> reqwest::Method {
@@ -280,8 +285,7 @@ fn answered(method: &str, address: &platform::address::Address, status: u16, dur
 
 impl ReqwestHttp {
     async fn sent(&self, request: HttpRequest) -> Result<HttpResponse, ActionError> {
-        let ranges = platform::guard::ranges_of(brand::network::BLOCKED);
-        if reqwest::Url::parse(&request.url).is_ok_and(|url| platform::guard::literal_blocked(&url, &ranges)) {
+        if reqwest::Url::parse(&request.url).is_ok_and(|url| platform::guard::literal_blocked(&url, &self.ranges)) {
             return Err(ActionError::permanent("this server does not call that address"));
         }
         let mut builder = self.client.request(ReqwestHttp::method(request.method), &request.url);

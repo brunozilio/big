@@ -6,6 +6,7 @@ import { isoSeconds } from "./login.ts";
 
 export { signIn } from "./login.ts";
 export { sso } from "./sso.ts";
+export { secret, secretEnvironment } from "./secret.ts";
 
 const PAGES = 20;
 

@@ -1,5 +1,6 @@
 mod bridge;
 mod host;
+mod secrets;
 mod sessions;
 mod sign_in;
 mod socket;
@@ -16,6 +17,7 @@ pub use bridge::{Answers, Script};
 use bridge::{WRAPPER, invoke, wrapper};
 pub use host::Local;
 use host::{Kept, Online};
+use secrets::ScriptedSecrets;
 use sessions::McpSessions;
 pub use sign_in::ScriptedSignIn;
 use sign_in::{SIGN_IN, redirect};
@@ -25,7 +27,7 @@ use crate::descriptor::{ActionSpec, AlternateAuth, AuthSpec, Presentation, Provi
 use crate::error::ActionError;
 use crate::http::Http;
 use crate::oauth::{DeviceApp, Loopback, Stepped};
-use crate::provider::{AccountOption, Credentials, EventBatch, EventSource, ExternalEvent, Provider};
+use crate::provider::{AccountOption, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SecretSource};
 
 pub const FOLDER: &str = "connectors/";
 pub const ENTRY: &str = "index.ts";
@@ -69,6 +71,7 @@ pub struct ScriptedProvider {
     chooses: Vec<String>,
     requires: domain::data_policy::Requires,
     events: Option<ScriptedEvents>,
+    secrets: Option<ScriptedSecrets>,
     answers: Arc<dyn Answers>,
     sessions: Arc<McpSessions>,
     shown: Mutex<Vec<(String, Language, Value)>>,
@@ -180,6 +183,8 @@ impl ScriptedProvider {
             answers: Arc::clone(&answers),
             sessions: Arc::clone(&sessions),
         });
+        let secrets = (script.kind(secrets::READ) == "function")
+            .then(|| ScriptedSecrets { script: script.clone(), sessions: Arc::clone(&sessions) });
         Ok(ScriptedProvider {
             key,
             script,
@@ -187,6 +192,7 @@ impl ScriptedProvider {
             chooses: declared.chooses,
             requires: declared.requires,
             events,
+            secrets,
             answers,
             sessions,
             shown: Mutex::default(),
@@ -259,8 +265,9 @@ pub fn discover() -> Vec<Arc<dyn Provider>> {
     let entries = entries();
     let root = content::folder();
     let configuration = Configuration::read();
-    let loaded =
-        platform::parallel::ordered(&entries, |entry| ScriptedProvider::load_with(root.as_deref(), entry, &configuration));
+    let loaded = platform::parallel::ordered(&entries, |entry| {
+        ScriptedProvider::load_with(root.as_deref(), entry, &configuration)
+    });
     let mut found: Vec<Arc<dyn Provider>> = Vec::new();
     for (entry, loaded) in entries.iter().zip(loaded) {
         match loaded {
@@ -297,6 +304,10 @@ impl Provider for ScriptedProvider {
 
     fn events(&self) -> Option<&dyn EventSource> {
         self.events.as_ref().map(|events| events as &dyn EventSource)
+    }
+
+    fn secrets(&self) -> Option<&dyn SecretSource> {
+        self.secrets.as_ref().map(|secrets| secrets as &dyn SecretSource)
     }
 
     fn presentation(&self, language: Language) -> Presentation {
@@ -340,7 +351,9 @@ impl Provider for ScriptedProvider {
             return domain::redact::Rules::default();
         }
         domain::redact::Rules::read(&declared)
-            .inspect_err(|error| tracing::warn!(connector = self.key, %error, "the connector's secret patterns do not read"))
+            .inspect_err(
+                |error| tracing::warn!(connector = self.key, %error, "the connector's secret patterns do not read"),
+            )
             .unwrap_or_default()
     }
 }
