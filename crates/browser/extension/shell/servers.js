@@ -1,5 +1,5 @@
 import { ask } from "./ask.js";
-import { homes, identity, rememberServer } from "./link.js";
+import { homes, identity, rememberServer } from "./identity.js";
 import { pageOf, trust } from "./relay.js";
 
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
@@ -41,13 +41,14 @@ export async function connectServer(message, sender) {
   if (!claimed.token) return { ok: false, reason: "claim-failed" };
   await trust(origin);
   await rememberServer(base, claimed.token);
+  chrome.runtime.sendMessage({ type: "servers-changed" }).catch(() => {});
   return { ok: true };
 }
 
 export async function reloadFor(_message, sender) {
   const page = pageOf(sender);
   const origin = page && parsed(page)?.origin;
-  if (!origin || !homes().includes(origin)) return { ok: false, reason: "unknown-page" };
+  if (!origin || !(await homes()).includes(origin)) return { ok: false, reason: "unknown-page" };
   setTimeout(() => chrome.runtime.reload(), 200);
   return { ok: true };
 }

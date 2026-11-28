@@ -1,4 +1,5 @@
-import { send } from "./cdp.js";
+import { AGENT } from "./agent.js";
+import { attach, onEvent, send } from "./cdp.js";
 import { clip, refuse } from "./results.js";
 
 const RESTRICTED = /^(chrome|chrome-extension|edge|about|devtools|view-source|chrome-search):/i;
@@ -12,25 +13,42 @@ function restricted(tab) {
   }
 }
 
+const worlds = new Map();
+
+onEvent((tabId, method, params) => {
+  if (method === "Runtime.executionContextsCleared") worlds.delete(tabId);
+  if (method === "Runtime.executionContextDestroyed" && worlds.get(tabId) === params.executionContextId) worlds.delete(tabId);
+});
+
+async function world(tabId) {
+  if (worlds.has(tabId)) return worlds.get(tabId);
+  const { frameTree } = await send(tabId, "Page.getFrameTree");
+  const made = await send(tabId, "Page.createIsolatedWorld", { frameId: frameTree.frame.id, worldName: "agent", grantUniveralAccess: true });
+  worlds.set(tabId, made.executionContextId);
+  return made.executionContextId;
+}
+
+async function evaluated(tabId, expression) {
+  for (let tries = 0; ; tries += 1) {
+    const contextId = await world(tabId);
+    try {
+      return await send(tabId, "Runtime.evaluate", { expression, contextId, returnByValue: true, awaitPromise: true });
+    } catch (error) {
+      worlds.delete(tabId);
+      if (tries > 0) throw error;
+    }
+  }
+}
+
 export async function inPage(tab, name, args = []) {
   restricted(tab);
-  try {
-    await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ["page/agent.js"] });
-    const [frame] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: (fn, params) => globalThis.__browserAgent.call(fn, params),
-      args: [name, args],
-    });
-    const answer = frame?.result;
-    if (answer && answer.error) refuse(answer.error);
-    return answer?.value;
-  } catch (error) {
-    const message = String(error?.message || error);
-    if (message.includes("Cannot access") || message.includes("cannot be scripted")) {
-      refuse(`Tab ${tab.id} cannot be read or scripted (${message}). Navigate it to a regular web page first.`);
-    }
-    throw error;
-  }
+  await attach(tab.id);
+  const expression = `${AGENT}\n;globalThis.__browserAgent.call(${JSON.stringify(name)}, ${JSON.stringify(args)})`;
+  const answer = await evaluated(tab.id, expression);
+  if (answer?.exceptionDetails) refuse(`The page script failed: ${answer.exceptionDetails.exception?.description || answer.exceptionDetails.text}`);
+  const found = answer?.result?.value;
+  if (found && found.error) refuse(found.error);
+  return found?.value;
 }
 
 export async function readPage(tab, input) {

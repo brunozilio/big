@@ -1,27 +1,18 @@
 use std::path::{Path, PathBuf};
 
-const FILES: [(&str, &str); 25] = [
+const FILES: [(&str, &str); 16] = [
     ("manifest.json", include_str!("../extension/manifest.json")),
     ("config.js", include_str!("../extension/config.js")),
-    ("bg/main.js", include_str!("../extension/bg/main.js")),
-    ("bg/link.js", include_str!("../extension/bg/link.js")),
-    ("bg/tabs.js", include_str!("../extension/bg/tabs.js")),
-    ("bg/cdp.js", include_str!("../extension/bg/cdp.js")),
-    ("bg/computer.js", include_str!("../extension/bg/computer.js")),
-    ("bg/keys.js", include_str!("../extension/bg/keys.js")),
-    ("bg/page.js", include_str!("../extension/bg/page.js")),
-    ("bg/results.js", include_str!("../extension/bg/results.js")),
-    ("bg/logs.js", include_str!("../extension/bg/logs.js")),
-    ("bg/capture.js", include_str!("../extension/bg/capture.js")),
-    ("bg/intercept.js", include_str!("../extension/bg/intercept.js")),
-    ("bg/frame.js", include_str!("../extension/bg/frame.js")),
-    ("bg/frames.js", include_str!("../extension/bg/frames.js")),
-    ("bg/sites.js", include_str!("../extension/bg/sites.js")),
-    ("bg/ask.js", include_str!("../extension/bg/ask.js")),
-    ("bg/shortcuts.js", include_str!("../extension/bg/shortcuts.js")),
-    ("bg/relay.js", include_str!("../extension/bg/relay.js")),
-    ("bg/servers.js", include_str!("../extension/bg/servers.js")),
-    ("page/agent.js", include_str!("../extension/page/agent.js")),
+    ("shell/worker.js", include_str!("../extension/shell/worker.js")),
+    ("shell/bridge.js", include_str!("../extension/shell/bridge.js")),
+    ("shell/identity.js", include_str!("../extension/shell/identity.js")),
+    ("shell/ask.js", include_str!("../extension/shell/ask.js")),
+    ("shell/relay.js", include_str!("../extension/shell/relay.js")),
+    ("shell/servers.js", include_str!("../extension/shell/servers.js")),
+    ("shell/offscreen.html", include_str!("../extension/shell/offscreen.html")),
+    ("shell/offscreen.js", include_str!("../extension/shell/offscreen.js")),
+    ("shell/sandbox.html", include_str!("../extension/shell/sandbox.html")),
+    ("shell/sandbox.js", include_str!("../extension/shell/sandbox.js")),
     ("page/relay.js", include_str!("../extension/page/relay.js")),
     ("ui/ask.html", include_str!("../extension/ui/ask.html")),
     ("ui/ask.js", include_str!("../extension/ui/ask.js")),
@@ -29,7 +20,29 @@ const FILES: [(&str, &str); 25] = [
 ];
 
 const ICON: &str = "icon.png";
-const GONE: [&str; 2] = ["ui/popup.html", "ui/popup.js"];
+const GONE: [&str; 21] = [
+    "bg/main.js",
+    "bg/link.js",
+    "bg/tabs.js",
+    "bg/cdp.js",
+    "bg/computer.js",
+    "bg/keys.js",
+    "bg/page.js",
+    "bg/results.js",
+    "bg/logs.js",
+    "bg/capture.js",
+    "bg/intercept.js",
+    "bg/frame.js",
+    "bg/frames.js",
+    "bg/sites.js",
+    "bg/ask.js",
+    "bg/shortcuts.js",
+    "bg/relay.js",
+    "bg/servers.js",
+    "page/agent.js",
+    "ui/popup.html",
+    "ui/popup.js",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Installed {
@@ -107,7 +120,7 @@ fn rendered(port: u16, iconless: bool) -> Vec<(&'static str, String)> {
         .collect()
 }
 
-fn fingerprint(files: &[(&str, String)], icon: Option<&[u8]>) -> String {
+pub(crate) fn fingerprint(files: &[(&str, String)], icon: Option<&[u8]>) -> String {
     let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
     let mut feed = |bytes: &[u8]| {
         for byte in bytes {
@@ -224,7 +237,7 @@ mod tests {
     fn the_sign_in_relay_is_packaged_and_declared() {
         let packaged: Vec<&str> = FILES.iter().map(|(path, _)| *path).collect();
         assert!(packaged.contains(&"page/relay.js"));
-        assert!(packaged.contains(&"bg/relay.js"));
+        assert!(packaged.contains(&"shell/relay.js"));
         let manifest: serde_json::Value = serde_json::from_str(&render(FILES[0].1, 4321)).unwrap_or_default();
         let permissions = manifest["permissions"].as_array().cloned().unwrap_or_default();
         assert!(permissions.iter().any(|permission| permission == "declarativeNetRequest"));
@@ -243,8 +256,8 @@ mod tests {
             .map(|(_, source)| render(source, 4321))
             .unwrap_or_default();
         assert!(script.contains(&format!("\"{marker}\"")));
-        let main = FILES.iter().find(|(path, _)| *path == "bg/main.js").map(|(_, source)| *source).unwrap_or_default();
-        assert!(main.contains("from \"./relay.js\""));
+        let worker = FILES.iter().find(|(path, _)| *path == "shell/worker.js").map(|(_, source)| *source).unwrap_or_default();
+        assert!(worker.contains("from \"./relay.js\""));
     }
 
     #[test]

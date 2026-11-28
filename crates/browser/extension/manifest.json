@@ -4,10 +4,11 @@
   "description": "Lets {{NAME}} agents use this Chrome, in their own tab group, with your sign-ins.",
   "version": "{{VERSION}}",
   "minimum_chrome_version": "116",
-  "permissions": ["debugger", "tabs", "tabGroups", "scripting", "storage", "downloads", "alarms", "declarativeNetRequest"],
+  "permissions": ["debugger", "tabs", "tabGroups", "scripting", "storage", "downloads", "alarms", "declarativeNetRequest", "offscreen"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [{ "matches": ["<all_urls>"], "js": ["page/relay.js"], "run_at": "document_start", "all_frames": false }],
-  "background": { "service_worker": "bg/main.js", "type": "module" },
+  "background": { "service_worker": "shell/worker.js", "type": "module" },
+  "sandbox": { "pages": ["shell/sandbox.html"] },
   "icons": { "16": "icon.png", "32": "icon.png", "48": "icon.png", "128": "icon.png" },
   "action": { "default_title": "{{NAME}}", "default_icon": { "16": "icon.png", "32": "icon.png" } }
 }

@@ -4,14 +4,10 @@ import { computer, shot, viewport } from "./computer.js";
 import { captureFrame, gif } from "./frames.js";
 import { contextOf, frameMatch, frameOf } from "./frame.js";
 import { intercept } from "./intercept.js";
-import { connect, handle, identity } from "./link.js";
-import { connectServer, reloadFor } from "./servers.js";
 import { readConsole, readNetwork } from "./logs.js";
 import { candidates, formInput, javascript, pageText, putFiles, readPage } from "./page.js";
 import { ToolError, blobToBase64, clip, fail, fromBase64, ok, refuse, sleep } from "./results.js";
 import { ensure } from "./sites.js";
-import { answered, ask, cancel } from "./ask.js";
-import { relay, watchRelays } from "./relay.js";
 import * as shortcuts from "./shortcuts.js";
 import { context, create, groupOf, listing, loaded, newTab, owned, tabsOf } from "./tabs.js";
 
@@ -313,44 +309,28 @@ async function call(message) {
   return result;
 }
 
-async function pair(id, link) {
+async function pair(id) {
   const askId = crypto.randomUUID();
   pairings.set(id, askId);
-  const me = await identity();
-  const answer = await ask({ kind: "pair", name: me.name }, askId);
+  const me = await host.identity();
+  const answer = await host.ask({ kind: "pair", name: me.name }, askId);
   pairings.delete(id);
   if (answer.choice !== "connect") return;
   const name = String(answer.name || "").trim();
   if (name) await chrome.storage.local.set({ deviceName: name });
-  link.send({ type: "paired", id, name });
+  host.send({ type: "paired", id, name });
 }
 
 function pairEnded(id) {
   const askId = pairings.get(id);
-  if (askId) cancel(askId);
+  if (askId) host.cancel(askId).catch(() => {});
 }
 
-handle({ call, pair, pairEnded, watch: (message, link) => watch(message, link).catch(() => {}) });
 listen();
 
-function fromExtensionPage(sender) {
-  return sender?.id === chrome.runtime.id && String(sender.url || "").startsWith(chrome.runtime.getURL(""));
-}
-
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (message?.type === "ask-answer" && fromExtensionPage(sender)) answered(message.id, message);
-  const work = { "relay-sign-in": relay, "browser-connect": connectServer, "browser-reload": reloadFor }[message?.type];
-  if (!work) return false;
-  work(message, sender).then(sendResponse, () => sendResponse({ ok: false, reason: "failed" }));
-  return true;
-});
-
-watchRelays();
-
-chrome.alarms.create("link", { periodInMinutes: 0.5 });
-chrome.alarms.onAlarm.addListener((alarm) => {
-  if (alarm.name === "link") connect();
-});
-chrome.runtime.onStartup.addListener(connect);
-chrome.runtime.onInstalled.addListener(connect);
-connect();
+export const handlers = {
+  call,
+  pair,
+  pairEnded,
+  watch: (message) => watch(message, { send: host.send, homes: host.homes(), ask: host.loopback }).catch(() => {}),
+};

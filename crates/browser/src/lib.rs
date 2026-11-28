@@ -4,6 +4,7 @@ mod extension;
 mod files;
 mod find;
 mod hub;
+mod logic;
 mod recording;
 mod session;
 mod socket;
@@ -12,6 +13,7 @@ mod stream;
 
 pub use eval::{Eval, run as evaluate};
 pub use extension::{Installed, Packaged, install, packaged};
+pub use logic::{Logic, ROUTE as LOGIC_ROUTE, logic};
 pub use hub::{BrowserInfo, Hub, OwnerOf, Resolved, no_browser};
 pub use session::{Ask, Session};
 pub use socket::{ROUTE, connect};

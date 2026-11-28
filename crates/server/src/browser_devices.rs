@@ -52,7 +52,19 @@ pub fn of_owner(owner: &str) -> String {
 }
 
 pub fn open_path(path: &str) -> bool {
-    path == CLAIM || path == STREAM || path == REPLY || path == LOOPBACK
+    path == CLAIM || path == STREAM || path == REPLY || path == LOOPBACK || path == browser::LOGIC_ROUTE
+}
+
+pub async fn logic() -> Response {
+    let served = browser::logic();
+    (
+        [
+            (CONTENT_TYPE, "text/javascript; charset=utf-8".to_owned()),
+            (axum::http::header::CACHE_CONTROL, "no-store".to_owned()),
+        ],
+        served.code.clone(),
+    )
+        .into_response()
 }
 
 fn issue(owner: &str) -> ApiResult<String> {
@@ -242,7 +254,7 @@ mod tests {
 
     #[test]
     fn only_the_browser_routes_that_carry_their_own_proof_are_open() {
-        assert!(open_path(CLAIM) && open_path(STREAM) && open_path(REPLY) && open_path(LOOPBACK));
+        assert!(open_path(CLAIM) && open_path(STREAM) && open_path(REPLY) && open_path(LOOPBACK) && open_path(browser::LOGIC_ROUTE));
         assert!(!open_path(PAIRING) && !open_path(DEVICES) && !open_path(PACKAGE));
     }
 }

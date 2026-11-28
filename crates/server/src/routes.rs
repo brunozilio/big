@@ -80,6 +80,7 @@ fn api() -> Router<Ctx> {
         .route("/api/browser", get(crate::browsers::status).put(crate::browsers::set))
         .route(browser::ROUTE, get(crate::browsers::connect))
         .route(crate::browser_devices::PAIRING, post(crate::browser_devices::pairing))
+        .route(browser::LOGIC_ROUTE, get(crate::browser_devices::logic))
         .route(crate::browser_devices::CLAIM, post(crate::browser_devices::claim))
         .route(crate::browser_devices::STREAM, get(crate::browser_devices::stream))
         .route(crate::browser_devices::REPLY, post(crate::browser_devices::answer))
