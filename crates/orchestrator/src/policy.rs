@@ -6,7 +6,7 @@ use agent_engine::policy_gate::{self, Asked};
 use connectors::{ActionSpec, Labelled};
 use domain::audit::{AuthorizedBy, OperationTag, code};
 use domain::effect::{Call, IdempotencyKey};
-use domain::label::{self, Levels, Mark, Sink};
+use domain::label::{self, Held, Levels, Mark, Sink};
 use domain::permission::{AskOutcome, Call as Judged, Effect, Layer, Reason, Surface, Verdict};
 use domain::workflow::{WorkItem, WorkflowEvent};
 use domain::{AskId, AskKind, Decision};
@@ -102,10 +102,13 @@ impl Gated<'_> {
             Verdict::Ask { reason: reason @ Reason::Flow(_), .. } if asked.surface == Surface::Routine => {
                 Err(Failure::permanent(policy_gate::unattended(asked, tool, &reason, code::FLOW_UNATTENDED)))
             }
+            Verdict::Ask { reason: reason @ Reason::Two(_), .. } if asked.surface == Surface::Routine => {
+                Err(Failure::permanent(policy_gate::unattended(asked, tool, &reason, code::TWO_UNATTENDED)))
+            }
             Verdict::Ask { .. } if asked.surface == Surface::Routine => {
                 Err(Failure::permanent(policy_gate::unasked(asked, tool)))
             }
-            Verdict::Ask { reason: Reason::Flow(why), .. } => {
+            Verdict::Ask { reason: Reason::Flow(why) | Reason::Two(why), .. } => {
                 self.approved(asked, named, &format!("{} {why}", call.action)).await
             }
             Verdict::Ask { .. } => self.approved(asked, named, &call.action).await,
@@ -117,7 +120,13 @@ impl Gated<'_> {
         let levels = self.levels();
         let mark = Mark::of(&levels, &label::reads(self.item));
         let sink = Sink { ceiling: spec.max_input_level.as_deref(), risky: spec.risky() };
-        labels::flow(asked, tool, &levels, &mark, &sink)
+        match labels::flow(asked, tool, &levels, &mark, &sink) {
+            Verdict::Allow => {
+                let held = Held::of(&levels, &label::reads(self.item));
+                labels::paired(asked, &levels, &held, &spec.next(tool))
+            }
+            crossed => crossed,
+        }
     }
 
     fn levels(&self) -> Levels {

@@ -1,8 +1,9 @@
 use app::labels;
 use app::policy_gate::{self, Asked};
 use connectors::{ActionError, ActionSpec, Labelled};
-use domain::label::{Levels, Mark, Read, Sink, Trust, envelope};
-use domain::permission::{Layer, Verdict};
+use domain::audit::code;
+use domain::label::{Held, Levels, Mark, Read, Sink, Trust, envelope};
+use domain::permission::{Layer, Reason, Verdict};
 
 use super::session_reads::{self, Session, held};
 
@@ -19,10 +20,15 @@ fn sessionless(asked: Asked<'_>, tool: &str) -> String {
 fn refused(asked: Asked<'_>, tool: &str, spec: &ActionSpec, levels: &Levels, reads: &[Read]) -> Option<String> {
     let mark = Mark::of(levels, reads);
     let sink = Sink { ceiling: spec.max_input_level.as_deref(), risky: spec.risky() };
-    match labels::flow(asked, tool, levels, &mark, &sink) {
-        Verdict::Ask { reason, .. } => {
-            Some(policy_gate::unattended(asked, tool, &reason, domain::audit::code::FLOW_UNATTENDED))
+    let verdict = match labels::flow(asked, tool, levels, &mark, &sink) {
+        Verdict::Allow => labels::paired(asked, levels, &Held::of(levels, reads), &spec.next(tool)),
+        crossed => crossed,
+    };
+    match verdict {
+        Verdict::Ask { reason: reason @ Reason::Two(_), .. } => {
+            Some(policy_gate::unattended(asked, tool, &reason, code::TWO_UNATTENDED))
         }
+        Verdict::Ask { reason, .. } => Some(policy_gate::unattended(asked, tool, &reason, code::FLOW_UNATTENDED)),
         Verdict::Deny(reason) => Some(policy_gate::refusal(&reason)),
         Verdict::Allow => None,
     }
@@ -49,7 +55,7 @@ pub struct Guarded<'a> {
 impl Guarded<'_> {
     pub fn run(&self, call: impl FnOnce() -> Result<Labelled, ActionError>) -> Result<String, String> {
         let found = session_reads::find(self.session);
-        let enforced = self.levels.enforced();
+        let enforced = self.levels.enforced() || self.levels.pairing_enforced();
         let reads = match &found {
             Session::Sessionless if enforced => return Err(sessionless(self.asked, self.tool)),
             Session::Open(reads) => Some(reads),

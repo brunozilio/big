@@ -35,8 +35,11 @@ mod tests {
 
     #[test]
     fn the_band_shows_the_highest_label_where_it_came_from_and_the_external_sources() {
-        let levels =
-            Levels { mode: Mode::Shadow, levels: vec!["public".into(), "internal".into(), "confidential".into()] };
+        let levels = Levels {
+            mode: Mode::Shadow,
+            levels: vec!["public".into(), "internal".into(), "confidential".into()],
+            ..Levels::default()
+        };
         let reads = [
             Read::new("Vault record", Trust::System, Some("confidential".into())),
             Read::new("Mail message", Trust::External, Some("internal".into())),

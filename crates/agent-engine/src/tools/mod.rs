@@ -146,6 +146,10 @@ pub trait Tool: Send + Sync {
         None
     }
 
+    fn profile(&self) -> Option<domain::operation::Profile> {
+        None
+    }
+
     fn skills(&self) -> &[skill::FoundSkill] {
         &[]
     }

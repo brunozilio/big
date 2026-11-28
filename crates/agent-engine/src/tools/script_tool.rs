@@ -467,6 +467,10 @@ impl Tool for ScriptTool {
         self.spec.clone()
     }
 
+    fn profile(&self) -> Option<Profile> {
+        self.profile.clone()
+    }
+
     fn effects(&self, input: &Value, workspace: &Workspace) -> Vec<Effect> {
         if !self.trusted || !self.exports.effects {
             let mut declared: Vec<Effect> = self.declared.map(Effect::Declared).into_iter().collect();

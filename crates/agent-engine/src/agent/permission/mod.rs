@@ -2,6 +2,7 @@ mod ask;
 pub(in crate::agent) mod plan_mode;
 mod policy;
 mod review;
+mod two;
 
 use domain::EngineEvent;
 use domain::permission::{AskOutcome, Effect, Judgement, Reason, RuleKind, Surface, Verdict};
@@ -113,6 +114,7 @@ impl Agent<'_> {
         let Asking { id, tool, called, .. } = *asking;
         let Called { name, input, .. } = *called;
         let verdict = self.screened(asking, verdict);
+        let verdict = self.paired(tool, name, verdict);
         let verdict = self.workspace.bounds().hard.tightened(&called.call(), verdict);
         let verdict = if self.control.no_prompts() {
             verdict.without_the_user(|reason| unavailable(name, reason))
@@ -133,14 +135,17 @@ impl Agent<'_> {
     pub(in crate::agent) fn went_ahead(&self, id: &str, tool: &dyn Tool, input: &Value) -> Outcome {
         self.workspace.tracking.count_refusal(false);
         let run = || crate::tools::calling::within(id, || tool.run(input, self.workspace));
-        if !tool.effects(input, self.workspace).iter().any(Effect::acts) {
-            return run();
-        }
-        let show = |line: String| {
-            let line = self.workspace.policy.redacted(&line);
-            (self.emit)(EngineEvent::ToolProgress { id: id.to_owned(), line });
+        let outcome = if tool.effects(input, self.workspace).iter().any(Effect::acts) {
+            let show = |line: String| {
+                let line = self.workspace.policy.redacted(&line);
+                (self.emit)(EngineEvent::ToolProgress { id: id.to_owned(), line });
+            };
+            crate::tools::progress::watched(&show, run)
+        } else {
+            run()
         };
-        crate::tools::progress::watched(&show, run)
+        self.noted(tool, &outcome);
+        outcome
     }
 
     pub(in crate::agent) fn refused(&self, tool: &str, reason: impl Into<String>) -> Outcome {

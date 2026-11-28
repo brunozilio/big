@@ -4,6 +4,8 @@ const unattended = {
     `${ctx.name} was blocked because ${ctx.reason.why}. The safety floor has a person approve that every time, and this run has no one to ask, so it was refused. Find a safer way to do this or ask the user.`,
   declared: (ctx) => `${ctx.name} ${ctx.reason.why}, so a person approves it every time; it does not run unattended.`,
   flow: (ctx) => `${ctx.name} ${ctx.reason.why}, so a person approves it first, and this run has no one to ask.`,
+  two: (ctx) =>
+    `${ctx.name} ${ctx.reason.why}, so a person approves it first, and this run has no one to ask. Leave out the untrusted content or the sensitive data, or ask the user.`,
 };
 
 const inChat = (ctx) => ctx.surface === "chat";

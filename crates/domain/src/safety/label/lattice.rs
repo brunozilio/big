@@ -23,6 +23,14 @@ impl Mode {
 pub struct Levels {
     pub mode: Mode,
     pub levels: Vec<String>,
+    pub two: Pairing,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+pub struct Pairing {
+    pub mode: Option<Mode>,
+    pub sensitive_from: Option<String>,
 }
 
 impl Levels {
@@ -47,6 +55,19 @@ impl Levels {
 
     pub fn enforced(&self) -> bool {
         self.mode == Mode::Enforce && !self.levels.is_empty()
+    }
+
+    pub fn paired(&self) -> Mode {
+        self.two.mode.unwrap_or(self.mode)
+    }
+
+    pub fn pairing_enforced(&self) -> bool {
+        self.paired() == Mode::Enforce
+    }
+
+    pub fn sensitive(&self, label: Option<&str>) -> bool {
+        let Some(from) = self.two.sensitive_from.as_deref().and_then(|from| self.rank(from)) else { return false };
+        self.ranked(label).is_some_and(|rank| rank >= from)
     }
 
     pub fn rank(&self, label: &str) -> Option<usize> {

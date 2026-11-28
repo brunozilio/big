@@ -36,6 +36,7 @@ pub enum Reason {
     Guarded { path: PathBuf, guard: Guard },
     Hard(super::hard::Category),
     Flow(String),
+    Two(String),
 }
 
 impl Reason {
@@ -46,13 +47,19 @@ impl Reason {
     pub fn reviewable(&self) -> bool {
         !matches!(
             self,
-            Self::Hook | Self::Listed | Self::Flagged(_) | Self::Hard(_) | Self::Declared { .. } | Self::Flow(_)
+            Self::Hook
+                | Self::Listed
+                | Self::Flagged(_)
+                | Self::Hard(_)
+                | Self::Declared { .. }
+                | Self::Flow(_)
+                | Self::Two(_)
         )
     }
 
     pub fn shown(&self) -> Option<String> {
         match self {
-            Self::Flagged(why) | Self::Flow(why) => Some(why.clone()),
+            Self::Flagged(why) | Self::Flow(why) | Self::Two(why) => Some(why.clone()),
             _ => None,
         }
     }

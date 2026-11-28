@@ -16,6 +16,9 @@ pub mod code {
     pub const REFUSED: &str = "approval.refused";
     pub const ABANDONED: &str = "approval.abandoned";
     pub const STANDING: &str = "standing.allowed";
+    pub const TWO_ASKED: &str = "two.asked";
+    pub const TWO_SHADOW: &str = "two.shadow";
+    pub const TWO_UNATTENDED: &str = "two.unattended";
 
     pub fn denied(layer: &str) -> String {
         format!("{layer}.denied")

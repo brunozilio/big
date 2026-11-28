@@ -55,12 +55,13 @@ impl Reason {
             Self::Guarded { .. } => "guarded",
             Self::Hard(_) => "hard",
             Self::Flow(_) => "flow",
+            Self::Two(_) => "two",
         }
     }
 
     pub fn why(&self) -> Option<String> {
         match self {
-            Self::Flagged(why) | Self::Flow(why) | Self::Declared { why, .. } => Some(why.clone()),
+            Self::Flagged(why) | Self::Flow(why) | Self::Two(why) | Self::Declared { why, .. } => Some(why.clone()),
             Self::Hard(category) => Some(category.why().to_owned()),
             Self::Guarded { guard, .. } => Some(guard.why().to_owned()),
             Self::Outside(path) => Some(path.display().to_string()),

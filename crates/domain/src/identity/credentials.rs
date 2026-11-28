@@ -8,6 +8,8 @@ pub struct RunCredentials {
     pub remote_mcp: Vec<crate::mcp::RemoteMcp>,
     pub client: u64,
     pub mcp_tokens: Option<McpSignIns>,
+    pub reads: Option<crate::label::SessionReads>,
+    pub exposed: Option<crate::label::SessionReads>,
 }
 
 pub trait McpTokenSource: Send + Sync {

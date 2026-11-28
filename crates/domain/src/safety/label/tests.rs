@@ -136,3 +136,37 @@ fn an_item_reads_what_its_effects_recorded() {
     let item = crate::workflow::reduce(item, &WorkflowEvent::EffectProgress { key, data: unlabelled.progress() });
     assert_eq!(reads(&item), [unlabelled], "a later read without a label does not keep the old one");
 }
+
+#[test]
+fn the_third_property_is_the_one_that_joins_the_rule_of_two() {
+    let lattice =
+        Levels::of(&json!({ "levels": ["public", "confidential"], "two": { "sensitiveFrom": "confidential" } }))
+            .expect("levels");
+    let reads =
+        [read("Tracker issue", Trust::External, None), read("Vault record", Trust::System, Some("confidential"))];
+    let held = Held::of(&lattice, &reads);
+    assert_eq!(held.untrusted.as_deref(), Some("Tracker issue"));
+    assert_eq!(held.sensitive.as_deref(), Some("Vault record"));
+    let comment = Next { tool: "code_comment", acts: true, ..Next::default() };
+    let why = held.joined(&comment).expect("all three");
+    assert!(why.contains("from Tracker issue") && why.contains("from Vault record") && why.contains("by code_comment"));
+    let look = Next { tool: "tracker_issue", ..Next::default() };
+    assert_eq!(held.joined(&look), None, "a call that adds nothing joins nothing");
+    let only_external = Held::of(&lattice, &reads[..1]);
+    assert_eq!(only_external.joined(&comment), None, "two of three is allowed");
+    let declared = read("Notes", Trust::System, None).exposed(true, false);
+    assert!(Held::of(&lattice, [&reads[0], &declared]).joined(&comment).is_some(), "a declared sensitive read counts");
+}
+
+#[test]
+fn the_rule_of_two_follows_the_labels_mode_unless_it_has_its_own() {
+    let follows = Levels::of(&json!({ "mode": "enforce", "levels": ["public"] })).expect("levels");
+    assert!(follows.pairing_enforced());
+    let own = Levels::of(&json!({ "mode": "enforce", "two": { "mode": "shadow" } })).expect("levels");
+    assert!(!own.pairing_enforced());
+    assert!(!Levels::default().pairing_enforced());
+    let unlabelled = Levels::of(&json!({ "levels": ["public"] })).expect("levels");
+    assert!(!unlabelled.sensitive(Some("public")), "no sensitiveFrom, no label is sensitive");
+    let old: Read = serde_json::from_value(json!({ "source": "s", "trust": "external" })).expect("an old read");
+    assert!(!old.sensitive && !old.acted);
+}

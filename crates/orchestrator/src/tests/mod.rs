@@ -19,6 +19,7 @@ mod trail;
 pub(crate) mod retired;
 mod space;
 mod triggers;
+mod two;
 mod unbound;
 mod versions;
 
@@ -62,7 +63,7 @@ pub struct FakeProvider {
     pub calls: Mutex<Vec<(String, Value, String)>>,
 }
 
-const ACTIONS: [&str; 18] = [
+const ACTIONS: [&str; 19] = [
     "tracker.issue",
     "tracker.schema",
     "tracker.projects",
@@ -81,6 +82,7 @@ const ACTIONS: [&str; 18] = [
     "code.merge",
     "cloud.identity",
     "design.frame",
+    "code.comment",
 ];
 
 impl FakeProvider {

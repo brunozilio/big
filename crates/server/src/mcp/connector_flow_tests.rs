@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use connectors::descriptor::object;
 use connectors::{ActionError, ActionSpec, Idempotency, Labelled};
-use domain::label::{Levels, Mode, Read, Trust};
+use domain::label::{Levels, Mode, Pairing, Read, Trust};
 use domain::operation::{Kind, Profile, Reversible, Risk};
 use domain::permission::Surface;
 use serde_json::json;
@@ -16,7 +16,7 @@ use app::policy_gate::Asked;
 const ASKED: Asked<'static> = Asked { surface: Surface::Mcp, stage: "tools/call", owner: "local", operation: None };
 
 fn levels(mode: Mode) -> Levels {
-    Levels { mode, levels: vec!["public".into(), "internal".into(), "confidential".into()] }
+    Levels { mode, levels: vec!["public".into(), "internal".into(), "confidential".into()], ..Levels::default() }
 }
 
 fn reading() -> ActionSpec {
@@ -110,4 +110,27 @@ fn two_calls_in_one_enforced_session_see_each_other() {
     });
     assert!(!sent_anyway.load(Ordering::SeqCst), "the send waited for the read and never ran");
     close("s-together");
+}
+
+#[test]
+fn a_send_after_an_external_and_sensitive_read_is_refused_only_when_the_rule_of_two_is_enforced() {
+    let secret = || {
+        let read = Read::new("Notes notes.get", Trust::External, None).exposed(true, false);
+        Ok(Labelled { value: json!({ "body": "the deploy key" }), read })
+    };
+    for (mode, session) in [(Mode::Shadow, "s-two-shadow"), (Mode::Enforce, "s-two-enforce")] {
+        let lattice = Levels { two: Pairing { mode: Some(mode), sensitive_from: None }, ..levels(Mode::Shadow) };
+        open(session);
+        assert!(guarded(Some(session), &reading(), &lattice).run(secret).is_ok());
+        let send = guarded(Some(session), &sending(), &lattice).run(sent);
+        match mode {
+            Mode::Shadow => assert_eq!(send.as_deref(), Ok("sent")),
+            Mode::Enforce => {
+                let refused = send.expect_err("the third property");
+                assert!(refused.starts_with("blocked_by_policy: notes_send would join"), "{refused}");
+                assert!(refused.contains("untrusted content (from Notes notes.get)"), "{refused}");
+            }
+        }
+        close(session);
+    }
 }

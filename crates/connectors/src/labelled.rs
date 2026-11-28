@@ -26,7 +26,14 @@ impl Connectors {
         let trust = spec.map_or(Trust::External, crate::ActionSpec::trusted);
         let declared = spec.and_then(|spec| spec.output_level.clone());
         let label = entry.provider.labelled(action, &value).or(declared);
-        Labelled { read: Read::new(source(connection, action), trust, label), value }
+        let sensitive = spec.is_some_and(|spec| spec.profile.sensitive) || self.holds_a_secret(&value);
+        let acted = spec.is_some_and(|spec| spec.profile.acts());
+        let read = Read::new(source(connection, action), trust, label).exposed(sensitive, acted);
+        Labelled { read, value }
+    }
+
+    pub fn holds_a_secret(&self, value: &Value) -> bool {
+        !self.redactor().redact_value(value, &domain::redact::Known::default()).1.is_empty()
     }
 
     pub async fn call_labelled(

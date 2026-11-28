@@ -107,6 +107,10 @@ impl Tool for McpTool {
         self.spec.clone()
     }
 
+    fn profile(&self) -> Option<domain::operation::Profile> {
+        self.declared.as_ref().map(|declared| declared.profile.clone())
+    }
+
     fn effects(&self, input: &Value, _workspace: &Workspace) -> Vec<Effect> {
         if self.server.name == domain::mcp::browser_server() {
             return domain::browser_sites::effects(&self.server.name, &self.name, input);

@@ -52,6 +52,13 @@ impl Policy {
         }
     }
 
+    pub fn holds_a_secret(&self, text: &str) -> bool {
+        match &self.redact {
+            Some(known) => self.redactor.redact(text, known).sensitive(),
+            None => self.redactor.redact(text, &Known::default()).sensitive(),
+        }
+    }
+
     pub fn redact_prompt(&self, messages: &mut [Message]) {
         let Some(known) = &self.redact else { return };
         for message in messages.iter_mut().filter(|message| message.role == Role::User) {

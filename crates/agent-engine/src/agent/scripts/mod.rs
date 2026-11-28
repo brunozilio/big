@@ -87,6 +87,10 @@ impl Tool for ScriptCall<'_, '_, '_> {
         self.tool.summary(input)
     }
 
+    fn profile(&self) -> Option<domain::operation::Profile> {
+        self.tool.profile.clone()
+    }
+
     fn run(&self, input: &Value, _workspace: &Workspace) -> Outcome {
         self.agent.run_script(self.within, self.tool, input)
     }

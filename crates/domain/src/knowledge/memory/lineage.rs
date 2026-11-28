@@ -105,7 +105,7 @@ mod tests {
     }
 
     fn levels(mode: Mode) -> Levels {
-        Levels { mode, levels: vec!["public".into(), "internal".into()] }
+        Levels { mode, levels: vec!["public".into(), "internal".into()], ..Levels::default() }
     }
 
     #[test]

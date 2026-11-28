@@ -140,6 +140,15 @@ impl ActionSpec {
         self.trust.unwrap_or(if self.profile.untrusted { Trust::External } else { Trust::System })
     }
 
+    pub fn next<'a>(&self, tool: &'a str) -> domain::label::Next<'a> {
+        domain::label::Next {
+            tool,
+            untrusted: self.trusted() == Trust::External,
+            sensitive: self.profile.sensitive,
+            acts: self.profile.acts(),
+        }
+    }
+
     pub fn risky(&self) -> bool {
         self.profile.acts() && (self.profile.strict() || self.permission.always_ask)
     }

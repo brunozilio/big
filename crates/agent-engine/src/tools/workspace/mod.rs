@@ -15,6 +15,8 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 
+use domain::label::SessionReads;
+
 pub use launcher::{Launch, Launcher, OnThisMachine};
 pub use models::Models;
 pub use policy::{Policy, env_secrets, personal, redactor};
@@ -95,7 +97,13 @@ impl Workspace {
 
     pub fn for_request(request: &domain::PromptRequest) -> Self {
         Self {
-            credentials: request.host.credentials.clone(),
+            credentials: domain::credentials::RunCredentials {
+                reads: Some(
+                    request.host.credentials.reads.clone().unwrap_or_else(|| SessionReads::of(&request.host.reads)),
+                ),
+                exposed: Some(request.host.credentials.exposed.clone().unwrap_or_default()),
+                ..request.host.credentials.clone()
+            },
             environment: request.host.environment.clone(),
             models: Models::new(request.session.model.clone()),
             owner: request.host.owner.clone(),
