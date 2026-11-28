@@ -9,7 +9,7 @@ pub const STEP_STARTED: &str = "step.started";
 pub const STEP_FINISHED: &str = "step.finished";
 pub const HUMAN: &str = "human";
 
-const ENVIRONMENT: [&str; 7] = ["timeout", "transient", "rate_limited", "auth", "conflict", "permanent", "cancelled"];
+pub const ENVIRONMENT: [&str; 7] = ["timeout", "transient", "rate_limited", "auth", "conflict", "permanent", "cancelled"];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

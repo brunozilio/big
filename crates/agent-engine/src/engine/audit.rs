@@ -19,7 +19,10 @@ struct Open {
 pub(super) fn around(request: &domain::PromptRequest) -> tracing::Span {
     let agent = request.session.agent.as_ref().map(|spec| spec.name.as_str());
     let user = request.host.owner.as_deref();
-    tracing::info_span!(target: "audit", "agent.run", agent, user)
+    let definition = request.session.agent.as_ref().and_then(|spec| spec.definition.as_deref());
+    let version = definition.map(|text| domain::factory::generation([("agent", text)]));
+    let creator = domain::audit::CreatorType::Agent.word();
+    tracing::info_span!(target: "audit", "agent.run", agent, agent.version = version.as_deref(), user, creator.type = creator)
 }
 
 #[derive(Default)]

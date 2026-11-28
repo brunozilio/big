@@ -1,30 +1,16 @@
-use database::{Conn, Param, Row, Value, args};
+use database::{Conn, Param, Row, Value};
+use domain::audit::AuditEvent;
 use serde::Serialize;
 
 use crate::audit_chain::{GENESIS, hash_of};
+use crate::audit_row::{COLUMNS, Stored};
 use crate::{Result, Store, signed, unsigned};
-
-#[derive(Debug, Clone, Default, PartialEq)]
-pub struct AuditDraft {
-    pub at: i64,
-    pub actor: Option<String>,
-    pub subject: Option<String>,
-    pub action: String,
-    pub policy: Option<String>,
-    pub outcome: Option<String>,
-    pub detail: serde_json::Value,
-}
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct AuditRecord {
     pub seq: u64,
-    pub at: i64,
-    pub actor: Option<String>,
-    pub subject: Option<String>,
-    pub action: String,
-    pub policy: Option<String>,
-    pub outcome: Option<String>,
-    pub detail: serde_json::Value,
+    #[serde(flatten)]
+    pub event: AuditEvent,
     pub prev: String,
     pub hash: String,
 }
@@ -51,56 +37,33 @@ pub struct AuditFacets {
     pub actions: Vec<String>,
 }
 
-pub(crate) const COLUMNS: &str = "seq, at, actor, subject, action, policy, outcome, detail, prev, hash";
-
 const LAST: &str = "SELECT seq, hash FROM audit_trail ORDER BY seq DESC LIMIT 1";
 
-const INSERT: &str = "INSERT INTO audit_trail (seq, at, actor, subject, action, policy, outcome, detail, prev, hash)
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)";
-
-pub(crate) fn record_of(row: &Row) -> Result<(AuditRecord, String)> {
-    let detail: String = row.get(7)?;
-    let record = AuditRecord {
-        seq: unsigned(row.get(0)?)?,
-        at: row.get(1)?,
-        actor: row.get(2)?,
-        subject: row.get(3)?,
-        action: row.get(4)?,
-        policy: row.get(5)?,
-        outcome: row.get(6)?,
-        detail: serde_json::from_str(&detail)?,
-        prev: row.get(8)?,
-        hash: row.get(9)?,
-    };
-    Ok((record, detail))
+fn insert() -> String {
+    let marks: Vec<String> = (1..=COLUMNS.split(',').count()).map(|at| format!("?{at}")).collect();
+    format!("INSERT INTO audit_trail ({COLUMNS}) VALUES ({})", marks.join(", "))
 }
 
-fn appended(conn: &mut dyn Conn, drafts: &[AuditDraft]) -> Result<u64> {
+fn record_of(row: &Row) -> Result<AuditRecord> {
+    let stored = Stored::read(row)?;
+    Ok(AuditRecord { seq: stored.seq, event: stored.event()?, prev: stored.prev, hash: stored.hash })
+}
+
+fn appended(conn: &mut dyn Conn, events: &[AuditEvent]) -> Result<u64> {
     let last = conn.row(LAST, &[])?;
     let (mut seq, mut prev) = match last {
         Some(row) => (unsigned(row.get(0)?)?, row.get::<String>(1)?),
         None => (0, GENESIS.to_owned()),
     };
-    for draft in drafts {
+    let sql = insert();
+    for event in events {
         seq += 1;
-        let detail = draft.detail.to_string();
-        let hash = hash_of(&prev, seq, draft, &detail);
-        conn.execute(
-            INSERT,
-            args![
-                signed(seq)?,
-                draft.at,
-                draft.actor,
-                draft.subject,
-                draft.action,
-                draft.policy,
-                draft.outcome,
-                detail,
-                prev,
-                hash
-            ],
-        )?;
-        prev = hash;
+        signed(seq)?;
+        let mut stored = Stored::of_event(seq, event);
+        stored.prev = prev;
+        stored.hash = hash_of(&stored);
+        conn.execute(&sql, &stored.values())?;
+        prev = stored.hash;
     }
     Ok(seq)
 }
@@ -146,14 +109,14 @@ fn distinct(conn: &mut dyn Conn, column: &str) -> Result<Vec<String>> {
 }
 
 impl Store {
-    pub fn append_audit(&self, drafts: &[AuditDraft]) -> Result<u64> {
-        self.write(|conn| appended(conn, drafts))
+    pub fn append_audit(&self, events: &[AuditEvent]) -> Result<u64> {
+        self.write(|conn| appended(conn, events))
     }
 
     pub fn audit(&self, filter: &AuditFilter, page: AuditPage, limit: usize) -> Result<Vec<AuditRecord>> {
         let (sql, values) = narrowed(filter, page, limit)?;
         self.read(|conn| {
-            conn.query(&sql, &values)?.iter().map(|row| record_of(row).map(|(record, _)| record)).collect()
+            conn.query(&sql, &values)?.iter().map(record_of).collect()
         })
     }
 

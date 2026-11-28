@@ -68,7 +68,7 @@ fn moved(to: &str, extra: Option<HeaderMap>) -> Response {
 }
 
 fn failed(reason: &str) -> Response {
-    tracing::warn!(target: "audit", reason, "auth.sso_failed");
+    tracing::warn!(target: "audit", reason, outcome = "failure", failure.stage = domain::audit::FailureStage::Authentication.word(), "auth.sso_failed");
     moved(&format!("{}/login?error=sso", settings::base_path()), None)
 }
 

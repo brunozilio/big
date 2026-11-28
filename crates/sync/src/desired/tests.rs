@@ -16,6 +16,7 @@ fn call(seq: u64, action: &str, connection: Option<&str>, args: Value, value: Va
         action: action.into(),
         connection: connection.map(str::to_owned),
         args,
+        operation: None,
     });
     [
         WorkflowEvent::EffectRequested(EffectRequest::new(key.clone(), effect)),

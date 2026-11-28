@@ -82,7 +82,7 @@ pub fn waits(expires: Option<i64>, now: i64, lasts: i64) -> bool {
 fn too_soon(shared: &Shared, email: &str) -> ApiResult<bool> {
     let soon = waits(shared.backend.store.code_expires(email)?, settings::now(), settings::code_seconds());
     if soon {
-        tracing::warn!(target: "audit", "auth.code_throttled");
+        tracing::warn!(target: "audit", outcome = "failure", failure.stage = domain::audit::FailureStage::Throttling.word(), "auth.code_throttled");
     }
     Ok(soon)
 }
@@ -101,7 +101,7 @@ pub async fn start(State(ctx): State<Ctx>, Json(asked): Json<Asked>) -> ApiResul
             return Err(ApiError::upstream(error));
         }
     } else {
-        tracing::warn!(target: "audit", domain = domain_of(&email), "auth.email_refused");
+        tracing::warn!(target: "audit", domain = domain_of(&email), outcome = "failure", failure.stage = domain::audit::FailureStage::Authorization.word(), "auth.email_refused");
     }
     Ok(done())
 }

@@ -14,6 +14,8 @@ export type Trust = "user-authored" | "external" | "system";
 
 export type Labels = (read: { action: string; result: unknown }) => string | null | undefined;
 
+export type Operation = { id: string; version?: number | string; friendlyName?: string };
+
 export type Profile = {
   effects: Effect[];
   risk: Risk;
@@ -27,6 +29,7 @@ export type Profile = {
   trust?: Trust;
   outputLevel?: string;
   maxInputLevel?: string;
+  operation?: Operation;
 };
 
 export type Action = {
@@ -220,11 +223,24 @@ const DESCRIPTIONS: Record<string, string> = {
 
 type Plain = Omit<Action, keyof Profile>;
 
+const friendly = (name: string): string => {
+  const words = name.slice(name.indexOf(".") + 1).replaceAll("_", " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
+
+export const operationOf = (name: string, given?: Operation): Operation => ({
+  id: name,
+  version: 1,
+  friendlyName: friendly(name),
+  ...given,
+});
+
 function described(action: Plain, given?: Profile): Action {
   const description = action.description ?? DESCRIPTIONS[action.name];
   const shown = description ? { ...action, description } : action;
-  const profile = given ?? PROFILES[action.name];
-  if (!profile) throw new TypeError(`${action.name} declares no profile: effects, risk, reversible, untrusted and sensitive`);
+  const found = given ?? PROFILES[action.name];
+  if (!found) throw new TypeError(`${action.name} declares no profile: effects, risk, reversible, untrusted and sensitive`);
+  const profile = { ...found, operation: operationOf(action.name, found.operation) };
   return profile.visibility === "host" ? { ...shown, ...profile, secret: true } : { ...shown, ...profile };
 }
 

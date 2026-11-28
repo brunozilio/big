@@ -115,7 +115,7 @@ pub async fn sign_in(State(ctx): State<Ctx>, Json(entered): Json<Entered>) -> Ap
     let store = &ctx.backend.store;
     let now = settings::now();
     if store.login_locked(&login, now)? {
-        tracing::warn!(target: "audit", "auth.login_locked");
+        tracing::warn!(target: "audit", outcome = "failure", failure.stage = domain::audit::FailureStage::Throttling.word(), "auth.login_locked");
         return Err(locked());
     }
     let person = store.user_by_email(&login)?;
@@ -130,7 +130,7 @@ pub async fn sign_in(State(ctx): State<Ctx>, Json(entered): Json<Entered>) -> Ap
     };
     if !matches(stored, entered.password).await {
         store.login_failed(&login, now, settings::login_attempts(), settings::lock_seconds())?;
-        tracing::warn!(target: "audit", user = %person.user, "auth.password_refused");
+        tracing::warn!(target: "audit", user = %person.user, outcome = "failure", failure.stage = domain::audit::FailureStage::Authentication.word(), "auth.password_refused");
         return Err(refused());
     }
     store.login_succeeded(&login)?;
@@ -241,7 +241,7 @@ pub async fn set_up(State(ctx): State<Ctx>, Json(claimed): Json<Claimed>) -> Api
         return Err(setup_closed());
     }
     if !same(claimed.token.trim(), &token) {
-        tracing::warn!(target: "audit", "auth.setup_refused");
+        tracing::warn!(target: "audit", outcome = "failure", failure.stage = domain::audit::FailureStage::Authorization.word(), "auth.setup_refused");
         return Err(ApiError::bad(said(
             "The setup link is wrong.",
             "El enlace de configuración es incorrecto.",

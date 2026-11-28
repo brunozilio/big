@@ -3,7 +3,8 @@ use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
 use domain::redact::Redactor;
-use store::{AuditDraft, Store};
+use domain::audit::AuditEvent;
+use store::Store;
 
 use super::capture::Captured;
 use super::entry::{draft_of, dropped};
@@ -50,7 +51,7 @@ fn now() -> i64 {
 
 impl Writer {
     pub fn run(self, receiver: &Receiver<Captured>) {
-        let mut pending: Vec<AuditDraft> = Vec::new();
+        let mut pending: Vec<AuditEvent> = Vec::new();
         let mut pruned: Option<Instant> = None;
         loop {
             let closed = match next(receiver) {
@@ -72,7 +73,7 @@ impl Writer {
         }
     }
 
-    pub(super) fn write(&self, pending: &mut Vec<AuditDraft>) {
+    pub(super) fn write(&self, pending: &mut Vec<AuditEvent>) {
         let lost = self.queue.take_dropped();
         if lost > 0 {
             pending.push(dropped(now(), lost));

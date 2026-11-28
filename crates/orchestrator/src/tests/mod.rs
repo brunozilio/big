@@ -14,6 +14,7 @@ mod package;
 mod policy;
 mod repos;
 mod restart;
+mod trail;
 pub(crate) mod retired;
 mod triggers;
 mod unbound;
@@ -537,7 +538,7 @@ pub fn output(item: &WorkItem) -> Value {
     }
 }
 
-fn looked() -> domain::operation::Profile {
+pub(super) fn looked() -> domain::operation::Profile {
     use domain::operation::{Kind, Profile, Reversible, Risk};
     Profile::new(vec![Kind::Read], Risk::Low, Reversible::Yes, false, false)
 }

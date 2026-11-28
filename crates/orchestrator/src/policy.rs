@@ -1,12 +1,16 @@
+use std::time::Instant;
+
 use agent_engine::labels;
 use agent_engine::policy_gate::{self, Asked};
-use connectors::Labelled;
+use connectors::{ActionSpec, Labelled};
+use domain::audit::{AuthorizedBy, OperationTag, code};
 use domain::effect::{Call, IdempotencyKey};
 use domain::label::{self, Levels, Mark, Sink};
 use domain::permission::{Call as Judged, Effect, Layer, Reason, Surface, Verdict};
 use domain::workflow::{WorkItem, WorkflowEvent};
 use domain::{AskId, AskKind, Decision};
 use serde_json::Value;
+use tracing::Instrument;
 
 use crate::agent::Failure;
 use crate::asking::Asking;
@@ -14,6 +18,30 @@ use crate::shared::Shared;
 
 pub fn surface_of(item: &WorkItem) -> Surface {
     if item.input["schedule"].is_object() { Surface::Routine } else { Surface::Workflow }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Authorized {
+    pub tag: OperationTag,
+    pub by: AuthorizedBy,
+    pub waited_ms: Option<u64>,
+}
+
+impl Authorized {
+    fn standing(tag: OperationTag) -> Self {
+        Self { tag, by: AuthorizedBy::Standing, waited_ms: None }
+    }
+
+    pub fn code(&self) -> &'static str {
+        match self.by {
+            AuthorizedBy::Standing => code::STANDING,
+            AuthorizedBy::Approval(_) => code::GRANTED,
+        }
+    }
+}
+
+fn tag_of(call: &Call, spec: Option<&ActionSpec>) -> OperationTag {
+    call.operation.clone().or_else(|| spec.map(ActionSpec::tag)).unwrap_or_else(|| OperationTag::plain(&call.action))
 }
 
 pub struct Gated<'a> {
@@ -24,40 +52,61 @@ pub struct Gated<'a> {
 }
 
 impl Gated<'_> {
-    pub async fn check(&self, call: &Call) -> Result<(), Failure> {
-        let Ok((connection, _)) = crate::effects::connection_of(self.shared, self.owner, call) else { return Ok(()) };
+    pub async fn check(&self, call: &Call) -> Result<Authorized, Failure> {
+        let Ok((connection, _)) = crate::effects::connection_of(self.shared, self.owner, call) else {
+            return Ok(Authorized::standing(tag_of(call, None)));
+        };
         let server = domain::mcp::connectors_server();
         let tool = domain::mcp::served_name(&server, &domain::mcp::connector_tool(&connection.label, &call.action));
         let hub = &self.shared.config.connectors;
         let descriptor = hub.descriptor(&connection.provider).ok();
         let spec = descriptor.and_then(|descriptor| descriptor.action(&call.action));
-        let declared = spec.and_then(|action| action.declaration().operation(&server, &call.args));
+        let tag = tag_of(call, spec);
+        let span = tracing::info_span!(
+            target: "audit",
+            "operation",
+            operation.id = %tag.id,
+            operation.version = tag.version.as_deref(),
+            operation.name = tag.friendly_name.as_deref()
+        );
+        let (by, waited_ms) = self.judged(call, &server, &tool, spec).instrument(span).await?;
+        Ok(Authorized { tag, by, waited_ms })
+    }
+
+    async fn judged(
+        &self,
+        call: &Call,
+        server: &str,
+        tool: &str,
+        spec: Option<&ActionSpec>,
+    ) -> Result<(AuthorizedBy, Option<u64>), Failure> {
+        let declared = spec.and_then(|action| action.declaration().operation(server, &call.args));
         let effects: Vec<Effect> = declared.map(Effect::Operation).into_iter().collect();
         let asked = Asked { surface: surface_of(self.item), stage: &self.key.step, owner: self.owner };
         let subject = policy_gate::subject(&call.action, &call.args);
-        let verdict = match policy_gate::decide(asked, &Judged { tool: &tool, subject: &subject, effects: &effects }) {
-            Verdict::Allow => self.flow(asked, &tool, spec),
+        let verdict = match policy_gate::decide(asked, &Judged { tool, subject: &subject, effects: &effects }) {
+            Verdict::Allow => self.flow(asked, tool, spec),
             listed => listed,
         };
         match verdict {
-            Verdict::Allow => Ok(()),
+            Verdict::Allow => Ok((AuthorizedBy::Standing, None)),
             Verdict::Deny(reason) => Err(Failure::permanent(policy_gate::refusal(&reason))),
             Verdict::Ask { reason: Reason::Flow(why), .. } if asked.surface == Surface::Routine => {
-                let told = Reason::Flow(why).unattended(&tool);
-                policy_gate::blocked(asked, &tool, &told, Layer::Declared);
+                let told = Reason::Flow(why).unattended(tool);
+                policy_gate::blocked_as(asked, tool, &told, Layer::Declared, code::FLOW_UNATTENDED);
                 Err(Failure::permanent(policy_gate::refusal(&told)))
             }
             Verdict::Ask { .. } if asked.surface == Surface::Routine => {
-                Err(Failure::permanent(policy_gate::unasked(asked, &tool)))
+                Err(Failure::permanent(policy_gate::unasked(asked, tool)))
             }
             Verdict::Ask { reason: Reason::Flow(why), .. } => {
-                self.approved(asked, &tool, &format!("{} {why}", call.action)).await
+                self.approved(asked, tool, &format!("{} {why}", call.action)).await
             }
-            Verdict::Ask { .. } => self.approved(asked, &tool, &call.action).await,
+            Verdict::Ask { .. } => self.approved(asked, tool, &call.action).await,
         }
     }
 
-    fn flow(&self, asked: Asked<'_>, tool: &str, spec: Option<&connectors::ActionSpec>) -> Verdict {
+    fn flow(&self, asked: Asked<'_>, tool: &str, spec: Option<&ActionSpec>) -> Verdict {
         let Some(spec) = spec else { return Verdict::Allow };
         let levels = self.levels();
         let mark = Mark::of(&levels, &label::reads(self.item));
@@ -80,17 +129,23 @@ impl Gated<'_> {
         Ok(labelled.value)
     }
 
-    async fn approved(&self, asked: Asked<'_>, tool: &str, subject: &str) -> Result<(), Failure> {
+    async fn approved(
+        &self,
+        asked: Asked<'_>,
+        tool: &str,
+        subject: &str,
+    ) -> Result<(AuthorizedBy, Option<u64>), Failure> {
         let id = AskId(format!("policy-{}", self.key));
-        let asking = Asking { shared: self.shared, item: &self.item.id, key: self.key, id };
-        match asking.decided(AskKind::permission(tool, subject, false)).await {
-            Some(decision) => settled(asked, tool, &decision),
-            None => {
-                let reason = format!("{tool} was waiting for a person, and the item stopped first.");
-                policy_gate::blocked(asked, tool, &reason, Layer::List);
-                Err(Failure::permanent(policy_gate::refusal(&reason)))
-            }
-        }
+        let asking = Asking { shared: self.shared, item: &self.item.id, key: self.key, id: id.clone() };
+        let started = Instant::now();
+        let Some(decision) = asking.decided(AskKind::permission(tool, subject, false)).await else {
+            let reason = format!("{tool} was waiting for a person, and the item stopped first.");
+            policy_gate::blocked_as(asked, tool, &reason, Layer::List, code::ABANDONED);
+            return Err(Failure::permanent(policy_gate::refusal(&reason)));
+        };
+        settled(asked, tool, &decision)?;
+        let measured = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+        Ok((AuthorizedBy::Approval(id.0), Some(asking.waited_ms().unwrap_or(measured))))
     }
 }
 
@@ -99,7 +154,7 @@ fn settled(asked: Asked<'_>, tool: &str, decision: &Decision) -> Result<(), Fail
         Decision::Allow | Decision::AllowAlways | Decision::Approve(_) => Ok(()),
         Decision::Deny | Decision::DenyWith(_) | Decision::Answer(_) => {
             let reason = format!("{tool} was refused by the person asked.");
-            policy_gate::blocked(asked, tool, &reason, Layer::List);
+            policy_gate::blocked_as(asked, tool, &reason, Layer::List, code::REFUSED);
             Err(Failure::permanent(policy_gate::refusal(&reason)))
         }
     }

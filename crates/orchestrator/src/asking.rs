@@ -60,6 +60,14 @@ impl Asking<'_> {
         serde_json::from_value(entry.progress["answered"][self.id.0.as_str()]["decision"].clone()).ok()
     }
 
+    pub fn waited_ms(&self) -> Option<u64> {
+        let state = self.shared.item(self.item).ok()?;
+        let entry = state.effects.get(&self.key.to_string())?;
+        let answered = &entry.progress["answered"][self.id.0.as_str()];
+        let waited = answered["at"].as_i64()?.checked_sub(answered["since"].as_i64()?)?;
+        u64::try_from(waited).ok()
+    }
+
     fn open(&self, kind: AskKind) {
         if self.shared.asks.of_key(self.key).iter().any(|pending| pending.ask.id == self.id) {
             return;

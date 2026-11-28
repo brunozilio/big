@@ -122,7 +122,7 @@ fn an_item_reads_what_its_effects_recorded() {
     use crate::effect::{Call, Effect, EffectRequest, IdempotencyKey};
     use crate::workflow::{ItemId, WorkflowEvent, replay};
     let key = IdempotencyKey::new("i", "s", None, 1, 1);
-    let call = Call { capability: "tracker".into(), action: "tracker.issue".into(), connection: None, args: json!({}) };
+    let call = Call { capability: "tracker".into(), action: "tracker.issue".into(), connection: None, args: json!({}), operation: None };
     let recorded = read("Tracker issue", Trust::External, Some("internal"));
     let item = replay(&[
         WorkflowEvent::ItemCreated { id: ItemId::from("i"), workflow: "w".into(), parent: None, input: json!({}) },

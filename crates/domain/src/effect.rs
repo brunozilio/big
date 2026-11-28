@@ -34,6 +34,8 @@ pub struct Call {
     pub action: String,
     pub connection: Option<String>,
     pub args: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<crate::audit::OperationTag>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]

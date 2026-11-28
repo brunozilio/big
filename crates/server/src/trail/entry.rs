@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
 use domain::redact::{Known, REDACTED, Redactor};
+use domain::audit::AuditEvent;
 use serde_json::{Map, Value};
-use store::AuditDraft;
 
 use super::capture::Captured;
+use super::versioned;
 
 const ACTOR: &[&str] = &["agent", "agent.name"];
 const SUBJECT: &[&str] = &["user", "person"];
@@ -23,7 +24,7 @@ fn cleaned(redactor: &Redactor, text: &str) -> String {
     clipped(&redactor.redact(text, &Known::default()).text)
 }
 
-fn word(value: &Value) -> Option<String> {
+pub(super) fn word(value: &Value) -> Option<String> {
     match value {
         Value::String(text) => Some(text.trim_matches('"').to_owned()).filter(|text| !text.is_empty()),
         Value::Null => None,
@@ -31,7 +32,7 @@ fn word(value: &Value) -> Option<String> {
     }
 }
 
-fn taken(fields: &mut BTreeMap<String, Value>, keys: &[&str], redactor: &Redactor) -> Option<String> {
+pub(super) fn taken(fields: &mut BTreeMap<String, Value>, keys: &[&str], redactor: &Redactor) -> Option<String> {
     let found = keys.iter().find_map(|key| fields.remove(*key).as_ref().and_then(word))?;
     for key in keys {
         fields.remove(*key);
@@ -49,33 +50,27 @@ fn detail_value(redactor: &Redactor, key: &str, value: Value) -> Value {
     }
 }
 
-pub fn draft_of(captured: Captured, redactor: &Redactor) -> AuditDraft {
+pub fn draft_of(captured: Captured, redactor: &Redactor) -> AuditEvent {
     let Captured { at, level, action, mut fields } = captured;
-    let actor = taken(&mut fields, ACTOR, redactor);
-    let subject = taken(&mut fields, SUBJECT, redactor);
-    let policy = taken(&mut fields, POLICY, redactor);
-    let outcome = taken(&mut fields, OUTCOME, redactor);
+    let mut event = AuditEvent::new(at, cleaned(redactor, &action));
+    event.layer = fields.get("layer").and_then(word).map(|layer| cleaned(redactor, &layer));
+    event.actor = taken(&mut fields, ACTOR, redactor);
+    event.subject = taken(&mut fields, SUBJECT, redactor);
+    event.policy = taken(&mut fields, POLICY, redactor);
+    event.outcome = taken(&mut fields, OUTCOME, redactor);
+    versioned::filled(&mut event, &mut fields, redactor);
     let mut detail: Map<String, Value> =
         fields.into_iter().map(|(key, value)| (key.clone(), detail_value(redactor, &key, value))).collect();
     detail.insert("level".to_owned(), Value::String(level.as_str().to_ascii_lowercase()));
-    AuditDraft {
-        at,
-        actor,
-        subject,
-        action: cleaned(redactor, &action),
-        policy,
-        outcome,
-        detail: Value::Object(detail),
-    }
+    event.detail = Value::Object(detail);
+    event
 }
 
-pub fn dropped(at: i64, count: u64) -> AuditDraft {
-    AuditDraft {
-        at,
-        action: "audit.dropped".to_owned(),
+pub fn dropped(at: i64, count: u64) -> AuditEvent {
+    AuditEvent {
         outcome: Some("failure".to_owned()),
         detail: serde_json::json!({ "count": count }),
-        ..AuditDraft::default()
+        ..AuditEvent::new(at, "audit.dropped")
     }
 }
 

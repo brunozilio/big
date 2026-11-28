@@ -1,5 +1,6 @@
 use std::time::Duration;
 
+use domain::audit::OperationTag;
 use domain::effect::{Call, Effect, EffectOutcome, ErrorClass, RetryPolicy};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -35,6 +36,8 @@ pub struct Command {
     pub timeout: Option<u64>,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub optional: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub operation: Option<Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
@@ -86,6 +89,7 @@ impl Command {
             action,
             connection: self.connection.clone(),
             args: call.get("args").cloned().unwrap_or_else(|| json!({})),
+            operation: self.operation.as_ref().and_then(OperationTag::read),
         }
     }
 

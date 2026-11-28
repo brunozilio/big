@@ -164,7 +164,7 @@ class Runtime {
     const seq = this.next();
     const waiting = deferred();
     const command = { seq, kind, branch: scope.branch, step: scope.step, attempt: scope.attempt, args };
-    for (const key of ["connection", "retry", "timeout", "optional"]) {
+    for (const key of ["connection", "retry", "timeout", "optional", "operation"]) {
       if (options && options[key] !== undefined) command[key] = options[key];
     }
     this.commands.set(seq, { command, waiting, resolved: false });

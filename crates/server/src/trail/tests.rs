@@ -64,12 +64,12 @@ fn the_writer_keeps_the_captured_events_and_tells_what_was_dropped() {
     assert!(pending.is_empty());
     let kept = store.audit(&AuditFilter::default(), AuditPage::After(0), 10).expect("kept");
     assert_eq!(
-        kept.iter().map(|record| record.action.as_str()).collect::<Vec<_>>(),
+        kept.iter().map(|record| record.event.action.as_str()).collect::<Vec<_>>(),
         ["policy.blocked", "audit.dropped"]
     );
-    assert_eq!(kept[0].actor.as_deref(), Some("dev"));
-    assert_eq!(kept[0].policy.as_deref(), Some("floor"));
-    assert_eq!(kept[1].detail, json!({ "count": 1 }));
+    assert_eq!(kept[0].event.actor.as_deref(), Some("dev"));
+    assert_eq!(kept[0].event.policy.as_deref(), Some("floor"));
+    assert_eq!(kept[1].event.detail, json!({ "count": 1 }));
     assert_eq!(store.verify_audit().expect("verify").broken, None);
 }
 

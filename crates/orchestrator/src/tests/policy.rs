@@ -29,11 +29,11 @@ export default workflow({
 });
 "#;
 
-fn tool(action: &str) -> String {
+pub(super) fn tool(action: &str) -> String {
     domain::mcp::served_name(&domain::mcp::connectors_server(), &domain::mcp::connector_tool("Fake", action))
 }
 
-fn listing(rules: Vec<Rule>) {
+pub(super) fn listing(rules: Vec<Rule>) {
     let mut list = Allowed::of(allowed::defaults());
     for rule in rules {
         list.add(rule);

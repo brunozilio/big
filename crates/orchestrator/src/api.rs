@@ -358,7 +358,7 @@ impl Orchestrator {
         let pending = &answered.pending;
         let record = json!({
             "ask": pending.ask, "session": pending.session, "decision": decision, "note": note,
-            "at": crate::shared::now_ms(),
+            "at": crate::shared::now_ms(), "since": pending.since,
         });
         let data = json!({ "asks": { ask.0.clone(): null }, "answered": { ask.0.clone(): record } });
         self.shared.append(&pending.item, &[WorkflowEvent::EffectProgress { key: answered.key.clone(), data }])?;

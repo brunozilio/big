@@ -1,5 +1,6 @@
 use std::sync::{Mutex, PoisonError};
 
+use domain::audit::{self, FailureStage};
 use domain::memory::MemoryPolicy;
 use domain::permission::hard::Floor;
 use domain::permission::{BLOCKED, Call, Decision, Effect, Layer, MemoryAccess, PolicyEngine, Surface, Verdict};
@@ -92,6 +93,10 @@ fn settled(asked: Asked<'_>, tool: &str, decision: Decision) -> Verdict {
 }
 
 pub fn blocked(asked: Asked<'_>, tool: &str, reason: &str, layer: Layer) {
+    blocked_as(asked, tool, reason, layer, &audit::code::denied(layer.word()));
+}
+
+pub fn blocked_as(asked: Asked<'_>, tool: &str, reason: &str, layer: Layer, code: &str) {
     tracing::warn!(
         target: "audit",
         surface = asked.surface.word(),
@@ -100,14 +105,25 @@ pub fn blocked(asked: Asked<'_>, tool: &str, reason: &str, layer: Layer) {
         tool,
         reason,
         layer = layer.word(),
+        decision.code = code,
+        policy.version = %version(),
+        failure.stage = FailureStage::Authorization.word(),
         outcome = "denied",
         "policy.blocked"
     );
 }
 
+pub fn version() -> String {
+    let allowed = domain::permission::allowed::global();
+    let listed = allowed.and_then(|allowed| serde_json::to_string(&allowed).ok()).unwrap_or_default();
+    let floor = crate::tools::hard_floor::sources();
+    let files = floor.iter().map(|(name, text)| (name.as_str(), text.as_str()));
+    domain::factory::generation(files.chain([("permissions", listed.as_str())]))
+}
+
 pub fn unasked(asked: Asked<'_>, tool: &str) -> String {
     let reason = format!("{tool} asks a person first, and {} cannot ask anyone yet.", asked.surface.word());
-    blocked(asked, tool, &reason, Layer::List);
+    blocked_as(asked, tool, &reason, Layer::List, audit::code::UNATTENDED);
     refusal(&reason)
 }
 

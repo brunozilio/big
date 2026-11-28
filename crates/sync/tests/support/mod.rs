@@ -316,6 +316,7 @@ pub fn call(item: &str, seq: u64, action: &str, connection: &str, args: Value, v
         action: action.into(),
         connection: Some(connection.into()),
         args,
+        operation: None,
     });
     [
         WorkflowEvent::EffectRequested(EffectRequest::new(key.clone(), effect)),

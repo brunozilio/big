@@ -83,6 +83,7 @@ fn effects_round_trip_through_json_with_a_type_tag() {
         action: "transition".into(),
         connection: None,
         args: json!({"to": "Doing"}),
+        operation: None,
     };
     let effects = [
         Effect::AgentRun { agent: "any".into(), input: json!({}) },

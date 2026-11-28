@@ -1,6 +1,7 @@
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use domain::Language;
+use domain::audit::OperationTag;
 use domain::connection::{Capability, ProviderKey};
 use domain::label::Trust;
 use domain::operation::{Declaration, Permission, Profile, Visibility};
@@ -49,6 +50,12 @@ pub struct ActionSpec {
     pub output_level: Option<String>,
     #[serde(default, rename = "maxInputLevel", skip_serializing_if = "Option::is_none")]
     pub max_input_level: Option<String>,
+    #[serde(default, deserialize_with = "tag_of", skip_serializing_if = "Option::is_none")]
+    pub operation: Option<OperationTag>,
+}
+
+fn tag_of<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<OperationTag>, D::Error> {
+    Ok(OperationTag::read(&Value::deserialize(deserializer)?))
 }
 
 fn native() -> Idempotency {
@@ -74,6 +81,7 @@ impl ActionSpec {
             trust: None,
             output_level: None,
             max_input_level: None,
+            operation: None,
         }
     }
 
@@ -101,6 +109,7 @@ impl ActionSpec {
             trust: None,
             output_level: None,
             max_input_level: None,
+            operation: None,
         }
     }
 
@@ -121,6 +130,10 @@ impl ActionSpec {
             free_text: self.free_text.clone(),
             permission: self.permission,
         }
+    }
+
+    pub fn tag(&self) -> OperationTag {
+        self.operation.clone().unwrap_or_else(|| OperationTag::plain(&self.name))
     }
 
     pub fn trusted(&self) -> Trust {

@@ -278,8 +278,10 @@ async fn call(who: Who<'_>, gated: &Gated<'_>, command: &Command, key: &str) -> 
             Ok(_) => {}
         }
     }
-    gated.check(&call).await?;
-    crate::reading::labelled(shared, who, &call, key).await.and_then(|read| gated.read(read))
+    let authorized = gated.check(&call).await?;
+    let done = crate::reading::labelled(shared, who, &call, key).await.and_then(|read| gated.read(read));
+    crate::operation_trail::recorded(gated, &call, &authorized, &done);
+    done
 }
 
 pub(crate) async fn worktree_of(shared: &Shared, item: &WorkItem, command: &Command) -> Result<PathBuf, Failure> {

@@ -33,6 +33,7 @@ pub mod library;
 mod links;
 mod matching;
 mod naming;
+mod operation_trail;
 mod overrun;
 pub mod owners;
 mod policy;

@@ -229,6 +229,20 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX audit_trail_by_subject ON audit_trail (subject, at);
     CREATE INDEX audit_trail_by_action ON audit_trail (action, at);
 ",
+    "
+    ALTER TABLE audit_trail ADD COLUMN schema_version INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE audit_trail ADD COLUMN operation TEXT;
+    ALTER TABLE audit_trail ADD COLUMN friendly_name TEXT;
+    ALTER TABLE audit_trail ADD COLUMN policy_version TEXT;
+    ALTER TABLE audit_trail ADD COLUMN decision_code TEXT;
+    ALTER TABLE audit_trail ADD COLUMN layer TEXT;
+    ALTER TABLE audit_trail ADD COLUMN failure_stage TEXT;
+    ALTER TABLE audit_trail ADD COLUMN approval_wait_ms INTEGER;
+    ALTER TABLE audit_trail ADD COLUMN authorized_by TEXT;
+    ALTER TABLE audit_trail ADD COLUMN creator_type TEXT;
+    ALTER TABLE audit_trail ADD COLUMN agent TEXT;
+    CREATE INDEX audit_trail_by_operation ON audit_trail (operation, at);
+",
 ];
 
 const SQLITE_GUARD: &str = "CREATE TRIGGER IF NOT EXISTS audit_trail_only_grows BEFORE UPDATE ON audit_trail

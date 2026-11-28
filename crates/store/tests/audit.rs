@@ -8,17 +8,17 @@ use std::time::Duration;
 use common::{Fresh, Place};
 use database::args;
 use serde_json::json;
-use store::{AuditDraft, AuditFilter, AuditPage, GENESIS};
+use domain::audit::AuditEvent;
+use store::{AuditFilter, AuditPage, GENESIS};
 
-fn draft(at: i64, actor: &str, subject: &str, action: &str) -> AuditDraft {
-    AuditDraft {
-        at,
+fn draft(at: i64, actor: &str, subject: &str, action: &str) -> AuditEvent {
+    AuditEvent {
         actor: Some(actor.into()),
         subject: Some(subject.into()),
-        action: action.into(),
         policy: Some("budgets".into()),
         outcome: Some("denied".into()),
         detail: json!({ "tool": "bash", "item": "i-1" }),
+        ..AuditEvent::new(at, action)
     }
 }
 
@@ -44,7 +44,7 @@ fn each_record_carries_the_hash_of_the_one_before(fresh: Fresh) {
     for pair in all.windows(2) {
         assert_eq!(pair[1].prev, pair[0].hash);
     }
-    assert_eq!(all[0].detail["tool"], "bash");
+    assert_eq!(all[0].event.detail["tool"], "bash");
     let verified = store.verify_audit().expect("verify");
     assert_eq!((verified.checked, verified.broken, verified.last), (4, None, Some(4)));
 }

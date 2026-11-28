@@ -57,7 +57,7 @@ fn user_names(folder: &Path) -> Vec<String> {
     names
 }
 
-fn sources() -> Vec<(String, String)> {
+pub(crate) fn sources() -> Vec<(String, String)> {
     let text = |bytes: &[u8]| brand::text(&String::from_utf8_lossy(bytes));
     let mut found = Vec::new();
     for name in shipped_names() {

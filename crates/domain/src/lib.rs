@@ -1,3 +1,4 @@
+pub mod audit;
 pub mod board;
 pub mod command;
 pub mod connection;

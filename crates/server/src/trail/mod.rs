@@ -1,6 +1,7 @@
 mod capture;
 mod entry;
 mod queue;
+mod versioned;
 mod writer;
 
 use std::sync::{Arc, OnceLock};

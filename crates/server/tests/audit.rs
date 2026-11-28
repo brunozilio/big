@@ -7,23 +7,21 @@ use std::time::Duration;
 
 use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
+use domain::audit::AuditEvent;
 use domain::principal::{Principal, UserId};
 use serde_json::Value;
-use store::AuditDraft;
 use support::World;
 use tower::ServiceExt;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-fn draft(at: i64, agent: &str, person: &str, action: &str) -> AuditDraft {
-    AuditDraft {
-        at,
+fn draft(at: i64, agent: &str, person: &str, action: &str) -> AuditEvent {
+    AuditEvent {
         actor: Some(agent.into()),
         subject: Some(person.into()),
-        action: action.into(),
-        policy: None,
         outcome: Some("success".into()),
         detail: serde_json::json!({}),
+        ..AuditEvent::new(at, action)
     }
 }
 
@@ -50,6 +48,9 @@ async fn an_audit_event_reaches_the_trail_and_is_filtered_exported_and_verified(
     assert_eq!(record["subject"], "u-ana");
     assert_eq!(record["policy"], "floor");
     assert_eq!(record["outcome"], "denied");
+    assert_eq!(record["schemaVersion"], domain::audit::SCHEMA_VERSION);
+    assert_eq!(record["layer"], "floor");
+    assert_eq!(record["failureStage"], "authorization");
     world.store.append_audit(&[draft(1_000, "review", "u-bia", "tool.call")]).expect("old");
     let old = world.get("/api/admin/audit?agent=review&from=500&to=1500").await;
     assert_eq!(old["records"].as_array().map(Vec::len), Some(1), "{old}");
@@ -73,7 +74,7 @@ async fn an_audit_event_reaches_the_trail_and_is_filtered_exported_and_verified(
 #[tokio::test(flavor = "multi_thread")]
 async fn the_trail_pages_from_the_newest() {
     let world = World::new().await;
-    let drafts: Vec<AuditDraft> = (1..=5).map(|at| draft(at, "dev", "u-ana", "tool.call")).collect();
+    let drafts: Vec<AuditEvent> = (1..=5).map(|at| draft(at, "dev", "u-ana", "tool.call")).collect();
     world.store.append_audit(&drafts).expect("append");
     let first = world.get("/api/admin/audit?limit=2").await;
     let seqs = |page: &Value| {

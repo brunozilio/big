@@ -4,7 +4,7 @@ use database::args;
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 
-use crate::audit::{AuditDraft, COLUMNS, record_of};
+use crate::audit_row::{COLUMNS, Stored};
 use crate::{Result, Store, signed};
 
 pub const GENESIS: &str = "0000000000000000000000000000000000000000000000000000000000000000";
@@ -19,19 +19,39 @@ pub struct AuditVerified {
     pub broken: Option<u64>,
 }
 
-pub(crate) fn hash_of(prev: &str, seq: u64, draft: &AuditDraft, detail: &str) -> String {
-    let fields = serde_json::json!([
-        prev,
-        seq,
-        draft.at,
-        draft.actor,
-        draft.subject,
-        draft.action,
-        draft.policy,
-        draft.outcome,
-        detail
+fn fields_of(stored: &Stored) -> serde_json::Value {
+    let legacy = serde_json::json!([
+        stored.prev,
+        stored.seq,
+        stored.at,
+        stored.actor,
+        stored.subject,
+        stored.action,
+        stored.policy,
+        stored.outcome,
+        stored.detail
     ]);
-    let digest = Sha256::digest(fields.to_string().as_bytes());
+    if stored.schema_version == 0 {
+        return legacy;
+    }
+    serde_json::json!([
+        legacy,
+        stored.schema_version,
+        stored.operation,
+        stored.friendly_name,
+        stored.policy_version,
+        stored.decision_code,
+        stored.layer,
+        stored.failure_stage,
+        stored.approval_wait_ms,
+        stored.authorized_by,
+        stored.creator_type,
+        stored.agent
+    ])
+}
+
+pub(crate) fn hash_of(stored: &Stored) -> String {
+    let digest = Sha256::digest(fields_of(stored).to_string().as_bytes());
     digest.iter().fold(String::with_capacity(64), |mut out, byte| {
         let _ = write!(out, "{byte:02x}");
         out
@@ -44,27 +64,18 @@ struct Walk {
 }
 
 impl Walk {
-    fn step(&mut self, record: &crate::AuditRecord, detail: &str) -> bool {
-        let draft = AuditDraft {
-            at: record.at,
-            actor: record.actor.clone(),
-            subject: record.subject.clone(),
-            action: record.action.clone(),
-            policy: record.policy.clone(),
-            outcome: record.outcome.clone(),
-            detail: serde_json::Value::Null,
-        };
+    fn step(&mut self, stored: &Stored) -> bool {
         let linked = match &self.prev {
-            Some(prev) => *prev == record.prev,
-            None => record.seq != 1 || record.prev == GENESIS,
+            Some(prev) => *prev == stored.prev,
+            None => stored.seq != 1 || stored.prev == GENESIS,
         };
-        let sound = linked && hash_of(&record.prev, record.seq, &draft, detail) == record.hash;
+        let sound = linked && hash_of(stored) == stored.hash;
         self.verified.checked += 1;
-        self.verified.first.get_or_insert(record.seq);
-        self.verified.last = Some(record.seq);
-        self.prev = Some(record.hash.clone());
+        self.verified.first.get_or_insert(stored.seq);
+        self.verified.last = Some(stored.seq);
+        self.prev = Some(stored.hash.clone());
         if !sound {
-            self.verified.broken = Some(record.seq);
+            self.verified.broken = Some(stored.seq);
         }
         sound
     }
@@ -81,9 +92,9 @@ impl Store {
                 return Ok(walk.verified);
             }
             for row in &rows {
-                let (record, detail) = record_of(row)?;
-                after = record.seq;
-                if !walk.step(&record, &detail) {
+                let stored = Stored::read(row)?;
+                after = stored.seq;
+                if !walk.step(&stored) {
                     return Ok(walk.verified);
                 }
             }

@@ -92,6 +92,7 @@ fn wanted(command: &Command, chosen: Option<&Binding>) -> Option<(Call, bool)> {
         action: contracts::cloud::IDENTITY.to_owned(),
         connection,
         args,
+        operation: None,
     };
     Some((call, optional))
 }
@@ -228,6 +229,7 @@ mod tests {
             retry: None,
             timeout: None,
             optional: false,
+            operation: None,
         }
     }
 

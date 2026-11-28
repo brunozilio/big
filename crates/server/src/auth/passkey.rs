@@ -116,7 +116,7 @@ pub async fn sign_in(State(ctx): State<Ctx>, Json(sent): Json<Assertion>) -> Api
         return Err(refused());
     }
     if (found.counter != 0 || key.counter != 0) && found.counter <= key.counter {
-        tracing::warn!(target: "audit", passkey = %key.id, "auth.passkey_cloned");
+        tracing::warn!(target: "audit", passkey = %key.id, outcome = "failure", failure.stage = domain::audit::FailureStage::Authentication.word(), "auth.passkey_cloned");
         return Err(refused());
     }
     ctx.backend.store.used_passkey(&key.id, found.counter, settings::now())?;
