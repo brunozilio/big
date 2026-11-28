@@ -86,7 +86,9 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
         }
         WorkflowEvent::Rewound { to, .. } => rewind(&mut item, to),
         WorkflowEvent::Cancelled { reason } => item.ending = Some(Ending::Cancelled { reason: reason.clone() }),
-        WorkflowEvent::Finished { output } => item.ending = Some(Ending::Finished { output: output.clone() }),
+        WorkflowEvent::Finished { output, delivered } => {
+            item.ending = Some(Ending::Finished { output: output.clone(), delivered: delivered.clone() });
+        }
         WorkflowEvent::ExternalObserved(seen) => observe(&mut item, seen),
         WorkflowEvent::Reconciled { .. } => {}
         WorkflowEvent::Named { title } => item.name = Some(title.clone()),

@@ -205,6 +205,10 @@ impl Orchestrator {
         found
     }
 
+    pub fn output(&self, workflow: &str) -> Option<domain::workflow::Output> {
+        self.shared.script(workflow).ok().and_then(|script| script.output.clone())
+    }
+
     pub fn describe(&self, workflow: &str) -> Value {
         self.shared.script(workflow).map(|script| script.described.clone()).unwrap_or(Value::Null)
     }

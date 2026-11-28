@@ -2,11 +2,13 @@ import { workflow, on } from "sdk";
 import { develop, checks, ci, review, merge, release } from "../packages/dev/steps/index.js";
 import { environments } from "../environments.ts";
 import { branches } from "../branches.ts";
+import { pullRequest } from "../packages/dev/output.ts";
 
 export default workflow({
   schema_version: 1,
   name: "pull-request",
   accepts: ["pull_request"],
+  output: pullRequest,
   triggers: [on("code.review.submitted", { verdict: "request_changes" })],
   branches,
   steps: [

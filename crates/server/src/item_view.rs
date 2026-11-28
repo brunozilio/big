@@ -1,7 +1,7 @@
 use connectors::ProviderDescriptor;
 use domain::Language;
 use domain::board::Group;
-use domain::workflow::{ItemId, StepState, WorkItem};
+use domain::workflow::{ItemId, Output, StepState, WorkItem};
 use orchestrator::{ItemSummary, NEEDS_CONNECTION, NEEDS_RECONNECT, StepSummary};
 use serde_json::{Value, json};
 use store::ConnectionRecord;
@@ -13,6 +13,7 @@ pub struct Known<'a> {
     pub stale: &'a [String],
     pub descriptors: &'a [ProviderDescriptor],
     pub described: &'a Value,
+    pub output: Option<&'a Output>,
     pub language: Language,
 }
 
@@ -32,7 +33,7 @@ pub fn state(state: StepState) -> Value {
     serde_json::to_value(state).unwrap_or(json!("pending"))
 }
 
-fn meta(known: &Known<'_>, step: &StepSummary) -> Value {
+pub(crate) fn meta(known: &Known<'_>, step: &StepSummary) -> Value {
     let labels = &known.described["labels"];
     let by_kind = step.kind.as_deref().map(|kind| &labels[kind]).filter(|found| !found.is_null());
     let mut found = by_kind.unwrap_or(&labels[step.id.as_str()]).clone();
@@ -100,26 +101,7 @@ fn issue(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -> V
     reference(known.descriptors, record, key, url.and_then(|output| output["url"].as_str()))
 }
 
-fn checks_state(state: StepState) -> Value {
-    match state {
-        StepState::Running | StepState::WaitingHuman => json!("running"),
-        StepState::Passed => json!("passed"),
-        StepState::Failed => json!("failed"),
-        StepState::Pending => json!("pending"),
-        StepState::Skipped => Value::Null,
-    }
-}
-
-fn checks(known: &Known<'_>, summary: &ItemSummary, item: &WorkItem) -> Value {
-    let Some(opened) = item.steps.iter().find(|run| text(&run.output["pr"]).is_some()) else { return Value::Null };
-    let Some(at) = summary.steps.iter().position(|step| step.id == opened.id) else { return Value::Null };
-    summary.steps[at + 1..]
-        .iter()
-        .find(|step| meta(known, step)["requires"] == "pipelines")
-        .map_or(Value::Null, |step| checks_state(step.state))
-}
-
-fn listed_sources(item: Option<&WorkItem>) -> Vec<Value> {
+pub(crate) fn listed_sources(item: Option<&WorkItem>) -> Vec<Value> {
     let Some(item) = item else { return Vec::new() };
     if let Some(found) = item.input["sources"].as_array() {
         return found.clone();
@@ -170,32 +152,6 @@ fn git(item: Option<&WorkItem>) -> Vec<Value> {
             })
         })
         .collect()
-}
-
-fn origin_change(known: &Known<'_>, item: Option<&WorkItem>) -> Value {
-    let listed = listed_sources(item);
-    let Some(pull) = listed.iter().find(|source| source["kind"] == "pull_request") else { return Value::Null };
-    let key = text(&pull["subject"]).unwrap_or_default();
-    let chosen = pull["connection"].as_str().and_then(|id| known.connections.iter().find(|record| record.id == id));
-    let Some(record) = chosen.or_else(|| serving(known.connections, "code")) else { return Value::Null };
-    let mut value = reference(known.descriptors, record, &key, None);
-    value["checks"] = Value::Null;
-    value["merged"] = json!(false);
-    value
-}
-
-fn change(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -> Value {
-    let found = outputs(item);
-    let Some(opened) = found.iter().rev().find(|output| text(&output["pr"]).is_some()) else {
-        return origin_change(known, item);
-    };
-    let Some(record) = serving(known.connections, "code") else { return Value::Null };
-    let key = text(&opened["pr"]).unwrap_or_default();
-    let merged = found.iter().any(|output| text(&output["pr"]).as_deref() == Some(&key) && output["merged"] == true);
-    let mut value = reference(known.descriptors, record, &key, opened["url"].as_str());
-    value["checks"] = item.map_or(Value::Null, |item| checks(known, summary, item));
-    value["merged"] = json!(merged);
-    value
 }
 
 fn reconnect(known: &Known<'_>, reason: &str) -> Option<Value> {
@@ -420,7 +376,8 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "group": group(summary.group),
         "status": summary.status,
         "issue": issue(known, summary, item),
-        "change": change(known, summary, item),
+        "change": crate::delivered_view::change(known, summary, item),
+        "delivered": crate::delivered_view::delivered(known, summary, item),
         "sources": sources(known, item),
         "git": git(item),
         "steps": summary.steps.iter().map(|step| step_json(known, step)).collect::<Vec<_>>(),
@@ -482,6 +439,7 @@ mod tests {
             stale: &stale,
             descriptors: &[],
             described: &Value::Null,
+            output: None,
             language: Language::default(),
         };
         let reason = format!("{NEEDS_RECONNECT}refresh_token is invalid");

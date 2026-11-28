@@ -58,12 +58,14 @@ impl Context {
 
     fn item(&mut self, shared: &Shared, summary: &ItemSummary) -> ApiResult<Value> {
         let described = self.described(shared, &summary.workflow);
+        let output = shared.backend.orchestrator.output(&summary.workflow);
         let item = shared.backend.orchestrator.item(&summary.id)?;
         let known = Known {
             connections: &self.connections,
             stale: &self.stale,
             descriptors: &self.descriptors,
             described: &described,
+            output: output.as_ref(),
             language: shared.language(),
         };
         let mut value = with_archive(item_view::item(&known, summary, item.as_ref()), &self.archived, &summary.id);
@@ -330,12 +332,14 @@ pub fn changed(shared: &Shared, id: &ItemId) -> ApiResult<Option<Value>> {
     }
     let mut context = Context::load(shared)?;
     let described = context.described(shared, &summary.workflow);
+    let output = shared.backend.orchestrator.output(&summary.workflow);
     let item = shared.backend.orchestrator.item(id)?;
     let known = Known {
         connections: &context.connections,
         stale: &context.stale,
         descriptors: &context.descriptors,
         described: &described,
+        output: output.as_ref(),
         language: shared.language(),
     };
     let mut value = with_archive(item_view::item(&known, &summary, item.as_ref()), &context.archived, id);

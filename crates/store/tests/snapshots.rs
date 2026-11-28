@@ -151,7 +151,7 @@ fn listings_rebuild_unreadable_projections_and_active_items_skip_ended_ones(fres
     for id in ["z", "a", "m"] {
         one_by_one(&store, &ItemId::from(id), &story(id, 2));
     }
-    store.append(&ItemId::from("a"), &[WorkflowEvent::Finished { output: json!(null) }]).expect("the store answers");
+    store.append(&ItemId::from("a"), &[WorkflowEvent::Finished { output: json!(null), delivered: None }]).expect("the store answers");
     break_projection(&place, "z");
     break_projection(&place, "a");
     let ids = |items: Vec<WorkItem>| items.into_iter().map(|item| item.id.to_string()).collect::<Vec<_>>();

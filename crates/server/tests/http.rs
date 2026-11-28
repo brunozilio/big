@@ -14,7 +14,7 @@ fn keys(value: &Value) -> Vec<String> {
     keys
 }
 
-const ITEM_KEYS: [&str; 27] = [
+const ITEM_KEYS: [&str; 28] = [
     "accepting",
     "activity",
     "application",
@@ -23,6 +23,7 @@ const ITEM_KEYS: [&str; 27] = [
     "change",
     "createdAt",
     "current",
+    "delivered",
     "doneAt",
     "git",
     "group",

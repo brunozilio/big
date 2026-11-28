@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use domain::effect::{Effect, EffectOutcome, EffectRequest, IdempotencyKey};
-use domain::workflow::{ItemId, StepState, WorkItem, WorkflowEvent};
+use domain::workflow::{Delivered, ItemId, StepState, WorkItem, WorkflowEvent};
 use serde_json::{Value, json};
 use tokio::sync::{OwnedSemaphorePermit, mpsc};
 use tokio::task::AbortHandle;
@@ -15,7 +15,7 @@ use crate::events::{OrchestratorEvent, Wake};
 use crate::ledger::Ledger;
 use crate::protocol::{AGENT, Activated, CHILD, Command, Signal, WAIT_HUMAN, kind_of};
 use crate::rewind;
-use crate::shared::Shared;
+use crate::shared::{Shared, now_ms};
 use crate::views::item_json;
 
 struct Inflight {
@@ -206,7 +206,7 @@ impl Runner {
             }
             "completed" | "cancelled" => {
                 let ending = if activated.state == "completed" {
-                    WorkflowEvent::Finished { output: activated.result }
+                    WorkflowEvent::Finished { output: activated.result, delivered: self.delivered()? }
                 } else {
                     WorkflowEvent::Cancelled { reason: activated.reason.unwrap_or_default() }
                 };
@@ -222,6 +222,12 @@ impl Runner {
                 Ok(true)
             }
         }
+    }
+
+    fn delivered(&self) -> Result<Option<Delivered>> {
+        let item = self.shared.item(&self.id)?;
+        let output = self.shared.script_for(&item).ok().and_then(|script| script.output.clone());
+        Ok(output.and_then(|output| output.deliver(&item.steps, now_ms())))
     }
 
     async fn activate(&self, item: &WorkItem, ledger: &Ledger) -> Result<Activated> {

@@ -1,4 +1,5 @@
 import { step, change, markdown } from "sdk";
+import { pullRequest } from "../output.ts";
 import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, gitOf, issueOf, object, planOf, repoOf, source, sourcePullRequestOf, summaryLine, targetFields } from "sdk/steps/context.js";
 
 function describe(summary, plan, issue, extra) {
@@ -79,6 +80,7 @@ export default step({
   icon: "sPr",
   requires: "code",
   doing: "Opening PR",
+  delivers: pullRequest,
   view: (s) => opened(Array.isArray(s.prs) && s.prs.length > 0 ? s.prs : [s]),
   async run(ctx, opts) {
     const previous = object(ctx.output(ctx.step));

@@ -209,7 +209,7 @@ async fn a_custom_workflow_with_all_child_and_event_timeouts_resumes_after_a_res
     let done = server.until(&id, "the parent ends", |item| item["group"] == "delivered").await;
     assert_eq!(done["status"], "Fazendo");
     let ended = server.handle.item(&parent).expect("store").expect("item");
-    let Some(domain::workflow::Ending::Finished { output }) = ended.ending else { panic!("{ended:?}") };
+    let Some(domain::workflow::Ending::Finished { output, .. }) = ended.ending else { panic!("{ended:?}") };
     assert_eq!(output, json!({ "child": "go", "to": "Pronto", "late": "timeout" }));
     assert_eq!(hub.tracker.state().comments_posted, 1);
     server.stop().await;

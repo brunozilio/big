@@ -1,6 +1,7 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex, PoisonError};
 
+use domain::workflow::Output;
 use serde_json::{Value, json};
 
 use crate::bundle::{Bundle, ENTRY, bundle};
@@ -21,6 +22,7 @@ pub struct Script {
     bundle: Bundle,
     pub target: Value,
     pub described: Value,
+    pub output: Option<Output>,
     views: Mutex<Vec<(String, Value)>>,
 }
 
@@ -33,6 +35,7 @@ fn versioned(described: &mut Value, workflow: &str) -> Result<(), String> {
             read(Contract::Trigger, trigger, &at).map_err(|error| error.to_string())?;
         }
         packages(&mut shape["steps"], &at)?;
+        Output::read(&shape["output"]).map_err(|error| format!("{at}: {error}"))?;
     }
     Ok(())
 }
@@ -55,7 +58,8 @@ impl Script {
     }
 
     fn built(bundle: Bundle, workflow: &str) -> Result<Script, String> {
-        let mut script = Script { bundle, target: Value::Null, described: Value::Null, views: Mutex::default() };
+        let mut script =
+            Script { bundle, target: Value::Null, described: Value::Null, output: None, views: Mutex::default() };
         script.described = script.call("host.describe", &[])?;
         versioned(&mut script.described, workflow)?;
         let names: Vec<&str> = script.described["workflows"]
@@ -65,6 +69,9 @@ impl Script {
         let chosen = names.iter().find(|name| **name == workflow).or_else(|| names.last());
         let chosen = chosen.ok_or_else(|| format!("the module of {workflow} registers no workflow"))?;
         script.target = json!({ "workflow": chosen });
+        let shapes = script.described["workflows"].as_array().into_iter().flatten();
+        let shape = shapes.into_iter().find(|shape| shape["name"] == script.target["workflow"]);
+        script.output = shape.and_then(|shape| Output::read(&shape["output"]).ok().flatten());
         Ok(script)
     }
 

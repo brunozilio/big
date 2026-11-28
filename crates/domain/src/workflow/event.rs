@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use super::item::{ItemId, ItemRecap, Observed, StepState};
+use super::deliverable::Delivered;
 use crate::effect::{EffectOutcome, EffectRequest, IdempotencyKey};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -76,6 +77,8 @@ pub enum WorkflowEvent {
     },
     Finished {
         output: Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delivered: Option<Delivered>,
     },
     ExternalObserved(Observed),
     Reconciled {

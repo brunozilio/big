@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use super::deliverable::Delivered;
 use crate::effect::{EffectOutcome, EffectRequest, IdempotencyKey};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -121,7 +122,11 @@ impl Observed {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Ending {
-    Finished { output: Value },
+    Finished {
+        output: Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        delivered: Option<Delivered>,
+    },
     Cancelled { reason: String },
 }
 

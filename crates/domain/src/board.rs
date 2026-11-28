@@ -56,7 +56,7 @@ mod tests {
     #[test]
     fn an_ended_workflow_is_delivered_whatever_else_lingers() {
         let finished = WorkItem {
-            ending: Some(Ending::Finished { output: json!(null) }),
+            ending: Some(Ending::Finished { output: json!(null), delivered: None }),
             impediment: Some(Impediment { reason: None }),
             ..with_step(StepState::WaitingHuman)
         };

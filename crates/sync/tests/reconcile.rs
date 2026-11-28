@@ -145,7 +145,7 @@ async fn runs_are_left_alone_when_nothing_waits_for_a_pipeline() {
 async fn ended_items_are_not_reconciled() {
     let h = harness().await;
     standard_item(&h, "i1");
-    h.add("i1", &[WorkflowEvent::Finished { output: json!(null) }]);
+    h.add("i1", &[WorkflowEvent::Finished { output: json!(null), delivered: None }]);
     h.fake.world().issues.insert("K-1".into(), ("Done".into(), false));
     assert_eq!(h.sync.reconcile_now().await.unwrap().items, 0);
 }

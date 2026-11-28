@@ -227,7 +227,7 @@ fn timers_are_pending_until_fired() {
 
 #[test]
 fn finishing_and_cancelling_end_the_item() {
-    let done = replay(&[created(), WorkflowEvent::Finished { output: json!(1) }]);
+    let done = replay(&[created(), WorkflowEvent::Finished { output: json!(1), delivered: None }]);
     assert!(done.is_finished() && done.is_ended() && !done.is_cancelled());
     let cancelled = replay(&[created(), WorkflowEvent::Cancelled { reason: "by hand".into() }]);
     assert!(cancelled.is_cancelled() && cancelled.is_ended() && !cancelled.is_finished());
@@ -247,7 +247,7 @@ fn rewinding_drops_what_came_after_the_step_and_resets_it() {
         finished("b", StepState::Passed),
         started("c"),
         requested("c", 3, exec()),
-        WorkflowEvent::Finished { output: json!(null) },
+        WorkflowEvent::Finished { output: json!(null), delivered: None },
         WorkflowEvent::Rewound { to: "b".into(), at: None },
     ]);
     let ids: Vec<_> = item.steps.iter().map(|s| (s.id.as_str(), s.state)).collect();

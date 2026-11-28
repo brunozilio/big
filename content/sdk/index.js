@@ -1029,6 +1029,7 @@ export function step(definition) {
     icon: definition.icon || null,
     requires: definition.requires || (typeof definition.needs === "string" ? definition.needs : null),
     doing: definition.doing || null,
+    delivers: definition.delivers && typeof definition.delivers === "object" ? plain(definition.delivers) : null,
   });
   registry.steps.set(type.name, type);
   const named = typeof definition.id === "string" && definition.id ? definition.id : type.name;
@@ -1111,6 +1112,7 @@ export function workflow(definition) {
     triggers: definition.triggers || [],
     reconcile: definition.reconcile || {},
     accepts: Array.isArray(definition.accepts) ? definition.accepts : [],
+    output: definition.output && typeof definition.output === "object" ? plain(definition.output) : delivered(steps, 0),
     steps,
     run,
     branches: typeof definition.branches === "function" ? definition.branches : null,
@@ -1118,6 +1120,17 @@ export function workflow(definition) {
   });
   registry.workflows.set(shape.name, shape);
   return shape;
+}
+
+function delivered(calls, depth) {
+  if (depth > DEEPEST) return null;
+  for (const call of (calls || []).map(callOf)) {
+    const type = call && call.type === "step-call" ? registry.steps.get(call.step) : null;
+    if (type && type.delivers) return type.delivers;
+    const inner = call ? delivered(childrenQuietly(call), depth + 1) : null;
+    if (inner) return inner;
+  }
+  return null;
 }
 
 function childrenQuietly(call) {
@@ -1250,6 +1263,7 @@ function describe() {
     triggers: found.triggers,
     reconcile: found.reconcile,
     accepts: found.accepts,
+    output: found.output,
     steps: tree(found.steps, "", nodes, 0),
     code: found.code,
   }));

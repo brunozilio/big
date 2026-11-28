@@ -27,6 +27,7 @@ mod editor;
 mod error;
 mod folders;
 mod item_usage;
+mod delivered_view;
 mod item_view;
 mod items;
 mod library;

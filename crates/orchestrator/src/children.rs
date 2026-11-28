@@ -53,7 +53,7 @@ pub fn sweep(shared: &Shared, parent: &ItemId, ledger: &Ledger) -> Result<()> {
         let child = child_id(parent, &key);
         let Some(Some(ending)) = shared.store.item(&child)?.map(|state| state.ending) else { continue };
         let (output, outcome) = match ending {
-            Ending::Finished { output } => (output.clone(), EffectOutcome::Ok { value: output }),
+            Ending::Finished { output, .. } => (output.clone(), EffectOutcome::Ok { value: output }),
             Ending::Cancelled { reason } => (serde_json::json!({ "cancelled": reason }), EffectOutcome::Cancelled),
         };
         let linked = shared.item(parent)?.children.iter().any(|link| link.id == child && !link.finished);

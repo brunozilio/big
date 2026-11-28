@@ -2,11 +2,13 @@ import { workflow, on } from "sdk";
 import { plan, ticket, cases, develop, checks, pr, ci, quality, security, review, provision, merge, release } from "../packages/dev/steps/index.js";
 import { environments } from "../environments.ts";
 import { branches } from "../branches.ts";
+import { pullRequest } from "../packages/dev/output.ts";
 
 export default workflow({
   schema_version: 1,
   name: "entrega",
   accepts: ["issue", "text"],
+  output: pullRequest,
   triggers: [on("tracker.issue.created")],
   branches,
   steps: [

@@ -2,6 +2,7 @@ mod application;
 mod budget;
 mod cloud;
 mod control;
+mod delivered;
 mod factory;
 mod flow;
 mod generic;
@@ -510,7 +511,7 @@ pub async fn crash(handle: Handle) {
 
 pub fn output(item: &WorkItem) -> Value {
     match &item.ending {
-        Some(domain::workflow::Ending::Finished { output }) => output.clone(),
+        Some(domain::workflow::Ending::Finished { output, .. }) => output.clone(),
         other => panic!("the item did not finish: {other:?}"),
     }
 }

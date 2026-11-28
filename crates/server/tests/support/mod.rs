@@ -54,7 +54,7 @@ const approve = step({
   },
 });
 
-export default workflow({ name: "default", steps: [work(), approve()] });
+export default workflow({ name: "default", output: { kind: "pr", via: "code", source: "pull_request", done: { merged: true } }, steps: [work(), approve()] });
 "#;
 
 const WORKER: &str = "---\nname: worker\npermissionMode: auto\nmodel: auto\n---\nVocê trabalha.";

@@ -58,7 +58,7 @@ mod tests {
         let Ok(store) = Store::in_memory(0) else { panic!("store") };
         let store = Arc::new(store);
         assert!(store.append(&ItemId::from("a"), &[created("a", "w1")]).is_ok());
-        let done = [created("b", "w2"), WorkflowEvent::Finished { output: json!(null) }];
+        let done = [created("b", "w2"), WorkflowEvent::Finished { output: json!(null), delivered: None }];
         assert!(store.append(&ItemId::from("b"), &done).is_ok());
         let view = StoreView::new(store);
         view.set_policy("w1", ReconcilePolicy { status: FieldPolicy::Local, ..ReconcilePolicy::default() });

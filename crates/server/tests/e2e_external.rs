@@ -142,6 +142,9 @@ async fn a_new_workflow_in_the_repository_changes_the_steps_and_the_statuses_sen
     server.input(&id, "merge", "merge", json!({ "method": "squash" })).await;
     let done = server.until(&id, "the delivery", |item| item["group"] == "delivered").await;
     assert_eq!(done["status"], "Etapa 3");
+    assert_eq!(done["change"]["key"], merging["change"]["key"], "a workflow without output inherits the pull request of its pr step");
+    assert_eq!(done["change"]["merged"], true);
+    assert_eq!((done["delivered"]["kind"].clone(), done["delivered"]["done"].clone()), (json!("pr"), json!(true)));
     let sent = hub.tracker.statuses_of("K-102");
     assert!(sent.ends_with(&["Etapa 2".to_owned(), "Etapa 3".to_owned()]), "{sent:?}");
     assert!(sent.iter().all(|status| status.starts_with("Etapa")), "{sent:?}");
