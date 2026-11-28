@@ -11,6 +11,7 @@ mod blocks;
 mod boot;
 mod branding;
 mod browser_devices;
+pub mod browser_logic;
 mod browsers;
 mod btw;
 mod callback_port;

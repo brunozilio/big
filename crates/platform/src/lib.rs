@@ -16,6 +16,7 @@ pub mod passkey;
 pub mod password;
 pub mod private_file;
 pub mod runtime;
+pub mod signing;
 pub mod stop;
 pub mod store;
 pub mod sync;

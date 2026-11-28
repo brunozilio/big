@@ -404,6 +404,8 @@ async fn on_a_shared_server_the_paired_chrome_opens_the_page_and_relays_what_it_
 #[tokio::test(flavor = "multi_thread")]
 async fn the_browser_logic_is_served_to_the_extension_without_a_session() {
     let world = shared_world().await;
+    let data = tempfile::tempdir().expect("data");
+    server::browser_logic::prepare(data.path());
     let request = Request::builder()
         .uri("/api/browser/logic.js")
         .header("host", "127.0.0.1:7999")
@@ -413,8 +415,11 @@ async fn the_browser_logic_is_served_to_the_extension_without_a_session() {
     let response = world.router.clone().oneshot(request).await.expect("response");
     assert_eq!(response.status(), StatusCode::OK);
     assert!(response.headers()["content-type"].to_str().unwrap_or_default().starts_with("text/javascript"));
+    let header = |name: &str| response.headers().get(name).and_then(|value| value.to_str().ok()).unwrap_or_default().to_owned();
+    let (signature, key) = (header("x-logic-signature"), header("x-logic-key"));
     let bytes = response.into_body().collect().await.expect("body").to_bytes();
     assert!(String::from_utf8_lossy(&bytes).contains("globalThis.__logic"));
+    assert!(platform::signing::verified(&key, &bytes, &signature), "the served logic is signed");
 }
 #[tokio::test(flavor = "multi_thread")]
 async fn only_the_owner_kills_an_item_and_killing_an_agent_needs_an_administrator() {

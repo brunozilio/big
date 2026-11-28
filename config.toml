@@ -257,6 +257,9 @@ call_seconds = "150"
 switch_seconds = "120"
 upload_limit_mb = "10"
 extension_folder = "browser-extension"
+logic_signing_key = "browser-logic.key"
+logic_signature_file = ""
+logic_key_file = ""
 files_folder = "browser-files"
 
 [mcp]
@@ -357,6 +360,7 @@ capture_limit = 16384
 [secrets]
 backend = "file"
 key_file = ""
+previous_key_file = ""
 
 [features]
 redact_secrets = true

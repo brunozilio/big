@@ -1,7 +1,7 @@
 import { BUILD, NAME } from "../config.js";
 import { answered, ask, cancel } from "./ask.js";
 import { forwardEvents, invoke } from "./bridge.js";
-import { forgetServer, homes, identity, servers } from "./identity.js";
+import { forgetServer, homes, identity, pinned, servers } from "./identity.js";
 import { relay, watchRelays } from "./relay.js";
 import { connectServer, reloadFor } from "./servers.js";
 
@@ -48,6 +48,7 @@ const FROM_OFFSCREEN = {
   servers: () => servers(),
   homes: () => homes(),
   forget: (message) => forgetServer(message.base),
+  pin: (message) => pinned(message.base, message.key),
   badge: async (message) => badge(message.state),
   reload: (message) => reload(message.build),
 };

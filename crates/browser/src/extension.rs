@@ -51,10 +51,10 @@ pub struct Installed {
     pub build: String,
 }
 
-pub fn install(folder: &Path, port: u16) -> Result<Installed, String> {
+pub fn install(folder: &Path, port: u16, key: &str) -> Result<Installed, String> {
     let mut written = 0;
     let icon = icon();
-    let rendered = rendered(port, icon.is_none());
+    let rendered = rendered(port, key, icon.is_none());
     let build = fingerprint(&rendered, icon);
     for (path, rendered) in rendered {
         let target = folder.join(path);
@@ -89,7 +89,7 @@ pub struct Packaged {
 
 pub fn packaged() -> Result<Packaged, String> {
     let icon = icon();
-    let rendered = rendered(0, icon.is_none());
+    let rendered = rendered(0, "", icon.is_none());
     let build = fingerprint(&rendered, icon);
     let folder = format!("{}-{}", brand::COMMAND, brand::browser::EXTENSION_FOLDER);
     let mut zip = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
@@ -110,11 +110,11 @@ pub fn packaged() -> Result<Packaged, String> {
     Ok(Packaged { name: format!("{folder}.zip"), bytes, build })
 }
 
-fn rendered(port: u16, iconless: bool) -> Vec<(&'static str, String)> {
+fn rendered(port: u16, key: &str, iconless: bool) -> Vec<(&'static str, String)> {
     FILES
         .iter()
         .map(|(path, source)| {
-            let text = render(source, port);
+            let text = render(source, port, key);
             (*path, if *path == "manifest.json" && iconless { without_icons(&text) } else { text })
         })
         .collect()
@@ -160,8 +160,8 @@ fn write_if_changed(target: &Path, bytes: &[u8]) -> Result<bool, String> {
     Ok(true)
 }
 
-fn render(source: &str, port: u16) -> String {
-    brand::text(source).replace("{{PORT}}", &port.to_string()).replace("{{VERSION}}", env!("CARGO_PKG_VERSION"))
+fn render(source: &str, port: u16, key: &str) -> String {
+    brand::text(source).replace("{{PORT}}", &port.to_string()).replace("{{LOGIC_KEY}}", key).replace("{{VERSION}}", env!("CARGO_PKG_VERSION"))
 }
 
 #[cfg(test)]
@@ -171,7 +171,7 @@ mod tests {
     #[test]
     fn the_extension_is_written_with_the_brand_and_port_and_rewritten_only_when_it_changes() {
         let folder = tempfile::tempdir().unwrap_or_else(|_| unreachable!());
-        let first = install(folder.path(), 4321);
+        let first = install(folder.path(), 4321, "key");
         assert_eq!(first.map(|installed| installed.written), Ok(FILES.len() + usize::from(icon().is_some())));
         assert_eq!(std::fs::read(folder.path().join(ICON)).ok().as_deref(), icon());
         let manifest = std::fs::read_to_string(folder.path().join("manifest.json")).unwrap_or_default();
@@ -184,16 +184,17 @@ mod tests {
         assert!(parsed["action"].get("default_popup").is_none());
         let config = std::fs::read_to_string(folder.path().join("config.js")).unwrap_or_default();
         assert!(config.contains("4321"));
+        assert!(config.contains(r#"LOGIC_KEY = "key";"#));
         for (path, _) in FILES {
             let text = std::fs::read_to_string(folder.path().join(path)).unwrap_or_default();
             assert!(!text.contains("{{"), "{path} keeps a placeholder");
         }
-        let again = install(folder.path(), 4321);
+        let again = install(folder.path(), 4321, "key");
         assert_eq!(again.as_ref().map(|installed| installed.written), Ok(0));
         let build = again.map(|installed| installed.build).unwrap_or_default();
         assert_eq!(build.len(), 16);
         assert!(config.contains(&build));
-        let moved = install(folder.path(), 9999);
+        let moved = install(folder.path(), 9999, "key");
         assert_eq!(moved.as_ref().map(|installed| installed.written), Ok(2));
         assert_ne!(moved.map(|installed| installed.build).unwrap_or_default(), build);
     }
@@ -238,7 +239,7 @@ mod tests {
         let packaged: Vec<&str> = FILES.iter().map(|(path, _)| *path).collect();
         assert!(packaged.contains(&"page/relay.js"));
         assert!(packaged.contains(&"shell/relay.js"));
-        let manifest: serde_json::Value = serde_json::from_str(&render(FILES[0].1, 4321)).unwrap_or_default();
+        let manifest: serde_json::Value = serde_json::from_str(&render(FILES[0].1, 4321, "")).unwrap_or_default();
         let permissions = manifest["permissions"].as_array().cloned().unwrap_or_default();
         assert!(permissions.iter().any(|permission| permission == "declarativeNetRequest"));
         let scripts = manifest["content_scripts"].as_array().cloned().unwrap_or_default();
@@ -253,7 +254,7 @@ mod tests {
         let script = FILES
             .iter()
             .find(|(path, _)| *path == "page/relay.js")
-            .map(|(_, source)| render(source, 4321))
+            .map(|(_, source)| render(source, 4321, ""))
             .unwrap_or_default();
         assert!(script.contains(&format!("\"{marker}\"")));
         let worker = FILES.iter().find(|(path, _)| *path == "shell/worker.js").map(|(_, source)| *source).unwrap_or_default();
@@ -262,7 +263,7 @@ mod tests {
 
     #[test]
     fn without_a_png_the_manifest_keeps_no_icon() {
-        let manifest = without_icons(&render(FILES[0].1, 4321));
+        let manifest = without_icons(&render(FILES[0].1, 4321, ""));
         let parsed: serde_json::Value = serde_json::from_str(&manifest).unwrap_or_default();
         assert!(parsed.get("icons").is_none());
         assert!(parsed["action"].get("default_icon").is_none());

@@ -27,6 +27,7 @@ type Entries = BTreeMap<String, Sealed>;
 pub struct SealedSecretStore {
     vault: Document,
     cipher: XChaCha20Poly1305,
+    previous: Option<XChaCha20Poly1305>,
     unreadable: Mutex<Option<String>>,
 }
 
@@ -37,7 +38,12 @@ impl std::fmt::Debug for SealedSecretStore {
 }
 
 impl SealedSecretStore {
+    #[cfg(test)]
     pub fn open(path: &Path, key: [u8; 32]) -> Result<Self, String> {
+        Self::rotating(path, key, None)
+    }
+
+    pub fn rotating(path: &Path, key: [u8; 32], previous: Option<[u8; 32]>) -> Result<Self, String> {
         let vault = Document::at(path);
         let entries = match vault.read::<Entries>() {
             Ok(entries) => entries.unwrap_or_default(),
@@ -47,12 +53,40 @@ impl SealedSecretStore {
             }
             Err(error) => return Err(format!("the secrets file cannot be used: {error}")),
         };
-        let store = Self { vault, cipher: XChaCha20Poly1305::new(&key.into()), unreadable: Mutex::new(None) };
+        let previous = previous.filter(|previous| *previous != key).map(|previous| XChaCha20Poly1305::new(&previous.into()));
+        let store = Self { vault, cipher: XChaCha20Poly1305::new(&key.into()), previous, unreadable: Mutex::new(None) };
+        let entries = if store.previous.is_some() { store.resealed(entries)? } else { entries };
         let closed = entries.iter().filter(|(name, entry)| store.opened(name, entry).is_none()).count();
         if closed > 0 {
             store.found_unreadable(closed);
         }
         Ok(store)
+    }
+
+    fn resealed(&self, entries: Entries) -> Result<Entries, String> {
+        let stale = |entries: &Entries| entries.iter().any(|(name, entry)| self.opened_with(&self.cipher, name, entry).is_none());
+        if !stale(&entries) {
+            return Ok(entries);
+        }
+        let mut moved = 0;
+        let kept = self.vault.try_update(|entries: &mut Entries| {
+            for (name, entry) in entries.iter_mut() {
+                if self.opened_with(&self.cipher, name, entry).is_some() {
+                    continue;
+                }
+                let Some(secrets) = self.previous.as_ref().and_then(|previous| self.opened_with(previous, name, entry)) else {
+                    continue;
+                };
+                *entry = self.sealed(name, &secrets)?;
+                moved += 1;
+            }
+            Ok::<Entries, String>(entries.clone())
+        });
+        let entries = kept.map_err(|error| error.to_string())??;
+        if moved > 0 {
+            tracing::info!(moved, "saved secrets were sealed again with the new secrets key");
+        }
+        Ok(entries)
     }
 
     fn found_unreadable(&self, count: usize) -> String {
@@ -84,9 +118,13 @@ impl SealedSecretStore {
     }
 
     fn opened(&self, name: &str, entry: &Sealed) -> Option<Secrets> {
+        self.opened_with(&self.cipher, name, entry)
+            .or_else(|| self.previous.as_ref().and_then(|previous| self.opened_with(previous, name, entry)))
+    }
+
+    fn opened_with(&self, cipher: &XChaCha20Poly1305, name: &str, entry: &Sealed) -> Option<Secrets> {
         let nonce: [u8; 24] = unhex(&entry.nonce)?.try_into().ok()?;
-        let opened = self
-            .cipher
+        let opened = cipher
             .decrypt(XNonce::from_slice(&nonce), Payload { msg: &unhex(&entry.sealed)?, aad: name.as_bytes() })
             .ok()?;
         serde_json::from_slice(&opened).ok()
@@ -217,6 +255,24 @@ mod tests {
         let reopened = SealedSecretStore::open(&path, key).expect("reopen");
         assert_eq!(reopened.get(connection), Some(secrets()));
         assert!(!std::fs::read_to_string(&path).expect("read").contains("very_secret"));
+    }
+
+    #[test]
+    fn a_new_key_with_the_previous_one_seals_every_saved_secret_again() {
+        let dir = tempfile::tempdir().expect("dir");
+        let path = dir.path().join("secrets.json");
+        let (old, new) = ([1; 32], [2; 32]);
+        let (kept, stranger) = (SecretId::new(), SecretId::new());
+        SealedSecretStore::open(&path, old).expect("old").set(kept, &secrets()).expect("set");
+        SealedSecretStore::open(&path, [3; 32]).expect("other").set(stranger, &secrets()).expect("set");
+        let before = std::fs::read_to_string(&path).expect("read");
+        let rotated = SealedSecretStore::rotating(&path, new, Some(old)).expect("rotated");
+        assert_eq!(rotated.get(kept), Some(secrets()));
+        assert!(rotated.unkept().is_some_and(|reason| reason.starts_with("1 saved secret ")), "only the stranger stays shut");
+        assert_ne!(std::fs::read_to_string(&path).expect("read"), before);
+        let alone = SealedSecretStore::open(&path, new).expect("new alone");
+        assert_eq!(alone.get(kept), Some(secrets()), "the new key opens it without the previous one");
+        assert_eq!(SealedSecretStore::open(&path, old).expect("old alone").get(kept), None);
     }
 
     #[test]

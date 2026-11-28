@@ -1,4 +1,4 @@
-import { BUILD, PORT, SOCKET, VERSION } from "../config.js";
+import { BUILD, LOGIC_KEY, PORT, SOCKET, VERSION } from "../config.js";
 
 const RETRY_MS = 3000;
 const LOCAL = "local";
@@ -44,10 +44,26 @@ export function blocksOf(text) {
   return { data, rest };
 }
 
+function bytesOf(text) {
+  return Uint8Array.from(atob(text), (letter) => letter.charCodeAt(0));
+}
+
+export async function verified(key, signature, code) {
+  if (!key || !signature) return false;
+  try {
+    const imported = await crypto.subtle.importKey("raw", bytesOf(key), { name: "Ed25519" }, false, ["verify"]);
+    return await crypto.subtle.verify({ name: "Ed25519" }, imported, bytesOf(signature), new TextEncoder().encode(code));
+  } catch {
+    return false;
+  }
+}
+
 async function loadLogic(link) {
   const response = await fetch(`${link.home}/api/browser/logic.js`, { headers: link.headers(), cache: "no-store" });
   if (!response.ok) throw new Error(`logic ${response.status}`);
   const code = await response.text();
+  const key = await link.trusted(response.headers.get("x-logic-key"));
+  if (!(await verified(key, response.headers.get("x-logic-signature"), code))) throw new Error("the served logic is not signed by the key this browser trusts");
   if (link.sandbox && link.code === code) return;
   link.code = code;
   link.sandbox?.remove();
@@ -87,7 +103,7 @@ async function hello() {
 }
 
 function localLink() {
-  const link = { key: LOCAL, home: `http://127.0.0.1:${PORT}`, state: "disconnected", socket: null, retry: null, headers: () => ({}) };
+  const link = { key: LOCAL, home: `http://127.0.0.1:${PORT}`, state: "disconnected", socket: null, retry: null, headers: () => ({}), trusted: async () => LOGIC_KEY };
   link.send = (message) => {
     if (link.socket?.readyState === WebSocket.OPEN) link.socket.send(JSON.stringify(message));
   };
@@ -141,6 +157,7 @@ async function listen(link, response) {
 function serverLink(server) {
   const link = { key: server.base, home: server.base, token: server.token, state: "disconnected", retry: null, gone: false, running: false };
   link.headers = () => ({ authorization: `Bearer ${link.token}` });
+  link.trusted = (offered) => worker("pin", { base: link.home, key: offered });
   link.send = (message) => {
     fetch(`${link.home}/api/browser/reply`, { method: "POST", headers: { ...link.headers(), "content-type": "application/json" }, body: JSON.stringify(message) }).catch(() => {});
   };

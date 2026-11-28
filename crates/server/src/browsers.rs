@@ -29,7 +29,8 @@ pub fn install(hub: &browser::Hub, data: &Path, port: u16) {
         Ok(made) => hub.expect(&made.build),
         Err(error) => tracing::warn!(%error, "the browser extension package could not be made"),
     }
-    match browser::install(&folder(data), port) {
+    let key = crate::browser_logic::prepare(data).map(|signed| signed.key.as_str()).unwrap_or_default();
+    match browser::install(&folder(data), port, key) {
         Ok(installed) => {
             hub.expect(&installed.build);
             if installed.written > 0 {

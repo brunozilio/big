@@ -23,9 +23,20 @@ export async function servers() {
   return Array.isArray(saved[SERVERS_KEY]) ? saved[SERVERS_KEY] : [];
 }
 
-export async function rememberServer(base, token) {
+export async function rememberServer(base, token, key) {
   const kept = (await servers()).filter((server) => server.base !== base);
-  await chrome.storage.local.set({ [SERVERS_KEY]: [...kept, { base, token }] });
+  await chrome.storage.local.set({ [SERVERS_KEY]: [...kept, { base, token, ...(key ? { key } : {}) }] });
+}
+
+export async function pinned(base, offered) {
+  const known = await servers();
+  const server = known.find((each) => each.base === base);
+  if (!server) return null;
+  if (server.key) return server.key;
+  if (!offered) return null;
+  server.key = offered;
+  await chrome.storage.local.set({ [SERVERS_KEY]: known });
+  return offered;
 }
 
 export async function forgetServer(base) {

@@ -40,7 +40,7 @@ export async function connectServer(message, sender) {
   const claimed = await response.json().catch(() => ({}));
   if (!claimed.token) return { ok: false, reason: "claim-failed" };
   await trust(origin);
-  await rememberServer(base, claimed.token);
+  await rememberServer(base, claimed.token, typeof claimed.logicKey === "string" ? claimed.logicKey : null);
   chrome.runtime.sendMessage({ type: "servers-changed" }).catch(() => {});
   return { ok: true };
 }

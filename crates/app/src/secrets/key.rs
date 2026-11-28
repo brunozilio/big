@@ -5,6 +5,7 @@ use platform::keychain::Keychain;
 use super::sealed::{hex, unhex};
 
 pub const IN_KEYCHAIN: &str = "keychain";
+pub const NO_PREVIOUS: &str = "none";
 pub const CHOICE: &str = "backend in the [secrets] section of config.toml";
 
 #[derive(Clone, Copy)]
@@ -142,6 +143,14 @@ pub fn given(path: &Path) -> Result<[u8; 32], String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("the secrets key file {} cannot be read: {error}", path.display()))?;
     read(path, &text)
+}
+
+pub fn previous(path: &Path) -> Option<[u8; 32]> {
+    let text = std::fs::read_to_string(path).ok()?;
+    if text.trim().is_empty() || text.trim() == NO_PREVIOUS {
+        return None;
+    }
+    read(path, &text).inspect_err(|error| tracing::warn!(%error, "the previous secrets key is ignored")).ok()
 }
 
 fn read(path: &Path, text: &str) -> Result<[u8; 32], String> {

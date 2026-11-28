@@ -40,6 +40,8 @@ enum Internal {
         about = "Serve the MCP resources the content declares (browser, memory, connectors…) on stdin/stdout, for another agent to use"
     )]
     Mcp(mcp::Args),
+    #[command(hide = true, about = "Sign the browser logic with a key file and write the signature and public key to a folder")]
+    SignLogic { key: PathBuf, out: PathBuf },
 }
 
 fn main() -> ExitCode {
@@ -66,8 +68,20 @@ fn launched(cli: Cli, root: &Path) -> Result<ExitCode, String> {
         Some(Internal::CloudCredentials(args)) => cloud::run(args),
         Some(Internal::GitCredential(args)) => git_credential::run(args),
         Some(Internal::Mcp(args)) => data_dir().and_then(|data| mcp::run(args, data)),
+        Some(Internal::SignLogic { key, out }) => signed_logic(&key, &out),
         None => serve(root, cli.port.unwrap_or_else(configured_port), !cli.no_open && configured_open()),
     }
+}
+
+fn signed_logic(key: &Path, out: &Path) -> Result<ExitCode, String> {
+    let text = std::fs::read_to_string(key).map_err(|error| format!("{}: {error}", key.display()))?;
+    let signed = server::browser_logic::signature_of(&text)?;
+    std::fs::create_dir_all(out).map_err(|error| format!("{}: {error}", out.display()))?;
+    for (name, value) in [("logic.sig", &signed.signature), ("logic.key", &signed.key)] {
+        let path = out.join(name);
+        std::fs::write(&path, value).map_err(|error| format!("{}: {error}", path.display()))?;
+    }
+    Ok(ExitCode::SUCCESS)
 }
 
 fn finish(ended: Result<ExitCode, String>) -> ExitCode {

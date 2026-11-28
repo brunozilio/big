@@ -55,16 +55,28 @@ pub fn open_path(path: &str) -> bool {
     path == CLAIM || path == STREAM || path == REPLY || path == LOOPBACK || path == browser::LOGIC_ROUTE
 }
 
+pub const SIGNATURE_HEADER: &str = "x-logic-signature";
+pub const KEY_HEADER: &str = "x-logic-key";
+
 pub async fn logic() -> Response {
     let served = browser::logic();
-    (
+    let mut response = (
         [
             (CONTENT_TYPE, "text/javascript; charset=utf-8".to_owned()),
             (axum::http::header::CACHE_CONTROL, "no-store".to_owned()),
+            (axum::http::header::ACCESS_CONTROL_EXPOSE_HEADERS, format!("{SIGNATURE_HEADER}, {KEY_HEADER}")),
         ],
         served.code.clone(),
     )
-        .into_response()
+        .into_response();
+    if let Some(signed) = crate::browser_logic::signed() {
+        for (name, value) in [(SIGNATURE_HEADER, &signed.signature), (KEY_HEADER, &signed.key)] {
+            if let Ok(value) = axum::http::HeaderValue::from_str(value) {
+                response.headers_mut().insert(name, value);
+            }
+        }
+    }
+    response
 }
 
 fn issue(owner: &str) -> ApiResult<String> {
@@ -142,7 +154,8 @@ pub async fn claim(State(ctx): State<Ctx>, Json(claim): Json<Claim>) -> ApiResul
     let kept = BrowserDevice { device: device.to_owned(), owner, name, created: settings::now() };
     ctx.backend.store.add_browser_device(&hashed(&token), &kept)?;
     tracing::info!(device = %kept.device, "a browser was paired");
-    Ok(reply(json!({ "token": token, "server": settings::public_base(ctx.port) })))
+    let key = crate::browser_logic::signed().map(|signed| signed.key.clone());
+    Ok(reply(json!({ "token": token, "server": settings::public_base(ctx.port), "logicKey": key })))
 }
 
 pub async fn stream(

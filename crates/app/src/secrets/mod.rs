@@ -71,7 +71,7 @@ fn kept_in(dir: Option<&Path>, keeper: Keeper<'_>) -> Arc<dyn SecretStore> {
 fn given_key(dir: Option<&Path>, file: &Path) -> Arc<dyn SecretStore> {
     let opened = dir.ok_or_else(|| "this user has no data folder".to_owned()).and_then(|dir| {
         std::fs::create_dir_all(dir).map_err(|error| format!("{} cannot be made: {error}", dir.display()))?;
-        SealedSecretStore::open(&dir.join("secrets.json"), key::given(file)?)
+        SealedSecretStore::rotating(&dir.join("secrets.json"), key::given(file)?, previous_key())
     });
     match opened {
         Ok(store) => Arc::new(store),
@@ -86,7 +86,15 @@ fn sealed_in(dir: Option<&Path>, keeper: Keeper<'_>) -> Result<SealedSecretStore
     let dir = dir.ok_or("this user has no data folder")?;
     std::fs::create_dir_all(dir).map_err(|error| format!("{} cannot be made: {error}", dir.display()))?;
     let key = key::at(&dir.join("secrets.key"), keeper)?;
-    SealedSecretStore::open(&dir.join("secrets.json"), key)
+    SealedSecretStore::rotating(&dir.join("secrets.json"), key, previous_key())
+}
+
+fn previous_key() -> Option<[u8; 32]> {
+    let file = brand::secrets::PREVIOUS_KEY_FILE.trim();
+    if file.is_empty() {
+        return None;
+    }
+    key::previous(Path::new(file))
 }
 
 #[derive(Debug, Default)]
