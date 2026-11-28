@@ -75,6 +75,14 @@ pub fn cancelled_by_watcher(language: Language) -> &'static str {
     )
 }
 
+pub fn killed(language: Language) -> &'static str {
+    language.pick(
+        "stopped at once by the kill switch",
+        "detenido al instante por el corte",
+        "parado na hora pelo corte",
+    )
+}
+
 pub fn escaped(language: Language, gate: &str, step: &str, workflow: &str) -> String {
     language.pick(
         format!("Evaluation: {gate} let a {step} defect through ({workflow})"),

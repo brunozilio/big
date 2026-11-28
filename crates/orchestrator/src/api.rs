@@ -56,14 +56,24 @@ pub fn cancel_item(shared: &Arc<Shared>, id: &ItemId, reason: &str) -> Result<()
         return Ok(());
     }
     let ended = shared.append(id, &[WorkflowEvent::Cancelled { reason: reason.to_owned() }])?;
+    settle_ended(shared, &ended, reason, cancel_item)
+}
+
+pub(crate) fn settle_ended(
+    shared: &Arc<Shared>,
+    ended: &WorkItem,
+    reason: &str,
+    child: fn(&Arc<Shared>, &ItemId, &str) -> Result<()>,
+) -> Result<()> {
+    let id = &ended.id;
     if !shared.wake(id, Wake::Poke) {
-        for child in ended.children.iter().filter(|child| !child.finished) {
-            cancel_item(shared, &child.id, reason)?;
+        for found in ended.children.iter().filter(|found| !found.finished) {
+            child(shared, &found.id, reason)?;
         }
         if let Some(parent) = &ended.parent {
             shared.wake(parent, Wake::Poke);
         }
-        crate::release::release(shared, &ended);
+        crate::release::release(shared, ended);
         shared.emit(OrchestratorEvent::ItemEnded { item: id.clone() });
     }
     Ok(())

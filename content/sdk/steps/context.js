@@ -50,6 +50,8 @@ export function agentOptions(opts, extra) {
     timeout: opts.timeout,
     retry: opts.retry,
     cloud: opts.cloud,
+    budgetUsd: opts.budgetUsd,
+    onBudget: opts.onBudget,
     ...extra,
   });
 }

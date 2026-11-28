@@ -33,6 +33,7 @@ mod item_view;
 #[cfg(test)]
 mod view_fixtures;
 mod items;
+mod kill;
 mod library;
 mod limits;
 mod live;

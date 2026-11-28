@@ -75,6 +75,24 @@ fn the_agent_s_own_ceiling_bounds_its_runs_when_the_step_names_none() {
 }
 
 #[test]
+fn each_extension_grows_only_the_reached_ceiling_by_its_own_size() {
+    let store = Store::in_memory(0).expect("store");
+    let extended = charge();
+    let ceilings = Ceilings { person: Some(30.0), ..Ceilings::default() };
+    let limits = |charge: &Charge| -> Vec<(Scope, f64)> {
+        let found = budgets(&store, &ceilings, charge, &command(json!({ "budgetUsd": 0.3 })), Some(MONTH));
+        found.iter().map(|b| (b.scope, (b.limit_usd * 100.0).round() / 100.0)).collect()
+    };
+    extended.extend(Scope::Run, 0.3);
+    assert_eq!(limits(&extended), [(Scope::Run, 0.6), (Scope::Person, 30.0)]);
+    extended.extend(Scope::Run, 0.6);
+    assert_eq!(limits(&extended), [(Scope::Run, 0.9), (Scope::Person, 30.0)]);
+    extended.extend(Scope::Person, 30.0);
+    assert_eq!(limits(&extended), [(Scope::Run, 0.9), (Scope::Person, 60.0)]);
+    assert_eq!(extended.extensions(), 3);
+}
+
+#[test]
 fn a_month_runs_from_its_first_local_midnight_to_the_next_one() {
     let now: Zoned = "2026-11-28T15:30:00-03:00[America/Sao_Paulo]".parse().expect("moment");
     let month = Month::of(&now).expect("month");

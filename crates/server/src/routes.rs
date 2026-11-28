@@ -20,6 +20,8 @@ fn api() -> Router<Ctx> {
         .route("/api/items", get(items::list).post(items::create))
         .route("/api/items/{id}/rerun", post(items::rerun))
         .route("/api/items/{id}/cancel", post(items::cancel))
+        .route("/api/items/{id}/kill", post(crate::kill::item))
+        .route("/api/agents/{name}/kill", post(crate::kill::agent))
         .route("/api/items/{id}/branches", get(items::branches))
         .route("/api/items/{id}/base", post(items::base))
         .route("/api/items/{id}/open", post(crate::editor::open_folders))

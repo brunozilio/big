@@ -14,7 +14,7 @@ fn keys(value: &Value) -> Vec<String> {
     keys
 }
 
-const ITEM_KEYS: [&str; 28] = [
+const ITEM_KEYS: [&str; 29] = [
     "accepting",
     "activity",
     "application",
@@ -35,6 +35,7 @@ const ITEM_KEYS: [&str; 28] = [
     "live",
     "owner",
     "recap",
+    "running",
     "sources",
     "status",
     "steps",
@@ -814,4 +815,15 @@ async fn the_browser_can_be_turned_off_and_back_on() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     let (_, on) = world.send(Method::PUT, "/api/browser", Some(json!({ "enabled": true }))).await;
     assert_eq!(on["enabled"], json!(true));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_kill_switch_answers_for_an_item_and_for_an_agent() {
+    let world = World::new().await;
+    let missing = world.send(Method::POST, "/api/items/nope/kill", Some(json!({}))).await;
+    assert_eq!(missing.0, StatusCode::NOT_FOUND);
+    assert_eq!(missing.1["error"]["code"], "not_found");
+    let none = world.send(Method::POST, "/api/agents/nobody/kill", Some(json!({}))).await;
+    assert_eq!(none.0, StatusCode::OK, "{}", none.1);
+    assert_eq!(none.1, json!({ "stopped": [] }));
 }

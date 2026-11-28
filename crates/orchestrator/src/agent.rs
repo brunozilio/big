@@ -213,7 +213,7 @@ fn request(shared: &Shared, profile: &Profile, command: &Command, cwd: &Path, re
 }
 
 #[derive(Debug, Default)]
-struct Collected {
+pub(crate) struct Collected {
     text: String,
     session: Option<String>,
     output: Value,
@@ -367,20 +367,20 @@ impl AgentEffect<'_> {
     }
 
     async fn drive(&self, request: &PromptRequest) -> Result<Collected, Failure> {
-        let mut collected = self.turn(request).await?;
+        let mut collected = self.bounded(request).await?;
         let mut next = request.clone();
         while !collected.approved
             && let Some(prompt) = self.woken(request.host.credentials.client, &collected).await
         {
             next.prompt = Prompt::typed(prompt);
             next.session.resume = collected.session.clone().map(SessionId).or(next.session.resume);
-            let later = self.turn(&next).await?;
+            let later = self.bounded(&next).await?;
             collected.absorb(later);
         }
         Ok(collected)
     }
 
-    async fn turn(&self, request: &PromptRequest) -> Result<Collected, Failure> {
+    pub(crate) async fn turn(&self, request: &PromptRequest) -> Result<Collected, Failure> {
         let (sender, receiver) = mpsc::unbounded_channel();
         let sink: Arc<dyn EventSink> = Arc::new(move |_run: RunId, event: EngineEvent| {
             let _ = sender.send(event);
@@ -550,7 +550,7 @@ impl AgentEffect<'_> {
         }
     }
 
-    fn note(&self, data: Value) {
+    pub(crate) fn note(&self, data: Value) {
         let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data };
         if let Err(error) = self.shared.append(self.item, &[progress]) {
             tracing::warn!(%error, "an ask could not be kept in the log");

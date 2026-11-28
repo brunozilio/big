@@ -21,7 +21,7 @@ pub use knowledge::{learning, memory};
 pub use models::{billing, cache_window, data_policy, fallback, model, model_roles, origin, routing, small_model, spend};
 pub use run::{
     affected, approval, budget, ceilings, changes, claims, engines, evals, events, factory_reset, failure, follow_through,
-    git_offer, image, interception, observer, quota, request, review, session_run, stuck, task_board, team,
+    git_offer, image, interception, observer, overrun, quota, request, review, session_run, stuck, task_board, team,
 };
 pub use safety::{operation, permission, redact, shell};
 pub use session::{catalog, chat, conversation, repeats, usage};

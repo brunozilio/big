@@ -20,6 +20,7 @@
     "live": false,
     "owner": "local",
     "recap": null,
+    "running": [],
     "sources": [],
     "status": null,
     "steps": [

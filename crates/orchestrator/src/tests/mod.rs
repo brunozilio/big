@@ -6,7 +6,9 @@ mod delivered;
 mod factory;
 mod flow;
 mod generic;
+mod kill;
 mod links;
+mod overrun;
 mod package;
 mod policy;
 mod repos;
@@ -173,6 +175,7 @@ pub struct EngineState {
     pub ask: AtomicBool,
     pub keeps_going: AtomicBool,
     pub limited: AtomicBool,
+    pub cancels: std::sync::atomic::AtomicUsize,
     pub write: Mutex<Option<String>>,
     pub answers: Mutex<Vec<(AskId, Decision)>>,
 }
@@ -214,6 +217,7 @@ struct FakeRun {
 impl RunHandle for FakeRun {
     fn cancel(&mut self) {
         self.cancelled.store(true, Ordering::SeqCst);
+        self.state.cancels.fetch_add(1, Ordering::SeqCst);
     }
 
     fn answer(&mut self, ask: &AskId, decision: &Decision) {
@@ -295,7 +299,7 @@ impl AgentEngine for FakeEngine {
             if stop.load(Ordering::SeqCst) {
                 return;
             }
-            if !request.policy.budgets.is_empty() && metered(&sink, run, &request.policy.budgets) {
+            if !request.policy.budgets.is_empty() && metered(&sink, run, &request) {
                 return;
             }
             if state.limited.load(Ordering::SeqCst) {
@@ -331,16 +335,18 @@ impl AgentEngine for FakeEngine {
 
 pub const CALL_USD: f64 = 0.4;
 
-fn metered(sink: &Arc<dyn EventSink>, run: RunId, budgets: &[domain::budget::Budget]) -> bool {
+fn metered(sink: &Arc<dyn EventSink>, run: RunId, request: &PromptRequest) -> bool {
+    let budgets = &request.policy.budgets;
+    let price = if request.prompt.text == crate::agent::RESUME { CALL_USD / 4.0 } else { CALL_USD };
     let unpriced = domain::budget::Unpriced::Block;
     if let Err(refused) = domain::budget::first_refusal(budgets, domain::billing::Cost::default(), unpriced) {
         sink.emit(run, EngineEvent::Failure((&refused).into()));
         sink.emit(run, EngineEvent::Failed(refused.to_string()));
         return true;
     }
-    let usage = domain::billing::ModelUsage { estimated_cost_usd: Some(CALL_USD), ..Default::default() };
+    let usage = domain::billing::ModelUsage { estimated_cost_usd: Some(price), ..Default::default() };
     sink.emit(run, EngineEvent::Usage(usage));
-    let spent = domain::billing::Cost::priced(Some(CALL_USD), domain::billing::Basis::Api);
+    let spent = domain::billing::Cost::priced(Some(price), domain::billing::Basis::Api);
     match domain::budget::first_refusal(budgets, spent, unpriced) {
         Ok(()) => false,
         Err(refused) => {

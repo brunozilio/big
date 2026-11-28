@@ -98,6 +98,20 @@ impl Shared {
         self.append_locked(item, events)
     }
 
+    pub fn end_with(
+        &self,
+        item: &ItemId,
+        ending: impl FnOnce(&WorkItem) -> Vec<WorkflowEvent>,
+    ) -> Result<Option<WorkItem>> {
+        let _guard = self.appending.lock().unwrap_or_else(PoisonError::into_inner);
+        let state = self.item(item)?;
+        if state.is_ended() {
+            return Ok(None);
+        }
+        let events = ending(&state);
+        self.append_locked(item, &events).map(Some)
+    }
+
     fn append_locked(&self, item: &ItemId, events: &[WorkflowEvent]) -> Result<WorkItem> {
         let state = self.store.append(item, events)?;
         self.shelve(item, events)?;

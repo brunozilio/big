@@ -51,6 +51,7 @@ pub struct Charge {
     pub owner: String,
     pub agent_usd: Option<f64>,
     run: Mutex<Cost>,
+    extended: Mutex<Vec<(Scope, f64)>>,
 }
 
 impl Charge {
@@ -71,6 +72,20 @@ impl Charge {
 
     pub fn run_spent(&self) -> Cost {
         *self.run.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn extend(&self, scope: Scope, reached_usd: f64) {
+        let once = (reached_usd - self.extra(scope)).max(0.0);
+        self.extended.lock().unwrap_or_else(PoisonError::into_inner).push((scope, once));
+    }
+
+    pub fn extensions(&self) -> usize {
+        self.extended.lock().unwrap_or_else(PoisonError::into_inner).len()
+    }
+
+    fn extra(&self, scope: Scope) -> f64 {
+        let extended = self.extended.lock().unwrap_or_else(PoisonError::into_inner);
+        extended.iter().filter(|(of, _)| *of == scope).map(|(_, usd)| usd).sum()
     }
 
     pub fn record(&self, store: &Store, event: &EngineEvent, at: i64) {
@@ -119,6 +134,7 @@ pub fn budgets(
 ) -> Vec<Budget> {
     let mut found = Vec::new();
     if let Some(limit_usd) = ceilings.run_of(&command.args["budgetUsd"], charge.agent_usd) {
+        let limit_usd = limit_usd + charge.extra(Scope::Run);
         found.push(Budget { limit_usd, spent: charge.run_spent(), scope: Scope::Run, resets_at: None });
     }
     let Some(month) = month else { return found };
@@ -130,7 +146,12 @@ pub fn budgets(
             tracing::warn!(%error, scope = scope.word(), "the spend so far could not be read; the ceiling counts from zero");
             Cost::default()
         });
-        found.push(Budget { limit_usd, spent, scope, resets_at: Some(month.resets_at) });
+        found.push(Budget {
+            limit_usd: limit_usd + charge.extra(scope),
+            spent,
+            scope,
+            resets_at: Some(month.resets_at),
+        });
     }
     found
 }

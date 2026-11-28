@@ -395,6 +395,7 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "accepting": item.is_some_and(|item| item.accepting && !item.is_ended()),
         "application": item.map(application).unwrap_or(Value::Null),
         "joinable": item.is_some_and(joinable),
+        "running": item.map(crate::kill::running).unwrap_or_default(),
     })
 }
 

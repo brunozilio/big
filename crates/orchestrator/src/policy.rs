@@ -2,14 +2,11 @@ use agent_engine::policy_gate::{self, Asked};
 use domain::effect::{Call, IdempotencyKey};
 use domain::permission::{Call as Judged, Effect, Layer, Surface, Verdict};
 use domain::workflow::WorkItem;
-use domain::{AgentAsk, AskId, AskKind, Decision};
-use serde_json::{Value, json};
-use tokio::sync::broadcast::error::RecvError;
+use domain::{AskId, AskKind, Decision};
 
 use crate::agent::Failure;
-use crate::asks::PendingAsk;
-use crate::events::OrchestratorEvent;
-use crate::shared::{Shared, now_ms};
+use crate::asking::Asking;
+use crate::shared::Shared;
 
 pub fn surface_of(item: &WorkItem) -> Surface {
     if item.input["schedule"].is_object() { Surface::Routine } else { Surface::Workflow }
@@ -20,11 +17,6 @@ pub struct Gated<'a> {
     pub item: &'a WorkItem,
     pub key: &'a IdempotencyKey,
     pub owner: &'a str,
-}
-
-enum Waited {
-    Decided(Decision),
-    Gone,
 }
 
 impl Gated<'_> {
@@ -50,85 +42,17 @@ impl Gated<'_> {
         }
     }
 
-    fn id(&self) -> AskId {
-        AskId(format!("policy-{}", self.key))
-    }
-
     async fn approved(&self, asked: Asked<'_>, tool: &str, subject: &str) -> Result<(), Failure> {
-        let kind = AskKind::permission(tool, subject, false);
-        let waited = match self.answered() {
-            Some(decision) => Waited::Decided(decision),
+        let id = AskId(format!("policy-{}", self.key));
+        let asking = Asking { shared: self.shared, item: &self.item.id, key: self.key, id };
+        match asking.decided(AskKind::permission(tool, subject, false)).await {
+            Some(decision) => settled(asked, tool, &decision),
             None => {
-                let events = self.shared.events.subscribe();
-                self.open(kind.clone());
-                self.waited(events, &kind).await
-            }
-        };
-        match waited {
-            Waited::Decided(decision) => settled(asked, tool, &decision),
-            Waited::Gone => {
                 let reason = format!("{tool} was waiting for a person, and the item stopped first.");
                 policy_gate::blocked(asked, tool, &reason, Layer::List);
                 Err(Failure::permanent(policy_gate::refusal(&reason)))
             }
         }
-    }
-
-    async fn waited(&self, mut events: tokio::sync::broadcast::Receiver<OrchestratorEvent>, kind: &AskKind) -> Waited {
-        loop {
-            if let Some(decision) = self.shared.asks.take_early(self.key, kind) {
-                return Waited::Decided(decision);
-            }
-            if self.gone() {
-                return Waited::Gone;
-            }
-            match events.recv().await {
-                Ok(event) if self.concerns(&event) => {}
-                Ok(_) | Err(RecvError::Lagged(_)) => continue,
-                Err(RecvError::Closed) => return Waited::Gone,
-            }
-        }
-    }
-
-    fn concerns(&self, event: &OrchestratorEvent) -> bool {
-        match event {
-            OrchestratorEvent::ItemChanged { item, .. }
-            | OrchestratorEvent::ItemEnded { item }
-            | OrchestratorEvent::AskClosed { item, .. } => *item == self.item.id,
-            OrchestratorEvent::Session { .. } | OrchestratorEvent::Asked { .. } => false,
-        }
-    }
-
-    fn gone(&self) -> bool {
-        self.shared.item(&self.item.id).map_or(true, |state| state.is_ended())
-    }
-
-    fn answered(&self) -> Option<Decision> {
-        let state = self.shared.item(&self.item.id).ok()?;
-        let entry = state.effects.get(&self.key.to_string())?;
-        serde_json::from_value(entry.progress["answered"][self.id().0.as_str()]["decision"].clone()).ok()
-    }
-
-    fn open(&self, kind: AskKind) {
-        let id = self.id();
-        if self.shared.asks.of_key(self.key).iter().any(|pending| pending.ask.id == id) {
-            return;
-        }
-        let pending = PendingAsk {
-            item: self.item.id.clone(),
-            step: self.key.step.clone(),
-            session: None,
-            ask: AgentAsk { id: id.clone(), kind },
-            since: now_ms(),
-        };
-        self.shared.asks.restore(pending.clone(), self.key.clone());
-        let data = json!({ "asks": { id.0.clone(): serde_json::to_value(&pending).unwrap_or(Value::Null) } });
-        let progress = domain::workflow::WorkflowEvent::EffectProgress { key: self.key.clone(), data };
-        if let Err(error) = self.shared.append(&self.item.id, &[progress]) {
-            tracing::warn!(%error, "a policy ask could not be kept in the log");
-        }
-        let PendingAsk { item, step, session, ask, .. } = pending;
-        self.shared.emit(OrchestratorEvent::Asked { item, step, session, ask });
     }
 }
 
