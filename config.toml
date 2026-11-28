@@ -351,6 +351,11 @@ memory_search = true
 unpriced = "block"
 unpriced_usd = "0.05"
 
+[data_policy]
+region = ""
+training = ""
+retention_days = ""
+
 [sonarqube]
 url = "https://sonarcloud.io"
 cloud = "sonarcloud.io sonarqube.us"

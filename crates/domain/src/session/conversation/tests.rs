@@ -157,6 +157,22 @@ fn a_model_switch_names_the_new_model_without_guessing_why() {
 }
 
 #[test]
+fn a_model_left_out_by_the_data_policy_is_named_with_the_reason() {
+    use crate::data_policy::{Rerouted, Skipped};
+    let mut transcript = Transcript::default();
+    let skipped = vec![Skipped { model: "a:us".into(), why: "region us is not eu".into() }];
+    let decision = Rerouted { from: "a:x".into(), to: None, failure: "overloaded".into(), skipped };
+    transcript.apply(&EngineEvent::Rerouted(decision));
+    transcript.apply(&EngineEvent::Rerouted(Rerouted {
+        from: "a:x".into(),
+        to: Some("b".into()),
+        failure: "network".into(),
+        skipped: vec![],
+    }));
+    assert_eq!(transcript.entries, [Entry::Notice("Skipped a:us: region us is not eu.".into())]);
+}
+
+#[test]
 fn an_account_switch_names_both_accounts() {
     let mut transcript = Transcript::default();
     transcript.apply(&EngineEvent::AccountSwitched { from: "a@x.io".into(), to: "b@x.io".into() });

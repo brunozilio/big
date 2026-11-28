@@ -49,6 +49,10 @@ impl Provider for Shared {
     fn chooses(&self) -> Vec<String> {
         self.0.chooses()
     }
+
+    fn requires(&self) -> domain::data_policy::Requires {
+        self.0.requires()
+    }
 }
 
 #[cfg(test)]

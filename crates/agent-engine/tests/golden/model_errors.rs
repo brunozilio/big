@@ -50,6 +50,7 @@ fn an_overloaded_model_falls_back_to_the_next_model_and_answers_once() {
         == prompt: events ==
         SessionStarted <session-1>
         Checkpoint(0)
+        Rerouted(Rerouted { from: "claude-opus-5-5", to: Some("claude-sonnet-5"), failure: "overloaded", skipped: [] })
         FellBack("claude-sonnet-5")
         Text "From the fallback."
         Usage model=claude-sonnet-5 input=10 output=5 cost=none
@@ -66,6 +67,7 @@ fn an_overloaded_model_falls_back_to_the_next_model_and_answers_once() {
         opened
         event Checkpoint
         message user
+        event Rerouted
         event FellBack
         event TextDelta
         called model=claude-sonnet-5 stop=EndTurn messages=1

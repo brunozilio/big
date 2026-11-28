@@ -64,6 +64,8 @@ export function provider() {
     makers: [["claude", "logo.svg"]],
     aliases: { sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5", haiku: "claude-haiku-5-5" },
     smallModel: "claude-haiku-5-5",
+    region: "unknown",
+    dataHandling: { training: "unknown", retention: "unknown" },
   };
 }
 

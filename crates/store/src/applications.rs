@@ -127,6 +127,8 @@ pub struct Application {
     pub repositories: Vec<Repository>,
     #[serde(default)]
     pub env: Environment,
+    #[serde(default, skip_serializing_if = "domain::data_policy::Requires::is_empty")]
+    pub requires: domain::data_policy::Requires,
 }
 
 pub type Environment = BTreeMap<String, String>;
@@ -134,6 +136,16 @@ pub type Environment = BTreeMap<String, String>;
 impl Application {
     pub fn bound(&self, capability: &str) -> Option<&Binding> {
         self.bindings.get(capability).filter(|binding| binding.is_set())
+    }
+
+    pub fn connections(&self) -> Vec<&str> {
+        let mut found: Vec<&str> = Vec::new();
+        for binding in holders(self) {
+            if !found.contains(&binding.connection.as_str()) {
+                found.push(&binding.connection);
+            }
+        }
+        found
     }
 }
 

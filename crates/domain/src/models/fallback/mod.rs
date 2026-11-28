@@ -7,11 +7,12 @@ pub enum Failure {
     Network,
     Provider,
     TooLong,
+    DataPolicy,
 }
 
 impl Failure {
     pub fn moves_down_the_chain(self) -> bool {
-        matches!(self, Self::Overloaded | Self::Unauthorized | Self::Network)
+        matches!(self, Self::Overloaded | Self::Unauthorized | Self::Network | Self::DataPolicy)
     }
 
     pub fn label(self) -> &'static str {
@@ -21,6 +22,7 @@ impl Failure {
             Self::Network => "network",
             Self::Provider => "provider",
             Self::TooLong => "too_long",
+            Self::DataPolicy => crate::data_policy::UNMET,
         }
     }
 }

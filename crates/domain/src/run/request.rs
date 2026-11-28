@@ -64,6 +64,8 @@ pub struct SessionConfig {
     pub output_style: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub language: Option<crate::Language>,
+    #[serde(default, skip_serializing_if = "crate::data_policy::Requires::is_empty")]
+    pub requires: crate::data_policy::Requires,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -152,6 +154,7 @@ impl SessionConfig {
             agent: None,
             output_style: None,
             language: None,
+            requires: Default::default(),
         }
     }
 }

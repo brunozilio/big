@@ -15,7 +15,7 @@ fn an_overloaded_model_goes_down_the_chain_in_order() {
 
 #[test]
 fn the_chain_answers_a_busy_signed_out_or_unreachable_model() {
-    for failure in [Failure::Overloaded, Failure::Unauthorized, Failure::Network] {
+    for failure in [Failure::Overloaded, Failure::Unauthorized, Failure::Network, Failure::DataPolicy] {
         assert_eq!(
             chain(&["orbit:a"]).next("nova:x", failure, FallbackChoice::Pass),
             Some("orbit:a".into()),
@@ -84,8 +84,15 @@ fn a_streak_stops_after_the_most_switches() {
 #[test]
 fn failures_have_stable_labels_for_hooks() {
     let labels: Vec<_> =
-        [Failure::Overloaded, Failure::Unauthorized, Failure::Network, Failure::Provider, Failure::TooLong]
-            .map(Failure::label)
-            .into();
-    assert_eq!(labels, ["overloaded", "unauthorized", "network", "provider", "too_long"]);
+        [
+        Failure::Overloaded,
+        Failure::Unauthorized,
+        Failure::Network,
+        Failure::Provider,
+        Failure::TooLong,
+        Failure::DataPolicy,
+    ]
+    .map(Failure::label)
+    .into();
+    assert_eq!(labels, ["overloaded", "unauthorized", "network", "provider", "too_long", "data_policy_unmet"]);
 }

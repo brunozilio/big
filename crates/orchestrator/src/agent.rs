@@ -302,6 +302,9 @@ impl AgentEffect<'_> {
         if let Some(application) = crate::application::id_of(&state.input) {
             crate::application::offer(client.0, &self.shared.store, application);
         }
+        let hub = &self.shared.config.connectors;
+        request.session.requires =
+            crate::data_policy::requires(&self.shared.store, hub, &state.input, &self.command.args);
         let mut environment = crate::application::environment(&self.shared.store, &state.input);
         environment.extend(cloud.as_ref().map(|lease| lease.environment.clone()).unwrap_or_default());
         request.host.environment = environment;

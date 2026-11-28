@@ -83,6 +83,10 @@ impl Connectors {
         self.entry(key).map(|entry| entry.provider.chooses()).unwrap_or_default()
     }
 
+    pub fn requires(&self, key: &ProviderKey) -> domain::data_policy::Requires {
+        self.entry(key).map(|entry| entry.provider.requires()).unwrap_or_default()
+    }
+
     pub fn descriptors(&self) -> Vec<&ProviderDescriptor> {
         self.entries.iter().map(|entry| &entry.descriptor).collect()
     }

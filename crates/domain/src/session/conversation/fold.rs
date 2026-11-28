@@ -79,6 +79,11 @@ impl Transcript {
             EngineEvent::Tasks(tasks) => self.tasks.clone_from(tasks),
             EngineEvent::ToolLog { text, .. } => self.notice(format!("  › {text}")),
             EngineEvent::FellBack(model) => self.notice(format!("The model call failed; going on with {model}.")),
+            EngineEvent::Rerouted(rerouted) => {
+                for skipped in &rerouted.skipped {
+                    self.notice(format!("Skipped {}: {}.", skipped.model, skipped.why));
+                }
+            }
             EngineEvent::AccountSwitched { from, to } => {
                 self.notice(format!("Account {from} is busy or signed out; going on with {to}."))
             }

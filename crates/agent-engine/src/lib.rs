@@ -6,6 +6,7 @@ pub mod checkpoints;
 pub mod chores;
 pub mod config_schema;
 pub mod control;
+pub mod data_gate;
 mod engine;
 #[cfg(any(test, feature = "test-support"))]
 pub mod fake;

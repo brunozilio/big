@@ -6,6 +6,7 @@ pub struct Models {
     pub escalation: Option<String>,
     pub roles: domain::model_roles::ModelRoles,
     pub tiers: std::sync::Arc<domain::model_roles::Tiers>,
+    pub requires: domain::data_policy::Requires,
 }
 
 impl Models {
@@ -17,6 +18,7 @@ impl Models {
             escalation: None,
             roles: Default::default(),
             tiers: crate::tiers::current(),
+            requires: Default::default(),
         }
     }
 
@@ -25,6 +27,10 @@ impl Models {
             Some(_) => self.roles.for_tier(&self.tiers, name, parent, self.small_model.as_deref()),
             None => name,
         }
+    }
+
+    pub fn unmet(&self, model: &str) -> Option<String> {
+        crate::data_gate::unmet(&self.requires, model, self.model.provider)
     }
 
     pub fn switch_to(&mut self, id: String) {

@@ -4,6 +4,7 @@ mod background_reports;
 mod code_review;
 mod compaction;
 mod custom_agents;
+mod data_policy;
 mod escalation;
 mod follow_through;
 mod input_validation;

@@ -39,6 +39,40 @@ fn a_provider_declares_the_discount_of_its_low_priority_mode_and_none_is_the_def
 }
 
 #[test]
+fn a_provider_declares_where_and_how_it_keeps_data_and_a_model_may_say_otherwise() {
+    let root = std::env::temp_dir().join(format!("handling-{}", uuid::Uuid::new_v4()));
+    let folder = root.join("providers/regional");
+    std::fs::create_dir_all(&folder).unwrap_or_else(|error| panic!("{error}"));
+    let declared = r#"export function provider() { return { id: "regional", name: "Regional", region: "us-east-1", dataHandling: { training: "no", retention: 30 } }; }
+export function handling({ name }) { return name.startsWith("eu-") ? { region: "eu-west-1" } : null; }"#;
+    std::fs::write(folder.join("index.ts"), declared).unwrap_or_else(|error| panic!("{error}"));
+    let loaded = crate::scripted::ScriptedProvider::load_in(Some(&root), "providers/regional/index.ts");
+    let _ = std::fs::remove_dir_all(&root);
+    let loaded = loaded.unwrap_or_else(|error| panic!("{error}"));
+    let us = domain::data_policy::Handling {
+        region: Some("us-east-1".into()),
+        training: Some(false),
+        retention_days: Some(30),
+    };
+    assert_eq!(loaded.handling("m"), us);
+    assert_eq!(loaded.handling("eu-m"), domain::data_policy::Handling { region: Some("eu-west-1".into()), ..us });
+}
+
+#[test]
+fn the_shipped_remote_providers_do_not_claim_a_region_or_retention_they_do_not_know() {
+    for id in [
+        "claude-subscription",
+        "openai-subscription",
+        "grok-subscription",
+        "copilot-subscription",
+        "kiro-subscription",
+        "antigravity-subscription",
+    ] {
+        assert_eq!(provider(id).handling("any"), domain::data_policy::Handling::default(), "{id}");
+    }
+}
+
+#[test]
 fn each_provider_declares_its_own_native_web_search_per_model() {
     let claude = provider("claude-subscription");
     let filtering = serde_json::json!({ "type": "web_search_20260209", "name": "web_search" });

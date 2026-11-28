@@ -101,6 +101,10 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
     fn chooses(&self) -> Vec<String> {
         Vec::new()
     }
+
+    fn requires(&self) -> domain::data_policy::Requires {
+        domain::data_policy::Requires::default()
+    }
 }
 
 pub trait SettingsSink: Send + Sync + std::fmt::Debug {

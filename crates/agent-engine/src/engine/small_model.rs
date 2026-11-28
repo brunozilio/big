@@ -1,11 +1,37 @@
+use domain::data_policy::{Requires, Rerouted, Skipped};
 use domain::small_model::{Offered, SmallChoice, choose};
-use domain::{ModelOption, ModelProvider};
+use domain::{EngineEvent, ModelOption, ModelProvider};
 
 use crate::model::{BoxFuture, CancellationToken, ModelApi, ModelError, OnDelta, Reply, TurnRequest};
 
 pub struct OrSession<'a> {
     pub api: &'a dyn ModelApi,
     pub session: String,
+    pub provider: ModelProvider,
+    pub requires: Requires,
+    pub emit: &'a (dyn Fn(EngineEvent) + Sync),
+}
+
+impl OrSession<'_> {
+    fn unmet(&self, model: &str) -> Option<Skipped> {
+        let why = crate::data_gate::unmet(&self.requires, model, self.provider)?;
+        Some(Skipped { model: model.to_owned(), why })
+    }
+
+    fn handed_over(&self, from: &str, failure: &str, mut skipped: Vec<Skipped>) -> Result<(), ModelError> {
+        let blocked = self.unmet(&self.session);
+        let to = blocked.is_none().then(|| self.session.clone());
+        skipped.extend(blocked);
+        let decision = Rerouted { from: from.to_owned(), to: to.clone(), failure: failure.to_owned(), skipped };
+        (self.emit)(EngineEvent::Rerouted(decision.clone()));
+        match to {
+            Some(model) => {
+                (self.emit)(EngineEvent::FellBack(model));
+                Ok(())
+            }
+            None => Err(crate::data_gate::refused(&decision.skipped)),
+        }
+    }
 }
 
 impl ModelApi for OrSession<'_> {
@@ -16,14 +42,25 @@ impl ModelApi for OrSession<'_> {
         cancel: &'b CancellationToken,
     ) -> BoxFuture<'b, Result<Reply, ModelError>> {
         Box::pin(async move {
-            match self.api.turn(request, &mut *on, cancel).await {
-                Err(error) if error != ModelError::Cancelled && request.model != self.session => {
-                    tracing::warn!(%error, model = %request.model, "the small model failed; the session's model answers");
-                    let again = TurnRequest { model: self.session.clone(), ..request.clone() };
-                    self.api.turn(&again, on, cancel).await
+            if request.model == self.session {
+                if let Some(skipped) = self.unmet(&self.session) {
+                    return Err(crate::data_gate::refused(&[skipped]));
                 }
-                answered => answered,
+                return self.api.turn(request, on, cancel).await;
             }
+            let (failure, skipped) = match self.unmet(&request.model) {
+                Some(skipped) => (domain::data_policy::UNMET.to_owned(), vec![skipped]),
+                None => match self.api.turn(request, &mut *on, cancel).await {
+                    Err(error) if error != ModelError::Cancelled => {
+                        tracing::warn!(%error, model = %request.model, "the small model failed; the session's model answers");
+                        (error.failure().map_or("provider", |failure| failure.label()).to_owned(), Vec::new())
+                    }
+                    answered => return answered,
+                },
+            };
+            self.handed_over(&request.model, &failure, skipped)?;
+            let again = TurnRequest { model: self.session.clone(), ..request.clone() };
+            self.api.turn(&again, on, cancel).await
         })
     }
 }
@@ -67,11 +104,16 @@ mod tests {
         }
     }
 
+    fn session_of<'a>(api: &'a ScriptedModel, emit: &'a (dyn Fn(EngineEvent) + Sync)) -> OrSession<'a> {
+        let provider = ModelProvider::new("keyed");
+        OrSession { api, session: "big".into(), provider, requires: Requires::default(), emit }
+    }
+
     #[test]
     fn a_failed_small_model_hands_the_call_to_the_session_s_model() {
         let failed = Err(ModelError::Provider("unknown model".into()));
         let scripted = ScriptedModel::new([failed, ScriptedModel::reply(vec![Block::Text("ok".into())])]);
-        let api = OrSession { api: &scripted, session: "big".into() };
+        let api = session_of(&scripted, &|_| {});
         let reply = api.turn_blocking(&asked("small"), &mut |_| {}, &CancellationToken::new()).expect("answered");
         assert_eq!(reply.message.text(), "ok");
         let models: Vec<String> = scripted.asked().into_iter().map(|request| request.model).collect();
@@ -82,10 +124,53 @@ mod tests {
     fn the_session_s_own_model_and_a_cancel_are_not_asked_again() {
         for (model, error) in [("big", ModelError::Provider("down".into())), ("small", ModelError::Cancelled)] {
             let scripted = ScriptedModel::new([Err(error)]);
-            let api = OrSession { api: &scripted, session: "big".into() };
+            let api = session_of(&scripted, &|_| {});
             assert!(api.turn_blocking(&asked(model), &mut |_| {}, &CancellationToken::new()).is_err());
             assert_eq!(scripted.asked().len(), 1);
         }
+    }
+
+    fn eu() -> Requires {
+        Requires { regions: Some(vec!["eu".into()]), ..Requires::default() }
+    }
+
+    #[test]
+    fn the_hand_over_to_the_session_s_model_is_told() {
+        let heard = std::sync::Mutex::new(Vec::new());
+        let emit = |event: EngineEvent| heard.lock().expect("heard").push(event);
+        let scripted = ScriptedModel::new([
+            Err(ModelError::Overloaded("busy".into())),
+            ScriptedModel::reply(vec![Block::Text("ok".into())]),
+        ]);
+        let api = session_of(&scripted, &emit);
+        api.turn_blocking(&asked("small"), &mut |_| {}, &CancellationToken::new()).expect("answered");
+        let heard = heard.lock().expect("heard").clone();
+        let decision =
+            Rerouted { from: "small".into(), to: Some("big".into()), failure: "overloaded".into(), skipped: vec![] };
+        assert_eq!(heard, [EngineEvent::Rerouted(decision), EngineEvent::FellBack("big".into())]);
+    }
+
+    #[test]
+    fn a_small_model_outside_the_policy_is_never_asked() {
+        crate::providers::install_testing();
+        let scripted = ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("ok".into())])]);
+        let api =
+            OrSession { provider: ModelProvider::new("keyed-too"), requires: eu(), ..session_of(&scripted, &|_| {}) };
+        let small = asked("keyed:small");
+        let reply = api.turn_blocking(&small, &mut |_| {}, &CancellationToken::new()).expect("answered");
+        assert_eq!(reply.message.text(), "ok");
+        let models: Vec<String> = scripted.asked().into_iter().map(|request| request.model).collect();
+        assert_eq!(models, ["big"]);
+    }
+
+    #[test]
+    fn without_a_model_that_meets_the_policy_the_call_fails_typed() {
+        crate::providers::install_testing();
+        let scripted = ScriptedModel::new([]);
+        let api = OrSession { requires: eu(), ..session_of(&scripted, &|_| {}) };
+        let refused = api.turn_blocking(&asked("small"), &mut |_| {}, &CancellationToken::new());
+        assert!(matches!(refused, Err(ModelError::DataPolicyUnmet(_))), "{refused:?}");
+        assert!(scripted.asked().is_empty());
     }
 
     fn offered(provider: ModelProvider, id: &str) -> ModelOption {

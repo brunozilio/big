@@ -13,6 +13,7 @@ mod chores;
 mod cloud;
 mod config;
 mod context;
+mod data_policy;
 mod editor;
 mod effects;
 mod error;

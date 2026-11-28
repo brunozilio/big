@@ -1,5 +1,6 @@
 use domain::EngineEvent;
-use domain::fallback::{Fallback, FallbackChoice};
+use domain::data_policy::{Rerouted, Skipped};
+use domain::fallback::{Failure, Fallback, FallbackChoice};
 use serde_json::{Value, json};
 
 use super::{Exchange, Next, TurnState, cutoffs};
@@ -21,6 +22,10 @@ impl Agent<'_> {
         run.transition(turn.history);
         let mut request = TurnRequest { messages: turn.history.clone(), ..self.turn_template(turn.fell_back.as_ref()) };
         self.intercept_request(&mut request, &turn.rejections)?;
+        if let Some(why) = self.workspace.models.unmet(&request.model) {
+            let refused = crate::data_gate::refused(&[Skipped { model: request.model.clone(), why }]);
+            return self.recovered(turn, &request, refused, "");
+        }
         let mut shown = String::new();
         match self.answered(&request, &mut shown) {
             Ok(reply) => {
@@ -66,18 +71,24 @@ impl Agent<'_> {
                 Ok(Next::AskModel)
             }
             error => match self.next_model(&mut turn.fallback, request, &error) {
-                Some(model) => {
+                Ok(Some(model)) => {
                     (self.emit)(EngineEvent::FellBack(model.clone()));
                     turn.fell_back = Some(model);
                     Ok(Next::AskModel)
                 }
-                None => Err(Ending::Failed(error)),
+                Ok(None) => Err(Ending::Failed(error)),
+                Err(refused) => Err(Ending::Failed(refused)),
             },
         }
     }
 
-    fn next_model(&self, fallback: &mut Fallback, request: &TurnRequest, error: &ModelError) -> Option<String> {
-        let failure = error.failure()?;
+    fn next_model(
+        &self,
+        fallback: &mut Fallback,
+        request: &TurnRequest,
+        error: &ModelError,
+    ) -> Result<Option<String>, ModelError> {
+        let Some(failure) = error.failure() else { return Ok(None) };
         fallback.failed(&request.model);
         let extra = json!({
             "error": error.to_string(),
@@ -91,7 +102,33 @@ impl Agent<'_> {
             Some(HookOutcome { model: Some(model), .. }) => FallbackChoice::Forward(model),
             _ => FallbackChoice::Pass,
         };
-        fallback.next(&request.model, failure, verdict)
+        let (to, skipped) = self.allowed(fallback, &request.model, failure, verdict);
+        if to.is_some() || !skipped.is_empty() {
+            let failure = failure.label().to_owned();
+            let decision = Rerouted { from: request.model.clone(), to: to.clone(), failure, skipped: skipped.clone() };
+            (self.emit)(EngineEvent::Rerouted(decision));
+        }
+        match to {
+            None if !skipped.is_empty() => Err(crate::data_gate::refused(&skipped)),
+            to => Ok(to),
+        }
+    }
+
+    fn allowed(
+        &self,
+        fallback: &mut Fallback,
+        from: &str,
+        failure: Failure,
+        verdict: FallbackChoice,
+    ) -> (Option<String>, Vec<Skipped>) {
+        let mut skipped = Vec::new();
+        let mut next = fallback.next(from, failure, verdict);
+        while let Some(model) = next {
+            let Some(why) = self.workspace.models.unmet(&model) else { return (Some(model), skipped) };
+            next = fallback.next(&model, failure, FallbackChoice::Pass);
+            skipped.push(Skipped { model, why });
+        }
+        (None, skipped)
     }
 
     pub(super) fn model_hook(

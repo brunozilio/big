@@ -24,6 +24,10 @@ export type Tier = Rates & { above: number };
 export type Price = Rates & { tiers: Tier[]; laterDiscount?: number };
 export type Prices = Record<string, Price>;
 export type Basis = "subscription" | "api";
+export type Training = "yes" | "no" | "unknown";
+export type Retention = number | "none" | "unknown";
+export type DataHandling = { training: Training; retention: Retention };
+export type Handling = { region?: string; dataHandling?: Partial<DataHandling> };
 
 export const over = (above: number, input: number, output: number, cacheRead: number, cacheWrite: CacheWrite): Tier => ({
   above,

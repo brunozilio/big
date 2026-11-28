@@ -82,7 +82,16 @@ impl Job {
         let ledger = Arc::new(Ledger::default());
         let api =
             Metered { calls: None, budget: None, ..self.metered(api, &ledger, self.request.session.model.clone()) };
-        let api = crate::engine::small_model::OrSession { api: &api, session: self.request.session.model.id.clone() };
+        let emit = |event: EngineEvent| {
+            self.gate.emit(event);
+        };
+        let api = crate::engine::small_model::OrSession {
+            api: &api,
+            session: self.request.session.model.id.clone(),
+            provider: self.request.session.model.provider,
+            requires: self.requires(),
+            emit: &emit,
+        };
         let small = self.small_model(&self.request.session.roles);
         let template = TurnRequest {
             model: small.unwrap_or_else(|| self.request.session.model.id.clone()),

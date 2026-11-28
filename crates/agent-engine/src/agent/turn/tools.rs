@@ -67,6 +67,10 @@ impl Agent<'_> {
             return None;
         }
         let model = self.workspace.models.escalation.clone()?;
+        if let Some(why) = self.workspace.models.unmet(&model) {
+            tracing::warn!(model, %why, "the escalation model does not meet the data policy; the model stays as it was");
+            return None;
+        }
         if let Some(Block::ToolResult { content, .. }) =
             results.iter_mut().rev().find(|block| matches!(block, Block::ToolResult { .. }))
         {

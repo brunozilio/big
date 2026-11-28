@@ -30,6 +30,8 @@ export function provider() {
     path: "/",
     prices: { ...BEDROCK, ...OPENAI },
     priceDate: PRICE_DATE,
+    region: "unknown",
+    dataHandling: { training: "unknown", retention: "unknown" },
   };
 }
 

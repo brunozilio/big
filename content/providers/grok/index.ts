@@ -49,6 +49,8 @@ export function provider() {
     priceDate: PRICE_DATE,
     owns: ["grok"],
     makers: [["grok", "logo.svg"]],
+    region: "unknown",
+    dataHandling: { training: "unknown", retention: "unknown" },
   };
 }
 

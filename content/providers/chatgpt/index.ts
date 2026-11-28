@@ -58,6 +58,8 @@ export function provider() {
     owns: ["gpt-", "o1", "o3", "o4"],
     makers: [["gpt", "openai.svg"], ["codex", "openai.svg"], ["o3", "openai.svg"], ["o4", "openai.svg"]],
     smallModel: "gpt-6-luna",
+    region: "unknown",
+    dataHandling: { training: "unknown", retention: "unknown" },
   };
 }
 

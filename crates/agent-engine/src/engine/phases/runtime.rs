@@ -35,6 +35,7 @@ impl Job {
         workspace.home = crate::brief::home(self.request.folder());
         workspace.teammate = crate::team::Me::of(workspace.home.as_deref(), self.request.session.teammate.as_ref());
         workspace.models.fallbacks = roles::fallbacks(&self.request.session, &settings.fallbacks);
+        workspace.models.requires = self.requires();
         workspace.models.small_model = self.small_model(&roles);
         workspace.models.roles = roles;
         workspace.services.network = Some(tools::Network(Arc::clone(&self.mcp)));
@@ -66,7 +67,19 @@ impl Job {
         if let Some(why) = &small.ignored {
             tracing::warn!("{why}");
         }
-        small.model
+        let provider = self.request.session.model.provider;
+        let requires = self.requires();
+        small.model.filter(|model| match crate::data_gate::unmet(&requires, model, provider) {
+            None => true,
+            Some(why) => {
+                tracing::warn!(model, %why, "the small model does not meet the data policy; the session's model answers");
+                false
+            }
+        })
+    }
+
+    pub(in crate::engine) fn requires(&self) -> domain::data_policy::Requires {
+        domain::data_policy::Requires::configured().stricter(&self.request.session.requires)
     }
 
     fn session_worktree(

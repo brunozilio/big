@@ -22,6 +22,8 @@ export function provider() {
     prices: VERTEX,
     priceDate: PRICE_DATE,
     makers: [["gemini", "google.svg"]],
+    region: "unknown",
+    dataHandling: { training: "unknown", retention: "unknown" },
   };
 }
 

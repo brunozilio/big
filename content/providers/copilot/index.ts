@@ -57,6 +57,8 @@ export function provider() {
     path: "/chat/completions",
     prices: { ...OPENAI, ...ANTHROPIC, ...VERTEX },
     priceDate: PRICE_DATE,
+    region: "unknown",
+    dataHandling: { training: "unknown", retention: "unknown" },
   };
 }
 

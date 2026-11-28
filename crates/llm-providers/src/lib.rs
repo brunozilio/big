@@ -4,6 +4,7 @@ pub mod added_tools;
 pub mod batch;
 pub mod catalog;
 mod config;
+mod data_handling;
 pub mod limits;
 pub mod model;
 pub mod oauth;
@@ -105,6 +106,10 @@ pub trait Provider: Sync {
 
     fn small_model(&self) -> Option<&'static str> {
         None
+    }
+
+    fn handling(&self, _model: &str) -> domain::data_policy::Handling {
+        domain::data_policy::Handling::default()
     }
 
     fn later_discount(&self) -> Option<f64> {

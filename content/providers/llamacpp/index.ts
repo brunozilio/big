@@ -59,6 +59,8 @@ export function provider() {
     path: "/chat/completions",
     servesAll: true,
     needs: ["local"],
+    region: "local",
+    dataHandling: { training: "no", retention: "none" },
   };
 }
 

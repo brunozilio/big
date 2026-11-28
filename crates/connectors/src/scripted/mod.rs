@@ -44,6 +44,8 @@ struct Declared {
     auth: Value,
     #[serde(default)]
     chooses: Vec<String>,
+    #[serde(default)]
+    requires: domain::data_policy::Requires,
 }
 
 #[derive(Debug, Deserialize)]
@@ -64,6 +66,7 @@ pub struct ScriptedProvider {
     script: Script,
     descriptor: ProviderDescriptor,
     chooses: Vec<String>,
+    requires: domain::data_policy::Requires,
     events: Option<ScriptedEvents>,
     answers: Arc<dyn Answers>,
     sessions: Arc<McpSessions>,
@@ -167,6 +170,7 @@ impl ScriptedProvider {
             script,
             descriptor,
             chooses: declared.chooses,
+            requires: declared.requires,
             events,
             answers,
             sessions,
@@ -302,6 +306,10 @@ impl Provider for ScriptedProvider {
 
     fn chooses(&self) -> Vec<String> {
         self.chooses.clone()
+    }
+
+    fn requires(&self) -> domain::data_policy::Requires {
+        self.requires.clone()
     }
 }
 

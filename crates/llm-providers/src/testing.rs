@@ -12,18 +12,11 @@ pub struct Stand {
 }
 
 pub static KEYED: Stand = Stand { id: "keyed", name: "Keyed", access: Access::Key, rank: 200 };
-pub static KEYED_TOO: Stand =
-    Stand { id: "keyed-too", name: "Keyed Too", access: Access::Key, rank: 201 };
-pub static BROWSER: Stand = Stand {
-    id: "browser-sub",
-    name: "Browser Subscription",
-    access: Access::Browser,
-    rank: 202,
-};
-pub static DEVICE: Stand =
-    Stand { id: "device-sub", name: "Device Subscription", access: Access::Code, rank: 203 };
-pub static FAMILY: Stand =
-    Stand { id: "family-key", name: "Family Key", access: Access::Key, rank: 204 };
+pub static KEYED_TOO: Stand = Stand { id: "keyed-too", name: "Keyed Too", access: Access::Key, rank: 201 };
+pub static BROWSER: Stand =
+    Stand { id: "browser-sub", name: "Browser Subscription", access: Access::Browser, rank: 202 };
+pub static DEVICE: Stand = Stand { id: "device-sub", name: "Device Subscription", access: Access::Code, rank: 203 };
+pub static FAMILY: Stand = Stand { id: "family-key", name: "Family Key", access: Access::Key, rank: 204 };
 
 const FAMILY_OWNS: &[&str] = &["claude-"];
 const FAMILY_ALIASES: [(&str, &str); 3] =
@@ -60,6 +53,14 @@ impl Provider for Stand {
     }
     fn small_model(&self) -> Option<&'static str> {
         self.alias("haiku")
+    }
+    fn handling(&self, _model: &str) -> domain::data_policy::Handling {
+        let region = match self.id {
+            "keyed" => Some("us-east-1".to_owned()),
+            "keyed-too" => Some("eu-west-1".to_owned()),
+            _ => None,
+        };
+        domain::data_policy::Handling { region, ..Default::default() }
     }
     fn slot(&self) -> u128 {
         0x7465_7374_0000_0000_0000_0000_0000_0000 + u128::from(self.rank)

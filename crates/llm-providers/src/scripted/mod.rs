@@ -80,6 +80,10 @@ struct Declared {
     makers: Vec<(String, String)>,
     #[serde(default)]
     aliases: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
+    region: Value,
+    #[serde(default)]
+    data_handling: Value,
 }
 
 #[derive(Debug)]
@@ -108,6 +112,7 @@ pub struct ScriptedProvider {
     owns: Vec<&'static str>,
     makers: Vec<(&'static str, &'static str)>,
     aliases: Vec<(String, &'static str)>,
+    handling: domain::data_policy::Handling,
 }
 
 fn section(name: &str) -> Value {
@@ -185,6 +190,7 @@ impl ScriptedProvider {
             owns: declared.owns.iter().map(|prefix| intern(prefix)).collect(),
             makers: declared.makers.iter().map(|(word, logo)| (intern(word), intern(&logo_of(root, &folder, logo)))).collect(),
             aliases: declared.aliases.into_iter().map(|(short, full)| (short, intern(&full))).collect(),
+            handling: crate::data_handling::read(&declared.region, &declared.data_handling),
             search_price: declared.search_price.filter(|usd| *usd >= 0.0).map(|usd| (usd * 1_000_000.0).round() as u64),
         })
     }
@@ -352,6 +358,13 @@ impl Provider for ScriptedProvider {
     }
     fn small_model(&self) -> Option<&'static str> {
         self.small
+    }
+    fn handling(&self, model: &str) -> domain::data_policy::Handling {
+        if !self.offers("handling") {
+            return self.handling.clone();
+        }
+        let declared: Value = self.quiet("handling", json!({ "name": model }));
+        crate::data_handling::over(&self.handling, &declared)
     }
     fn owns(&self) -> &[&'static str] {
         &self.owns

@@ -95,6 +95,8 @@ pub enum ModelError {
     Cancelled,
     #[error("{0}")]
     Quota(domain::quota::QuotaError),
+    #[error("data_policy_unmet: {0}")]
+    DataPolicyUnmet(String),
 }
 
 impl From<llm_providers::ProviderError> for ModelError {
@@ -137,6 +139,7 @@ impl ModelError {
             Self::TooLong(_) => Some(Failure::TooLong),
             Self::Provider(_) | Self::Oversized(_) => Some(Failure::Provider),
             Self::Network(_) | Self::Stalled(_) => Some(Failure::Network),
+            Self::DataPolicyUnmet(_) => Some(Failure::DataPolicy),
             Self::Cancelled | Self::Quota(_) => None,
         }
     }

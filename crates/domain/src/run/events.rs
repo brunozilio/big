@@ -94,6 +94,7 @@ pub enum EngineEvent {
     AskWithdrawn(AskId),
     Steered(String),
     FellBack(String),
+    Rerouted(crate::data_policy::Rerouted),
     AccountSwitched {
         from: String,
         to: String,

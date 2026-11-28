@@ -225,6 +225,10 @@ fn rest(session: &str, agent: Option<usize>, event: &EngineEvent) {
         EngineEvent::FellBack(reason) => {
             tracing::event!(target: "audit", tracing::Level::WARN, session.id = session, agent.index = agent, error.message = %preview(reason), "agent.fallback");
         }
+        EngineEvent::Rerouted(rerouted) => {
+            let skipped = serde_json::to_string(&rerouted.skipped).unwrap_or_default();
+            tracing::event!(target: "audit", tracing::Level::WARN, session.id = session, agent.index = agent, model.from = %rerouted.from, model.to = rerouted.to.as_deref(), error.kind = %rerouted.failure, model.skipped = %skipped, "agent.fallback.decision");
+        }
         EngineEvent::AccountSwitched { from, to } => {
             tracing::event!(target: "audit", tracing::Level::WARN, session.id = session, agent.index = agent, account.from = %from, account.to = %to, "agent.account.switch");
         }
