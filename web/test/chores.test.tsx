@@ -8,7 +8,6 @@ import { mockApi } from '../src/api/mock'
 import { applyLive, boot, getState, stop, useSession } from '../src/api/store'
 import { btwOf, Composer } from '../src/chat/Composer'
 import { SideAnswers, useSideQuestions } from '../src/chat/SideQuestions'
-import { HeadsUpNote } from '../src/screens/items/ItemModal'
 import { ItemsView } from '../src/screens/items/ItemsView'
 import { TooltipProvider } from '../src/ui/overlay'
 
@@ -49,21 +48,13 @@ describe('resumo do item', () => {
   })
 })
 
-describe('aviso da etapa', () => {
-  test('mostra título e explicação, mais forte quando urgente', () => {
-    const view = render(<HeadsUpNote headsUp={{ title: 'Migração em staging', explain: 'Altera tabelas compartilhadas.', urgent: true }} />)
-    const note = view.getByRole('note')
-    expect(note.textContent).toContain('Você deveria saber')
-    expect(view.getByText('Migração em staging').className).toContain('font-medium')
-    expect(note.getAttribute('data-urgent')).toBe('true')
-  })
-
-  test('o mock só traz avisos válidos', async () => {
+describe('visão da etapa', () => {
+  test('o mock só traz visões válidas, sem aviso no topo', async () => {
     const api = await started()
     const items = await api.items()
     const views = await Promise.all(items.flatMap((it) => it.steps.map((s) => api.step(it.id, s.id, null))))
     expect(views.every(isStepView)).toBe(true)
-    expect(views.some((v) => v.headsUp)).toBe(true)
+    expect(views.every((v) => !('headsUp' in v))).toBe(true)
   })
 })
 

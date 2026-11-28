@@ -1,4 +1,4 @@
-import type { Application, Attempt as WireAttempt, Attention, Block, ChangeRef, Command, ExternalRef, HeadsUp, Item, ItemGit, ItemSource, ItemStep, NewItem, ProviderMark, StepState, StepView } from '../contract'
+import type { Application, Attempt as WireAttempt, Attention, Block, ChangeRef, Command, ExternalRef, Item, ItemGit, ItemSource, ItemStep, NewItem, ProviderMark, StepState, StepView } from '../contract'
 import { NEED_PROVIDER, PEOPLE, providers } from './fixtures'
 import { say } from './say'
 import { autoTriage, findingsFor, qualityFor } from './security'
@@ -203,12 +203,6 @@ function blocksFor(it: SimItem, s: Step, attempt: number): Block[] {
 export function stepView(it: SimItem, step: StepId, attempt: number | null): StepView {
   const s = STEPS[IDX[step]]
   const n = pickAttempt(it, step, attempt)
-  return { item: String(it.id), step, attempt: n, attempts: attemptsOf(it, step), blocks: blocksFor(it, s, n), headsUp: headsUpFor(it, step) }
-}
-
-function headsUpFor(it: SimItem, step: StepId): HeadsUp | null {
-  if (step === 'develop' && it.pause?.kind === 'permission' && isPaused(it)) return { title: say('stagingMigration'), explain: say('stagingMigrationExplain'), urgent: true }
-  if (step === 'develop' && it.attempts.develop.length > 1) return { title: say('testFailedBefore'), explain: say('testFailedExplain', { test: testName(it) }), urgent: false }
-  return null
+  return { item: String(it.id), step, attempt: n, attempts: attemptsOf(it, step), blocks: blocksFor(it, s, n) }
 }
 

@@ -192,13 +192,6 @@ export interface StepView {
   attempt: number
   attempts: Attempt[]
   blocks: Block[]
-  headsUp: HeadsUp | null
-}
-
-export interface HeadsUp {
-  title: string
-  explain: string
-  urgent: boolean
 }
 
 export type CommandState = 'todo' | 'running' | 'done' | 'failed'

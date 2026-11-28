@@ -91,11 +91,7 @@ export function isBlock(v: unknown): v is Block {
 }
 
 export function isStepView(v: unknown): v is StepView {
-  return obj(v) && str(v.item) && str(v.step) && num(v.attempt) && Array.isArray(v.attempts) && arr(v.blocks, isBlock) && (v.headsUp === null || isHeadsUp(v.headsUp))
-}
-
-function isHeadsUp(v: unknown): boolean {
-  return obj(v) && str(v.title) && str(v.explain) && bool(v.urgent)
+  return obj(v) && str(v.item) && str(v.step) && num(v.attempt) && Array.isArray(v.attempts) && arr(v.blocks, isBlock)
 }
 
 const eventTypes: SessionEvent['type'][] = ['user', 'thinking', 'tools', 'assistant', 'status', 'ask', 'permission', 'plan']

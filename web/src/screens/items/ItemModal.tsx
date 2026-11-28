@@ -2,7 +2,7 @@ import { motion } from 'framer-motion'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { api } from '@/api'
 import { mins } from '@/api/clock'
-import type { Block, HeadsUp, Item, StepState, StepView } from '@/api/contract'
+import type { Block, Item, StepState, StepView } from '@/api/contract'
 import { useStepView, useStore } from '@/api/store'
 import { BlockContext, type BlockHost } from '@/blocks/context'
 import { BlockView, fillsPanel } from '@/blocks/registry'
@@ -233,24 +233,8 @@ function StepContent({ it, step }: { it: Item; step: string }) {
     )
   }
   return (
-    <div className="flex h-full flex-col gap-3">
-      {current.headsUp && <HeadsUpNote headsUp={current.headsUp} />}
-      <div className="min-h-0 flex-1">
-        <StepBody it={it} step={step} view={current} host={host} onPick={setAttempt} />
-      </div>
-    </div>
-  )
-}
-
-export function HeadsUpNote({ headsUp }: { headsUp: HeadsUp }) {
-  const t = useT()
-  return (
-    <div role="note" data-urgent={headsUp.urgent} className={cn('flex shrink-0 gap-2.5 rounded-card px-4 py-3 text-base', headsUp.urgent ? 'bg-danger-soft text-danger-fg shadow-[0_0_0_1px_rgb(var(--danger)/0.35)]' : 'bg-warning-soft text-warning-fg')}>
-      <Icon name={headsUp.urgent ? 'alert' : 'info'} size={17} className="mt-px shrink-0" />
-      <div className="min-w-0">
-        <p className="text-sm opacity-80">{t('items.headsUp')}</p>
-        <p className="mt-0.5 break-words"><span className="font-medium">{headsUp.title}</span> <span>{headsUp.explain}</span></p>
-      </div>
+    <div className="h-full min-h-0">
+      <StepBody it={it} step={step} view={current} host={host} onPick={setAttempt} />
     </div>
   )
 }

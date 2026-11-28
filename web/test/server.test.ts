@@ -26,14 +26,14 @@ describe('respostas reais do servidor', () => {
     expect(isSession(load('session'))).toBe(true)
   })
 
-  test('resumo, aviso e sugestão seguem o contrato', () => {
+  test('resumo e sugestão seguem o contrato', () => {
     const item = load('item') as Record<string, unknown>
     expect(item.recap === null || typeof item.recap === 'string').toBe(true)
     expect(isItem({ ...item, recap: 'Espera sua revisão do PR.' })).toBe(true)
     expect(isItem({ ...item, recap: 3 })).toBe(false)
     const step = load('step') as Record<string, unknown>
-    expect(isStepView({ ...step, headsUp: { title: 'Migração', explain: 'Altera tabelas.', urgent: true } })).toBe(true)
-    expect(isStepView({ ...step, headsUp: { title: 'Migração' } })).toBe(false)
+    expect(isStepView(step)).toBe(true)
+    expect('headsUp' in step).toBe(false)
     const session = load('session') as Record<string, unknown>
     expect(isSession({ ...session, suggestion: 'Rode os testes de novo' })).toBe(true)
     expect(isSession({ ...session, suggestion: false })).toBe(false)
