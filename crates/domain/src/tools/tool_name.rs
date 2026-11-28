@@ -40,13 +40,14 @@ pub enum ToolName {
     Watch,
     WebFetch,
     WebSearch,
+    Worklog,
     Write,
     Mcp(String),
     Other(String),
 }
 
 impl ToolName {
-    pub const BUILTIN: [Self; 35] = [
+    pub const BUILTIN: [Self; 36] = [
         Self::AddRepository,
         Self::Agent,
         Self::Artifact,
@@ -81,6 +82,7 @@ impl ToolName {
         Self::Watch,
         Self::WebFetch,
         Self::WebSearch,
+        Self::Worklog,
         Self::Write,
     ];
 
@@ -127,6 +129,7 @@ impl ToolName {
             Self::Watch => "Watch",
             Self::WebFetch => "WebFetch",
             Self::WebSearch => "WebSearch",
+            Self::Worklog => "Worklog",
             Self::Write => "Write",
             Self::Mcp(name) | Self::Other(name) => name.as_str(),
         }

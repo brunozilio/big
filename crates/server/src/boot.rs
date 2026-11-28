@@ -64,6 +64,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let services = services
         .with_applications(crate::memories::applications(Arc::clone(&store)))
         .with_connected_mcp(connected)
+        .with_ledger(Arc::new(crate::worklog::StoredWorklog::configured(Arc::clone(&store))))
         .with_browser_mcp(crate::browsers::for_runs(&hub, &launch.data, Arc::clone(&store)));
     crate::browsers::install(&hub, &launch.data, address.port());
     if let Err(error) = crate::mcp::token(&launch.data) {

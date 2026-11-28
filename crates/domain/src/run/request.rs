@@ -105,6 +105,8 @@ pub struct HostContext {
     pub owner: Option<String>,
     #[serde(skip)]
     pub reads: Vec<crate::label::Read>,
+    #[serde(skip)]
+    pub ledger: Option<crate::workflow::ledger::HostLedger>,
     #[serde(default, skip_serializing_if = "crate::origin::Attribution::is_unset")]
     pub attribution: crate::origin::Attribution,
 }

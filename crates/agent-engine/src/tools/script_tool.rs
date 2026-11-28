@@ -258,6 +258,7 @@ pub fn facts(workspace: &Workspace) -> Value {
             "lsp": workspace.services.lsp.is_some(),
             "deferred": workspace.services.deferred.is_some(),
             "history": workspace.services.history.is_some(),
+            "worklog": workspace.services.ledger.is_some(),
         },
     })
 }

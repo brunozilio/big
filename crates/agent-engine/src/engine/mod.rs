@@ -114,6 +114,7 @@ impl AgentEngine for Engine {
         workspace.services.launch = self.launch.clone();
         workspace.services.pointers.clone_from(&self.pointers);
         workspace.services.history.clone_from(&self.history);
+        workspace.services.ledger.clone_from(&request.host.ledger);
         let control = Arc::new(
             Control::new(request.policy.permission, workspace.stop.clone()).reviewed_by(request.policy.reviewer),
         );

@@ -34,6 +34,7 @@ mod turns;
 mod two;
 mod watch;
 mod watch_hooks;
+mod worklog;
 mod write_boundary;
 
 use std::sync::{Arc, Mutex};

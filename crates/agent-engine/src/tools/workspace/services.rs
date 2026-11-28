@@ -13,6 +13,7 @@ pub struct Services {
     pub artifacts: Option<std::path::PathBuf>,
     pub pointers: Option<CodePointers>,
     pub history: Option<crate::history::HostHistory>,
+    pub ledger: Option<domain::workflow::ledger::HostLedger>,
 }
 
 pub trait Pointers: Send + Sync {

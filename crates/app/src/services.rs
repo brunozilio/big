@@ -77,6 +77,7 @@ pub struct LocalServices {
     pub secrets: Arc<dyn crate::SecretStore>,
     pub connected_mcp: ConnectedMcp,
     pub browser_mcp: BrowserMcp,
+    pub ledger: Option<domain::workflow::ledger::HostLedger>,
     pub(crate) exporter: Option<crate::features::trace::export::Exporter>,
 }
 
@@ -160,6 +161,7 @@ impl LocalServices {
             secrets: stores.secrets,
             connected_mcp: ConnectedMcp::default(),
             browser_mcp: BrowserMcp::default(),
+            ledger: None,
         }
     }
 
@@ -170,6 +172,11 @@ impl LocalServices {
 
     pub fn with_applications(mut self, applications: crate::features::memory::ApplicationOf) -> Self {
         self.memories = self.memories.with_applications(applications);
+        self
+    }
+
+    pub fn with_ledger(mut self, ledger: std::sync::Arc<dyn domain::workflow::ledger::Ledger>) -> Self {
+        self.ledger = Some(domain::workflow::ledger::HostLedger(ledger));
         self
     }
 

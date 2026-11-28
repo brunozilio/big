@@ -16,6 +16,7 @@ mod schema;
 mod search;
 mod session;
 pub(crate) mod tasks;
+mod worklog;
 
 use serde_json::Value;
 
@@ -45,6 +46,7 @@ const SPACES: &[(&str, Space)] = &[
     (mcp::SPACE, mcp::call),
     (session::SPACE, session::call),
     (history::SPACE, history::call),
+    (worklog::SPACE, worklog::call),
     (schema::SPACE, schema::call),
     (tasks::SPACE, tasks::call),
     (observer::SPACE, observer::call),
