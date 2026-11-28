@@ -94,14 +94,20 @@ fn data_dir() -> Result<PathBuf, String> {
 fn serve(cwd: &Path, port: u16, open: bool) -> Result<ExitCode, String> {
     let repo = std::fs::canonicalize(cwd).map_err(|error| format!("{}: {error}", cwd.display()))?;
     let data = data_dir()?;
-    let held = match instance::claim(&data).map_err(|error| format!("{}: {error}", data.display()))? {
-        Instance::Ours(held) => held,
-        Instance::Running(url) => return Ok(already_running(url, open)),
+    let held = if shared_database() {
+        None
+    } else {
+        match instance::claim(&data).map_err(|error| format!("{}: {error}", data.display()))? {
+            Instance::Ours(held) => Some(held),
+            Instance::Running(url) => return Ok(already_running(url, open)),
+        }
     };
     let listener = server::bind(port).map_err(|error| format!("could not listen on 127.0.0.1: {error}"))?;
     let address = listener.local_addr().map_err(|error| error.to_string())?;
     let url = format!("http://{address}/");
-    held.announce(&url).map_err(|error| error.to_string())?;
+    if let Some(held) = &held {
+        held.announce(&url).map_err(|error| error.to_string())?;
+    }
     let runtime =
         tokio::runtime::Builder::new_multi_thread().enable_all().build().map_err(|error| error.to_string())?;
     println!("{} is running at {url}", brand::NAME);
@@ -109,14 +115,34 @@ fn serve(cwd: &Path, port: u16, open: bool) -> Result<ExitCode, String> {
         open_in_browser(&url);
     }
     let launch = server::Launch { repo, data, listener };
-    let stop = async {
-        let _ = tokio::signal::ctrl_c().await;
-    };
+    let stop = stopped();
     let served = runtime.block_on(server::run(launch, stop));
     app::release_local_models();
     served?;
     drop(held);
     Ok(ExitCode::SUCCESS)
+}
+
+fn shared_database() -> bool {
+    !brand::database::URL_FILE.trim().is_empty()
+}
+
+async fn stopped() {
+    #[cfg(unix)]
+    {
+        let Ok(mut terminate) = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) else {
+            let _ = tokio::signal::ctrl_c().await;
+            return;
+        };
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = terminate.recv() => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
 }
 
 fn already_running(url: Option<String>, open: bool) -> ExitCode {
