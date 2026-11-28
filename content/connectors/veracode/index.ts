@@ -45,6 +45,7 @@ const regionField = (ctx: Ctx, language: Language) =>
 export function provider({ language }: { language?: Language }, ctx: Ctx) {
   const fields = [regionField(ctx, language ?? "pt-BR"), tokenField("apiId", "API ID", "", false), tokenField("apiKey", "API key", "", true)];
   return {
+    schema_version: 1,
     name: "Veracode",
     logo: "logo.svg",
     capabilities: ["security"],

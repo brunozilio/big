@@ -12,6 +12,7 @@ type Ctx = { config: { graph: string } } & Record<string, any>;
 
 export function provider() {
   return {
+    schema_version: 1,
     name: "Microsoft 365",
     logo: "logo.svg",
     capabilities: ["email", "files", "messaging"],

@@ -16,6 +16,8 @@ pub mod library;
 mod modules;
 mod place;
 mod render;
+pub mod retired;
+pub mod schema;
 #[cfg(test)]
 mod sdk_tests;
 #[cfg(test)]

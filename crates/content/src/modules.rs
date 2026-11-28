@@ -37,10 +37,12 @@ fn resolve(folder: Option<&Path>, from: &str, spec: &str) -> Result<String, Stri
     } else {
         return Err(format!("the import {spec} is neither the sdk nor a relative path"));
     };
-    ENDINGS
+    let candidates: Vec<String> = ENDINGS
         .iter()
         .map(|ending| format!("{base}{ending}"))
-        .find(|candidate| (candidate.ends_with(".ts") || candidate.ends_with(".js")) && exists(folder, candidate))
+        .filter(|candidate| candidate.ends_with(".ts") || candidate.ends_with(".js"))
+        .collect();
+    super::retired::resolve(&super::retired::table(), &candidates, &|candidate| exists(folder, candidate), from)
         .ok_or_else(|| format!("the import {spec} of {from} was not found"))
 }
 

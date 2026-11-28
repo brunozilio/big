@@ -53,9 +53,8 @@ fn resolve(resources: &Resources, from: Option<&str>, spec: &str) -> Result<Stri
         return Err(format!("the import {spec} is not the sdk nor a relative path"));
     };
     let candidates = if base == SDK { script_candidates("sdk/index") } else { script_candidates(&base) };
-    candidates
-        .into_iter()
-        .find(|candidate| resources.find(candidate).is_some())
+    let importer = from.unwrap_or(spec);
+    content::retired::resolve(&content::retired::table(), &candidates, &|candidate| resources.find(candidate).is_some(), importer)
         .ok_or_else(|| format!("the import {spec} was not found"))
 }
 

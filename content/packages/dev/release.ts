@@ -1,6 +1,7 @@
-import { environments } from "../environments.ts";
+import { environments } from "../../environments.ts";
 
 export default {
+  schema_version: 1,
   arrival: { step: "merge", integrated: true, filter: { data: { workflow: ["default", "pull-request"], step: "merge", state: "passed" } } },
   environments,
   zone: "-03:00",

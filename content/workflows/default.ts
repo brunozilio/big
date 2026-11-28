@@ -4,6 +4,7 @@ import { environments } from "../environments.ts";
 import { branches } from "../branches.ts";
 
 export default workflow({
+  schema_version: 1,
   name: "entrega",
   accepts: ["issue", "text"],
   triggers: [on("tracker.issue.created")],

@@ -141,7 +141,9 @@ impl ScriptedProvider {
         }
         let script = Script { modules: Arc::new(modules), data };
         let local: Arc<dyn script::Host> = Arc::new(Local);
-        let declared = script.invoke_here("provider", &json!({}), local).map_err(|error| error.message)?;
+        let mut declared = script.invoke_here("provider", &json!({}), local).map_err(|error| error.message)?;
+        content::schema::read(content::schema::Contract::Connector, &mut declared, entry)
+            .map_err(|error| error.to_string())?;
         let declared: Declared = serde_json::from_value(declared).map_err(|error| format!("{entry}: {error}"))?;
         let key = if declared.key.is_empty() { named } else { declared.key.clone() };
         let polls = script.kind("poll") == "function";

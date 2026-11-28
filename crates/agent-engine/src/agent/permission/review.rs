@@ -67,7 +67,7 @@ const READ_ONLY_COMMANDS: &str = "safety/read-only-commands.json";
 
 fn clearly_read_only(effects: &[Effect]) -> bool {
     let Some(declared) = content::source(READ_ONLY_COMMANDS).and_then(|json| {
-        ReadOnlyCommands::read(&json)
+        read_only_commands(&json)
             .inspect_err(|error| tracing::warn!(%error, "the read-only command list does not load"))
             .ok()
     }) else {
@@ -78,6 +78,13 @@ fn clearly_read_only(effects: &[Effect]) -> bool {
             Effect::Exec(exec) => declared.allow(exec.command.text()),
             _ => false,
         })
+}
+
+fn read_only_commands(json: &str) -> Result<ReadOnlyCommands, String> {
+    let mut policy: serde_json::Value = serde_json::from_str(json).map_err(|error| error.to_string())?;
+    content::schema::read(content::schema::Contract::Policy, &mut policy, READ_ONLY_COMMANDS)
+        .map_err(|error| error.to_string())?;
+    ReadOnlyCommands::read(&policy.to_string())
 }
 
 fn flagged(why: String) -> Verdict {

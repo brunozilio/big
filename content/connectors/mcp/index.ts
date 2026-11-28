@@ -25,6 +25,7 @@ const serverOf = (state: State): string => (state?.server ? state.server : fail(
 
 export function provider() {
   return {
+    schema_version: 1,
     key: "mcp",
     name: "MCP server",
     logo: "logo.svg",

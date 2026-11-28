@@ -3,6 +3,7 @@ import { findings, ticket, develop, checks, pr, review } from "sdk/steps";
 import { branches } from "../branches.ts";
 
 export default workflow({
+  schema_version: 1,
   name: "security",
   branches,
   steps: [

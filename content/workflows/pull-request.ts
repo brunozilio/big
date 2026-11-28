@@ -4,6 +4,7 @@ import { environments } from "../environments.ts";
 import { branches } from "../branches.ts";
 
 export default workflow({
+  schema_version: 1,
   name: "pull-request",
   accepts: ["pull_request"],
   triggers: [on("code.review.submitted", { verdict: "request_changes" })],

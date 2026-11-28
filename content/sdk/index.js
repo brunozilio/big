@@ -86,8 +86,10 @@ export const actions = (buttons) =>
 
 const blocks = (view) => (view === undefined || view === null ? [] : Array.isArray(view) ? view : [view]);
 
+export const TRIGGER_SCHEMA = 1;
+
 export const on = (kind, filter, options) =>
-  Object.freeze({ ...(options || {}), type: "trigger", kind, filter: filter || {} });
+  Object.freeze({ schema_version: TRIGGER_SCHEMA, ...(options || {}), type: "trigger", kind, filter: filter || {} });
 
 const outcome = (kind, fields) => Object.freeze({ type: "outcome", outcome: kind, ...fields });
 const isOutcome = (value) => value !== null && typeof value === "object" && value.type === "outcome";
@@ -1102,6 +1104,7 @@ export function workflow(definition) {
   const run = definition.run || ((ctx) => rooted(ctx, steps));
   const shape = Object.freeze({
     type: "workflow",
+    schema_version: definition.schema_version,
     name: definition.name,
     statuses: definition.statuses || [],
     triggers: definition.triggers || [],
@@ -1240,6 +1243,7 @@ function describe() {
   );
   const nodes = {};
   const workflows = [...registry.workflows.values()].map((found) => ({
+    schema_version: found.schema_version,
     name: found.name,
     statuses: found.statuses,
     triggers: found.triggers,

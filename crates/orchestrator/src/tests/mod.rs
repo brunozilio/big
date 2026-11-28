@@ -7,6 +7,7 @@ mod links;
 mod package;
 mod repos;
 mod restart;
+mod versions;
 mod triggers;
 mod unbound;
 

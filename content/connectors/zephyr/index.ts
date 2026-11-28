@@ -9,7 +9,7 @@ export const API_TOKEN = "api_token";
 type Ctx = { config: { mcp_url: string; oauth_redirect: string; scopes: string } } & Record<string, any>;
 
 export function provider() {
-  return { name: "Zephyr", logo: "logo.svg", capabilities: ["tests"], auth: { kind: "loopback" }, actions: [...tests(), options("tests")] };
+  return { schema_version: 1, name: "Zephyr", logo: "logo.svg", capabilities: ["tests"], auth: { kind: "loopback" }, actions: [...tests(), options("tests")] };
 }
 
 export function presentation({ language }: { language: Language }) {

@@ -24,6 +24,30 @@ pub struct Script {
     views: Mutex<Vec<(String, Value)>>,
 }
 
+fn versioned(described: &mut Value, workflow: &str) -> Result<(), String> {
+    use content::schema::{Contract, read};
+    let at = format!("workflows/{workflow}");
+    for shape in described["workflows"].as_array_mut().into_iter().flatten() {
+        read(Contract::Workflow, shape, &at).map_err(|error| error.to_string())?;
+        for trigger in shape["triggers"].as_array_mut().into_iter().flatten() {
+            read(Contract::Trigger, trigger, &at).map_err(|error| error.to_string())?;
+        }
+        packages(&mut shape["steps"], &at)?;
+    }
+    Ok(())
+}
+
+fn packages(steps: &mut Value, at: &str) -> Result<(), String> {
+    use content::schema::{Contract, FIELD, read};
+    for call in steps.as_array_mut().into_iter().flatten() {
+        if call["options"].get(FIELD).is_some() {
+            read(Contract::Package, &mut call["options"], at).map_err(|error| error.to_string())?;
+        }
+        packages(&mut call["steps"], at)?;
+    }
+    Ok(())
+}
+
 impl Script {
     pub fn load(resources: &Resources, workflow: &str) -> Result<Script, String> {
         let found = resources.workflow(workflow).ok_or_else(|| format!("there is no workflow named {workflow}"))?;
@@ -33,6 +57,7 @@ impl Script {
     fn built(bundle: Bundle, workflow: &str) -> Result<Script, String> {
         let mut script = Script { bundle, target: Value::Null, described: Value::Null, views: Mutex::default() };
         script.described = script.call("host.describe", &[])?;
+        versioned(&mut script.described, workflow)?;
         let names: Vec<&str> = script.described["workflows"]
             .as_array()
             .map(|all| all.iter().filter_map(|shape| shape["name"].as_str()).collect())
