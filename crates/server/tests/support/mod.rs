@@ -409,9 +409,13 @@ fn http() -> FakeHttp {
 }
 
 pub fn repo(dir: &Path) -> PathBuf {
+    repo_with(dir, &[])
+}
+
+fn repo_with(dir: &Path, extra: &[(&str, &str)]) -> PathBuf {
     let repo = dir.join("repo");
     let files = [("workflows/default.ts", WORKFLOW), ("agents/worker.md", WORKER)];
-    for (path, text) in files {
+    for (path, text) in files.iter().chain(extra) {
         let file = repo.join(brand::DIR).join(path);
         std::fs::create_dir_all(file.parent().expect("parent")).expect("dir");
         std::fs::write(file, text).expect("write");
@@ -421,11 +425,15 @@ pub fn repo(dir: &Path) -> PathBuf {
 
 impl World {
     pub async fn new() -> World {
+        World::with(&[], script()).await
+    }
+
+    pub async fn with(extra: &[(&str, &str)], script: Vec<EngineEvent>) -> World {
         let dir = tempfile::tempdir().expect("dir");
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).expect("data");
         let model = ModelOption::new("m1", "Modelo Um");
-        let engine = FakeEngine::new(vec![model], script()).answering_chores(vec![
+        let engine = FakeEngine::new(vec![model], script).answering_chores(vec![
             domain::ChoreAnswer::Suggestion("rode os testes".into()),
             domain::ChoreAnswer::Side("está no passo dois".into()),
             domain::ChoreAnswer::Answer(
@@ -468,11 +476,12 @@ impl World {
         let keyed = Arc::new(app::KeyedEngine::new(services.clone()));
         let listed = content::builtin_files("").into_iter().map(|(path, _)| path.to_owned()).collect();
         let builtin: orchestrator::Builtin = Arc::new(content::builtin_text);
-        let resources = Resources::new(Some(repo(dir.path()).join(brand::DIR)), None, builtin).listing(listed);
+        let kept = repo_with(dir.path(), extra).join(brand::DIR);
+        let resources = Resources::new(Some(kept), None, builtin).listing(listed);
         let mut config = Config::new(Arc::clone(&store), Arc::clone(&connectors), keyed.clone(), data.clone())
             .with_resources(resources)
             .without_sync();
-        config.repo = Some(repo(dir.path()));
+        config.repo = Some(repo_with(dir.path(), extra));
         let handle = Orchestrator::start(config).expect("start");
         let backend = server::Backend {
             orchestrator: (*handle).clone(),

@@ -48,6 +48,11 @@ async fn shared_world() -> World {
     World::new().await
 }
 
+async fn shared_world_with(extra: &[(&str, &str)], script: Vec<domain::EngineEvent>) -> World {
+    server::force_auth_mode(server::AuthMode::Shared);
+    World::with(extra, script).await
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn without_a_session_only_the_sign_in_is_open() {
     let world = shared_world().await;
@@ -457,6 +462,107 @@ async fn each_person_sees_only_what_waits_for_them() {
         tokio::time::sleep(std::time::Duration::from_millis(25)).await;
     }
     assert_eq!(seen, (vec!["Corrigir o login".to_owned()], vec!["Trocar o logo".to_owned()]));
-    let (status, _) = send(&world, Some(&bia), Method::POST, "/api/inbox/respond", Some(json!({ "ask": "nope" }))).await;
+    let nope = json!({ "ask": "nope" });
+    let (status, _) = send(&world, Some(&bia), Method::POST, "/api/inbox/respond", Some(nope)).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+const PARENT: &str = r#"
+import { workflow, step } from "sdk";
+
+const spawn = step({
+  name: "spawn",
+  label: "Filho",
+  icon: "sCode",
+  async run(ctx) {
+    const done = await ctx.child("default", { title: "Filho" });
+    return ctx.pass({ done });
+  },
+});
+
+export default workflow({ name: "parent", steps: [spawn()] });
+"#;
+
+fn asking() -> Vec<domain::EngineEvent> {
+    let choice = domain::Choice { label: "Sim".into(), description: "segue".into() };
+    let question =
+        domain::Question { header: "Escopo".into(), text: "Pode?".into(), options: vec![choice], multi: false };
+    let ask =
+        domain::AgentAsk { id: domain::AskId("ask-ana".into()), kind: domain::AskKind::Questions(vec![question]) };
+    vec![domain::EngineEvent::SessionStarted(domain::SessionId("s-ana".into())), domain::EngineEvent::Asked(ask)]
+}
+
+async fn inbox_of(world: &World, cookie: &str) -> Vec<Value> {
+    send(world, Some(cookie), Method::GET, "/api/inbox", None).await.1.as_array().cloned().unwrap_or_default()
+}
+
+async fn asked_of(world: &World, cookie: &str, kind: &str) -> Value {
+    for _ in 0..400 {
+        if let Some(found) = inbox_of(world, cookie).await.into_iter().find(|entry| entry["kind"] == kind) {
+            return found;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("no {kind} for ana: {:?}", inbox_of(world, cookie).await)
+}
+
+async fn created_by(world: &World, cookie: &str, body: Value) -> String {
+    let (status, item) = send(world, Some(cookie), Method::POST, "/api/items", Some(body)).await;
+    assert_eq!(status, StatusCode::OK, "{item}");
+    item["id"].as_str().expect("id").to_owned()
+}
+
+async fn refused_to_bia(world: &World, ana: &str, bia: &str, entry: &Value, response: Value) {
+    let body = json!({ "ask": entry["id"], "response": response });
+    let (status, _) = send(world, Some(bia), Method::POST, "/api/inbox/respond", Some(body)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "someone else's ask stays hidden");
+    assert!(inbox_of(world, bia).await.is_empty());
+    let still = inbox_of(world, ana).await;
+    assert!(still.iter().any(|kept| kept["id"] == entry["id"]), "the ask stays open: {still:?}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn someone_else_cannot_answer_an_agent_question_from_the_inbox() {
+    let world = shared_world_with(&[], asking()).await;
+    let (ana, bia) = (signed(&world, "ana"), signed(&world, "bia"));
+    let made = json!({ "text": "Corrigir o login", "issue": null, "model": "auto", "attachments": [] });
+    created_by(&world, &ana, made).await;
+    let entry = asked_of(&world, &ana, "question").await;
+    assert_eq!(entry["session"], "s-ana");
+    refused_to_bia(&world, &ana, &bia, &entry, json!({ "kind": "ask", "answers": ["Sim"] })).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn someone_else_cannot_answer_a_call_permission_from_the_inbox() {
+    let tool = domain::mcp::served_name(
+        &domain::mcp::connectors_server(),
+        &domain::mcp::connector_tool("Fake", "tracker.issue"),
+    );
+    let rule = domain::permission::Rule::new(domain::permission::Grant::Tool(tool), domain::permission::Behavior::Ask);
+    let list = domain::permission::Allowed::of([rule]);
+    domain::permission::allowed::install(list, std::sync::Arc::new(|_: &domain::permission::Allowed| {}));
+    let world = shared_world().await;
+    let (ana, bia) = (signed(&world, "ana"), signed(&world, "bia"));
+    world.store.set_owner(store::ownership::CONNECTION, "c1", "ana").expect("owner");
+    let made = json!({ "text": "Corrigir o login", "issue": null, "model": "auto", "attachments": [] });
+    let id = created_by(&world, &ana, made).await;
+    asked_of(&world, &ana, "notice").await;
+    let path = format!("/api/items/{id}/steps/approve/input");
+    let approve = json!({ "action": "approve", "payload": null });
+    let (status, body) = send(&world, Some(&ana), Method::POST, &path, Some(approve)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    let entry = asked_of(&world, &ana, "permission").await;
+    assert!(entry["session"].is_null(), "{entry}");
+    refused_to_bia(&world, &ana, &bia, &entry, json!({ "kind": "permission", "decision": "allowed" })).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn someone_else_cannot_answer_an_ask_in_a_child_item_from_the_inbox() {
+    let world = shared_world_with(&[("workflows/parent.ts", PARENT)], asking()).await;
+    let (ana, bia) = (signed(&world, "ana"), signed(&world, "bia"));
+    let made = json!({ "text": "Pai", "workflow": "parent", "issue": null, "model": "auto", "attachments": [] });
+    let parent = created_by(&world, &ana, made).await;
+    let entry = asked_of(&world, &ana, "question").await;
+    assert_ne!(entry["item"]["id"], parent.as_str(), "the ask is in the child");
+    assert_eq!(entry["item"]["open"], parent.as_str());
+    refused_to_bia(&world, &ana, &bia, &entry, json!({ "kind": "ask", "answers": ["Sim"] })).await;
 }
