@@ -4,10 +4,11 @@ mod policy;
 mod review;
 
 use domain::EngineEvent;
-use domain::permission::{Effect, Judgement, Reason, RuleKind, Verdict};
+use domain::permission::{AskOutcome, Effect, Judgement, Reason, RuleKind, Surface, Verdict};
 use serde_json::{Value, json};
 
 use super::Agent;
+use crate::conduct::{Told, told};
 use crate::tools::{Outcome, Tool};
 use crate::transcript::Message;
 
@@ -113,10 +114,16 @@ impl Agent<'_> {
         let Called { name, input, .. } = *called;
         let verdict = self.screened(asking, verdict);
         let verdict = self.workspace.bounds().hard.tightened(&called.call(), verdict);
-        let verdict = if self.control.no_prompts() { verdict.without_the_user(name) } else { verdict };
+        let verdict = if self.control.no_prompts() {
+            verdict.without_the_user(|reason| unavailable(name, reason))
+        } else {
+            verdict
+        };
         match verdict {
             Verdict::Allow => self.went_ahead(id, tool, input),
-            Verdict::Deny(reason) => self.refused(name, reason),
+            Verdict::Deny(reason) => {
+                self.refused(name, told(&Told::new(AskOutcome::BlockedByPolicy, Surface::Chat, name).why(&reason)))
+            }
             Verdict::Ask { rememberable, reason } => {
                 self.ask_permission(asking, &asking.shown(&reason), rememberable, &reason)
             }
@@ -142,6 +149,10 @@ impl Agent<'_> {
         (self.emit)(EngineEvent::Refused { tool: tool.to_owned(), reason: reason.clone() });
         Outcome::error(reason)
     }
+}
+
+fn unavailable(tool: &str, reason: &Reason) -> String {
+    told(&Told::new(AskOutcome::Unavailable, Surface::Chat, tool).reason(reason))
 }
 
 fn after_the_tool_hook(original: Verdict, hook_permission: Option<RuleKind>, judgement: &Judgement) -> Verdict {

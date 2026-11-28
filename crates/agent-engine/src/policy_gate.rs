@@ -3,8 +3,12 @@ use std::sync::{Mutex, PoisonError};
 use domain::audit::{self, FailureStage};
 use domain::memory::MemoryPolicy;
 use domain::permission::hard::Floor;
-use domain::permission::{BLOCKED, Call, Decision, Effect, Layer, MemoryAccess, PolicyEngine, Surface, Verdict};
+use domain::permission::{
+    AskOutcome, Call, Decision, Effect, Layer, MemoryAccess, PolicyEngine, Reason, Surface, Verdict,
+};
 use serde_json::Value;
+
+use crate::conduct::{Told, told};
 
 const MEMORY_FILE: &str = "safety/memory.ts";
 const MEMORY_EXPORT: &str = "memory";
@@ -25,15 +29,17 @@ pub fn decide(asked: Asked<'_>, call: &Call<'_>) -> Verdict {
 pub fn decide_under(floor: &Floor, asked: Asked<'_>, call: &Call<'_>) -> Verdict {
     let allowed = domain::permission::allowed::global();
     let listed = PolicyEngine::unattended(call, allowed.as_ref());
-    settled(asked, call.tool, floored(floor, call, listed))
+    settled(asked, call.tool, floored(floor, asked, call, listed))
 }
 
-fn floored(floor: &Floor, call: &Call<'_>, listed: Decision) -> Decision {
+fn floored(floor: &Floor, asked: Asked<'_>, call: &Call<'_>, listed: Decision) -> Decision {
     let tightened = floor.tightened(call, listed.verdict.clone());
     if tightened == listed.verdict {
         return listed;
     }
-    match tightened.without_the_user(call.tool) {
+    let blocked =
+        |reason: &Reason| told(&Told::new(AskOutcome::BlockedByPolicy, asked.surface, call.tool).reason(reason));
+    match tightened.without_the_user(blocked) {
         Verdict::Deny(reason) => Decision::deny(reason, Layer::Floor),
         verdict => Decision { verdict, layer: Some(Layer::Floor) },
     }
@@ -122,9 +128,15 @@ pub fn version() -> String {
 }
 
 pub fn unasked(asked: Asked<'_>, tool: &str) -> String {
-    let reason = format!("{tool} asks a person first, and {} cannot ask anyone yet.", asked.surface.word());
+    let reason = told(&Told::new(AskOutcome::Unavailable, asked.surface, tool));
     blocked_as(asked, tool, &reason, Layer::List, audit::code::UNATTENDED);
-    refusal(&reason)
+    AskOutcome::Unavailable.refusal(&reason)
+}
+
+pub fn unattended(asked: Asked<'_>, tool: &str, reason: &Reason, code: &str) -> String {
+    let reason = told(&Told::new(AskOutcome::Unavailable, asked.surface, tool).reason(reason));
+    blocked_as(asked, tool, &reason, Layer::Declared, code);
+    AskOutcome::Unavailable.refusal(&reason)
 }
 
 pub fn subject(action: &str, args: &Value) -> String {
@@ -133,7 +145,7 @@ pub fn subject(action: &str, args: &Value) -> String {
 }
 
 pub fn refusal(reason: &str) -> String {
-    format!("{BLOCKED}: {reason}")
+    AskOutcome::BlockedByPolicy.refusal(reason)
 }
 
 #[cfg(test)]
@@ -170,7 +182,7 @@ mod tests {
     #[test]
     fn a_refusal_names_the_policy_and_a_missing_person() {
         let told = unasked(ASKED, "x_tracker_create");
-        assert!(told.starts_with("blocked_by_policy: x_tracker_create asks a person first"), "{told}");
+        assert!(told.starts_with("unavailable: x_tracker_create asks a person first"), "{told}");
     }
 
     #[test]

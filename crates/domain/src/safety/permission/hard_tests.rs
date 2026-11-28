@@ -90,10 +90,10 @@ fn the_product_s_configuration_and_content_are_asked_every_time_and_never_rememb
     let call = Call { tool: "Write", subject: &ordinary, effects: &effects };
     assert_eq!(judged(PermissionMode::Auto, &Remembered::default(), None, call), Verdict::Allow);
     assert!(!Reason::Hard(Category::Governance).reviewable() && !Reason::Hard(Category::Governance).rememberable());
-    let unattended =
-        Verdict::Ask { reason: Reason::Hard(Category::Governance), rememberable: false }.without_the_user("Write");
+    let unattended = Verdict::Ask { reason: Reason::Hard(Category::Governance), rememberable: false }
+        .without_the_user(|reason| reason.why().unwrap_or_default());
     let Verdict::Deny(why) = unattended else { panic!("an unattended run refuses it") };
-    assert!(why.contains("own configuration or content") && why.contains("no one to ask"), "{why}");
+    assert!(why.contains("own configuration or content"), "{why}");
 }
 
 fn bash(command: &str) -> Verdict {

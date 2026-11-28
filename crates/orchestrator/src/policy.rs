@@ -1,12 +1,13 @@
 use std::time::Instant;
 
+use agent_engine::conduct::{Told, told};
 use agent_engine::labels;
 use agent_engine::policy_gate::{self, Asked};
 use connectors::{ActionSpec, Labelled};
 use domain::audit::{AuthorizedBy, OperationTag, code};
 use domain::effect::{Call, IdempotencyKey};
 use domain::label::{self, Levels, Mark, Sink};
-use domain::permission::{Call as Judged, Effect, Layer, Reason, Surface, Verdict};
+use domain::permission::{AskOutcome, Call as Judged, Effect, Layer, Reason, Surface, Verdict};
 use domain::workflow::{WorkItem, WorkflowEvent};
 use domain::{AskId, AskKind, Decision};
 use serde_json::Value;
@@ -69,7 +70,8 @@ impl Gated<'_> {
             operation.version = tag.version.as_deref(),
             operation.name = tag.friendly_name.as_deref()
         );
-        let (by, waited_ms) = self.judged(call, &server, &tool, spec).instrument(span).await?;
+        let named = Named { tool: &tool, operation: &tag.id };
+        let (by, waited_ms) = self.judged(call, &server, named, spec).instrument(span).await?;
         Ok(Authorized { tag, by, waited_ms })
     }
 
@@ -77,9 +79,10 @@ impl Gated<'_> {
         &self,
         call: &Call,
         server: &str,
-        tool: &str,
+        named: Named<'_>,
         spec: Option<&ActionSpec>,
     ) -> Result<(AuthorizedBy, Option<u64>), Failure> {
+        let tool = named.tool;
         let declared = spec.and_then(|action| action.declaration().operation(server, &call.args));
         let effects: Vec<Effect> = declared.map(Effect::Operation).into_iter().collect();
         let asked = Asked { surface: surface_of(self.item), stage: &self.key.step, owner: self.owner };
@@ -91,18 +94,16 @@ impl Gated<'_> {
         match verdict {
             Verdict::Allow => Ok((AuthorizedBy::Standing, None)),
             Verdict::Deny(reason) => Err(Failure::permanent(policy_gate::refusal(&reason))),
-            Verdict::Ask { reason: Reason::Flow(why), .. } if asked.surface == Surface::Routine => {
-                let told = Reason::Flow(why).unattended(tool);
-                policy_gate::blocked_as(asked, tool, &told, Layer::Declared, code::FLOW_UNATTENDED);
-                Err(Failure::permanent(policy_gate::refusal(&told)))
+            Verdict::Ask { reason: reason @ Reason::Flow(_), .. } if asked.surface == Surface::Routine => {
+                Err(Failure::permanent(policy_gate::unattended(asked, tool, &reason, code::FLOW_UNATTENDED)))
             }
             Verdict::Ask { .. } if asked.surface == Surface::Routine => {
                 Err(Failure::permanent(policy_gate::unasked(asked, tool)))
             }
             Verdict::Ask { reason: Reason::Flow(why), .. } => {
-                self.approved(asked, tool, &format!("{} {why}", call.action)).await
+                self.approved(asked, named, &format!("{} {why}", call.action)).await
             }
-            Verdict::Ask { .. } => self.approved(asked, tool, &call.action).await,
+            Verdict::Ask { .. } => self.approved(asked, named, &call.action).await,
         }
     }
 
@@ -132,30 +133,39 @@ impl Gated<'_> {
     async fn approved(
         &self,
         asked: Asked<'_>,
-        tool: &str,
+        named: Named<'_>,
         subject: &str,
     ) -> Result<(AuthorizedBy, Option<u64>), Failure> {
+        let tool = named.tool;
         let id = AskId(format!("policy-{}", self.key));
         let asking = Asking { shared: self.shared, item: &self.item.id, key: self.key, id: id.clone() };
         let started = Instant::now();
         let Some(decision) = asking.decided(AskKind::permission(tool, subject, false)).await else {
-            let reason = format!("{tool} was waiting for a person, and the item stopped first.");
-            policy_gate::blocked_as(asked, tool, &reason, Layer::List, code::ABANDONED);
-            return Err(Failure::permanent(policy_gate::refusal(&reason)));
+            return Err(Failure::permanent(ended(asked, named, AskOutcome::Expired, code::ABANDONED)));
         };
-        settled(asked, tool, &decision)?;
+        settled(asked, named, &decision)?;
         let measured = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
         Ok((AuthorizedBy::Approval(id.0), Some(asking.waited_ms().unwrap_or(measured))))
     }
 }
 
-fn settled(asked: Asked<'_>, tool: &str, decision: &Decision) -> Result<(), Failure> {
+#[derive(Debug, Clone, Copy)]
+struct Named<'a> {
+    tool: &'a str,
+    operation: &'a str,
+}
+
+fn settled(asked: Asked<'_>, named: Named<'_>, decision: &Decision) -> Result<(), Failure> {
     match decision {
         Decision::Allow | Decision::AllowAlways | Decision::Approve(_) => Ok(()),
         Decision::Deny | Decision::DenyWith(_) | Decision::Answer(_) => {
-            let reason = format!("{tool} was refused by the person asked.");
-            policy_gate::blocked_as(asked, tool, &reason, Layer::List, code::REFUSED);
-            Err(Failure::permanent(policy_gate::refusal(&reason)))
+            Err(Failure::permanent(ended(asked, named, AskOutcome::Declined, code::REFUSED)))
         }
     }
+}
+
+fn ended(asked: Asked<'_>, named: Named<'_>, outcome: AskOutcome, decision: &str) -> String {
+    let reason = told(&Told::new(outcome, asked.surface, named.tool).operation(named.operation));
+    policy_gate::blocked_as(asked, named.tool, &reason, Layer::List, decision);
+    outcome.refusal(&reason)
 }

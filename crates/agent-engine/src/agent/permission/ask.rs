@@ -1,11 +1,12 @@
 use crossbeam_channel::RecvError;
 use domain::operation::Disclosed;
-use domain::permission::{Allowed, Effect, Judgement, Reason, Standing};
+use domain::permission::{Allowed, AskOutcome, Effect, Judgement, Reason, Standing, Surface};
 use domain::{AgentAsk, AskId, AskKind, Decision, EngineEvent};
 use serde_json::Value;
 
 use super::{Asking, Called};
 use crate::agent::Agent;
+use crate::conduct::{Told, told};
 use crate::tools::Outcome;
 
 impl Agent<'_> {
@@ -39,14 +40,11 @@ impl Agent<'_> {
                 }
                 self.went_ahead(id, tool, input)
             }
-            Ok(Decision::Deny) => self.refused(
-                name,
-                format!("The user did not allow {name} here. Do not retry it; ask them or take another approach."),
-            ),
+            Ok(Decision::Deny) => self.refused(name, told(&Told::new(AskOutcome::Declined, Surface::Chat, name))),
             Ok(Decision::DenyWith(note)) => {
-                self.refused(name, format!("The user did not allow {name} here and said what to do instead: {note}"))
+                self.refused(name, told(&Told::new(AskOutcome::Declined, Surface::Chat, name).note(&note)))
             }
-            Err(_) => Outcome::error(crate::tools::stopped::while_asking(name)),
+            Err(_) => Outcome::error(told(&Told::new(AskOutcome::Expired, Surface::Chat, name))),
         }
     }
 

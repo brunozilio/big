@@ -59,10 +59,7 @@ fn an_external_result_is_wrapped_and_a_confidential_read_stops_the_send_only_whe
             Mode::Shadow => assert_eq!(send.as_deref(), Ok("sent")),
             Mode::Enforce => {
                 let refused = send.expect_err("past the ceiling");
-                assert!(
-                    refused.starts_with("blocked_by_policy: ") && refused.contains("internal ceiling"),
-                    "{refused}"
-                );
+                assert!(refused.starts_with("unavailable: ") && refused.contains("internal ceiling"), "{refused}");
             }
         }
         close(&session);

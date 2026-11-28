@@ -21,9 +21,7 @@ fn refused(asked: Asked<'_>, tool: &str, spec: &ActionSpec, levels: &Levels, rea
     let sink = Sink { ceiling: spec.max_input_level.as_deref(), risky: spec.risky() };
     match labels::flow(asked, tool, levels, &mark, &sink) {
         Verdict::Ask { reason, .. } => {
-            let told = reason.unattended(tool);
-            policy_gate::blocked(asked, tool, &told, Layer::Declared);
-            Some(policy_gate::refusal(&told))
+            Some(policy_gate::unattended(asked, tool, &reason, domain::audit::code::FLOW_UNATTENDED))
         }
         Verdict::Deny(reason) => Some(policy_gate::refusal(&reason)),
         Verdict::Allow => None,

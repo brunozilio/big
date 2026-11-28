@@ -44,32 +44,16 @@ impl Reason {
     }
 
     pub fn reviewable(&self) -> bool {
-        !matches!(self, Self::Hook | Self::Listed | Self::Flagged(_) | Self::Hard(_) | Self::Declared { .. } | Self::Flow(_))
+        !matches!(
+            self,
+            Self::Hook | Self::Listed | Self::Flagged(_) | Self::Hard(_) | Self::Declared { .. } | Self::Flow(_)
+        )
     }
 
     pub fn shown(&self) -> Option<String> {
         match self {
             Self::Flagged(why) | Self::Flow(why) => Some(why.clone()),
             _ => None,
-        }
-    }
-
-    pub fn unattended(&self, tool: &str) -> String {
-        match self {
-            Self::Flagged(why) => format!("{tool} was blocked. {why} Find a safer way to do this or ask the user."),
-            Self::Hard(category) => {
-                format!(
-                    "{tool} was blocked because {}. The safety floor has a person approve that every time, and this run has no one to ask, so it was refused. Find a safer way to do this or ask the user.",
-                    category.why()
-                )
-            }
-            Self::Declared { why, .. } => {
-                format!("{tool} {why}, so a person approves it every time; it does not run unattended.")
-            }
-            Self::Flow(why) => {
-                format!("{tool} {why}, so a person approves it first, and this run has no one to ask.")
-            }
-            _ => format!("{tool} requires permission; dontAsk denies unapproved actions."),
         }
     }
 }
@@ -90,9 +74,9 @@ impl Verdict {
         matches!(self, Self::Deny(_))
     }
 
-    pub fn without_the_user(self, tool: &str) -> Self {
+    pub fn without_the_user(self, told: impl FnOnce(&Reason) -> String) -> Self {
         match self {
-            Self::Ask { reason, .. } => Self::Deny(reason.unattended(tool)),
+            Self::Ask { reason, .. } => Self::Deny(told(&reason)),
             settled => settled,
         }
     }

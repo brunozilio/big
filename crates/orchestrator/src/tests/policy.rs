@@ -88,7 +88,8 @@ async fn a_person_who_refuses_the_ask_blocks_the_call() {
     let asked = first_ask(&kernel).await;
     kernel.answer_ask(&asked.ask.id, &Decision::Deny).expect("answer");
     let answer = output(&ended(&kernel, &id).await);
-    assert!(answer["message"].as_str().is_some_and(|told| told.contains("blocked_by_policy")), "{answer}");
+    let message = answer["message"].as_str().unwrap_or_default();
+    assert_eq!(message, format!("declined: {} was refused by the person asked.", tool("tracker.link_issues")));
     assert_eq!(world.provider.count("tracker.link_issues"), 0);
 }
 
@@ -146,7 +147,7 @@ async fn a_routine_has_no_one_to_ask_so_an_ask_rule_refuses() {
     let id = kernel.create_item("linking", input).expect("item");
     let answer = output(&ended(&kernel, &id).await);
     let message = answer["message"].as_str().unwrap_or_default();
-    assert!(message.contains("blocked_by_policy") && message.contains("asks a person first"), "{answer}");
+    assert!(message.starts_with("unavailable: ") && message.contains("asks a person first"), "{answer}");
     assert!(kernel.asks().is_empty());
     assert_eq!(world.provider.count("tracker.link_issues"), 0);
 }

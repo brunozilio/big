@@ -85,7 +85,7 @@ impl PolicyContext<'_> {
         self.mode.capped(self.ceiling)
     }
 
-    pub fn settled(&self, verdict: super::Verdict, tool: &str) -> super::Verdict {
-        if self.no_prompts { verdict.without_the_user(tool) } else { verdict }
+    pub fn settled(&self, verdict: super::Verdict, told: impl FnOnce(&super::Reason) -> String) -> super::Verdict {
+        if self.no_prompts { verdict.without_the_user(told) } else { verdict }
     }
 }

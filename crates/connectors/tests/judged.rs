@@ -18,7 +18,7 @@ fn verdicts(effects: &[Effect]) -> Vec<Verdict> {
                     no_prompts,
                     allowed,
                 };
-                found.push(cx.settled(PolicyEngine::decide(&call, &cx), "t"));
+                found.push(cx.settled(PolicyEngine::decide(&call, &cx), |reason| reason.kind().into()));
             }
         }
     }

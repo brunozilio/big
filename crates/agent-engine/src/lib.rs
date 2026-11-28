@@ -4,6 +4,7 @@ mod boundary;
 pub mod brief;
 pub mod checkpoints;
 pub mod chores;
+pub mod conduct;
 pub mod config_schema;
 pub mod control;
 pub mod data_gate;

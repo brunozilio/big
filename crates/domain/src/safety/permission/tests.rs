@@ -134,7 +134,7 @@ fn a_guarded_write_names_its_guard_and_unattended_asks_are_denied() {
     let judged = PolicyEngine::judge(&call, &context(PermissionMode::Auto, &none, &bounds));
     assert!(matches!(judged.verdict, Verdict::Ask { reason: Reason::Guarded { guard: Guard::GitFolder, .. }, .. }));
     let unattended = PolicyContext { no_prompts: true, ..context(PermissionMode::Auto, &none, &bounds) };
-    assert!(unattended.settled(judged.verdict, "Edit").denies());
+    assert!(unattended.settled(judged.verdict, |reason| reason.kind().into()).denies());
 }
 
 #[test]
@@ -413,6 +413,6 @@ fn a_remembered_always_for_an_action_now_strict_is_reported_as_overridden() {
     remembered.remember("mcp__connectors__mail_send", Standing::Acts, "");
     let verdict = operated(declared(&[Kind::SendExternal], Risk::Medium), PermissionMode::Auto, None, &remembered);
     assert!(matches!(verdict, Verdict::Ask { reason: Reason::Declared { overrode: true, .. }, rememberable: false }));
-    let unattended = verdict.without_the_user("mail_send");
-    assert!(matches!(unattended, Verdict::Deny(why) if why.contains("does not run unattended")));
+    let unattended = verdict.without_the_user(|reason| reason.kind().into());
+    assert_eq!(unattended, Verdict::Deny("declared".into()));
 }

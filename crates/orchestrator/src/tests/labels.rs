@@ -84,7 +84,7 @@ async fn a_risky_action_after_external_content_asks_and_a_routine_refuses_it() {
     let (kernel, id) = forwarded(&world, input).await;
     let answer = output(&ended(&kernel, &id).await);
     let message = answer["message"].as_str().unwrap_or_default();
-    assert!(message.contains("blocked_by_policy"), "{answer}");
+    assert!(message.starts_with("unavailable: "), "{answer}");
     assert!(message.contains("acts after reading external content from Fake tracker.issue"), "{answer}");
     assert!(kernel.asks().is_empty());
     assert_eq!(world.provider.count("tracker.comment"), 0);

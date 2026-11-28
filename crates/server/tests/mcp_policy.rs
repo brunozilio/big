@@ -75,7 +75,7 @@ async fn the_list_decides_a_mcp_call_to_a_connection_as_it_decides_the_chat_and_
     );
     listing(vec![(connector_tool("tracker.issue"), Behavior::Ask)]);
     let (failed, text) = told(&asked(&world, &connectors, &issue).await);
-    assert!(failed && text.starts_with("blocked_by_policy: ") && text.contains("asks a person first"), "{text}");
+    assert!(failed && text.starts_with("unavailable: ") && text.contains("asks a person first"), "{text}");
     listing(vec![(connector_tool("tracker.issue"), Behavior::Allow)]);
     let (failed, text) = told(&asked(&world, &connectors, &issue).await);
     assert!(!failed && !text.is_empty() && !text.starts_with("blocked"), "an allow rule still allows: {text}");
