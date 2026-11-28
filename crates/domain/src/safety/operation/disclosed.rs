@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::{Kind, Operation, Risk};
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+#[serde(default, rename_all = "camelCase")]
 pub struct Disclosed {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub effects: Vec<Kind>,
@@ -11,6 +11,10 @@ pub struct Disclosed {
     pub risk: Option<Risk>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub recipients: Vec<String>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub strict: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub revoked_grant: bool,
 }
 
 impl Disclosed {
@@ -31,6 +35,6 @@ impl Disclosed {
     }
 
     pub fn is_empty(&self) -> bool {
-        self.effects.is_empty() && self.risk.is_none() && self.recipients.is_empty()
+        self.effects.is_empty() && self.risk.is_none() && self.recipients.is_empty() && !self.strict
     }
 }

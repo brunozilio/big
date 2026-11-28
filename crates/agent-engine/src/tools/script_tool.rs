@@ -276,17 +276,20 @@ pub struct ScriptTool {
     pub top_level_only: bool,
     pub skills: Vec<super::skill::FoundSkill>,
     pub interceptors: Vec<crate::intercept::Interceptor>,
-    pub profile: Profile,
+    pub profile: Option<Profile>,
 }
 
-pub fn profile_of(shown: &str, spec: &Value) -> Result<Profile, String> {
+pub fn profile_of(shown: &str, spec: &Value) -> Result<Option<Profile>, String> {
     match spec.get("profile") {
         None | Some(Value::Null) => {
-            tracing::warn!(tool = shown, "a tool declares no spec.profile; it is treated as the riskiest kind");
-            Ok(Profile::conservative())
+            tracing::warn!(
+                tool = shown,
+                "a tool declares no spec.profile; unless it declares access \"read\" it is treated as the riskiest kind"
+            );
+            Ok(None)
         }
         Some(declared) => {
-            domain::operation::checked(declared).map_err(|problem| format!("{shown}: spec.profile {problem}"))
+            domain::operation::checked(declared).map(Some).map_err(|problem| format!("{shown}: spec.profile {problem}"))
         }
     }
 }
@@ -467,8 +470,13 @@ impl Tool for ScriptTool {
     fn effects(&self, input: &Value, workspace: &Workspace) -> Vec<Effect> {
         if !self.trusted || !self.exports.effects {
             let mut declared: Vec<Effect> = self.declared.map(Effect::Declared).into_iter().collect();
-            if self.profile.strict() {
-                declared.push(Effect::Operation(self.profile.operation(&self.spec.name)));
+            let strict = match &self.profile {
+                Some(profile) => profile.strict(),
+                None => self.declared.is_some(),
+            };
+            if strict {
+                let profile = self.profile.clone().unwrap_or_else(Profile::conservative);
+                declared.push(Effect::Operation(profile.operation(&self.spec.name)));
             }
             return declared;
         }

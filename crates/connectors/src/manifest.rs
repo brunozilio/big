@@ -1,7 +1,5 @@
 use std::fmt;
 use std::path::Path;
-use std::sync::Arc;
-use std::sync::atomic::AtomicBool;
 
 use content::schema::{Contract, SchemaError};
 use domain::operation::{Kind, Problem, checked};
@@ -36,6 +34,9 @@ fn acting(action: &Value) -> bool {
 
 fn action_checked(action: &Value) -> Result<(), ManifestError> {
     let name = action["name"].as_str().unwrap_or_default().to_owned();
+    if action["permission"]["default"] == "allow" {
+        tracing::warn!(action = %name, "permission.default \"allow\" is read as \"ask\": a connector only tightens how it is asked");
+    }
     if action["writes"].as_bool() == Some(true) && !acting(action) {
         return Err(ManifestError::WriteWithoutEffects { action: name });
     }
@@ -43,14 +44,14 @@ fn action_checked(action: &Value) -> Result<(), ManifestError> {
 }
 
 pub fn migrated(root: Option<&Path>, declared: Value) -> Result<Value, ManifestError> {
-    let catalog = crate::contracts::CATALOG;
-    let source = content::user_text(root, catalog)
-        .or_else(|| content::builtin_text(catalog))
-        .ok_or_else(|| ManifestError::Migration(format!("{catalog} is missing")))?;
-    let host: Arc<dyn script::Host> = Arc::new(crate::scripted::Local);
-    let stop = Arc::new(AtomicBool::new(false));
-    script::run_within(catalog, &source, "migrated", &[declared], &Value::Null, host, stop, None)
-        .map_err(ManifestError::Migration)
+    let version = declared.get(content::schema::FIELD);
+    let older = version.is_none_or(|version| {
+        version.is_null() || version.as_u64().is_some_and(|found| found < Contract::Connector.current())
+    });
+    if !older {
+        return Ok(declared);
+    }
+    crate::contracts::sdk(root, "migrated", &[declared]).map_err(ManifestError::Migration)
 }
 
 pub fn read(declared: &mut Value, at: &str) -> Result<(), ManifestError> {

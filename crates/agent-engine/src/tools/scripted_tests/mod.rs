@@ -23,7 +23,8 @@ fn every_shipped_tool_declares_its_risk_profile() {
             panic!("{path}: spec.profile {problem}");
         }
     }
-    assert!(shipped("Bash").profile.strict() && !shipped("Read").profile.acts());
+    assert!(shipped("Bash").profile.is_some_and(|profile| profile.strict()));
+    assert!(shipped("Read").profile.is_some_and(|profile| !profile.acts()));
 }
 
 #[test]
@@ -36,7 +37,7 @@ fn a_tool_with_a_broken_profile_does_not_load_and_one_without_is_the_riskiest() 
     let bare = "export const spec = { name: \"Y\" };\nexport function execute() { return \"\"; }\n";
     let parsed =
         super::script_tool::parse_source(std::path::Path::new("tools/Y.ts"), bare.into(), true).expect("loads");
-    assert_eq!(parsed.profile, domain::operation::Profile::conservative());
+    assert_eq!(parsed.profile, None);
 }
 #[test]
 fn a_tool_s_profile_only_tightens_what_its_call_is_asked_about() {
@@ -71,14 +72,10 @@ fn a_tool_s_profile_only_tightens_what_its_call_is_asked_about() {
     assert!(operations(&shipped("Read")).is_empty(), "a built-in tool keeps its own per-call effects");
 }
 #[test]
-fn a_user_tool_without_a_profile_is_asked_about_never_refused() {
+fn a_user_tool_without_a_profile_is_asked_about_never_refused_unless_it_only_reads() {
     use crate::tools::{Tool, Workspace};
     use domain::permission::{Bounds, Call, PolicyContext, PolicyEngine, Reason, Remembered, Verdict};
     let workspace = Workspace::new(".");
-    let bare = "export const spec = { name: \"Bare\" };\nexport function execute() { return \"\"; }\n";
-    let tool =
-        super::script_tool::parse_source(std::path::Path::new("tools/Bare.ts"), bare.into(), true).expect("loads");
-    let effects = tool.effects(&serde_json::json!({}), &workspace);
     let bounds = Bounds::of(vec![std::path::PathBuf::from("/work")], Vec::new());
     let remembered = Remembered::default();
     let cx = PolicyContext {
@@ -89,6 +86,15 @@ fn a_user_tool_without_a_profile_is_asked_about_never_refused() {
         no_prompts: false,
         allowed: None,
     };
-    let verdict = PolicyEngine::decide(&Call { tool: "Bare", subject: "", effects: &effects }, &cx);
-    assert!(matches!(verdict, Verdict::Ask { reason: Reason::Declared { .. }, rememberable: false }), "{verdict:?}");
+    let judged = |spec: &str| {
+        let source =
+            format!("export const spec = {{ name: \"Bare\"{spec} }};\nexport function execute() {{ return \"\"; }}\n");
+        let tool =
+            super::script_tool::parse_source(std::path::Path::new("tools/Bare.ts"), source, true).expect("loads");
+        let effects = tool.effects(&serde_json::json!({}), &workspace);
+        PolicyEngine::decide(&Call { tool: "Bare", subject: "", effects: &effects }, &cx)
+    };
+    let bare = judged("");
+    assert!(matches!(bare, Verdict::Ask { reason: Reason::Declared { .. }, rememberable: false }), "{bare:?}");
+    assert_eq!(judged(", access: \"read\""), Verdict::Allow, "a tool that only reads runs as before");
 }

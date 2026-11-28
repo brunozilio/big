@@ -1,3 +1,7 @@
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
+
 use serde_json::Value;
 
 use crate::descriptor::ActionSpec;
@@ -97,10 +101,18 @@ pub mod mcp {
 
 pub const CATALOG: &str = "sdk/connectors/contracts.ts";
 
+pub(crate) fn sdk(root: Option<&Path>, export: &str, arguments: &[Value]) -> Result<Value, String> {
+    let mine = content::user_text(root, CATALOG).filter(|source| script::exports(CATALOG, source, export));
+    let source = mine.or_else(|| content::builtin_text(CATALOG)).ok_or_else(|| format!("{CATALOG} is missing"))?;
+    let host: Arc<dyn script::Host> = Arc::new(crate::scripted::Local);
+    script::run_within(CATALOG, &source, export, arguments, &Value::Null, host, Arc::new(AtomicBool::new(false)), None)
+}
+
 fn catalog(capability: &str) -> Vec<ActionSpec> {
-    let listed = content::call(CATALOG, capability, &Value::Null).unwrap_or_default();
-    serde_json::from_value(listed).unwrap_or_else(|error| {
-        tracing::error!(%error, capability, "the shipped action catalog does not read");
+    let listed = sdk(content::folder().as_deref(), capability, &[])
+        .and_then(|listed| serde_json::from_value(listed).map_err(|error| error.to_string()));
+    listed.unwrap_or_else(|error| {
+        tracing::error!(%error, capability, "the action catalog of the sdk does not read");
         Vec::new()
     })
 }

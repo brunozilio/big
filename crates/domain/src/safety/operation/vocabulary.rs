@@ -118,6 +118,7 @@ pub enum Visibility {
 pub enum Initial {
     #[default]
     Ask,
+    Allow,
     Deny,
 }
 

@@ -394,6 +394,11 @@ fn what_an_operation_declares_only_tightens_how_it_is_asked() {
         judged(always, PermissionMode::Auto, Some(&list)),
         Verdict::Ask { reason: Reason::Declared { .. }, .. }
     ));
+    let loose = crate::operation::Operation {
+        permission: Permission { default: Initial::Allow, always_ask: false },
+        ..comment.clone()
+    };
+    assert_eq!(judged(loose, PermissionMode::Auto, None), asked, "allow never loosens: it is asked like ask");
     let refused =
         crate::operation::Operation { permission: Permission { default: Initial::Deny, always_ask: false }, ..comment };
     assert!(judged(refused.clone(), PermissionMode::Auto, None).denies());

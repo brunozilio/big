@@ -38,7 +38,12 @@ mod tests {
             serde_json::from_value::<Declaration>(json!({ "effects": ["read"] })).is_err(),
             "no profile, no default"
         );
-        assert!(serde_json::from_value::<Permission>(json!({ "default": "allow" })).is_err(), "content only tightens");
+        let mut loose =
+            json!({ "effects": ["write"], "risk": "low", "reversible": true, "untrusted": false, "sensitive": false });
+        loose["permission"] = json!({ "default": "allow" });
+        let loose: Declaration = serde_json::from_value(loose).expect("allow is read");
+        let operation = loose.operation("s", &input).expect("acts");
+        assert!(!operation.refused() && !operation.strict(), "allow is asked like ask: content only tightens");
     }
 
     #[test]

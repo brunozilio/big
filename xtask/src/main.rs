@@ -6,6 +6,7 @@ mod environment;
 mod git_commands;
 mod lint;
 mod provider_names;
+mod test_blocks;
 mod web;
 
 use std::path::PathBuf;

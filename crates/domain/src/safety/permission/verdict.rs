@@ -49,12 +49,6 @@ impl Reason {
     pub fn shown(&self) -> Option<String> {
         match self {
             Self::Flagged(why) => Some(why.clone()),
-            Self::Declared { why, overrode: false } => {
-                Some(format!("This action {why}, so a person approves it every time."))
-            }
-            Self::Declared { why, overrode: true } => Some(format!(
-                "This action {why}, so a person approves it every time: the \"always allow\" saved for it no longer applies."
-            )),
             _ => None,
         }
     }

@@ -8,7 +8,7 @@ use serde_json::json;
 use crate::{Rig, tool_use};
 
 const TOOL: &str = r#"
-export const spec = { profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false }, name: "Mark", description: "Writes a mark.", access: "read", capabilities: ["writeFile"] };
+export const spec = { name: "Mark", description: "Writes a mark.", access: "read", capabilities: ["writeFile"] };
 export function run(input, ctx) {
   ctx.log("marking");
   ctx.writeFile("mark.txt", "marked");
@@ -87,7 +87,7 @@ fn a_tool_that_exports_execute_runs_it_and_no_rust_tool_is_left_to_call() {
     let folder = home.path().join(brand::DIR).join("tools");
     std::fs::create_dir_all(&folder).expect("tools");
     let tool = r#"
-export const spec = { profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false }, name: "Mark", description: "Writes a mark.", access: "read", capabilities: ["writeFile"] };
+export const spec = { name: "Mark", description: "Writes a mark.", access: "read", capabilities: ["writeFile"] };
 export function execute(input, ctx) {
   ctx.writeFile("mark.txt", "executed");
   try { ctx.builtin(input) } catch (error) { return error.message }
@@ -125,7 +125,7 @@ fn a_tool_a_script_calls_again_and_again_is_held_back_like_the_model_s_own_calls
     let rig = Rig::new(domain::Reviewer::Nobody);
     let home = tempfile::tempdir().expect("home");
     let tool = r#"
-export const spec = { profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false }, name: "Thrice", description: "Reads one file three times.", access: "read" };
+export const spec = { name: "Thrice", description: "Reads one file three times.", access: "read" };
 export function run(input, ctx) {
   const read = () => ctx.tool("Read", { file_path: "notes.txt" });
   read();
@@ -151,7 +151,7 @@ fn a_background_agent_a_script_starts_is_one_the_run_can_collect() {
     let rig = Rig::new(domain::Reviewer::Nobody);
     let home = tempfile::tempdir().expect("home");
     let tool = r#"
-export const spec = { profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false }, name: "Delegate", description: "Starts a reviewer in the background.", access: "read" };
+export const spec = { name: "Delegate", description: "Starts a reviewer in the background.", access: "read" };
 export function run(input, ctx) {
   return ctx.tool("Agent", { description: "Review", prompt: "review", run_in_background: true });
 }
@@ -175,7 +175,7 @@ export function run(input, ctx) {
 fn runner(capabilities: &str) -> String {
     format!(
         r#"
-export const spec = {{ profile: {{ effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false }}, name: "Runner", description: "Runs a command.", access: "read"{capabilities} }};
+export const spec = {{ name: "Runner", description: "Runs a command.", access: "read"{capabilities} }};
 export function run(input, ctx) {{
   try {{ return "exit " + ctx.exec("echo hi > made.txt").code }} catch (error) {{ return "refused: " + error.message }}
 }}

@@ -309,6 +309,7 @@ pub fn ask_event(ask: &AgentAsk, at: i64) -> Value {
             "risk": disclosed.risk.map_or("medium", domain::operation::Risk::word), "rememberable": rememberable,
             "effects": disclosed.effects.iter().map(|kind| kind.word()).collect::<Vec<_>>(),
             "recipients": disclosed.recipients,
+            "strict": disclosed.strict, "revokedGrant": disclosed.revoked_grant,
         }),
         AskKind::Questions(questions) => {
             let asked: Vec<Value> = questions

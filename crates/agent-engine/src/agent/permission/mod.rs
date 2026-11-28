@@ -117,7 +117,9 @@ impl Agent<'_> {
         match verdict {
             Verdict::Allow => self.went_ahead(id, tool, input),
             Verdict::Deny(reason) => self.refused(name, reason),
-            Verdict::Ask { rememberable, reason } => self.ask_permission(asking, &asking.shown(&reason), rememberable),
+            Verdict::Ask { rememberable, reason } => {
+                self.ask_permission(asking, &asking.shown(&reason), rememberable, &reason)
+            }
         }
     }
 
