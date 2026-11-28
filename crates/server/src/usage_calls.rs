@@ -1,9 +1,8 @@
-use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use connectors::calls::{CallSink, Called};
-use serde_json::{Value, json};
-use store::{ConnectionRecord, ConnectorCall, ConnectorCalls, Store};
+use domain::spend::{Charged, SpendSink};
+use store::{ConnectorCall, Spent, Store};
 
 #[derive(Debug)]
 pub struct StoredCalls(pub Arc<Store>);
@@ -26,115 +25,67 @@ impl CallSink for StoredCalls {
     }
 }
 
-#[derive(Debug, Default)]
-struct PerConnection {
-    calls: u64,
-    failed: u64,
-    by_origin: BTreeMap<String, u64>,
-}
+#[derive(Debug)]
+pub struct StoredSpend(pub Arc<Store>);
 
-#[derive(Debug, Default, PartialEq, Eq)]
-pub struct Unowned {
-    pub calls: u64,
-}
-
-pub fn by_connection(
-    rows: &[ConnectorCalls],
-    records: &[ConnectionRecord],
-    mine: impl Fn(&str) -> bool,
-) -> (Vec<Value>, Unowned) {
-    let mut grouped: BTreeMap<&str, PerConnection> = BTreeMap::new();
-    let mut unowned = Unowned::default();
-    for row in rows.iter().filter(|row| mine(&row.connection)) {
-        let kept = grouped.entry(row.connection.as_str()).or_default();
-        kept.calls += row.calls;
-        kept.failed += row.failed;
-        if let Some(origin) = &row.origin {
-            *kept.by_origin.entry(origin.clone()).or_default() += row.calls;
-        }
-        if !row.attributed {
-            unowned.calls += row.calls;
+impl SpendSink for StoredSpend {
+    fn spent(&self, charged: &Charged<'_>) {
+        let attribution = charged.attribution;
+        let spent = Spent {
+            at: crate::marks::now_ms(),
+            item: attribution.item.clone().unwrap_or_default(),
+            step: attribution.step.clone().unwrap_or_default(),
+            agent: charged.agent.to_owned(),
+            application: String::new(),
+            owner: charged.owner.to_owned(),
+            origin: attribution.origin,
+            cost: charged.cost,
+        };
+        if let Err(error) = self.0.record_spend(&spent) {
+            tracing::warn!(%error, owner = charged.owner, "a conversation's spend could not be kept");
         }
     }
-    let mut listed: Vec<(&str, PerConnection)> = grouped.into_iter().collect();
-    listed.sort_by(|a, b| b.1.calls.cmp(&a.1.calls).then(a.0.cmp(b.0)));
-    let found = listed
-        .into_iter()
-        .map(|(id, counted)| {
-            let record = records.iter().find(|record| record.id == id);
-            json!({
-                "id": id,
-                "name": record.map_or(id, |record| record.label.as_str()),
-                "provider": record.map(|record| record.provider.as_str()),
-                "calls": counted.calls,
-                "failed": counted.failed,
-                "byOrigin": counted.by_origin,
-            })
-        })
-        .collect();
-    (found, unowned)
 }
 
 #[cfg(test)]
 mod tests {
+    use domain::billing::{Basis, Cost};
+    use domain::origin::{Attribution, Origin};
+    use domain::quota::Scope;
+    use store::ConnectorCalls;
+
     use super::*;
 
     fn row(connection: &str, origin: Option<&str>, attributed: bool, calls: u64, failed: u64) -> ConnectorCalls {
         ConnectorCalls { connection: connection.into(), origin: origin.map(str::to_owned), attributed, calls, failed }
     }
 
-    fn record(id: &str, label: &str) -> ConnectionRecord {
-        ConnectionRecord {
-            id: id.into(),
-            provider: "tracker-x".into(),
-            label: label.into(),
-            account: None,
-            capabilities: Vec::new(),
-            settings: Value::Null,
-        }
-    }
-
-    #[test]
-    fn calls_are_listed_per_connection_by_origin_and_the_ones_no_item_owns_are_counted_apart() {
-        let rows = [
-            row("c1", Some("step"), true, 4, 1),
-            row("c1", None, false, 2, 0),
-            row("c2", Some("trigger"), false, 9, 0),
-            row("c3", Some("step"), true, 50, 0),
-        ];
-        let (listed, unowned) = by_connection(&rows, &[record("c1", "Acme")], |id| id != "c3");
-        assert_eq!(listed[0]["id"], "c2");
-        assert_eq!(listed[0]["name"], "c2", "a connection gone from the store keeps its id");
-        assert_eq!(listed[1]["name"], "Acme");
-        assert_eq!(listed[1]["provider"], "tracker-x");
-        assert_eq!((listed[1]["calls"].as_u64(), listed[1]["failed"].as_u64()), (Some(6), Some(1)));
-        assert_eq!(listed[1]["byOrigin"], json!({ "step": 4 }));
-        assert_eq!(listed.len(), 2, "a connection the person cannot see is left out");
-        assert_eq!(unowned, Unowned { calls: 11 });
-    }
-
     #[test]
     fn a_counted_call_lands_in_the_store_with_its_origin_and_item() {
         let store = Arc::new(Store::in_memory(0).expect("store"));
         let sink = StoredCalls(Arc::clone(&store));
-        let charged = domain::origin::Attribution::of_step("i1", "develop", domain::origin::Origin::Step);
+        let charged = Attribution::of_step("i1", "develop", Origin::Step);
         let (connection, provider) =
             (domain::connection::ConnectionId::from("c1"), domain::connection::ProviderKey::from("p"));
-        sink.called(&Called {
-            connection: &connection,
-            provider: &provider,
-            action: "a.b",
-            attribution: Some(&charged),
-            ok: true,
-        });
-        sink.called(&Called {
-            connection: &connection,
-            provider: &provider,
-            action: "a.b",
-            attribution: None,
-            ok: false,
-        });
+        let called =
+            |attribution, ok| Called { connection: &connection, provider: &provider, action: "a.b", attribution, ok };
+        sink.called(&called(Some(&charged), true));
+        sink.called(&called(None, false));
         let rows = store.connector_calls_since(0).expect("rows");
         assert_eq!(rows, [row("c1", None, false, 1, 1), row("c1", Some("step"), true, 1, 0)]);
+    }
+
+    #[test]
+    fn a_conversation_s_spend_counts_for_its_person_ceiling() {
+        let store = Arc::new(Store::in_memory(0).expect("store"));
+        let sink = StoredSpend(Arc::clone(&store));
+        let chat = Attribution::default();
+        let title = Attribution { origin: Origin::Title, ..Attribution::default() };
+        for attribution in [&chat, &title] {
+            let cost = Cost::priced(Some(0.5), Basis::Api);
+            sink.spent(&Charged { owner: "u-ana", agent: "", attribution, cost });
+        }
+        let kept = store.spent_since(0, Scope::Person, "u-ana").expect("spend");
+        assert_eq!(kept.known_micros, 1_000_000);
     }
 }

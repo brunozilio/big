@@ -105,12 +105,12 @@ fn the_report_shows_the_known_part_and_how_many_calls_had_no_price() {
 fn the_report_splits_the_spend_by_origin_and_counts_what_no_item_owns() {
     use domain::origin::{Attribution, Origin};
     let window = window(jiff::civil::date(2026, 11, 23), 7);
-    let mut tally = UsageTally::new(&window, &["claude-subscription"]);
+    let mut tally = UsageTally::new(&window, &["provider-a"]);
     let call = |cost, attribution| {
         EngineEvent::Usage(ModelUsage {
-            model: "claude-opus-4-5".into(),
+            model: "model-x".into(),
             estimated_cost_usd: Some(cost),
-            provider: "claude-subscription".into(),
+            provider: "provider-a".into(),
             attribution,
             ..ModelUsage::default()
         })

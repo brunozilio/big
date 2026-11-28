@@ -42,6 +42,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let sink = Arc::new(StoredSettings(Arc::clone(&store)));
     let calls = Arc::new(crate::usage_calls::StoredCalls(Arc::clone(&store)));
     let connectors = Arc::new(Connectors::new(http, keeper).with_sink(sink).with_calls(calls));
+    app::install_spend(Arc::new(crate::usage_calls::StoredSpend(Arc::clone(&store))));
     connectors::memory::install(Arc::new(crate::connector_memory::StoredMemory(Arc::clone(&store))));
     let runtime = tokio::runtime::Handle::current();
     let connected = crate::connected_mcp::for_runs(Arc::clone(&store), Arc::clone(&connectors), runtime);

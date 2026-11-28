@@ -29,6 +29,7 @@ pub struct Chore {
     pub cwd: PathBuf,
     pub model: Option<String>,
     pub resume: Option<String>,
+    pub owner: Option<String>,
 }
 
 pub fn model(shared: &Shared, wanted: Option<&str>) -> ModelOption {
@@ -46,6 +47,7 @@ pub async fn answer(shared: &Shared, chore: Chore) -> Option<ChoreAnswer> {
     let mut request = PromptRequest::plain(chore.cwd, chore.text, model(shared, chore.model.as_deref()));
     request.session.command = Some(chore.command);
     request.session.resume = chore.resume.map(SessionId);
+    request.host.owner = chore.owner;
     request.session.language = shared.store.language().ok();
     let (sender, mut receiver) = mpsc::unbounded_channel();
     let sink: Arc<dyn EventSink> = Arc::new(move |_run: RunId, event: EngineEvent| {
@@ -128,6 +130,7 @@ pub fn recap(shared: &Arc<Shared>, item: &ItemId, moment: &str) {
             cwd: ran.cwd,
             model: wanted_model(&state),
             resume: Some(ran.session),
+            owner: Some(crate::owners::of(&shared.store, &state)),
         };
         let Some(ChoreAnswer::Recap(text)) = answer(&shared, chore).await else { return };
         let recap = ItemRecap { text, after };

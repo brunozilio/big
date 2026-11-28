@@ -20,6 +20,7 @@ mod sessions;
 mod settings;
 
 pub use agent_engine::meter::estimate as estimated_cost;
+pub use agent_engine::spend_sink::install as install_spend;
 pub use agent_engine::prompt::output_style::{OutputStyle, all as output_styles};
 pub use api::{Backend, BackendError, BackgroundJob, Wake};
 pub(crate) use catalog::SessionCatalog;

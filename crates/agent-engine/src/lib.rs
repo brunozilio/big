@@ -22,6 +22,7 @@ pub mod lsp_warm;
 pub use lsp_fetch::NetFetch;
 pub mod mcp;
 pub mod meter;
+pub mod spend_sink;
 pub mod prompt;
 pub mod scope;
 pub mod sessions;

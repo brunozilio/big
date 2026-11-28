@@ -50,7 +50,7 @@ impl Ceilings {
     }
 
     pub fn run_of(&self, step: &Value, agent: Option<f64>) -> Option<f64> {
-        declared(step).or(agent).or(self.run)
+        [declared(step), agent, self.run].into_iter().flatten().reduce(f64::min)
     }
 }
 
@@ -72,12 +72,16 @@ mod tests {
     }
 
     #[test]
-    fn a_run_s_ceiling_is_the_step_s_then_the_agent_s_then_the_config_s() {
+    fn a_run_s_ceiling_is_the_lowest_of_the_step_s_the_agent_s_and_the_config_s() {
         let config = Ceilings { run: Some(5.0), ..Ceilings::default() };
         assert_eq!(config.run_of(&json!(1.5), Some(3.0)), Some(1.5));
+        assert_eq!(config.run_of(&json!(4), Some(3.0)), Some(3.0), "a step cannot raise its agent's ceiling either");
         assert_eq!(config.run_of(&json!("2"), None), Some(2.0));
         assert_eq!(config.run_of(&Value::Null, Some(3.0)), Some(3.0));
         assert_eq!(config.run_of(&json!(-1), None), Some(5.0));
         assert_eq!(Ceilings::default().run_of(&Value::Null, None), None);
+        assert_eq!(config.run_of(&json!(50), None), Some(5.0), "a step cannot raise the configured ceiling");
+        assert_eq!(config.run_of(&Value::Null, Some(9.0)), Some(5.0), "nor can an agent");
+        assert_eq!(Ceilings::default().run_of(&json!(50), None), Some(50.0), "without one the declared ceiling holds");
     }
 }

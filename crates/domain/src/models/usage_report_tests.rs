@@ -132,7 +132,7 @@ fn a_record_saved_before_provider_and_account_existed_still_reads() {
 fn use_is_split_by_origin_and_what_no_item_owns_is_counted_apart() {
     let agents = [("s1".to_owned(), "dev".to_owned())].into();
     let mut tally = UsageTally::new(&window(), &KNOWN).with_agents(agents);
-    let charged = |origin, item: Option<&str>, cost| match spent("claude-subscription", "a", "opus", Some(cost)) {
+    let charged = |origin, item: Option<&str>, cost| match spent("provider-a", "a", "model-x", Some(cost)) {
         EngineEvent::Usage(usage) => EngineEvent::Usage(ModelUsage {
             attribution: crate::origin::Attribution { item: item.map(str::to_owned), step: None, origin },
             ..usage

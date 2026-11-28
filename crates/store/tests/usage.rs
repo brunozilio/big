@@ -47,6 +47,7 @@ fn spent(at: i64, agent: &str, application: &str, owner: &str, micros: u64, unpr
         agent: agent.into(),
         application: application.into(),
         owner: owner.into(),
+        origin: domain::origin::Origin::Step,
         cost: domain::billing::Cost { known_micros: micros, unpriced_calls: unpriced, ..Default::default() },
     }
 }

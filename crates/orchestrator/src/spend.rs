@@ -17,6 +17,31 @@ pub fn attribution(item: &ItemId, step: &str, command: &Command) -> Attribution 
     Attribution::of_step(item.to_string(), step, origin)
 }
 
+fn origin_of(event: &EngineEvent) -> Origin {
+    match event {
+        EngineEvent::Usage(usage) => usage.attribution.origin,
+        EngineEvent::AgentEvent { event, .. } => origin_of(event),
+        _ => Origin::Step,
+    }
+}
+
+impl crate::agent::AgentEffect<'_> {
+    pub(crate) fn charge_to(&self, name: &str, state: &domain::workflow::WorkItem, budget_usd: Option<f64>) {
+        let application = crate::application::id_of(&state.input);
+        let owner = crate::owners::of(&self.shared.store, state);
+        let charge = Charge::new(self.item, &self.key.step, name, application, &owner);
+        let _ = self.charge.set(charge.with_agent_ceiling(budget_usd));
+    }
+
+    pub(crate) fn budgeted(&self, request: &domain::PromptRequest) -> domain::PromptRequest {
+        let mut request = request.clone();
+        let Some(charge) = self.charge.get() else { return request };
+        let month = Month::of(&Zoned::now());
+        request.policy.budgets = budgets(&self.shared.store, &Ceilings::configured(), charge, self.command, month);
+        request
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Charge {
     pub item: String,
@@ -61,6 +86,7 @@ impl Charge {
             agent: self.agent.clone(),
             application: self.application.clone(),
             owner: self.owner.clone(),
+            origin: origin_of(event),
             cost,
         };
         if let Err(error) = store.record_spend(&spent) {
@@ -84,13 +110,21 @@ impl Month {
     }
 }
 
-pub fn budgets(store: &Store, ceilings: &Ceilings, charge: &Charge, command: &Command, month: Option<Month>) -> Vec<Budget> {
+pub fn budgets(
+    store: &Store,
+    ceilings: &Ceilings,
+    charge: &Charge,
+    command: &Command,
+    month: Option<Month>,
+) -> Vec<Budget> {
     let mut found = Vec::new();
     if let Some(limit_usd) = ceilings.run_of(&command.args["budgetUsd"], charge.agent_usd) {
         found.push(Budget { limit_usd, spent: charge.run_spent(), scope: Scope::Run, resets_at: None });
     }
     let Some(month) = month else { return found };
-    for (scope, id) in [(Scope::Agent, &charge.agent), (Scope::Application, &charge.application), (Scope::Person, &charge.owner)] {
+    for (scope, id) in
+        [(Scope::Agent, &charge.agent), (Scope::Application, &charge.application), (Scope::Person, &charge.owner)]
+    {
         let Some(limit_usd) = ceilings.of(scope).filter(|_| !id.is_empty()) else { continue };
         let spent = store.spent_since(month.since_ms, scope, id).unwrap_or_else(|error| {
             tracing::warn!(%error, scope = scope.word(), "the spend so far could not be read; the ceiling counts from zero");

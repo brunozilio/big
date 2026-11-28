@@ -202,9 +202,13 @@ const MIGRATIONS: &[&str] = &[
         agent TEXT NOT NULL,
         application TEXT NOT NULL,
         owner TEXT NOT NULL,
+        origin TEXT NOT NULL,
         micros INTEGER NOT NULL,
         unpriced INTEGER NOT NULL
     );
+    CREATE INDEX spend_by_agent ON spend (agent, at);
+    CREATE INDEX spend_by_application ON spend (application, at);
+    CREATE INDEX spend_by_owner ON spend (owner, at);
     CREATE INDEX spend_by_at ON spend (at);
 ",
 ];

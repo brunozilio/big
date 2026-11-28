@@ -7,13 +7,15 @@ use serde_json::Value;
 
 use crate::shared::Shared;
 
-async fn asked(shared: &Shared, text: String, cwd: PathBuf, wanted: Option<&str>) -> Option<String> {
+async fn asked(shared: &Shared, item: &ItemId, text: String, cwd: PathBuf, wanted: Option<&str>) -> Option<String> {
+    let owner = shared.item(item).ok().map(|state| crate::owners::of(&shared.store, &state));
     let chore = crate::chores::Chore {
         command: SessionCommand::Title,
         text,
         cwd,
         model: wanted.map(str::to_owned),
         resume: None,
+        owner,
     };
     match crate::chores::answer(shared, chore).await {
         Some(ChoreAnswer::Title(title)) => Some(title).filter(|title| !title.trim().is_empty()),
@@ -25,7 +27,7 @@ pub fn name(shared: &Arc<Shared>, item: ItemId, text: String, cwd: PathBuf, want
     let shared = Arc::clone(shared);
     let held = Arc::clone(&shared);
     held.spawn(async move {
-        let Some(title) = asked(&shared, text, cwd, wanted.as_deref()).await else { return };
+        let Some(title) = asked(&shared, &item, text, cwd, wanted.as_deref()).await else { return };
         if let Err(error) = shared.append(&item, &[WorkflowEvent::Named { title }]) {
             tracing::warn!(%error, "the item's title could not be kept");
         }

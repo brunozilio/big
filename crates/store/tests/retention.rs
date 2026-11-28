@@ -64,7 +64,48 @@ fn an_item_ended_long_ago_is_forgotten_unless_an_active_item_mentions_it(fresh: 
     assert_eq!(store.events(&active, 0).expect("events").len(), 6);
 }
 
+fn spent(at: i64) -> store::Spent {
+    store::Spent {
+        at,
+        item: "i1".into(),
+        step: "develop".into(),
+        agent: "dev".into(),
+        application: String::new(),
+        owner: "u-ana".into(),
+        origin: domain::origin::Origin::Step,
+        cost: domain::billing::Cost { known_micros: 100, ..Default::default() },
+    }
+}
+
+fn call(at: i64) -> store::ConnectorCall<'static> {
+    store::ConnectorCall { at, connection: "c1", action: "a.b", origin: None, item: None, step: None, ok: true }
+}
+
+fn old_connector_calls_go_and_spend_stays_while_its_month_still_counts(fresh: Fresh) {
+    use domain::quota::Scope;
+    let place = fresh();
+    let store = place.open(2);
+    let now = jiff::Timestamp::now().as_millisecond();
+    let today = jiff::Zoned::now().date().first_of_month().to_zoned(jiff::tz::TimeZone::system());
+    let month = today.expect("month start").timestamp().as_millisecond();
+    for at in [1, now - 1] {
+        store.count_connector_call(&call(at)).expect("counted");
+    }
+    for at in [1, month, now - 1] {
+        store.record_spend(&spent(at)).expect("kept");
+    }
+
+    store.forget_ended(None).expect("forget");
+    assert_eq!(store.connector_calls_since(0).expect("calls").iter().map(|row| row.calls).sum::<u64>(), 2);
+
+    store.forget_ended(Some(Duration::ZERO)).expect("forget");
+    assert!(store.connector_calls_since(0).expect("calls").is_empty(), "every call is older than a zero cutoff");
+    let kept = store.spent_since(0, Scope::Person, "u-ana").expect("spend");
+    assert_eq!(kept.known_micros, 200, "the spend of this month stays for the ceilings");
+}
+
 scenarios!(
     without_a_retention_only_the_older_snapshots_of_ended_items_go,
     an_item_ended_long_ago_is_forgotten_unless_an_active_item_mentions_it,
+    old_connector_calls_go_and_spend_stays_while_its_month_still_counts,
 );

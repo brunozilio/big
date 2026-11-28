@@ -1,5 +1,6 @@
 use database::args;
 use domain::billing::{Basis, Cost};
+use domain::origin::Origin;
 use domain::quota::Scope;
 
 use crate::{Result, Store};
@@ -12,6 +13,7 @@ pub struct Spent {
     pub agent: String,
     pub application: String,
     pub owner: String,
+    pub origin: Origin,
     pub cost: Cost,
 }
 
@@ -31,8 +33,8 @@ impl Store {
         }
         self.write(|conn| {
             conn.execute(
-                "INSERT INTO spend (at, item, step, agent, application, owner, micros, unpriced)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO spend (at, item, step, agent, application, owner, origin, micros, unpriced)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 args![
                     spent.at,
                     spent.item,
@@ -40,6 +42,7 @@ impl Store {
                     spent.agent,
                     spent.application,
                     spent.owner,
+                    spent.origin.word(),
                     spent.cost.known_micros,
                     spent.cost.unpriced_calls
                 ],

@@ -33,6 +33,8 @@ pub struct Metered {
     pub budgets: Vec<domain::budget::Budget>,
     pub account: String,
     pub attribution: Attribution,
+    pub owner: String,
+    pub agent: String,
 }
 impl ModelApi for Metered {
     fn turn<'a>(
@@ -79,6 +81,9 @@ impl Metered {
         let cost = crate::model::intent::discounted(cost, request.intent, discount);
         self.ledger.costs.lock().map_err(|_| ModelError::Provider("usage ledger unavailable".into()))?.push(cost);
         let served = self.served_by(request, reply);
+        let attribution = self.attribution(request);
+        let basis = provider.map_or(Basis::Unknown, |provider| provider.basis());
+        crate::spend_sink::charge(&self.owner, &self.agent, &attribution, Cost::priced(cost, basis));
         self.gate.emit(spent_by(
             crate::agent::current::agent(),
             ModelUsage {
@@ -89,11 +94,11 @@ impl Metered {
                 cache_write: u.cache_write,
                 searches: u.searches,
                 estimated_cost_usd: cost,
-                basis: provider.map_or(Basis::Unknown, |provider| provider.basis()).label().into(),
+                basis: basis.label().into(),
                 price_date: provider.map_or("", |provider| provider.price_date()).into(),
                 provider: served.0,
                 account: served.1,
-                attribution: self.attribution(request),
+                attribution,
             },
         ));
         Ok(())
@@ -176,6 +181,8 @@ mod tests {
             budgets,
             account: "a@x.io".into(),
             attribution: Attribution::default(),
+            owner: String::new(),
+            agent: String::new(),
         }
     }
 
@@ -249,7 +256,10 @@ mod tests {
             panic!("not a budget refusal: {refused:?}");
         };
         assert_eq!((*scope, spent.known_micros, spent.unpriced_calls), (Scope::Session, 500_000, 1));
-        assert!(matches!(domain::FailureKind::from(&refused), domain::FailureKind::Budget { scope: Scope::Session, .. }));
+        assert!(matches!(
+            domain::FailureKind::from(&refused),
+            domain::FailureKind::Budget { scope: Scope::Session, .. }
+        ));
     }
 
     #[test]

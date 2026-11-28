@@ -87,7 +87,6 @@ impl Session {
         });
         request.session.effort = self.effort;
         request.host.memory = Some(MemoryBrief::new(None));
-        request.host.owner.clone_from(&self.headless.owner);
         request.session.agent.clone_from(&self.agent);
         {
             let carried = self.carried.locked();
@@ -112,6 +111,7 @@ impl Session {
 
     fn start(&self, mut request: PromptRequest) -> Result<Run, Error> {
         request.policy.max_turns = self.headless.max_turns;
+        request.host.owner.clone_from(&self.headless.owner);
         request.session.append_system.clone_from(&self.headless.append_system);
         request.session.fallback_model.clone_from(&self.headless.fallback_model);
         request.session.teammate.clone_from(&self.headless.teammate);

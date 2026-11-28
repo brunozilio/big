@@ -7,4 +7,5 @@ pub mod model_roles;
 pub mod origin;
 pub mod routing;
 pub mod small_model;
+pub mod spend;
 pub mod usage_report;

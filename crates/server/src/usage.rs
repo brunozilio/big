@@ -92,7 +92,7 @@ fn connector_calls(shared: &Shared, listed: &mut Value, start: u64, only: Option
     let theirs: Option<Vec<String>> =
         only.map(|owner| store.connections_of(owner).unwrap_or_default().into_iter().map(|record| record.id).collect());
     let mine = |id: &str| theirs.as_ref().is_none_or(|ids| ids.iter().any(|known| known == id));
-    let (by_connection, unowned) = crate::usage_calls::by_connection(&rows, &records, mine);
+    let (by_connection, unowned) = crate::usage_connections::by_connection(&rows, &records, mine);
     listed["byConnection"] = json!(by_connection);
     listed["unattributed"]["connectorCalls"] = json!(unowned.calls);
 }

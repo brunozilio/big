@@ -71,6 +71,8 @@ impl Job {
             budgets: self.request.policy.budgets.clone(),
             account: self.request.host.credentials.model_accounts.first().cloned().unwrap_or_default(),
             attribution: self.request.host.attribution.clone(),
+            owner: self.request.host.owner.clone().unwrap_or_default(),
+            agent: self.request.session.agent.as_ref().map(|agent| agent.name.clone()).unwrap_or_default(),
         }
     }
 

@@ -81,6 +81,8 @@ fn a_session_s_compaction_is_metered_as_a_summary_of_its_item_and_step() {
         budgets: Vec::new(),
         account: String::new(),
         attribution: Attribution::of_step("i1", "develop", Origin::Step),
+        owner: String::new(),
+        agent: String::new(),
     };
     let mut history = vec![Message::user("a"), Message::user("b")];
     compact(&metered, &last_turn(), &mut history, &platform::Stop::new()).expect("compact");

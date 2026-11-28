@@ -507,22 +507,6 @@ impl AgentEffect<'_> {
         None
     }
 
-    fn charge_to(&self, name: &str, state: &domain::workflow::WorkItem, budget_usd: Option<f64>) {
-        let application = crate::application::id_of(&state.input);
-        let owner = crate::owners::of(&self.shared.store, state);
-        let charge = crate::spend::Charge::new(self.item, &self.key.step, name, application, &owner);
-        let _ = self.charge.set(charge.with_agent_ceiling(budget_usd));
-    }
-
-    fn budgeted(&self, request: &PromptRequest) -> PromptRequest {
-        let mut request = request.clone();
-        let Some(charge) = self.charge.get() else { return request };
-        let month = crate::spend::Month::of(&jiff::Zoned::now());
-        let ceilings = domain::ceilings::Ceilings::configured();
-        request.policy.budgets = crate::spend::budgets(&self.shared.store, &ceilings, charge, self.command, month);
-        request
-    }
-
     fn closed(&self, ask: AskId) {
         if self.shared.asks.close(&ask).is_some() {
             self.note(json!({ "asks": { ask.0.clone(): null } }));

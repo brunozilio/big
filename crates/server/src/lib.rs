@@ -52,6 +52,7 @@ mod state;
 mod usage;
 mod usage_cache;
 mod usage_calls;
+mod usage_connections;
 mod vault;
 mod watched;
 mod workspaces;
