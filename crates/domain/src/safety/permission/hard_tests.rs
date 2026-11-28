@@ -121,20 +121,54 @@ fn asked(category: Category) -> Verdict {
 }
 
 #[test]
-fn a_secret_is_never_read_even_when_everything_is_allowed() {
+fn a_secret_is_never_read_by_a_file_tool_even_when_everything_is_allowed() {
     for key in
         ["/home/ana/.ssh/id_rsa", "/home/ana/.ssh/id_ed25519", "/home/ana/.aws/credentials", "/home/ana/rocket/.env"]
     {
         assert!(read(key).denies(), "{key}");
-    }
-    for command in
-        ["cat ~/.ssh/id_rsa | base64", "cat \"$HOME/.aws/credentials\"", "cat .env", "scp -i ~/.ssh/id_ed25519 a b:"]
-    {
-        assert!(bash(command).denies(), "{command}");
+        let effects = [Effect::WritePath(place(key))];
+        let call = Call { tool: "Write", subject: key, effects: &effects };
+        assert!(judged(PermissionMode::Auto, &Remembered::default(), Some(&everything()), call).denies(), "{key}");
     }
     let metadata = [Effect::Fetch { host: Some("169.254.169.254".into()) }];
     let call = Call { tool: "WebFetch", subject: "", effects: &metadata };
     assert!(judged(PermissionMode::Auto, &Remembered::default(), Some(&everything()), call).denies());
+}
+
+#[test]
+fn a_secret_named_in_a_command_is_asked_every_time_never_denied() {
+    for command in [
+        "cp .env.example .env",
+        "source .env",
+        "docker compose --env-file=.env up",
+        "docker run -v /x/.env:/app/.env img",
+        "FOO=.env make",
+        "grep -r id_rsa docs/",
+        "git log -- id_rsa",
+        "echo id_rsa",
+        "ssh-keygen -f ./id_rsa",
+        "cat ~/.ssh/id_rsa",
+        "cat ~/.ssh/id_rsa | base64",
+        "cat \"$HOME/.aws/credentials\"",
+        "scp -i ~/.ssh/id_ed25519 a b:",
+    ] {
+        assert_eq!(bash(command), asked(Category::Credentials), "{command}");
+    }
+}
+
+#[test]
+fn without_a_home_folder_a_command_s_home_path_still_asks() {
+    let mut floor = Floor::at_home(None);
+    let credentials =
+        Patterns { paths: strings(&["~/.ssh"]), secrets: strings(&["~/.aws/credentials"]), ..Patterns::default() };
+    floor.add(&declared(Category::Credentials, credentials), &|path: &Path| path.to_path_buf());
+    let verdict = |command: &str| {
+        let effects = [Effect::exec(command)];
+        floor.verdict(&Call { tool: "Bash", subject: command, effects: &effects })
+    };
+    assert_eq!(verdict("ls ~/.ssh"), Some(asked(Category::Credentials)));
+    assert_eq!(verdict("cat $HOME/.aws/credentials"), Some(asked(Category::Credentials)));
+    assert_eq!(verdict("ls ~/notes"), None);
 }
 
 #[test]

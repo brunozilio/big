@@ -215,7 +215,10 @@ impl Floor {
     fn word_hits(&self, word: &str) -> Vec<Hit> {
         let pieces = std::iter::once(word).chain(word.split([':', '=']));
         let pieces: Vec<&str> = pieces.map(|piece| piece.trim_matches(|c| c == '"' || c == '\'')).collect();
-        let places: Vec<PathBuf> = pieces.iter().filter_map(|piece| self.expanded(piece)).collect();
+        let places: Vec<PathBuf> = pieces
+            .iter()
+            .filter_map(|piece| self.expanded(piece).or_else(|| home_relative(piece).map(PathBuf::from)))
+            .collect();
         let named_secret = pieces.iter().any(|piece| {
             Path::new(piece).file_name().is_some_and(|file| {
                 let file = file.to_string_lossy();
@@ -223,7 +226,7 @@ impl Floor {
             })
         });
         if named_secret || places.iter().any(|place| self.secret(place)) {
-            return vec![Hit::of(Category::Credentials, word, true)];
+            return vec![Hit::of(Category::Credentials, word, false)];
         }
         places
             .iter()
