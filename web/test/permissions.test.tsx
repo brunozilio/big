@@ -12,8 +12,9 @@ afterEach(() => {
   globalThis.fetch = realFetch
 })
 
-function serve(start: Grant[], suggestions: unknown[] = []) {
+function serve(start: Grant[], suggestions: unknown[] = [], broken: unknown = null) {
   let grants = start
+  let problem = broken
   const puts: Grant[][] = []
   let discovery: unknown = { state: 'idle' }
   globalThis.fetch = (async (path: string, init?: RequestInit) => {
@@ -24,8 +25,12 @@ function serve(start: Grant[], suggestions: unknown[] = []) {
     if (init?.method === 'PUT') {
       grants = (JSON.parse(String(init.body)) as { grants: Grant[] }).grants
       puts.push(grants)
+      problem = null
+      if (grants.some((grant) => grant.value === '*' && grant.behavior !== 'deny')) {
+        return new Response(JSON.stringify({ error: { code: 'bad_request', message: '* liberaria tudo; nomeie os comandos ou sites, ou negue.' } }), { status: 400 })
+      }
     }
-    return new Response(JSON.stringify({ grants }), { status: 200 })
+    return new Response(JSON.stringify({ grants, problem }), { status: 200 })
   }) as typeof fetch
   return puts
 }
@@ -109,6 +114,33 @@ describe('aba de permissões', () => {
     fireEvent.submit(box)
     expect((await view.findByRole('alert')).textContent).toContain('já está na lista')
     expect(puts).toEqual([])
+  })
+
+  test('uma lista salva corrompida avisa que valem as últimas regras boas e some ao salvar', async () => {
+    serve([{ kind: 'command', value: 'git push', behavior: 'deny' }], [], { fallback: 'last_good', error: 'schema_version None is not 1' })
+    const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    const alert = await view.findByRole('alert')
+    expect(alert.textContent).toContain('Valem as últimas regras boas')
+    expect(alert.textContent).toContain('schema_version None is not 1')
+    const box = view.getByLabelText('Adicionar regra…')
+    fireEvent.change(box, { target: { value: 'Bash(ls)' } })
+    fireEvent.submit(box)
+    await waitFor(() => expect(view.queryByRole('alert')).toBeNull())
+  })
+
+  test('sem cópia boa, avisa que comandos e sites estão negados', async () => {
+    serve([], [], { fallback: 'closed', error: 'expected the saved grants' })
+    const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    expect((await view.findByRole('alert')).textContent).toContain('Comandos e sites estão negados')
+  })
+
+  test('liberar tudo com * é recusado e diz o porquê', async () => {
+    serve([])
+    const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    const box = await view.findByLabelText('Adicionar regra…')
+    fireEvent.change(box, { target: { value: 'Bash' } })
+    fireEvent.submit(box)
+    expect((await view.findByRole('alert')).textContent).toContain('liberaria tudo')
   })
 
   test('cada regra diz se permite, sempre pergunta ou nega', async () => {

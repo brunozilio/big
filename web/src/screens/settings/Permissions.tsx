@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useState } from 'react'
-import { request } from '@/api/http'
+import { ApiError, request } from '@/api/http'
 import { IconButton } from '@/ui/button'
 import { Card } from '@/ui/display'
 import { ChipPicker } from '@/ui/chipPicker'
@@ -38,7 +38,17 @@ function BehaviorPicker({ value, onChange, name }: { value: Behavior; onChange: 
   return <ChipPicker label={t('settings.perm_behaviorOf', { name })} placeholder={t('settings.perm_changeTo')} value={value} options={options} onChange={onChange} />
 }
 
-type Loaded = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; grants: Grant[] }
+export interface ListProblem {
+  fallback: 'last_good' | 'closed'
+  error: string
+}
+
+interface Listed {
+  grants: Grant[]
+  problem?: ListProblem | null
+}
+
+type Loaded = { state: 'loading' } | { state: 'failed' } | { state: 'ready'; grants: Grant[]; problem: ListProblem | null }
 
 export function ruleOf(grant: Grant): string {
   if (grant.kind === 'command') return grant.value === '*' ? 'Bash' : `Bash(${grant.value}:*)`
@@ -95,8 +105,8 @@ function usePermissions() {
   const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     let alive = true
-    request<{ grants: Grant[] }>('GET', '/api/permissions')
-      .then((answer) => alive && setLoaded({ state: 'ready', grants: answer.grants }))
+    request<Listed>('GET', '/api/permissions')
+      .then((answer) => alive && setLoaded({ state: 'ready', grants: answer.grants, problem: answer.problem ?? null }))
       .catch(() => alive && setLoaded({ state: 'failed' }))
     return () => {
       alive = false
@@ -104,9 +114,9 @@ function usePermissions() {
   }, [])
   const save = (grants: Grant[]) => {
     setError(null)
-    request<{ grants: Grant[] }>('PUT', '/api/permissions', { grants })
-      .then((answer) => setLoaded({ state: 'ready', grants: answer.grants }))
-      .catch(() => setError(t('settings.perm_saveFailed')))
+    request<Listed>('PUT', '/api/permissions', { grants })
+      .then((answer) => setLoaded({ state: 'ready', grants: answer.grants, problem: answer.problem ?? null }))
+      .catch((failed: unknown) => setError(failed instanceof ApiError && failed.status === 400 ? failed.message : t('settings.perm_saveFailed')))
   }
   return { loaded, error, save }
 }
@@ -164,14 +174,25 @@ function Adder({ grants, onAdd }: { grants: Grant[]; onAdd: (grant: Grant) => vo
   )
 }
 
+export function BrokenList({ problem }: { problem: ListProblem }) {
+  const t = useT()
+  return (
+    <div role="alert" className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger-fg">
+      <p>{problem.fallback === 'last_good' ? t('settings.perm_brokenLastGood') : t('settings.perm_brokenClosed')}</p>
+      <code className="mt-1 block break-all font-mono text-xs text-muted">{problem.error}</code>
+    </div>
+  )
+}
+
 export function PermissionsView() {
   const t = useT()
   const { loaded, error, save } = usePermissions()
   if (loaded.state === 'loading') return null
   if (loaded.state === 'failed') return <p role="alert" className="text-sm text-danger-fg">{t('settings.perm_loadFailed')}</p>
-  const { grants } = loaded
+  const { grants, problem } = loaded
   return (
     <section className="space-y-3">
+      {problem && <BrokenList problem={problem} />}
       <PermissionsDiscovery onAdd={(found) => save([...found.filter((grant) => !grants.some((g) => same(g, grant))), ...grants])} />
       <Card>
         <ul aria-label={t('settings.tab_permissions')} className="divide-y">
