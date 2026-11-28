@@ -1,3 +1,48 @@
+dev-term crates/server/src/calls.rs: merged: Some("merged") => "merged",
+dev-term crates/server/src/calls.rs: pr: let args = json!({ "pr": raw });
+dev-term crates/server/src/calls.rs: pull_request: let pull = caller.call(code::PULL_REQUEST, args.clone()).await?;
+dev-term crates/server/src/change_view.rs: merged: value["merged"] = json!(false);
+dev-term crates/server/src/change_view.rs: merged: value["merged"] = json!(found.done);
+dev-term crates/server/src/folders.rs: git: dir.join(".git").exists()
+dev-term crates/server/src/folders.rs: git: let url = url.strip_suffix(".git").unwrap_or(url);
+dev-term crates/server/src/item_usage.rs: merged: Some((_, total)) => merged(total, spent),
+dev-term crates/server/src/item_usage.rs: merged: fn merged(into: &mut Spent, more: &Spent) {
+dev-term crates/server/src/item_view.rs: git: "git": git(item),
+dev-term crates/server/src/item_view.rs: git: fn git(item: Option<&WorkItem>) -> Vec<Value> {
+dev-term crates/server/src/items.rs: git: Ok(Origin { sources, git: git(body), application, title: None, kind: None })
+dev-term crates/server/src/items.rs: git: fn git(body: &Value) -> Map<String, Value> {
+dev-term crates/server/src/items.rs: git: for (repository, wanted) in body["git"].as_object().into_iter().flatten() {
+dev-term crates/server/src/items.rs: git: git: Map<String, Value>,
+dev-term crates/server/src/items.rs: git: if !origin.git.is_empty() {
+dev-term crates/server/src/items.rs: git: input["git"] = Value::Object(origin.git.clone());
+dev-term crates/server/src/items.rs: git: let entry = self.git.entry(repository).or_insert_with(|| json!({}));
+dev-term crates/server/src/items.rs: git: let entry = self.git.entry(repository).or_insert_with(|| json!({})); (#2)
+dev-term crates/server/src/items.rs: git: match self.git.keys().find(|id| !known(id)) {
+dev-term crates/server/src/items.rs: pr: let args = json!({ "pr": subject });
+dev-term crates/server/src/items.rs: pull request: "A conta do pull request não está mais conectada.",
+dev-term crates/server/src/items.rs: pull request: "Conecta una cuenta de código para empezar desde un pull request.",
+dev-term crates/server/src/items.rs: pull request: "Conecte uma conta de código para começar de um pull request.",
+dev-term crates/server/src/items.rs: pull request: "Connect a code account to start from a pull request.",
+dev-term crates/server/src/items.rs: pull request: "Descreva o item ou escolha uma origem: issue, pull request ou branch.",
+dev-term crates/server/src/items.rs: pull request: "Describe el ítem o elige un origen: issue, pull request o branch.",
+dev-term crates/server/src/items.rs: pull request: "Describe the item or choose a source: issue, pull request or branch.",
+dev-term crates/server/src/items.rs: pull request: "La cuenta del pull request ya no está conectada.",
+dev-term crates/server/src/items.rs: pull request: "The pull request account is no longer connected.",
+dev-term crates/server/src/items.rs: pull request: format!("Could not read pull request {subject}: {}", error.shown()),
+dev-term crates/server/src/items.rs: pull request: format!("El pull request {subject} no dice de qué repositorio es."),
+dev-term crates/server/src/items.rs: pull request: format!("No pude leer el pull request {subject}: {}", error.shown()),
+dev-term crates/server/src/items.rs: pull request: format!("Não consegui ler o pull request {subject}: {}", error.shown()),
+dev-term crates/server/src/items.rs: pull request: format!("O pull request {subject} não diz de qual repositório é."),
+dev-term crates/server/src/items.rs: pull request: format!("Pull request {subject} does not say which repository it is from."),
+dev-term crates/server/src/items.rs: pull_request: Some(PULL_REQUEST) => self.pull(shared, applications, at).await?,
+dev-term crates/server/src/items.rs: pull_request: const KINDS: [&str; 3] = [PULL_REQUEST, ISSUE, BRANCH];
+dev-term crates/server/src/items.rs: pull_request: const PULL_REQUEST: &str = "pull_request";
+dev-term crates/server/src/items.rs: pull_request: let found = hub.call(&connection(record), &record.settings, code::PULL_REQUEST, &args, &key).await;
+dev-term crates/server/src/workspaces.rs: git: if !folder.join(".git").exists() {
+dev-term crates/server/src/workspaces.rs: git: let kept = platform::git::command(folder).args(["config", "credential.helper", helper]).output();
+dev-term crates/server/src/workspaces.rs: git: let mut command = platform::git::command(parent);
+dev-term crates/server/src/workspaces.rs: git: pub const CREDENTIALS_PATH: &str = "/api/git/credentials/";
+dev-term crates/server/src/workspaces.rs: git: pub const HELPER_COMMAND: &str = "git-credential";
 provider-name crates/agent-engine/src/fake.rs: claude: let models = vec![ModelOption::new("claude-opus-5-5", "Opus 5.5")];
 provider-name crates/agent-engine/src/tools/builtin_skills.rs: claude: for other in ["Claude", "Anthropic", "claude.ai"] {
 provider-name crates/domain/src/safety/permission/suggested.rs: aws: "aws",

@@ -3,6 +3,7 @@ mod comments;
 mod conformance;
 mod contracts;
 mod crate_graph;
+mod dev_terms;
 mod environment;
 mod git_commands;
 mod harness;

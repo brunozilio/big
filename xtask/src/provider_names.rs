@@ -50,12 +50,12 @@ fn mentions(code: &str, name: &str) -> bool {
         .any(|(at, _)| !word(code.as_bytes().get(at.wrapping_sub(1))) && !word(code.as_bytes().get(at + name.len())))
 }
 
-fn shown(root: &Path, file: &Path) -> String {
+pub(crate) fn shown(root: &Path, file: &Path) -> String {
     let relative: PathBuf = file.strip_prefix(root).unwrap_or(file).components().collect();
     relative.to_string_lossy().replace('\\', "/")
 }
 
-fn rust_files(dir: &Path, files: &mut Vec<PathBuf>) {
+pub(crate) fn rust_files(dir: &Path, files: &mut Vec<PathBuf>) {
     let Ok(entries) = std::fs::read_dir(dir) else { return };
     for entry in entries.flatten() {
         let path = entry.path();

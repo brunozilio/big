@@ -10,6 +10,7 @@ pub fn run(root: &Path, update_baseline: bool) -> Result<(), Box<dyn std::error:
     found.extend(crate::conformance::findings(root)?);
     found.extend(crate::contracts::findings(root)?);
     found.extend(crate::crate_graph::findings(root)?);
+    found.extend(crate::dev_terms::findings(root)?);
     found.extend(crate::environment::findings(root)?);
     found.extend(crate::git_commands::findings(root)?);
     found.extend(crate::provider_names::findings(root)?);
