@@ -53,7 +53,7 @@ fn everything() -> Allowed {
 }
 
 #[test]
-fn the_agent_never_writes_the_product_s_configuration_or_content() {
+fn the_product_s_configuration_and_content_are_asked_every_time_and_never_remembered() {
     let settings = format!("{CWD}/{}/settings.json", brand::DIR);
     let mut remembered = Remembered::default();
     for target in ["/opt/app/config.toml", "/opt/app/content/connectors/a/index.ts", settings.as_str()] {
@@ -62,15 +62,15 @@ fn the_agent_never_writes_the_product_s_configuration_or_content() {
         let effects = [Effect::WritePath(place(target))];
         let call = Call { tool: "Write", subject: target, effects: &effects };
         let list = everything();
-        for mode in [PermissionMode::Auto, PermissionMode::Plan] {
-            let verdict = judged(mode, &remembered, Some(&list), call);
-            assert!(verdict.denies(), "{target} {mode:?}: {verdict:?}");
-        }
+        let asked = Verdict::Ask { reason: Reason::Hard(Category::Governance), rememberable: false };
+        assert_eq!(judged(PermissionMode::Auto, &remembered, Some(&list), call), asked, "{target}");
+        assert!(judged(PermissionMode::Plan, &remembered, Some(&list), call).denies(), "{target}");
     }
     let ordinary = format!("{CWD}/src/a.rs");
     let effects = [Effect::WritePath(place(&ordinary))];
     let call = Call { tool: "Write", subject: &ordinary, effects: &effects };
     assert_eq!(judged(PermissionMode::Auto, &Remembered::default(), None, call), Verdict::Allow);
+    assert!(!Reason::Hard(Category::Governance).reviewable() && !Reason::Hard(Category::Governance).rememberable());
 }
 
 #[test]

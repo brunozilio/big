@@ -30,7 +30,7 @@ impl Category {
     }
 
     fn denies(self) -> bool {
-        matches!(self, Self::Credentials | Self::Governance | Self::SandboxEscape)
+        matches!(self, Self::Credentials | Self::SandboxEscape)
     }
 
     fn on_reads(self) -> bool {

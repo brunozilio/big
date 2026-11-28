@@ -117,20 +117,21 @@ fn an_edit_to_a_git_hook_asks_even_when_edits_are_accepted() {
 }
 
 #[test]
-fn an_edit_to_the_project_s_own_settings_is_refused_by_every_reviewer_and_after_always() {
+fn an_edit_to_the_project_s_own_settings_is_asked_by_every_reviewer_every_time() {
     let settings = Path::new(brand::DIR).join("settings.local.json");
     let hook = Path::new(brand::DIR).join("hooks/start.js");
     for reviewer in [domain::Reviewer::Human, domain::Reviewer::Model, domain::Reviewer::Nobody] {
         let rig = Rig::new(reviewer);
-        let human = reviewer == domain::Reviewer::Human;
-        let earlier = Path::new(".git/hooks/x");
-        let paths: Vec<&Path> = if human { vec![earlier, &settings, &hook] } else { vec![&settings, &hook] };
-        let always = vec![Decision::AllowAlways; 3];
-        let asked = run_answering(&rig, &writes(&paths), always);
-        assert!(asked.iter().all(|subject| !subject.contains(brand::DIR)), "{reviewer:?}: {asked:?}");
-        assert_eq!(asked.len(), usize::from(human), "{reviewer:?}: {asked:?}");
-        assert!(!rig.dir.path().join(&settings).exists(), "{reviewer:?}");
-        assert!(!rig.dir.path().join(&hook).exists(), "{reviewer:?}");
+        let answers = vec![Decision::AllowAlways, Decision::Deny, Decision::Deny];
+        let asked = run_answering(&rig, &writes(&[&settings, &settings, &hook]), answers);
+        assert_eq!(asked.len(), 3, "{reviewer:?}: 'always' is never remembered: {asked:?}");
+        assert!(asked.iter().all(|subject| subject.contains("always asked because")), "{reviewer:?}: {asked:?}");
+        let offered_always = rig.events().into_iter().any(|event| {
+            matches!(event, EngineEvent::Asked(ask) if matches!(ask.kind, AskKind::Permission { rememberable: true, .. }))
+        });
+        assert!(!offered_always, "{reviewer:?}");
+        assert!(rig.dir.path().join(&settings).exists(), "{reviewer:?}: the approved edit happens");
+        assert!(!rig.dir.path().join(&hook).exists(), "{reviewer:?}: the denied one does not");
     }
 }
 
