@@ -29,7 +29,7 @@ pub(super) fn errored(event: HookEvent, fail_closed: bool, error: String) -> Fai
 fn blocked(event: HookEvent, how: &str, said: &str) -> String {
     let said = if said.is_empty() { String::new() } else { format!(": {said}") };
     format!(
-        "A {event} hook failed {how}{said}. A failing decision hook blocks the action; fix the hook, or declare failClosed: false on it to let actions through when it fails."
+        "The {event} hook failed {how}{said}, and because it decides whether the action runs, the action is blocked. Fix the hook, or declare failClosed: false on it so a failure lets the action through."
     )
 }
 

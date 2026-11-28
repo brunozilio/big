@@ -139,6 +139,7 @@ fn a_decision_hook_that_cannot_run_blocks_unless_it_declares_otherwise() {
     };
     let blocked = asked("PreToolUse", true).expect("decided").blocked.unwrap_or_default();
     assert!(blocked.contains("PreToolUse hook failed to run") && blocked.contains("model"), "{blocked}");
+    assert!(blocked.contains("the action is blocked") && blocked.contains("failClosed: false"), "{blocked}");
     let through = asked("PermissionRequest", false).expect("decided");
     assert_eq!(through.blocked, None);
     assert!(through.context.starts_with("Hook failed:"), "{}", through.context);
@@ -146,7 +147,7 @@ fn a_decision_hook_that_cannot_run_blocks_unless_it_declares_otherwise() {
 }
 
 #[test]
-fn a_matcher_that_is_no_pattern_fails_the_run_for_the_caller_to_refuse() {
+fn a_matcher_that_is_no_pattern_blocks_a_decision_and_says_how_to_let_it_through() {
     let dir = tempfile::tempdir().expect("dir");
     let workspace = crate::tools::Workspace::new(dir.path());
     let parsed = super::Hooks::parse(&json!({"PreToolUse": [{"hooks": [{"type": "command", "command": "true"}]}]}));
@@ -154,5 +155,7 @@ fn a_matcher_that_is_no_pattern_fails_the_run_for_the_caller_to_refuse() {
     for groups in hooks.0.values_mut() {
         groups[0].matcher = "(".into();
     }
-    assert!(hooks.run(super::HookEvent::PreToolUse, "Bash", json!({}), &workspace).is_err());
+    let ran = hooks.run(super::HookEvent::PreToolUse, "Bash", json!({}), &workspace).expect("decided");
+    let blocked = ran.blocked.unwrap_or_default();
+    assert!(blocked.contains("PreToolUse hook failed") && blocked.contains("failClosed: false"), "{blocked}");
 }

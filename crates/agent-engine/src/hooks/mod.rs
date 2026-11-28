@@ -213,8 +213,15 @@ impl Hooks {
         input["agent_type"] = json!(workspace.agent_name);
         input["cwd"] = json!(workspace.cwd);
         for group in self.0.get(&event).into_iter().flatten() {
-            if !group.applies_to(subject)? {
-                continue;
+            let fail_closed = group.hooks.iter().any(|handler| handler.fail_closed);
+            match group.applies_to(subject).map_err(|error| failing::errored(event, fail_closed, error)) {
+                Ok(true) => {}
+                Ok(false) | Err(failing::Failed::GoesOn(_)) => continue,
+                Err(failing::Failed::Stops(error)) => return Err(error),
+                Err(failing::Failed::Blocks(why)) => {
+                    decision.blocked = Some(why);
+                    return Ok(decision);
+                }
             }
             for handler in &group.hooks {
                 let result = match handler.runs(&input, workspace, model) {
