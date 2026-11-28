@@ -199,3 +199,31 @@ async fn the_application_s_variables_reach_its_commands_and_agents_without_enter
     let system = request.session.append_system.clone().unwrap_or_default();
     assert!(system.contains("End-to-end suite in `e2e`: `npx cypress run`"), "{system}");
 }
+
+fn opinion(output: &str) -> String {
+    format!(
+        "import {{ workflow, step }} from \"sdk\";\nconst write = step({{ name: \"write\", async run(ctx) {{ return ctx.pass({{ report: \"parecer.md\" }}); }} }});\nexport default workflow({{ name: \"opinion\", {output}steps: [write()] }});\n"
+    )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_output_of_an_item_comes_from_the_workflow_its_own_application_runs() {
+    let mut world = World::new();
+    world.init_git();
+    world.workflow("opinion", &opinion(""));
+    let other = world.dir.path().join("other");
+    let file = other.join(brand::DIR).join("workflows/opinion.ts");
+    std::fs::create_dir_all(file.parent().expect("parent")).expect("dir");
+    std::fs::write(&file, opinion("output: { kind: \"report\", audience: \"group:legal\" }, ")).expect("write");
+    git_repo(&other, "OTHER.txt");
+    let kernel = world.start().await;
+    let app =
+        json!({ "id": "o", "name": "Outra", "repositories": [{ "id": "o", "directory": other.to_string_lossy() }] });
+    let there = kernel.create_item("opinion", json!({ "title": "b", "application": app })).expect("item");
+    let here = kernel.create_item("opinion", json!({ "title": "a" })).expect("item");
+    let there = ended(&kernel, &there).await;
+    let here = ended(&kernel, &here).await;
+    assert_eq!(kernel.output_of(&there).map(|output| output.kind), Some("report".to_owned()));
+    assert_eq!(kernel.output_of(&here), None);
+    assert!(matches!(there.ending, Some(domain::workflow::Ending::Finished { delivered: Some(_), .. })));
+}

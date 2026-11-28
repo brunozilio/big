@@ -1112,7 +1112,7 @@ export function workflow(definition) {
     triggers: definition.triggers || [],
     reconcile: definition.reconcile || {},
     accepts: Array.isArray(definition.accepts) ? definition.accepts : [],
-    output: definition.output && typeof definition.output === "object" ? plain(definition.output) : delivered(steps, 0),
+    output: definition.output && typeof definition.output === "object" ? plain(definition.output) : delivered(steps, 0) || registered(),
     steps,
     run,
     branches: typeof definition.branches === "function" ? definition.branches : null,
@@ -1131,6 +1131,11 @@ function delivered(calls, depth) {
     if (inner) return inner;
   }
   return null;
+}
+
+function registered() {
+  const found = [...registry.steps.values()].find((type) => type.delivers);
+  return found ? found.delivers : null;
 }
 
 function childrenQuietly(call) {

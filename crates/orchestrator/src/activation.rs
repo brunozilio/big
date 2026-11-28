@@ -71,7 +71,13 @@ impl Script {
         script.target = json!({ "workflow": chosen });
         let shapes = script.described["workflows"].as_array().into_iter().flatten();
         let shape = shapes.into_iter().find(|shape| shape["name"] == script.target["workflow"]);
-        script.output = shape.and_then(|shape| Output::read(&shape["output"]).ok().flatten());
+        script.output = shape.and_then(|shape| match Output::read(&shape["output"]) {
+            Ok(output) => output,
+            Err(error) => {
+                tracing::warn!(workflow, %error, "the declared output of the workflow could not be read");
+                None
+            }
+        });
         Ok(script)
     }
 

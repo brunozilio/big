@@ -50,11 +50,11 @@ const approve = step({
   async run(ctx) {
     const answer = await ctx.waitHuman([markdown("Aprovar?"), actions(["approve"])]);
     const issue = await ctx.call("tracker", "issue", { issue: "K-1" });
-    return ctx.pass({ by: answer.action, issue: issue.ref, url: issue.url, pr: "o/r#3" });
+    return ctx.pass({ by: answer.action, issue: issue.ref, url: issue.url, change: "o/r#3" });
   },
 });
 
-export default workflow({ name: "default", output: { kind: "pr", via: "code", source: "pull_request", done: { merged: true } }, steps: [work(), approve()] });
+export default workflow({ name: "default", output: { kind: "change", via: "code", done: { closed: true } }, steps: [work(), approve()] });
 "#;
 
 const WORKER: &str = "---\nname: worker\npermissionMode: auto\nmodel: auto\n---\nVocê trabalha.";

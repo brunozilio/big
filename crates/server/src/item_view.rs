@@ -376,7 +376,7 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "group": group(summary.group),
         "status": summary.status,
         "issue": issue(known, summary, item),
-        "change": crate::delivered_view::change(known, summary, item),
+        "change": crate::change_view::change(known, summary, item),
         "delivered": crate::delivered_view::delivered(known, summary, item),
         "sources": sources(known, item),
         "git": git(item),

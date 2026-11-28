@@ -27,8 +27,11 @@ mod editor;
 mod error;
 mod folders;
 mod item_usage;
+mod change_view;
 mod delivered_view;
 mod item_view;
+#[cfg(test)]
+mod view_fixtures;
 mod items;
 mod library;
 mod limits;

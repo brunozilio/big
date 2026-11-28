@@ -58,8 +58,8 @@ impl Context {
 
     fn item(&mut self, shared: &Shared, summary: &ItemSummary) -> ApiResult<Value> {
         let described = self.described(shared, &summary.workflow);
-        let output = shared.backend.orchestrator.output(&summary.workflow);
         let item = shared.backend.orchestrator.item(&summary.id)?;
+        let output = item.as_ref().and_then(|item| shared.backend.orchestrator.output_of(item));
         let known = Known {
             connections: &self.connections,
             stale: &self.stale,
@@ -332,8 +332,8 @@ pub fn changed(shared: &Shared, id: &ItemId) -> ApiResult<Option<Value>> {
     }
     let mut context = Context::load(shared)?;
     let described = context.described(shared, &summary.workflow);
-    let output = shared.backend.orchestrator.output(&summary.workflow);
     let item = shared.backend.orchestrator.item(id)?;
+    let output = item.as_ref().and_then(|item| shared.backend.orchestrator.output_of(item));
     let known = Known {
         connections: &context.connections,
         stale: &context.stale,

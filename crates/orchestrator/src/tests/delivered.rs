@@ -33,3 +33,23 @@ async fn a_workflow_without_an_output_ends_with_nothing_delivered() {
     let item = ended(&kernel, &id).await;
     assert!(matches!(item.ending, Some(Ending::Finished { delivered: None, .. })));
 }
+
+const WRITES_PR: &str = r#"
+import { workflow, step } from "sdk";
+import "../packages/dev/steps/index.js";
+const open = step({ name: "open", async run(ctx) { return ctx.pass({ pr: "o/r#9", url: "https://code.test/9" }); } });
+export default workflow({ name: "writes", steps: [open()] });
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_workflow_without_output_that_writes_a_pull_request_by_its_own_step_still_delivers_it() {
+    let world = World::new();
+    world.workflow("writes", WRITES_PR);
+    let kernel = world.start().await;
+    let id = kernel.create_item("writes", json!({})).expect("item");
+    let item = ended(&kernel, &id).await;
+    let output = kernel.output_of(&item).expect("the kind its package declares");
+    assert_eq!((output.kind.as_str(), output.via.as_deref()), ("pr", Some("code")));
+    let Some(Ending::Finished { delivered: Some(delivered), .. }) = item.ending else { panic!("{:?}", item.ending) };
+    assert_eq!((delivered.key.as_str(), delivered.url.as_deref()), ("o/r#9", Some("https://code.test/9")));
+}
