@@ -218,7 +218,6 @@ function Devices({ devices, onChange }: { devices: PairedDevice[]; onChange: () 
 }
 
 function CloudView({ status, onChange }: { status: BrowserStatus; onChange: () => void }) {
-  const t = useT()
   const installed = extensionBuild()
   const pkg = status.package ?? '/api/browser/extension.zip'
   const connected = status.browsers.length > 0
@@ -232,7 +231,6 @@ function CloudView({ status, onChange }: { status: BrowserStatus; onChange: () =
       {installed && status.build && installed !== status.build && <Outdated pkg={pkg} />}
       {installed && <ConnectThis onDone={onChange} />}
       <Devices devices={status.devices ?? []} onChange={onChange} />
-      {installed && <p className="px-1 text-xs text-muted">{t('settings.browser_cloud_updateHint')}</p>}
     </section>
   )
 }
