@@ -29,7 +29,7 @@ const STEPS: [&str; 13] = [
     "security",
 ];
 
-const GENERIC: [&str; 5] = ["draft", "assess", "act", "wait", "deliver"];
+const GENERIC: [&str; 6] = ["draft", "assess", "act", "criterion", "wait", "deliver"];
 
 const PROVIDERS: [&str; 12] = [
     "jira",
@@ -313,7 +313,7 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
     assert!(STEPS.iter().all(|step| index.contains(&format!("default as {step} "))));
     let base = super::builtin_text("sdk/steps/index.js").expect("index");
     assert!(
-        GENERIC.iter().all(|step| base.contains(&format!("as {} ", if *step == "assess" { "review" } else { step })))
+        GENERIC.iter().all(|step| base.contains(&format!("as {} ", match *step { "assess" => "review", "criterion" => "verify", other => other })))
     );
 }
 
@@ -1614,6 +1614,9 @@ mod input;
 
 #[path = "stdlib_generic_tests.rs"]
 mod generic;
+
+#[path = "stdlib_verify_tests.rs"]
+mod verify;
 
 const ENGLISH_PLAN: &str = "# Customer sign-up\n\n## Description\nAs a clerk, I want to sign customers up so that I can serve them later.\n\n## Acceptance criteria\n- Given I am on the sign-up, when I save a customer, then it shows in the list.\n\n## Subtasks\n### Create the table\nCustomers table with name and document.";
 

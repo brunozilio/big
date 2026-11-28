@@ -41,3 +41,15 @@ async fn a_draft_is_reviewed_acted_on_and_delivered_with_no_code_connector() {
     assert_eq!(world.provider.count("tracker.comment"), 1);
     assert_eq!(ran(&world, "code.") + ran(&world, "pipelines."), 0);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_invoice_and_order_example_loads_with_its_declared_criterion() {
+    let world = World::new();
+    let kernel = world.start().await;
+    let script = kernel.shared.script("invoice-match").expect("the example compiles");
+    assert_eq!(script.target, json!({ "workflow": "nf-pedido" }));
+    let steps = script.described["workflows"][0]["steps"].as_array().cloned().unwrap_or_default();
+    let kinds: Vec<&str> = steps.iter().filter_map(|step| step["step"].as_str()).collect();
+    assert_eq!(kinds, ["wait", "act", "verify", "assess", "act", "deliver"]);
+    assert_eq!(steps[2]["options"]["onFail"], "hold");
+}

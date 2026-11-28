@@ -42,5 +42,5 @@ fn shipped_actions_are_judged_as_before_except_the_ones_that_declare_a_strict_ef
     }
     changed.sort();
     changed.dedup();
-    assert_eq!(changed, ["email.create_event", "email.reply", "email.send"]);
+    assert_eq!(changed, ["email.create_event", "email.reply", "email.send", "purchasing.release"]);
 }

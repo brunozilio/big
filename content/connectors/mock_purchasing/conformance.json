@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "Compras Indiretas", "settings": {} },
+  "cases": [
+    {
+      "name": "lê uma nota fiscal recebida",
+      "action": "purchasing.invoice",
+      "args": { "invoice": "4521" },
+      "expect": { "ok": { "number": "4521", "series": "1", "order": "4500012345", "total": 4899, "status": "received" } }
+    },
+    {
+      "name": "uma nota desconhecida é recusada",
+      "action": "purchasing.invoice",
+      "args": { "invoice": "9999" },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "lê o pedido de compra",
+      "action": "purchasing.order",
+      "args": { "order": "4500012345" },
+      "expect": { "ok": { "number": "4500012345", "status": "approved", "tolerance": 0.02, "total": 4899 } }
+    },
+    {
+      "name": "uma nota não casa com outro pedido",
+      "action": "purchasing.match",
+      "args": { "invoice": "4521", "order": "4500012399" },
+      "expect": { "error": "conflict" }
+    },
+    {
+      "name": "registra a conferência",
+      "action": "purchasing.match",
+      "args": { "invoice": "4533", "order": "4500012345" },
+      "expect": { "ok": { "invoice": "4533", "order": "4500012345", "status": "matched", "ref": "CONF-4533" } }
+    },
+    {
+      "name": "uma nota sem conferência não é liberada",
+      "action": "purchasing.release",
+      "args": { "invoice": "4547" },
+      "expect": { "error": "conflict" }
+    },
+    {
+      "name": "a conta é o nome dado",
+      "action": "accounts",
+      "expect": { "ok": [{ "id": "mock-purchasing", "label": "Compras Indiretas" }] }
+    }
+  ]
+}
