@@ -78,7 +78,7 @@ fn a_session_s_compaction_is_metered_as_a_summary_of_its_item_and_step() {
         gate: crate::RunGate::new(domain::RunId::new(), sink),
         model: domain::ModelOption::new("m", "M"),
         calls: None,
-        budget: None,
+        budgets: Vec::new(),
         account: String::new(),
         attribution: Attribution::of_step("i1", "develop", Origin::Step),
     };

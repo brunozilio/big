@@ -186,7 +186,14 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
     match launch.command.kind.as_str() {
         AGENT => {
             let effect =
-                AgentEffect { shared, item, command: &launch.command, key: &launch.key, resume: launch.resume.clone() };
+                AgentEffect {
+                shared,
+                item,
+                command: &launch.command,
+                key: &launch.key,
+                resume: launch.resume.clone(),
+                charge: std::sync::OnceLock::new(),
+            };
             effect.run().await
         }
         EXEC => exec(shared, &state, &launch.command).await,

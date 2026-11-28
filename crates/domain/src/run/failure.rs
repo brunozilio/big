@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum FailureKind {
     UsageLimit { resets_at: Option<i64> },
+    Budget { scope: crate::quota::Scope, limit_micros: u64, counted_micros: u64, resets_at: Option<i64> },
     Unavailable,
     Other,
 }

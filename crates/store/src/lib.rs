@@ -14,6 +14,7 @@ mod passwords;
 mod preferences;
 mod retention;
 mod schema;
+mod spend;
 mod sync;
 
 use std::path::Path;
@@ -25,6 +26,7 @@ pub use applications::{Application, Binding, Bindings, Choice, Environment, Fiel
 pub use browser_devices::BrowserDevice;
 pub use connections::ConnectionRecord;
 pub use connector_calls::{ConnectorCall, ConnectorCalls};
+pub use spend::Spent;
 pub use error::Error;
 pub use factory::Generation;
 pub use identity::{CodeCheck, Passkey, Person};

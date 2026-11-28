@@ -14,6 +14,7 @@ mod browsers;
 mod btw;
 mod callback_port;
 mod calls;
+mod ceiling_view;
 mod chats;
 mod cloud;
 mod cloud_db;

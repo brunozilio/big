@@ -194,6 +194,19 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX connector_calls_by_at ON connector_calls (at);
 ",
+    "
+    CREATE TABLE spend (
+        at INTEGER NOT NULL,
+        item TEXT NOT NULL,
+        step TEXT NOT NULL,
+        agent TEXT NOT NULL,
+        application TEXT NOT NULL,
+        owner TEXT NOT NULL,
+        micros INTEGER NOT NULL,
+        unpriced INTEGER NOT NULL
+    );
+    CREATE INDEX spend_by_at ON spend (at);
+",
 ];
 
 const ORDERED: [&str; 4] = ["connections", "applications", "factory_findings", "items"];

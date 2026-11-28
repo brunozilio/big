@@ -46,9 +46,17 @@ impl Unpriced {
 pub struct Budget {
     pub limit_usd: f64,
     pub spent: Cost,
+    #[serde(default)]
+    pub scope: Scope,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resets_at: Option<i64>,
 }
 
 impl Budget {
+    pub const fn session(limit_usd: f64, spent: Cost) -> Self {
+        Self { limit_usd, spent, scope: Scope::Session, resets_at: None }
+    }
+
     pub fn check(&self, run: Cost, unpriced: Unpriced) -> Result<(), QuotaError> {
         let total = self.spent.plus(run);
         let limit_micros = micros(self.limit_usd);
@@ -56,14 +64,18 @@ impl Budget {
         match counted {
             Some(counted) if counted < limit_micros => Ok(()),
             _ => Err(QuotaError::Budget {
-                scope: Scope::Session,
+                scope: self.scope,
                 limit_micros,
                 counted_micros: counted.unwrap_or(total.known_micros),
                 spent: total,
-                resets_at: None,
+                resets_at: self.resets_at,
             }),
         }
     }
+}
+
+pub fn first_refusal(budgets: &[Budget], run: Cost, unpriced: Unpriced) -> Result<(), QuotaError> {
+    budgets.iter().try_for_each(|budget| budget.check(run, unpriced))
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq)]
@@ -78,7 +90,7 @@ impl Spending {
     }
 
     pub fn budget(&self) -> Option<Budget> {
-        self.limit_usd.map(|limit_usd| Budget { limit_usd, spent: self.spent })
+        self.limit_usd.map(|limit_usd| Budget::session(limit_usd, self.spent))
     }
 
     pub fn check(&self, run: Cost, unpriced: Unpriced) -> Result<(), QuotaError> {
@@ -127,7 +139,7 @@ mod tests {
 
     #[test]
     fn a_budget_allows_calls_until_the_session_has_spent_it() {
-        let budget = Budget { limit_usd: 5.0, spent: known(4.0) };
+        let budget = Budget::session(5.0, known(4.0));
         assert!(budget.check(known(0.5), Unpriced::Block).is_ok());
         let refused = budget.check(known(1.25), Unpriced::Block).expect_err("spent");
         assert_eq!(
@@ -138,7 +150,7 @@ mod tests {
 
     #[test]
     fn a_call_without_a_price_counts_against_the_budget_as_the_config_says() {
-        let budget = Budget { limit_usd: 1.0, spent: known(0.5).plus(unpriced()) };
+        let budget = Budget::session(1.0, known(0.5).plus(unpriced()));
         let blocked = budget.check(Cost::default(), Unpriced::Block).expect_err("blocked");
         assert!(
             matches!(blocked, QuotaError::Budget { scope: Scope::Session, spent, .. } if spent.unpriced_calls == 1)
@@ -182,7 +194,7 @@ mod tests {
         assert!(spending.check(known(1_000.0), Unpriced::Block).is_ok(), "and nothing is refused");
 
         spending.limit_usd = Some(3.0);
-        assert_eq!(spending.budget(), Some(Budget { limit_usd: 3.0, spent: spending.spent }));
+        assert_eq!(spending.budget(), Some(Budget::session(3.0, spending.spent)));
         assert!(spending.check(known(0.5), Unpriced::Block).is_ok());
         assert!(spending.check(known(1.0), Unpriced::Block).is_err());
     }

@@ -258,12 +258,18 @@ pub fn said(reason: &str, connect: &Value) -> Value {
     if let Some((_, base)) = orchestrator::missing_base(reason) {
         return key("base_missing", json!({ "base": base }));
     }
+    if let Some(reached) = orchestrator::ceiling::budget_reached(reason) {
+        return crate::ceiling_view::said(&reached);
+    }
     Value::Null
 }
 
 const MOST_HEADLINE: usize = 48;
 
 pub fn headline(reason: &str, connect: &Value, language: Language) -> String {
+    if let Some(reached) = orchestrator::ceiling::budget_reached(reason) {
+        return crate::ceiling_view::headline(&reached, language);
+    }
     let name = connect["name"].as_str();
     if reason.starts_with(NEEDS_RECONNECT) {
         return name.map_or_else(

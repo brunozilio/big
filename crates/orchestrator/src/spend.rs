@@ -1,5 +1,14 @@
+use std::sync::{Mutex, PoisonError};
+
+use domain::EngineEvent;
+use domain::billing::Cost;
+use domain::budget::Budget;
+use domain::ceilings::Ceilings;
 use domain::origin::{Attribution, Origin};
+use domain::quota::Scope;
 use domain::workflow::ItemId;
+use jiff::{ToSpan, Zoned};
+use store::{Spent, Store};
 
 use crate::protocol::Command;
 
@@ -8,24 +17,90 @@ pub fn attribution(item: &ItemId, step: &str, command: &Command) -> Attribution 
     Attribution::of_step(item.to_string(), step, origin)
 }
 
-#[cfg(test)]
-mod tests {
-    use serde_json::json;
+#[derive(Debug, Default)]
+pub struct Charge {
+    pub item: String,
+    pub step: String,
+    pub agent: String,
+    pub application: String,
+    pub owner: String,
+    pub agent_usd: Option<f64>,
+    run: Mutex<Cost>,
+}
 
-    use super::*;
-
-    fn command(args: serde_json::Value) -> Command {
-        serde_json::from_value(json!({ "seq": 1, "kind": "agent", "branch": "", "args": args })).expect("command")
+impl Charge {
+    pub fn new(item: &ItemId, step: &str, agent: &str, application: Option<String>, owner: &str) -> Self {
+        Self {
+            item: item.to_string(),
+            step: step.to_owned(),
+            agent: agent.to_owned(),
+            application: application.unwrap_or_default(),
+            owner: owner.to_owned(),
+            ..Self::default()
+        }
     }
 
-    #[test]
-    fn a_run_is_charged_to_its_item_and_step_and_to_the_origin_the_workflow_names() {
-        let item = ItemId::from("i1");
-        let plain = attribution(&item, "develop", &command(json!({ "name": "dev" })));
-        assert_eq!(plain, Attribution::of_step("i1", "develop", Origin::Step));
-        let eval = attribution(&item, "evals", &command(json!({ "name": "judge", "origin": "eval" })));
-        assert_eq!(eval.origin, Origin::Eval);
-        let unknown = attribution(&item, "x", &command(json!({ "origin": "whatever" })));
-        assert_eq!(unknown.origin, Origin::Step);
+    pub fn with_agent_ceiling(self, agent_usd: Option<f64>) -> Self {
+        Self { agent_usd, ..self }
+    }
+
+    pub fn run_spent(&self) -> Cost {
+        *self.run.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn record(&self, store: &Store, event: &EngineEvent, at: i64) {
+        let cost = domain::budget::spent(event);
+        if cost == Cost::default() {
+            return;
+        }
+        self.run.lock().unwrap_or_else(PoisonError::into_inner).add(cost);
+        let spent = Spent {
+            at,
+            item: self.item.clone(),
+            step: self.step.clone(),
+            agent: self.agent.clone(),
+            application: self.application.clone(),
+            owner: self.owner.clone(),
+            cost,
+        };
+        if let Err(error) = store.record_spend(&spent) {
+            tracing::warn!(%error, item = %self.item, "a run's spend could not be kept");
+        }
     }
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Month {
+    pub since_ms: i64,
+    pub resets_at: i64,
+}
+
+impl Month {
+    pub fn of(now: &Zoned) -> Option<Self> {
+        let first = now.date().first_of_month();
+        let start = first.to_zoned(now.time_zone().clone()).ok()?;
+        let next = first.checked_add(1.month()).ok()?.to_zoned(now.time_zone().clone()).ok()?;
+        Some(Self { since_ms: start.timestamp().as_millisecond(), resets_at: next.timestamp().as_second() })
+    }
+}
+
+pub fn budgets(store: &Store, ceilings: &Ceilings, charge: &Charge, command: &Command, month: Option<Month>) -> Vec<Budget> {
+    let mut found = Vec::new();
+    if let Some(limit_usd) = ceilings.run_of(&command.args["budgetUsd"], charge.agent_usd) {
+        found.push(Budget { limit_usd, spent: charge.run_spent(), scope: Scope::Run, resets_at: None });
+    }
+    let Some(month) = month else { return found };
+    for (scope, id) in [(Scope::Agent, &charge.agent), (Scope::Application, &charge.application), (Scope::Person, &charge.owner)] {
+        let Some(limit_usd) = ceilings.of(scope).filter(|_| !id.is_empty()) else { continue };
+        let spent = store.spent_since(month.since_ms, scope, id).unwrap_or_else(|error| {
+            tracing::warn!(%error, scope = scope.word(), "the spend so far could not be read; the ceiling counts from zero");
+            Cost::default()
+        });
+        found.push(Budget { limit_usd, spent, scope, resets_at: Some(month.resets_at) });
+    }
+    found
+}
+
+#[cfg(test)]
+#[path = "spend_tests.rs"]
+mod tests;

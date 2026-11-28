@@ -32,6 +32,9 @@ pub enum Failure {
 fn failed(language: domain::Language, kind: Option<FailureKind>, message: String) -> Failure {
     match kind {
         Some(FailureKind::UsageLimit { .. }) => Failure::Blocked(crate::texts::usage_limit(language, &message)),
+        Some(FailureKind::Budget { scope, limit_micros, counted_micros, .. }) => {
+            Failure::Blocked(crate::ceiling::reached(scope, counted_micros, limit_micros))
+        }
         Some(FailureKind::Unavailable) => Failure::Class(ErrorClass::Transient, message),
         _ => Failure::permanent(message),
     }
@@ -48,6 +51,7 @@ struct Profile {
     mode: Option<PermissionMode>,
     model: Option<String>,
     tools: Vec<String>,
+    budget_usd: Option<f64>,
 }
 
 impl Profile {
@@ -68,6 +72,7 @@ impl Profile {
             mode: header["permissionMode"].as_str().and_then(domain::command::mode_named),
             model: header["model"].as_str().filter(|model| !model.is_empty()).map(str::to_owned),
             tools,
+            budget_usd: domain::ceilings::declared(&header["budgetUsd"]),
         }
     }
 }
@@ -268,6 +273,7 @@ pub struct AgentEffect<'a> {
     pub command: &'a Command,
     pub key: &'a IdempotencyKey,
     pub resume: Option<String>,
+    pub charge: std::sync::OnceLock<crate::spend::Charge>,
 }
 
 impl AgentEffect<'_> {
@@ -310,6 +316,7 @@ impl AgentEffect<'_> {
         request.host.environment = environment;
         request.host.owner = Some(crate::owners::of(&self.shared.store, &state));
         request.host.attribution = crate::spend::attribution(self.item, &self.key.step, self.command);
+        self.charge_to(&name, &state, profile.budget_usd);
         let (consulted, writable): (Vec<&Worktree>, Vec<&Worktree>) =
             trees.iter().skip(1).partition(|tree| tree.checkout.read_only);
         request.session.add_dirs = writable.into_iter().map(|tree| tree.path.clone()).collect();
@@ -373,6 +380,7 @@ impl AgentEffect<'_> {
         let sink: Arc<dyn EventSink> = Arc::new(move |_run: RunId, event: EngineEvent| {
             let _ = sender.send(event);
         });
+        let request = &self.budgeted(request);
         let started = self.shared.config.engine.start(RunId::new(), request, sink);
         let handle = started.map_err(|error| Failure::permanent(error.to_string()))?;
         let mut running = Running { run: Arc::new(Mutex::new(handle)), done: false };
@@ -456,6 +464,9 @@ impl AgentEffect<'_> {
 
     fn take(&self, event: EngineEvent, collected: &mut Collected, run: &SharedRun) -> Option<Result<(), Failure>> {
         self.watched(&event, collected);
+        if let Some(charge) = self.charge.get() {
+            charge.record(&self.shared.store, &event, now_ms());
+        }
         match event {
             EngineEvent::SessionStarted(session) => {
                 self.shared.steering.follow(&session.0, run);
@@ -494,6 +505,22 @@ impl AgentEffect<'_> {
             _ => {}
         }
         None
+    }
+
+    fn charge_to(&self, name: &str, state: &domain::workflow::WorkItem, budget_usd: Option<f64>) {
+        let application = crate::application::id_of(&state.input);
+        let owner = crate::owners::of(&self.shared.store, state);
+        let charge = crate::spend::Charge::new(self.item, &self.key.step, name, application, &owner);
+        let _ = self.charge.set(charge.with_agent_ceiling(budget_usd));
+    }
+
+    fn budgeted(&self, request: &PromptRequest) -> PromptRequest {
+        let mut request = request.clone();
+        let Some(charge) = self.charge.get() else { return request };
+        let month = crate::spend::Month::of(&jiff::Zoned::now());
+        let ceilings = domain::ceilings::Ceilings::configured();
+        request.policy.budgets = crate::spend::budgets(&self.shared.store, &ceilings, charge, self.command, month);
+        request
     }
 
     fn closed(&self, ask: AskId) {

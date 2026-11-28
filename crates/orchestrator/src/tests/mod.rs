@@ -1,4 +1,5 @@
 mod application;
+mod budget;
 mod cloud;
 mod control;
 mod factory;
@@ -290,6 +291,9 @@ impl AgentEngine for FakeEngine {
             if stop.load(Ordering::SeqCst) {
                 return;
             }
+            if !request.policy.budgets.is_empty() && metered(&sink, run, &request.policy.budgets) {
+                return;
+            }
             if state.limited.load(Ordering::SeqCst) {
                 sink.emit(run, EngineEvent::Failure(domain::FailureKind::UsageLimit { resets_at: None }));
                 sink.emit(run, EngineEvent::Failed("HTTP 400: You have reached the limit.".into()));
@@ -318,6 +322,28 @@ impl AgentEngine for FakeEngine {
             sink.emit(run, EngineEvent::Completed { duration_ms: 0, cost_usd: None });
         });
         Ok(Box::new(FakeRun { cancelled, answer, state: Arc::clone(&self.state) }))
+    }
+}
+
+pub const CALL_USD: f64 = 0.4;
+
+fn metered(sink: &Arc<dyn EventSink>, run: RunId, budgets: &[domain::budget::Budget]) -> bool {
+    let unpriced = domain::budget::Unpriced::Block;
+    if let Err(refused) = domain::budget::first_refusal(budgets, domain::billing::Cost::default(), unpriced) {
+        sink.emit(run, EngineEvent::Failure((&refused).into()));
+        sink.emit(run, EngineEvent::Failed(refused.to_string()));
+        return true;
+    }
+    let usage = domain::billing::ModelUsage { estimated_cost_usd: Some(CALL_USD), ..Default::default() };
+    sink.emit(run, EngineEvent::Usage(usage));
+    let spent = domain::billing::Cost::priced(Some(CALL_USD), domain::billing::Basis::Api);
+    match domain::budget::first_refusal(budgets, spent, unpriced) {
+        Ok(()) => false,
+        Err(refused) => {
+            sink.emit(run, EngineEvent::Failure((&refused).into()));
+            sink.emit(run, EngineEvent::Failed(refused.to_string()));
+            true
+        }
     }
 }
 

@@ -83,8 +83,8 @@ pub struct Policy {
     pub reviewer: crate::Reviewer,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub max_turns: Option<u32>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub budget: Option<crate::budget::Budget>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub budgets: Vec<crate::budget::Budget>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

@@ -82,7 +82,7 @@ impl Job {
         let ledger = Arc::new(Ledger::default());
         let metered = self.metered(api, &ledger, self.request.session.model.clone());
         let attribution = metered.attribution.as_origin(command.origin());
-        let api = Metered { calls: None, budget: None, attribution, ..metered };
+        let api = Metered { calls: None, budgets: Vec::new(), attribution, ..metered };
         let emit = |event: EngineEvent| {
             self.gate.emit(event);
         };

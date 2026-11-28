@@ -8,6 +8,7 @@ mod branches;
 mod bundle;
 mod calls;
 mod cards;
+pub mod ceiling;
 mod children;
 mod chores;
 mod cloud;

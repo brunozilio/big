@@ -30,7 +30,7 @@ pub struct Metered {
     pub gate: RunGate,
     pub model: domain::ModelOption,
     pub calls: Option<Calls>,
-    pub budget: Option<domain::budget::Budget>,
+    pub budgets: Vec<domain::budget::Budget>,
     pub account: String,
     pub attribution: Attribution,
 }
@@ -42,9 +42,9 @@ impl ModelApi for Metered {
         cancel: &'a CancellationToken,
     ) -> BoxFuture<'a, Result<Reply, ModelError>> {
         Box::pin(async move {
-            if let Some(budget) = &self.budget {
-                budget
-                    .check(self.ledger.spent()?, domain::budget::Unpriced::configured())
+            if !self.budgets.is_empty() {
+                let unpriced = domain::budget::Unpriced::configured();
+                domain::budget::first_refusal(&self.budgets, self.ledger.spent()?, unpriced)
                     .map_err(ModelError::Quota)?;
             }
             let reply = self.api.turn(request, on, cancel).await?;
@@ -165,6 +165,7 @@ mod tests {
     }
 
     fn metered(budget: Option<Budget>) -> Metered {
+        let budgets = budget.into_iter().collect();
         Metered {
             api: Arc::new(ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("ok".into())])])),
             ledger: Arc::default(),
@@ -172,7 +173,7 @@ mod tests {
             gate: RunGate::new(domain::RunId::new(), Arc::new(Quiet)),
             model: domain::ModelOption::new("m", "M"),
             calls: None,
-            budget,
+            budgets,
             account: "a@x.io".into(),
             attribution: Attribution::default(),
         }
@@ -214,12 +215,12 @@ mod tests {
         };
         let stop = CancellationToken::new();
 
-        let used_up = metered(Some(Budget { limit_usd: 1.0, spent: spent(1.0) }));
+        let used_up = metered(Some(Budget::session(1.0, spent(1.0))));
         let refused = used_up.turn_blocking(&request, &mut |_| {}, &stop).expect_err("refused");
         assert!(matches!(refused, ModelError::Quota(QuotaError::Budget { .. })), "{refused}");
         assert!(refused.to_string().contains("budget"), "{refused}");
 
-        let within = metered(Some(Budget { limit_usd: 1.0, spent: spent(0.5) }));
+        let within = metered(Some(Budget::session(1.0, spent(0.5))));
         assert!(within.turn_blocking(&request, &mut |_| {}, &stop).is_ok());
         assert!(metered(None).turn_blocking(&request, &mut |_| {}, &stop).is_ok());
     }
@@ -237,7 +238,7 @@ mod tests {
             intent: Default::default(),
         };
         let stop = CancellationToken::new();
-        let meter = metered(Some(Budget { limit_usd: 10.0, spent: spent(0.5) }));
+        let meter = metered(Some(Budget::session(10.0, spent(0.5))));
         assert!(
             meter.turn_blocking(&request, &mut |_| {}, &stop).is_ok(),
             "the first call has nothing unpriced before it"
@@ -248,7 +249,7 @@ mod tests {
             panic!("not a budget refusal: {refused:?}");
         };
         assert_eq!((*scope, spent.known_micros, spent.unpriced_calls), (Scope::Session, 500_000, 1));
-        assert_eq!(domain::FailureKind::from(&refused), domain::FailureKind::UsageLimit { resets_at: None });
+        assert!(matches!(domain::FailureKind::from(&refused), domain::FailureKind::Budget { scope: Scope::Session, .. }));
     }
 
     #[test]

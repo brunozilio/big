@@ -32,7 +32,7 @@ impl Job {
         let Equipped { mut workspace, mut toolbox, main } = equipped;
         workspace.policy = flagged(settings, &workspace.cwd);
         workspace.models.escalation.clone_from(&settings.escalation);
-        self.request.policy.budget = budget(&self.request);
+        self.request.policy.budgets = budgets(&self.request);
         workspace.services.files = Some(Arc::default());
         let roles = roles::merged(&self.request.session.roles, settings);
         toolbox.tools.retain(|tool| tool.offered(&workspace));
@@ -64,8 +64,8 @@ pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path) -> Policy {
     }
 }
 
-pub(in crate::engine) fn budget(request: &PromptRequest) -> Option<domain::budget::Budget> {
-    request.policy.budget.filter(|_| on(flags::BUDGET))
+pub(in crate::engine) fn budgets(request: &PromptRequest) -> Vec<domain::budget::Budget> {
+    if on(flags::BUDGET) { request.policy.budgets.clone() } else { Vec::new() }
 }
 
 pub(in crate::engine) fn anchored(request: &PromptRequest) -> Vec<domain::Memory> {

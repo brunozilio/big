@@ -68,7 +68,7 @@ impl Job {
             gate: self.gate.clone(),
             model,
             calls: self.recorder.as_ref().map(|recorder| recorder.calls()),
-            budget: self.request.policy.budget,
+            budgets: self.request.policy.budgets.clone(),
             account: self.request.host.credentials.model_accounts.first().cloned().unwrap_or_default(),
             attribution: self.request.host.attribution.clone(),
         }

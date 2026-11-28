@@ -2,17 +2,32 @@ use serde::{Deserialize, Serialize};
 
 use crate::billing::Cost;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Scope {
     Run,
+    #[default]
     Session,
     Item,
     Account,
     Workspace,
+    Agent,
+    Application,
+    Person,
 }
 
 impl Scope {
+    pub const ALL: [Self; 8] = [
+        Self::Run,
+        Self::Session,
+        Self::Item,
+        Self::Account,
+        Self::Workspace,
+        Self::Agent,
+        Self::Application,
+        Self::Person,
+    ];
+
     pub const fn word(self) -> &'static str {
         match self {
             Self::Run => "run",
@@ -20,7 +35,14 @@ impl Scope {
             Self::Item => "item",
             Self::Account => "account",
             Self::Workspace => "workspace",
+            Self::Agent => "agent",
+            Self::Application => "application",
+            Self::Person => "person",
         }
+    }
+
+    pub fn named(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|scope| scope.word() == word)
     }
 }
 
@@ -61,12 +83,20 @@ fn dollars(micros: u64) -> f64 {
 }
 
 fn budget(f: &mut std::fmt::Formatter<'_>, scope: Scope, limit: u64, counted: u64, spent: &Cost) -> std::fmt::Result {
+    let (raise, raise_or_off, tail) = match scope {
+        Scope::Session => (
+            "Raise it with /budget <dollars>",
+            "Raise it with /budget <dollars>, turn it off with /budget off,",
+            ", or turn it off with /budget off",
+        ),
+        _ => ("Raise its ceiling in the config", "Raise its ceiling in the config", ""),
+    };
     let scope = scope.word();
     let unpriced = spent.unpriced_calls;
     if counted < limit && unpriced > 0 {
         return write!(
             f,
-            "Stopped: {unpriced} model call(s) in this {scope} have no price, so its ${:.2} budget cannot be checked (${:.2} known so far). Raise it with /budget <dollars>, turn it off with /budget off, or set how unpriced calls count in the config.",
+            "Stopped: {unpriced} model call(s) in this {scope} have no price, so its ${:.2} budget cannot be checked (${:.2} known so far). {raise_or_off} or set how unpriced calls count in the config.",
             dollars(limit),
             spent.known_usd()
         );
@@ -74,7 +104,7 @@ fn budget(f: &mut std::fmt::Formatter<'_>, scope: Scope, limit: u64, counted: u6
     let partial = if unpriced > 0 { format!(" (+{unpriced} unpriced)") } else { String::new() };
     write!(
         f,
-        "Stopped: this {scope} spent ${:.2}{partial} of its ${:.2} budget. Raise it with /budget <dollars>, or turn it off with /budget off.",
+        "Stopped: this {scope} spent ${:.2}{partial} of its ${:.2} budget. {raise}{tail}.",
         dollars(counted),
         dollars(limit)
     )
@@ -104,7 +134,15 @@ impl std::error::Error for QuotaError {}
 
 impl From<&QuotaError> for crate::failure::FailureKind {
     fn from(error: &QuotaError) -> Self {
-        Self::UsageLimit { resets_at: error.resets_at() }
+        match error {
+            QuotaError::Budget { scope, limit_micros, counted_micros, resets_at, .. } => Self::Budget {
+                scope: *scope,
+                limit_micros: *limit_micros,
+                counted_micros: *counted_micros,
+                resets_at: *resets_at,
+            },
+            _ => Self::UsageLimit { resets_at: error.resets_at() },
+        }
     }
 }
 
