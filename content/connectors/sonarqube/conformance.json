@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "squ_token", "settings": { "url": "https://sonar.acme.test/" } },
+  "cases": [
+    {
+      "name": "o relatório de um pull request traz o gate, as medidas e os problemas",
+      "action": "quality.report",
+      "args": { "project": "acme_web", "pullRequest": "12" },
+      "http": [
+        { "method": "GET", "url": "/api/qualitygates/project_status", "body": { "projectStatus": { "status": "ERROR", "conditions": [
+          { "status": "ERROR", "metricKey": "new_coverage", "comparator": "LT", "errorThreshold": "80", "actualValue": "71.4" },
+          { "status": "OK", "metricKey": "new_duplicated_lines_density", "comparator": "GT", "errorThreshold": "3", "actualValue": "1.2" } ] } } },
+        { "method": "GET", "url": "/api/metrics/search", "body": { "metrics": [{ "key": "new_coverage", "name": "Coverage on New Code" }] } },
+        { "method": "GET", "url": "/api/measures/component", "body": { "component": { "measures": [
+          { "metric": "new_reliability_rating", "period": { "value": "3.0" } },
+          { "metric": "new_security_rating", "period": { "value": "1.0" } },
+          { "metric": "new_bugs", "period": { "value": "2" } },
+          { "metric": "new_coverage", "period": { "value": "71.4" } } ] } } },
+        { "method": "GET", "url": "/api/issues/search", "body": { "total": 7, "issues": [
+          { "key": "AX1", "type": "BUG", "severity": "MAJOR", "message": "Null check", "component": "acme_web:src/cart.ts", "line": 12 } ] } }
+      ],
+      "expect": { "ok": {
+        "status": "done",
+        "gate": "failed",
+        "ratings": { "reliability": "C", "security": "A", "maintainability": "A" },
+        "coverage": 71.4,
+        "issues": [{ "file": "src/cart.ts", "type": "bug", "severity": "major" }],
+        "total": 7,
+        "url": "https://sonar.acme.test/dashboard?id=acme_web&pullRequest=12"
+      } },
+      "sent": ["GET https://sonar.acme.test/api/qualitygates/project_status?projectKey=acme_web&pullRequest=12"]
+    },
+    {
+      "name": "um pull request ainda não analisado está pendente",
+      "action": "quality.report",
+      "args": { "project": "acme_web", "pullRequest": "12" },
+      "http": [{ "method": "GET", "url": "/api/qualitygates/project_status", "status": 404, "body": { "errors": [] } }],
+      "expect": { "ok": { "status": "pending" } }
+    },
+    {
+      "name": "lista os projetos do servidor",
+      "action": "quality.options",
+      "args": { "query": "acme" },
+      "http": [{ "method": "GET", "url": "/api/components/search", "body": { "components": [{ "key": "acme_web", "name": "Web" }, { "key": "acme_api", "name": "acme_api" }] } }],
+      "expect": { "ok": [{ "value": "acme_web", "label": "acme_web" }, { "value": "acme_api", "label": "acme_api" }] }
+    },
+    {
+      "name": "lê todas as páginas de projetos até o total",
+      "action": "quality.options",
+      "http": [
+        { "method": "GET", "url": "/api/components/search?qualifiers=TRK&ps=500&p=1", "body": { "paging": { "pageIndex": 1, "pageSize": 500, "total": 1000 }, "components": [{ "key": "a", "name": "Name" }, { "key": "b", "name": "Name" }] } },
+        { "method": "GET", "url": "/api/components/search?qualifiers=TRK&ps=500&p=2", "body": { "paging": { "pageIndex": 2, "pageSize": 500, "total": 1000 }, "components": [{ "key": "c", "name": "Name" }] } }
+      ],
+      "expect": { "ok": [{ "label": "a" }, { "label": "b" }, { "label": "c" }] }
+    },
+    {
+      "name": "um token recusado é erro de autenticação",
+      "action": "accounts",
+      "http": [{ "method": "GET", "url": "/api/authentication/validate", "body": { "valid": false }, "repeat": true }],
+      "expect": { "error": "auth" }
+    },
+    {
+      "name": "a conta é o login no servidor",
+      "action": "accounts",
+      "http": [
+        { "method": "GET", "url": "/api/authentication/validate", "body": { "valid": true } },
+        { "method": "GET", "url": "/api/users/current", "body": { "login": "ana", "isLoggedIn": true } }
+      ],
+      "expect": { "ok": [{ "label": "ana · sonar.acme.test", "settings": { "url": "https://sonar.acme.test" } }] }
+    }
+  ]
+}

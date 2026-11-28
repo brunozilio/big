@@ -1,18 +1,21 @@
 mod brand;
 mod comments;
+mod conformance;
 mod contracts;
 mod crate_graph;
 mod environment;
 mod git_commands;
 mod lint;
 mod provider_names;
+mod published;
 mod test_blocks;
 mod web;
 
 use std::path::PathBuf;
 
 const USAGE: &str = "usage: xtask lint [--update-baseline] | xtask brand | xtask comments <file>… | xtask web | \
-                     xtask check-release | xtask web-fixtures | xtask schemas";
+                     xtask check-release | xtask web-fixtures | xtask schemas | \
+                     xtask conformance [--publish]";
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -21,6 +24,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         [task] if task == "brand" => brand::run(&root()),
         [task, files @ ..] if task == "comments" => comments::check(files),
         [task, flag] if task == "lint" && flag == "--update-baseline" => lint::run(&root(), true),
+        [task] if task == "conformance" => conformance::run(&root(), false),
+        [task, flag] if task == "conformance" && flag == "--publish" => conformance::run(&root(), true),
         [task] if task == "web" => web::build(&root()),
         [task] if task == "check-release" => web::check_release(&root()),
         [task] if task == "web-fixtures" => web::fixtures(),

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "sso-at", "settings": { "region": "eu-west-1" } },
+  "cases": [
+    {
+      "name": "a identidade compra as credenciais do papel",
+      "action": "cloud.identity",
+      "args": { "account": "111", "role": "ReadOnly" },
+      "http": [{ "method": "GET", "url": "/federation/credentials?account_id=111&role_name=ReadOnly",
+                 "body": { "roleCredentials": { "accessKeyId": "ASIA", "secretAccessKey": "s", "sessionToken": "t", "expiration": 4102444800000 } } }],
+      "expect": { "ok": { "account": "111", "role": "ReadOnly", "access_key_id": "ASIA", "session_token": "t", "expires_at": "2100-01-01T00:00:00Z" } }
+    },
+    {
+      "name": "um token de SSO recusado é erro de autenticação",
+      "action": "cloud.identity",
+      "args": { "account": "1", "role": "r" },
+      "http": [{ "method": "GET", "url": "/federation/credentials", "status": 401, "body": {} }],
+      "expect": { "error": "auth" }
+    },
+    {
+      "name": "credenciais do console dizem a identidade pelo STS",
+      "action": "cloud.identity",
+      "creds": { "token": "{\"accessKeyId\":\"ASIA1\",\"secretAccessKey\":\"sk\",\"sessionToken\":\"st\",\"accountId\":\"123456789012\",\"expiresAt\":\"2100-01-01T00:00:00Z\"}", "settings": { "region": "us-east-1" } },
+      "http": [{ "method": "POST", "url": "sts.us-east-1.amazonaws.com", "repeat": true,
+                 "body": "<GetCallerIdentityResponse><GetCallerIdentityResult><Arn>arn:aws:iam::123456789012:user/ana</Arn><UserId>AIDA</UserId><Account>123456789012</Account></GetCallerIdentityResult></GetCallerIdentityResponse>" }],
+      "expect": { "ok": { "account": "123456789012", "arn": "arn:aws:iam::123456789012:user/ana", "access_key_id": "ASIA1" } }
+    },
+    {
+      "name": "contas e papéis seguem todas as páginas",
+      "action": "cloud.accounts_and_roles",
+      "http": [
+        { "method": "GET", "url": "/assignment/accounts", "body": { "accountList": [{ "accountId": "111", "accountName": "prod", "emailAddress": "p@x" }], "nextToken": "n1" } },
+        { "method": "GET", "url": "/assignment/accounts", "body": { "accountList": [{ "accountId": "222", "accountName": "dev" }] } },
+        { "method": "GET", "url": "account_id=111", "body": { "roleList": [{ "roleName": "Admin" }, { "roleName": "ReadOnly" }] } },
+        { "method": "GET", "url": "account_id=222", "body": { "roleList": [] } }
+      ],
+      "expect": { "ok": { "accounts": [{ "roles": ["Admin", "ReadOnly"] }, { "name": "dev" }] } },
+      "sent": ["GET https://portal.sso.eu-west-1.amazonaws.com/assignment/accounts", "next_token=n1"]
+    },
+    {
+      "name": "as opções de conta vêm do SSO",
+      "action": "cloud.options",
+      "args": { "field": "account" },
+      "http": [{ "method": "GET", "url": "/assignment/accounts", "body": { "accountList": [{ "accountId": "111", "accountName": "prod" }, { "accountId": "222", "accountName": "dev" }] } }],
+      "expect": { "ok": [{ "value": "111", "label": "prod" }, { "value": "222", "label": "dev" }] }
+    },
+    {
+      "name": "sem conta escolhida não há papel",
+      "action": "cloud.options",
+      "args": { "field": "role" },
+      "expect": { "ok": [] }
+    },
+    {
+      "name": "entrar pelo SSO não escolhe conta",
+      "action": "accounts",
+      "creds": { "token": "sso-at", "settings": { "region": "eu-west-1", "start_url": "https://acme.awsapps.com/start" } },
+      "expect": { "ok": [{ "label": "acme" }] }
+    }
+  ]
+}

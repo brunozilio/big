@@ -6,9 +6,11 @@ edition.workspace = true
 publish = false
 license.workspace = true
 
+[dependencies]
+serde_json.workspace = true
+
 [dev-dependencies]
 domain.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
 
 [lints]

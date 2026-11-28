@@ -1,6 +1,7 @@
 pub mod browser;
 pub mod calls;
 pub mod clock;
+pub mod conformance;
 pub mod contracts;
 pub mod descriptor;
 pub mod error;

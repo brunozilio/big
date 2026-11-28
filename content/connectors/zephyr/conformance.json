@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "zt", "settings": { "project": "BIG" } },
+  "cases": [
+    {
+      "name": "the account lists the projects",
+      "action": "accounts",
+      "creds": { "token": "zt-accounts", "settings": {} },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "content": [], "structuredContent": { "values": [{ "id": 10, "key": "BIG", "name": "Big" }], "isLast": true } } } }
+      ],
+      "expect": { "ok": [{ "id": "zephyr", "settings": { "project": "BIG", "shown": { "projects": ["BIG"] } } }] }
+    },
+    {
+      "name": "projects are filtered by the query",
+      "action": "tests.projects",
+      "args": { "query": "big" },
+      "creds": { "token": "zt-projects", "settings": {} },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "content": [], "structuredContent": { "values": [{ "id": 10, "key": "BIG", "name": "Big" }, { "id": 11, "key": "OPS", "name": "Operations" }], "isLast": true } } } }
+      ],
+      "expect": { "ok": [{ "id": "10", "key": "BIG", "name": "Big" }] }
+    },
+    {
+      "name": "options list the projects",
+      "action": "tests.options",
+      "creds": { "token": "zt-options", "settings": {} },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "content": [], "structuredContent": { "values": [{ "id": 10, "key": "BIG", "name": "Big" }], "isLast": true } } } }
+      ],
+      "expect": { "ok": [{ "value": "BIG" }] }
+    },
+    {
+      "name": "the cases of an issue carry their titles",
+      "action": "tests.cases",
+      "args": { "issue": "BIG-1" },
+      "creds": { "token": "zt-cases", "settings": { "project": "BIG" } },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "content": [], "structuredContent": { "result": [{ "key": "BIG-T1", "version": 1 }] } } } },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 3, "result": { "content": [], "structuredContent": { "key": "BIG-T1", "name": "Login" } } } }
+      ],
+      "expect": { "ok": [{ "ref": "BIG-T1", "title": "Login" }] }
+    },
+    {
+      "name": "a new case is created",
+      "action": "tests.create_case",
+      "args": { "title": "Login works", "objective": "o" },
+      "creds": { "token": "zt-create-case", "settings": { "project": "BIG" } },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "content": [], "structuredContent": { "values": [], "nextStartAtId": null, "limit": 50 } } } },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 3, "result": { "content": [], "structuredContent": { "id": 7, "key": "BIG-T7" } } } }
+      ],
+      "expect": { "ok": { "ref": "BIG-T7", "title": "Login works", "created": true } }
+    },
+    {
+      "name": "a case without a title is refused",
+      "action": "tests.create_case",
+      "args": {},
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "a new cycle is created",
+      "action": "tests.create_cycle",
+      "args": { "title": "Release 1", "description": "d" },
+      "creds": { "token": "zt-create-cycle", "settings": { "project": "BIG" } },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "content": [], "structuredContent": { "values": [], "isLast": true } } } },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 3, "result": { "content": [], "structuredContent": { "id": 3, "key": "BIG-R3" } } } }
+      ],
+      "expect": { "ok": { "ref": "BIG-R3" } }
+    },
+    {
+      "name": "an execution is recorded",
+      "action": "tests.record",
+      "args": { "case": "BIG-T7", "cycle": "BIG-R3", "status": "passed", "comment": "ok", "seconds": 2 },
+      "creds": { "token": "zt-record", "settings": { "project": "BIG" } },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "content": [], "structuredContent": { "values": [], "nextStartAtId": null } } } },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 3, "result": { "content": [], "structuredContent": { "id": 99, "key": "BIG-E99" } } } }
+      ],
+      "expect": { "ok": { "ref": "BIG-E99" } }
+    },
+    {
+      "name": "an unknown status is refused",
+      "action": "tests.record",
+      "args": { "case": "BIG-T7", "cycle": "BIG-R3", "status": "maybe" },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "a cycle is finished",
+      "action": "tests.finish_cycle",
+      "args": { "cycle": "BIG-R3", "status": "done" },
+      "creds": { "token": "zt-finish", "settings": { "project": "BIG" } },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "content": [], "structuredContent": { "values": [{ "id": 5, "name": "In Progress" }, { "id": 6, "name": "Done" }], "isLast": true } } } },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 3, "result": { "content": [], "structuredContent": {} } } }
+      ],
+      "expect": { "ok": { "ref": "BIG-R3", "status": "Done" } }
+    }
+  ]
+}

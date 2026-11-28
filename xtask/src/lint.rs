@@ -7,6 +7,7 @@ pub fn run(root: &Path, update_baseline: bool) -> Result<(), Box<dyn std::error:
     let mut found = BTreeSet::new();
     found.extend(crate::brand::findings(root)?);
     found.extend(crate::comments::findings(root)?);
+    found.extend(crate::conformance::findings(root)?);
     found.extend(crate::contracts::findings(root)?);
     found.extend(crate::crate_graph::findings(root)?);
     found.extend(crate::environment::findings(root)?);

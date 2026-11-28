@@ -1,0 +1,203 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "gho_conformance", "settings": { "repo": "acme/web" } },
+  "cases": [
+    {
+      "name": "the account is the signed-in login",
+      "action": "accounts",
+      "http": [{ "method": "GET", "url": "/user", "body": { "login": "octo" } }],
+      "expect": { "ok": [{ "id": "octo", "label": "octo", "settings": { "login": "octo" } }] }
+    },
+    {
+      "name": "lists the repositories the account reaches",
+      "action": "code.repos",
+      "http": [{ "method": "GET", "url": "/user/repos?per_page=100&page=1", "body": [
+        { "id": 1, "full_name": "acme/web", "name": "web", "html_url": "https://github.com/acme/web", "default_branch": "main", "private": true }
+      ] }],
+      "expect": { "ok": [{ "id": "1", "ref": "acme/web", "name": "web", "default_branch": "main", "private": true }] },
+      "sent": ["GET https://api.github.com/user/repos?per_page=100&page=1"]
+    },
+    {
+      "name": "offers the repositories as options",
+      "action": "code.options",
+      "http": [{ "method": "GET", "url": "/user/repos", "body": [
+        { "id": 1, "full_name": "acme/web", "name": "web", "default_branch": "main" }
+      ] }],
+      "expect": { "ok": [{ "value": "acme/web", "label": "acme/web" }] }
+    },
+    {
+      "name": "lists the open pull requests of the default repository",
+      "action": "code.pull_requests",
+      "http": [{ "method": "GET", "url": "/repos/acme/web/pulls?state=open", "body": [
+        { "number": 7, "html_url": "https://github.com/acme/web/pull/7", "title": "Fix cart", "state": "open", "head": { "ref": "fix", "sha": "abc" }, "base": { "ref": "main" }, "user": { "login": "octo" } }
+      ] }],
+      "expect": { "ok": [{ "ref": "acme/web#7", "number": 7, "title": "Fix cart", "state": "open", "head": "fix", "base": "main", "merged": false }] }
+    },
+    {
+      "name": "reads a pull request with its checks and reviews",
+      "action": "code.pull_request",
+      "args": { "pr": "acme/web#7" },
+      "http": [
+        { "method": "GET", "url": "/repos/acme/web/pulls/7/reviews", "body": [{ "id": 9, "user": { "login": "rev" }, "state": "APPROVED", "body": "ok", "submitted_at": "2024-01-02T03:04:05Z" }] },
+        { "method": "GET", "url": "/repos/acme/web/commits/abc/check-runs", "body": { "check_runs": [{ "name": "ci", "status": "completed", "conclusion": "success", "html_url": "https://ci" }] } },
+        { "method": "GET", "url": "/repos/acme/web/pulls/7", "body": { "number": 7, "title": "Fix cart", "state": "open", "head": { "ref": "fix", "sha": "abc" }, "base": { "ref": "main" } } }
+      ],
+      "expect": { "ok": { "ref": "acme/web#7", "sha": "abc", "checks": [{ "name": "ci", "state": "passed" }], "reviews": [{ "id": "9", "verdict": "approve", "author": "rev" }] } }
+    },
+    {
+      "name": "a pull request that is not a number is refused",
+      "action": "code.pull_request",
+      "args": { "pr": "acme/web#seven" },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "reads the changed files of a pull request",
+      "action": "code.files_diff",
+      "args": { "number": 7 },
+      "http": [{ "method": "GET", "url": "/repos/acme/web/pulls/7/files?per_page=100&page=1", "body": [
+        { "filename": "src/cart.ts", "status": "renamed", "previous_filename": "src/old.ts", "additions": 2, "deletions": 1, "patch": "@@ -1 +1 @@" }
+      ] }],
+      "expect": { "ok": [{ "path": "src/cart.ts", "previous": "src/old.ts", "change": "renamed", "additions": 2, "deletions": 1 }] }
+    },
+    {
+      "name": "reads the review threads through graphql",
+      "action": "code.review_comments",
+      "args": { "pr": "acme/web#7" },
+      "http": [{ "method": "POST", "url": "/graphql", "body": { "data": { "repository": { "pullRequest": { "reviewThreads": { "nodes": [
+        { "id": "T1", "isResolved": false, "isOutdated": false, "path": "src/cart.ts", "line": 3, "comments": { "nodes": [{ "id": "C1", "body": "why?", "createdAt": "2024-01-02T03:04:05Z", "author": { "login": "rev" } }] } }
+      ] } } } } } }],
+      "expect": { "ok": [{ "id": "C1", "thread": "T1", "path": "src/cart.ts", "line": 3, "author": "rev", "body": "why?", "resolved": false }] }
+    },
+    {
+      "name": "submits an approving review",
+      "action": "code.submit_review",
+      "args": { "pr": "acme/web#7", "verdict": "approve", "body": "Looks good" },
+      "http": [
+        { "method": "GET", "url": "/repos/acme/web/pulls/7/reviews", "body": [] },
+        { "method": "POST", "url": "/repos/acme/web/pulls/7/reviews", "body": { "id": 10 } }
+      ],
+      "expect": { "ok": { "id": "10", "verdict": "approve", "created": true } },
+      "sent": ["POST https://api.github.com/repos/acme/web/pulls/7/reviews"]
+    },
+    {
+      "name": "an unknown verdict is refused",
+      "action": "code.submit_review",
+      "args": { "pr": "acme/web#7", "verdict": "maybe" },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "resolves a review thread",
+      "action": "code.resolve_thread",
+      "args": { "thread": "T1" },
+      "http": [{ "method": "POST", "url": "/graphql", "body": { "data": { "resolveReviewThread": { "thread": { "id": "T1", "isResolved": true } } } } }],
+      "expect": { "ok": { "thread": "T1", "resolved": true } }
+    },
+    {
+      "name": "a graphql error is a permanent failure",
+      "action": "code.resolve_thread",
+      "args": { "thread": "T1" },
+      "http": [{ "method": "POST", "url": "/graphql", "body": { "errors": [{ "message": "Could not resolve to a node" }] } }],
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "merges an open pull request",
+      "action": "code.merge",
+      "args": { "number": 7, "method": "squash", "delete_branch": false },
+      "http": [
+        { "method": "GET", "url": "/repos/acme/web/pulls/7", "body": { "number": 7, "state": "open", "head": { "ref": "fix", "sha": "abc" }, "base": { "ref": "main" } } },
+        { "method": "PUT", "url": "/repos/acme/web/pulls/7/merge", "body": { "merged": true, "sha": "m1" } }
+      ],
+      "expect": { "ok": { "merged": true, "already": false, "sha": "m1", "deleted": false } },
+      "sent": ["PUT https://api.github.com/repos/acme/web/pulls/7/merge"]
+    },
+    {
+      "name": "lists the branches and marks the default",
+      "action": "code.branches",
+      "http": [
+        { "method": "GET", "url": "/repos/acme/web/branches?per_page=100&page=1", "body": [{ "name": "main" }, { "name": "dev" }] },
+        { "method": "GET", "url": "/repos/acme/web", "body": { "default_branch": "main" } }
+      ],
+      "expect": { "ok": [{ "default": true, "name": "main" }, { "default": false, "name": "dev" }] }
+    },
+    {
+      "name": "merges one branch into another",
+      "action": "code.merge_branches",
+      "args": { "base": "main", "head": "dev" },
+      "http": [{ "method": "POST", "url": "/repos/acme/web/merges", "status": 201, "body": { "sha": "s1" } }],
+      "expect": { "ok": { "merged": true, "already": false, "sha": "s1" } }
+    },
+    {
+      "name": "a merge without the head branch is refused",
+      "action": "code.merge_branches",
+      "args": { "base": "main" },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "opens a pull request when the branch has none",
+      "action": "code.open_pull_request",
+      "args": { "head": "feat", "title": "Add feature", "base": "main" },
+      "http": [
+        { "method": "GET", "url": "/repos/acme/web/pulls?head=", "body": [] },
+        { "method": "POST", "url": "/repos/acme/web/pulls", "status": 201, "body": { "number": 8, "title": "Add feature", "state": "open", "head": { "ref": "feat", "sha": "f1" }, "base": { "ref": "main" } } }
+      ],
+      "expect": { "ok": { "ref": "acme/web#8", "number": 8, "created": true, "head": "feat", "base": "main" } },
+      "sent": ["POST https://api.github.com/repos/acme/web/pulls"]
+    },
+    {
+      "name": "hands git the token only for its own host",
+      "action": "code.git_credentials",
+      "args": { "url": "https://github.com/acme/web.git" },
+      "expect": { "ok": { "username": "x-access-token", "password": "gho_conformance" } }
+    },
+    {
+      "name": "lists the runs of the repository",
+      "action": "pipelines.runs",
+      "http": [{ "method": "GET", "url": "/repos/acme/web/actions/runs?per_page=20", "body": { "workflow_runs": [
+        { "id": 5, "name": "CI", "path": ".github/workflows/ci.yml", "event": "push", "head_branch": "main", "head_sha": "abc", "status": "completed", "conclusion": "failure", "run_attempt": 2, "created_at": "2024-01-02T03:04:05Z", "updated_at": "2024-01-02T03:10:00Z" }
+      ] } }],
+      "expect": { "ok": [{ "ref": "acme/web/runs/5", "pipeline": "CI", "state": "failed", "attempt": 2, "finished": "2024-01-02T03:10:00Z" }] }
+    },
+    {
+      "name": "reads a run with its jobs",
+      "action": "pipelines.run",
+      "args": { "run": "acme/web/runs/5" },
+      "http": [
+        { "method": "GET", "url": "/repos/acme/web/actions/runs/5/jobs", "body": { "jobs": [{ "id": 11, "name": "build", "status": "in_progress", "steps": [{ "name": "checkout", "status": "completed", "conclusion": "success" }] }] } },
+        { "method": "GET", "url": "/repos/acme/web/actions/runs/5", "body": { "id": 5, "name": "CI", "status": "in_progress", "head_sha": "abc" } }
+      ],
+      "expect": { "ok": { "ref": "acme/web/runs/5", "state": "running", "jobs": [{ "id": "11", "name": "build", "state": "running", "steps": [{ "name": "checkout", "state": "passed" }] }] } }
+    },
+    {
+      "name": "a run without its id is refused",
+      "action": "pipelines.run",
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "reads the tail of a job log",
+      "action": "pipelines.job_log",
+      "args": { "run": "acme/web/runs/5", "job": 11, "tail": 2 },
+      "http": [{ "method": "GET", "url": "/repos/acme/web/actions/jobs/11/logs", "body": "one\ntwo\nthree\n" }],
+      "expect": { "ok": { "text": "two\nthree", "truncated": true } }
+    },
+    {
+      "name": "lists the deployments waiting for review",
+      "action": "pipelines.pending_deployments",
+      "args": { "run": "5" },
+      "http": [{ "method": "GET", "url": "/repos/acme/web/actions/runs/5/pending_deployments", "body": [
+        { "environment": { "id": 3, "name": "prod" }, "reviewers": [{ "reviewer": { "login": "boss" } }], "current_user_can_approve": true }
+      ] }],
+      "expect": { "ok": [{ "id": "3", "environment": "prod", "run": "acme/web/runs/5", "reviewers": ["boss"], "canApprove": true }] }
+    },
+    {
+      "name": "approves the waiting deployment",
+      "action": "pipelines.review_deployment",
+      "args": { "run": "acme/web/runs/5", "decision": "approve", "comment": "go" },
+      "http": [
+        { "method": "GET", "url": "/repos/acme/web/actions/runs/5/pending_deployments", "body": [{ "environment": { "id": 3, "name": "prod" }, "current_user_can_approve": true }] },
+        { "method": "POST", "url": "/repos/acme/web/actions/runs/5/pending_deployments", "body": [] }
+      ],
+      "expect": { "ok": { "decision": "approve", "deployments": ["3"], "already": false } },
+      "sent": ["POST https://api.github.com/repos/acme/web/actions/runs/5/pending_deployments"]
+    }
+  ]
+}

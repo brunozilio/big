@@ -1,0 +1,1126 @@
+{
+  "schema_version": 1,
+  "creds": {
+    "token": "at",
+    "settings": {
+      "cloud_id": "cloud1",
+      "site_url": "https://acme.atlassian.net/",
+      "project": "BIG"
+    }
+  },
+  "cases": [
+    {
+      "name": "lists the sites with their projects",
+      "action": "accounts",
+      "args": {},
+      "creds": {
+        "token": "at-1",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"id\": \"c1\", \"url\": \"https://acme.atlassian.net\", \"name\": \"acme\"}]"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"values\": [{\"id\": \"100\", \"key\": \"BIG\", \"name\": \"Big\"}, {\"id\": \"101\", \"key\": \"APP\", \"name\": \"App\"}], \"isLast\": true}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": [
+          {
+            "id": "c1",
+            "label": "acme.atlassian.net",
+            "settings": {
+              "cloud_id": "c1"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "reads an issue",
+      "action": "tracker.issue",
+      "args": {
+        "issue": "BIG-1"
+      },
+      "creds": {
+        "token": "at-2",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"id\": \"10001\", \"key\": \"BIG-1\", \"fields\": {\"summary\": \"Corrigir o login\", \"status\": {\"name\": \"A fazer\", \"statusCategory\": {\"key\": \"new\"}}, \"issuetype\": {\"name\": \"Hist\\u00f3ria\"}, \"project\": {\"key\": \"BIG\"}, \"description\": \"Passos para reproduzir\", \"labels\": [\"web\"], \"assignee\": {\"accountId\": \"a1\", \"displayName\": \"Ana\"}, \"subtasks\": [], \"attachment\": [], \"comment\": {\"comments\": []}, \"updated\": \"2024-01-02T03:04:05.000+0000\"}}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "ref": "BIG-1",
+          "title": "Corrigir o login",
+          "status": "A fazer",
+          "url": "https://acme.atlassian.net/browse/BIG-1",
+          "assignee": {
+            "id": "a1",
+            "name": "Ana"
+          },
+          "type": "História",
+          "project": "BIG"
+        }
+      }
+    },
+    {
+      "name": "a key that is not a key never reaches a tool",
+      "action": "tracker.issue",
+      "args": {
+        "issue": "BIG-1\" OR 1=1"
+      },
+      "creds": {
+        "token": "at-3",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [],
+      "expect": {
+        "error": "permanent"
+      }
+    },
+    {
+      "name": "finds the issue already labelled with the key",
+      "action": "tracker.create_issue",
+      "args": {
+        "title": "Corrigir o login"
+      },
+      "creds": {
+        "token": "at-4",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"issues\": [{\"id\": \"10001\", \"key\": \"BIG-1\", \"fields\": {\"summary\": \"Corrigir o login\", \"status\": {\"name\": \"A fazer\", \"statusCategory\": {\"key\": \"new\"}}, \"issuetype\": {\"name\": \"Hist\\u00f3ria\"}, \"project\": {\"key\": \"BIG\"}, \"description\": \"Passos para reproduzir\", \"labels\": [\"web\"], \"assignee\": {\"accountId\": \"a1\", \"displayName\": \"Ana\"}, \"subtasks\": [], \"attachment\": [], \"comment\": {\"comments\": []}, \"updated\": \"2024-01-02T03:04:05.000+0000\"}}]}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "ref": "BIG-1",
+          "created": false
+        }
+      }
+    },
+    {
+      "name": "posts a new comment",
+      "action": "tracker.comment",
+      "args": {
+        "issue": "BIG-1",
+        "body": "oi"
+      },
+      "creds": {
+        "token": "at-5",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"comments\": [], \"isLast\": true}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"commentId\": \"8\", \"body\": \"oi\"}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "id": "8",
+          "body": "oi",
+          "created": true
+        }
+      }
+    },
+    {
+      "name": "lists the statuses of the project",
+      "action": "tracker.statuses",
+      "args": {
+        "project": "BIG"
+      },
+      "creds": {
+        "token": "at-6",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"id\": \"10\", \"name\": \"Task\", \"statuses\": [{\"id\": \"1\", \"name\": \"A fazer\", \"statusCategory\": {\"key\": \"new\"}}, {\"id\": \"3\", \"name\": \"Feito\", \"statusCategory\": {\"key\": \"done\"}}]}]"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": [
+          {
+            "id": "1",
+            "name": "A fazer",
+            "category": "new"
+          },
+          {
+            "id": "3",
+            "name": "Feito",
+            "category": "done"
+          }
+        ]
+      }
+    },
+    {
+      "name": "lists the required fields of a type",
+      "action": "tracker.fields",
+      "args": {
+        "project": "BIG",
+        "type": "Task"
+      },
+      "creds": {
+        "token": "at-7",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"issueTypes\": [{\"id\": \"1\", \"name\": \"\\u00c9pico\", \"hierarchyLevel\": 1}, {\"id\": \"10\", \"name\": \"Task\", \"hierarchyLevel\": 0}, {\"id\": \"3\", \"name\": \"Subtarefa\", \"hierarchyLevel\": -1, \"subtask\": true}]}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"fields\": [{\"key\": \"customfield_1\", \"name\": \"Time\", \"required\": true, \"schema\": {\"type\": \"option\"}, \"allowedValues\": [{\"id\": \"7\", \"value\": \"Squad A\"}]}]}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": [
+          {
+            "key": "customfield_1",
+            "name": "Time",
+            "values": [
+              {
+                "id": "7",
+                "name": "Squad A"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "moves the issue to the named status",
+      "action": "tracker.transition",
+      "args": {
+        "issue": "BIG-1",
+        "status": "Feito"
+      },
+      "creds": {
+        "token": "at-8",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"fields\": {\"status\": {\"name\": \"A fazer\"}}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"transitions\": [{\"id\": \"11\", \"to\": {\"name\": \"Fazendo\"}}, {\"id\": \"31\", \"to\": {\"name\": \"Feito\"}}]}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"key\": \"BIG-1\", \"status\": {\"name\": \"Feito\"}}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "ref": "BIG-1",
+          "status": "Feito",
+          "changed": true
+        }
+      },
+      "sent": [
+        "/v2/mcp"
+      ]
+    },
+    {
+      "name": "a status no transition reaches is refused",
+      "action": "tracker.transition",
+      "args": {
+        "issue": "BIG-1",
+        "status": "Feito"
+      },
+      "creds": {
+        "token": "at-9",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"fields\": {\"status\": {\"name\": \"A fazer\"}}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"transitions\": []}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "error": "permanent"
+      }
+    },
+    {
+      "name": "describes the issue types and their statuses",
+      "action": "tracker.schema",
+      "args": {
+        "project": "BIG"
+      },
+      "creds": {
+        "token": "at-10",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"issueTypes\": [{\"id\": \"1\", \"name\": \"\\u00c9pico\", \"hierarchyLevel\": 1}, {\"id\": \"10\", \"name\": \"Task\", \"hierarchyLevel\": 0}, {\"id\": \"3\", \"name\": \"Subtarefa\", \"hierarchyLevel\": -1, \"subtask\": true}]}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "[{\"id\": \"10\", \"name\": \"Task\", \"statuses\": [{\"id\": \"1\", \"name\": \"A fazer\", \"statusCategory\": {\"key\": \"new\"}}, {\"id\": \"3\", \"name\": \"Feito\", \"statusCategory\": {\"key\": \"done\"}}]}]"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "default": "Task",
+          "types": [
+            {
+              "name": "Épico",
+              "level": 1,
+              "children": [
+                "Task"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "clears the impediment",
+      "action": "tracker.set_impediment",
+      "args": {
+        "issue": "BIG-1",
+        "on": false
+      },
+      "creds": {
+        "token": "at-11",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "on": false,
+          "reason": null
+        }
+      }
+    },
+    {
+      "name": "searches one page after the other",
+      "action": "tracker.search",
+      "args": {
+        "project": "BIG"
+      },
+      "creds": {
+        "token": "at-12",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"issues\": [{\"id\": \"10001\", \"key\": \"BIG-1\", \"fields\": {\"summary\": \"Corrigir o login\", \"status\": {\"name\": \"A fazer\", \"statusCategory\": {\"key\": \"new\"}}, \"issuetype\": {\"name\": \"Hist\\u00f3ria\"}, \"project\": {\"key\": \"BIG\"}, \"description\": \"Passos para reproduzir\", \"labels\": [\"web\"], \"assignee\": {\"accountId\": \"a1\", \"displayName\": \"Ana\"}, \"subtasks\": [], \"attachment\": [], \"comment\": {\"comments\": []}, \"updated\": \"2024-01-02T03:04:05.000+0000\"}}], \"nextPageToken\": \"t2\", \"isLast\": false}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "issues": [
+            {
+              "ref": "BIG-1",
+              "type": "História"
+            }
+          ],
+          "cursor": "t2"
+        }
+      },
+      "next": {
+        "cursor": "/cursor",
+        "arg": "cursor",
+        "http": [
+          {
+            "method": "POST",
+            "url": "/v2/mcp",
+            "body": {
+              "jsonrpc": "2.0",
+              "id": 3,
+              "result": {
+                "content": [
+                  {
+                    "type": "text",
+                    "text": "{\"issues\": [{\"key\": \"BIG-2\", \"fields\": {\"summary\": \"Outra\", \"status\": {\"name\": \"Feito\"}}}], \"isLast\": true}"
+                  }
+                ]
+              }
+            }
+          }
+        ],
+        "expect": {
+          "ok": {
+            "issues": [
+              {
+                "ref": "BIG-2",
+                "title": "Outra"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "lists the visible projects",
+      "action": "tracker.projects",
+      "args": {},
+      "creds": {
+        "token": "at-13",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"values\": [{\"id\": \"100\", \"key\": \"BIG\", \"name\": \"Big\"}, {\"id\": \"101\", \"key\": \"APP\", \"name\": \"App\"}], \"isLast\": true}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": [
+          {
+            "id": "100",
+            "key": "BIG",
+            "name": "Big"
+          },
+          {
+            "id": "101",
+            "key": "APP",
+            "name": "App"
+          }
+        ]
+      }
+    },
+    {
+      "name": "offers the projects as choices",
+      "action": "tracker.options",
+      "args": {
+        "query": "b"
+      },
+      "creds": {
+        "token": "at-14",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"values\": [{\"id\": \"100\", \"key\": \"BIG\", \"name\": \"Big\"}, {\"id\": \"101\", \"key\": \"APP\", \"name\": \"App\"}], \"isLast\": true}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": [
+          {
+            "value": "BIG",
+            "label": "Big"
+          },
+          {
+            "value": "APP",
+            "label": "App"
+          }
+        ]
+      }
+    },
+    {
+      "name": "edits the title and the description",
+      "action": "tracker.update_issue",
+      "args": {
+        "issue": "BIG-1",
+        "title": "Novo",
+        "description": "notas"
+      },
+      "creds": {
+        "token": "at-15",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"key\": \"BIG-1\", \"fields\": {\"summary\": \"Novo\", \"status\": {\"name\": \"A fazer\"}}}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "ref": "BIG-1",
+          "title": "Novo",
+          "changed": true
+        }
+      }
+    },
+    {
+      "name": "links two issues",
+      "action": "tracker.link_issues",
+      "args": {
+        "issue": "BIG-1",
+        "to": "APP-2"
+      },
+      "creds": {
+        "token": "at-16",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"fields\": {\"issuelinks\": []}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{}"
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "expect": {
+        "ok": {
+          "issue": "BIG-1",
+          "to": "APP-2",
+          "already": false
+        }
+      }
+    },
+    {
+      "name": "uploads a file the issue does not have yet",
+      "action": "tracker.attach",
+      "args": {
+        "issue": "BIG-1",
+        "files": [
+          {
+            "name": "log.txt",
+            "contentType": "text/plain",
+            "base64": "b2k="
+          }
+        ]
+      },
+      "creds": {
+        "token": "at-17",
+        "settings": {
+          "cloud_id": "cloud1",
+          "site_url": "https://acme.atlassian.net/",
+          "project": "BIG"
+        }
+      },
+      "http": [
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 1,
+            "result": {}
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "status": 202
+        },
+        {
+          "method": "POST",
+          "url": "/v2/mcp",
+          "body": {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "result": {
+              "content": [
+                {
+                  "type": "text",
+                  "text": "{\"id\": \"10001\", \"key\": \"BIG-1\", \"fields\": {\"summary\": \"Corrigir o login\", \"status\": {\"name\": \"A fazer\", \"statusCategory\": {\"key\": \"new\"}}, \"issuetype\": {\"name\": \"Hist\\u00f3ria\"}, \"project\": {\"key\": \"BIG\"}, \"description\": \"Passos para reproduzir\", \"labels\": [\"web\"], \"assignee\": {\"accountId\": \"a1\", \"displayName\": \"Ana\"}, \"subtasks\": [], \"attachment\": [], \"comment\": {\"comments\": []}, \"updated\": \"2024-01-02T03:04:05.000+0000\"}}"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "method": "POST",
+          "url": "/rest/api/3/issue/BIG-1/attachments",
+          "body": [
+            {
+              "id": "a1",
+              "filename": "log.txt"
+            }
+          ]
+        }
+      ],
+      "expect": {
+        "ok": {
+          "attached": [
+            "log.txt"
+          ],
+          "skipped": []
+        }
+      },
+      "sent": [
+        "POST https://api.atlassian.com/ex/jira/cloud1/rest/api/3/issue/BIG-1/attachments"
+      ]
+    }
+  ]
+}

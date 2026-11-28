@@ -69,11 +69,13 @@ const ACTIONS: Record<string, (connection: any, args: Record<string, any>, key: 
   "pipelines.review_deployment": runs.reviewDeployment,
 };
 
+const hostOf = (url: string): string => (/^[a-z][a-z0-9+.-]*:\/\/(?:[^@/?#]*@)?([^/:?#]+)/i.exec(url)?.[1] ?? "").toLowerCase();
+
 function gitCredentials(creds: Creds, args: Record<string, any>, ctx) {
-  const api = new URL(String(ctx.config.api ?? "https://api.github.com"));
-  const wanted = new URL(String(args.url ?? ""));
-  const host = api.hostname.replace(/^api\./, "");
-  if (wanted.hostname !== host && wanted.hostname !== api.hostname) return { username: "", password: "" };
+  const api = hostOf(String(ctx.config.api ?? "https://api.github.com"));
+  const wanted = hostOf(String(args.url ?? ""));
+  const host = api.replace(/^api\./, "");
+  if (wanted === "" || (wanted !== host && wanted !== api)) return { username: "", password: "" };
   return { username: "x-access-token", password: creds.token };
 }
 

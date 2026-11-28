@@ -16,7 +16,7 @@ tracing.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 reqwest.workspace = true
-tokio = { workspace = true, features = ["sync", "time"] }
+tokio = { workspace = true, features = ["sync", "time", "rt"] }
 async-trait = "0.1"
 url.workspace = true
 jiff = { workspace = true, features = ["serde"] }

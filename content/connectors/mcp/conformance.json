@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "at", "settings": { "url": "https://tools.test/mcp", "label": "Tracker" } },
+  "cases": [
+    {
+      "name": "the account is the named server with its tool count",
+      "action": "accounts",
+      "creds": { "token": "at-accounts", "settings": { "url": "https://tools.test/mcp", "label": "Tracker" } },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} }, "headers": { "mcp-session-id": "s1" } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "tools": [{ "name": "search" }, { "name": "create_issue" }] } } }
+      ],
+      "expect": { "ok": [{ "id": "https://tools.test/mcp", "label": "Tracker", "settings": { "url": "https://tools.test/mcp", "shown": { "tools": 2, "host": "tools.test" } } }] }
+    },
+    {
+      "name": "lists the server tools",
+      "action": "mcp.tools",
+      "creds": { "token": "at-tools", "settings": { "url": "https://tools.test/mcp" } },
+      "http": [
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} }, "headers": { "mcp-session-id": "s2" } },
+        { "method": "POST", "url": "/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "tools": [{ "name": "search" }] } } }
+      ],
+      "expect": { "ok": [{ "name": "search" }] }
+    },
+    {
+      "name": "a connection without its server address is refused",
+      "action": "mcp.tools",
+      "creds": { "token": "at", "settings": {} },
+      "expect": { "error": "permanent" }
+    }
+  ]
+}

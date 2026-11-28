@@ -1,0 +1,118 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "at", "settings": {} },
+  "cases": [
+    {
+      "name": "lists the inbox",
+      "action": "email.list_messages",
+      "args": { "limit": 5 },
+      "http": [{ "method": "GET", "url": "/me/messages?", "body": { "value": [{ "id": "m1", "subject": "Hi", "from": { "emailAddress": { "address": "a@b.com" } }, "receivedDateTime": "2026-01-01T00:00:00Z", "isRead": false }] } }],
+      "expect": { "ok": [{ "ref": "m1", "subject": "Hi", "from": "a@b.com", "unread": true }] },
+      "sent": ["GET https://graph.microsoft.com/v1.0/me/messages?$orderby=receivedDateTime desc&$select="]
+    },
+    {
+      "name": "reads one message",
+      "action": "email.message",
+      "args": { "message": "m1" },
+      "http": [{ "method": "GET", "url": "/me/messages/m1?", "body": { "id": "m1", "subject": "Hi", "body": { "content": "Hello there" } } }],
+      "expect": { "ok": { "ref": "m1", "body": "Hello there" } }
+    },
+    {
+      "name": "a message without its id is refused",
+      "action": "email.message",
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "sends an email",
+      "action": "email.send",
+      "args": { "to": ["c@d.com"], "subject": "Report", "body": "Done." },
+      "http": [{ "method": "POST", "url": "/me/sendMail", "status": 202, "body": "" }],
+      "expect": { "ok": { "sent": true } },
+      "sent": ["POST https://graph.microsoft.com/v1.0/me/sendMail"]
+    },
+    {
+      "name": "replies to all",
+      "action": "email.reply",
+      "args": { "message": "m1", "body": "Thanks", "all": true },
+      "http": [{ "method": "POST", "url": "/me/messages/m1/replyAll", "status": 202, "body": "" }],
+      "expect": { "ok": { "sent": true } }
+    },
+    {
+      "name": "lists events in a window",
+      "action": "email.list_events",
+      "args": { "from": "2026-01-01T00:00:00Z", "to": "2026-01-08T00:00:00Z" },
+      "http": [{ "method": "GET", "url": "/me/calendarView?", "body": { "value": [{ "id": "e1", "subject": "Standup", "start": { "dateTime": "2026-01-02T09:00:00" }, "end": { "dateTime": "2026-01-02T09:15:00" }, "organizer": { "emailAddress": { "address": "a@b.com" } } }] } }],
+      "expect": { "ok": [{ "ref": "e1", "subject": "Standup", "organizer": "a@b.com" }] }
+    },
+    {
+      "name": "creates an online event",
+      "action": "email.create_event",
+      "args": { "subject": "Review", "start": "2026-01-05T14:00:00", "end": "2026-01-05T15:00:00", "attendees": ["c@d.com"], "online": true },
+      "http": [{ "method": "POST", "url": "/me/events", "status": 201, "body": { "id": "e2", "webLink": "https://outlook/e2", "onlineMeeting": { "joinUrl": "https://teams/j" } } }],
+      "expect": { "ok": { "ref": "e2", "online": "https://teams/j", "created": true } }
+    },
+    {
+      "name": "lists a folder",
+      "action": "files.list",
+      "args": { "folder": "Docs" },
+      "http": [{ "method": "GET", "url": "/me/drive/root:/Docs:/children", "body": { "value": [{ "id": "f1", "name": "plan.docx", "size": 10, "file": { "mimeType": "application/msword" } }, { "id": "d1", "name": "old", "folder": {} }] } }],
+      "expect": { "ok": [{ "ref": "f1", "kind": "file" }, { "ref": "d1", "kind": "folder" }] }
+    },
+    {
+      "name": "searches the drive",
+      "action": "files.search",
+      "args": { "query": "plan" },
+      "http": [{ "method": "GET", "url": "/me/drive/root/search(q='plan')", "body": { "value": [{ "id": "f1", "name": "plan.docx" }] } }],
+      "expect": { "ok": [{ "ref": "f1", "name": "plan.docx" }] }
+    },
+    {
+      "name": "downloads a file",
+      "action": "files.download",
+      "args": { "file": "f1" },
+      "http": [
+        { "method": "GET", "url": "/me/drive/items/f1?", "body": { "name": "notes.txt", "file": { "mimeType": "text/plain" } } },
+        { "method": "GET", "url": "/me/drive/items/f1/content", "body": "hello", "headers": { "content-type": "text/plain" } }
+      ],
+      "expect": { "ok": { "name": "notes.txt", "mime": "text/plain", "truncated": false } }
+    },
+    {
+      "name": "lists sites",
+      "action": "files.sites",
+      "args": { "query": "team" },
+      "http": [{ "method": "GET", "url": "/sites?search=team", "body": { "value": [{ "id": "s1", "displayName": "Team", "webUrl": "https://x.sharepoint.com/sites/team", "siteCollection": { "hostname": "x.sharepoint.com" } }] } }],
+      "expect": { "ok": [{ "ref": "s1", "name": "Team", "host": "x.sharepoint.com" }] }
+    },
+    {
+      "name": "lists chats",
+      "action": "messaging.list_chats",
+      "http": [{ "method": "GET", "url": "/me/chats?", "body": { "value": [{ "id": "c1", "chatType": "group", "topic": "Launch", "members": [{ "displayName": "Ana" }] }] } }],
+      "expect": { "ok": [{ "ref": "c1", "kind": "group", "members": ["Ana"] }] }
+    },
+    {
+      "name": "lists a chat's messages",
+      "action": "messaging.list_messages",
+      "args": { "chat": "c1", "limit": 2 },
+      "http": [{ "method": "GET", "url": "/me/chats/c1/messages?$top=2", "body": { "value": [{ "id": "x1", "from": { "user": { "displayName": "Ana" } }, "body": { "content": "oi" } }] } }],
+      "expect": { "ok": [{ "ref": "x1", "from": "Ana", "text": "oi" }] }
+    },
+    {
+      "name": "sends a chat message",
+      "action": "messaging.send_message",
+      "args": { "chat": "c1", "text": "shipped" },
+      "http": [{ "method": "POST", "url": "/me/chats/c1/messages", "status": 201, "body": { "id": "x2" } }],
+      "expect": { "ok": { "sent": true, "ref": "x2" } }
+    },
+    {
+      "name": "the account is the signed-in person",
+      "action": "accounts",
+      "http": [{ "method": "GET", "url": "/me?", "body": { "id": "u1", "displayName": "Ana", "mail": "ana@b.com" } }],
+      "expect": { "ok": [{ "id": "u1", "label": "Ana", "settings": { "shown": { "account": "ana@b.com" } } }] }
+    },
+    {
+      "name": "an account without an id asks to sign in again",
+      "action": "accounts",
+      "http": [{ "method": "GET", "url": "/me?", "body": {} }],
+      "expect": { "error": "auth" }
+    }
+  ]
+}

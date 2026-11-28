@@ -1,0 +1,55 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "{\"token\":\"figd_1\"}", "settings": {} },
+  "cases": [
+    {
+      "name": "o link de um frame traz os textos, a estrutura e a imagem",
+      "action": "design.frame",
+      "args": { "url": "https://www.figma.com/design/AbC123/App?node-id=12-34&t=x" },
+      "http": [
+        { "method": "GET", "url": "/v1/files/AbC123/nodes", "body": { "name": "App", "nodes": { "12:34": { "document": { "id": "12:34", "name": "Cadastro", "type": "FRAME", "children": [
+          { "name": "Título", "type": "TEXT", "characters": "Novo cliente" },
+          { "name": "Ajuda", "type": "INSTANCE", "children": [{ "name": "tooltip", "type": "TEXT", "characters": "Informe o CPF sem pontos" }] },
+          { "name": "oculto", "type": "TEXT", "characters": "rascunho", "visible": false } ] } } } } },
+        { "method": "GET", "url": "/v1/images/AbC123", "body": { "images": { "12:34": "https://img.test/12-34.png" } } },
+        { "method": "GET", "url": "/12-34.png", "body": "png" }
+      ],
+      "expect": { "ok": {
+        "ref": "AbC123:12:34",
+        "name": "Cadastro",
+        "file": "App",
+        "texts": ["Novo cliente", "Informe o CPF sem pontos"],
+        "image": "https://img.test/12-34.png",
+        "picture": { "media_type": "image/png", "data": "cG5n" }
+      } },
+      "sent": ["ids=12%3A34"]
+    },
+    {
+      "name": "um link de branch lê o arquivo do branch",
+      "action": "design.frame",
+      "args": { "url": "https://www.figma.com/design/AbC123/branch/Br4nch/App" },
+      "http": [{ "method": "GET", "url": "/v1/files/Br4nch", "body": { "name": "App", "document": { "name": "Document", "type": "DOCUMENT", "children": [{ "name": "Tela", "type": "CANVAS" }] } } }],
+      "expect": { "ok": { "ref": "Br4nch" } },
+      "sent": ["depth=3"]
+    },
+    {
+      "name": "um link que não é do Figma é recusado sem pedido",
+      "action": "design.frame",
+      "args": { "url": "https://example.test/acme/web/pull/1" },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "um token recusado é erro de autenticação",
+      "action": "accounts",
+      "creds": { "token": "bad" },
+      "http": [{ "method": "GET", "url": "/v1/me", "status": 403, "body": { "status": 403, "err": "Invalid token" } }],
+      "expect": { "error": "auth" }
+    },
+    {
+      "name": "a conta é o handle",
+      "action": "accounts",
+      "http": [{ "method": "GET", "url": "/v1/me", "body": { "id": "7", "handle": "Ana", "email": "ana@acme.test" } }],
+      "expect": { "ok": [{ "label": "Ana" }] }
+    }
+  ]
+}

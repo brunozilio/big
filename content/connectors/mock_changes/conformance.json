@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "Squad XPTO", "settings": {} },
+  "cases": [
+    {
+      "name": "cria uma mudança",
+      "action": "changes.create",
+      "args": {
+        "title": "Pacote 131",
+        "environment": "HST",
+        "start": "2026-11-26T22:00:00-03:00",
+        "end": "2026-11-26T23:30:00-03:00",
+        "settings": { "template": "tpl-hst-deploy", "company": "acme" }
+      },
+      "expect": { "ok": { "title": "Pacote 131", "environment": "HST", "requester": "Squad XPTO", "status": "awaiting_approval", "created": true } }
+    },
+    {
+      "name": "uma mudança sem horário é recusada",
+      "action": "changes.create",
+      "args": { "title": "x", "environment": "HST" },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "lê uma mudança antiga",
+      "action": "changes.get",
+      "args": { "change": "mock-100-1" },
+      "expect": { "ok": { "ref": "mock-100-1", "key": "GMUD-4831", "status": "done" } }
+    },
+    {
+      "name": "uma referência desconhecida é recusada",
+      "action": "changes.get",
+      "args": { "change": "GMUD-1" },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "altera o título",
+      "action": "changes.update",
+      "args": { "change": "mock-100-2", "title": "Pacote 132" },
+      "expect": { "ok": { "ref": "mock-100-2", "title": "Pacote 132", "revision": 1 } }
+    },
+    {
+      "name": "cancela",
+      "action": "changes.cancel",
+      "args": { "change": "mock-100-3" },
+      "expect": { "ok": { "ref": "mock-100-3", "status": "cancelled" } }
+    },
+    {
+      "name": "lista os donos",
+      "action": "changes.options",
+      "args": { "field": "owner", "query": "dba" },
+      "expect": { "ok": [{ "value": "DBA N1", "label": "DBA N1" }] }
+    },
+    {
+      "name": "a conta é o nome dado",
+      "action": "accounts",
+      "expect": { "ok": [{ "id": "mock-changes", "label": "Squad XPTO" }] }
+    }
+  ]
+}

@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "creds": {
+    "token": "{\"apiId\":\"vera01ki-abc123\",\"apiKey\":\"vera01ks-00112233445566778899aabbccddeeff\"}",
+    "settings": { "region": "com", "project": "1f2e3d4c-0000-4000-8000-0123456789ab" }
+  },
+  "cases": [
+    {
+      "name": "the account lists the applications across pages",
+      "action": "accounts",
+      "http": [
+        { "method": "GET", "url": "/appsec/v1/applications?page=0&size=100", "body": { "_embedded": { "applications": [{ "guid": "1f2e3d4c-0000-4000-8000-0123456789ab", "profile": { "name": "Loja" } }] }, "page": { "total_pages": 2 } } },
+        { "method": "GET", "url": "/appsec/v1/applications?page=1&size=100", "body": { "_embedded": { "applications": [{ "guid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee", "profile": { "name": "Checkout" } }] }, "page": { "total_pages": 2 } } }
+      ],
+      "expect": { "ok": [{ "id": "veracode-com", "settings": { "region": "com", "shown": { "projects": ["Loja", "Checkout"] } } }] },
+      "sent": ["GET https://api.veracode.com/appsec/v1/applications?page=1&size=100"]
+    },
+    {
+      "name": "projects are searched by name",
+      "action": "security.projects",
+      "args": { "query": "loja" },
+      "http": [
+        { "method": "GET", "url": "/appsec/v1/applications?page=0&size=100&name=loja", "body": { "_embedded": { "applications": [{ "guid": "1f2e3d4c-0000-4000-8000-0123456789ab", "profile": { "name": "Loja" } }] }, "page": { "total_pages": 1 } } }
+      ],
+      "expect": { "ok": [{ "id": "1f2e3d4c-0000-4000-8000-0123456789ab", "name": "Loja" }] }
+    },
+    {
+      "name": "options list the projects",
+      "action": "security.options",
+      "args": {},
+      "http": [
+        { "method": "GET", "url": "/appsec/v1/applications?page=0&size=100", "body": { "_embedded": { "applications": [{ "guid": "1f2e3d4c-0000-4000-8000-0123456789ab", "profile": { "name": "Loja" } }] }, "page": { "total_pages": 1 } } }
+      ],
+      "expect": { "ok": [{ "value": "1f2e3d4c-0000-4000-8000-0123456789ab" }] }
+    },
+    {
+      "name": "static findings are read and normalized",
+      "action": "security.findings",
+      "args": { "kinds": ["static"] },
+      "http": [
+        { "method": "GET", "url": "/appsec/v2/applications/1f2e3d4c-0000-4000-8000-0123456789ab/findings?size=500&page=0&scan_type=STATIC", "body": { "_embedded": { "findings": [
+          { "issue_id": 7, "scan_type": "STATIC", "violates_policy": true, "description": "<span>SQL &amp; injection</span>",
+            "finding_status": { "status": "OPEN", "resolution_status": "UNRESOLVED", "new": true, "first_found_date": "2024-01-02T03:04:05Z" },
+            "finding_details": { "severity": 4, "cwe": { "id": 89, "name": "SQL Injection" }, "file_path": "src/db.ts", "file_line_number": 12, "module": "app.zip" } }
+        ] }, "page": { "total_pages": 1 } } }
+      ],
+      "expect": { "ok": [{ "id": "7", "title": "SQL Injection", "severity": 4, "kind": "static", "status": "open", "policy": true, "file": "src/db.ts", "line": 12, "description": "SQL & injection" }] }
+    },
+    {
+      "name": "an unknown kind of finding is refused",
+      "action": "security.findings",
+      "args": { "kinds": ["telepathy"] },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "the last scan is read",
+      "action": "security.status",
+      "args": { "since": "2024-01-01T00:00:00Z" },
+      "http": [
+        { "method": "GET", "url": "/appsec/v1/applications/1f2e3d4c-0000-4000-8000-0123456789ab", "body": { "guid": "1f2e3d4c-0000-4000-8000-0123456789ab", "last_completed_scan_date": "2024-02-01T00:00:00Z", "scans": [{ "status": "PUBLISHED", "modified_date": "2024-02-01T00:00:00Z" }] } }
+      ],
+      "expect": { "ok": { "status": "done", "scannedAt": "2024-02-01T00:00:00Z", "running": false } }
+    },
+    {
+      "name": "a token that is not the key pair asks to reconnect",
+      "action": "security.status",
+      "creds": { "token": "not json", "settings": { "region": "com" } },
+      "expect": { "error": "auth" }
+    }
+  ]
+}

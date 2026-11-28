@@ -1,0 +1,23 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "{\"token\":\"at\",\"tenant_url\":\"https://tenant.example\",\"account\":\"816885297016\"}", "settings": {} },
+  "cases": [
+    {
+      "name": "the account is read from the held sign-in",
+      "action": "accounts",
+      "expect": { "ok": [{ "id": "quick-816885297016", "label": "Amazon Quick · 816885297016" }] }
+    },
+    {
+      "name": "a token that is not a sign-in asks to sign in again",
+      "action": "accounts",
+      "creds": { "token": "not-json" },
+      "expect": { "error": "auth" }
+    },
+    {
+      "name": "an empty question is refused before opening the conversation",
+      "action": "assistant.ask",
+      "args": { "question": "  " },
+      "expect": { "error": "permanent" }
+    }
+  ]
+}

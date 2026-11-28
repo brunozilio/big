@@ -2,5 +2,8 @@
   "schema_version": 1,
   "imports": [
     { "from": "packages/config.ts", "to": "packages/dev/release.ts" }
+  ],
+  "ids": [
+    { "from": "route:/mcp/browser" }
   ]
 }

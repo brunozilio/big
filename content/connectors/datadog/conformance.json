@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "at", "settings": {} },
+  "cases": [
+    {
+      "name": "the account points at the site's MCP server and counts its tools",
+      "action": "accounts",
+      "creds": { "token": "at-accounts", "settings": { "site": "app.datadoghq.eu" } },
+      "http": [
+        { "method": "POST", "url": "https://mcp.datadoghq.eu/v1/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} }, "headers": { "mcp-session-id": "s1" } },
+        { "method": "POST", "url": "https://mcp.datadoghq.eu/v1/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "https://mcp.datadoghq.eu/v1/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "tools": [{ "name": "search_datadog_logs" }, { "name": "get_datadog_trace" }] } } }
+      ],
+      "expect": { "ok": [{ "id": "datadoghq.eu", "label": "Datadog EU1", "settings": { "url": "https://mcp.datadoghq.eu/v1/mcp", "site": "datadoghq.eu", "shown": { "tools": 2, "host": "datadoghq.eu" } } }] }
+    },
+    {
+      "name": "an unknown site is refused without a request",
+      "action": "accounts",
+      "creds": { "token": "at", "settings": { "site": "ddog-gov.com" } },
+      "expect": { "error": "permanent" }
+    },
+    {
+      "name": "lists the tools of the stored server",
+      "action": "mcp.tools",
+      "creds": { "token": "at-tools", "settings": { "url": "https://mcp.datadoghq.com/v1/mcp", "site": "datadoghq.com" } },
+      "http": [
+        { "method": "POST", "url": "https://mcp.datadoghq.com/v1/mcp", "body": { "jsonrpc": "2.0", "id": 1, "result": {} }, "headers": { "mcp-session-id": "s2" } },
+        { "method": "POST", "url": "https://mcp.datadoghq.com/v1/mcp", "status": 202, "body": "" },
+        { "method": "POST", "url": "https://mcp.datadoghq.com/v1/mcp", "body": { "jsonrpc": "2.0", "id": 2, "result": { "tools": [{ "name": "search_datadog_logs" }] } } }
+      ],
+      "expect": { "ok": [{ "name": "search_datadog_logs" }] }
+    }
+  ]
+}
