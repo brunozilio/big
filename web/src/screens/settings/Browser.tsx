@@ -220,17 +220,12 @@ function Devices({ devices, onChange }: { devices: PairedDevice[]; onChange: () 
 function CloudView({ status, onChange }: { status: BrowserStatus; onChange: () => void }) {
   const installed = extensionBuild()
   const pkg = status.package ?? '/api/browser/extension.zip'
-  const connected = status.browsers.length > 0
   return (
     <section className="space-y-3">
-      <Card className="flex items-center gap-2.5 px-4 py-3.5">
-        <p className="text-base font-medium text-fg">Chrome</p>
-        <StatusBadge connected={connected} />
-      </Card>
       {!installed && <CloudSetup pkg={pkg} />}
       {installed && status.build && installed !== status.build && <Outdated pkg={pkg} />}
-      {installed && <ConnectThis onDone={onChange} />}
       <Devices devices={status.devices ?? []} onChange={onChange} />
+      {installed && <ConnectThis onDone={onChange} />}
     </section>
   )
 }
