@@ -19,7 +19,8 @@ RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git ripgrep bash curl \
-    && rm -rf /var/lib/apt/lists/* && useradd --create-home --uid 10001 app && mkdir -p /data && chown app /data
+    && rm -rf /var/lib/apt/lists/* && useradd --create-home --uid 10001 app && mkdir -p /data && chown app /data \
+    && curl -fsSLo /usr/local/share/rds-ca.pem https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 COPY --from=build /app /usr/local/bin/app
 USER app
 ENV HOME=/data XDG_CONFIG_HOME=/data

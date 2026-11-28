@@ -4,10 +4,10 @@ use std::time::Duration;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("{place}: {source}")]
-    Sqlite {
+    Database {
         place: String,
         #[source]
-        source: rusqlite::Error,
+        source: database::Error,
     },
     #[error("{place} is being written by another process; gave up after {} s", waited.as_secs_f32())]
     Busy { place: String, waited: Duration },
@@ -24,17 +24,12 @@ pub enum Error {
 }
 
 impl Error {
-    pub(super) fn of(place: &str, waited: Duration, source: rusqlite::Error) -> Self {
-        if is_busy(&source) {
+    pub(super) fn of(place: &str, waited: Duration, source: database::Error) -> Self {
+        if source.busy() {
             return Self::Busy { place: place.to_owned(), waited };
         }
-        Self::Sqlite { place: place.to_owned(), source }
+        Self::Database { place: place.to_owned(), source }
     }
-}
-
-pub(super) fn is_busy(error: &rusqlite::Error) -> bool {
-    use rusqlite::ErrorCode::{DatabaseBusy, DatabaseLocked};
-    matches!(error, rusqlite::Error::SqliteFailure(failure, _) if matches!(failure.code, DatabaseBusy | DatabaseLocked))
 }
 
 impl From<Error> for io::Error {
@@ -42,7 +37,7 @@ impl From<Error> for io::Error {
         let kind = match &error {
             Error::Io { source, .. } => source.kind(),
             Error::Busy { .. } => io::ErrorKind::TimedOut,
-            Error::Sqlite { .. } | Error::Newer { .. } => io::ErrorKind::InvalidData,
+            Error::Database { .. } | Error::Newer { .. } => io::ErrorKind::InvalidData,
         };
         io::Error::new(kind, error.to_string())
     }

@@ -3,22 +3,24 @@ mod error;
 pub(crate) mod imported;
 mod schema;
 #[cfg(test)]
+pub(crate) mod testing;
+#[cfg(test)]
 mod tests;
 
 use std::fs::OpenOptions;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use platform::sync::Locked;
-use rusqlite::{Connection, Transaction, TransactionBehavior};
+use database::{Conn, Database, Dialect, args};
 
 pub use error::Error;
-use schema::Refused;
 
 pub const FILE: &str = "app.db";
 pub const WAIT: Duration = Duration::from_secs(10);
 const RETRY_EVERY: Duration = Duration::from_millis(10);
+const VERSIONS: &str = "schema_version";
+const MIGRATING: i64 = 0x6170_705f_6462;
 
 #[derive(Clone)]
 pub struct Db {
@@ -26,7 +28,7 @@ pub struct Db {
 }
 
 struct Kept {
-    connection: Mutex<Connection>,
+    database: Database,
     place: String,
     wait: Duration,
 }
@@ -44,72 +46,103 @@ impl Db {
 
     pub fn in_memory() -> Result<Self, Error> {
         let place = "the database in memory".to_owned();
-        let connection =
-            Connection::open_in_memory().map_err(|source| Error::Sqlite { place: place.clone(), source })?;
-        Self::ready(Kept { connection: Mutex::new(connection), place, wait: WAIT }, schema::MIGRATIONS)
+        let database = Database::sqlite_in_memory().map_err(|source| Error::of(&place, WAIT, source))?;
+        Self::ready(Kept { database, place, wait: WAIT }, schema::MIGRATIONS)
+    }
+
+    pub fn with_database(database: Database) -> Result<Self, Error> {
+        Self::given(database, schema::MIGRATIONS)
+    }
+
+    pub(crate) fn given(database: Database, migrations: &[&str]) -> Result<Self, Error> {
+        let place = match database.dialect() {
+            Dialect::Sqlite => "the database",
+            Dialect::Postgres => "the PostgreSQL database",
+        };
+        Self::ready(Kept { database, place: place.to_owned(), wait: WAIT }, migrations)
     }
 
     pub(crate) fn opened(path: &Path, wait: Duration, migrations: &[&str]) -> Result<Self, Error> {
         let place = path.display().to_string();
         made_private(path).map_err(|source| Error::Io { place: place.clone(), source })?;
-        let connection = Connection::open(path).map_err(|source| Error::Sqlite { place: place.clone(), source })?;
-        Self::ready(Kept { connection: Mutex::new(connection), place, wait }, migrations)
+        let database = settled(wait, || Database::sqlite(path)).map_err(|source| Error::of(&place, wait, source))?;
+        let timed = database.sqlite_connection(|connection| connection.busy_timeout(wait));
+        if let Some(Err(source)) = timed {
+            return Err(Error::of(&place, wait, source.into()));
+        }
+        Self::ready(Kept { database, place, wait }, migrations)
     }
 
     fn ready(kept: Kept, migrations: &[&str]) -> Result<Self, Error> {
         let db = Self { kept: Arc::new(kept) };
-        db.configured().map_err(|source| db.error(source))?;
         db.migrated(migrations)?;
         Ok(db)
     }
 
-    fn configured(&self) -> rusqlite::Result<()> {
-        let connection = self.kept.connection.locked();
-        connection.busy_timeout(self.kept.wait)?;
-        settled(self.kept.wait, || connection.pragma_update(None, "journal_mode", "WAL"))?;
-        connection.pragma_update(None, "synchronous", "NORMAL")?;
-        connection.pragma_update(None, "foreign_keys", "ON")
-    }
-
     fn migrated(&self, migrations: &[&str]) -> Result<(), Error> {
-        let current = {
-            let connection = self.kept.connection.locked();
-            schema::is_current(&connection, migrations)
+        let known = i64::try_from(migrations.len()).unwrap_or(i64::MAX);
+        let count = format!("SELECT COUNT(*) FROM {VERSIONS}");
+        let found = match self.read(|conn| conn.one::<i64>(&count, &[])) {
+            Ok(found) if found.unwrap_or(0) >= known => found.unwrap_or(0),
+            _ => self.write(|conn| migrate(conn, migrations))?,
         };
-        let migrated = match current {
-            Ok(true) => Ok(()),
-            Ok(false) => self.within(|transaction| schema::migrate(transaction, migrations)),
-            Err(refused) => Err(refused),
-        };
-        migrated.map_err(|refused| match refused {
-            Refused::Sqlite(source) => self.error(source),
-            Refused::Newer { found, known } => Error::Newer { place: self.kept.place.clone(), found, known },
-        })
+        if found > known {
+            return Err(Error::Newer { place: self.kept.place.clone(), found, known });
+        }
+        Ok(())
     }
 
-    pub(crate) fn read<R>(&self, query: impl FnOnce(&Connection) -> rusqlite::Result<R>) -> Result<R, Error> {
-        let connection = self.kept.connection.locked();
-        let snapshot = connection.unchecked_transaction().map_err(|source| self.error(source))?;
-        query(&snapshot).map_err(|source| self.error(source))
-    }
-
-    pub(crate) fn write<R>(&self, change: impl FnOnce(&Transaction<'_>) -> rusqlite::Result<R>) -> Result<R, Error> {
-        self.within(change).map_err(|source| self.error(source))
-    }
-
-    fn within<R, E: From<rusqlite::Error>>(
+    pub(crate) fn read<R: Send>(
         &self,
-        change: impl FnOnce(&Transaction<'_>) -> Result<R, E>,
-    ) -> Result<R, E> {
-        let mut connection = self.kept.connection.locked();
-        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let answer = change(&transaction)?;
-        transaction.commit()?;
-        Ok(answer)
+        query: impl FnOnce(&mut dyn Conn) -> database::Result<R> + Send,
+    ) -> Result<R, Error> {
+        let snapshot = self.kept.database.read(|conn| {
+            let begin = match conn.dialect() {
+                Dialect::Sqlite => "BEGIN",
+                Dialect::Postgres => "BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY",
+            };
+            conn.batch(begin)?;
+            let answer = query(conn);
+            let ended = conn.batch(if answer.is_ok() { "COMMIT" } else { "ROLLBACK" });
+            let answer = answer?;
+            ended.map(|()| answer)
+        });
+        snapshot.map_err(|source| self.error(source))
     }
 
-    fn error(&self, source: rusqlite::Error) -> Error {
+    pub(crate) fn write<R: Send>(
+        &self,
+        change: impl FnOnce(&mut dyn Conn) -> database::Result<R> + Send,
+    ) -> Result<R, Error> {
+        self.kept.database.write(change).map_err(|source| self.error(source))
+    }
+
+    fn error(&self, source: database::Error) -> Error {
         Error::of(&self.kept.place, self.kept.wait, source)
+    }
+}
+
+fn migrate(conn: &mut dyn Conn, migrations: &[&str]) -> database::Result<i64> {
+    if conn.dialect() == Dialect::Postgres {
+        conn.batch(&format!("SELECT pg_advisory_xact_lock({MIGRATING})"))?;
+    }
+    conn.batch(&format!("CREATE TABLE IF NOT EXISTS {VERSIONS} (version BIGINT NOT NULL)"))?;
+    let found = conn.one::<i64>(&format!("SELECT COUNT(*) FROM {VERSIONS}"), &[])?.unwrap_or(0);
+    let done = usize::try_from(found).unwrap_or(usize::MAX);
+    for (step, migration) in migrations.iter().enumerate().skip(done) {
+        match conn.dialect() {
+            Dialect::Sqlite => conn.batch(migration)?,
+            Dialect::Postgres => conn.batch(&database::schema_for_postgres(migration))?,
+        }
+        conn.execute(&format!("INSERT INTO {VERSIONS} (version) VALUES (?1)"), args![step + 1])?;
+    }
+    Ok(found)
+}
+
+pub(crate) fn alone(conn: &mut dyn Conn, table: &str) -> database::Result<()> {
+    match conn.dialect() {
+        Dialect::Sqlite => Ok(()),
+        Dialect::Postgres => conn.batch(&format!("LOCK TABLE {table} IN EXCLUSIVE MODE")),
     }
 }
 
@@ -123,11 +156,11 @@ fn made_private(path: &Path) -> std::io::Result<()> {
     platform::private_file::open(OpenOptions::new().write(true).create(true).truncate(false), path).map(drop)
 }
 
-fn settled<T>(wait: Duration, mut attempt: impl FnMut() -> rusqlite::Result<T>) -> rusqlite::Result<T> {
+fn settled<T>(wait: Duration, mut attempt: impl FnMut() -> database::Result<T>) -> database::Result<T> {
     let give_up = Instant::now() + wait;
     loop {
         match attempt() {
-            Err(error) if error::is_busy(&error) && Instant::now() < give_up => std::thread::sleep(RETRY_EVERY),
+            Err(error) if error.busy() && Instant::now() < give_up => std::thread::sleep(RETRY_EVERY),
             settled => return settled,
         }
     }

@@ -231,6 +231,11 @@ scheme = "vscode"
 [attachments]
 limit_mb = "10"
 
+[database]
+url_file = ""
+ca_file = ""
+password_secret_file = ""
+
 [browser]
 call_seconds = "150"
 switch_seconds = "120"

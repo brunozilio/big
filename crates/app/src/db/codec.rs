@@ -1,25 +1,24 @@
-use rusqlite::types::Type;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 
-pub(crate) fn name<T: Serialize>(value: &T) -> rusqlite::Result<String> {
+pub(crate) fn name<T: Serialize>(value: &T) -> database::Result<String> {
     match serde_json::to_value(value) {
         Ok(serde_json::Value::String(name)) => Ok(name),
-        Ok(other) => Err(unwritable(format!("{other} is not a name"))),
-        Err(error) => Err(unwritable(error)),
+        Ok(other) => Err(database::Error::decode(format!("{other} is not a name"))),
+        Err(error) => Err(database::Error::decode(error.to_string())),
     }
 }
 
-pub(crate) fn named<T: DeserializeOwned>(column: usize, name: String) -> rusqlite::Result<T> {
-    serde_json::from_value(serde_json::Value::String(name)).map_err(|error| unreadable(column, error))
+pub(crate) fn named<T: DeserializeOwned>(column: usize, name: String) -> database::Result<T> {
+    serde_json::from_value(serde_json::Value::String(name)).map_err(|error| unreadable(column, &error))
 }
 
-pub(crate) fn json<T: Serialize>(value: &T) -> rusqlite::Result<String> {
-    serde_json::to_string(value).map_err(unwritable)
+pub(crate) fn json<T: Serialize>(value: &T) -> database::Result<String> {
+    serde_json::to_string(value).map_err(|error| database::Error::decode(error.to_string()))
 }
 
-pub(crate) fn from_json<T: DeserializeOwned>(column: usize, text: &str) -> rusqlite::Result<T> {
-    serde_json::from_str(text).map_err(|error| unreadable(column, error))
+pub(crate) fn from_json<T: DeserializeOwned>(column: usize, text: &str) -> database::Result<T> {
+    serde_json::from_str(text).map_err(|error| unreadable(column, &error))
 }
 
 pub(crate) fn stored(count: u64) -> i64 {
@@ -34,12 +33,8 @@ pub(crate) fn small(stored: i64) -> u32 {
     u32::try_from(stored.max(0)).unwrap_or(u32::MAX)
 }
 
-fn unwritable(error: impl Into<Box<dyn std::error::Error + Send + Sync>>) -> rusqlite::Error {
-    rusqlite::Error::ToSqlConversionFailure(error.into())
-}
-
-fn unreadable(column: usize, error: serde_json::Error) -> rusqlite::Error {
-    rusqlite::Error::FromSqlConversionFailure(column, Type::Text, Box::new(error))
+fn unreadable(column: usize, error: &serde_json::Error) -> database::Error {
+    database::Error::decode(format!("column {column}: {error}"))
 }
 
 #[cfg(test)]

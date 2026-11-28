@@ -1,8 +1,9 @@
-use rusqlite::{OptionalExtension, Row, params};
+use database::{Row, args};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::{Error, Result, Store};
+use crate::schema::next_seq;
+use crate::{Result, Store};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ConnectionRecord {
@@ -20,41 +21,45 @@ type Raw = (String, String, String, Option<String>, String, String);
 
 impl Store {
     pub fn save_connection(&self, record: &ConnectionRecord) -> Result<()> {
-        self.locked().execute(
-            "INSERT INTO connections (id, provider, label, account, capabilities, settings)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT (id) DO UPDATE SET provider = excluded.provider, label = excluded.label,
-             account = excluded.account, capabilities = excluded.capabilities, settings = excluded.settings",
-            params![
-                record.id,
-                record.provider,
-                record.label,
-                record.account,
-                serde_json::to_string(&record.capabilities)?,
-                serde_json::to_string(&record.settings)?,
-            ],
-        )?;
-        Ok(())
+        let capabilities = serde_json::to_string(&record.capabilities)?;
+        let settings = serde_json::to_string(&record.settings)?;
+        self.write(|conn| {
+            conn.execute(
+                &format!(
+                    "INSERT INTO connections (id, provider, label, account, capabilities, settings, seq)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, {})
+                     ON CONFLICT (id) DO UPDATE SET provider = excluded.provider, label = excluded.label,
+                     account = excluded.account, capabilities = excluded.capabilities, settings = excluded.settings",
+                    next_seq("connections")
+                ),
+                args![record.id, record.provider, record.label, record.account, capabilities, settings],
+            )?;
+            Ok(())
+        })
     }
 
     pub fn connection(&self, id: &str) -> Result<Option<ConnectionRecord>> {
-        let raw = self.locked().query_row(&format!("{COLUMNS} WHERE id = ?1"), [id], raw).optional()?;
+        let raw = self.read(|conn| {
+            let row = conn.row(&format!("{COLUMNS} WHERE id = ?1"), args![id])?;
+            Ok(row.as_ref().map(raw).transpose()?)
+        })?;
         raw.map(record).transpose()
     }
 
     pub fn connections(&self) -> Result<Vec<ConnectionRecord>> {
-        let connection = self.locked();
-        let mut statement = connection.prepare(&format!("{COLUMNS} ORDER BY rowid"))?;
-        let rows = statement.query_map([], raw)?.collect::<rusqlite::Result<Vec<_>>>()?;
+        let rows = self.read(|conn| {
+            let rows = conn.query(&format!("{COLUMNS} ORDER BY seq, id"), &[])?;
+            Ok(rows.iter().map(raw).collect::<database::Result<Vec<_>>>()?)
+        })?;
         rows.into_iter().map(record).collect()
     }
 
     pub fn delete_connection(&self, id: &str) -> Result<bool> {
-        Ok(self.locked().execute("DELETE FROM connections WHERE id = ?1", [id])? > 0)
+        Ok(self.write(|conn| Ok(conn.execute("DELETE FROM connections WHERE id = ?1", args![id])?))? > 0)
     }
 }
 
-fn raw(row: &Row<'_>) -> rusqlite::Result<Raw> {
+fn raw(row: &Row) -> database::Result<Raw> {
     Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?, row.get(5)?))
 }
 
@@ -64,7 +69,7 @@ fn record((id, provider, label, account, capabilities, settings): Raw) -> Result
         provider,
         label,
         account,
-        capabilities: serde_json::from_str(&capabilities).map_err(Error::from)?,
+        capabilities: serde_json::from_str(&capabilities)?,
         settings: serde_json::from_str(&settings)?,
     })
 }

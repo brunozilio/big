@@ -22,6 +22,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+database.workspace = true
 rusqlite.workspace = true
 axum.workspace = true
 tokio = { workspace = true, features = ["rt", "net", "sync", "macros"] }

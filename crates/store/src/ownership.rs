@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
+use database::args;
 use domain::principal::LOCAL_USER;
-use rusqlite::{OptionalExtension, params};
 
 use crate::{ConnectionRecord, Result, Store};
 
@@ -12,33 +12,29 @@ pub const ATTACHMENT: &str = "attachment";
 
 impl Store {
     pub fn set_owner(&self, kind: &str, id: &str, owner: &str) -> Result<()> {
-        self.locked().execute(
-            "INSERT INTO ownership (kind, id, owner) VALUES (?1, ?2, ?3)
-             ON CONFLICT (kind, id) DO UPDATE SET owner = excluded.owner",
-            params![kind, id, owner],
-        )?;
-        Ok(())
+        self.write(|conn| {
+            conn.execute(
+                "INSERT INTO ownership (kind, id, owner) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (kind, id) DO UPDATE SET owner = excluded.owner",
+                args![kind, id, owner],
+            )?;
+            Ok(())
+        })
     }
 
     pub fn claim(&self, kind: &str, id: &str, owner: &str) -> Result<String> {
-        self.write(|transaction| {
-            transaction.execute(
+        self.write(|conn| {
+            conn.execute(
                 "INSERT INTO ownership (kind, id, owner) VALUES (?1, ?2, ?3) ON CONFLICT (kind, id) DO NOTHING",
-                params![kind, id, owner],
+                args![kind, id, owner],
             )?;
-            Ok(transaction.query_row(
-                "SELECT owner FROM ownership WHERE kind = ?1 AND id = ?2",
-                params![kind, id],
-                |row| row.get(0),
-            )?)
+            let kept = conn.one("SELECT owner FROM ownership WHERE kind = ?1 AND id = ?2", args![kind, id])?;
+            Ok(kept.ok_or_else(|| database::Error::decode("the claim just written is missing"))?)
         })
     }
 
     pub fn recorded_owner(&self, kind: &str, id: &str) -> Result<Option<String>> {
-        Ok(self
-            .locked()
-            .query_row("SELECT owner FROM ownership WHERE kind = ?1 AND id = ?2", params![kind, id], |row| row.get(0))
-            .optional()?)
+        self.read(|conn| Ok(conn.one("SELECT owner FROM ownership WHERE kind = ?1 AND id = ?2", args![kind, id])?))
     }
 
     pub fn owner_of(&self, kind: &str, id: &str) -> Result<String> {
@@ -50,15 +46,17 @@ impl Store {
     }
 
     pub fn owned(&self, kind: &str) -> Result<Vec<(String, String)>> {
-        let connection = self.locked();
-        let mut statement = connection.prepare("SELECT id, owner FROM ownership WHERE kind = ?1")?;
-        let rows = statement.query_map([kind], |row| Ok((row.get(0)?, row.get(1)?)))?;
-        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
+        self.read(|conn| {
+            let rows = conn.query("SELECT id, owner FROM ownership WHERE kind = ?1", args![kind])?;
+            Ok(rows.iter().map(|row| Ok((row.get(0)?, row.get(1)?))).collect::<database::Result<_>>()?)
+        })
     }
 
     pub fn forget_owner(&self, kind: &str, id: &str) -> Result<()> {
-        self.locked().execute("DELETE FROM ownership WHERE kind = ?1 AND id = ?2", params![kind, id])?;
-        Ok(())
+        self.write(|conn| {
+            conn.execute("DELETE FROM ownership WHERE kind = ?1 AND id = ?2", args![kind, id])?;
+            Ok(())
+        })
     }
 
     pub fn connections_of(&self, owner: &str) -> Result<Vec<ConnectionRecord>> {
@@ -80,21 +78,21 @@ impl Store {
 
 impl Store {
     pub fn put_git_token(&self, token: &str, owner: &str, connection: &str) -> Result<()> {
-        self.locked().execute(
-            "INSERT INTO git_tokens (token, owner, connection) VALUES (?1, ?2, ?3)
-             ON CONFLICT (token) DO UPDATE SET owner = excluded.owner, connection = excluded.connection",
-            params![token, owner, connection],
-        )?;
-        Ok(())
+        self.write(|conn| {
+            conn.execute(
+                "INSERT INTO git_tokens (token, owner, connection) VALUES (?1, ?2, ?3)
+                 ON CONFLICT (token) DO UPDATE SET owner = excluded.owner, connection = excluded.connection",
+                args![token, owner, connection],
+            )?;
+            Ok(())
+        })
     }
 
     pub fn git_token(&self, token: &str) -> Result<Option<(String, String)>> {
-        Ok(self
-            .locked()
-            .query_row("SELECT owner, connection FROM git_tokens WHERE token = ?1", [token], |row| {
-                Ok((row.get(0)?, row.get(1)?))
-            })
-            .optional()?)
+        self.read(|conn| {
+            let row = conn.row("SELECT owner, connection FROM git_tokens WHERE token = ?1", args![token])?;
+            Ok(row.map(|row| Ok::<_, database::Error>((row.get(0)?, row.get(1)?))).transpose()?)
+        })
     }
 }
 

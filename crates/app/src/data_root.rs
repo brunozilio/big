@@ -160,21 +160,19 @@ impl DataRoot {
         }
     }
 
-    fn db(&self) -> (Option<Db>, Degraded) {
-        let Some(file) = self.database() else {
-            if self.keeps_nothing() {
-                return (in_memory(), Degraded::default());
+    fn db(&self, given: Option<database::Database>) -> (Option<Db>, Degraded) {
+        let opened = match (given, self.database()) {
+            (Some(database), _) => Db::with_database(database),
+            (None, Some(file)) => Db::open(&file),
+            (None, None) if self.keeps_nothing() => return (in_memory(), Degraded::default()),
+            (None, None) => {
+                tracing::error!("no app data folder; sessions and memory last only until the process ends");
+                return (in_memory(), Degraded::because("this user has no data folder"));
             }
-            tracing::error!("no app data folder; sessions and memory last only until the process ends");
-            return (in_memory(), Degraded::because("this user has no data folder"));
         };
-        match Db::open(&file) {
+        match opened {
             Ok(db) => {
-                crate::catalog::legacy::import(&db, &self.users());
-                crate::catalog::former::import(&db, &self.app(), &self.sessions(), &self.formers());
-                if let Some(memory) = self.memory() {
-                    crate::features::memory::store::legacy::import(&db, &memory);
-                }
+                self.imported(&db);
                 (Some(db), Degraded::default())
             }
             Err(error) => {
@@ -184,9 +182,24 @@ impl DataRoot {
         }
     }
 
+    fn imported(&self, db: &Db) {
+        if self.keeps_nothing() {
+            return;
+        }
+        crate::catalog::legacy::import(db, &self.users());
+        crate::catalog::former::import(db, &self.app(), &self.sessions(), &self.formers());
+        if let Some(memory) = self.memory() {
+            crate::features::memory::store::legacy::import(db, &memory);
+        }
+    }
+
     pub(crate) fn stores(&self) -> Stores {
+        self.stores_on(None)
+    }
+
+    pub(crate) fn stores_on(&self, given: Option<database::Database>) -> Stores {
         let sessions = Arc::new(FileSessions::new(self.sessions()));
-        let (db, database) = self.db();
+        let (db, database) = self.db(given);
         let (catalog, memories): (Arc<dyn SessionCatalog>, Memories) = match db {
             Some(db) => (Arc::new(SqliteSessionCatalog::new(db.clone())), Memories::kept_in(db)),
             None => (Arc::new(InMemorySessionCatalog::default()), Memories::only_in_the_process()),

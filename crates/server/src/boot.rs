@@ -19,9 +19,21 @@ pub struct Launch {
 }
 
 pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static) -> Result<(), String> {
-    let services = app::LocalServices::detect();
     let every = brand::store::SNAPSHOT_EVERY.trim().parse().unwrap_or(0);
-    let store = Arc::new(Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?);
+    let cloud = crate::cloud_db::cloud();
+    let (store, services) = if cloud {
+        let store = Store::with_database(crate::cloud_db::connect()?, every).map_err(|error| error.to_string())?;
+        let services = app::LocalServices::detect_on(crate::cloud_db::connect()?);
+        crate::cloud_db::copy_local(&launch.data, &store);
+        (Arc::new(store), services)
+    } else {
+        let store = Store::open(&launch.data.join("app.db"), every).map_err(|error| error.to_string())?;
+        (Arc::new(store), app::LocalServices::detect())
+    };
+    let lease = crate::cloud_db::lease();
+    if cloud {
+        crate::cloud_db::take_turn(&store, &lease).await;
+    }
     crate::permissions::install(Arc::clone(&store));
     crate::scope::load_claimed(&store);
     let http = Arc::new(ReqwestHttp::new().map_err(|error| error.message)?);
@@ -53,12 +65,17 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
         .in_repo(launch.repo.clone())
         .with_server(format!("http://127.0.0.1:{}", address.port()));
     let handle = Orchestrator::start(config).map_err(|error| error.to_string())?;
+    if cloud {
+        let stopping = (*handle).clone();
+        crate::cloud_db::keep_turn(Arc::clone(&store), lease.clone(), move || stopping.shutdown());
+    }
     let remembered = (client.clone(), Arc::clone(&engine));
     std::thread::spawn(move || {
         if let Ok(models) = remembered.0.models() {
             remembered.1.remember(models);
         }
     });
+    let kept = Arc::clone(&store);
     let backend = Backend {
         orchestrator: (*handle).clone(),
         store,
@@ -70,5 +87,8 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     };
     let served = crate::server::serve(launch.listener, backend, page::embedded(), stop).await;
     drop(handle);
+    if cloud {
+        crate::cloud_db::release(&kept, &lease);
+    }
     served.map_err(|error| error.to_string())
 }

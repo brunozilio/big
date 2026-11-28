@@ -1,4 +1,4 @@
-use rusqlite::{Connection, TransactionBehavior};
+use database::{Database, Dialect};
 
 const MIGRATIONS: &[&str] = &[
     "
@@ -104,11 +104,11 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE TABLE auth_sessions (
         token TEXT PRIMARY KEY,
-        user TEXT NOT NULL,
+        \"user\" TEXT NOT NULL,
         created INTEGER NOT NULL,
         expires INTEGER NOT NULL
     );
-    CREATE INDEX auth_sessions_by_user ON auth_sessions (user);
+    CREATE INDEX auth_sessions_by_user ON auth_sessions (\"user\");
     CREATE TABLE auth_codes (
         email TEXT PRIMARY KEY,
         code TEXT NOT NULL,
@@ -123,7 +123,7 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE TABLE passkeys (
         id TEXT PRIMARY KEY,
-        user TEXT NOT NULL,
+        \"user\" TEXT NOT NULL,
         public_key BLOB NOT NULL,
         algorithm INTEGER NOT NULL,
         counter INTEGER NOT NULL,
@@ -131,7 +131,7 @@ const MIGRATIONS: &[&str] = &[
         created INTEGER NOT NULL,
         used INTEGER
     );
-    CREATE INDEX passkeys_by_user ON passkeys (user);
+    CREATE INDEX passkeys_by_user ON passkeys (\"user\");
 ",
     "
     CREATE TABLE ownership (
@@ -154,7 +154,7 @@ const MIGRATIONS: &[&str] = &[
 ",
     "
     CREATE TABLE passwords (
-        user TEXT PRIMARY KEY,
+        \"user\" TEXT PRIMARY KEY,
         hash TEXT NOT NULL,
         changed INTEGER NOT NULL
     );
@@ -174,18 +174,31 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX browser_devices_owner ON browser_devices (owner);
 ",
+    "
+    ALTER TABLE connections ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE applications ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE factory_findings ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE items ADD COLUMN seq INTEGER NOT NULL DEFAULT 0;
+    CREATE INDEX items_by_seq ON items (seq);
+    CREATE INDEX factory_findings_by_seq ON factory_findings (seq);
+",
 ];
 
-pub fn migrate(connection: &mut Connection) -> rusqlite::Result<()> {
-    let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    transaction.execute_batch("CREATE TABLE IF NOT EXISTS store_schema (version INTEGER NOT NULL)")?;
-    let current: i64 = transaction.query_row("SELECT COUNT(*) FROM store_schema", [], |row| row.get(0))?;
-    for (version, migration) in MIGRATIONS.iter().enumerate().skip(usize::try_from(current).unwrap_or(0)) {
-        transaction.execute_batch(migration)?;
-        transaction.execute(
-            "INSERT INTO store_schema (version) VALUES (?1)",
-            [i64::try_from(version + 1).unwrap_or(i64::MAX)],
-        )?;
+const ORDERED: [&str; 4] = ["connections", "applications", "factory_findings", "items"];
+
+pub fn migrate(database: &Database) -> database::Result<()> {
+    database.migrate("store_schema", MIGRATIONS)?;
+    if database.dialect() != Dialect::Sqlite {
+        return Ok(());
     }
-    transaction.commit()
+    database.write(|conn| {
+        for table in ORDERED {
+            conn.execute(&format!("UPDATE {table} SET seq = rowid WHERE seq = 0"), &[])?;
+        }
+        Ok(())
+    })
+}
+
+pub fn next_seq(table: &str) -> String {
+    format!("(SELECT COALESCE(MAX(seq), 0) + 1 FROM {table})")
 }

@@ -15,12 +15,10 @@ mod retention;
 mod schema;
 mod sync;
 
-use std::ops::{Deref, DerefMut};
 use std::path::Path;
-use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
-use rusqlite::{Connection, Transaction, TransactionBehavior};
+use database::{Conn, Database};
 
 pub use applications::{Application, Binding, Bindings, Choice, Environment, Fields, Repository, watched};
 pub use browser_devices::BrowserDevice;
@@ -33,75 +31,62 @@ pub use retention::Forgotten;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-const BUSY_WAIT: Duration = Duration::from_secs(10);
-
 #[derive(Debug)]
 pub struct Store {
-    connection: Mutex<Connection>,
+    database: Database,
     snapshot_every: u64,
 }
 
 impl Store {
     pub fn open(path: &Path, snapshot_every: u64) -> Result<Self> {
-        Self::ready(Connection::open(path)?, snapshot_every)
+        Self::with_database(Database::sqlite(path)?, snapshot_every)
     }
 
     pub fn in_memory(snapshot_every: u64) -> Result<Self> {
-        Self::ready(Connection::open_in_memory()?, snapshot_every)
+        Self::with_database(Database::sqlite_in_memory()?, snapshot_every)
     }
 
-    fn ready(mut connection: Connection, snapshot_every: u64) -> Result<Self> {
-        connection.busy_timeout(BUSY_WAIT)?;
-        connection.pragma_update(None, "journal_mode", "WAL")?;
-        connection.pragma_update(None, "synchronous", "NORMAL")?;
-        schema::migrate(&mut connection)?;
-        Ok(Self { connection: Mutex::new(connection), snapshot_every })
+    pub fn with_database(database: Database, snapshot_every: u64) -> Result<Self> {
+        schema::migrate(&database)?;
+        Ok(Self { database, snapshot_every })
     }
 
-    fn locked(&self) -> Held<'_> {
-        let asked = Instant::now();
-        let guard = self.connection.lock().unwrap_or_else(PoisonError::into_inner);
-        Held { guard, waited: asked.elapsed(), since: Instant::now() }
+    pub fn database(&self) -> &Database {
+        &self.database
     }
 
-    fn write<T>(&self, work: impl FnOnce(&Transaction<'_>) -> Result<T>) -> Result<T> {
-        let mut connection = self.locked();
-        let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate)?;
-        let value = work(&transaction)?;
-        transaction.commit()?;
-        Ok(value)
+    fn read<T: Send>(&self, work: impl FnOnce(&mut dyn Conn) -> Result<T> + Send) -> Result<T> {
+        self.run(false, work)
     }
-}
 
-struct Held<'a> {
-    guard: MutexGuard<'a, Connection>,
-    waited: Duration,
-    since: Instant,
-}
-
-impl Deref for Held<'_> {
-    type Target = Connection;
-
-    fn deref(&self) -> &Connection {
-        &self.guard
+    fn write<T: Send>(&self, work: impl FnOnce(&mut dyn Conn) -> Result<T> + Send) -> Result<T> {
+        self.run(true, work)
     }
-}
 
-impl DerefMut for Held<'_> {
-    fn deref_mut(&mut self) -> &mut Connection {
-        &mut self.guard
-    }
-}
-
-impl Drop for Held<'_> {
-    fn drop(&mut self) {
+    fn run<T: Send>(&self, writes: bool, work: impl FnOnce(&mut dyn Conn) -> Result<T> + Send) -> Result<T> {
+        let since = Instant::now();
+        let mut kept = None;
+        let guarded = |conn: &mut dyn Conn| {
+            work(conn).map_err(|error| match error {
+                Error::Database(inner) => inner,
+                other => {
+                    let shown = other.to_string();
+                    kept = Some(other);
+                    database::Error::decode(shown)
+                }
+            })
+        };
+        let done = if writes { self.database.write(guarded) } else { self.database.read(guarded) };
         tracing::event!(
             target: "timing", tracing::Level::DEBUG,
             timing = "store.query",
-            waited_us = micros(self.waited),
-            held_us = micros(self.since.elapsed()),
+            held_us = micros(since.elapsed()),
             "timing"
         );
+        match kept {
+            Some(error) => Err(error),
+            None => done.map_err(Error::from),
+        }
     }
 }
 

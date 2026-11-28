@@ -38,7 +38,7 @@ impl super::SessionCatalog for LegacySessionCatalog {
         self.kept.read_or_default()
     }
 
-    fn update(&self, change: &mut dyn FnMut(&mut Catalog)) {
+    fn update(&self, change: &mut (dyn FnMut(&mut Catalog) + Send)) {
         self.kept.update(|catalog: &mut Catalog| change(catalog)).expect("legacy catalog");
     }
 }
@@ -48,12 +48,13 @@ pub(crate) fn import(db: &Db, users: &Path) {
     if !legacy.file().exists() {
         return;
     }
-    let imported = db.write(|transaction| {
-        if !sqlite::is_empty(transaction)? {
+    let imported = db.write(|conn| {
+        crate::db::alone(conn, "sessions")?;
+        if !sqlite::is_empty(conn)? {
             return Ok(false);
         }
         let Some(catalog) = legacy.listed() else { return Ok(false) };
-        sqlite::keep(transaction, &[], &catalog)?;
+        sqlite::keep(conn, &[], &catalog)?;
         Ok(true)
     });
     match imported {

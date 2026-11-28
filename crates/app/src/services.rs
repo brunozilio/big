@@ -95,8 +95,16 @@ impl std::fmt::Debug for LocalServices {
 
 impl LocalServices {
     pub fn detect() -> Self {
+        Self::detected(None)
+    }
+
+    pub fn detect_on(database: database::Database) -> Self {
+        Self::detected(Some(database))
+    }
+
+    fn detected(database: Option<database::Database>) -> Self {
         let root = DataRoot::system();
-        let stores = root.stores();
+        let stores = root.stores_on(database);
         let engine = crate::engine::build(Arc::clone(&stores.sessions), Arc::clone(&stores.catalog), &root);
         let mut services = Self::of(Arc::new(engine), root, stores);
         services.homes = Arc::new(crate::OwnerHome::system());

@@ -10,8 +10,10 @@ use super::legacy::LegacySessionCatalog;
 use super::*;
 use crate::DataRoot;
 use crate::db::Db;
+use crate::db::testing::{Place, on_postgres, rows_written};
+use database::args;
 
-type Change = Box<dyn Fn(&mut Catalog)>;
+type Change = Box<dyn Fn(&mut Catalog) + Send + Sync>;
 
 fn id(name: &str) -> SessionId {
     SessionId(name.to_owned())
@@ -70,6 +72,10 @@ fn keeps_what_the_domain_decides(kept: &dyn SessionCatalog) {
     assert_eq!(expected.listed().len(), KEPT - 1, "the script reached the most a catalog keeps");
 }
 
+fn a_database_catalog_keeps_what_the_domain_decides(place: &Place) {
+    keeps_what_the_domain_decides(&SqliteSessionCatalog::new(place.open()));
+}
+
 #[test]
 fn every_catalog_keeps_exactly_what_the_domain_decides() {
     let dir = tempfile::tempdir().expect("dir");
@@ -94,12 +100,14 @@ fn sessions_are_kept_between_runs_of_the_program() {
 
 #[test]
 fn a_session_an_earlier_version_archived_is_listed_and_kept() {
-    let dir = tempfile::tempdir().expect("dir");
-    let file = dir.path().join("app.db");
-    let kept = SqliteSessionCatalog::new(Db::open(&file).expect("open"));
+    an_archived_session_is_listed_and_kept(&Place::file());
+}
+
+fn an_archived_session_is_listed_and_kept(place: &Place) {
+    let kept = SqliteSessionCatalog::new(place.open());
     kept.update(&mut |catalog| catalog.started(&id("shelved"), Path::new("/w"), 1));
-    let earlier = Db::open(&file).expect("earlier");
-    earlier.write(|transaction| transaction.execute("UPDATE sessions SET archived = 1", [])).expect("archived");
+    let earlier = place.open();
+    earlier.write(|conn| conn.execute("UPDATE sessions SET archived = ?1", args![true])).expect("archived");
 
     assert_eq!(kept.read().listed().iter().map(|row| row.session.0.as_str()).collect::<Vec<_>>(), ["shelved"]);
     kept.update(&mut |catalog| catalog.rename(&id("shelved"), "Still here"));
@@ -112,7 +120,7 @@ fn a_change_writes_only_the_rows_it_changed() {
     let db = Db::in_memory().expect("db");
     let kept = SqliteSessionCatalog::new(db.clone());
     kept.update(&mut |catalog| (0..300).for_each(|n| catalog.started(&SessionId(format!("s{n}")), Path::new("/w"), n)));
-    let written = || db.read(|connection| Ok(connection.total_changes())).expect("changes");
+    let written = || rows_written(&db);
     let before = written();
 
     kept.update(&mut |catalog| catalog.rename(&id("s7"), "Renamed"));
@@ -136,15 +144,17 @@ fn a_change_writes_only_the_rows_it_changed() {
 
 #[test]
 fn two_programs_on_one_database_lose_none_of_each_other_s_sessions() {
+    two_programs_lose_none_of_each_other_s_sessions(&Place::file());
+}
+
+fn two_programs_lose_none_of_each_other_s_sessions(place: &Place) {
     const EACH: usize = 200;
-    let dir = tempfile::tempdir().expect("dir");
-    let file = dir.path().join("app.db");
     let start = Barrier::new(2);
     std::thread::scope(|scope| {
         for writer in 0..2 {
-            let (file, start) = (&file, &start);
+            let start = &start;
             scope.spawn(move || {
-                let kept = SqliteSessionCatalog::new(Db::open(file).expect("open"));
+                let kept = SqliteSessionCatalog::new(place.open());
                 start.wait();
                 for session in 0..EACH {
                     let session = SessionId(format!("{writer}-{session}"));
@@ -155,7 +165,7 @@ fn two_programs_on_one_database_lose_none_of_each_other_s_sessions() {
             });
         }
     });
-    let kept = SqliteSessionCatalog::new(Db::open(&file).expect("open")).read();
+    let kept = SqliteSessionCatalog::new(place.open()).read();
     assert_eq!(kept.listed().len(), 2 * EACH);
     assert!(kept.listed().iter().all(|row| row.status == SessionStatus::Done && row.unread));
 }
@@ -258,14 +268,23 @@ fn a_session_list_that_does_not_parse_is_kept_aside_and_the_program_starts_empty
 
 #[test]
 fn a_catalog_whose_database_cannot_be_written_is_left_as_it_was() {
-    let dir = tempfile::tempdir().expect("dir");
-    let file = dir.path().join("app.db");
-    let kept = SqliteSessionCatalog::new(Db::open(&file).expect("open"));
+    a_catalog_that_cannot_be_written_is_left_as_it_was(&Place::file());
+}
+
+fn a_catalog_that_cannot_be_written_is_left_as_it_was(place: &Place) {
+    let kept = SqliteSessionCatalog::new(place.open());
     kept.update(&mut |catalog| catalog.started(&id("a"), Path::new("/w"), 1));
-    let other = Db::open(&file).expect("other");
-    other.write(|transaction| transaction.execute("DROP TABLE sessions", [])).expect("drop");
+    let other = place.open();
+    other.write(|conn| conn.batch("DROP TABLE sessions")).expect("drop");
 
     kept.update(&mut |catalog| catalog.started(&id("b"), Path::new("/w"), 2));
 
     assert!(kept.read().listed().is_empty() && kept.is_empty());
+}
+
+on_postgres! {
+    postgres_a_catalog_keeps_what_the_domain_decides => a_database_catalog_keeps_what_the_domain_decides,
+    postgres_an_archived_session_is_listed_and_kept => an_archived_session_is_listed_and_kept,
+    postgres_two_programs_lose_none_of_each_other_s_sessions => two_programs_lose_none_of_each_other_s_sessions,
+    postgres_a_catalog_that_cannot_be_written_is_left_as_it_was => a_catalog_that_cannot_be_written_is_left_as_it_was,
 }

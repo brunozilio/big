@@ -100,7 +100,7 @@ impl Memories {
         self.books.locked()
     }
 
-    fn update(&self, shelf: &MemoryShelf, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<()> {
+    fn update(&self, shelf: &MemoryShelf, change: &mut (dyn FnMut(&mut MemoryBook) + Send)) -> std::io::Result<()> {
         let mut books = self.lock();
         let changed = self.store.update(&shelf.key(), change)?;
         books.insert(shelf.key(), changed);

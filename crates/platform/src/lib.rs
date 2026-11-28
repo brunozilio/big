@@ -1,5 +1,6 @@
 pub mod address;
 pub mod atomic;
+pub mod aws;
 pub mod bounded;
 pub mod child;
 pub mod crypto;

@@ -21,7 +21,7 @@ pub struct Revised {
 pub trait MemoryStore: Send + Sync {
     fn revision(&self, key: &str) -> u64;
     fn read(&self, key: &str) -> Revised;
-    fn update(&self, key: &str, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised>;
+    fn update(&self, key: &str, change: &mut (dyn FnMut(&mut MemoryBook) + Send)) -> std::io::Result<Revised>;
     fn undo_point(&self, key: &str) -> Option<MemoryBook>;
     fn set_undo_point(&self, key: &str, book: Option<&MemoryBook>) -> std::io::Result<()>;
 
@@ -49,7 +49,7 @@ impl MemoryStore for InMemoryStore {
         self.books.locked().get(key).cloned().unwrap_or_default()
     }
 
-    fn update(&self, key: &str, change: &mut dyn FnMut(&mut MemoryBook)) -> std::io::Result<Revised> {
+    fn update(&self, key: &str, change: &mut (dyn FnMut(&mut MemoryBook) + Send)) -> std::io::Result<Revised> {
         let mut books = self.books.locked();
         let kept = books.entry(key.to_owned()).or_default();
         let before = kept.book.clone();

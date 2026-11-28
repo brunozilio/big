@@ -1,4 +1,10 @@
-use store::{Application, Binding, Bindings, Repository, Store};
+#![allow(clippy::expect_used, reason = "a failed setup step stops the test")]
+
+#[macro_use]
+mod common;
+
+use common::Fresh;
+use store::{Application, Binding, Bindings, Repository};
 
 fn application(id: &str, name: &str) -> Application {
     Application {
@@ -27,9 +33,9 @@ fn application(id: &str, name: &str) -> Application {
     }
 }
 
-#[test]
-fn applications_are_kept_in_order_changed_in_place_and_removed() {
-    let store = Store::in_memory(0).expect("the store answers");
+fn applications_are_kept_in_order_changed_in_place_and_removed(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     assert!(store.applications().expect("the store answers").is_empty());
     store.save_application(&application("a", "Web")).expect("saved");
     store.save_application(&application("b", "Api")).expect("saved");
@@ -63,3 +69,5 @@ fn an_application_saved_with_the_old_dependabot_flag_still_reads() {
     let off: Application = serde_json::from_str(r#"{"name":"Loja","skipDependabot":false}"#).expect("turned off");
     assert_eq!(off.name, "Loja");
 }
+
+scenarios!(applications_are_kept_in_order_changed_in_place_and_removed,);

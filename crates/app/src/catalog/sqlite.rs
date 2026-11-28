@@ -1,13 +1,13 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+use database::{Conn, args};
 use domain::SessionId;
 use domain::catalog::{Catalog, KEPT, Listed};
-use rusqlite::{Connection, params};
 
 use super::SessionCatalog;
-use crate::db::Db;
 use crate::db::codec::{counted, name, named, stored};
+use crate::db::{Db, alone};
 
 const COLUMNS: &str = "session, cwd, title, created, updated, status, unread, tie";
 const UPSERT: &str = "INSERT INTO sessions (session, cwd, title, created, updated, status, unread, tie) \
@@ -44,12 +44,13 @@ impl SessionCatalog for SqliteSessionCatalog {
         }
     }
 
-    fn update(&self, change: &mut dyn FnMut(&mut Catalog)) {
-        let changed = self.db.write(|transaction| {
-            let before = rows(transaction)?;
+    fn update(&self, change: &mut (dyn FnMut(&mut Catalog) + Send)) {
+        let changed = self.db.write(|conn| {
+            alone(conn, "sessions")?;
+            let before = rows(conn)?;
             let mut catalog = catalog_of(&before);
             change(&mut catalog);
-            keep(transaction, &before, &catalog)
+            keep(conn, &before, &catalog)
         });
         if let Err(error) = changed {
             tracing::warn!(%error, "could not keep the session catalog; it was left as it was");
@@ -64,28 +65,30 @@ impl SessionCatalog for SqliteSessionCatalog {
     }
 }
 
-pub(super) fn is_empty(connection: &Connection) -> rusqlite::Result<bool> {
-    connection.query_row("SELECT NOT EXISTS (SELECT 1 FROM sessions)", [], |row| row.get(0))
+pub(super) fn is_empty(conn: &mut dyn Conn) -> database::Result<bool> {
+    Ok(conn.one("SELECT NOT EXISTS (SELECT 1 FROM sessions)", &[])?.unwrap_or(true))
 }
 
-fn rows(connection: &Connection) -> rusqlite::Result<Vec<Row>> {
-    let mut newest_first =
-        connection.prepare(&format!("SELECT {COLUMNS} FROM sessions ORDER BY updated DESC, tie LIMIT ?1"))?;
-    let rows = newest_first.query_map([stored(KEPT as u64)], |row| {
-        Ok(Row {
-            listed: Listed {
-                session: SessionId(row.get(0)?),
-                cwd: PathBuf::from(row.get::<_, String>(1)?),
-                title: row.get(2)?,
-                created: counted(row.get(3)?),
-                updated: counted(row.get(4)?),
-                status: named(5, row.get(5)?)?,
-                unread: row.get(6)?,
-            },
-            tie: row.get(7)?,
+fn rows(conn: &mut dyn Conn) -> database::Result<Vec<Row>> {
+    let sql = format!("SELECT {COLUMNS} FROM sessions ORDER BY updated DESC, tie LIMIT ?1");
+    let found = conn.query(&sql, args![stored(KEPT as u64)])?;
+    found
+        .iter()
+        .map(|row| {
+            Ok(Row {
+                listed: Listed {
+                    session: SessionId(row.get(0)?),
+                    cwd: PathBuf::from(row.get::<String>(1)?),
+                    title: row.get(2)?,
+                    created: counted(row.get(3)?),
+                    updated: counted(row.get(4)?),
+                    status: named(5, row.get(5)?)?,
+                    unread: row.get(6)?,
+                },
+                tie: row.get(7)?,
+            })
         })
-    })?;
-    rows.collect()
+        .collect()
 }
 
 fn catalog_of(rows: &[Row]) -> Catalog {
@@ -107,27 +110,19 @@ fn ranked(catalog: &Catalog, had: &HashMap<&str, &Row>) -> Vec<Row> {
     catalog.listed().iter().map(|listed| Row { tie: after_the_last(listed), listed: listed.clone() }).collect()
 }
 
-pub(super) fn keep(connection: &Connection, before: &[Row], catalog: &Catalog) -> rusqlite::Result<()> {
+pub(super) fn keep(conn: &mut dyn Conn, before: &[Row], catalog: &Catalog) -> database::Result<()> {
     let had: HashMap<&str, &Row> = before.iter().map(|row| (row.listed.session.0.as_str(), row)).collect();
     let wanted = ranked(catalog, &had);
     let listed: HashSet<&str> = wanted.iter().map(|row| row.listed.session.0.as_str()).collect();
-    let mut upsert = connection.prepare(UPSERT)?;
     for row in wanted.iter().filter(|row| had.get(row.listed.session.0.as_str()).copied() != Some(*row)) {
         let Listed { session, cwd, title, created, updated, status, unread } = &row.listed;
-        upsert.execute(params![
-            session.0,
-            text(cwd),
-            title,
-            stored(*created),
-            stored(*updated),
-            name(status)?,
-            unread,
-            row.tie
-        ])?;
+        conn.execute(
+            UPSERT,
+            args![session.0, text(cwd), title, stored(*created), stored(*updated), name(status)?, unread, row.tie],
+        )?;
     }
-    let mut delete = connection.prepare("DELETE FROM sessions WHERE session = ?1")?;
     for gone in before.iter().filter(|row| !listed.contains(row.listed.session.0.as_str())) {
-        delete.execute([&gone.listed.session.0])?;
+        conn.execute("DELETE FROM sessions WHERE session = ?1", args![gone.listed.session.0])?;
     }
     Ok(())
 }

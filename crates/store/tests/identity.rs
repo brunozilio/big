@@ -1,19 +1,19 @@
 #![allow(clippy::expect_used, reason = "a failed setup step stops the test")]
 
-use domain::principal::{Principal, UserId};
-use store::{CodeCheck, Passkey, Store};
+#[macro_use]
+mod common;
 
-fn store() -> Store {
-    Store::in_memory(0).expect("store")
-}
+use common::Fresh;
+use domain::principal::{Principal, UserId};
+use store::{CodeCheck, Passkey};
 
 fn ana() -> Principal {
     Principal { user: UserId("u-ana".into()), email: "ana@example.com".into(), name: "Ana".into() }
 }
 
-#[test]
-fn a_user_is_kept_once_per_email_and_keeps_the_first_id() {
-    let store = store();
+fn a_user_is_kept_once_per_email_and_keeps_the_first_id(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     let first = store.ensure_user(&ana(), 10).expect("first");
     let again = Principal { user: UserId("u-other".into()), name: String::new(), ..ana() };
     let second = store.ensure_user(&again, 20).expect("second");
@@ -21,9 +21,9 @@ fn a_user_is_kept_once_per_email_and_keeps_the_first_id() {
     assert_eq!(store.user_by_email("ana@example.com").expect("found"), Some(ana()));
 }
 
-#[test]
-fn a_session_lasts_until_it_expires_or_is_closed() {
-    let store = store();
+fn a_session_lasts_until_it_expires_or_is_closed(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     store.ensure_user(&ana(), 0).expect("user");
     store.open_session("t1", &ana().user, 0, 100).expect("open");
     assert_eq!(store.session_user("t1", 50).expect("read"), Some(ana()));
@@ -32,9 +32,9 @@ fn a_session_lasts_until_it_expires_or_is_closed() {
     assert_eq!(store.session_user("t1", 50).expect("read"), None);
 }
 
-#[test]
-fn a_code_works_once_and_gives_out_after_too_many_wrong_tries() {
-    let store = store();
+fn a_code_works_once_and_gives_out_after_too_many_wrong_tries(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     store.put_code("ana@example.com", "h1", 100).expect("put");
     assert_eq!(store.check_code("ana@example.com", "nope", 10, 2).expect("check"), CodeCheck::Wrong);
     assert_eq!(store.check_code("ana@example.com", "h1", 10, 2).expect("check"), CodeCheck::Matched);
@@ -46,9 +46,9 @@ fn a_code_works_once_and_gives_out_after_too_many_wrong_tries() {
     assert_eq!(store.check_code("ana@example.com", "h2", 10, 2).expect("check"), CodeCheck::Gone);
 }
 
-#[test]
-fn a_challenge_is_taken_once_and_only_by_its_kind() {
-    let store = store();
+fn a_challenge_is_taken_once_and_only_by_its_kind(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     store.put_challenge("c1", "sso", "{}", 100).expect("put");
     assert_eq!(store.take_challenge("c1", "passkey", 10).expect("take"), None);
     store.put_challenge("c2", "sso", "{}", 100).expect("put");
@@ -56,9 +56,9 @@ fn a_challenge_is_taken_once_and_only_by_its_kind() {
     assert_eq!(store.take_challenge("c2", "sso", 10).expect("take"), None);
 }
 
-#[test]
-fn passkeys_belong_to_one_user() {
-    let store = store();
+fn passkeys_belong_to_one_user(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     let key = Passkey {
         id: "k1".into(),
         user: ana().user,
@@ -78,9 +78,9 @@ fn passkeys_belong_to_one_user() {
     assert!(store.remove_passkey(&ana().user, "k1").expect("remove"));
 }
 
-#[test]
-fn what_nobody_claimed_belongs_to_the_local_user() {
-    let store = store();
+fn what_nobody_claimed_belongs_to_the_local_user(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     store.set_owner("connection", "c-ana", "u-ana").expect("own");
     assert_eq!(store.owner_of("connection", "c-old").expect("owner"), "local");
     let local = store.owned_ids("connection", "local").expect("ids");
@@ -91,9 +91,9 @@ fn what_nobody_claimed_belongs_to_the_local_user() {
     assert_eq!(store.claim("session", "s1", "u-bia").expect("claim"), "u-ana");
 }
 
-#[test]
-fn each_person_keeps_their_own_language_over_the_shared_one() {
-    let store = store();
+fn each_person_keeps_their_own_language_over_the_shared_one(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     store.set_branding_for("local", "language", &serde_json::json!("en")).expect("set");
     store.set_branding_for("u-ana", "language", &serde_json::json!("es")).expect("set");
     assert_eq!(store.language().expect("language"), domain::Language::English);
@@ -102,9 +102,9 @@ fn each_person_keeps_their_own_language_over_the_shared_one() {
     assert!(!store.branding().expect("branding").keys().any(|key| key.starts_with("user.")));
 }
 
-#[test]
-fn a_password_belongs_to_its_user_and_too_many_failures_lock_the_login() {
-    let store = store();
+fn a_password_belongs_to_its_user_and_too_many_failures_lock_the_login(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(0);
     assert!(store.add_user(&ana(), 1).expect("add"));
     assert!(!store.add_user(&ana(), 2).expect("again"));
     assert_eq!(store.password_of(&ana().user).expect("none"), None);
@@ -121,3 +121,14 @@ fn a_password_belongs_to_its_user_and_too_many_failures_lock_the_login() {
     store.login_succeeded("ana").expect("clear");
     assert!(!store.login_locked("ana", 11).expect("cleared"));
 }
+
+scenarios!(
+    a_user_is_kept_once_per_email_and_keeps_the_first_id,
+    a_session_lasts_until_it_expires_or_is_closed,
+    a_code_works_once_and_gives_out_after_too_many_wrong_tries,
+    a_challenge_is_taken_once_and_only_by_its_kind,
+    passkeys_belong_to_one_user,
+    what_nobody_claimed_belongs_to_the_local_user,
+    each_person_keeps_their_own_language_over_the_shared_one,
+    a_password_belongs_to_its_user_and_too_many_failures_lock_the_login,
+);

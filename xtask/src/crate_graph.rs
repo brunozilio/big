@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-const ALLOWED: [(&str, &[&str]); 19] = [
+const ALLOWED: [(&str, &[&str]); 20] = [
     (
         "orchestrator",
         &["domain", "store", "connectors", "script", "content", "agent-engine", "platform", "brand", "sync"],
@@ -9,20 +9,21 @@ const ALLOWED: [(&str, &[&str]); 19] = [
     ("sync", &["domain", "store", "connectors", "brand"]),
     ("connectors", &["domain", "brand", "platform", "content", "script"]),
     ("cli", &["platform", "brand", "app", "server", "domain"]),
-    ("app", &["platform", "brand", "domain", "llm-providers", "agent-engine", "code-map"]),
+    ("app", &["platform", "brand", "domain", "llm-providers", "agent-engine", "code-map", "database"]),
     ("agent-engine", &["script", "content", "brand", "domain", "platform", "language-servers", "llm-providers"]),
     ("llm-providers", &["brand", "domain", "platform", "content", "script", "local-models"]),
     ("local-models", &["brand", "platform"]),
     ("domain", &["brand"]),
-    ("store", &["domain"]),
+    ("store", &["domain", "database"]),
     ("language-servers", &["brand", "domain", "platform"]),
     ("content", &["brand", "script"]),
     (
         "server",
-        &["app", "brand", "domain", "orchestrator", "connectors", "store", "sync", "page", "browser", "platform"],
+        &["app", "brand", "domain", "orchestrator", "connectors", "store", "sync", "page", "browser", "platform", "database"],
     ),
     ("browser", &["brand", "domain"]),
     ("page", &[]),
+    ("database", &[]),
     ("code-map", &[]),
     ("platform", &[]),
     ("script", &[]),

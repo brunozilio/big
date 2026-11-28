@@ -46,9 +46,7 @@ fn main() -> ExitCode {
     let root = std::env::current_dir().unwrap_or_default();
     let found = discovered::discover(&discovered::roots(brand::commands::DIRS, &root));
     let matches = discovered::injected(Cli::command(), &found).get_matches();
-    if let Some((name, given)) = matches.subcommand()
-        && let Some(command) = found.iter().find(|command| command.name == name)
-    {
+    if let Some((command, given)) = discovered::chosen(&found, &matches) {
         let args = given.get_many::<OsString>(discovered::ARGS).map(|args| args.cloned().collect()).unwrap_or_default();
         if command.page {
             logging::install(false);
@@ -183,6 +181,7 @@ mod tests {
     #[test]
     fn a_discovered_command_joins_the_launcher_and_keeps_its_arguments() {
         let found = vec![discovered::Discovered {
+            group: None,
             name: "ship-it".into(),
             about: "Ship".into(),
             run: vec!["true".into()],

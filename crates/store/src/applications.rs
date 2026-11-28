@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
-use rusqlite::{OptionalExtension, params};
+use database::args;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
+use crate::schema::next_seq;
 use crate::{Result, Store};
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -196,37 +197,35 @@ fn read(data: &str) -> Result<Application> {
 
 impl Store {
     pub fn applications(&self) -> Result<Vec<Application>> {
-        let connection = self.locked();
-        let mut statement = connection.prepare("SELECT data FROM applications ORDER BY position, rowid")?;
-        let rows = statement.query_map([], |row| row.get::<_, String>(0))?.collect::<rusqlite::Result<Vec<_>>>()?;
+        let rows: Vec<String> =
+            self.read(|conn| Ok(conn.all("SELECT data FROM applications ORDER BY position, seq, id", &[])?))?;
         rows.iter().map(|data| read(data)).collect()
     }
 
     pub fn application(&self, id: &str) -> Result<Option<Application>> {
-        let found: Option<String> = self
-            .locked()
-            .query_row("SELECT data FROM applications WHERE id = ?1", [id], |row| row.get(0))
-            .optional()?;
+        let found: Option<String> =
+            self.read(|conn| Ok(conn.one("SELECT data FROM applications WHERE id = ?1", args![id])?))?;
         found.map(|data| read(&data)).transpose()
     }
 
     pub fn save_application(&self, application: &Application) -> Result<()> {
         let data = serde_json::to_string(application)?;
-        self.write(|transaction| {
-            let next: i64 =
-                transaction
-                    .query_row("SELECT COALESCE(MAX(position), -1) + 1 FROM applications", [], |row| row.get(0))?;
-            transaction.execute(
-                "INSERT INTO applications (id, position, data) VALUES (?1, ?2, ?3)
-                 ON CONFLICT (id) DO UPDATE SET data = excluded.data",
-                params![application.id, next, data],
+        self.write(|conn| {
+            let next: i64 = conn.one("SELECT COALESCE(MAX(position), -1) + 1 FROM applications", &[])?.unwrap_or(0);
+            conn.execute(
+                &format!(
+                    "INSERT INTO applications (id, position, data, seq) VALUES (?1, ?2, ?3, {})
+                     ON CONFLICT (id) DO UPDATE SET data = excluded.data",
+                    next_seq("applications")
+                ),
+                args![application.id, next, data],
             )?;
             Ok(())
         })
     }
 
     pub fn delete_application(&self, id: &str) -> Result<bool> {
-        Ok(self.locked().execute("DELETE FROM applications WHERE id = ?1", [id])? > 0)
+        Ok(self.write(|conn| Ok(conn.execute("DELETE FROM applications WHERE id = ?1", args![id])?))? > 0)
     }
 }
 

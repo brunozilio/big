@@ -78,14 +78,15 @@ pub(crate) fn import(db: &Db, folder: &Path) {
     if kept.is_empty() {
         return;
     }
-    let imported = db.write(|transaction| {
+    let imported = db.write(|conn| {
         let mut imported = Vec::new();
-        if !sqlite::is_empty(transaction)? {
+        crate::db::alone(conn, "memory_books")?;
+        if !sqlite::is_empty(conn)? {
             return Ok(imported);
         }
         for Kept { key, file } in &kept {
             let Some(book) = book(file) else { continue };
-            sqlite::keep(transaction, key, &sqlite::Stored::default(), &book)?;
+            sqlite::keep(conn, key, &sqlite::Stored::default(), &book)?;
             imported.push(file);
         }
         Ok(imported)

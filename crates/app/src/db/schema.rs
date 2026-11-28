@@ -1,5 +1,3 @@
-use rusqlite::{Connection, OptionalExtension};
-
 const SESSIONS_AND_MEMORY: &str = "
 CREATE TABLE sessions (
     session TEXT PRIMARY KEY NOT NULL,
@@ -54,54 +52,3 @@ CREATE TABLE memory_undo_points (
 ";
 
 pub(super) const MIGRATIONS: &[&str] = &[SESSIONS_AND_MEMORY];
-
-#[derive(Debug)]
-pub(super) enum Refused {
-    Sqlite(rusqlite::Error),
-    Newer { found: i64, known: i64 },
-}
-
-impl From<rusqlite::Error> for Refused {
-    fn from(error: rusqlite::Error) -> Self {
-        Self::Sqlite(error)
-    }
-}
-
-pub(super) fn version(connection: &Connection) -> rusqlite::Result<i64> {
-    let versioned: Option<String> = connection
-        .query_row("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'schema_version'", [], |row| {
-            row.get(0)
-        })
-        .optional()?;
-    if versioned.is_none() {
-        return Ok(0);
-    }
-    let version: Option<i64> = connection.query_row("SELECT max(version) FROM schema_version", [], |row| row.get(0))?;
-    Ok(version.unwrap_or(0))
-}
-
-pub(super) fn is_current(connection: &Connection, migrations: &[&str]) -> Result<bool, Refused> {
-    let (found, known) = (version(connection)?, known(migrations));
-    if found > known {
-        return Err(Refused::Newer { found, known });
-    }
-    Ok(found == known)
-}
-
-pub(super) fn migrate(connection: &Connection, migrations: &[&str]) -> Result<(), Refused> {
-    if is_current(connection, migrations)? {
-        return Ok(());
-    }
-    let found = version(connection)?;
-    connection.execute_batch("CREATE TABLE IF NOT EXISTS schema_version (version INTEGER NOT NULL)")?;
-    for (step, migration) in migrations.iter().enumerate().skip(usize::try_from(found).unwrap_or(usize::MAX)) {
-        connection.execute_batch(migration)?;
-        connection.execute("DELETE FROM schema_version", [])?;
-        connection.execute("INSERT INTO schema_version (version) VALUES (?1)", [known(&migrations[..=step])])?;
-    }
-    Ok(())
-}
-
-fn known(migrations: &[&str]) -> i64 {
-    i64::try_from(migrations.len()).unwrap_or(i64::MAX)
-}

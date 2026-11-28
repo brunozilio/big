@@ -1,3 +1,4 @@
+use database::args;
 use domain::Language;
 use serde_json::{Map, Value};
 
@@ -11,11 +12,10 @@ fn personal_prefix(owner: &str) -> Option<String> {
 
 impl Store {
     fn branding_rows(&self) -> Result<Vec<(String, Value)>> {
-        let connection = self.locked();
-        let mut statement = connection.prepare("SELECT key, value FROM branding ORDER BY key")?;
-        let rows = statement
-            .query_map([], |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)))?
-            .collect::<rusqlite::Result<Vec<_>>>()?;
+        let rows: Vec<(String, String)> = self.read(|conn| {
+            let rows = conn.query("SELECT key, value FROM branding ORDER BY key", &[])?;
+            Ok(rows.iter().map(|row| Ok((row.get(0)?, row.get(1)?))).collect::<database::Result<_>>()?)
+        })?;
         rows.into_iter().map(|(key, value)| Ok((key, serde_json::from_str(&value)?))).collect()
     }
 
@@ -62,11 +62,14 @@ impl Store {
     }
 
     pub fn set_branding(&self, key: &str, value: &Value) -> Result<()> {
-        self.locked().execute(
-            "INSERT INTO branding (key, value) VALUES (?1, ?2)
-             ON CONFLICT (key) DO UPDATE SET value = excluded.value",
-            [key, &serde_json::to_string(value)?],
-        )?;
-        Ok(())
+        let text = serde_json::to_string(value)?;
+        self.write(|conn| {
+            conn.execute(
+                "INSERT INTO branding (key, value) VALUES (?1, ?2)
+                 ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                args![key, text],
+            )?;
+            Ok(())
+        })
     }
 }

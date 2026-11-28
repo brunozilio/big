@@ -51,6 +51,9 @@ fn mode_name() -> &'static str {
 }
 
 async fn methods(State(ctx): State<Ctx>) -> ApiResult<Response> {
+    if crate::cloud_db::draining() {
+        return Ok(axum::http::StatusCode::SERVICE_UNAVAILABLE.into_response());
+    }
     let offered: Vec<&str> =
         settings::methods().into_iter().filter(|method| settings::offers(*method)).map(settings::Method::key).collect();
     let label = brand::auth::SSO_LABEL.trim();

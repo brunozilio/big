@@ -16,6 +16,7 @@ mod callback_port;
 mod calls;
 mod chats;
 mod cloud;
+mod cloud_db;
 mod connected_mcp;
 mod connections;
 mod connector_browser;

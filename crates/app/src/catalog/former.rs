@@ -1,13 +1,14 @@
 use std::path::{Path, PathBuf};
 
 use agent_engine::sessions::scoped_id;
+use database::args;
 use domain::SessionId;
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags};
 
 use crate::db::Db;
 
-const INSERT: &str = "INSERT OR IGNORE INTO sessions (session, cwd, title, created, updated, status, archived, unread, tie) \
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)";
+const INSERT: &str = "INSERT INTO sessions (session, cwd, title, created, updated, status, archived, unread, tie) \
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) ON CONFLICT DO NOTHING";
 const SELECT: &str = "SELECT session, cwd, title, created, updated, status, archived, unread, tie FROM sessions";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,12 +111,12 @@ fn import_one(db: &Db, sessions: &Path, former: &Former) -> Result<usize, String
             kept.push(row);
         }
     }
-    db.write(|transaction| {
+    db.write(|conn| {
         let mut added = 0;
         for row in &kept {
-            added += transaction.execute(
+            added += conn.execute(
                 INSERT,
-                params![
+                args![
                     row.session,
                     row.cwd,
                     row.title,
@@ -128,7 +129,7 @@ fn import_one(db: &Db, sessions: &Path, former: &Former) -> Result<usize, String
                 ],
             )?;
         }
-        Ok(added)
+        Ok(usize::try_from(added).unwrap_or(usize::MAX))
     })
     .map_err(|error| error.to_string())
 }

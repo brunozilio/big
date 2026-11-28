@@ -1,7 +1,11 @@
-#![allow(clippy::expect_used)]
+#![allow(clippy::expect_used, reason = "a failed setup step stops the test")]
+
+#[macro_use]
+mod common;
 
 use std::time::Duration;
 
+use common::Fresh;
 use domain::workflow::{ItemId, WorkflowEvent};
 use serde_json::{Value, json};
 use store::{Forgotten, Store};
@@ -23,9 +27,9 @@ fn lived(store: &Store, id: &str, input: Value, ended: bool) -> ItemId {
     item
 }
 
-#[test]
-fn without_a_retention_only_the_older_snapshots_of_ended_items_go() {
-    let store = Store::in_memory(2).expect("store");
+fn without_a_retention_only_the_older_snapshots_of_ended_items_go(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(2);
     let ended = lived(&store, "ended", json!({}), true);
     let active = lived(&store, "active", json!({}), false);
     let before = store.item(&ended).expect("item");
@@ -41,9 +45,9 @@ fn without_a_retention_only_the_older_snapshots_of_ended_items_go() {
     assert_eq!(store.load(&ended).expect("rebuilt"), before, "the item still rebuilds from what is left");
 }
 
-#[test]
-fn an_item_ended_long_ago_is_forgotten_unless_an_active_item_mentions_it() {
-    let store = Store::in_memory(2).expect("store");
+fn an_item_ended_long_ago_is_forgotten_unless_an_active_item_mentions_it(fresh: Fresh) {
+    let place = fresh();
+    let store = place.open(2);
     let old = lived(&store, "old", json!({}), true);
     let linked = lived(&store, "linked", json!({}), true);
     let active = lived(&store, "active", json!({ "story": "linked" }), false);
@@ -59,3 +63,8 @@ fn an_item_ended_long_ago_is_forgotten_unless_an_active_item_mentions_it() {
     assert!(store.item(&active).expect("item").is_some());
     assert_eq!(store.events(&active, 0).expect("events").len(), 6);
 }
+
+scenarios!(
+    without_a_retention_only_the_older_snapshots_of_ended_items_go,
+    an_item_ended_long_ago_is_forgotten_unless_an_active_item_mentions_it,
+);

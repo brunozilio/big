@@ -13,13 +13,23 @@ pub const ARGS: &str = "args";
 struct Declared {
     #[serde(default)]
     about: String,
+    #[serde(default)]
     run: Vec<String>,
     #[serde(default)]
     page: bool,
+    #[serde(default)]
+    commands: BTreeMap<String, Declared>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Group {
+    pub name: String,
+    pub about: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Discovered {
+    pub group: Option<Group>,
     pub name: String,
     pub about: String,
     pub run: Vec<String>,
@@ -35,7 +45,7 @@ pub fn discover(roots: &[PathBuf]) -> Vec<Discovered> {
     let mut found: BTreeMap<String, Discovered> = BTreeMap::new();
     for folder in roots.iter().flat_map(|root| folders(root)) {
         for command in declared(&folder) {
-            found.entry(command.name.clone()).or_insert(command);
+            found.entry(command.path()).or_insert(command);
         }
     }
     found.into_values().collect()
@@ -67,32 +77,78 @@ fn declared(folder: &Path) -> Vec<Discovered> {
             return Vec::new();
         }
     };
-    parsed
-        .into_iter()
-        .filter(|(name, declared)| named(name) && !declared.run.is_empty())
-        .map(|(name, declared)| Discovered {
-            name,
-            about: declared.about,
-            run: declared.run,
-            folder: folder.to_path_buf(),
-            page: declared.page,
-        })
-        .collect()
+    let mut found = Vec::new();
+    for (name, declared) in parsed.into_iter().filter(|(name, _)| named(name)) {
+        if !declared.run.is_empty() {
+            found.push(leaf(None, name.clone(), declared.about.clone(), declared.run.clone(), declared.page, folder));
+        }
+        let group = Group { name, about: declared.about };
+        for (child, inner) in
+            declared.commands.into_iter().filter(|(child, inner)| named(child) && !inner.run.is_empty())
+        {
+            found.push(leaf(Some(group.clone()), child, inner.about, inner.run, inner.page, folder));
+        }
+    }
+    found
+}
+
+fn leaf(group: Option<Group>, name: String, about: String, run: Vec<String>, page: bool, folder: &Path) -> Discovered {
+    Discovered { group, name, about, run, folder: folder.to_path_buf(), page }
+}
+
+impl Discovered {
+    pub fn path(&self) -> String {
+        match &self.group {
+            Some(group) => format!("{} {}", group.name, self.name),
+            None => self.name.clone(),
+        }
+    }
+}
+
+fn subcommand(command: &Discovered) -> Command {
+    let args = Arg::new(ARGS)
+        .num_args(0..)
+        .trailing_var_arg(true)
+        .allow_hyphen_values(true)
+        .value_parser(value_parser!(OsString));
+    Command::new(command.name.clone()).about(command.about.clone()).disable_help_flag(true).arg(args)
+}
+
+pub fn chosen<'a>(
+    found: &'a [Discovered],
+    matches: &'a clap::ArgMatches,
+) -> Option<(&'a Discovered, &'a clap::ArgMatches)> {
+    let (name, given) = matches.subcommand()?;
+    if let Some(command) = found.iter().find(|command| command.group.is_none() && command.name == name) {
+        return Some((command, given));
+    }
+    let (leaf, inner) = given.subcommand()?;
+    let command = found
+        .iter()
+        .find(|command| command.group.as_ref().is_some_and(|group| group.name == name) && command.name == leaf)?;
+    Some((command, inner))
 }
 
 pub fn injected(mut cli: Command, found: &[Discovered]) -> Command {
+    let builtin: Vec<String> = cli.get_subcommands().map(|command| command.get_name().to_owned()).collect();
+    let mut groups: BTreeMap<String, Command> = BTreeMap::new();
     for command in found {
-        if cli.find_subcommand(&command.name).is_some() {
+        let top = command.group.as_ref().map_or(&command.name, |group| &group.name);
+        if builtin.contains(top) {
             continue;
         }
-        let args = Arg::new(ARGS)
-            .num_args(0..)
-            .trailing_var_arg(true)
-            .allow_hyphen_values(true)
-            .value_parser(value_parser!(OsString));
-        cli = cli.subcommand(
-            Command::new(command.name.clone()).about(command.about.clone()).disable_help_flag(true).arg(args),
-        );
+        match &command.group {
+            None => cli = cli.subcommand(subcommand(command)),
+            Some(group) => {
+                let held = groups.remove(&group.name).unwrap_or_else(|| {
+                    Command::new(group.name.clone()).about(group.about.clone()).subcommand_required(true)
+                });
+                groups.insert(group.name.clone(), held.subcommand(subcommand(command)));
+            }
+        }
+    }
+    for group in groups.into_values() {
+        cli = cli.subcommand(group);
     }
     cli
 }
@@ -149,8 +205,29 @@ mod tests {
     }
 
     #[test]
+    fn a_group_declares_its_commands_under_one_name() {
+        let root = tempfile::tempdir().expect("root");
+        folder_with(
+            root.path(),
+            "cloud",
+            r#"{"cloud": {"about": "Cloud", "commands": {"install": {"about": "I", "run": ["bun", "a.ts", "install"], "page": true}, "update": {"run": ["bun", "a.ts", "update"]}, "Bad": {"run": ["x"]}}}}"#,
+        );
+        let found = discover(&roots(".", root.path()));
+        let paths: Vec<String> = found.iter().map(Discovered::path).collect();
+        assert_eq!(paths, ["cloud install", "cloud update"]);
+        let cli = injected(Command::new("big").subcommand(Command::new("serve")), &found);
+        let matches = cli.try_get_matches_from(["big", "cloud", "update", "--x"]).expect("parsed");
+        let (command, given) = chosen(&found, &matches).expect("chosen");
+        assert_eq!(command.path(), "cloud update");
+        assert_eq!(given.get_many::<OsString>(ARGS).map(Iterator::count), Some(1));
+        let missing = injected(Command::new("big"), &found).try_get_matches_from(["big", "cloud"]);
+        assert!(missing.is_err());
+    }
+
+    #[test]
     fn a_relative_program_runs_from_its_folder() {
         let command = Discovered {
+            group: None,
             name: "x".into(),
             about: String::new(),
             run: vec!["./run.sh".into(), "go".into()],

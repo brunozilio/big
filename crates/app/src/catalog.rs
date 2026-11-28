@@ -15,7 +15,7 @@ pub use sqlite::SqliteSessionCatalog;
 
 pub trait SessionCatalog: Send + Sync {
     fn read(&self) -> Catalog;
-    fn update(&self, change: &mut dyn FnMut(&mut Catalog));
+    fn update(&self, change: &mut (dyn FnMut(&mut Catalog) + Send));
 
     fn is_empty(&self) -> bool {
         self.read().listed().is_empty()
@@ -32,7 +32,7 @@ impl SessionCatalog for InMemorySessionCatalog {
         self.kept.locked().clone()
     }
 
-    fn update(&self, change: &mut dyn FnMut(&mut Catalog)) {
+    fn update(&self, change: &mut (dyn FnMut(&mut Catalog) + Send)) {
         change(&mut self.kept.locked());
     }
 }
