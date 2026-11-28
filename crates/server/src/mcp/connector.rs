@@ -1,11 +1,11 @@
 use std::sync::Arc;
 
+use app::policy_gate::{self, Asked};
 use connectors::{ActionSpec, Connectors};
 use domain::connection::{Capability, ProviderKey};
-use app::policy_gate::{self, Asked};
 use domain::mcp::{LocalMcp, McpEndpoint, connector_tool, respond, served_name, slug, text_result};
-use domain::permission::{Call, Effect, Surface, Verdict};
 use domain::operation::Kind;
+use domain::permission::{Call, Effect, Surface, Verdict};
 use serde_json::{Value, json};
 use store::ConnectionRecord;
 
@@ -109,7 +109,8 @@ fn server() -> String {
     domain::mcp::connectors_server()
 }
 
-const ASKED: Asked<'static> = Asked { surface: Surface::Mcp, stage: STAGE, owner: domain::principal::LOCAL_USER };
+const ASKED: Asked<'static> =
+    Asked { surface: Surface::Mcp, stage: STAGE, owner: domain::principal::LOCAL_USER, operation: None };
 
 fn served(tool: &Tool) -> String {
     served_name(&server(), tool.definition["name"].as_str().unwrap_or_default())
@@ -119,7 +120,7 @@ fn refused(tool: &Tool, arguments: &Value) -> Option<String> {
     let server = server();
     let name = served(tool);
     let effects: Vec<Effect> = tool.declared.operation(&server, arguments).map(Effect::Operation).into_iter().collect();
-    let asked = ASKED;
+    let asked = Asked { operation: Some(&tool.action), ..ASKED };
     let subject = policy_gate::subject(&tool.action, arguments);
     match policy_gate::decide(asked, &Call { tool: &name, subject: &subject, effects: &effects }) {
         Verdict::Allow => None,
@@ -144,7 +145,13 @@ impl ConnectorTools {
         let called =
             self.hub.call_labelled(Some(&charged), &connection, &record.settings, &tool.action, &arguments, &key);
         let (name, levels) = (served(tool), app::labels::levels());
-        let guarded = Guarded { asked: ASKED, session: self.session.as_deref(), tool: &name, spec: &tool.spec, levels: &levels };
+        let guarded = Guarded {
+            asked: Asked { operation: Some(&tool.action), ..ASKED },
+            session: self.session.as_deref(),
+            tool: &name,
+            spec: &tool.spec,
+            levels: &levels,
+        };
         match guarded.run(|| self.runtime.block_on(called)) {
             Ok(text) => text_result(text, false),
             Err(told) => text_result(told, true),

@@ -33,7 +33,7 @@ impl Agent<'_> {
         if let Verdict::Deny(reason) = &judgement.verdict {
             let stage = self.workspace.session_id.as_str();
             let owner = self.workspace.owner.as_deref().unwrap_or(domain::principal::LOCAL_USER);
-            let asked = crate::policy_gate::Asked { surface: Surface::Chat, stage, owner };
+            let asked = crate::policy_gate::Asked { surface: Surface::Chat, stage, owner, operation: None };
             crate::policy_gate::blocked(asked, called.name, reason, PolicyEngine::layer(&called.call(), &context));
         }
         judgement

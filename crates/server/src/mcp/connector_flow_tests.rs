@@ -13,7 +13,7 @@ use super::Guarded;
 use super::session_reads::{close, open};
 use app::policy_gate::Asked;
 
-const ASKED: Asked<'static> = Asked { surface: Surface::Mcp, stage: "tools/call", owner: "local" };
+const ASKED: Asked<'static> = Asked { surface: Surface::Mcp, stage: "tools/call", owner: "local", operation: None };
 
 fn levels(mode: Mode) -> Levels {
     Levels { mode, levels: vec!["public".into(), "internal".into(), "confidential".into()] }

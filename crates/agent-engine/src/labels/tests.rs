@@ -5,7 +5,7 @@ use serde_json::json;
 use super::*;
 use crate::policy_gate::Asked;
 
-const ASKED: Asked<'static> = Asked { surface: Surface::Workflow, stage: "send", owner: "local" };
+const ASKED: Asked<'static> = Asked { surface: Surface::Workflow, stage: "send", owner: "local", operation: None };
 
 fn enforced() -> Levels {
     levels_of("export const labels = { mode: \"enforce\", levels: [\"public\", \"internal\", \"confidential\"] };")

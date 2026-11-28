@@ -82,3 +82,18 @@ fn a_broken_conduct_falls_back_and_an_odd_operation_name_is_never_a_path() {
     }
     assert_eq!(file_of("code.merge").as_deref(), Some("prompts/outcomes/code.merge.js"));
 }
+
+#[test]
+fn with_no_conduct_at_all_the_refusal_carries_the_outcome_once() {
+    let folder = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+    let prompts = folder.path().join("prompts");
+    std::fs::create_dir_all(&prompts).unwrap_or_else(|error| panic!("{error}"));
+    std::fs::write(prompts.join("broken.js"), "export default () => { throw new Error('mine') };")
+        .unwrap_or_else(|error| panic!("{error}"));
+    for outcome in AskOutcome::ALL {
+        let told = Told::new(outcome, Surface::Routine, "x").operation("tracker.link");
+        let reason = told_from(Some(folder.path()), "prompts/broken.js", &told);
+        assert_eq!(reason, "x");
+        assert_eq!(outcome.refusal(&reason), format!("{}: x", outcome.word()));
+    }
+}

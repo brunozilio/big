@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use agent_engine::conduct::{Told, told};
+use agent_engine::conduct::told;
 use agent_engine::labels;
 use agent_engine::policy_gate::{self, Asked};
 use connectors::{ActionSpec, Labelled};
@@ -85,7 +85,12 @@ impl Gated<'_> {
         let tool = named.tool;
         let declared = spec.and_then(|action| action.declaration().operation(server, &call.args));
         let effects: Vec<Effect> = declared.map(Effect::Operation).into_iter().collect();
-        let asked = Asked { surface: surface_of(self.item), stage: &self.key.step, owner: self.owner };
+        let asked = Asked {
+            surface: surface_of(self.item),
+            stage: &self.key.step,
+            owner: self.owner,
+            operation: Some(named.operation),
+        };
         let subject = policy_gate::subject(&call.action, &call.args);
         let verdict = match policy_gate::decide(asked, &Judged { tool, subject: &subject, effects: &effects }) {
             Verdict::Allow => self.flow(asked, tool, spec),
@@ -165,7 +170,7 @@ fn settled(asked: Asked<'_>, named: Named<'_>, decision: &Decision) -> Result<()
 }
 
 fn ended(asked: Asked<'_>, named: Named<'_>, outcome: AskOutcome, decision: &str) -> String {
-    let reason = told(&Told::new(outcome, asked.surface, named.tool).operation(named.operation));
+    let reason = told(&asked.told(outcome, named.tool));
     policy_gate::blocked_as(asked, named.tool, &reason, Layer::List, decision);
     outcome.refusal(&reason)
 }

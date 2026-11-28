@@ -18,6 +18,17 @@ pub struct Asked<'a> {
     pub surface: Surface,
     pub stage: &'a str,
     pub owner: &'a str,
+    pub operation: Option<&'a str>,
+}
+
+impl<'a> Asked<'a> {
+    pub fn told(&self, outcome: AskOutcome, tool: &'a str) -> Told<'a> {
+        let told = Told::new(outcome, self.surface, tool);
+        match self.operation {
+            Some(operation) => told.operation(operation),
+            None => told,
+        }
+    }
 }
 
 static MEMORY_POLICY: Mutex<Option<(String, MemoryPolicy)>> = Mutex::new(None);
@@ -37,8 +48,7 @@ fn floored(floor: &Floor, asked: Asked<'_>, call: &Call<'_>, listed: Decision) -
     if tightened == listed.verdict {
         return listed;
     }
-    let blocked =
-        |reason: &Reason| told(&Told::new(AskOutcome::BlockedByPolicy, asked.surface, call.tool).reason(reason));
+    let blocked = |reason: &Reason| told(&asked.told(AskOutcome::BlockedByPolicy, call.tool).reason(reason));
     match tightened.without_the_user(blocked) {
         Verdict::Deny(reason) => Decision::deny(reason, Layer::Floor),
         verdict => Decision { verdict, layer: Some(Layer::Floor) },
@@ -128,13 +138,13 @@ pub fn version() -> String {
 }
 
 pub fn unasked(asked: Asked<'_>, tool: &str) -> String {
-    let reason = told(&Told::new(AskOutcome::Unavailable, asked.surface, tool));
+    let reason = told(&asked.told(AskOutcome::Unavailable, tool));
     blocked_as(asked, tool, &reason, Layer::List, audit::code::UNATTENDED);
     AskOutcome::Unavailable.refusal(&reason)
 }
 
 pub fn unattended(asked: Asked<'_>, tool: &str, reason: &Reason, code: &str) -> String {
-    let reason = told(&Told::new(AskOutcome::Unavailable, asked.surface, tool).reason(reason));
+    let reason = told(&asked.told(AskOutcome::Unavailable, tool).reason(reason));
     blocked_as(asked, tool, &reason, Layer::Declared, code);
     AskOutcome::Unavailable.refusal(&reason)
 }
@@ -155,7 +165,7 @@ mod tests {
 
     use super::*;
 
-    const ASKED: Asked<'static> = Asked { surface: Surface::Mcp, stage: "tools/call", owner: "local" };
+    const ASKED: Asked<'static> = Asked { surface: Surface::Mcp, stage: "tools/call", owner: "local", operation: None };
 
     #[test]
     fn the_shipped_memory_policy_keeps_every_surface_reading_and_writing() {
@@ -177,6 +187,15 @@ mod tests {
         assert!(reason.contains("global scope"), "{reason}");
         let fine = MemoryAccess::Write(MemoryScope::Repository);
         assert_eq!(memory_under(&policy, ASKED, "memory_remember", fine, None), Verdict::Allow);
+    }
+
+    #[test]
+    fn the_operation_asked_reaches_every_outcome() {
+        let merging = Asked { operation: Some("code.merge"), ..ASKED };
+        for outcome in AskOutcome::ALL {
+            assert_eq!(merging.told(outcome, "x").operation, Some("code.merge"), "{outcome:?}");
+            assert_eq!(ASKED.told(outcome, "x").operation, None, "{outcome:?}");
+        }
     }
 
     #[test]

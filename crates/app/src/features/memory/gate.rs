@@ -37,7 +37,7 @@ impl Gate<'_> {
     }
 
     fn asked(&self) -> Asked<'_> {
-        Asked { surface: self.surface, stage: self.stage, owner: domain::principal::LOCAL_USER }
+        Asked { surface: self.surface, stage: self.stage, owner: domain::principal::LOCAL_USER, operation: None }
     }
 
     pub(crate) fn refused(&self, access: MemoryAccess) -> Option<String> {

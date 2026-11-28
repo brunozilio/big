@@ -54,11 +54,15 @@ pub fn told(told: &Told<'_>) -> String {
 }
 
 pub fn told_in(folder: Option<&std::path::Path>, told: &Told<'_>) -> String {
+    told_from(folder, FILE, told)
+}
+
+fn told_from(folder: Option<&std::path::Path>, general: &str, told: &Told<'_>) -> String {
     let data = content::with_brand(&told.data());
     let operation = told.operation.unwrap_or(told.tool);
     let own = file_of(operation).and_then(|file| content::call_in(folder, &file, "default", &data)).and_then(text);
-    own.or_else(|| content::call_in(folder, FILE, "default", &data).and_then(text))
-        .unwrap_or_else(|| told.outcome.refusal(told.tool))
+    own.or_else(|| content::call_in(folder, general, "default", &data).and_then(text))
+        .unwrap_or_else(|| told.tool.to_owned())
 }
 
 fn file_of(operation: &str) -> Option<String> {
