@@ -33,6 +33,23 @@ fn the_same_command_failing_three_times_moves_the_next_turns_to_the_escalation_m
 }
 
 #[test]
+fn an_escalation_model_outside_the_data_policy_is_not_moved_to() {
+    agent_engine::providers::install_testing();
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
+    rig.workspace.policy.escalation = true;
+    rig.workspace.models.model.provider = domain::ModelProvider::new("keyed-too");
+    rig.workspace.models.escalation = Some("keyed:big-model".into());
+    rig.workspace.models.requires =
+        domain::data_policy::Requires { regions: Some(vec!["eu".into()]), ..Default::default() };
+    let model = failing(3);
+
+    rig.run(&model, &mut vec![Message::user("fix it")]).expect("run");
+
+    assert!(model.asked().iter().all(|request| request.model == "m"));
+    assert!(!rig.events().iter().any(|event| matches!(event, EngineEvent::FellBack(_))));
+}
+
+#[test]
 fn without_the_flag_the_model_stays() {
     let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.models.escalation = Some("big-model".into());

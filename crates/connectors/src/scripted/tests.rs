@@ -166,3 +166,13 @@ fn a_connector_whose_write_declares_no_effects_does_not_load() {
     let refused = loaded.err().unwrap_or_default();
     assert!(refused.contains("x.send writes but declares no effects"), "{refused}");
 }
+
+#[test]
+fn a_connector_declares_what_the_models_working_on_its_data_must_meet() {
+    let declared = FIXTURE.replace("capabilities: [\"notes\"],", "capabilities: [\"notes\"], requires: { regions: [\"eu\"], noTraining: true, retentionDays: 0 },");
+    let (_folder, loaded) = installed("strict", &declared);
+    let wanted = domain::data_policy::Requires { regions: Some(vec!["eu".into()]), no_training: true, retention_days: Some(0) };
+    assert_eq!(loaded.unwrap_or_else(|error| panic!("{error}")).requires(), wanted);
+    let (_folder, plain) = installed("fixture", FIXTURE);
+    assert!(plain.unwrap_or_else(|error| panic!("{error}")).requires().is_empty());
+}

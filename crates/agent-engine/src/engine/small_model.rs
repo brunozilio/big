@@ -80,6 +80,16 @@ pub fn pick(provider: ModelProvider, session: &str, configured: Option<&str>, ca
     choose(session, configured, declared, &offered)
 }
 
+pub fn within(small: Option<String>, requires: &Requires, provider: ModelProvider) -> Option<String> {
+    small.filter(|model| match crate::data_gate::unmet(requires, model, provider) {
+        None => true,
+        Some(why) => {
+            tracing::warn!(model, %why, "the small model does not meet the data policy; the session's model answers");
+            false
+        }
+    })
+}
+
 fn input_rate(provider: Option<&dyn llm_providers::Provider>, id: &str) -> Option<u64> {
     let priced = llm_providers::priced(provider?, id, 0, llm_providers::model::Cache::default());
     priced.map(|rates| rates.input)
@@ -171,6 +181,16 @@ mod tests {
         let refused = api.turn_blocking(&asked("small"), &mut |_| {}, &CancellationToken::new());
         assert!(matches!(refused, Err(ModelError::DataPolicyUnmet(_))), "{refused:?}");
         assert!(scripted.asked().is_empty());
+    }
+
+    #[test]
+    fn a_small_model_outside_the_policy_is_dropped_so_the_session_s_model_answers() {
+        crate::providers::install_testing();
+        let session = ModelProvider::new("keyed-too");
+        assert_eq!(within(Some("keyed:small".into()), &eu(), session), None);
+        assert_eq!(within(Some("small".into()), &eu(), session).as_deref(), Some("small"));
+        assert_eq!(within(Some("keyed:small".into()), &Requires::default(), session).as_deref(), Some("keyed:small"));
+        assert_eq!(within(None, &eu(), session), None);
     }
 
     fn offered(provider: ModelProvider, id: &str) -> ModelOption {

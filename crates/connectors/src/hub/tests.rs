@@ -217,6 +217,10 @@ impl Provider for Picky {
     fn chooses(&self) -> Vec<String> {
         vec!["site".to_owned()]
     }
+
+    fn requires(&self) -> domain::data_policy::Requires {
+        domain::data_policy::Requires { regions: Some(vec!["eu".into()]), ..Default::default() }
+    }
 }
 
 #[derive(Debug, Default)]
@@ -305,4 +309,13 @@ async fn a_login_required_error_is_shown_at_once_without_refreshing_the_token() 
 fn looked() -> domain::operation::Profile {
     use domain::operation::{Kind, Profile, Reversible, Risk};
     Profile::new(vec![Kind::Read], Risk::Low, Reversible::Yes, false, false)
+}
+
+#[tokio::test]
+async fn the_hub_hands_out_what_each_connector_requires_and_nothing_for_others() {
+    let (hub, _, _) = picky(Vec::new()).await;
+    let eu = domain::data_policy::Requires { regions: Some(vec!["eu".into()]), ..Default::default() };
+    assert_eq!(hub.requires(&ProviderKey::from("picky")), eu);
+    assert!(hub.requires(&ProviderKey::from("nobody")).is_empty());
+    assert!(self::hub(FakeHttp::new(), None).await.requires(&ProviderKey::from("echo")).is_empty());
 }

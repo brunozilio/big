@@ -67,15 +67,7 @@ impl Job {
         if let Some(why) = &small.ignored {
             tracing::warn!("{why}");
         }
-        let provider = self.request.session.model.provider;
-        let requires = self.requires();
-        small.model.filter(|model| match crate::data_gate::unmet(&requires, model, provider) {
-            None => true,
-            Some(why) => {
-                tracing::warn!(model, %why, "the small model does not meet the data policy; the session's model answers");
-                false
-            }
-        })
+        small_model::within(small.model, &self.requires(), self.request.session.model.provider)
     }
 
     pub(in crate::engine) fn requires(&self) -> domain::data_policy::Requires {

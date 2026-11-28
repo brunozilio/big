@@ -256,6 +256,61 @@ fn preview(text: &str) -> String {
 mod tests {
     use super::*;
 
+    type Pairs = Vec<(String, String)>;
+
+    #[derive(Default, Clone)]
+    struct Heard(std::sync::Arc<Mutex<Vec<Pairs>>>);
+
+    struct Fields<'a>(&'a mut Pairs);
+
+    impl tracing::field::Visit for Fields<'_> {
+        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
+            self.0.push((field.name().to_owned(), format!("{value:?}")));
+        }
+        fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+            self.0.push((field.name().to_owned(), value.to_owned()));
+        }
+    }
+
+    impl tracing::Subscriber for Heard {
+        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
+            true
+        }
+        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
+            tracing::span::Id::from_u64(1)
+        }
+        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
+        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
+        fn event(&self, event: &tracing::Event<'_>) {
+            let mut fields = Vec::new();
+            event.record(&mut Fields(&mut fields));
+            self.0.locked().push(fields);
+        }
+        fn enter(&self, _: &tracing::span::Id) {}
+        fn exit(&self, _: &tracing::span::Id) {}
+    }
+
+    fn field<'a>(fields: &'a [(String, String)], name: &str) -> Option<&'a str> {
+        fields.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str())
+    }
+
+    #[test]
+    fn a_fallback_is_audited_as_a_decision_with_the_models_it_skipped() {
+        use domain::data_policy::{Rerouted, Skipped};
+        let heard = Heard::default();
+        let skipped = vec![Skipped { model: "a:us".into(), why: "region us is not eu".into() }];
+        let decision = Rerouted { from: "a:x".into(), to: Some("b:eu".into()), failure: "overloaded".into(), skipped };
+        tracing::subscriber::with_default(heard.clone(), || rest("s1", None, &EngineEvent::Rerouted(decision)));
+        let events = heard.0.locked().clone();
+        let [fields] = events.as_slice() else { panic!("{events:?}") };
+        assert_eq!(field(fields, "message"), Some("agent.fallback.decision"));
+        assert_eq!(field(fields, "session.id"), Some("s1"));
+        assert_eq!(field(fields, "model.from"), Some("a:x"));
+        assert_eq!(field(fields, "model.to"), Some("b:eu"));
+        assert_eq!(field(fields, "error.kind"), Some("overloaded"));
+        assert_eq!(field(fields, "model.skipped"), Some(r#"[{"model":"a:us","why":"region us is not eu"}]"#));
+    }
+
     #[test]
     fn a_preview_is_one_line_and_short() {
         assert_eq!(preview("one\n  two\tthree"), "one two three");

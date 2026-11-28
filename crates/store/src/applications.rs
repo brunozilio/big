@@ -264,6 +264,29 @@ mod tests {
     }
 
     #[test]
+    fn the_connections_of_a_space_are_each_bound_one_listed_once() {
+        let found = read(
+            r#"{"name":"Web","bindings":{"tracker":{"connection":"c-jira","value":"APP"},"tests":{"connection":"c-jira","value":"QA"},
+            "cloud":{"connection":"","value":"x"}},
+            "repositories":[{"directory":"/web","bindings":{"code":{"connection":"c-gh","value":"acme/web"}}}]}"#,
+        )
+        .expect("parsed");
+        assert_eq!(found.connections(), ["c-jira", "c-gh"]);
+        assert!(found.requires.is_empty());
+    }
+
+    #[test]
+    fn what_a_space_requires_of_the_models_is_kept_and_left_out_when_empty() {
+        let strict = read(r#"{"name":"Web","repositories":[],"requires":{"regions":["eu"],"noTraining":true}}"#).expect("parsed");
+        assert_eq!(strict.requires.regions, Some(vec!["eu".to_owned()]));
+        assert!(strict.requires.no_training);
+        let saved = serde_json::to_value(&strict).expect("saved");
+        assert_eq!(saved["requires"], serde_json::json!({ "regions": ["eu"], "noTraining": true }));
+        let plain = serde_json::to_value(read(r#"{"name":"Web","repositories":[]}"#).expect("parsed")).expect("saved");
+        assert!(plain.get("requires").is_none());
+    }
+
+    #[test]
     fn a_binding_already_on_the_repository_wins_over_the_old_shared_one() {
         let kept = read(
             r#"{"name":"Web","security":{"connection":"c","project":"old"},
