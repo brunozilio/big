@@ -134,7 +134,8 @@ impl Job {
                 setup.memory
             ));
         }
-        for skill in &main.config.skills {
+        let asked = self.request.session.skills.iter().filter(|skill| !main.config.skills.contains(skill));
+        for skill in main.config.skills.iter().chain(asked) {
             let Some(tool) = toolbox.tools.iter().find(|tool| tool.spec().name == crate::tools::names::SKILL) else {
                 return Err(Stop::failed("Configured agent requires the Skill tool"));
             };

@@ -119,6 +119,30 @@ fn a_skill_the_agent_preloads_loads_even_when_only_the_user_may_invoke_it() {
 }
 
 #[test]
+fn a_skill_the_request_requires_loads_once_beside_the_ones_the_agent_preloads() {
+    let dir = tempfile::tempdir().expect("dir");
+    let root = dir.path().join(brand::DIR);
+    std::fs::create_dir_all(root.join("agents")).expect("agents");
+    for (name, sentinel) in [("check", "AGENT_SKILL_SENTINEL"), ("ledger", "REQUIRED_SKILL_SENTINEL")] {
+        std::fs::create_dir_all(root.join("skills").join(name)).expect("skill");
+        std::fs::write(root.join("skills").join(name).join("SKILL.md"), format!("---\nname: {name}\ndescription: Checks.\n---\n{sentinel}"))
+            .expect("skill");
+    }
+    std::fs::write(root.join("settings.json"), r#"{"agent":"builder"}"#).expect("settings");
+    std::fs::write(root.join("agents/builder.md"), "---\nname: builder\nskills: [check]\n---\nBuild.").expect("agent");
+    let model_api = Arc::new(ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Built".into())])]));
+    let engine =
+        Engine::new(Arc::new(Source(Mutex::new(vec![model_api.clone()]))), Arc::new(InMemorySessions::default()));
+    let mut request = crate::asked_in(dir.path(), "Build it");
+    request.session.skills = vec!["ledger".into(), "check".into()];
+    let events = finish(&start(&engine, &request));
+    assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");
+    let system = &model_api.asked()[0].system;
+    assert!(system.contains("REQUIRED_SKILL_SENTINEL"));
+    assert_eq!(system.matches("AGENT_SKILL_SENTINEL").count(), 1);
+}
+
+#[test]
 fn initial_prompt_expands_a_custom_command() {
     let dir = tempfile::tempdir().expect("dir");
     let root = dir.path().join(brand::DIR);

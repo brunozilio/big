@@ -66,6 +66,8 @@ pub struct SessionConfig {
     pub language: Option<crate::Language>,
     #[serde(default, skip_serializing_if = "crate::data_policy::Requires::is_empty")]
     pub requires: crate::data_policy::Requires,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,6 +159,7 @@ impl SessionConfig {
             output_style: None,
             language: None,
             requires: Default::default(),
+            skills: Vec::new(),
         }
     }
 }
