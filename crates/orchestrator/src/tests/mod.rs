@@ -16,6 +16,7 @@ mod repos;
 mod restart;
 mod trail;
 pub(crate) mod retired;
+mod space;
 mod triggers;
 mod unbound;
 mod versions;

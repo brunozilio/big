@@ -205,12 +205,14 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
         }
         CALL => {
             let gated = Gated { shared, item: &state, key: &launch.key, owner: &owner };
-            call(who, &gated, &launch.command, &key).await
+            let command = crate::space::routed(&shared.store, &owner, &state.input, &launch.command);
+            call(who, &gated, &command, &key).await
         }
         WAIT_POLL => {
             let gated = Gated { shared, item: &state, key: &launch.key, owner: &owner };
-            gated.check(&launch.command.call()).await?;
-            crate::reading::poll(&gated, who, &launch.command, &key).await
+            let command = crate::space::routed(&shared.store, &owner, &state.input, &launch.command);
+            gated.check(&command.call()).await?;
+            crate::reading::poll(&gated, who, &command, &key).await
         }
         STATUS | IMPEDIMENT => push(shared, &state, &launch.command, &launch.key).await,
         other => Err(Failure::permanent(format!("the kernel does not know the command {other}"))),

@@ -330,9 +330,9 @@ impl AgentEffect<'_> {
             request.session.read_dirs.insert(0, cwd.clone());
         }
         if let Some(text) = repos::described(&trees) {
-            let system = request.session.append_system.take().unwrap_or_default();
-            request.session.append_system = Some(if system.is_empty() { text } else { format!("{system}\n\n{text}") });
+            crate::space::append(&mut request, text);
         }
+        crate::space::brief(&self.shared.store, &state.input, &mut request);
         self.note(json!({ "worktree": cwd.to_string_lossy() }));
         let collected = self.drive(&request).await?;
         let pushed: Vec<(PathBuf, String)> = trees
