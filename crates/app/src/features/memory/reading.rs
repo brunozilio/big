@@ -51,11 +51,3 @@ pub(crate) fn lineage(reads: Option<&Reads>) -> Option<Lineage> {
     let reads = reads?.locked().clone();
     Some(Lineage::of(&Mark::of(&crate::labels::levels(), &reads)))
 }
-
-pub(crate) fn purged(memories: &[Memory], left: &[Memory]) {
-    for gone in memories.iter().filter(|memory| !left.iter().any(|kept| kept.id == memory.id)) {
-        let sources = gone.lineage.as_ref().map(|lineage| lineage.sources.join(", ")).unwrap_or_default();
-        let trust = gone.lineage.as_ref().map_or("unknown", |lineage| lineage.trust.word());
-        tracing::warn!(target: "audit", memory = gone.id.0, trust, from = sources.as_str(), "memory.purged");
-    }
-}

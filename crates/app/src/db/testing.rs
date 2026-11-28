@@ -55,6 +55,10 @@ impl Place {
     pub(crate) fn open(&self) -> Db {
         self.opened(WAIT, schema::MIGRATIONS).expect("open")
     }
+
+    pub(crate) fn open_at(&self, version: usize) -> Db {
+        self.opened(WAIT, &schema::MIGRATIONS[..version]).expect("open at a version")
+    }
 }
 
 pub(crate) fn rows_written(db: &Db) -> u64 {

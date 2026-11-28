@@ -1,6 +1,7 @@
 mod gate;
 pub(crate) mod lesson;
 pub mod mcp;
+mod purge;
 pub mod reading;
 mod recalled;
 pub mod run;
@@ -188,13 +189,10 @@ impl Memories {
         edits: &[MemoryEdit],
         by: Provenance,
     ) -> Result<MemoryListing, String> {
-        let purges = edits.iter().any(|edit| matches!(edit, MemoryEdit::Purge { .. } | MemoryEdit::PurgeSource { .. }));
-        let before = purges.then(|| everything(&self.shelf(shelf)));
+        let targeted = purge::targeted(&self.shelf(shelf), edits);
         self.apply(shelf, edits, &by)?;
         let listing = self.shelf(shelf);
-        if let Some(before) = before {
-            reading::purged(&before, &everything(&listing));
-        }
+        purge::told(&targeted, &listing);
         Ok(listing)
     }
 
@@ -268,10 +266,6 @@ impl Memories {
         let applied = self.edit(&request.session.cwd, &edits, by);
         Some(applied.map(|listing| applied_since(&before, listing)))
     }
-}
-
-fn everything(listing: &MemoryListing) -> Vec<Memory> {
-    listing.memories.iter().cloned().chain(listing.forgotten.iter().map(|f| f.memory.clone())).collect()
 }
 
 fn with_memory(request: &PromptRequest, brief: MemoryBrief) -> PromptRequest {

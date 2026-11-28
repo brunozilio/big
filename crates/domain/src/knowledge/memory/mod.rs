@@ -231,8 +231,8 @@ impl MemoryBook {
         memory.history.push(Revision { text: old, until: by.now });
         let extra = memory.history.len().saturating_sub(REVISIONS_KEPT);
         memory.history.drain(..extra);
-        if let Some(lineage) = by.lineage.as_ref().filter(|lineage| lineage::replaces(lineage, memory)) {
-            memory.lineage = Some(lineage.clone());
+        if let Some(lineage) = by.lineage.as_ref().and_then(|by| lineage::revised(memory.lineage.as_ref(), by)) {
+            memory.lineage = Some(lineage);
         }
         Some(id)
     }

@@ -251,3 +251,4 @@ on_postgres! {
 }
 
 mod legacy_import;
+mod lineage;

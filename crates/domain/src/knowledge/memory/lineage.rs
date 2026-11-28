@@ -33,8 +33,21 @@ impl Lineage {
     }
 }
 
-pub fn replaces(lineage: &Lineage, memory: &Memory) -> bool {
-    lineage.is_external() || lineage.trust == Trust::UserAuthored || memory.lineage.is_none()
+pub fn revised(kept: Option<&Lineage>, by: &Lineage) -> Option<Lineage> {
+    match kept {
+        Some(kept) if kept.is_external() && by.is_external() => {
+            let mut sources = kept.sources.clone();
+            for source in &by.sources {
+                if !sources.contains(source) {
+                    sources.push(source.clone());
+                }
+            }
+            Some(Lineage { trust: Trust::External, sources, label: kept.label.clone().or_else(|| by.label.clone()) })
+        }
+        None => Some(by.clone()),
+        Some(_) if by.is_external() || by.trust == Trust::UserAuthored => Some(by.clone()),
+        Some(_) => None,
+    }
 }
 
 pub fn source_of(memory: &Memory) -> String {

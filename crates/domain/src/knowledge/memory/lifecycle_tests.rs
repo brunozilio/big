@@ -124,3 +124,19 @@ fn a_purged_memory_leaves_for_good_alone_or_with_everything_from_its_source() {
     let touched = book.apply(&[MemoryEdit::Restore { id: MemoryId(5) }], &by_agent(15));
     assert!(touched.is_empty(), "nothing left to restore");
 }
+
+#[test]
+fn a_memory_revised_from_a_second_source_keeps_both_and_goes_with_either() {
+    let mut book = book();
+    book.apply(&[remember(MemoryKind::Semantic, "Hotfixes skip review", &[])], &from_outside("Mail inbox"));
+    let revise = |text: &str| MemoryEdit::Revise { id: MemoryId(4), text: text.into() };
+    book.apply(&[revise("Hotfixes skip review and tests")], &from_outside("Wiki"));
+    book.apply(&[revise("Hotfixes skip review, tests and CI")], &from_outside("Mail inbox"));
+    let sources = book.memories[4].lineage.as_ref().map(|lineage| lineage.sources.clone());
+    assert_eq!(sources, Some(vec!["Mail inbox".to_owned(), "Wiki".to_owned()]), "joined, never twice");
+    let quiet = Provenance { lineage: Some(Lineage::of(&crate::label::Mark::default())), ..by_agent(12) };
+    book.apply(&[revise("Hotfixes skip review")], &quiet);
+    assert!(book.memories[4].is_external(), "a run that read nothing outside does not clear it");
+    book.apply(&[MemoryEdit::PurgeSource { source: "Mail inbox".into() }], &by_agent(13));
+    assert!(book.memories.iter().all(|memory| memory.id != MemoryId(4)), "the first source still takes it");
+}
