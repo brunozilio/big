@@ -125,7 +125,28 @@ fn bound(given: Bindings) -> Bindings {
         .collect()
 }
 
-pub fn checked(mut application: Application) -> ApiResult<Application> {
+fn work(application: &mut Application, workflows: &[String]) -> ApiResult<()> {
+    application.instructions = trimmed(&application.instructions);
+    let mut skills: Vec<String> = Vec::new();
+    for skill in application.skills.iter().map(|skill| trimmed(skill)).filter(|skill| !skill.is_empty()) {
+        if !skills.contains(&skill) {
+            skills.push(skill);
+        }
+    }
+    application.skills = skills;
+    application.workflow = trimmed(&application.workflow);
+    let wanted = &application.workflow;
+    if wanted.is_empty() || workflows.contains(wanted) {
+        return Ok(());
+    }
+    Err(ApiError::bad(said(
+        format!("There is no workflow {wanted}."),
+        format!("No existe el workflow {wanted}."),
+        format!("Não há o workflow {wanted}."),
+    )))
+}
+
+pub fn checked(mut application: Application, workflows: &[String]) -> ApiResult<Application> {
     application.name = trimmed(&application.name);
     if application.name.is_empty() {
         return Err(ApiError::bad(said(
@@ -134,13 +155,7 @@ pub fn checked(mut application: Application) -> ApiResult<Application> {
             "Dê um nome à aplicação.",
         )));
     }
-    if application.repositories.is_empty() {
-        return Err(ApiError::bad(said(
-            "Add at least one repository.",
-            "Agrega al menos un repositorio.",
-            "Adicione ao menos um repositório.",
-        )));
-    }
+    work(&mut application, workflows)?;
     application.bindings = bound(application.bindings);
     application.env = environment(application.env)?;
     let mut kept: Vec<Repository> = Vec::new();
@@ -192,7 +207,7 @@ pub async fn create(
     let mut application = parsed(body)?;
     application.id = random_id()?;
     let application = crate::workspaces::cloned(&ctx, person.owner(), application).await?;
-    let application = checked(application)?;
+    let application = checked(application, &ctx.backend.orchestrator.workflows())?;
     ctx.backend.store.save_application(&application)?;
     ctx.backend.store.set_owner(store::ownership::APPLICATION, &application.id, person.owner())?;
     Ok(reply(application))
@@ -214,7 +229,7 @@ pub async fn update(
     let mut application = parsed(body)?;
     application.id = id;
     let application = crate::workspaces::cloned(&ctx, person.owner(), application).await?;
-    let application = checked(application)?;
+    let application = checked(application, &ctx.backend.orchestrator.workflows())?;
     ctx.backend.store.save_application(&application)?;
     Ok(reply(application))
 }

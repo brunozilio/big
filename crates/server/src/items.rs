@@ -348,9 +348,22 @@ pub fn changed(shared: &Shared, id: &ItemId) -> ApiResult<Option<Value>> {
     Ok(moved.then_some(value))
 }
 
-pub async fn list(State(ctx): State<Ctx>, Extension(person): Extension<Principal>) -> ApiResult<Response> {
-    let mine: Vec<Value> = all(&ctx)?.into_iter().filter(|item| item["owner"] == person.owner()).collect();
+pub async fn list(
+    State(ctx): State<Ctx>,
+    Extension(person): Extension<Principal>,
+    Query(query): Query<HashMap<String, String>>,
+) -> ApiResult<Response> {
+    let space = query.get("application").map(String::as_str).filter(|id| !id.is_empty());
+    let within = |item: &Value| space.is_none_or(|id| item["application"]["id"] == id);
+    let mine: Vec<Value> =
+        all(&ctx)?.into_iter().filter(|item| item["owner"] == person.owner() && within(item)).collect();
     Ok(reply(mine))
+}
+
+fn spaced(shared: &Shared, names: &[String], wanted: &str, kind: &str) -> Option<String> {
+    let known = names.iter().find(|name| name.as_str() == wanted)?;
+    let accepted = shared.backend.orchestrator.accepts(known);
+    (accepted.is_empty() || accepted.iter().any(|name| name == kind)).then(|| known.clone())
 }
 
 fn workflow(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<String> {
@@ -366,6 +379,10 @@ fn workflow(shared: &Shared, body: &Value, origin: &Origin<'_>) -> ApiResult<Str
         });
     }
     let kind = origin.primary();
+    if let Some(chosen) = origin.application.and_then(|application| spaced(shared, &names, &application.workflow, kind))
+    {
+        return Ok(chosen);
+    }
     let accepting: Vec<&String> = names
         .iter()
         .filter(|name| shared.backend.orchestrator.accepts(name).iter().any(|accepted| accepted == kind))

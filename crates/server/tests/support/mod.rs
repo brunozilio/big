@@ -423,12 +423,26 @@ fn repo_with(dir: &Path, extra: &[(&str, &str)]) -> PathBuf {
     repo
 }
 
+#[derive(Default)]
+pub struct Extra {
+    pub providers: Vec<Arc<dyn Provider>>,
+    pub connections: Vec<ConnectionRecord>,
+}
+
 impl World {
     pub async fn new() -> World {
-        World::with(&[], script()).await
+        World::built(&[], script(), Extra::default()).await
     }
 
     pub async fn with(extra: &[(&str, &str)], script: Vec<EngineEvent>) -> World {
+        World::built(extra, script, Extra::default()).await
+    }
+
+    pub async fn equipped(more: Extra) -> World {
+        World::built(&[], script(), more).await
+    }
+
+    async fn built(extra: &[(&str, &str)], script: Vec<EngineEvent>, more: Extra) -> World {
         let dir = tempfile::tempdir().expect("dir");
         let data = dir.path().join("data");
         std::fs::create_dir_all(&data).expect("data");
@@ -454,6 +468,10 @@ impl World {
             .expect("connection");
         let tokens = Arc::new(server::VaultTokens::new(Arc::clone(&services.secrets)));
         tokens.save(&ConnectionId::from("c1"), &Grant::bearer("tok")).await.expect("grant");
+        for record in more.connections {
+            store.save_connection(&record).expect("connection");
+            tokens.save(&ConnectionId::from(record.id.as_str()), &Grant::bearer("tok")).await.expect("grant");
+        }
         let http = Arc::new(http());
         let keeper = TokenKeeper::new(tokens, http.clone(), Arc::new(FixedClock::at_second(1_000)));
         let provider: &'static FakeProvider = Box::leak(Box::new(FakeProvider::default()));
@@ -468,6 +486,7 @@ impl World {
             .collect();
         let mcp = connectors::scripted::ScriptedProvider::load_in(None, "connectors/mcp/index.ts").expect("mcp");
         providers.push(Arc::new(mcp));
+        providers.extend(more.providers);
         let connectors = Arc::new(Connectors::from_providers(providers, http, keeper).with_sink(sink));
         let runtime = tokio::runtime::Handle::current();
         let connected = server::connected_mcp(Arc::clone(&store), Arc::clone(&connectors), runtime);
