@@ -36,7 +36,7 @@ async fn a_typescript_workflow_runs_each_effect_once_and_replays_without_repeati
     assert_eq!(agent.name, "worker");
     assert_eq!(agent.definition.as_deref(), Some(WORKER), "its tools, skills and hooks travel with it");
     assert_ne!(request.host.credentials.client, 0, "each agent run has a client of its own");
-    let branch = item.branch.clone().expect("the item names its branch before the first agent runs");
+    let branch = crate::git::lane(&item).expect("the item names its branch before the first agent runs");
     let id_tail: String = id.as_str().chars().filter(char::is_ascii_alphanumeric).collect();
     assert!(branch.starts_with(&format!("{}/", brand::workflow::BRANCH_PREFIX)), "{branch}");
     assert!(branch.ends_with(&id_tail[id_tail.len() - 6..]), "{branch}");

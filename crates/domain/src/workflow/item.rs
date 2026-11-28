@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
 
+use super::binding::Binding;
 use super::deliverable::Delivered;
 use crate::effect::{EffectOutcome, EffectRequest, IdempotencyKey};
 
@@ -149,8 +150,8 @@ pub struct WorkItem {
     pub version: u64,
     #[serde(default)]
     pub name: Option<String>,
-    #[serde(default)]
-    pub branch: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub bindings: Vec<Binding>,
     #[serde(default)]
     pub recap: Option<ItemRecap>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -164,6 +165,10 @@ pub struct WorkItem {
 impl WorkItem {
     pub fn step(&self, id: &str, branch: Option<&str>) -> Option<&StepRun> {
         self.steps.iter().find(|step| step.is(id, branch))
+    }
+
+    pub fn bound(&self, connection: &str, kind: &str) -> Option<&Binding> {
+        self.bindings.iter().find(|binding| binding.is(connection, kind))
     }
 
     pub fn outcome(&self, key: &IdempotencyKey) -> Option<&EffectOutcome> {

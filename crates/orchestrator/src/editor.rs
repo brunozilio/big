@@ -64,7 +64,11 @@ mod tests {
     }
 
     fn item() -> WorkItem {
-        WorkItem { id: ItemId::from("item-1"), branch: Some("big/x".into()), ..WorkItem::default() }
+        WorkItem {
+            id: ItemId::from("item-1"),
+            bindings: vec![domain::workflow::Binding::new("", crate::git::LANE, serde_json::json!("big/x"))],
+            ..WorkItem::default()
+        }
     }
 
     #[test]

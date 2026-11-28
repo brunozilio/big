@@ -45,6 +45,7 @@ pub fn item_json(item: &WorkItem) -> Value {
         .insert("labels".into(), input.get("labels").filter(|labels| labels.is_array()).cloned().unwrap_or(json!([])));
     fields.insert("branch".into(), json!(branch(item)));
     fields.insert("git".into(), heads(item));
+    fields.insert("bindings".into(), json!(item.bindings));
     fields.insert("issue".into(), json!(text("issue")));
     fields.insert("description".into(), json!(text("description").or_else(|| text("text"))));
     fields.insert("input".into(), input.clone());
@@ -397,6 +398,26 @@ mod tests {
         effect(&mut ledger, 2, agent(), (5_000_000, None));
         ledger.pauses.push(crate::ledger::Pause { seq: 2, ask: "b".into(), from: 5_030_000, to: None });
         assert_eq!(timing(&ledger, "build", 9_000_000).0, 400 + 30);
+    }
+
+    #[test]
+    fn scripts_see_the_bound_lane_and_a_chosen_base_over_the_given_one() {
+        let repositories = json!([{ "id": "api" }]);
+        let given = item(json!({
+            "application": { "repositories": repositories },
+            "git": { "api": { "base": "develop" } },
+        }));
+        let mut chosen = domain::workflow::replay(&[
+            git::named_lane("big/x".into()),
+            git::chosen_base("api", "release/1".into()),
+            git::named_lane("big/y".into()),
+        ]);
+        chosen.id = given.id.clone();
+        chosen.input = given.input;
+        let found = item_json(&chosen);
+        assert_eq!(found["branch"], "big/x");
+        assert_eq!(found["git"], json!({ "api": { "base": "release/1", "head": "big/x" } }));
+        assert_eq!(found["bindings"][1], json!({ "connection": "api", "kind": "base", "value": "release/1" }));
     }
 
     #[test]

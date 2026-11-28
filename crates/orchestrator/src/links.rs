@@ -43,7 +43,7 @@ fn text_at(value: &Value) -> Option<String> {
 }
 
 pub fn base_of(item: &WorkItem) -> Option<String> {
-    let given = item.input["git"].as_object().and_then(|repos| repos.values().find_map(|repo| text_at(&repo["base"])));
+    let given = crate::git::chosen(item).into_iter().find_map(|wanted| wanted.base);
     given.or_else(|| {
         item.steps.iter().rev().find_map(|run| {
             text_at(&run.output["base"])
@@ -54,9 +54,9 @@ pub fn base_of(item: &WorkItem) -> Option<String> {
 
 pub fn integrated(item: &WorkItem) -> bool {
     let fallback = base_of(item);
-    item.input["git"].as_object().into_iter().flatten().any(|(_, entry)| {
+    item.input["git"].as_object().into_iter().flatten().any(|(repo, entry)| {
         let Some(lane) = entry["promote"].get(0).and_then(|first| text_at(&first["from"])) else { return false };
-        text_at(&entry["base"]).or_else(|| fallback.clone()).is_some_and(|base| base == lane)
+        crate::git::base_of(item, repo).or_else(|| fallback.clone()).is_some_and(|base| base == lane)
     })
 }
 

@@ -66,7 +66,7 @@ pub use kill::Killed;
 pub use error::{Error, Result};
 pub use events::OrchestratorEvent;
 pub use factory::{Autonomy, ESCAPED as FACTORY_ESCAPED, Factory, RECURRING as FACTORY_RECURRING};
-pub use git::{is_repo, origin};
+pub use git::{Wanted, chosen as wanted_refs, is_repo, origin};
 pub use provenance::snapshot as application_snapshot;
 pub use resources::{Builtin, Origin, Resource, Resources};
 pub use schedules::{Cron, Schedules};

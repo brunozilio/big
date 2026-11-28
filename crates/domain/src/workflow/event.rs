@@ -1,8 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use super::item::{ItemId, ItemRecap, Observed, StepState};
+use super::binding::Binding;
 use super::deliverable::Delivered;
+use super::item::{ItemId, ItemRecap, Observed, StepState};
 use crate::effect::{EffectOutcome, EffectRequest, IdempotencyKey};
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -90,9 +91,6 @@ pub enum WorkflowEvent {
     Named {
         title: String,
     },
-    Branched {
-        name: String,
-    },
     Recapped {
         recap: ItemRecap,
     },
@@ -105,9 +103,10 @@ pub enum WorkflowEvent {
     Accepting {
         on: bool,
     },
-    BaseChosen {
-        repository: String,
-        base: String,
+    Bound {
+        binding: Binding,
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        keep: bool,
     },
 }
 
@@ -115,7 +114,10 @@ const RETIRED: &[&str] = &["heads_up"];
 
 impl WorkflowEvent {
     pub fn read(text: &str) -> serde_json::Result<Option<Self>> {
-        let value: Value = serde_json::from_str(text)?;
+        Self::decoded(serde_json::from_str(text)?)
+    }
+
+    pub fn decoded(value: Value) -> serde_json::Result<Option<Self>> {
         if value["type"].as_str().is_some_and(|kind| RETIRED.contains(&kind)) {
             return Ok(None);
         }

@@ -8,6 +8,7 @@ mod connector_memory;
 mod error;
 mod factory;
 mod identity;
+mod legacy;
 mod log;
 pub mod ownership;
 mod passwords;

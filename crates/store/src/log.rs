@@ -41,7 +41,7 @@ impl Store {
 
     pub fn item(&self, item: &ItemId) -> Result<Option<WorkItem>> {
         let stored = self.read(|conn| stored(conn, item))?;
-        match stored.map(|text| serde_json::from_str::<WorkItem>(&text)) {
+        match stored.map(|text| crate::legacy::item(&text)) {
             Some(Ok(state)) => Ok(Some(state)),
             Some(Err(_)) => self.heal(item),
             None => Ok(None),
@@ -63,7 +63,7 @@ impl Store {
         })?;
         let mut items = Vec::with_capacity(rows.len());
         for (id, text) in rows {
-            match serde_json::from_str::<WorkItem>(&text) {
+            match crate::legacy::item(&text) {
                 Ok(state) => items.push(state),
                 Err(_) => items.extend(self.heal(&ItemId::from(id))?),
             }
@@ -97,7 +97,7 @@ impl Store {
                 .collect::<database::Result<Vec<_>>>()?)
         })?;
         rows.into_iter()
-            .filter_map(|(seq, at, text)| match WorkflowEvent::read(&text) {
+            .filter_map(|(seq, at, text)| match crate::legacy::event(&text) {
                 Ok(Some(event)) => Some(unsigned(seq).map(|seq| (seq, at, event))),
                 Ok(None) => None,
                 Err(error) => Some(Err(error.into())),
@@ -118,7 +118,7 @@ fn stored(conn: &mut dyn Conn, item: &ItemId) -> Result<Option<String>> {
 }
 
 fn current(conn: &mut dyn Conn, item: &ItemId) -> Result<Option<WorkItem>> {
-    match stored(conn, item)?.map(|text| serde_json::from_str::<WorkItem>(&text)) {
+    match stored(conn, item)?.map(|text| crate::legacy::item(&text)) {
         Some(Ok(state)) => Ok(Some(state)),
         Some(Err(_)) | None => rebuilt(conn, item),
     }
@@ -143,7 +143,7 @@ fn latest_snapshot(conn: &mut dyn Conn, item: &ItemId) -> Result<Option<WorkItem
         conn.query("SELECT seq, state FROM snapshots WHERE item = ?1 ORDER BY seq DESC", args![item.as_str()])?;
     for row in rows {
         let seq = unsigned(row.get(0)?)?;
-        let decoded = serde_json::from_str::<WorkItem>(&row.get::<String>(1)?).ok();
+        let decoded = crate::legacy::item(&row.get::<String>(1)?).ok();
         if let Some(state) = decoded.filter(|state| state.version == seq) {
             return Ok(Some(state));
         }
@@ -180,7 +180,7 @@ fn events_after(conn: &mut dyn Conn, item: &ItemId, after: u64) -> Result<Vec<(u
         .map(|row| Ok((row.get::<i64>(0)?, row.get::<String>(1)?)))
         .collect::<database::Result<Vec<_>>>()?
         .into_iter()
-        .filter_map(|(seq, text)| match WorkflowEvent::read(&text) {
+        .filter_map(|(seq, text)| match crate::legacy::event(&text) {
             Ok(Some(event)) => Some(unsigned(seq).map(|seq| (seq, event))),
             Ok(None) => None,
             Err(error) => Some(Err(error.into())),
@@ -199,6 +199,44 @@ mod tests {
     use serde_json::json;
 
     use super::*;
+
+    #[test]
+    fn an_item_kept_before_bindings_loads_its_lane_and_chosen_base_as_bindings() {
+        let store = Store::in_memory(0).expect("store");
+        let id = ItemId::from("old-2");
+        let created =
+            WorkflowEvent::ItemCreated { id: id.clone(), workflow: "flow".into(), parent: None, input: json!({}) };
+        store.append(&id, &[created]).expect("created");
+        let lane = json!({ "type": "branched", "data": { "name": "big/x" } });
+        let base = json!({ "type": "base_chosen", "data": { "repository": "web", "base": "main" } });
+        store
+            .write(|conn| {
+                for (seq, event) in [(2, &lane), (3, &base)] {
+                    conn.execute(
+                        "INSERT INTO work_events (item, seq, event, at) VALUES (?1, ?2, ?3, 0)",
+                        args![id.as_str(), seq, event.to_string()],
+                    )?;
+                }
+                let state: String =
+                    conn.one("SELECT state FROM items WHERE id = ?1", args![id.as_str()])?.unwrap_or_default();
+                let mut state: serde_json::Value = serde_json::from_str(&state)?;
+                state["branch"] = json!("big/x");
+                state["version"] = json!(3);
+                conn.execute("UPDATE items SET state = ?1 WHERE id = ?2", args![state.to_string(), id.as_str()])?;
+                Ok(())
+            })
+            .expect("an old item");
+        let text = |item: &WorkItem, connection: &str, kind: &str| {
+            item.bound(connection, kind).and_then(domain::workflow::Binding::text).map(str::to_owned)
+        };
+        let kept = store.item(&id).expect("item").expect("kept");
+        assert_eq!(text(&kept, "", "branch").as_deref(), Some("big/x"), "the old projection keeps its lane");
+        let rebuilt = store.load(&id).expect("rebuilt").expect("events");
+        assert_eq!(text(&rebuilt, "", "branch").as_deref(), Some("big/x"));
+        assert_eq!(text(&rebuilt, "web", "base").as_deref(), Some("main"));
+        assert_eq!(store.events(&id, 0).expect("events").len(), 3);
+        assert!(store.append(&id, &[WorkflowEvent::Named { title: "novo".into() }]).is_ok());
+    }
 
     #[test]
     fn an_item_kept_with_a_retired_heads_up_still_loads() {

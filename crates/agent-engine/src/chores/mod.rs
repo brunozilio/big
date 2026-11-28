@@ -68,7 +68,7 @@ pub fn title(
 pub fn branch_name(title: &str, history: &[Message]) -> Option<String> {
     let opening = || history.iter().find(|message| message.role == crate::transcript::Role::User).map(Message::text);
     let source = Some(title.to_owned()).filter(|title| !title.trim().is_empty()).or_else(opening)?;
-    domain::workflow::branch_slug(&source)
+    domain::workflow::slug(&source)
 }
 
 fn later(template: &TurnRequest) -> TurnRequest {

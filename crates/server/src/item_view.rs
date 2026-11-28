@@ -143,12 +143,12 @@ fn repository_name(item: &WorkItem, id: &str) -> String {
 
 fn git(item: Option<&WorkItem>) -> Vec<Value> {
     let Some(item) = item else { return Vec::new() };
-    let wanted = item.input["git"].as_object().into_iter().flatten();
-    wanted
-        .map(|(id, branches)| {
+    orchestrator::wanted_refs(item)
+        .into_iter()
+        .map(|wanted| {
             json!({
-                "repository": id, "name": repository_name(item, id),
-                "base": text(&branches["base"]), "head": text(&branches["head"]),
+                "repository": wanted.repository, "name": repository_name(item, &wanted.repository),
+                "base": wanted.base, "head": wanted.head,
             })
         })
         .collect()

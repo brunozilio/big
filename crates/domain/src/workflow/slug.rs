@@ -14,7 +14,7 @@ fn plain(letter: char) -> char {
     }
 }
 
-pub fn branch_slug(text: &str) -> Option<String> {
+pub fn slug(text: &str) -> Option<String> {
     let folded: String = text.chars().map(plain).collect();
     let words: Vec<&str> =
         folded.split(|c: char| !c.is_ascii_alphanumeric()).filter(|word| !word.is_empty()).take(WORDS).collect();
@@ -34,14 +34,14 @@ pub fn branch_slug(text: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::branch_slug;
+    use super::slug;
 
     #[test]
     fn a_slug_keeps_the_first_words_without_accents_and_stays_short() {
-        assert_eq!(branch_slug("Corrigir a validação do login!").as_deref(), Some("corrigir-a-validacao-do-login"));
-        assert_eq!(branch_slug("PROJ-12").as_deref(), Some("proj-12"));
-        assert_eq!(branch_slug("  ...  "), None);
-        let long = branch_slug("internacionalização configurável extraordinariamente demorada").expect("slug");
+        assert_eq!(slug("Corrigir a validação do login!").as_deref(), Some("corrigir-a-validacao-do-login"));
+        assert_eq!(slug("PROJ-12").as_deref(), Some("proj-12"));
+        assert_eq!(slug("  ...  "), None);
+        let long = slug("internacionalização configurável extraordinariamente demorada").expect("slug");
         assert!(long.len() <= 40, "{long}");
         assert_eq!(long, "internacionalizacao-configuravel");
     }

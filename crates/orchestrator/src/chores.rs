@@ -154,7 +154,7 @@ fn source_text(item: &WorkItem) -> Option<String> {
 }
 
 pub fn branch_for(item: &WorkItem) -> Option<String> {
-    let slug = domain::workflow::branch_slug(&source_text(item)?)?;
+    let slug = domain::workflow::slug(&source_text(item)?)?;
     let id: String = item.id.as_str().chars().filter(char::is_ascii_alphanumeric).collect();
     let short = &id[id.len().saturating_sub(SHORT_ID)..];
     Some(format!("{}/{slug}-{}", brand::workflow::BRANCH_PREFIX, short.to_ascii_lowercase()))
@@ -165,11 +165,11 @@ pub fn ensure_branch(shared: &Shared, item: &WorkItem, current: &str) -> WorkIte
         .effects
         .iter()
         .any(|(key, entry)| key != current && matches!(entry.request.effect, Effect::AgentRun { .. }));
-    if item.branch.is_some() || started {
+    if crate::git::lane(item).is_some() || started {
         return item.clone();
     }
     let Some(name) = branch_for(item) else { return item.clone() };
-    shared.append(&item.id, &[WorkflowEvent::Branched { name }]).unwrap_or_else(|error| {
+    shared.append(&item.id, &[crate::git::named_lane(name)]).unwrap_or_else(|error| {
         tracing::warn!(%error, "the item's branch name could not be kept");
         item.clone()
     })

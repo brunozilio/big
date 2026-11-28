@@ -2,6 +2,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value;
 
+use super::binding::bind;
 use super::event::WorkflowEvent;
 use super::item::{ChildLink, EffectEntry, Ending, HumanAnswer, Impediment, Observed, StepRun, StepState, WorkItem};
 use crate::effect::{Effect, EffectOutcome, EffectRequest, IdempotencyKey};
@@ -92,9 +93,6 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
         WorkflowEvent::ExternalObserved(seen) => observe(&mut item, seen),
         WorkflowEvent::Reconciled { .. } => {}
         WorkflowEvent::Named { title } => item.name = Some(title.clone()),
-        WorkflowEvent::Branched { name } => {
-            item.branch.get_or_insert_with(|| name.clone());
-        }
         WorkflowEvent::Recapped { recap } => item.recap = Some(recap.clone()),
         WorkflowEvent::Linked { item: member } => {
             item.released.retain(|known| known != member);
@@ -109,19 +107,9 @@ pub fn reduce(mut item: WorkItem, event: &WorkflowEvent) -> WorkItem {
             }
         }
         WorkflowEvent::Accepting { on } => item.accepting = *on,
-        WorkflowEvent::BaseChosen { repository, base } => choose_base(&mut item, repository, base),
+        WorkflowEvent::Bound { binding, keep } => bind(&mut item.bindings, binding, *keep),
     }
     item
-}
-
-fn choose_base(item: &mut WorkItem, repository: &str, base: &str) {
-    if !item.input["git"].is_object() {
-        item.input["git"] = Value::Object(serde_json::Map::new());
-    }
-    if !item.input["git"][repository].is_object() {
-        item.input["git"][repository] = Value::Object(serde_json::Map::new());
-    }
-    item.input["git"][repository]["base"] = Value::String(base.to_owned());
 }
 
 fn run_mut<'a>(item: &'a mut WorkItem, id: &str, branch: Option<&str>) -> &'a mut StepRun {

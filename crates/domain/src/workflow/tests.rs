@@ -428,15 +428,16 @@ fn items_saved_before_observations_existed_still_load() {
 }
 
 #[test]
-fn the_first_branch_sticks_and_the_latest_recap_wins() {
+fn a_kept_binding_sticks_and_the_latest_recap_wins() {
+    let first = Binding::new("", "lane", json!("big/primeira"));
     let item = replay(&[
         created(),
-        WorkflowEvent::Branched { name: "big/primeira".into() },
-        WorkflowEvent::Branched { name: "big/segunda".into() },
+        WorkflowEvent::Bound { binding: first.clone(), keep: true },
+        WorkflowEvent::Bound { binding: Binding::new("", "lane", json!("big/segunda")), keep: true },
         WorkflowEvent::Recapped { recap: ItemRecap { text: "antes".into(), after: "k1".into() } },
         WorkflowEvent::Recapped { recap: ItemRecap { text: "agora".into(), after: "k2".into() } },
     ]);
-    assert_eq!(item.branch.as_deref(), Some("big/primeira"));
+    assert_eq!(item.bound("", "lane"), Some(&first));
     assert_eq!(item.recap.as_ref().map(|recap| recap.text.as_str()), Some("agora"));
 }
 
@@ -461,12 +462,27 @@ fn a_linked_item_stays_linked_until_released_and_a_new_link_takes_it_back() {
 }
 
 #[test]
-fn a_chosen_base_branch_replaces_the_one_the_flow_gave_only_for_its_repository() {
-    let item = replay(&[
-        created(),
-        WorkflowEvent::BaseChosen { repository: "web".into(), base: "main".into() },
-        WorkflowEvent::BaseChosen { repository: "api".into(), base: "trunk".into() },
-    ]);
-    assert_eq!(item.input["git"]["web"]["base"], "main");
-    assert_eq!(item.input["git"]["api"]["base"], "trunk");
+fn a_binding_replaces_only_its_own_connection_and_kind_and_stays_opaque() {
+    let bound = |connection: &str, kind: &str, value: &str| WorkflowEvent::Bound {
+        binding: Binding::new(connection, kind, json!(value)),
+        keep: false,
+    };
+    let item = replay(&[created(), bound("web", "base", "dev"), bound("web", "base", "main"), bound("api", "base", "trunk")]);
+    assert_eq!(item.bound("web", "base").and_then(Binding::text), Some("main"));
+    assert_eq!(item.bound("api", "base").and_then(Binding::text), Some("trunk"));
+    assert_eq!(item.bindings.len(), 2);
+    assert_eq!(item.input, json!({"title": "x"}), "a binding never writes into the input");
+    let saved = serde_json::to_value(&item).unwrap_or_default();
+    assert_eq!(saved["bindings"][0], json!({ "connection": "web", "kind": "base", "value": "main" }));
+    let back: Option<WorkItem> = serde_json::from_value(saved).ok();
+    assert_eq!(back, Some(item));
+}
+
+#[test]
+fn an_item_without_bindings_saves_none_and_loads_back_empty() {
+    let item = replay(&[created()]);
+    let saved = serde_json::to_value(&item).unwrap_or_default();
+    assert!(saved.get("bindings").is_none());
+    let back: Option<WorkItem> = serde_json::from_value(saved).ok();
+    assert!(back.is_some_and(|back| back.bindings.is_empty()));
 }
