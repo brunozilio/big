@@ -32,7 +32,7 @@ pub fn nearest<'a>(name: &str, known: impl IntoIterator<Item = &'a str>) -> Opti
         .min_by_key(|candidate| (distance(&name, &candidate.to_ascii_lowercase()), name.len().abs_diff(candidate.len())))
 }
 
-fn distance(a: &str, b: &str) -> usize {
+pub fn distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     let mut table = vec![vec![0; b.len() + 1]; a.len() + 1];

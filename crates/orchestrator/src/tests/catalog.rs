@@ -96,3 +96,34 @@ async fn a_wait_on_the_old_name_wakes_on_the_renamed_event() {
     let item = ended(&kernel, &id).await;
     assert_eq!(output(&item)["data"], json!({ "kind": "fake.status.changed" }));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_wait_on_the_old_name_registered_after_the_event_takes_the_one_already_seen() {
+    let world = World::new();
+    declared(&world);
+    let body = "const e = await ctx.event(\"tracker.status.changed\", { to: \"Feito\" }); return ctx.pass({ kind: e.kind, capability: e.capability });";
+    let source = format!(
+        "import {{ workflow, step }} from \"sdk\";\nconst only = step({{ name: \"only\", async run(ctx) {{ {body} }} }});\nexport default workflow({{ name: \"late\", steps: [only()] }});\n"
+    );
+    world.workflow("late", &source);
+    let kernel = world.start().await;
+    let id = kernel.create_item("late", json!({})).expect("item");
+    let waiting =
+        |item: &WorkItem| item.pending_effects().any(|request| matches!(request.effect, Effect::WaitEvent { .. }));
+    until(&kernel, &id, waiting).await;
+    crash(kernel).await;
+    let seen = domain::workflow::Observed {
+        id: "s1".into(),
+        connection: "c1".into(),
+        kind: "fake.status.changed".into(),
+        subject: "BIG-9".into(),
+        data: json!({ "to": "Feito" }),
+        at: jiff::Timestamp::now().as_millisecond(),
+        aliases: vec!["tracker.status.changed".into()],
+        capability: "tracker".into(),
+    };
+    world.store().append(&id, &[domain::workflow::WorkflowEvent::ExternalObserved(seen)]).expect("observed");
+    let kernel = world.start().await;
+    let item = ended(&kernel, &id).await;
+    assert_eq!(output(&item)["data"], json!({ "kind": "fake.status.changed", "capability": "tracker" }));
+}

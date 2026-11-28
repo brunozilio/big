@@ -1,11 +1,17 @@
+use axum::Router;
 use axum::extract::State;
 use axum::response::Response;
+use axum::routing::get;
 use connectors::Connectors;
 use domain::Language;
 use serde_json::{Value, json};
 
 use crate::error::json as reply;
 use crate::state::Ctx;
+
+pub fn routes(router: Router<Ctx>) -> Router<Ctx> {
+    router.route("/api/events", get(list))
+}
 
 pub fn listing(connectors: &Connectors, language: Language) -> Value {
     json!({ "connectors": connectors.catalog(language), "platform": orchestrator::platform_events() })

@@ -73,6 +73,7 @@ pub(crate) fn observed(event: &ExternalEvent) -> Observed {
         data: event.data.clone(),
         at: event.at.as_millisecond(),
         aliases: event.aliases.clone(),
+        capability: event.capability.to_string(),
     }
 }
 

@@ -349,7 +349,6 @@ async fn a_trigger_creates_one_item_per_subject_and_the_sync_reports_health() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_pull_request_trigger_keeps_a_typed_source_and_no_issue() {
     let world = World::new();
-    world.provider.declare(json!([{ "name": "fake.pr.opened", "capability": "code", "source": "pull_request", "aliases": ["code.pr.opened"] }]));
     world.workflow(
         "reviews",
         "import { workflow, on } from \"sdk\";\nexport default workflow({ name: \"reviews\", triggers: [on(\"code.pr.opened\")], async run(ctx) { return await ctx.waitHuman([]); } });",

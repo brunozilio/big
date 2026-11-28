@@ -422,9 +422,7 @@ impl Orchestrator {
         let custom =
             |workflow: &&String| resources.workflow(workflow).is_some_and(|found| found.origin != Origin::Builtin);
         let Some(workflow) = fresh.iter().find(custom).or(fresh.first()) else { return Ok(0) };
-        let connectors = &self.shared.config.connectors;
-        let declared = connectors.event(&event.kind).map(|spec| spec.source.as_str()).filter(|source| !source.is_empty());
-        let kind = declared.unwrap_or(event.capability.as_str());
+        let kind = crate::triggers::source_of(&self.shared.config.connectors, event);
         let title = value["data"]["title"].as_str().unwrap_or(&event.subject).to_owned();
         let source = json!({ "kind": kind, "connection": event.connection, "subject": event.subject });
         let mut input = json!({ "title": title, "sources": [source], "event": value });

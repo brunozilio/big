@@ -116,9 +116,15 @@ pub struct Observed {
     pub at: i64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub aliases: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub capability: String,
 }
 
 impl Observed {
+    pub fn answers(&self, kind: &str) -> bool {
+        self.kind == kind || self.aliases.iter().any(|alias| alias == kind)
+    }
+
     pub fn slot(&self) -> String {
         format!("{}@{}", self.kind, self.subject)
     }

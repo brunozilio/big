@@ -77,13 +77,16 @@ fn seen_before(shared: &Shared, wait: &EventWait) -> crate::error::Result<Option
     let state = shared.item(&wait.item)?;
     let ledger = crate::ledger::Ledger::load(&shared.store, &wait.item)?;
     let since = ledger.requested_at.get(&wait.key.seq).copied().unwrap_or(i64::MAX);
-    let mut seen: Vec<_> = state.observed.values().filter(|seen| seen.kind == wait.kind && seen.at >= since).collect();
+    let mut seen: Vec<_> = state.observed.values().filter(|seen| seen.answers(&wait.kind) && seen.at >= since).collect();
     seen.sort_by_key(|seen| seen.at);
+    let connectors = &shared.config.connectors;
     Ok(seen.into_iter().find_map(|seen| {
         let at = jiff::Timestamp::from_millisecond(seen.at).map(|at| at.to_string()).unwrap_or_default();
+        let declared = || connectors.event(&seen.kind).map(|spec| spec.capability.to_string()).unwrap_or_default();
+        let capability = if seen.capability.is_empty() { declared() } else { seen.capability.clone() };
         let value = json!({
-            "id": seen.id, "connection": seen.connection, "capability": seen.kind.split('.').next(),
-            "kind": seen.kind, "subject": seen.subject, "data": seen.data, "at": at,
+            "id": seen.id, "connection": seen.connection, "capability": capability,
+            "kind": seen.kind, "aliases": seen.aliases, "subject": seen.subject, "data": seen.data, "at": at,
         });
         event_matches(&wait.filter, &value).then_some(value)
     }))

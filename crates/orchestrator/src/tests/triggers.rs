@@ -52,7 +52,6 @@ async fn a_review_trigger_lands_in_the_application_of_the_repository_on_the_pull
 #[tokio::test(flavor = "multi_thread")]
 async fn an_issue_trigger_lands_in_the_application_that_tracks_that_connection() {
     let world = World::new();
-    world.provider.declare(json!([{ "name": "fake.issue.created", "capability": "tracker", "source": "issue", "aliases": ["tracker.issue.created"] }]));
     world.store().save_application(&checkout(&world)).expect("application");
     waiting(&world, "intake", "tracker.issue.created");
     let kernel = world.start().await;

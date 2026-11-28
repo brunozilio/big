@@ -422,6 +422,8 @@ async fn events_come_from_pulls_reviews_and_runs_changed_since_the_cursor_and_et
     let Ok(batch) = batch else { panic!("{batch:?}") };
     let kinds: Vec<&str> = batch.events.iter().map(|e| e.kind.as_str()).collect();
     assert_eq!(kinds, ["github.run.finished", "github.review.submitted", "github.pr.merged"]);
+    assert!(batch.events[2].id.contains(":code.pr.merged:"), "the id keeps the old name: {}", batch.events[2].id);
+    assert!(batch.events[0].id.ends_with(":pipelines.run.finished"), "{}", batch.events[0].id);
     assert_eq!(batch.events[2].subject, "acme/app#7");
     assert_eq!(batch.events[2].data["state"], "merged");
     assert_eq!(batch.events[0].subject, "acme/app/runs/5");
