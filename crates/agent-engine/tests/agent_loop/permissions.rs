@@ -37,7 +37,7 @@ fn asks_before_commands_and_honours_the_answer() {
 fn reading_outside_the_project_is_asked_for_by_path_and_a_denial_keeps_it_unread() {
     let rig = Rig::planning();
     let elsewhere = tempfile::tempdir().expect("dir");
-    let secret = elsewhere.path().join("id_ed25519");
+    let secret = elsewhere.path().join("deploy-notes.txt");
     std::fs::write(&secret, "PRIVATE KEY").expect("write");
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![
@@ -63,7 +63,7 @@ fn reading_outside_the_project_is_asked_for_by_path_and_a_denial_keeps_it_unread
         })
         .collect();
     assert_eq!(asked.len(), 2, "only the reads outside: {asked:?}");
-    assert!(asked.iter().any(|(tool, subject)| tool == "Read" && subject.ends_with("id_ed25519")));
+    assert!(asked.iter().any(|(tool, subject)| tool == "Read" && subject.ends_with("deploy-notes.txt")));
     assert!(asked.iter().any(|(tool, _)| tool == "Grep"));
     let results = &model.asked()[1].messages[2].blocks;
     let text = format!("{results:?}");

@@ -49,7 +49,10 @@ impl Reason {
         match self {
             Self::Flagged(why) => format!("{tool} was blocked. {why} Find a safer way to do this or ask the user."),
             Self::Hard(category) => {
-                format!("{tool} was blocked: {}. Find a safer way to do this or ask the user.", category.why())
+                format!(
+                    "{tool} was blocked because {}. The safety floor has a person approve that every time, and this run has no one to ask, so it was refused. Find a safer way to do this or ask the user.",
+                    category.why()
+                )
             }
             _ => format!("{tool} requires permission; dontAsk denies unapproved actions."),
         }

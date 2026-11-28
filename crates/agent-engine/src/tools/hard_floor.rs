@@ -10,10 +10,18 @@ const TARGETS: &str = "safety/targets/";
 const EXPORT: &str = "hard";
 
 pub fn floor(home: Option<&Path>) -> Floor {
-    let mut floor = Floor::at_home(home.map(Path::to_path_buf));
-    floor.govern(governed(home), [brand::DIR.to_owned()]);
+    let home = home.map(Path::to_path_buf).or_else(std::env::home_dir);
+    let mut floor = Floor::at_home(home.clone());
+    floor.govern(governed(home.as_deref()), [brand::DIR.to_owned()]);
     for (name, source) in sources() {
-        floor.add(&declared(&name, &source), &|path| settled(path));
+        let homeless = floor.add(&declared(&name, &source), &|path| settled(path));
+        if !homeless.is_empty() {
+            tracing::warn!(
+                file = name,
+                ?homeless,
+                "no home folder is known, so these safety floor paths match wherever they appear"
+            );
+        }
     }
     floor
 }

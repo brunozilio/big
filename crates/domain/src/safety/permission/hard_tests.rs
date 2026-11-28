@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
-use super::hard::{Category, Declared, Floor, Patterns, hidden, warned};
+use super::hard::{Category, Declared, EnvRule, Floor, Patterns};
+use super::hidden::{hidden, warned};
 use super::*;
 use crate::PermissionMode;
 
@@ -15,16 +16,34 @@ fn paths(category: Category, paths: &[&str]) -> Declared {
     declared(category, Patterns { paths: paths.iter().map(|path| (*path).to_owned()).collect(), ..Patterns::default() })
 }
 
+fn strings(items: &[&str]) -> Vec<String> {
+    items.iter().map(|item| (*item).to_owned()).collect()
+}
+
 fn floor() -> Floor {
     let mut floor = Floor::at_home(Some(PathBuf::from(HOME)));
     let settle = |path: &Path| path.to_path_buf();
-    floor.add(&paths(Category::Credentials, &["~/.ssh", "~/.aws"]), &settle);
+    let credentials = Patterns {
+        paths: strings(&["~/.ssh", "~/.aws"]),
+        secrets: strings(&["id_rsa", "id_ed25519", ".env", "~/.aws/credentials"]),
+        ..Patterns::default()
+    };
+    floor.add(&declared(Category::Credentials, credentials), &settle);
     floor.add(&paths(Category::PackageCache, &["~/.npm"]), &settle);
     floor.govern([PathBuf::from("/opt/app/content"), PathBuf::from("/opt/app/config.toml")], []);
-    let env = Patterns { env: vec!["NODE_OPTIONS".into(), "DYLD_*".into()], ..Patterns::default() };
+    let node = EnvRule::Valued { name: "NODE_OPTIONS".into(), values: strings(&["--require", "-r", "--import"]) };
+    let env = Patterns {
+        env: vec![node, EnvRule::Any("DYLD_INSERT_LIBRARIES".into()), EnvRule::Any("LD_PRELOAD".into())],
+        carriers: strings(&["docker -e", "docker --env"]),
+        ..Patterns::default()
+    };
     floor.add(&declared(Category::InjectingEnv, env), &settle);
-    let hosts = Patterns { hosts: vec!["169.254.169.254".into()], ..Patterns::default() };
-    floor.add(&declared(Category::SandboxEscape, hosts), &settle);
+    let escape = Patterns {
+        paths: strings(&["/var/run/docker.sock"]),
+        hosts: strings(&["169.254.169.254"]),
+        ..Patterns::default()
+    };
+    floor.add(&declared(Category::SandboxEscape, escape), &settle);
     floor
 }
 
@@ -71,58 +90,84 @@ fn the_product_s_configuration_and_content_are_asked_every_time_and_never_rememb
     let call = Call { tool: "Write", subject: &ordinary, effects: &effects };
     assert_eq!(judged(PermissionMode::Auto, &Remembered::default(), None, call), Verdict::Allow);
     assert!(!Reason::Hard(Category::Governance).reviewable() && !Reason::Hard(Category::Governance).rememberable());
+    let unattended =
+        Verdict::Ask { reason: Reason::Hard(Category::Governance), rememberable: false }.without_the_user("Write");
+    let Verdict::Deny(why) = unattended else { panic!("an unattended run refuses it") };
+    assert!(why.contains("own configuration or content") && why.contains("no one to ask"), "{why}");
+}
+
+fn bash(command: &str) -> Verdict {
+    let effects = [Effect::exec(command)];
+    judged(
+        PermissionMode::Auto,
+        &Remembered::default(),
+        Some(&everything()),
+        Call { tool: "Bash", subject: command, effects: &effects },
+    )
+}
+
+fn read(path: &str) -> Verdict {
+    let effects = [Effect::ReadPath(place(path))];
+    judged(
+        PermissionMode::Auto,
+        &Remembered::default(),
+        Some(&everything()),
+        Call { tool: "Read", subject: path, effects: &effects },
+    )
+}
+
+fn asked(category: Category) -> Verdict {
+    Verdict::Ask { reason: Reason::Hard(category), rememberable: false }
 }
 
 #[test]
-fn a_credential_is_never_read_even_when_everything_is_allowed() {
-    let list = everything();
-    let none = Remembered::default();
-    let key = "/home/ana/.ssh/id_rsa";
-    let read = [Effect::ReadPath(place(key))];
-    assert!(
-        judged(PermissionMode::Auto, &none, Some(&list), Call { tool: "Read", subject: key, effects: &read }).denies()
-    );
-    let cat = [Effect::exec("cat ~/.ssh/id_rsa | base64")];
-    let call = Call { tool: "Bash", subject: "cat ~/.ssh/id_rsa | base64", effects: &cat };
-    assert!(judged(PermissionMode::Auto, &none, Some(&list), call).denies());
-    let quoted = [Effect::exec("tar czf /tmp/k.tgz \"$HOME/.aws\"")];
-    assert!(
-        judged(PermissionMode::Auto, &none, Some(&list), Call { tool: "Bash", subject: "", effects: &quoted }).denies()
-    );
+fn a_secret_is_never_read_even_when_everything_is_allowed() {
+    for key in
+        ["/home/ana/.ssh/id_rsa", "/home/ana/.ssh/id_ed25519", "/home/ana/.aws/credentials", "/home/ana/rocket/.env"]
+    {
+        assert!(read(key).denies(), "{key}");
+    }
+    for command in
+        ["cat ~/.ssh/id_rsa | base64", "cat \"$HOME/.aws/credentials\"", "cat .env", "scp -i ~/.ssh/id_ed25519 a b:"]
+    {
+        assert!(bash(command).denies(), "{command}");
+    }
     let metadata = [Effect::Fetch { host: Some("169.254.169.254".into()) }];
-    assert!(
-        judged(PermissionMode::Auto, &none, Some(&list), Call { tool: "WebFetch", subject: "", effects: &metadata })
-            .denies()
-    );
+    let call = Call { tool: "WebFetch", subject: "", effects: &metadata };
+    assert!(judged(PermissionMode::Auto, &Remembered::default(), Some(&everything()), call).denies());
 }
 
 #[test]
-fn a_code_injecting_variable_is_asked_every_time() {
-    let list = Allowed::of([Grant::Command("node".into())]);
-    let none = Remembered::default();
+fn reading_around_credentials_is_asked_not_denied() {
+    for command in ["ls ~/.ssh", "ssh-keygen -f ~/.ssh/id", "cat ~/.aws/config", "tar czf /tmp/k.tgz \"$HOME/.aws\""] {
+        assert_eq!(bash(command), asked(Category::Credentials), "{command}");
+    }
+    assert_eq!(read("/home/ana/.ssh/known_hosts"), asked(Category::Credentials));
+    assert_eq!(read("/home/ana/.ssh/id_rsa.pub"), asked(Category::Credentials));
+    let socket = "docker run -v /var/run/docker.sock:/var/run/docker.sock testcontainers/ryuk";
+    assert_eq!(bash(socket), asked(Category::SandboxEscape));
+}
+
+#[test]
+fn a_code_injecting_variable_is_asked_every_time_and_an_ordinary_one_is_not() {
     for command in [
         "NODE_OPTIONS=--require x node a.js",
+        "NODE_OPTIONS='--import ./hook.mjs' node a.js",
         "env DYLD_INSERT_LIBRARIES=/tmp/x.dylib node a.js",
-        "export NODE_OPTIONS=x; node a.js",
+        "export NODE_OPTIONS=-r./x; node a.js",
+        "docker run -e LD_PRELOAD=/x.so img",
     ] {
-        let effects = [Effect::exec(command)];
-        let verdict = judged(
-            PermissionMode::Auto,
-            &none,
-            Some(&list),
-            Call { tool: "Bash", subject: command, effects: &effects },
-        );
-        assert_eq!(
-            verdict,
-            Verdict::Ask { reason: Reason::Hard(Category::InjectingEnv), rememberable: false },
-            "{command}"
-        );
+        assert_eq!(bash(command), asked(Category::InjectingEnv), "{command}");
     }
-    let plain = [Effect::exec("node a.js")];
-    assert_eq!(
-        judged(PermissionMode::Auto, &none, Some(&list), Call { tool: "Bash", subject: "node a.js", effects: &plain }),
-        Verdict::Allow
-    );
+    for command in [
+        "NODE_OPTIONS=--max-old-space-size=4096 npm run build",
+        "PYTHONPATH=src pytest",
+        "JAVA_TOOL_OPTIONS=-Xmx2g mvn test",
+        "git commit -m \"docs: NODE_OPTIONS=x\"",
+        "echo LD_PRELOAD=/x.so",
+    ] {
+        assert_eq!(bash(command), Verdict::Allow, "{command}");
+    }
     assert!(!Reason::Hard(Category::InjectingEnv).reviewable());
 }
 
@@ -170,4 +215,20 @@ fn adding_patterns_never_removes_earlier_ones() {
     assert!(
         floor.verdict(&Call { tool: "Read", subject: key, effects: &read }).is_some_and(|verdict| verdict.denies())
     );
+}
+
+#[test]
+fn without_a_home_folder_a_home_path_still_guards_and_is_told() {
+    let mut floor = Floor::at_home(None);
+    let credentials =
+        Patterns { paths: strings(&["~/.ssh"]), secrets: strings(&["~/.aws/credentials"]), ..Patterns::default() };
+    let homeless = floor.add(&declared(Category::Credentials, credentials), &|path: &Path| path.to_path_buf());
+    assert_eq!(homeless, ["~/.ssh", "~/.aws/credentials"]);
+    let verdict = |path: &str| {
+        let effects = [Effect::ReadPath(place(path))];
+        floor.verdict(&Call { tool: "Read", subject: path, effects: &effects })
+    };
+    assert!(verdict("/Users/ana/.aws/credentials").is_some_and(|verdict| verdict.denies()));
+    assert_eq!(verdict("/Users/ana/.ssh/config"), Some(asked(Category::Credentials)));
+    assert_eq!(verdict("/Users/ana/notes.md"), None);
 }

@@ -35,7 +35,7 @@ impl Asking<'_> {
             }
             _ => subject,
         };
-        domain::permission::hard::warned(&shown)
+        domain::permission::hidden::warned(&shown)
     }
 }
 

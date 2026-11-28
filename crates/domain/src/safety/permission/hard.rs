@@ -3,6 +3,9 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
+pub use super::env::EnvRule;
+use super::env;
+use super::hidden::{hidden, revealed};
 use super::{Call, Effect, Reason, Verdict};
 use crate::shell::SimpleCommand;
 
@@ -29,7 +32,7 @@ impl Category {
         }
     }
 
-    fn denies(self) -> bool {
+    fn denies_writes(self) -> bool {
         matches!(self, Self::Credentials | Self::SandboxEscape)
     }
 
@@ -43,24 +46,57 @@ pub struct Patterns {
     #[serde(default)]
     pub paths: Vec<String>,
     #[serde(default)]
+    pub secrets: Vec<String>,
+    #[serde(default)]
     pub hosts: Vec<String>,
     #[serde(default)]
     pub apps: Vec<String>,
     #[serde(default)]
-    pub env: Vec<String>,
+    pub env: Vec<EnvRule>,
+    #[serde(default)]
+    pub carriers: Vec<String>,
 }
 
 pub type Declared = BTreeMap<Category, Patterns>;
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Place {
+    Under(PathBuf),
+    Named(String),
+    Homeless(PathBuf),
+}
+
+impl Place {
+    fn holds(&self, real: &Path, inside: &Path) -> bool {
+        match self {
+            Self::Under(place) => real.starts_with(place),
+            Self::Named(name) => inside.components().any(|part| glob(name, &part.as_os_str().to_string_lossy())),
+            Self::Homeless(rest) => {
+                let parts: Vec<_> = real.components().collect();
+                let wanted: Vec<_> = rest.components().collect();
+                !wanted.is_empty() && parts.windows(wanted.len()).any(|window| window == wanted.as_slice())
+            }
+        }
+    }
+}
+
+fn glob(rule: &str, name: &str) -> bool {
+    match rule.split_once('*') {
+        Some((head, tail)) => name.len() >= head.len() + tail.len() && name.starts_with(head) && name.ends_with(tail),
+        None => rule.eq_ignore_ascii_case(name),
+    }
+}
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Floor {
     home: Option<PathBuf>,
     roots: Vec<PathBuf>,
-    paths: Vec<(Category, PathBuf)>,
-    named: Vec<(Category, String)>,
+    paths: Vec<(Category, Place)>,
+    secrets: Vec<Place>,
     hosts: Vec<(Category, String)>,
     apps: Vec<(Category, String)>,
-    env: Vec<(Category, String)>,
+    env: Vec<(Category, EnvRule)>,
+    carriers: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -89,39 +125,57 @@ impl Floor {
         self.home = self.home.take().or(other.home);
         self.roots.extend(other.roots);
         self.paths.extend(other.paths);
-        self.named.extend(other.named);
+        self.secrets.extend(other.secrets);
         self.hosts.extend(other.hosts);
         self.apps.extend(other.apps);
         self.env.extend(other.env);
+        self.carriers.extend(other.carriers);
     }
 
     pub fn govern(&mut self, places: impl IntoIterator<Item = PathBuf>, named: impl IntoIterator<Item = String>) {
-        self.paths.extend(places.into_iter().map(|place| (Category::Governance, place)));
-        self.named.extend(named.into_iter().map(|name| (Category::Governance, name)));
+        self.paths.extend(places.into_iter().map(|place| (Category::Governance, Place::Under(place))));
+        self.paths.extend(named.into_iter().map(|name| (Category::Governance, Place::Named(name))));
     }
 
-    pub fn add(&mut self, declared: &Declared, settle: &dyn Fn(&Path) -> PathBuf) {
+    pub fn add(&mut self, declared: &Declared, settle: &dyn Fn(&Path) -> PathBuf) -> Vec<String> {
+        let mut homeless = Vec::new();
         for (category, patterns) in declared {
-            for path in patterns.paths.iter().map(|path| path.trim()).filter(|path| !path.is_empty()) {
-                match self.expanded(path) {
-                    Some(place) => self.paths.push((*category, settle(&place))),
-                    None => self.named.push((*category, path.to_owned())),
-                }
+            for written in patterns.paths.iter().map(|path| path.trim()).filter(|path| !path.is_empty()) {
+                self.paths.push((*category, self.placed(written, settle, &mut homeless)));
+            }
+            for written in patterns.secrets.iter().map(|path| path.trim()).filter(|path| !path.is_empty()) {
+                let place = self.placed(written, settle, &mut homeless);
+                self.secrets.push(place);
             }
             let lower = |text: &String| text.trim().to_ascii_lowercase();
             self.hosts.extend(patterns.hosts.iter().map(lower).filter(|h| !h.is_empty()).map(|h| (*category, h)));
             self.apps.extend(patterns.apps.iter().map(lower).filter(|a| !a.is_empty()).map(|a| (*category, a)));
-            let env = patterns.env.iter().map(|name| name.trim().to_owned()).filter(|name| !name.is_empty());
-            self.env.extend(env.map(|name| (*category, name)));
+            self.env.extend(patterns.env.iter().filter(|rule| rule.named()).map(|rule| (*category, rule.clone())));
+            self.carriers.extend(patterns.carriers.iter().filter_map(|carrier| {
+                let (app, flag) = carrier.trim().split_once(' ')?;
+                Some((app.to_ascii_lowercase(), flag.trim().to_owned()))
+            }));
+        }
+        homeless
+    }
+
+    fn placed(&self, written: &str, settle: &dyn Fn(&Path) -> PathBuf, homeless: &mut Vec<String>) -> Place {
+        if let Some(place) = self.expanded(written) {
+            return Place::Under(settle(&place));
+        }
+        match home_relative(written) {
+            Some(rest) => {
+                homeless.push(written.to_owned());
+                Place::Homeless(PathBuf::from(rest))
+            }
+            None => Place::Named(written.to_owned()),
         }
     }
 
     fn expanded(&self, written: &str) -> Option<PathBuf> {
         let written = written.trim_matches(|c| c == '"' || c == '\'');
-        for prefix in ["~/", "$HOME/", "${HOME}/"] {
-            if let Some(rest) = written.strip_prefix(prefix) {
-                return self.home.as_ref().map(|home| home.join(rest));
-            }
+        if let Some(rest) = home_relative(written) {
+            return self.home.as_ref().map(|home| home.join(rest));
         }
         if written == "~" {
             return self.home.clone();
@@ -129,16 +183,22 @@ impl Floor {
         Path::new(written).is_absolute().then(|| PathBuf::from(written))
     }
 
+    fn inside<'p>(&self, real: &'p Path) -> &'p Path {
+        self.roots.iter().find_map(|root| real.strip_prefix(root).ok()).unwrap_or(real)
+    }
+
     fn path_hit(&self, real: &Path, wanted: impl Fn(Category) -> bool) -> Option<Category> {
-        let by_place = self.paths.iter().find(|(category, place)| wanted(*category) && real.starts_with(place));
-        let inside = self.roots.iter().find_map(|root| real.strip_prefix(root).ok()).unwrap_or(real);
-        let by_name = || {
-            self.named.iter().find(|(category, name)| {
-                wanted(*category)
-                    && inside.components().any(|part| part.as_os_str().to_string_lossy().eq_ignore_ascii_case(name))
-            })
-        };
-        by_place.map(|(category, _)| *category).or_else(|| by_name().map(|(category, _)| *category))
+        let inside = self.inside(real);
+        self.paths.iter().find(|(category, place)| wanted(*category) && place.holds(real, inside)).map(|(c, _)| *c)
+    }
+
+    fn secret(&self, real: &Path) -> bool {
+        let inside = self.inside(real);
+        let named = |name: &str| real.file_name().is_some_and(|file| glob(name, &file.to_string_lossy()));
+        self.secrets.iter().any(|place| match place {
+            Place::Named(name) => named(name),
+            other => other.holds(real, inside),
+        })
     }
 
     fn host_hit(&self, host: &str) -> Option<Category> {
@@ -152,31 +212,41 @@ impl Floor {
             .map(|(category, _)| *category)
     }
 
-    fn env_hit(&self, text: &str) -> Option<Hit> {
-        assignments(text).into_iter().find_map(|name| {
-            self.env
-                .iter()
-                .find(|(_, rule)| match rule.strip_suffix('*') {
-                    Some(prefix) => name.starts_with(prefix),
-                    None => *rule == name,
-                })
-                .map(|(category, _)| Hit::of(*category, name, false))
-        })
+    fn word_hits(&self, word: &str) -> Vec<Hit> {
+        let pieces = std::iter::once(word).chain(word.split([':', '=']));
+        let pieces: Vec<&str> = pieces.map(|piece| piece.trim_matches(|c| c == '"' || c == '\'')).collect();
+        let places: Vec<PathBuf> = pieces.iter().filter_map(|piece| self.expanded(piece)).collect();
+        let named_secret = pieces.iter().any(|piece| {
+            Path::new(piece).file_name().is_some_and(|file| {
+                let file = file.to_string_lossy();
+                self.secrets.iter().any(|place| matches!(place, Place::Named(name) if glob(name, &file)))
+            })
+        });
+        if named_secret || places.iter().any(|place| self.secret(place)) {
+            return vec![Hit::of(Category::Credentials, word, true)];
+        }
+        places
+            .iter()
+            .find_map(|place| self.path_hit(place, |_| true))
+            .map(|category| Hit::of(category, word, false))
+            .into_iter()
+            .collect()
     }
 
-    fn exec_hit(&self, text: &str, simple: &[&str]) -> Vec<Hit> {
-        let mut hits: Vec<Hit> = self.env_hit(text).into_iter().collect();
+    fn exec_hits(&self, simple: &[&str]) -> Vec<Hit> {
+        let mut hits = Vec::new();
         for command in simple {
             let parsed = SimpleCommand::of(command);
-            let words: Vec<String> = parsed.as_ref().map_or_else(
-                || command.split_whitespace().map(str::to_owned).collect(),
-                |parsed| parsed.words.iter().chain(parsed.redirections.iter().map(|r| &r.target)).cloned().collect(),
-            );
-            hits.extend(words.iter().filter_map(|word| {
-                let place = self.expanded(word)?;
-                self.path_hit(&place, |_| true).map(|category| Hit::of(category, word.clone(), category.on_reads()))
+            let words: Vec<String> = parsed
+                .as_ref()
+                .map_or_else(|| command.split_whitespace().map(str::to_owned).collect(), |parsed| parsed.words.clone());
+            let targets = parsed.iter().flat_map(|parsed| parsed.redirections.iter().map(|r| r.target.clone()));
+            hits.extend(words.iter().cloned().chain(targets).flat_map(|word| self.word_hits(&word)));
+            hits.extend(env::assigned(&words, &self.carriers).into_iter().filter_map(|set| {
+                let (category, _) = self.env.iter().find(|(_, rule)| rule.injects(&set))?;
+                Some(Hit::of(*category, format!("{}={}", set.name, set.value), false))
             }));
-            if let Some(program) = program(&words)
+            if let Some((_, program)) = env::program(&words)
                 && let Some((category, _)) = self.apps.iter().find(|(_, app)| *app == program)
             {
                 hits.push(Hit::of(*category, program, false));
@@ -185,28 +255,28 @@ impl Floor {
         hits
     }
 
+    fn place_hits(&self, place: &super::Place, writes: bool) -> Option<Hit> {
+        let shown = place.written.display().to_string();
+        if self.secret(&place.real) {
+            return Some(Hit::of(Category::Credentials, shown, true));
+        }
+        let category =
+            if writes { self.path_hit(&place.real, |_| true) } else { self.path_hit(&place.real, Category::on_reads) }?;
+        Some(Hit::of(category, shown, writes && category.denies_writes()))
+    }
+
     fn effect_hits(&self, effect: &Effect) -> Vec<Hit> {
-        let shown = |category: Category, place: &super::Place| {
-            Hit::of(category, place.written.display().to_string(), category.denies())
-        };
         match effect {
-            Effect::ReadPath(place) | Effect::ReadTree(place) => self
-                .path_hit(&place.real, Category::on_reads)
-                .map(|category| shown(category, place))
-                .into_iter()
-                .collect(),
-            Effect::WritePath(place) => {
-                self.path_hit(&place.real, |_| true).map(|category| shown(category, place)).into_iter().collect()
-            }
+            Effect::ReadPath(place) | Effect::ReadTree(place) => self.place_hits(place, false).into_iter().collect(),
+            Effect::WritePath(place) => self.place_hits(place, true).into_iter().collect(),
             Effect::Exec(exec) => {
                 let command = &exec.command;
                 let whole = [command.text()];
-                let simple = if command.opaque() { whole.to_vec() } else { command.commands() };
-                self.exec_hit(command.text(), &simple)
+                self.exec_hits(&if command.opaque() { whole.to_vec() } else { command.commands() })
             }
             Effect::Net { host: Some(host) } | Effect::Fetch { host: Some(host) } => self
                 .host_hit(host)
-                .map(|category| Hit::of(category, host.clone(), category.denies()))
+                .map(|category| Hit::of(category, host.clone(), category.on_reads()))
                 .into_iter()
                 .collect(),
             _ => Vec::new(),
@@ -243,67 +313,6 @@ impl Floor {
     }
 }
 
-fn program(words: &[String]) -> Option<String> {
-    let mut rest = words.iter().skip_while(|word| assignment(word).is_some());
-    let mut first = rest.next()?;
-    while first == "env" || first.starts_with('-') || assignment(first).is_some() {
-        first = rest.next()?;
-    }
-    let name = first.trim_matches(|c| c == '"' || c == '\'');
-    Some(name.rsplit('/').next().unwrap_or(name).to_ascii_lowercase())
-}
-
-fn assignment(word: &str) -> Option<&str> {
-    let (name, _) = word.split_once('=')?;
-    let mut chars = name.chars();
-    let first = chars.next()?;
-    let named = (first.is_ascii_alphabetic() || first == '_') && chars.all(|c| c.is_ascii_alphanumeric() || c == '_');
-    named.then_some(name)
-}
-
-fn assignments(text: &str) -> Vec<&str> {
-    text.split(|c: char| c.is_whitespace() || matches!(c, ';' | '&' | '|' | '(' | '`' | '"' | '\''))
-        .filter_map(assignment)
-        .collect()
-}
-
-const HIDDEN: &[(char, char)] = &[
-    ('\u{00AD}', '\u{00AD}'),
-    ('\u{061C}', '\u{061C}'),
-    ('\u{180E}', '\u{180E}'),
-    ('\u{200B}', '\u{200F}'),
-    ('\u{202A}', '\u{202E}'),
-    ('\u{2060}', '\u{2064}'),
-    ('\u{2066}', '\u{2069}'),
-    ('\u{FEFF}', '\u{FEFF}'),
-    ('\u{E0000}', '\u{E007F}'),
-];
-
-fn is_hidden(c: char) -> bool {
-    HIDDEN.iter().any(|(first, last)| (*first..=*last).contains(&c))
-}
-
-pub fn hidden(text: &str) -> Vec<char> {
-    let mut found: Vec<char> = text.chars().filter(|c| is_hidden(*c)).collect();
-    found.dedup();
-    found
-}
-
-pub fn revealed(text: &str) -> String {
-    text.chars().map(|c| if is_hidden(c) { format!("<U+{:04X}>", u32::from(c)) } else { c.to_string() }).collect()
-}
-
-pub fn warned(text: &str) -> String {
-    let found = hidden(text);
-    if found.is_empty() {
-        return text.to_owned();
-    }
-    let mut codes: Vec<String> = found.iter().map(|c| format!("U+{:04X}", u32::from(*c))).collect();
-    codes.sort();
-    codes.dedup();
-    format!(
-        "Warning: this holds invisible or direction-changing characters ({}), so it may read differently from what runs. They are shown as <U+…> below.\n{}",
-        codes.join(", "),
-        revealed(text)
-    )
+fn home_relative(written: &str) -> Option<&str> {
+    ["~/", "$HOME/", "${HOME}/"].iter().find_map(|prefix| written.strip_prefix(prefix))
 }
