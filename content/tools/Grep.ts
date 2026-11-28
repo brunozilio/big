@@ -63,7 +63,7 @@ export const spec = {
     "type": "object"
   },
   description: `Search file contents with a regular expression (Rust regex syntax, like ripgrep). Files ignored by git, \`.ignore\` or \`.rgignore\` are skipped; hidden files are searched, the \`.git\` folder is not. \`output_mode\` is \`files_with_matches\` (default: the matching files), \`content\` (the matching lines; \`-n\` numbers them, \`-A\`/\`-B\`/\`-C\` add context) or \`count\`. Narrow with \`path\` and \`glob\` (e.g. \`*.rs\`). \`-i\` ignores case. Each line is matched on its own unless \`multiline\` is set: then a match can span lines, \`.\` matches line ends too, and \`content\` shows every line a match covers. Matching lines come grouped under their file's path; a file shows its first ${PER_FILE} matches, a line its first ${LINE} characters, and the whole answer the first ${RESULTS} results (\`head_limit\` changes that), each saying how much was left out. Always use this instead of running grep or rg through Bash.`,
-  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: true, sensitive: true },
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
 };
 
 type Input = {

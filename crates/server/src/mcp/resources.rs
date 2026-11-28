@@ -74,7 +74,9 @@ impl Asked<'_> {
                     connected = true;
                     let wanted =
                         super::connector::Wanted { provider: connector, actions, writes: *writes, connection: chosen };
-                    parts.extend(super::connector::local(self.ctx, &wanted, self.runtime.clone(), self.id));
+                    let known =
+                        super::project(self.headers).map(|project| app::env_secrets(&project)).unwrap_or_default();
+                    parts.extend(super::connector::local(self.ctx, &wanted, self.runtime.clone(), self.id, known));
                 }
             }
         }

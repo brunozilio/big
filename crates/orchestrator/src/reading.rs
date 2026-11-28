@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use domain::effect::{Call, ErrorClass};
+use domain::redact::Known;
 use serde_json::Value;
 
 use crate::agent::Failure;
@@ -17,11 +18,19 @@ pub async fn connector(shared: &Shared, who: Who<'_>, call: &Call, key: &str) ->
 pub(crate) async fn labelled(shared: &Shared, who: Who<'_>, call: &Call, key: &str) -> Result<connectors::Labelled, Failure> {
     let (connection, settings) = connection_of(shared, who.owner, who.space, call)?;
     let hub = &shared.config.connectors;
-    let called = hub.call_labelled(Some(who.charged), &connection, &settings, &call.action, &call.args, key);
-    called.await.map_err(|error| match error.blocker() {
+    let called = hub.call_for(Some(who.charged), &connection, &settings, &call.action, &call.args, key);
+    let value = called.await.map_err(|error| match error.blocker() {
         Some(reason) => Failure::Blocked(hub.told(&connection.provider, who.language, reason)),
         None => Failure::Class(error.class, error.message),
-    })
+    })?;
+    Ok(hub.labelled(&connection, &call.action, value, &known(shared, who.space)))
+}
+
+fn known(shared: &Shared, input: &Value) -> Known {
+    let live = crate::application::live(&shared.store, input);
+    let checkouts = crate::repos::of_input(&live, shared.config.repo.as_deref());
+    let folders = checkouts.into_iter().filter_map(|checkout| checkout.directory);
+    folders.fold(Known::default(), |known, folder| known.joined(&agent_engine::tools::env_secrets(&folder)))
 }
 
 pub(crate) async fn poll(gated: &Gated<'_>, who: Who<'_>, command: &Command, key: &str) -> Result<Value, Failure> {

@@ -169,3 +169,23 @@ fn broken_shipped_rules_are_an_error_and_a_broken_copy_only_a_warning() {
     let newer = layer(r#"{ "schema_version": 9 }"#);
     assert!(newer.is_err());
 }
+
+#[test]
+fn finding_a_secret_agrees_with_redacting_without_making_a_copy() {
+    let redactor = testing();
+    let known = Known::from_env_files(["DEPLOY=s3cr3t-value-42"]);
+    let texts = [
+        format!("key ({TOKEN})."),
+        "API_KEY=abc123".to_owned(),
+        "auth: Bearer eyJhbGc.eyJzdWIi.c2lnbmF0".to_owned(),
+        "pushed with s3cr3t-value-42 today".to_owned(),
+        "the Bearer of bad news".to_owned(),
+        "nothing here".to_owned(),
+    ];
+    for text in &texts {
+        assert_eq!(redactor.finds(text, &known), redactor.redact(text, &known).sensitive(), "{text}");
+    }
+    let nested = json!({ "runs": [{ "log": "API_KEY=abc123" }], "count": 3 });
+    assert!(redactor.finds_in(&nested, &Known::default()));
+    assert!(!redactor.finds_in(&json!({ "count": 3, "log": "ok" }), &Known::default()));
+}

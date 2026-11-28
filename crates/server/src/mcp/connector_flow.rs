@@ -21,7 +21,7 @@ fn refused(asked: Asked<'_>, tool: &str, spec: &ActionSpec, levels: &Levels, rea
     let mark = Mark::of(levels, reads);
     let sink = Sink { ceiling: spec.max_input_level.as_deref(), risky: spec.risky() };
     let verdict = match labels::flow(asked, tool, levels, &mark, &sink) {
-        Verdict::Allow => labels::paired(asked, levels, &Held::of(levels, reads), &spec.next(tool)),
+        Verdict::Allow => labels::paired(asked, levels, &Held::of(levels, reads), &spec.next(tool), false),
         crossed => crossed,
     };
     match verdict {

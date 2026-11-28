@@ -17,7 +17,7 @@ pub fn prepare(context: &Context<'_>, run: RunId, request: PromptRequest) -> (Pr
     let mut request = memories.brief(run, &request, wanted);
     let surface = super::gate::surface_of(&request);
     let host = &mut request.host;
-    let shared = host.credentials.reads.get_or_insert_with(|| SessionReads(super::reading::fresh(&host.reads)));
+    let shared = host.credentials.reads.get_or_insert_with(|| SessionReads::over(super::reading::fresh(&host.reads)));
     let reads = Arc::clone(&shared.0);
     if let Some(brief) = &request.host.memory {
         super::reading::Noted { surface, stage: "brief" }.read(Some(&reads), &brief.recalled);

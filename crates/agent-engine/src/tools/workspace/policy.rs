@@ -53,10 +53,8 @@ impl Policy {
     }
 
     pub fn holds_a_secret(&self, text: &str) -> bool {
-        match &self.redact {
-            Some(known) => self.redactor.redact(text, known).sensitive(),
-            None => self.redactor.redact(text, &Known::default()).sensitive(),
-        }
+        let unknown = Known::default();
+        self.redactor.finds(text, self.redact.as_deref().unwrap_or(&unknown))
     }
 
     pub fn redact_prompt(&self, messages: &mut [Message]) {

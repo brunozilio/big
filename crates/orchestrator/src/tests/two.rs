@@ -90,8 +90,12 @@ async fn a_routine_refuses_the_third_property_with_the_reason() {
     let (kernel, id) = leaking(&world, input).await;
     let answer = output(&ended(&kernel, &id).await);
     let message = answer["message"].as_str().unwrap_or_default();
-    assert!(message.contains("blocked_by_policy"), "{answer}");
+    assert!(message.starts_with("unavailable: "), "{answer}");
     assert!(message.contains("would join, in one session, untrusted content"), "{answer}");
+    assert!(
+        message.contains("Leave out the untrusted content or the sensitive data"),
+        "the conduct comes from outcomes.js: {answer}"
+    );
     assert!(kernel.asks().is_empty());
     assert_eq!(world.provider.count("code.comment"), 0);
 }
@@ -107,4 +111,35 @@ async fn with_the_shipped_labels_the_same_session_runs_as_before() {
     assert!(kernel.asks().is_empty(), "the shipped rule of two only logs");
     let held = Held::of(&Levels::default(), &reads(&item));
     assert!(held.all(), "the session still keeps all three: {held:?}");
+}
+
+const TWICE: &str = r#"
+import { workflow } from "sdk";
+export default workflow({
+  name: "twice",
+  async run(ctx) {
+    const issue = await ctx.call("tracker", "issue", { key: "K-1" });
+    const runs = await ctx.call("pipelines", "runs", { pipeline: "deploy" });
+    const first = await ctx.call("code", "comment", { repository: "public", text: issue.title, runs: runs.count });
+    const second = await ctx.call("code", "comment", { repository: "public", text: "again", runs: runs.count });
+    return { first: first.n, second: second.n };
+  },
+});
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_yes_to_the_rule_of_two_holds_for_the_rest_of_the_item() {
+    shipped_list();
+    let world = World::new();
+    world.write("safety/labels.ts", PAIRED);
+    shaped(&world);
+    world.workflow("twice", TWICE);
+    let kernel = world.start().await;
+    let id = kernel.create_item("twice", json!({})).expect("item");
+    let asked = first_ask(&kernel).await;
+    kernel.answer_ask(&asked.ask.id, &Decision::Allow).expect("answer");
+    assert_eq!(output(&ended(&kernel, &id).await), json!({ "first": 1, "second": 2 }));
+    assert!(kernel.asks().is_empty(), "the second comment did not ask again");
+    let item = kernel.item(&id).expect("item").expect("there");
+    assert!(domain::label::pairing_approved(&item));
 }

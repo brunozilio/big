@@ -6,6 +6,7 @@ use domain::connection::{Capability, ProviderKey};
 use domain::mcp::{LocalMcp, McpEndpoint, connector_tool, respond, served_name, slug, text_result};
 use domain::operation::Kind;
 use domain::permission::{Call, Effect, Surface, Verdict};
+use domain::redact::Known;
 use serde_json::{Value, json};
 use store::ConnectionRecord;
 
@@ -58,6 +59,7 @@ pub struct ConnectorTools {
     runtime: tokio::runtime::Handle,
     tools: Vec<Tool>,
     session: Option<String>,
+    known: Known,
 }
 
 fn definition(name: &str, provider: &str, record: &ConnectionRecord, action: &ActionSpec) -> Value {
@@ -97,12 +99,19 @@ fn tools_of(hub: &Connectors, records: Vec<ConnectionRecord>, wanted: &Wanted<'_
     tools
 }
 
-pub fn local(ctx: &Ctx, wanted: &Wanted<'_>, runtime: tokio::runtime::Handle, session: &str) -> Option<LocalMcp> {
+pub fn local(
+    ctx: &Ctx,
+    wanted: &Wanted<'_>,
+    runtime: tokio::runtime::Handle,
+    session: &str,
+    known: Known,
+) -> Option<LocalMcp> {
     let records = ctx.backend.store.connections_of(domain::principal::LOCAL_USER).unwrap_or_default();
     let hub = Arc::clone(&ctx.backend.connectors);
     let tools = tools_of(&hub, records, wanted);
     let session = Some(session).filter(|session| *session != super::EXTERNAL).map(str::to_owned);
-    (!tools.is_empty()).then(|| LocalMcp::new(server(), Arc::new(ConnectorTools { hub, runtime, tools, session })))
+    (!tools.is_empty())
+        .then(|| LocalMcp::new(server(), Arc::new(ConnectorTools { hub, runtime, tools, session, known })))
 }
 
 fn server() -> String {
@@ -142,8 +151,13 @@ impl ConnectorTools {
         let record = &tool.record;
         let connection = connection(record);
         let charged = domain::origin::Attribution::default();
-        let called =
-            self.hub.call_labelled(Some(&charged), &connection, &record.settings, &tool.action, &arguments, &key);
+        let called = async {
+            let value = self
+                .hub
+                .call_for(Some(&charged), &connection, &record.settings, &tool.action, &arguments, &key)
+                .await?;
+            Ok(self.hub.labelled(&connection, &tool.action, value, &self.known))
+        };
         let (name, levels) = (served(tool), app::labels::levels());
         let guarded = Guarded {
             asked: Asked { operation: Some(&tool.action), ..ASKED },

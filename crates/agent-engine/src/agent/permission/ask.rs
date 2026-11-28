@@ -32,7 +32,16 @@ impl Agent<'_> {
             disclosed.revoked_grant = *overrode;
         }
         let kind = AskKind::Permission { tool: name.to_owned(), subject: shown.to_owned(), rememberable, disclosed };
-        match self.asked_relaying(id, kind, Some(input)) {
+        let decided = self.asked_relaying(id, kind, Some(input));
+        if matches!(reason, Reason::Two(_))
+            && matches!(
+                decided,
+                Ok(Decision::Allow | Decision::AllowAlways | Decision::Answer(_) | Decision::Approve(_))
+            )
+        {
+            self.approved_the_pair();
+        }
+        match decided {
             Ok(Decision::Allow | Decision::Answer(_) | Decision::Approve(_)) => self.went_ahead(id, tool, input),
             Ok(Decision::AllowAlways) => {
                 if rememberable {

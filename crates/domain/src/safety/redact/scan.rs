@@ -24,29 +24,45 @@ struct Scan<'a> {
     found: Vec<String>,
 }
 
-impl Scan<'_> {
+enum Hit<'a> {
+    Core(&'a str),
+    After(usize),
+}
+
+impl<'a> Scan<'a> {
     fn saw(&mut self, name: &str) {
         if !self.found.iter().any(|known| known == name) {
             self.found.push(name.to_owned());
         }
     }
 
-    fn word(&mut self, word: &str) -> String {
+    fn hit(&mut self, word: &str) -> Option<Hit<'a>> {
         let core = core(word);
-        if std::mem::take(&mut self.next) && self.engine.labelled_value(core) {
-            self.saw(LABEL);
-            return replace_core(word);
+        let engine = self.engine;
+        if std::mem::take(&mut self.next) && engine.labelled_value(core) {
+            return Some(Hit::Core(LABEL));
         }
-        if let Some(name) = self.engine.token(core) {
-            let name = name.to_owned();
-            self.saw(&name);
-            replace_core(word)
-        } else if let Some(at) = self.assignment(word) {
-            self.saw(ASSIGNMENT);
-            format!("{}{REDACTED}", &word[..at])
-        } else {
-            self.next = self.engine.label(core) || self.secret_label(word);
-            word.to_owned()
+        if let Some(name) = engine.token(core) {
+            return Some(Hit::Core(name));
+        }
+        if let Some(at) = self.assignment(word) {
+            return Some(Hit::After(at));
+        }
+        self.next = engine.label(core) || self.secret_label(word);
+        None
+    }
+
+    fn word(&mut self, word: &str) -> String {
+        match self.hit(word) {
+            Some(Hit::Core(name)) => {
+                self.saw(name);
+                replace_core(word)
+            }
+            Some(Hit::After(at)) => {
+                self.saw(ASSIGNMENT);
+                format!("{}{REDACTED}", &word[..at])
+            }
+            None => word.to_owned(),
         }
     }
 
@@ -94,6 +110,28 @@ impl Redactor {
             }
         }
         Redaction { text: out, found: scan.found }
+    }
+
+    pub fn finds(&self, text: &str, known: &Known) -> bool {
+        let mut scan = self.scan();
+        let mut previous = "";
+        for piece in text.split_whitespace() {
+            if scan.hit(piece).is_some() {
+                return true;
+            }
+            scan.next &= !scan.names_a_parse_error(previous, piece);
+            previous = piece;
+        }
+        known.values().iter().any(|value| text.contains(value.as_str()))
+    }
+
+    pub fn finds_in(&self, value: &Value, known: &Known) -> bool {
+        match value {
+            Value::String(text) => self.finds(text, known),
+            Value::Array(items) => items.iter().any(|item| self.finds_in(item, known)),
+            Value::Object(fields) => fields.values().any(|item| self.finds_in(item, known)),
+            _ => false,
+        }
     }
 
     pub fn words(&self, text: &str) -> Vec<String> {

@@ -22,7 +22,7 @@ pub fn redactor<'a>(providers: impl Iterator<Item = &'a dyn Provider>) -> Arc<Re
 }
 
 fn carries_a_secret(redactor: &Redactor, value: &Value) -> bool {
-    !redactor.redact_value(value, &Known::default()).1.is_empty()
+    redactor.finds_in(value, &Known::default())
 }
 
 pub fn guarded(redactor: &Redactor, spec: &ActionSpec, args: &Value) -> Result<(), ActionError> {

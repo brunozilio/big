@@ -21,6 +21,7 @@ mod settings;
 
 pub use agent_engine::meter::estimate as estimated_cost;
 pub use agent_engine::labels;
+pub use agent_engine::tools::env_secrets;
 pub use agent_engine::policy_gate;
 pub use agent_engine::spend_sink::install as install_spend;
 pub use agent_engine::prompt::output_style::{OutputStyle, all as output_styles};

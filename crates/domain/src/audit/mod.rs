@@ -19,6 +19,7 @@ pub mod code {
     pub const TWO_ASKED: &str = "two.asked";
     pub const TWO_SHADOW: &str = "two.shadow";
     pub const TWO_UNATTENDED: &str = "two.unattended";
+    pub const TWO_SESSION: &str = "two.session";
 
     pub fn denied(layer: &str) -> String {
         format!("{layer}.denied")

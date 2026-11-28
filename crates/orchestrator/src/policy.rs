@@ -108,7 +108,12 @@ impl Gated<'_> {
             Verdict::Ask { .. } if asked.surface == Surface::Routine => {
                 Err(Failure::permanent(policy_gate::unasked(asked, tool)))
             }
-            Verdict::Ask { reason: Reason::Flow(why) | Reason::Two(why), .. } => {
+            Verdict::Ask { reason: Reason::Two(why), .. } => {
+                let approved = self.approved(asked, named, &format!("{} {why}", call.action)).await?;
+                self.keep(label::pairing_approval())?;
+                Ok(approved)
+            }
+            Verdict::Ask { reason: Reason::Flow(why), .. } => {
                 self.approved(asked, named, &format!("{} {why}", call.action)).await
             }
             Verdict::Ask { .. } => self.approved(asked, named, &call.action).await,
@@ -123,7 +128,7 @@ impl Gated<'_> {
         match labels::flow(asked, tool, &levels, &mark, &sink) {
             Verdict::Allow => {
                 let held = Held::of(&levels, &label::reads(self.item));
-                labels::paired(asked, &levels, &held, &spec.next(tool))
+                labels::paired(asked, &levels, &held, &spec.next(tool), label::pairing_approved(self.item))
             }
             crossed => crossed,
         }
@@ -136,12 +141,17 @@ impl Gated<'_> {
 
     pub fn read(&self, labelled: Labelled) -> Result<Value, Failure> {
         let read = labels::classified(&self.levels(), labelled.read, &labelled.value);
-        let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data: read.progress() };
+        self.keep(read.progress())?;
+        Ok(labelled.value)
+    }
+
+    fn keep(&self, data: Value) -> Result<(), Failure> {
+        let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data };
         self.shared.append_open(&self.item.id, &[progress], || {}).map_err(|error| {
             let told = format!("what the call read could not be kept in the log: {error}");
             Failure::Class(domain::effect::ErrorClass::Transient, told)
         })?;
-        Ok(labelled.value)
+        Ok(())
     }
 
     async fn approved(

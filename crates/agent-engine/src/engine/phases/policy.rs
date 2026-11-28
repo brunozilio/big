@@ -39,6 +39,8 @@ impl Job {
         toolbox.tools.retain(|tool| tool.offered(&workspace));
         workspace.agent_name = main.name().into();
         workspace.session_id.clone_from(&session.0);
+        let exposed = &mut workspace.credentials.exposed;
+        exposed.get_or_insert_with(|| crate::labels::exposed(&session.0));
         workspace.anchored_memories = anchored(&self.request);
         workspace.blast_radius = on(flags::BLAST_RADIUS);
         workspace.hooks = settings.hooks.clone();

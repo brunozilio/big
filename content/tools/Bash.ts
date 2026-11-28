@@ -47,7 +47,7 @@ Git:
 - GitHub notifies the owner of any \`@name\` written in a pull request, issue or comment. Write a bare \`@name\` only for a real login you mean to notify; put roles, placeholders and code (\`@reviewer\`, \`@types/node\`) in backticks or drop the \`@\`.
 - Commit or push only when the user asks. On the default branch, create a branch first.
 - Never force-push, rewrite published history or skip hooks unless the user asks for that.`,
-  profile: { effects: ["write", "send-external", "destructive"], risk: "high", reversible: false, untrusted: true, sensitive: true },
+  profile: { effects: ["write", "send-external", "destructive"], risk: "high", reversible: false, untrusted: false, sensitive: false },
 };
 
 type Input = { command: string; description?: string; run_in_background?: boolean; timeout?: number };

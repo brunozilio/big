@@ -127,7 +127,7 @@ fn a_send_after_an_external_and_sensitive_read_is_refused_only_when_the_rule_of_
             Mode::Shadow => assert_eq!(send.as_deref(), Ok("sent")),
             Mode::Enforce => {
                 let refused = send.expect_err("the third property");
-                assert!(refused.starts_with("blocked_by_policy: notes_send would join"), "{refused}");
+                assert!(refused.starts_with("unavailable: notes_send would join"), "{refused}");
                 assert!(refused.contains("untrusted content (from Notes notes.get)"), "{refused}");
             }
         }

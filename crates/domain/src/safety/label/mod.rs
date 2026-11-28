@@ -18,7 +18,7 @@ pub const READ: &str = "read";
 pub type Reads = std::sync::Arc<std::sync::Mutex<Vec<Read>>>;
 
 #[derive(Debug, Clone, Default)]
-pub struct SessionReads(pub Reads);
+pub struct SessionReads(pub Reads, std::sync::Arc<std::sync::atomic::AtomicBool>);
 
 impl PartialEq for SessionReads {
     fn eq(&self, other: &Self) -> bool {
@@ -30,7 +30,19 @@ impl Eq for SessionReads {}
 
 impl SessionReads {
     pub fn of(reads: &[Read]) -> Self {
-        Self(std::sync::Arc::new(std::sync::Mutex::new(reads.to_vec())))
+        Self::over(std::sync::Arc::new(std::sync::Mutex::new(reads.to_vec())))
+    }
+
+    pub fn over(reads: Reads) -> Self {
+        Self(reads, std::sync::Arc::default())
+    }
+
+    pub fn approve(&self) {
+        self.1.store(true, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    pub fn approved(&self) -> bool {
+        self.1.load(std::sync::atomic::Ordering::SeqCst)
     }
 
     pub fn held(&self) -> Vec<Read> {
@@ -89,6 +101,17 @@ impl Read {
     pub fn progress(&self) -> Value {
         serde_json::json!({ READ: self })
     }
+}
+
+pub const PAIRED: &str = "two";
+pub const APPROVED: &str = "approved";
+
+pub fn pairing_approval() -> Value {
+    serde_json::json!({ PAIRED: APPROVED })
+}
+
+pub fn pairing_approved(item: &WorkItem) -> bool {
+    item.effects.values().any(|entry| entry.progress.get(PAIRED).and_then(Value::as_str) == Some(APPROVED))
 }
 
 pub fn reads(item: &WorkItem) -> Vec<Read> {

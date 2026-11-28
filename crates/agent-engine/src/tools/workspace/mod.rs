@@ -101,7 +101,6 @@ impl Workspace {
                 reads: Some(
                     request.host.credentials.reads.clone().unwrap_or_else(|| SessionReads::of(&request.host.reads)),
                 ),
-                exposed: Some(request.host.credentials.exposed.clone().unwrap_or_default()),
                 ..request.host.credentials.clone()
             },
             environment: request.host.environment.clone(),

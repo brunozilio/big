@@ -6,10 +6,10 @@ use crate::agent::Agent;
 use crate::policy_gate::Asked;
 use crate::tools::{Outcome, Tool};
 
-fn judged(asked: Asked<'_>, levels: &Levels, reads: &[Read], profile: &Profile, tool: &str) -> Verdict {
+fn judged(asked: Asked<'_>, levels: &Levels, reads: &[Read], profile: &Profile, tool: &str, approved: bool) -> Verdict {
     let held = Held::of(levels, reads);
     let next = Next { tool, untrusted: profile.untrusted, sensitive: profile.sensitive, acts: profile.acts() };
-    crate::labels::paired(asked, levels, &held, &next)
+    crate::labels::paired(asked, levels, &held, &next, approved)
 }
 
 fn kept(reads: &SessionReads, tool: &str, profile: &Profile, secret: bool) {
@@ -29,7 +29,13 @@ impl Agent<'_> {
         let stage = self.workspace.session_id.as_str();
         let owner = self.workspace.owner.as_deref().unwrap_or(domain::principal::LOCAL_USER);
         let asked = Asked { surface: Surface::Chat, stage, owner, operation: None };
-        judged(asked, &crate::labels::levels(), &reads, &profile, name)
+        judged(asked, &crate::labels::levels(), &reads, &profile, name, exposed.approved())
+    }
+
+    pub(in crate::agent) fn approved_the_pair(&self) {
+        if let Some(exposed) = &self.workspace.credentials.exposed {
+            exposed.approve();
+        }
     }
 
     pub(in crate::agent) fn noted(&self, tool: &dyn Tool, outcome: &Outcome) {
@@ -62,11 +68,11 @@ mod tests {
         for mode in [Mode::Shadow, Mode::Enforce] {
             let levels = Levels { mode, ..Levels::default() };
             let reads = SessionReads::default();
-            assert_eq!(judged(ASKED, &levels, &reads.held(), &issue, "issue"), Verdict::Allow);
+            assert_eq!(judged(ASKED, &levels, &reads.held(), &issue, "issue", false), Verdict::Allow);
             kept(&reads, "issue", &issue, false);
-            assert_eq!(judged(ASKED, &levels, &reads.held(), &vault, "vault"), Verdict::Allow);
+            assert_eq!(judged(ASKED, &levels, &reads.held(), &vault, "vault", false), Verdict::Allow);
             kept(&reads, "vault", &vault, true);
-            let verdict = judged(ASKED, &levels, &reads.held(), &comment, "comment");
+            let verdict = judged(ASKED, &levels, &reads.held(), &comment, "comment", false);
             match mode {
                 Mode::Shadow => assert_eq!(verdict, Verdict::Allow),
                 Mode::Enforce => {
@@ -74,9 +80,33 @@ mod tests {
                         panic!("the third property asks: {verdict:?}");
                     };
                     assert!(why.contains("from issue") && why.contains("from vault") && why.contains("by comment"));
+                    reads.approve();
+                    let again = judged(ASKED, &levels, &reads.held(), &comment, "comment", reads.approved());
+                    assert_eq!(again, Verdict::Allow, "the session already said yes");
                 }
             }
         }
+    }
+
+    fn built_in(name: &str) -> Profile {
+        crate::tools::named(name).and_then(|tool| tool.profile()).expect("a built-in tool declares its profile")
+    }
+
+    #[test]
+    fn with_the_built_in_profiles_a_project_read_then_bash_runs_and_a_fetch_then_a_secret_then_bash_asks() {
+        let levels = Levels { mode: Mode::Enforce, ..Levels::default() };
+        let (read, bash, fetch) = (built_in("Read"), built_in("Bash"), built_in("WebFetch"));
+        assert!(!read.untrusted && !read.sensitive && !bash.untrusted && !bash.sensitive && bash.acts());
+        let project = SessionReads::default();
+        kept(&project, "Read", &read, false);
+        assert_eq!(judged(ASKED, &levels, &project.held(), &bash, "Bash", false), Verdict::Allow);
+        let fetched = SessionReads::default();
+        assert_eq!(judged(ASKED, &levels, &fetched.held(), &fetch, "WebFetch", false), Verdict::Allow);
+        kept(&fetched, "WebFetch", &fetch, false);
+        assert_eq!(judged(ASKED, &levels, &fetched.held(), &read, "Read", false), Verdict::Allow);
+        kept(&fetched, "Read", &read, true);
+        let verdict = judged(ASKED, &levels, &fetched.held(), &bash, "Bash", false);
+        assert!(matches!(verdict, Verdict::Ask { reason: Reason::Two(_), .. }), "{verdict:?}");
     }
 
     #[test]
