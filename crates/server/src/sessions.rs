@@ -273,7 +273,7 @@ pub async fn send(State(ctx): State<Ctx>, Path(id): Path<String>, Json(body): Js
     Ok(done())
 }
 
-fn answer_now(shared: &Shared, session: &str, event: &str, response: &Value) -> ApiResult<()> {
+pub(crate) fn answer_now(shared: &Shared, session: &str, event: &str, response: &Value) -> ApiResult<()> {
     let from_kernel = kernel_asks(shared, session).into_iter().find(|ask| ask.id.0 == event);
     let ask = from_kernel.clone().or_else(|| shared.chats.pending(session).filter(|ask| ask.id.0 == event));
     let ask = ask.ok_or_else(|| {

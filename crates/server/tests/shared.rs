@@ -430,3 +430,33 @@ async fn only_the_owner_kills_an_item_and_killing_an_agent_needs_an_administrato
     let (status, _) = send(&world, Some(&ana), Method::POST, &path, Some(json!({}))).await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 }
+
+fn titles(found: &Value) -> Vec<String> {
+    let listed = found.as_array().map(Vec::as_slice).unwrap_or_default();
+    listed.iter().filter_map(|entry| entry["item"]["title"].as_str().map(str::to_owned)).collect()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn each_person_sees_only_what_waits_for_them() {
+    let world = shared_world().await;
+    let (ana, bia) = (signed(&world, "ana"), signed(&world, "bia"));
+    for (cookie, text) in [(&ana, "Corrigir o login"), (&bia, "Trocar o logo")] {
+        let made = json!({ "text": text, "issue": null, "model": "auto", "attachments": [] });
+        let (status, item) = send(&world, Some(cookie), Method::POST, "/api/items", Some(made)).await;
+        assert_eq!(status, StatusCode::OK, "{item}");
+    }
+    let mut seen = (Vec::new(), Vec::new());
+    for _ in 0..400 {
+        seen = (
+            titles(&send(&world, Some(&ana), Method::GET, "/api/inbox", None).await.1),
+            titles(&send(&world, Some(&bia), Method::GET, "/api/inbox", None).await.1),
+        );
+        if !seen.0.is_empty() && !seen.1.is_empty() {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    assert_eq!(seen, (vec!["Corrigir o login".to_owned()], vec!["Trocar o logo".to_owned()]));
+    let (status, _) = send(&world, Some(&bia), Method::POST, "/api/inbox/respond", Some(json!({ "ask": "nope" }))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

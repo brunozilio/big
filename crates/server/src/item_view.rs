@@ -315,7 +315,7 @@ fn activity(known: &Known<'_>, summary: &ItemSummary, language: Language) -> Val
     json!({ "text": text, "since": iso(current.since.unwrap_or(summary.updated_at)) })
 }
 
-fn title(summary: &ItemSummary, language: Language) -> String {
+pub(crate) fn title(summary: &ItemSummary, language: Language) -> String {
     let chosen = summary.title.trim();
     if !chosen.is_empty() {
         return chosen.to_owned();

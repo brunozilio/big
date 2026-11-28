@@ -26,6 +26,7 @@ mod discover;
 mod editor;
 mod error;
 mod folders;
+mod inbox;
 mod item_usage;
 mod change_view;
 mod delivered_view;

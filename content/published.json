@@ -125,6 +125,8 @@
     "route:/api/connections/{id}/call",
     "route:/api/connections/{id}/start",
     "route:/api/fs/dirs",
+    "route:/api/inbox",
+    "route:/api/inbox/respond",
     "route:/api/items",
     "route:/api/items/{id}/archive",
     "route:/api/items/{id}/base",

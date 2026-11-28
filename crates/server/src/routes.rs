@@ -37,6 +37,8 @@ fn api() -> Router<Ctx> {
         .route("/api/sessions/{id}/side", post(sessions::side))
         .route("/api/sessions/{id}/open", post(crate::editor::open))
         .route("/api/btw", post(crate::btw::ask))
+        .route("/api/inbox", get(crate::inbox::list))
+        .route("/api/inbox/respond", post(crate::inbox::respond))
         .route("/api/connections", get(connections::list))
         .route("/api/connections/oauth/callback", get(connections::callback))
         .route("/oauth/callback", get(connections::callback))
