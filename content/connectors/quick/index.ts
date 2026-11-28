@@ -11,12 +11,7 @@ export function provider() {
 
 export function presentation({ language }: { language: Language }) {
   return {
-    description: pick(
-      language,
-      "Ask Amazon Quick about your company's email, chats, documents and data",
-      "Pregunta a Amazon Quick sobre el correo, los chats, los documentos y los datos de tu empresa",
-      "Pergunte ao Amazon Quick sobre e-mails, conversas, documentos e dados da sua empresa",
-    ),
+    description: pick(language, "Your Amazon Quick account", "Tu cuenta de Amazon Quick", "Sua conta Amazon Quick"),
     group: "assistant",
     button: pick(language, "Sign in with Amazon Quick", "Entrar con Amazon Quick", "Entrar com o Amazon Quick"),
     site: pick(language, "Amazon Quick", "de Amazon Quick", "do Amazon Quick"),
