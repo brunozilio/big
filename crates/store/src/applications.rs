@@ -129,6 +129,12 @@ pub struct Application {
     pub env: Environment,
     #[serde(default, skip_serializing_if = "domain::data_policy::Requires::is_empty")]
     pub requires: domain::data_policy::Requires,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub instructions: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub skills: Vec<String>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub workflow: String,
 }
 
 pub type Environment = BTreeMap<String, String>;
