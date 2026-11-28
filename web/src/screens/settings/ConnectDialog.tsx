@@ -115,10 +115,10 @@ function useSignIn(provider: Provider | null, way: Way | null, fields: Record<st
   }
   const relayThenLeave = (start: RedirectStart, relay: NonNullable<RedirectStart['relay']>) => {
     setStep({ kind: 'browser', start, relaying: true })
-    void askRelay(relay).then(() => {
+    void askRelay(relay, start.url).then((answer) => {
       if (current.current !== start.flow) return
       setStep({ kind: 'browser', start })
-      if (!isMock()) leave(start, opened)
+      if (!answer.opened && !isMock()) leave(start, opened)
     })
   }
   const send = (flowId: string, extra: { code?: string; choice?: string }) => {

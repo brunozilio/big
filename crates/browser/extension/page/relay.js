@@ -13,28 +13,29 @@
     }
   }
 
-  function refusal(from, to) {
+  function refusal(from, to, url) {
     const source = parsed(from);
     const target = parsed(to);
-    if (!source || !target) return "bad-url";
+    const opening = parsed(url);
+    if (!source || !target || !opening || opening.protocol !== "https:") return "bad-url";
     if (source.protocol !== "http:" || !LOOPBACK.has(source.hostname) || source.search || source.hash) return "bad-from";
     if (target.origin !== location.origin) return "bad-to";
     if (target.protocol !== "https:" && !LOOPBACK.has(location.hostname)) return "bad-to";
     return null;
   }
 
-  function reply(id, ok, reason) {
-    const answer = { source: MARKER, type: "relay-sign-in-ready", id, ok };
+  function reply(id, ok, reason, opened) {
+    const answer = { source: MARKER, type: "relay-sign-in-ready", id, ok, opened: opened === true };
     if (reason) answer.reason = reason;
     window.postMessage(answer, location.origin === "null" ? "*" : location.origin);
   }
 
   async function forward(data) {
-    const reason = refusal(data.from, data.to);
+    const reason = refusal(data.from, data.to, data.url);
     if (reason) return reply(data.id, false, reason);
     try {
-      const answer = await chrome.runtime.sendMessage({ type: "relay-sign-in", from: String(data.from), to: String(data.to) });
-      reply(data.id, answer?.ok === true, answer?.ok === true ? undefined : answer?.reason || "refused");
+      const answer = await chrome.runtime.sendMessage({ type: "relay-sign-in", from: String(data.from), to: String(data.to), url: String(data.url) });
+      reply(data.id, answer?.ok === true, answer?.ok === true ? undefined : answer?.reason || "refused", answer?.opened === true);
     } catch {
       reply(data.id, false, "unavailable");
     }

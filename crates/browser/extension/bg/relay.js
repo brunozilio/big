@@ -2,6 +2,7 @@ import { ask } from "./ask.js";
 
 const TRUSTED_KEY = "relayOrigins";
 const LIFETIME_MINUTES = 15;
+const WATCHED_KEY = "relayWatched";
 const ALARM_PREFIX = "relay:";
 const LOOPBACK = new Set(["127.0.0.1", "localhost", "[::1]"]);
 const asking = new Map();
@@ -33,13 +34,18 @@ export function filterOf(from) {
   return `^${escaped(from)}(.*)$`;
 }
 
-export function ruleOf(id, from, to) {
+export function ruleOf(id, from, to, tabId) {
   return {
     id,
     priority: 1,
     action: { type: "redirect", redirect: { regexSubstitution: `${to}\\1` } },
-    condition: { regexFilter: filterOf(from), resourceTypes: ["main_frame"] },
+    condition: { regexFilter: filterOf(from), resourceTypes: ["main_frame"], tabIds: [tabId] },
   };
+}
+
+export function signInUrl(value) {
+  const url = parsed(value);
+  return url && url.protocol === "https:" ? url.href : null;
 }
 
 async function trusted(origin) {
@@ -72,13 +78,26 @@ async function drop(ids) {
   await Promise.all(ids.map((id) => chrome.alarms.clear(`${ALARM_PREFIX}${id}`)));
 }
 
-async function install(from, to) {
+async function install(from, to, tabId, back) {
   const rules = await chrome.declarativeNetRequest.getSessionRules();
-  const filter = filterOf(from);
-  await drop(rules.filter((rule) => rule.condition?.regexFilter === filter).map((rule) => rule.id));
   const id = rules.reduce((top, rule) => Math.max(top, rule.id), 0) + 1;
-  await chrome.declarativeNetRequest.updateSessionRules({ addRules: [ruleOf(id, from, to)] });
+  await chrome.declarativeNetRequest.updateSessionRules({ addRules: [ruleOf(id, from, to, tabId)] });
   await chrome.alarms.create(`${ALARM_PREFIX}${id}`, { delayInMinutes: LIFETIME_MINUTES });
+  const kept = await watched();
+  kept[id] = { tab: tabId, back, to, arrived: false };
+  await chrome.storage.session.set({ [WATCHED_KEY]: kept });
+}
+
+async function watched() {
+  const saved = await chrome.storage.session.get(WATCHED_KEY);
+  return saved[WATCHED_KEY] || {};
+}
+
+async function forget(ids) {
+  const kept = await watched();
+  for (const id of ids) delete kept[id];
+  await chrome.storage.session.set({ [WATCHED_KEY]: kept });
+  await drop(ids.map(Number));
 }
 
 export function pageOf(sender) {
@@ -91,31 +110,48 @@ export async function relay(message, sender) {
   if (!page) return { ok: false, reason: "bad-sender" };
   const target = relayTarget(message.from, message.to, page);
   if (target.reason) return { ok: false, reason: target.reason };
+  const url = signInUrl(message.url);
+  if (!url) return { ok: false, reason: "bad-url" };
   if (!(await approved(target.origin))) return { ok: false, reason: "declined" };
   try {
-    await install(target.from, target.to);
-    return { ok: true };
+    const tab = await chrome.tabs.create({ url: "about:blank", active: true, index: sender.tab.index + 1, windowId: sender.tab.windowId });
+    await install(target.from, target.to, tab.id, sender.tab.id);
+    await chrome.tabs.update(tab.id, { url });
+    return { ok: true, opened: true };
   } catch {
     return { ok: false, reason: "rule-failed" };
   }
 }
 
-async function arrived(url) {
-  const rules = await chrome.declarativeNetRequest.getSessionRules();
-  const used = rules.filter((rule) => {
-    const to = String(rule.action?.redirect?.regexSubstitution || "").replace(/\\1$/, "");
-    return to && url.startsWith(to);
-  });
-  await drop(used.map((rule) => rule.id));
+async function updated(tabId, change) {
+  const kept = await watched();
+  for (const [id, watch] of Object.entries(kept)) {
+    if (watch.tab !== tabId) continue;
+    if (change.url && change.url.startsWith(watch.to)) {
+      watch.arrived = true;
+      await chrome.storage.session.set({ [WATCHED_KEY]: kept });
+    }
+    if (watch.arrived && change.status === "complete") {
+      await forget([id]);
+      await chrome.tabs.remove(tabId).catch(() => {});
+      await chrome.tabs.update(watch.back, { active: true }).catch(() => {});
+    }
+  }
+}
+
+async function closed(tabId) {
+  const kept = await watched();
+  await forget(Object.keys(kept).filter((id) => kept[id].tab === tabId));
 }
 
 export function watchRelays() {
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (!alarm.name.startsWith(ALARM_PREFIX)) return;
     const id = Number(alarm.name.slice(ALARM_PREFIX.length));
-    if (Number.isInteger(id)) chrome.declarativeNetRequest.updateSessionRules({ removeRuleIds: [id] }).catch(() => {});
+    if (Number.isInteger(id)) forget([String(id)]).catch(() => {});
   });
-  chrome.tabs.onUpdated.addListener((_tabId, change) => {
-    if (change.url) arrived(change.url).catch(() => {});
+  chrome.tabs.onUpdated.addListener((tabId, change) => {
+    if (change.url || change.status === "complete") updated(tabId, change).catch(() => {});
   });
+  chrome.tabs.onRemoved.addListener((tabId) => closed(tabId).catch(() => {}));
 }

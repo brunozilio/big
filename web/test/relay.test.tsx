@@ -30,7 +30,7 @@ afterEach(() => {
 
 describe('repasse do login pela extensão', () => {
   test('sem a extensão responde não na hora', async () => {
-    expect(await askRelay(relay)).toBe(false)
+    expect(await askRelay(relay, 'https://idp.example.com/authorize')).toEqual({ ok: false, opened: false })
   })
 
   test('a resposta pronta com o mesmo id confirma o repasse', async () => {
@@ -38,24 +38,24 @@ describe('repasse do login pela extensão', () => {
     let seen: Asked | null = null
     const stop = extension((asked) => {
       seen = asked
-      return { source: marker, type: 'relay-sign-in-ready', id: asked.id, ok: true }
+      return { source: marker, type: 'relay-sign-in-ready', id: asked.id, ok: true, opened: true }
     })
-    expect(await askRelay(relay)).toBe(true)
-    expect(seen).toMatchObject({ from: relay.from, to: relay.to })
+    expect(await askRelay(relay, 'https://idp.example.com/authorize')).toEqual({ ok: true, opened: true })
+    expect(seen).toMatchObject({ from: relay.from, to: relay.to, url: 'https://idp.example.com/authorize' })
     stop()
   })
 
   test('uma resposta com outro id é ignorada', async () => {
     document.documentElement.dataset.signInRelay = marker
     const stop = extension(() => ({ source: marker, type: 'relay-sign-in-ready', id: 'outro', ok: true }))
-    expect(await askRelay(relay, 200)).toBe(false)
+    expect(await askRelay(relay, 'https://idp.example.com/authorize', 200)).toEqual({ ok: false, opened: false })
     stop()
   })
 
   test('a recusa da extensão responde não', async () => {
     document.documentElement.dataset.signInRelay = marker
     const stop = extension((asked) => ({ source: marker, type: 'relay-sign-in-ready', id: asked.id, ok: false, reason: 'declined' }))
-    expect(await askRelay(relay)).toBe(false)
+    expect(await askRelay(relay, 'https://idp.example.com/authorize')).toEqual({ ok: false, opened: false })
     stop()
   })
 

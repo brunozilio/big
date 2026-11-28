@@ -176,15 +176,13 @@ export function BrowserWait({ site, start, relaying, pasted, onPasted }: { site:
     <Panel>
       <p className="text-sm text-fg2">{t('settings.signIn_authorize', { site })}</p>
       <OpenLink url={start.url} />
-      {start.relay && <Waiting text={relaying ? t('settings.signIn_relayConfirm') : t('settings.signIn_awaiting')} />}
-      {start.paste ? (
+      {(start.relay || !start.paste) && <Waiting text={relaying ? t('settings.signIn_relayConfirm') : t('settings.signIn_awaiting')} />}
+      {start.paste && (
         <div className="space-y-1.5">
           <label htmlFor={inputId} className="block text-sm font-medium text-fg2">{t('settings.signIn_paste')}</label>
           {start.relay && <p className="text-sm text-muted">{t('settings.signIn_relayHint')}</p>}
           <Input id={inputId} data-paste value={pasted} onChange={(e) => onPasted(e.target.value)} placeholder="http://localhost:…/callback?code=…" className="bg-surface font-mono" />
         </div>
-      ) : (
-        <Waiting text={t('settings.signIn_awaiting')} />
       )}
     </Panel>
   )
