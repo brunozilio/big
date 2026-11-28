@@ -30,7 +30,7 @@ export function escaped(text) {
 }
 
 export function filterOf(from) {
-  return `^${escaped(from)}(\\?.*)?$`;
+  return `^${escaped(from)}(.*)$`;
 }
 
 export function ruleOf(id, from, to) {
@@ -104,7 +104,7 @@ async function arrived(url) {
   const rules = await chrome.declarativeNetRequest.getSessionRules();
   const used = rules.filter((rule) => {
     const to = String(rule.action?.redirect?.regexSubstitution || "").replace(/\\1$/, "");
-    return to && (url === to || url.startsWith(`${to}?`));
+    return to && url.startsWith(to);
   });
   await drop(used.map((rule) => rule.id));
 }

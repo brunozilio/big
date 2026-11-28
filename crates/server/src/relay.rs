@@ -125,5 +125,7 @@ mod tests {
         let authorize = "https://idp.example.com/authorize?client_id=x&redirect_uri=http%3A%2F%2Flocalhost%3A1455%2Fauth%2Fcallback&state=s";
         let found = redirect_in(authorize).map(|url| bare(&url));
         assert_eq!(found.as_deref(), Some("http://localhost:1455/auth/callback"));
+        let only_port = "https://app.kiro.dev/signin?redirect_uri=http%3A%2F%2Flocalhost%3A49153&state=s";
+        assert_eq!(redirect_in(only_port).map(|url| bare(&url)).as_deref(), Some("http://localhost:49153/"));
     }
 }
