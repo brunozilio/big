@@ -4,6 +4,7 @@ use super::conventions_tests::{execution, named, said, spans};
 use super::*;
 use crate::redact::{Known, Redactor, layer};
 use crate::trace::build;
+use crate::trace::capture::Keys;
 use crate::trace::runs::{Run, runs};
 
 const PERSONAL: &str = include_str!("../../../../../content/safety/personal.json");
@@ -17,8 +18,10 @@ fn personal() -> Redactor {
     Redactor::compiled(layer(PERSONAL).unwrap_or_else(|error| panic!("{error}"))).0
 }
 
+const ALL: Keys = Keys { usage: true, content: true, prompts: true };
+
 fn captured(redactor: &Redactor, known: &Known, limit: usize) -> Vec<Value> {
-    spans(&request_with(&traced(), "1", Some(Capture { redactor, known, limit })))
+    spans(&request_with(&traced(), "1", Some(Capture { redactor, known, limit, keys: ALL })))
 }
 
 fn strings(value: &Value) -> Vec<String> {
@@ -93,4 +96,28 @@ fn the_limit_caps_each_attribute_as_a_whole_keeping_the_latest_text() {
     }
     let chat_in = said(first_chat(&all), "gen_ai.input.messages");
     assert!(chat_in.contains(" …"), "{chat_in}");
+}
+
+#[test]
+fn without_content_capture_no_tool_arguments_or_answers_leave() {
+    let redactor = personal();
+    let known = Known::default();
+    let keys = Keys { content: false, ..ALL };
+    let export = Export { capture: Some(Capture { redactor: &redactor, known: &known, limit: 4_096, keys }), usage: true, revision: "r1" };
+    let sent = exported(&traced(), "1", &export).to_string();
+    for content in ["gen_ai.tool.call.arguments", "gen_ai.tool.call.result", "gen_ai.output.messages", "rounding"] {
+        assert!(!sent.contains(content), "{content} left without content capture");
+    }
+    assert!(sent.contains("gen_ai.input.messages"), "prompts are still captured");
+}
+
+#[test]
+fn each_export_names_its_policy_and_usage_leaves_only_when_captured() {
+    let export = Export { capture: None, usage: false, revision: "abc123" };
+    let sent = exported(&traced(), "1", &export);
+    let resource = sent["resourceSpans"][0]["resource"]["attributes"].to_string();
+    assert!(resource.contains("policy_revision") && resource.contains("abc123"), "{resource}");
+    let text = sent.to_string();
+    assert!(!text.contains("gen_ai.usage.") && !text.contains("cost_usd"), "{text}");
+    assert!(request(&traced(), "1").to_string().contains("gen_ai.usage.input_tokens"));
 }

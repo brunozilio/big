@@ -38,6 +38,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
         crate::cloud_db::take_turn(&store, &lease).await;
     }
     crate::trail::attach(Arc::clone(&store), Arc::clone(&redactor));
+    crate::outbound::attach(&redactor);
     crate::permissions::install(Arc::clone(&store));
     crate::scope::load_claimed(&store);
     let http = Arc::new(ReqwestHttp::new().map_err(|error| error.message)?);

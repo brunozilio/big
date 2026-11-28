@@ -1,8 +1,11 @@
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::Arc;
+
+use server::outbound::{Line, Outbound, Shape};
 
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::fmt::MakeWriter;
 use tracing_subscriber::fmt::time::ChronoLocal;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -11,6 +14,16 @@ use tracing_subscriber::{Layer, fmt};
 const DEFAULT_FILTER: &str = "warn";
 const TIME_FORMAT: &str = "%Y-%m-%dT%H:%M:%S%.3f%:z";
 const KEPT_BYTES: u64 = 5 * 1024 * 1024;
+
+pub struct Redacted(pub Arc<Outbound>);
+
+impl<'a> MakeWriter<'a> for Redacted {
+    type Writer = Line<'a>;
+
+    fn make_writer(&'a self) -> Self::Writer {
+        self.0.line()
+    }
+}
 
 pub fn file_in(data: &Path) -> PathBuf {
     data.join("logs").join(format!("{}.log", brand::COMMAND))
@@ -42,7 +55,7 @@ pub fn install(terminal: bool, kept: bool) -> Option<PathBuf> {
             .flatten_event(true)
             .with_current_span(false)
             .with_span_list(false)
-            .with_writer(Mutex::new(file))
+            .with_writer(Redacted(Outbound::configured(Shape::Json, Box::new(file))))
             .with_filter(filter(Some(brand::log::FILTER)))
     });
     let shown = terminal.then(|| shown(Format::chosen(brand::log::FORMAT)));
@@ -75,11 +88,11 @@ where
             .flatten_event(true)
             .with_current_span(false)
             .with_span_list(false)
-            .with_writer(std::io::stderr)
+            .with_writer(Redacted(Outbound::configured(Shape::Json, Box::new(std::io::stderr()))))
             .with_filter(filter)
             .boxed(),
         Format::Text => fmt::layer()
-            .with_writer(std::io::stderr)
+            .with_writer(Redacted(Outbound::configured(Shape::Text, Box::new(std::io::stderr()))))
             .with_ansi(std::io::IsTerminal::is_terminal(&std::io::stderr()))
             .with_timer(ChronoLocal::new(TIME_FORMAT.to_owned()))
             .with_target(false)
@@ -121,6 +134,22 @@ mod tests {
         assert_eq!(Format::chosen(" JSON "), Format::Json);
         assert_eq!(Format::chosen("text"), Format::Text);
         assert_eq!(Format::chosen(""), Format::Text);
+    }
+
+    #[test]
+    fn a_connector_log_reaches_the_file_redacted_with_the_policy_revision() {
+        let dir = tempfile::tempdir().expect("dir");
+        let file = file_in(dir.path());
+        let outbound = Outbound::configured(Shape::Json, Box::new(open(&file).expect("open")));
+        let layer = fmt::layer().json().flatten_event(true).with_writer(Redacted(Arc::clone(&outbound)));
+        let subscriber = tracing_subscriber::registry().with(layer);
+        tracing::subscriber::with_default(subscriber, || {
+            tracing::info!(target: "connector", "{}", "Bearer abc");
+        });
+        let written = std::fs::read_to_string(&file).expect("log");
+        let line: serde_json::Value = serde_json::from_str(written.trim_end()).expect("one json line");
+        assert_eq!(line["message"], "Bearer [redacted]", "{written}");
+        assert_eq!(line["policy_revision"].as_str(), Some(outbound.revision().as_str()));
     }
 
     #[test]

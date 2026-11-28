@@ -209,11 +209,12 @@ fn project_secrets() -> Secrets {
 fn capture_starts_off_and_a_limit_that_is_not_a_positive_number_keeps_it_off() {
     assert_eq!(brand::traces::CAPTURE_CONTENT, "false", "capture starts off");
     let redactor = || Arc::new(domain::redact::Redactor::default());
-    let (on, limit) = (brand::traces::CAPTURE_CONTENT, brand::traces::CAPTURE_LIMIT);
-    assert!(Content::from(on, limit, redactor, project_secrets()).is_none());
-    assert!(Content::from("true", limit, redactor, project_secrets()).is_some(), "the shipped limit is valid");
+    let limit = brand::traces::CAPTURE_LIMIT;
+    let on = Keys { content: true, ..Keys::default() };
+    assert!(Content::from(Keys::configured(), limit, redactor, project_secrets()).is_none());
+    assert!(Content::from(on, limit, redactor, project_secrets()).is_some(), "the shipped limit is valid");
     for broken in ["", "0", "-3", "many"] {
-        assert!(Content::from("true", broken, redactor, project_secrets()).is_none(), "{broken:?}");
+        assert!(Content::from(on, broken, redactor, project_secrets()).is_none(), "{broken:?}");
     }
 }
 
@@ -229,10 +230,13 @@ fn turned_on_the_content_leaves_without_personal_data_or_the_project_s_secrets()
     });
     let exporter = Exporter::start(otlp(&collector.url), traced, Arc::new(NetHttp)).expect("exporter");
     let personal = || agent_engine::tools::personal(&domain::redact::Redactor::default());
-    exporter.capturing(Content::from("true", "4096", personal, project_secrets()));
+    let keys = Keys { usage: true, content: true, prompts: true };
+    let content = Content::from(keys, "4096", personal, project_secrets());
+    exporter.capturing(Policy { content, usage: true, revision: "rev-1".into() });
     exporter.finished(project.path(), &SessionId("s".into()));
     let (sent, _) = collector.received.recv_timeout(WAIT).expect("export");
     let sent = sent.to_string();
     assert!(sent.contains("call me at [redacted], the key is [redacted]"), "{sent}");
     assert!(!sent.contains("ana@example.com") && !sent.contains("projectsecret42"));
+    assert!(sent.contains("policy_revision") && sent.contains("rev-1"), "{sent}");
 }

@@ -66,6 +66,7 @@ mod usage_runs;
 mod vault;
 mod watched;
 mod workspaces;
+pub mod outbound;
 pub mod trail;
 mod audit;
 

@@ -64,6 +64,15 @@ fn a_key_or_a_label_is_redacted_only_when_its_value_looks_like_a_secret() {
 }
 
 #[test]
+fn a_label_may_ask_for_a_shorter_value_than_a_bare_word() {
+    let shorter = redactor(json!({ "labels": ["bearer"], "valueMin": 6, "labelMin": 3 }));
+    assert_eq!(shorter.redact("Bearer abc", &Known::default()).text, "Bearer [redacted]");
+    assert_eq!(shorter.redact("the Bearer of bad news", &Known::default()).text, "the Bearer of bad news");
+    let unset = redactor(json!({ "labels": ["bearer"], "valueMin": 6 }));
+    assert_eq!(unset.redact("Bearer abc", &Known::default()).text, "Bearer abc");
+}
+
+#[test]
 fn each_kind_of_rule_is_generic_and_names_what_it_found() {
     let redactor = redactor(json!({
         "prefixes": [{ "name": "acme", "prefix": "acme_", "min": 10 }],

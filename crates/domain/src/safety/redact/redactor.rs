@@ -66,7 +66,15 @@ impl Redactor {
     }
 
     pub fn secret_value(&self, value: &str) -> bool {
-        let long = value.chars().count() >= self.rules.value_min.unwrap_or(1).max(1);
+        self.at_least(value, self.rules.value_min)
+    }
+
+    pub fn labelled_value(&self, value: &str) -> bool {
+        self.at_least(value, self.rules.label_min.or(self.rules.value_min))
+    }
+
+    fn at_least(&self, value: &str, min: Option<usize>) -> bool {
+        let long = value.chars().count() >= min.unwrap_or(1).max(1);
         long && !self.rules.type_names.iter().any(|name| value.eq_ignore_ascii_case(name))
     }
 }

@@ -32,6 +32,7 @@ pub struct Rules {
     pub parse_errors: Vec<String>,
     pub type_names: Vec<String>,
     pub value_min: Option<usize>,
+    pub label_min: Option<usize>,
     pub jwt: bool,
     pub entropy: Option<Entropy>,
 }
@@ -58,6 +59,7 @@ impl Rules {
         joined(&mut self.type_names, &more.type_names);
         self.jwt |= more.jwt;
         self.value_min = more.value_min.or(self.value_min);
+        self.label_min = more.label_min.or(self.label_min);
         self.entropy = more.entropy.or(self.entropy);
     }
 

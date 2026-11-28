@@ -80,9 +80,29 @@ fn attributes(run: &Run, span: &Span) -> Vec<Value> {
     attributes
 }
 
-fn shaped(ids: &Ids, run: &Run, span: &Span, capture: Option<Capture<'_>>) -> Value {
+#[derive(Debug, Clone, Copy)]
+pub struct Export<'a> {
+    pub capture: Option<Capture<'a>>,
+    pub usage: bool,
+    pub revision: &'a str,
+}
+
+fn usage_key(key: &str) -> bool {
+    key.starts_with("gen_ai.usage.") || key.starts_with(&own("usage.")) || key == own("cost_usd") || key == own("tokens")
+}
+
+fn captured(export: &Export<'_>, run: &Run, span: &Span) -> Option<Vec<Value>> {
+    let Some(capture) = export.capture else { return Some(Vec::new()) };
+    let redacted = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| capture.attributes(run, span)));
+    redacted.map_err(|_| crate::trace::capture::drop_one()).ok()
+}
+
+fn shaped(ids: &Ids, run: &Run, span: &Span, export: &Export<'_>) -> Option<Value> {
     let mut attributes = attributes(run, span);
-    attributes.extend(capture.map(|capture| capture.attributes(run, span)).unwrap_or_default());
+    if !export.usage {
+        attributes.retain(|attribute| !attribute["key"].as_str().is_some_and(usage_key));
+    }
+    attributes.extend(captured(export, run, span)?);
     let mut shaped = json!({
         "traceId": ids.trace,
         "spanId": ids.span(span.id).unwrap_or_default(),
@@ -100,7 +120,7 @@ fn shaped(ids: &Ids, run: &Run, span: &Span, capture: Option<Capture<'_>>) -> Va
     if failed {
         shaped["status"] = json!({"code": ERROR});
     }
-    shaped
+    Some(shaped)
 }
 
 fn workflow(ids: &Ids, run: &Run) -> Option<Value> {
@@ -121,10 +141,10 @@ fn workflow(ids: &Ids, run: &Run) -> Option<Value> {
     Some(shaped)
 }
 
-fn spans_of(run: &Run, capture: Option<Capture<'_>>) -> Vec<Value> {
+fn spans_of(run: &Run, export: &Export<'_>) -> Vec<Value> {
     let ids = Ids::of(run);
     let mut spans: Vec<Value> = workflow(&ids, run).into_iter().collect();
-    spans.extend(run.spans.iter().map(|span| shaped(&ids, run, span, capture)));
+    spans.extend(run.spans.iter().filter_map(|span| shaped(&ids, run, span, export)));
     spans
 }
 
@@ -133,11 +153,19 @@ pub fn request(runs: &[Run], version: &str) -> Value {
 }
 
 pub fn request_with(runs: &[Run], version: &str, capture: Option<Capture<'_>>) -> Value {
+    exported(runs, version, &Export { capture, usage: true, revision: "" })
+}
+
+pub fn exported(runs: &[Run], version: &str, export: &Export<'_>) -> Value {
     let spans: Vec<Value> =
-        runs.iter().filter(|run| run.status != Status::Running).flat_map(|run| spans_of(run, capture)).collect();
+        runs.iter().filter(|run| run.status != Status::Running).flat_map(|run| spans_of(run, export)).collect();
+    let mut resource = vec![text("service.name", brand::COMMAND), text("service.version", version)];
+    if !export.revision.is_empty() {
+        resource.push(text(&own("policy_revision"), export.revision));
+    }
     json!({
         "resourceSpans": [{
-            "resource": {"attributes": [text("service.name", brand::COMMAND), text("service.version", version)]},
+            "resource": {"attributes": resource},
             "scopeSpans": [{"scope": {"name": brand::COMMAND, "version": version}, "spans": spans}]
         }]
     })

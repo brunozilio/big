@@ -2,6 +2,7 @@ use serde_json::{Value, json};
 
 use super::text;
 use crate::redact::{Known, Redactor};
+use crate::trace::capture::Keys;
 use crate::trace::runs::{Run, Span, SpanKind};
 
 #[derive(Debug, Clone, Copy)]
@@ -9,6 +10,7 @@ pub struct Capture<'a> {
     pub redactor: &'a Redactor,
     pub known: &'a Known,
     pub limit: usize,
+    pub keys: Keys,
 }
 
 fn part(kind: &str, content: &str) -> Value {
@@ -67,19 +69,28 @@ impl Capture<'_> {
     }
 
     pub fn attributes(&self, run: &Run, span: &Span) -> Vec<Value> {
+        let (prompts, content) = (self.keys.prompts, self.keys.content);
         let mut attributes = Vec::new();
         match span.kind {
             SpanKind::Run | SpanKind::Agent => {
-                attributes.extend(self.said("gen_ai.input.messages", "user", self.texts(&[("text", &span.input)])));
-                let answer = self.texts(&[("text", &span.output)]);
-                attributes.extend(self.said("gen_ai.output.messages", "assistant", answer));
+                if prompts {
+                    attributes.extend(self.said("gen_ai.input.messages", "user", self.texts(&[("text", &span.input)])));
+                }
+                if content {
+                    let answer = self.texts(&[("text", &span.output)]);
+                    attributes.extend(self.said("gen_ai.output.messages", "assistant", answer));
+                }
             }
             SpanKind::Llm => {
-                attributes.extend(self.sent(run, span));
-                let parts = self.texts(&[("reasoning", &span.thinking), ("text", &span.output)]);
-                attributes.extend(self.said("gen_ai.output.messages", "assistant", parts));
+                if prompts {
+                    attributes.extend(self.sent(run, span));
+                }
+                if content {
+                    let parts = self.texts(&[("reasoning", &span.thinking), ("text", &span.output)]);
+                    attributes.extend(self.said("gen_ai.output.messages", "assistant", parts));
+                }
             }
-            SpanKind::Tool => {
+            SpanKind::Tool if content => {
                 let pairs = [("gen_ai.tool.call.arguments", &span.input), ("gen_ai.tool.call.result", &span.output)];
                 for (key, said) in pairs.into_iter().filter(|(_, said)| !said.trim().is_empty()) {
                     let kept = self.fitted(vec![self.clean(said)], 0);

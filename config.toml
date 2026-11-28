@@ -327,6 +327,7 @@ mcp_defer_over = "20"
 filter = "info"
 terminal = "info,hyper=warn,reqwest=warn,h2=warn,rustls=warn"
 format = "text"
+sharing = "full"
 
 [audit]
 level = "info"
@@ -337,7 +338,10 @@ retention_days = ""
 [traces]
 otlp_endpoint = ""
 otlp_headers = ""
+sharing = "full"
+capture_usage = true
 capture_content = false
+capture_prompts = false
 capture_limit = 16384
 
 [secrets]

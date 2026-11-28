@@ -1,3 +1,4 @@
+pub mod capture;
 pub mod insights;
 mod lane;
 pub mod marks;

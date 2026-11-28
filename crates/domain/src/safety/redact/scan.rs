@@ -33,7 +33,7 @@ impl Scan<'_> {
 
     fn word(&mut self, word: &str) -> String {
         let core = core(word);
-        if std::mem::take(&mut self.next) && self.engine.secret_value(core) {
+        if std::mem::take(&mut self.next) && self.engine.labelled_value(core) {
             self.saw(LABEL);
             return replace_core(word);
         }

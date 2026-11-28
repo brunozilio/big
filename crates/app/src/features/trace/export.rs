@@ -6,7 +6,8 @@ use std::time::{Duration, Instant};
 use agent_engine::model::http::Http;
 use crossbeam_channel::{Receiver, Sender, TrySendError};
 use domain::redact::{Known, Redactor};
-use domain::trace::otlp::Capture;
+use domain::trace::capture::Keys;
+use domain::trace::otlp::{Capture, Export};
 use domain::trace::runs::{Run, Status};
 use domain::{EngineEvent, SessionId};
 use platform::sync::Locked;
@@ -45,15 +46,16 @@ pub struct Content {
     pub redactor: Arc<Redactor>,
     pub secrets: Secrets,
     pub limit: usize,
+    pub keys: Keys,
 }
 
 impl Content {
-    pub fn from(on: &str, limit: &str, redactor: impl FnOnce() -> Arc<Redactor>, secrets: Secrets) -> Option<Self> {
-        if on.trim() != "true" {
+    pub fn from(keys: Keys, limit: &str, redactor: impl FnOnce() -> Arc<Redactor>, secrets: Secrets) -> Option<Self> {
+        if !keys.any_text() {
             return None;
         }
         match limit.trim().parse::<usize>() {
-            Ok(limit) if limit > 0 => Some(Self { redactor: redactor(), secrets, limit }),
+            Ok(limit) if limit > 0 => Some(Self { redactor: redactor(), secrets, limit, keys }),
             _ => {
                 tracing::warn!(limit, "[traces] capture_limit is not a positive number; content is not captured");
                 None
@@ -66,7 +68,20 @@ impl Content {
     }
 }
 
-type Captured = Arc<Mutex<Option<Content>>>;
+#[derive(Clone)]
+pub struct Policy {
+    pub content: Option<Content>,
+    pub usage: bool,
+    pub revision: String,
+}
+
+impl Default for Policy {
+    fn default() -> Self {
+        Self { content: None, usage: true, revision: String::new() }
+    }
+}
+
+type Captured = Arc<Mutex<Policy>>;
 
 #[derive(Debug)]
 struct Job {
@@ -127,8 +142,8 @@ impl Exporter {
         }
     }
 
-    pub fn capturing(&self, content: Option<Content>) {
-        *self.content.locked() = content;
+    pub fn capturing(&self, policy: Policy) {
+        *self.content.locked() = policy;
     }
 
     pub fn finished(&self, cwd: &Path, session: &SessionId) {
@@ -212,10 +227,17 @@ impl Worker {
     }
 
     fn send(&self, runs: &[Run], folders: &[PathBuf]) {
-        let content = self.content.locked().clone();
-        let known = content.as_ref().map(|content| content.known(folders)).unwrap_or_default();
-        let capture = content.as_ref().map(|content| Capture { redactor: &content.redactor, known: &known, limit: content.limit });
-        let body = domain::trace::otlp::request_with(runs, env!("CARGO_PKG_VERSION"), capture).to_string();
+        let policy = self.content.locked().clone();
+        let content = policy.content.as_ref();
+        let known = content.map(|content| content.known(folders)).unwrap_or_default();
+        let capture = content.map(|content| Capture {
+            redactor: &content.redactor,
+            known: &known,
+            limit: content.limit,
+            keys: content.keys,
+        });
+        let export = Export { capture, usage: policy.usage, revision: &policy.revision };
+        let body = domain::trace::otlp::exported(runs, env!("CARGO_PKG_VERSION"), &export).to_string();
         match self.http.post(&self.otlp.url, &self.otlp.headers, &body) {
             Ok(answer) if (200..300).contains(&answer.status) => {}
             Ok(answer) => {

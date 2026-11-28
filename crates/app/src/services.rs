@@ -4,6 +4,7 @@ use std::sync::Arc;
 use agent_engine::AgentEngine;
 use agent_engine::sessions::FileSessions;
 use domain::redact::Redactor;
+use domain::trace::capture::{Keys, Sharing};
 
 use crate::data_root::DataRoot;
 use crate::extensions::Extensions;
@@ -82,18 +83,27 @@ pub struct LocalServices {
 
 fn exporter(sessions: &Arc<FileSessions>, secrets: &Redactor) -> Option<crate::features::trace::export::Exporter> {
     use crate::features::trace::export::{Exporter, Otlp, Traced};
+    if Sharing::read(brand::traces::SHARING) == Sharing::Disabled {
+        return None;
+    }
     let otlp = Otlp::from(brand::traces::OTLP_ENDPOINT, brand::traces::OTLP_HEADERS)?;
     let store = Arc::clone(sessions);
     let traced: Traced = Arc::new(move |cwd, id| crate::features::trace::traced(&store, cwd, id));
     let exporter = Exporter::start(otlp, traced, Arc::new(agent_engine::model::http::NetHttp))?;
-    exporter.capturing(content(secrets));
+    exporter.capturing(policy(secrets));
     Some(exporter)
 }
 
-fn content(secrets: &Redactor) -> Option<crate::features::trace::export::Content> {
-    let (on, limit) = (brand::traces::CAPTURE_CONTENT, brand::traces::CAPTURE_LIMIT);
-    let folder_secrets: crate::features::trace::export::Secrets = Arc::new(agent_engine::tools::env_secrets);
-    crate::features::trace::export::Content::from(on, limit, || agent_engine::tools::personal(secrets), folder_secrets)
+fn policy(secrets: &Redactor) -> crate::features::trace::export::Policy {
+    use crate::features::trace::export::{Content, Policy, Secrets};
+    let sharing = Sharing::read(brand::traces::SHARING);
+    let configured = Keys::configured();
+    let keys = configured.shared(sharing);
+    let redactor = agent_engine::tools::personal(secrets);
+    let revision = domain::trace::capture::revision(configured, sharing, redactor.rules());
+    let folder_secrets: Secrets = Arc::new(agent_engine::tools::env_secrets);
+    let content = Content::from(keys, brand::traces::CAPTURE_LIMIT, || redactor, folder_secrets);
+    Policy { content, usage: keys.usage, revision }
 }
 
 impl std::fmt::Debug for LocalServices {
@@ -132,7 +142,7 @@ impl LocalServices {
 
     pub fn with_redactor(mut self, redactor: Arc<Redactor>) -> Self {
         if let Some(exporter) = &self.exporter {
-            exporter.capturing(content(&redactor));
+            exporter.capturing(policy(&redactor));
         }
         self.memories = self.memories.with_redactor(redactor);
         self

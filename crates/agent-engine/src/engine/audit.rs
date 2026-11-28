@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use domain::billing::ModelUsage;
+use domain::trace::capture::Keys;
 use domain::trace::{ModelCall, RunInfo};
 use domain::{AgentAsk, AgentStatus, AskKind, EngineEvent, SessionId, ToolCall};
 use platform::sync::Locked;
@@ -25,16 +26,26 @@ pub(super) fn around(request: &domain::PromptRequest) -> tracing::Span {
     tracing::info_span!(target: "audit", "agent.run", agent, agent.version = version.as_deref(), user, creator.type = creator)
 }
 
-#[derive(Default)]
 pub(super) struct Audit {
     tools: Mutex<HashMap<String, Open>>,
+    keys: Keys,
+}
+
+impl Default for Audit {
+    fn default() -> Self {
+        Self::capturing(Keys::configured())
+    }
 }
 
 impl Audit {
+    fn capturing(keys: Keys) -> Self {
+        Self { tools: Mutex::default(), keys }
+    }
+
     pub(super) fn entry(&self, session: &SessionId, entry: &Entry) {
         let session = session.0.as_str();
         match entry {
-            Entry::Prompted { prompt, .. } => prompted(session, prompt),
+            Entry::Prompted { prompt, .. } => prompted(session, prompt, self.keys),
             Entry::Opened { run, .. } => opened(session, run),
             Entry::Called { agent, call, .. } => called(session, *agent, call),
             Entry::Event { at_ms, event } => self.event(session, None, *at_ms, event),
@@ -54,9 +65,11 @@ impl Audit {
                 let open = self.tools.locked().remove(id);
                 let name = open.as_ref().map_or("", |open| open.name.as_str());
                 let duration_ms = open.as_ref().map(|open| at_ms.saturating_sub(open.at_ms));
-                tool_call(session, agent, &Finished { id, name, duration_ms, output, failed: *failed });
+                let finished = Finished { id, name, duration_ms, output, failed: *failed };
+                tool_call(session, agent, &finished, self.keys);
             }
-            EngineEvent::Usage(usage) => used(session, agent, usage),
+            EngineEvent::Usage(usage) if self.keys.usage => used(session, agent, usage),
+            EngineEvent::Usage(_) => {}
             other => {
                 if !step(session, agent, other) && !changed(session, agent, other) && !ended(session, agent, other) {
                     rest(session, agent, other);
@@ -72,14 +85,14 @@ impl Audit {
         }
         tools.insert(call.id.clone(), Open { name: call.name.clone(), at_ms });
         drop(tools);
-        let input = call.input.as_ref().map(|input| preview(&input.to_string())).unwrap_or_default();
+        let input = call.input.as_ref().filter(|_| self.keys.content).map(|input| preview(&input.to_string()));
         tracing::event!(
             target: "audit", tracing::Level::DEBUG,
             session.id = session,
             agent.index = agent,
             gen_ai.tool.name = %call.name,
             gen_ai.tool.call.id = %call.id,
-            gen_ai.tool.call.arguments = %input,
+            gen_ai.tool.call.arguments = input,
             "tool.start"
         );
     }
@@ -93,20 +106,24 @@ struct Finished<'a> {
     failed: bool,
 }
 
-fn tool_call(session: &str, agent: Option<usize>, done: &Finished<'_>) {
+fn tool_call(session: &str, agent: Option<usize>, done: &Finished<'_>, keys: Keys) {
     let (id, name, duration_ms) = (done.id, done.name, done.duration_ms);
     if done.failed {
         let error = preview(done.output);
         tracing::event!(target: "audit", tracing::Level::WARN, session.id = session, agent.index = agent, gen_ai.tool.name = name, gen_ai.tool.call.id = id, duration_ms, outcome = "failure", error.message = %error, "tool.call");
     } else {
         tracing::event!(target: "audit", tracing::Level::INFO, session.id = session, agent.index = agent, gen_ai.tool.name = name, gen_ai.tool.call.id = id, duration_ms, outcome = "success", "tool.call");
-        tracing::event!(target: "audit", tracing::Level::DEBUG, session.id = session, gen_ai.tool.call.id = id, gen_ai.tool.call.result = %preview(done.output), "tool.result");
+        if keys.content {
+            tracing::event!(target: "audit", tracing::Level::DEBUG, session.id = session, gen_ai.tool.call.id = id, gen_ai.tool.call.result = %preview(done.output), "tool.result");
+        }
     }
 }
 
-fn prompted(session: &str, prompt: &str) {
+fn prompted(session: &str, prompt: &str, keys: Keys) {
     tracing::event!(target: "audit", tracing::Level::INFO, session.id = session, prompt.chars = prompt.chars().count(), "agent.prompt");
-    tracing::event!(target: "audit", tracing::Level::DEBUG, session.id = session, prompt.text = %preview(prompt), "agent.prompt.content");
+    if keys.prompts {
+        tracing::event!(target: "audit", tracing::Level::DEBUG, session.id = session, prompt.text = %preview(prompt), "agent.prompt.content");
+    }
 }
 
 fn opened(session: &str, run: &RunInfo) {
@@ -262,101 +279,5 @@ fn preview(text: &str) -> String {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    type Pairs = Vec<(String, String)>;
-
-    #[derive(Default, Clone)]
-    struct Heard(std::sync::Arc<Mutex<Vec<Pairs>>>);
-
-    struct Fields<'a>(&'a mut Pairs);
-
-    impl tracing::field::Visit for Fields<'_> {
-        fn record_debug(&mut self, field: &tracing::field::Field, value: &dyn std::fmt::Debug) {
-            self.0.push((field.name().to_owned(), format!("{value:?}")));
-        }
-        fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-            self.0.push((field.name().to_owned(), value.to_owned()));
-        }
-    }
-
-    impl tracing::Subscriber for Heard {
-        fn enabled(&self, _: &tracing::Metadata<'_>) -> bool {
-            true
-        }
-        fn new_span(&self, _: &tracing::span::Attributes<'_>) -> tracing::span::Id {
-            tracing::span::Id::from_u64(1)
-        }
-        fn record(&self, _: &tracing::span::Id, _: &tracing::span::Record<'_>) {}
-        fn record_follows_from(&self, _: &tracing::span::Id, _: &tracing::span::Id) {}
-        fn event(&self, event: &tracing::Event<'_>) {
-            let mut fields = Vec::new();
-            event.record(&mut Fields(&mut fields));
-            self.0.locked().push(fields);
-        }
-        fn enter(&self, _: &tracing::span::Id) {}
-        fn exit(&self, _: &tracing::span::Id) {}
-    }
-
-    fn field<'a>(fields: &'a [(String, String)], name: &str) -> Option<&'a str> {
-        fields.iter().find(|(key, _)| key == name).map(|(_, value)| value.as_str())
-    }
-
-    #[test]
-    fn a_fallback_is_audited_as_a_decision_with_the_models_it_skipped() {
-        use domain::data_policy::{Rerouted, Skipped};
-        let heard = Heard::default();
-        let skipped = vec![Skipped { model: "a:us".into(), why: "region us is not eu".into() }];
-        let decision = Rerouted { from: "a:x".into(), to: Some("b:eu".into()), failure: "overloaded".into(), skipped };
-        tracing::subscriber::with_default(heard.clone(), || rest("s1", None, &EngineEvent::Rerouted(decision)));
-        let events = heard.0.locked().clone();
-        let [fields] = events.as_slice() else { panic!("{events:?}") };
-        assert_eq!(field(fields, "message"), Some("agent.fallback.decision"));
-        assert_eq!(field(fields, "session.id"), Some("s1"));
-        assert_eq!(field(fields, "model.from"), Some("a:x"));
-        assert_eq!(field(fields, "model.to"), Some("b:eu"));
-        assert_eq!(field(fields, "error.kind"), Some("overloaded"));
-        assert_eq!(field(fields, "model.skipped"), Some(r#"[{"model":"a:us","why":"region us is not eu"}]"#));
-    }
-
-    #[test]
-    fn a_preview_is_one_line_and_short() {
-        assert_eq!(preview("one\n  two\tthree"), "one two three");
-        let long = "a".repeat(PREVIEW_CHARS + 10);
-        assert_eq!(preview(&long).chars().count(), PREVIEW_CHARS + 1);
-    }
-
-    #[test]
-    fn the_kind_of_an_event_is_its_variant_name() {
-        assert_eq!(kind(&EngineEvent::Cancelled), "Cancelled");
-        assert_eq!(kind(&EngineEvent::Checkpoint(3)), "Checkpoint");
-        assert_eq!(kind(&EngineEvent::ToolFinished { id: "x".into() }), "ToolFinished");
-    }
-
-    #[test]
-    fn a_tool_is_closed_by_its_result_even_inside_a_subagent() {
-        let audit = Audit::default();
-        let call = ToolCall {
-            id: "t1".into(),
-            name: "Grep".into(),
-            summary: String::new(),
-            output: None,
-            failed: false,
-            input: None,
-        };
-        let inside = |event| EngineEvent::AgentEvent { index: 1, event: Box::new(event) };
-        audit.event("s", None, 10, &inside(EngineEvent::ToolStarted(call)));
-        assert_eq!(
-            audit.tools.locked().get("t1").map(|open| (open.name.clone(), open.at_ms)),
-            Some(("Grep".into(), 10))
-        );
-        audit.event(
-            "s",
-            None,
-            40,
-            &inside(EngineEvent::ToolResult { id: "t1".into(), output: "ok".into(), failed: false }),
-        );
-        assert!(audit.tools.locked().is_empty());
-    }
-}
+#[path = "audit_tests.rs"]
+mod tests;
