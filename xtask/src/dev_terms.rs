@@ -3,7 +3,9 @@ use std::path::Path;
 
 use crate::provider_names::{rust_files, shown};
 
-const CRATES: [&str; 3] = ["crates/domain/src", "crates/orchestrator/src", "crates/server/src"];
+const REFUSED: [&str; 2] = ["crates/domain/src", "crates/server/src"];
+
+const WARNED: [&str; 1] = ["crates/orchestrator/src"];
 
 const HOST_PRIMITIVES: [&str; 2] = ["crates/domain/src/tools/output/filters/git.rs", "crates/orchestrator/src/git.rs"];
 
@@ -21,8 +23,16 @@ const TERMS: [&str; 10] = [
 ];
 
 pub fn findings(root: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    scan(root, &REFUSED)
+}
+
+pub fn warnings(root: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    scan(root, &WARNED)
+}
+
+fn scan(root: &Path, folders: &[&str]) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     let mut files = Vec::new();
-    for folder in CRATES {
+    for folder in folders {
         rust_files(&root.join(folder), &mut files);
     }
     let mut found = BTreeSet::new();
@@ -71,7 +81,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_dev_term_is_found_across_case_and_underscores_and_a_longer_word_is_not() {
+    fn a_dev_term_refuses_the_domain_and_the_server_warns_the_orchestrator_and_spans_case_and_underscores() {
         let root = tempfile::tempdir().expect("root");
         for folder in ["crates/orchestrator/src", "crates/server/src", "crates/other/src"] {
             std::fs::create_dir_all(root.path().join(folder)).expect("folder");
@@ -90,13 +100,18 @@ mod tests {
         assert_eq!(
             findings(root.path()).expect("findings"),
             [
-                "dev-term crates/orchestrator/src/lib.rs: git: fn d() { let _ = \"git\"; }".to_owned(),
                 "dev-term crates/server/src/lib.rs: git: fn a() { let _ = item[\"git\"]; let _ = \"digit\"; let _ = merge_patch; }".to_owned(),
                 format!("dev-term crates/server/src/lib.rs: merge request: {c}"),
                 "dev-term crates/server/src/lib.rs: pr: fn b() { let _ = pr_url; let _ = \"prose\"; }".to_owned(),
                 format!("dev-term crates/server/src/lib.rs: pull request: {c}"),
                 format!("dev-term crates/server/src/lib.rs: pull requests: {c}"),
-            ]
+            ],
+            "the domain and the server refuse, the orchestrator does not"
+        );
+        assert_eq!(
+            warnings(root.path()).expect("warnings"),
+            ["dev-term crates/orchestrator/src/lib.rs: git: fn d() { let _ = \"git\"; }"],
+            "the orchestrator only warns, and its git primitive not even that"
         );
     }
 }

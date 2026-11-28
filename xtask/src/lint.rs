@@ -14,6 +14,9 @@ pub fn run(root: &Path, update_baseline: bool) -> Result<(), Box<dyn std::error:
     found.extend(crate::environment::findings(root)?);
     found.extend(crate::git_commands::findings(root)?);
     found.extend(crate::provider_names::findings(root)?);
+    for warning in crate::dev_terms::warnings(root)? {
+        println!("lint warning: {warning}");
+    }
     let baseline_path = root.join(BASELINE);
     if update_baseline {
         std::fs::write(&baseline_path, found.iter().map(|f| format!("{f}\n")).collect::<String>())?;
