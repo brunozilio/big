@@ -7,7 +7,7 @@ use domain::principal::Principal;
 use serde_json::{Value, json};
 use store::Claim;
 
-use super::answer::{taken, visible};
+use super::answer::{still_held, taken, visible};
 use crate::assignees::Reader;
 use crate::error::{ApiResult, done, json as reply};
 use crate::marks::{iso, now_ms};
@@ -15,14 +15,20 @@ use crate::state::{Ctx, Shared};
 
 fn claim_now(shared: &Shared, person: &Principal, id: &str) -> ApiResult<Value> {
     let reader = Reader::of(shared, person);
-    visible(shared, &reader, id)?;
+    let found = visible(shared, &reader, id)?;
     let wanted = Claim {
         target: id.to_owned(),
+        item: found.item().as_str().to_owned(),
         person: person.owner().to_owned(),
         name: reader.display().to_owned(),
         at: now_ms(),
     };
-    let held = shared.backend.store.claim_inbox(&wanted)?;
+    let store = &shared.backend.store;
+    let mut held = store.claim_inbox(&wanted)?;
+    if held.person != wanted.person && !still_held(shared, &held, found.assign()) {
+        store.release_inbox(id, Some(&held.person))?;
+        held = store.claim_inbox(&wanted)?;
+    }
     if held.person != wanted.person {
         return Err(taken(&held.name));
     }
@@ -32,7 +38,6 @@ fn claim_now(shared: &Shared, person: &Principal, id: &str) -> ApiResult<Value> 
 
 fn release_now(shared: &Shared, person: &Principal, id: &str) -> ApiResult<()> {
     let reader = Reader::of(shared, person);
-    visible(shared, &reader, id)?;
     let whose = (!reader.admin()).then(|| person.owner());
     if shared.backend.store.release_inbox(id, whose)? {
         tracing::info!(target: "audit", user = person.owner(), request = id, outcome = "released", "inbox.released");

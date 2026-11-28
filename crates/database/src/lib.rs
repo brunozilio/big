@@ -13,6 +13,8 @@ pub use postgres_db::Password;
 pub use sql::{for_postgres, schema_for_postgres};
 pub use value::{FromValue, Param, Row, Value};
 
+const MIGRATING: i32 = 0x6d69_6772;
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error(transparent)]
@@ -139,7 +141,7 @@ impl Database {
         let dialect = self.dialect();
         self.write(|conn| {
             if dialect == Dialect::Postgres {
-                conn.batch(&format!("SELECT pg_advisory_xact_lock(hashtext(current_schema() || '.{table}'))"))?;
+                conn.batch(&format!("SELECT pg_advisory_xact_lock({MIGRATING}, hashtext(current_schema()))"))?;
             }
             conn.batch(&format!("CREATE TABLE IF NOT EXISTS {table} (version BIGINT NOT NULL)"))?;
             let current: i64 = conn.one(&format!("SELECT COUNT(*) FROM {table}"), &[])?.unwrap_or(0);

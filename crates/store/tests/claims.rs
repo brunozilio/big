@@ -7,7 +7,7 @@ use common::Fresh;
 use store::Claim;
 
 fn by(person: &str, at: i64) -> Claim {
-    Claim { target: "i-1:approve".into(), person: person.into(), name: person.to_uppercase(), at }
+    Claim { target: "i-1:approve".into(), item: "i-1".into(), person: person.into(), name: person.to_uppercase(), at }
 }
 
 fn the_first_claim_holds_and_the_others_see_who_took_it(fresh: Fresh) {
@@ -21,6 +21,11 @@ fn the_first_claim_holds_and_the_others_see_who_took_it(fresh: Fresh) {
     assert_eq!(store.claim_inbox(&by("bia", 30)).expect("bia again"), by("bia", 30));
     assert!(store.release_inbox("i-1:approve", None).expect("anyone's"));
     assert!(store.inbox_claims().expect("empty").is_empty());
+    store.claim_inbox(&by("ana", 40)).expect("again");
+    let other = Claim { target: "ask-9".into(), item: "i-2".into(), ..by("bia", 50) };
+    store.claim_inbox(&other).expect("other item");
+    assert_eq!(store.forget_item_claims("i-1").expect("forgotten"), 1);
+    assert_eq!(store.inbox_claims().expect("left"), vec![other]);
 }
 
 fn many_instances_open_the_same_new_database_at_once(fresh: Fresh) {

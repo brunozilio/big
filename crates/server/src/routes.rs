@@ -28,7 +28,7 @@ fn api() -> Router<Ctx> {
         .route("/api/items/{id}/usage", get(crate::item_usage::usage))
         .route("/api/items/{id}/archive", post(crate::archive::archive).delete(crate::archive::unarchive))
         .route("/api/items/{id}/steps/{step}", get(items::step))
-        .route("/api/items/{id}/steps/{step}/input", post(items::human))
+        .route("/api/items/{id}/steps/{step}/input", post(crate::inbox::human))
         .route("/api/sessions/{id}", get(sessions::open))
         .route("/api/sessions/{id}/messages", post(sessions::send))
         .route("/api/sessions/{id}/respond", post(sessions::respond))

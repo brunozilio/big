@@ -4,10 +4,11 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::Response;
 use axum::{Extension, Json};
-use domain::principal::Principal;
+use domain::principal::{Principal, UserId};
 use domain::workflow::{Assignee, ItemId, StepState};
 use orchestrator::PendingAsk;
 use serde_json::{Value, json};
+use store::Claim;
 
 use crate::assignees::Reader;
 use crate::blocks;
@@ -56,20 +57,46 @@ pub fn target(shared: &Shared, id: &str) -> ApiResult<Target> {
     waiting(shared, id)?.ok_or_else(gone)
 }
 
-pub fn visible(shared: &Shared, reader: &Reader<'_>, id: &str) -> ApiResult<Target> {
-    let found = target(shared, id)?;
-    let (item, assign) = match &found {
-        Target::Ask(pending) => (pending.item.as_str(), pending.assign.as_ref()),
-        Target::Wait { item, assign, .. } => (item.as_str(), assign.as_ref()),
-    };
-    let owner = crate::scope::item_owner(shared, item)?.unwrap_or_default();
-    if reader.sees(&owner, assign) { Ok(found) } else { Err(gone()) }
+impl Target {
+    pub fn item(&self) -> &ItemId {
+        match self {
+            Target::Ask(pending) => &pending.item,
+            Target::Wait { item, .. } => item,
+        }
+    }
+
+    pub fn assign(&self) -> Option<&Assignee> {
+        match self {
+            Target::Ask(pending) => pending.assign.as_ref(),
+            Target::Wait { assign, .. } => assign.as_ref(),
+        }
+    }
 }
 
-fn free(shared: &Shared, reader: &Reader<'_>, id: &str) -> ApiResult<()> {
+pub fn visible(shared: &Shared, reader: &Reader<'_>, id: &str) -> ApiResult<Target> {
+    let found = target(shared, id)?;
+    let owner = crate::scope::item_owner(shared, found.item().as_str())?.unwrap_or_default();
+    if reader.sees(&owner, found.assign()) { Ok(found) } else { Err(gone()) }
+}
+
+pub fn still_held(shared: &Shared, held: &Claim, assign: Option<&Assignee>) -> bool {
+    let Some(assign) = assign else { return true };
+    match shared.backend.store.user(&UserId(held.person.clone())) {
+        Ok(Some(claimant)) => Reader::of(shared, &claimant).reaches(assign),
+        Ok(None) => false,
+        Err(error) => {
+            tracing::warn!(%error, "the person holding a claim could not be read");
+            true
+        }
+    }
+}
+
+fn free(shared: &Shared, reader: &Reader<'_>, id: &str, assign: Option<&Assignee>) -> ApiResult<()> {
     let claims = shared.backend.store.inbox_claims()?;
     match claims.into_iter().find(|held| held.target == id) {
-        Some(held) if held.person != reader.person.owner() => Err(taken(&held.name)),
+        Some(held) if held.person != reader.person.owner() && still_held(shared, &held, assign) => {
+            Err(taken(&held.name))
+        }
         _ => Ok(()),
     }
 }
@@ -78,12 +105,12 @@ pub fn guard_wait(shared: &Shared, person: &Principal, item: &ItemId, step: &str
     let reader = Reader::of(shared, person);
     let id = super::wait_id(item, step);
     let Some(Target::Wait { assign: Some(assign), .. }) = waiting(shared, &id)? else {
-        return free(shared, &reader, &id);
+        return free(shared, &reader, &id, None);
     };
     if !reader.reaches(&assign) {
         return Err(crate::scope::not_allowed());
     }
-    free(shared, &reader, &id)
+    free(shared, &reader, &id, Some(&assign))
 }
 
 fn noted(payload: Value, note: &str) -> Value {
@@ -134,7 +161,7 @@ pub fn answer(
     note: &str,
 ) -> ApiResult<Option<String>> {
     let found = visible(shared, reader, id)?;
-    free(shared, reader, id)?;
+    free(shared, reader, id, found.assign())?;
     let followed = match &found {
         Target::Ask(pending) => match pending.session.clone() {
             Some(session) => {

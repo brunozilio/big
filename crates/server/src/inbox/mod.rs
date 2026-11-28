@@ -1,5 +1,6 @@
 mod answer;
 mod claims;
+mod step;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -14,7 +15,8 @@ use orchestrator::{ItemSummary, PendingAsk};
 use serde_json::{Value, json};
 use store::{Claim, ConnectionRecord};
 
-pub use answer::{batch, guard_wait, respond};
+pub use answer::{batch, respond};
+pub use step::human;
 pub use claims::{claim, release};
 
 use crate::assignees::Reader;
@@ -104,7 +106,8 @@ impl<'a> Inbox<'a> {
 
     fn routed(&self, entry: &mut Value, id: &str, assign: Option<&Assignee>) {
         entry["assignedTo"] = assign.map_or(Value::Null, Assignee::shown);
-        entry["claim"] = self.claims.get(id).map_or(Value::Null, |held| {
+        let held = self.claims.get(id).filter(|held| answer::still_held(self.shared, held, assign));
+        entry["claim"] = held.map_or(Value::Null, |held| {
             json!({ "by": held.name, "at": iso(held.at), "mine": held.person == self.reader.person.owner() })
         });
     }
@@ -150,6 +153,12 @@ impl<'a> Inbox<'a> {
             found.push(entry);
         }
         Ok(found)
+    }
+}
+
+pub fn forget_claims(shared: &Shared, item: &ItemId) {
+    if let Err(error) = shared.backend.store.forget_item_claims(item.as_str()) {
+        tracing::warn!(%error, item = %item, "the claims of an ended item could not be dropped");
     }
 }
 

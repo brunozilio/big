@@ -23,8 +23,10 @@ fn item_changed(shared: &Shared, id: &ItemId) {
 
 fn handle(shared: &Shared, event: OrchestratorEvent) {
     match event {
-        OrchestratorEvent::ItemChanged { item, .. } | OrchestratorEvent::ItemEnded { item } => {
-            item_changed(shared, &item)
+        OrchestratorEvent::ItemChanged { item, .. } => item_changed(shared, &item),
+        OrchestratorEvent::ItemEnded { item } => {
+            crate::inbox::forget_claims(shared, &item);
+            item_changed(shared, &item);
         }
         OrchestratorEvent::Session { item, session, .. } => {
             shared.follow(&session);

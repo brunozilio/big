@@ -147,3 +147,60 @@ async fn without_an_assignee_the_wait_stays_with_the_owner_and_a_release_frees_t
     assert_eq!(status, StatusCode::NO_CONTENT);
     assert!(inbox(&world, &ana).await[0]["claim"].is_null());
 }
+
+async fn claimed(world: &World, cookie: &str, id: &str) -> StatusCode {
+    send(world, cookie, Method::POST, "/api/inbox/claim", Some(json!({ "id": id }))).await.0
+}
+
+async fn released(world: &World, cookie: &str, id: &str) -> StatusCode {
+    send(world, cookie, Method::POST, "/api/inbox/release", Some(json!({ "id": id }))).await.0
+}
+
+async fn claims_left(world: &World, item: &str) -> Vec<String> {
+    for _ in 0..400 {
+        let all = world.store.inbox_claims().expect("claims");
+        if all.iter().all(|held| held.item != item) {
+            return all.into_iter().map(|held| held.target).collect();
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+    }
+    panic!("the claims of {item} stayed: {:?}", world.store.inbox_claims())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_admin_frees_a_claim_a_lost_role_frees_it_too_and_an_ended_item_leaves_none() {
+    server::force_auth_mode(server::AuthMode::Shared);
+    let world = World::with(&[("workflows/compra.ts", PURCHASE)], Vec::new()).await;
+    let (ana, bia, caio, root) =
+        (signed(&world, "ana"), signed(&world, "bia"), signed(&world, "caio"), signed(&world, "root"));
+    give(&world, "bia", "controller");
+    give(&world, "caio", "controller");
+    give(&world, "root", brand::access::ADMIN_ROLE);
+    let first = bought(&world, &ana, "Notebook").await;
+    let second = bought(&world, &ana, "Monitor").await;
+    inbox_until(&world, &bia, 2, "approve").await;
+    let (one, two) = (format!("{first}:approve"), format!("{second}:approve"));
+    assert_eq!(claimed(&world, &bia, &one).await, StatusCode::OK);
+    assert_eq!(released(&world, &caio, &one).await, StatusCode::NO_CONTENT);
+    assert_eq!(claimed(&world, &caio, &one).await, StatusCode::CONFLICT, "caio cannot free the claim of bia");
+    assert_eq!(released(&world, &root, &one).await, StatusCode::NO_CONTENT);
+    assert_eq!(claimed(&world, &caio, &one).await, StatusCode::OK, "the admin freed it");
+    let member = [brand::access::DEFAULT_ROLE.to_owned()];
+    world.store.set_roles(&UserId("caio".into()), "assigned", &member).expect("lost");
+    assert!(inbox(&world, &bia).await.iter().all(|entry| entry["claim"].is_null()), "a lost role holds nothing");
+    assert_eq!(claimed(&world, &bia, &one).await, StatusCode::OK);
+    assert_eq!(claimed(&world, &bia, &two).await, StatusCode::OK);
+    let (status, _) = send(&world, &ana, Method::POST, &format!("/api/items/{second}/cancel"), None).await;
+    assert!(status.is_success(), "{status}");
+    assert_eq!(claims_left(&world, &second).await, std::slice::from_ref(&one));
+    let gone = store::Claim {
+        target: "sumiu:approve".into(),
+        item: "sumiu".into(),
+        person: "bia".into(),
+        name: "bia".into(),
+        at: 0,
+    };
+    world.store.claim_inbox(&gone).expect("stale");
+    assert_eq!(released(&world, &bia, "sumiu:approve").await, StatusCode::NO_CONTENT);
+    assert!(world.store.inbox_claims().expect("claims").iter().all(|held| held.target != "sumiu:approve"));
+}

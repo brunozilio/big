@@ -264,10 +264,12 @@ const MIGRATIONS: &[&str] = &[
     "
     CREATE TABLE IF NOT EXISTS inbox_claims (
         target TEXT PRIMARY KEY,
+        item TEXT NOT NULL,
         person TEXT NOT NULL,
         name TEXT NOT NULL,
         at INTEGER NOT NULL
     );
+    CREATE INDEX IF NOT EXISTS inbox_claims_by_item ON inbox_claims (item);
 ",
 ];
 
