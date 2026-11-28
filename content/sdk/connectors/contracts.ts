@@ -8,7 +8,7 @@ export type Reversible = boolean | "compensate";
 
 export type Visibility = "model" | "host";
 
-export type Permission = { default: "ask" | "allow"; alwaysAsk: boolean };
+export type Permission = { default: "ask" | "deny"; alwaysAsk: boolean };
 
 export type Profile = {
   effects: Effect[];
@@ -31,12 +31,6 @@ export type Action = {
   description?: string;
   secret?: boolean;
 } & Profile;
-
-export const EFFECTS: Effect[] = ["read", "write", "send-external", "money", "pii", "legal", "destructive", "memory", "consumes-budget"];
-
-const REQUIRED = ["effects", "risk", "reversible", "untrusted", "sensitive"] as const;
-
-const INERT: Effect[] = ["read", "pii", "consumes-budget"];
 
 export const looks = (untrusted = false, sensitive = false, more: Effect[] = []): Profile => ({
   effects: ["read", ...more],
@@ -77,17 +71,17 @@ const PROFILES: Record<string, Profile> = {
   "code.review_comments": looks(true),
   "code.submit_review": alters("medium", "compensate", { freeText: ["body"] }),
   "code.resolve_thread": alters("low", true),
-  "code.merge": alters("high", "compensate"),
+  "code.merge": alters("medium", "compensate"),
   "code.repos": looks(),
   "code.pull_requests": looks(true),
   "code.branches": looks(),
-  "code.merge_branches": alters("high", "compensate"),
+  "code.merge_branches": alters("medium", "compensate"),
   "code.git_credentials": { ...looks(false, true), visibility: "host" },
   "pipelines.runs": looks(),
   "pipelines.run": looks(),
   "pipelines.job_log": looks(true),
   "pipelines.pending_deployments": looks(),
-  "pipelines.review_deployment": alters("high", false, { permission: ALWAYS_ASK, freeText: ["comment"] }),
+  "pipelines.review_deployment": alters("medium", "compensate", { freeText: ["comment"] }),
   "cloud.identity": { ...looks(false, true), visibility: "host" },
   "cloud.accounts_and_roles": looks(),
   "cloud.last_deployment": looks(),
@@ -118,21 +112,24 @@ const PROFILES: Record<string, Profile> = {
   "files.sites": looks(),
   "messaging.list_chats": looks(false, true, ["pii"]),
   "messaging.list_messages": looks(true, true, ["pii"]),
-  "messaging.send_message": alters("medium", "compensate", { effects: ["send-external"], recipients: ["chat"], freeText: ["text"] }),
+  "messaging.send_message": alters("medium", "compensate", { recipients: ["chat"], freeText: ["text"] }),
   "design.frame": looks(true),
   "assistant.ask": { ...looks(true, false, ["consumes-budget"]), freeText: ["question", "context"] },
 };
 
-export function checked(name: string, profile: Partial<Profile> | undefined, writes: boolean): Profile {
-  if (!profile) throw new TypeError(`${name} declares no effects, risk, reversible, untrusted nor sensitive`);
-  for (const key of REQUIRED) if (profile[key] === undefined) throw new TypeError(`${name} declares no ${key}`);
-  const effects = profile.effects ?? [];
-  if (effects.length === 0) throw new TypeError(`${name} declares an empty effects list`);
-  const unknown = effects.find((effect) => !EFFECTS.includes(effect));
-  if (unknown) throw new TypeError(`${name} declares the unknown effect ${unknown}`);
-  if (writes && effects.every((effect) => INERT.includes(effect))) throw new TypeError(`${name} writes, so it declares what it changes in effects`);
-  if (effects.includes("pii") && profile.sensitive !== true) throw new TypeError(`${name} touches personal data, so it is sensitive`);
-  return profile as Profile;
+export const CONNECTOR_SCHEMA = 2;
+
+const legacy = (writes: boolean): Profile =>
+  writes ? alters("medium", false, { untrusted: true, sensitive: true }) : looks(true, true);
+
+export function migrated(manifest: { schema_version?: number; actions?: Partial<Action>[] }) {
+  if (!manifest || typeof manifest !== "object" || (manifest.schema_version ?? 0) >= CONNECTOR_SCHEMA) return manifest;
+  const actions = (manifest.actions ?? []).map((action) => {
+    if (!action || typeof action !== "object" || action.effects !== undefined) return action;
+    const hidden = action.secret === true ? { visibility: "host" as Visibility } : {};
+    return { ...legacy(action.writes === true), ...hidden, ...action };
+  });
+  return { ...manifest, actions };
 }
 
 
@@ -218,7 +215,8 @@ type Plain = Omit<Action, keyof Profile>;
 function described(action: Plain, given?: Profile): Action {
   const description = action.description ?? DESCRIPTIONS[action.name];
   const shown = description ? { ...action, description } : action;
-  const profile = checked(action.name, given ?? PROFILES[action.name], action.writes);
+  const profile = given ?? PROFILES[action.name];
+  if (!profile) throw new TypeError(`${action.name} declares no profile: effects, risk, reversible, untrusted and sensitive`);
   return profile.visibility === "host" ? { ...shown, ...profile, secret: true } : { ...shown, ...profile };
 }
 

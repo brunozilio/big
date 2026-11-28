@@ -39,8 +39,8 @@ impl Provider for Echo {
             capabilities: vec![Capability::from("x"), Capability::from("y")],
             auth: AuthSpec::Device(device()),
             actions: vec![
-                ActionSpec::read("x.read", object(&[("a", "string")], &[]), json!({})),
-                ActionSpec::read("y.read", object(&[], &[]), json!({})),
+                ActionSpec::read("x.read", object(&[("a", "string")], &[]), json!({}), looked()),
+                ActionSpec::read("y.read", object(&[], &[]), json!({}), looked()),
             ],
         }
     }
@@ -300,4 +300,9 @@ async fn a_login_required_error_is_shown_at_once_without_refreshing_the_token() 
     connection.provider = ProviderKey::from("locked");
     let refused = hub.call(&connection, &json!({}), "x.read", &json!({"a": "1"}), "").await;
     assert!(matches!(refused, Err(e) if e.needs_login() && e.shown() == "faça login no Helix"));
+}
+
+fn looked() -> domain::operation::Profile {
+    use domain::operation::{Kind, Profile, Reversible, Risk};
+    Profile::new(vec![Kind::Read], Risk::Low, Reversible::Yes, false, false)
 }

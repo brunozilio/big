@@ -350,43 +350,64 @@ fn declared(effects: &[crate::operation::Kind], risk: crate::operation::Risk) ->
     }
 }
 
-#[test]
-fn what_an_operation_declares_sets_how_it_is_asked() {
-    use crate::operation::{Initial, Kind, Permission, Risk};
+fn operated(
+    operation: crate::operation::Operation,
+    mode: PermissionMode,
+    allowed: Option<&Allowed>,
+    remembered: &Remembered,
+) -> Verdict {
     let bounds = bounds();
+    let effects = [Effect::Operation(operation)];
+    let call = Call { tool: "mcp__connectors__mail_send", subject: "", effects: &effects };
+    PolicyEngine::decide(&call, &PolicyContext { allowed, ..context(mode, remembered, &bounds) })
+}
+
+#[test]
+fn what_an_operation_declares_only_tightens_how_it_is_asked() {
+    use crate::operation::{Initial, Kind, Permission, Risk};
     let none = Remembered::default();
     let list = Allowed::of([Grant::Tool("mcp__connectors__*".into())]);
-    let judged = |operation: crate::operation::Operation, mode, allowed: Option<&Allowed>| {
-        let effects = [Effect::Operation(operation)];
-        let call = Call { tool: "mcp__connectors__mail_send", subject: "", effects: &effects };
-        PolicyEngine::decide(&call, &PolicyContext { allowed, ..context(mode, &none, &bounds) })
-    };
+    let judged = |operation, mode, allowed| operated(operation, mode, allowed, &none);
     let comment = declared(&[Kind::Write], Risk::Low);
-    assert_eq!(
-        judged(comment.clone(), PermissionMode::Auto, None),
-        Verdict::Ask { reason: Reason::Mode, rememberable: true }
-    );
+    let asked = Verdict::Ask { reason: Reason::Mode, rememberable: true };
+    assert_eq!(judged(comment.clone(), PermissionMode::Auto, None), asked);
     assert_eq!(judged(comment.clone(), PermissionMode::Auto, Some(&list)), Verdict::Allow);
     let send = declared(&[Kind::SendExternal, Kind::Pii], Risk::Medium);
-    let strict = Verdict::Ask { reason: Reason::Declared("declares pii, send-external".into()), rememberable: false };
-    assert_eq!(judged(send.clone(), PermissionMode::Auto, None), strict);
-    assert_eq!(judged(send.clone(), PermissionMode::Auto, Some(&list)), strict, "the list never waives a declared ask");
+    let strict = |overrode| Verdict::Ask {
+        reason: Reason::Declared { why: "declares pii, send-external".into(), overrode },
+        rememberable: false,
+    };
+    assert_eq!(judged(send.clone(), PermissionMode::Auto, None), strict(false));
+    assert_eq!(
+        judged(send.clone(), PermissionMode::Auto, Some(&list)),
+        strict(true),
+        "a saved allow no longer applies"
+    );
     assert!(judged(send, PermissionMode::Plan, None).denies());
     let risky = declared(&[Kind::Write], Risk::High);
-    assert!(matches!(judged(risky, PermissionMode::Auto, None), Verdict::Ask { reason: Reason::Declared(_), .. }));
+    assert!(matches!(judged(risky, PermissionMode::Auto, None), Verdict::Ask { reason: Reason::Declared { .. }, .. }));
     let always = crate::operation::Operation {
         permission: Permission { default: Initial::Ask, always_ask: true },
         ..comment.clone()
     };
     assert!(matches!(
         judged(always, PermissionMode::Auto, Some(&list)),
-        Verdict::Ask { reason: Reason::Declared(_), .. }
+        Verdict::Ask { reason: Reason::Declared { .. }, .. }
     ));
-    let free = crate::operation::Operation {
-        permission: Permission { default: Initial::Allow, always_ask: false },
-        ..comment
-    };
-    assert_eq!(judged(free.clone(), PermissionMode::Auto, None), Verdict::Allow);
-    assert!(judged(free, PermissionMode::Plan, None).denies());
-    assert!(!Reason::Declared(String::new()).reviewable());
+    let refused =
+        crate::operation::Operation { permission: Permission { default: Initial::Deny, always_ask: false }, ..comment };
+    assert!(judged(refused.clone(), PermissionMode::Auto, None).denies());
+    assert_eq!(judged(refused, PermissionMode::Auto, Some(&list)), Verdict::Allow, "only the user's list releases it");
+    assert!(!Reason::Declared { why: String::new(), overrode: false }.reviewable());
+}
+
+#[test]
+fn a_remembered_always_for_an_action_now_strict_is_reported_as_overridden() {
+    use crate::operation::{Kind, Risk};
+    let mut remembered = Remembered::default();
+    remembered.remember("mcp__connectors__mail_send", Standing::Acts, "");
+    let verdict = operated(declared(&[Kind::SendExternal], Risk::Medium), PermissionMode::Auto, None, &remembered);
+    assert!(matches!(verdict, Verdict::Ask { reason: Reason::Declared { overrode: true, .. }, rememberable: false }));
+    let unattended = verdict.without_the_user("mail_send");
+    assert!(matches!(unattended, Verdict::Deny(why) if why.contains("does not run unattended")));
 }

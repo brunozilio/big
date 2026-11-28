@@ -12,15 +12,53 @@ pub fn findings(root: &Path) -> Result<Vec<String>, Box<dyn std::error::Error>> 
     let mut found = BTreeSet::new();
     for file in files {
         let source = std::fs::read_to_string(&file)?;
-        let code = source.split("#[cfg(test)]").next().unwrap_or_default().to_ascii_lowercase();
-        for name in names.iter().filter(|name| mentions(&code, name)) {
-            found.insert(format!(
-                "provider-name {}: {name} (the platform never names a provider; the TS content does)",
-                shown(root, &file)
-            ));
+        let code = without_test_modules(&source);
+        for line in code.lines() {
+            let lowered = line.to_ascii_lowercase();
+            for name in names.iter().filter(|name| mentions(&lowered, name)) {
+                found.insert(format!("provider-name {}: {name}: {}", shown(root, &file), line.trim()));
+            }
         }
     }
     Ok(found.into_iter().collect())
+}
+
+const TEST_GATE: &str = "#[cfg(test)]";
+
+fn without_test_modules(source: &str) -> String {
+    let mut code = source.to_owned();
+    let mut from = 0;
+    while let Some(found) = code[from..].find(TEST_GATE) {
+        let gate = from + found;
+        let after = gate + TEST_GATE.len();
+        let rest = code[after..].trim_start();
+        let opens = rest.starts_with("mod ")
+            && rest.find('{').is_some_and(|brace| rest.find(';').is_none_or(|semi| brace < semi));
+        let end = opens.then(|| block_end(&code, after)).flatten();
+        match end {
+            Some(end) => code.replace_range(gate..end, ""),
+            None => from = after,
+        }
+    }
+    code
+}
+
+fn block_end(code: &str, from: usize) -> Option<usize> {
+    let open = from + code[from..].find('{')?;
+    let mut depth = 0usize;
+    for (at, letter) in code[open..].char_indices() {
+        match letter {
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 {
+                    return Some(open + at + 1);
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 fn names(root: &Path) -> Vec<String> {
@@ -75,12 +113,15 @@ mod tests {
         std::fs::create_dir_all(root.path().join("content/connectors/acme")).expect("connector");
         std::fs::create_dir_all(root.path().join("content/connectors/mcp")).expect("protocol");
         std::fs::create_dir_all(root.path().join("crates/x/src")).expect("crate");
-        let code = "fn a() { let _ = \"acme\"; let _ = \"acmes\"; let _ = \"mcp\"; }\n#[cfg(test)]\nmod tests { const X: &str = \"acme\"; }\n";
+        let code = "fn a() { let _ = \"acme\"; let _ = \"acmes\"; let _ = \"mcp\"; }\n#[cfg(test)]\nmod tests { const X: &str = \"acme\"; }\n#[cfg(test)]\nfn helper() {}\nfn after() { let _ = \"Acme\"; }\n";
         std::fs::write(root.path().join("crates/x/src/lib.rs"), code).expect("lib");
         std::fs::write(root.path().join("crates/x/src/clean.rs"), "fn b() { let _ = \"acmes\"; }\n").expect("clean");
         assert_eq!(
             findings(root.path()).expect("findings"),
-            ["provider-name crates/x/src/lib.rs: acme (the platform never names a provider; the TS content does)"]
+            [
+                "provider-name crates/x/src/lib.rs: acme: fn a() { let _ = \"acme\"; let _ = \"acmes\"; let _ = \"mcp\"; }",
+                "provider-name crates/x/src/lib.rs: acme: fn after() { let _ = \"Acme\"; }",
+            ]
         );
     }
 }

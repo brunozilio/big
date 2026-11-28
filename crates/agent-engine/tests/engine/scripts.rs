@@ -11,6 +11,7 @@ use crate::{Source, finish, model, start};
 
 const TOOL: &str = r#"
 export const spec = {
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
   name: "Summarize",
   description: "Summarizes a file.",
   input: { type: "object", properties: { path: { type: "string" } } },

@@ -1,4 +1,7 @@
 use std::fmt;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 
 use content::schema::{Contract, SchemaError};
 use domain::operation::{Kind, Problem, checked};
@@ -9,6 +12,7 @@ pub enum ManifestError {
     Schema(SchemaError),
     WriteWithoutEffects { action: String },
     Attribute { action: String, problem: Problem },
+    Migration(String),
 }
 
 impl fmt::Display for ManifestError {
@@ -19,6 +23,7 @@ impl fmt::Display for ManifestError {
                 write!(f, "{action} writes but declares no effects: say what it changes (write, send-external, money…)")
             }
             Self::Attribute { action, problem } => write!(f, "{action} {problem}"),
+            Self::Migration(error) => write!(f, "the connector could not be brought to the current contract: {error}"),
         }
     }
 }
@@ -35,6 +40,17 @@ fn action_checked(action: &Value) -> Result<(), ManifestError> {
         return Err(ManifestError::WriteWithoutEffects { action: name });
     }
     checked(action).map(drop).map_err(|problem| ManifestError::Attribute { action: name, problem })
+}
+
+pub fn migrated(root: Option<&Path>, declared: Value) -> Result<Value, ManifestError> {
+    let catalog = crate::contracts::CATALOG;
+    let source = content::user_text(root, catalog)
+        .or_else(|| content::builtin_text(catalog))
+        .ok_or_else(|| ManifestError::Migration(format!("{catalog} is missing")))?;
+    let host: Arc<dyn script::Host> = Arc::new(crate::scripted::Local);
+    let stop = Arc::new(AtomicBool::new(false));
+    script::run_within(catalog, &source, "migrated", &[declared], &Value::Null, host, stop, None)
+        .map_err(ManifestError::Migration)
 }
 
 pub fn read(declared: &mut Value, at: &str) -> Result<(), ManifestError> {
@@ -80,9 +96,17 @@ mod tests {
     }
 
     #[test]
-    fn an_older_connector_is_migrated_instead_of_refused() {
-        let mut old = json!({ "name": "X", "actions": [{ "name": "x.send", "writes": true }] });
+    fn an_older_connector_is_migrated_by_the_sdk_instead_of_refused() {
+        let old = json!({ "name": "X", "actions": [{ "name": "x.send", "writes": true }, { "name": "x.key", "secret": true }] });
+        let mut old = migrated(None, old).expect("migrated");
         assert_eq!(read(&mut old, "x"), Ok(()));
-        assert_eq!(old["actions"][0]["effects"], json!(["write"]));
+        assert_eq!((&old["actions"][0]["effects"], &old["actions"][0]["risk"]), (&json!(["write"]), &json!("medium")));
+        assert_eq!(
+            (&old["actions"][1]["effects"], &old["actions"][1]["visibility"]),
+            (&json!(["read"]), &json!("host"))
+        );
+        let current = connector(json!({ "name": "x.send", "writes": true }));
+        let mut current = migrated(None, current).expect("untouched");
+        assert_eq!(read(&mut current, "x"), Err(ManifestError::WriteWithoutEffects { action: "x.send".into() }));
     }
 }

@@ -122,7 +122,7 @@ impl Provider for FakeProvider {
                 start_fields: Vec::new(),
                 dialect: Dialect::Form,
             }),
-            actions: ACTIONS.iter().map(|name| ActionSpec::read(name, object(&[], &[]), json!({}))).collect(),
+            actions: ACTIONS.iter().map(|name| ActionSpec::read(name, object(&[], &[]), json!({}), looked())).collect(),
         }
     }
 
@@ -490,4 +490,9 @@ pub fn output(item: &WorkItem) -> Value {
         Some(domain::workflow::Ending::Finished { output }) => output.clone(),
         other => panic!("the item did not finish: {other:?}"),
     }
+}
+
+fn looked() -> domain::operation::Profile {
+    use domain::operation::{Kind, Profile, Reversible, Risk};
+    Profile::new(vec![Kind::Read], Risk::Low, Reversible::Yes, false, false)
 }

@@ -141,7 +141,8 @@ impl ScriptedProvider {
         }
         let script = Script { modules: Arc::new(modules), data };
         let local: Arc<dyn script::Host> = Arc::new(Local);
-        let mut declared = script.invoke_here("provider", &json!({}), local).map_err(|error| error.message)?;
+        let declared = script.invoke_here("provider", &json!({}), local).map_err(|error| error.message)?;
+        let mut declared = crate::manifest::migrated(root, declared).map_err(|error| error.to_string())?;
         crate::manifest::read(&mut declared, entry).map_err(|error| error.to_string())?;
         let declared: Declared = serde_json::from_value(declared).map_err(|error| format!("{entry}: {error}"))?;
         let key = if declared.key.is_empty() { named } else { declared.key.clone() };

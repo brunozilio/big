@@ -28,12 +28,22 @@ impl Asking<'_> {
             Some((path, guard)) => format!("{}\n{}", guard.why(), path.display()),
             None => self.shown.unwrap_or(&self.judgement.subject).to_owned(),
         };
+        if let Reason::Declared { why, overrode: true } = reason {
+            tracing::warn!(
+                tool = self.called.name,
+                why,
+                "a saved \"always allow\" no longer applies: the action now asks a person every time"
+            );
+        }
         let shown = match reason {
             Reason::Flagged(why) => format!("{why}\n{subject}"),
             Reason::Hard(category) if *category != domain::permission::hard::Category::Hidden => {
                 format!("This is always asked because {}:\n{subject}", category.why())
             }
-            _ => subject,
+            _ => match reason.shown() {
+                Some(why) => format!("{why}\n{subject}"),
+                None => subject,
+            },
         };
         domain::permission::hidden::warned(&shown)
     }

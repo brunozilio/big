@@ -104,6 +104,7 @@ fn every_shipped_action_says_what_it_does_and_credentials_are_kept_secret() {
         }
     }
 }
+
 #[test]
 fn every_shipped_connector_loads_at_the_current_contract_and_declares_each_action_s_effects() {
     use domain::operation::{Kind, Visibility};
@@ -118,20 +119,50 @@ fn every_shipped_connector_loads_at_the_current_contract_and_declares_each_actio
             }
         }
     }
-    let mail = loaded("microsoft");
-    let send = mail.descriptor().action("email.send").cloned().expect("email.send");
-    assert!(send.profile.effects.contains(&Kind::SendExternal));
-    assert_eq!(send.recipients, ["to", "cc"]);
-    assert!(send.permission.always_ask);
+}
+
+const FIXTURE: &str = r#"import { looks, object, read, write } from "sdk/connectors/contracts.ts";
+export function provider() {
+  const share = { effects: ["send-external", "pii"], risk: "medium", reversible: false, untrusted: false, sensitive: true, recipients: ["to"], freeText: ["body"], permission: { default: "ask", alwaysAsk: true } };
+  return { schema_version: 2, name: "Fixture", capabilities: ["notes"], auth: { kind: "token", fields: [] },
+    actions: [write("notes.share", object([["to", "array"], ["body", "string"]]), object([]), "native", share), read("notes.list", object([]), object([]), looks(true))] };
+}
+export function call() { return null; }
+"#;
+
+fn installed(name: &str, source: &str) -> (tempfile::TempDir, Result<ScriptedProvider, String>) {
+    let folder = tempfile::tempdir().expect("folder");
+    let dir = folder.path().join(format!("connectors/{name}"));
+    std::fs::create_dir_all(&dir).expect("dir");
+    std::fs::write(dir.join("index.ts"), source).expect("index");
+    let loaded = ScriptedProvider::load_in(Some(folder.path()), &format!("connectors/{name}/index.ts"));
+    (folder, loaded)
+}
+
+#[test]
+fn a_connector_declares_what_an_action_sends_and_to_whom() {
+    use domain::operation::Kind;
+    let (_folder, fixture) = installed("fixture", FIXTURE);
+    let fixture = fixture.unwrap_or_else(|error| panic!("{error}"));
+    let share = fixture.descriptor().action("notes.share").cloned().expect("notes.share");
+    assert_eq!(share.profile.effects, [Kind::SendExternal, Kind::Pii]);
+    assert_eq!((share.recipients.as_slice(), share.permission.always_ask), (["to".to_owned()].as_slice(), true));
+    let list = fixture.descriptor().action("notes.list").cloned().expect("notes.list");
+    assert!(list.profile.untrusted && !list.profile.acts());
+}
+
+#[test]
+fn a_first_contract_connector_is_brought_up_by_the_sdk_and_still_loads() {
+    let old = "export function provider() {\n  return { schema_version: 1, name: \"Old\", capabilities: [\"x\"], auth: { kind: \"token\", fields: [] },\n    actions: [{ name: \"x.send\", input_schema: { type: \"object\" }, output_schema: {}, writes: true, idempotent: \"native\" }] };\n}\nexport function call() { return null; }\n";
+    let (_folder, loaded) = installed("old", old);
+    let send = loaded.unwrap_or_else(|error| panic!("{error}")).descriptor().actions[0].clone();
+    assert_eq!(send.profile.effects, [domain::operation::Kind::Write]);
 }
 
 #[test]
 fn a_connector_whose_write_declares_no_effects_does_not_load() {
-    let folder = tempfile::tempdir().expect("folder");
-    let dir = folder.path().join("connectors/bare");
-    std::fs::create_dir_all(&dir).expect("dir");
     let source = "export function provider() {\n  return { schema_version: 2, name: \"Bare\", capabilities: [\"x\"], auth: { kind: \"token\", fields: [] },\n    actions: [{ name: \"x.send\", input_schema: { type: \"object\" }, output_schema: {}, writes: true, idempotent: \"native\", risk: \"high\", reversible: false, untrusted: false, sensitive: false }] };\n}\nexport function call() { return null; }\n";
-    std::fs::write(dir.join("index.ts"), source).expect("index");
-    let refused = ScriptedProvider::load_in(Some(folder.path()), "connectors/bare/index.ts").err().unwrap_or_default();
+    let (_folder, loaded) = installed("bare", source);
+    let refused = loaded.err().unwrap_or_default();
     assert!(refused.contains("x.send writes but declares no effects"), "{refused}");
 }

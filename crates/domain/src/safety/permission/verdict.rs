@@ -31,7 +31,7 @@ pub enum Reason {
     Hook,
     Listed,
     Flagged(String),
-    Declared(String),
+    Declared { why: String, overrode: bool },
     Outside(PathBuf),
     Guarded { path: PathBuf, guard: Guard },
     Hard(super::hard::Category),
@@ -43,7 +43,20 @@ impl Reason {
     }
 
     pub fn reviewable(&self) -> bool {
-        !matches!(self, Self::Hook | Self::Listed | Self::Flagged(_) | Self::Hard(_) | Self::Declared(_))
+        !matches!(self, Self::Hook | Self::Listed | Self::Flagged(_) | Self::Hard(_) | Self::Declared { .. })
+    }
+
+    pub fn shown(&self) -> Option<String> {
+        match self {
+            Self::Flagged(why) => Some(why.clone()),
+            Self::Declared { why, overrode: false } => {
+                Some(format!("This action {why}, so a person approves it every time."))
+            }
+            Self::Declared { why, overrode: true } => Some(format!(
+                "This action {why}, so a person approves it every time: the \"always allow\" saved for it no longer applies."
+            )),
+            _ => None,
+        }
     }
 
     pub fn unattended(&self, tool: &str) -> String {
@@ -55,7 +68,7 @@ impl Reason {
                     category.why()
                 )
             }
-            Self::Declared(why) => {
+            Self::Declared { why, .. } => {
                 format!("{tool} {why}, so a person approves it every time; it does not run unattended.")
             }
             _ => format!("{tool} requires permission; dontAsk denies unapproved actions."),

@@ -13,6 +13,7 @@ use serde_json::json;
 
 const WRAPPED_READ: &str = r#"
 export const spec = {
+  profile: { effects: ["read"], risk: "low", reversible: true, untrusted: false, sensitive: false },
   name: "Read",
   input: { type: "object", properties: { file_path: { type: "string" } }, required: ["file_path"] },
   description: "Reads a file, shouting.",

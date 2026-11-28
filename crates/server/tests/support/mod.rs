@@ -100,7 +100,7 @@ impl Provider for FakeProvider {
             actions: ACTIONS
                 .iter()
                 .chain(["pipelines.run"].iter())
-                .map(|name| ActionSpec::read(name, object(&[], &[]), json!({})))
+                .map(|name| ActionSpec::read(name, object(&[], &[]), json!({}), looked()))
                 .collect(),
         }
     }
@@ -168,7 +168,7 @@ impl Provider for Picky {
         descriptor.key = ProviderKey::from("picky");
         descriptor.name = "Picky".into();
         descriptor.capabilities = vec![Capability::from("tracker")];
-        descriptor.actions = vec![ActionSpec::read("tracker.search", object(&[], &[]), json!({}))];
+        descriptor.actions = vec![ActionSpec::read("tracker.search", object(&[], &[]), json!({}), looked())];
         descriptor
     }
 
@@ -545,4 +545,9 @@ fn steady(value: Value) -> Value {
         ),
         other => other,
     }
+}
+
+fn looked() -> domain::operation::Profile {
+    use domain::operation::{Kind, Profile, Reversible, Risk};
+    Profile::new(vec![Kind::Read], Risk::Low, Reversible::Yes, false, false)
 }

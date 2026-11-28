@@ -1,6 +1,6 @@
-use serde_json::{Value, json};
+use serde_json::Value;
 
-use crate::descriptor::{ActionSpec, Idempotency, object};
+use crate::descriptor::ActionSpec;
 
 pub const TRACKER: &str = "tracker";
 pub const CODE: &str = "code";
@@ -95,475 +95,56 @@ pub mod mcp {
     pub const URL: &str = "url";
 }
 
-fn list() -> Value {
-    json!({ "type": "array" })
-}
+pub const CATALOG: &str = "sdk/connectors/contracts.ts";
 
-fn issue_output() -> Value {
-    object(
-        &[("ref", "string"), ("title", "string"), ("status", "string"), ("url", "string")],
-        &[
-            ("id", "string"),
-            ("project", "string"),
-            ("type", "string"),
-            ("parent", "string"),
-            ("description", "string"),
-            ("impediment", "object"),
-            ("subtasks", "array"),
-            ("attachments", "array"),
-            ("comments", "array"),
-        ],
-    )
-}
-
-fn issue_summary() -> Value {
-    object(
-        &[("ref", "string"), ("status", "string")],
-        &[("id", "string"), ("title", "string"), ("url", "string"), ("changed", "boolean")],
-    )
-}
-
-fn project_list() -> Value {
-    let project = object(&[("id", "string"), ("key", "string"), ("name", "string")], &[("avatar", "string")]);
-    json!({ "type": "array", "items": project })
-}
-
-fn field_list() -> Value {
-    let field = object(
-        &[("key", "string"), ("name", "string"), ("type", "string")],
-        &[("required", "boolean"), ("values", "array")],
-    );
-    json!({ "type": "array", "items": field })
-}
-
-fn tracker_schema() -> Value {
-    let status = object(&[("name", "string")], &[("id", "string"), ("category", "string")]);
-    let mut kind = object(
-        &[("name", "string"), ("level", "integer"), ("children", "array"), ("statuses", "array")],
-        &[("id", "string")],
-    );
-    kind["properties"]["statuses"] = json!({ "type": "array", "items": status });
-    let mut shaped = object(&[("types", "array")], &[("default", "string")]);
-    shaped["properties"]["types"] = json!({ "type": "array", "items": kind });
-    shaped
+fn catalog(capability: &str) -> Vec<ActionSpec> {
+    let listed = content::call(CATALOG, capability, &Value::Null).unwrap_or_default();
+    serde_json::from_value(listed).unwrap_or_else(|error| {
+        tracing::error!(%error, capability, "the shipped action catalog does not read");
+        Vec::new()
+    })
 }
 
 pub fn tracker() -> Vec<ActionSpec> {
-    let new_issue = object(
-        &[("title", "string")],
-        &[
-            ("project", "string"),
-            ("description", "string"),
-            ("type", "string"),
-            ("parent", "string"),
-            ("labels", "array"),
-            ("fields", "object"),
-        ],
-    );
-    vec![
-        ActionSpec::write(tracker::CREATE_ISSUE, new_issue, issue_summary(), Idempotency::Lookup),
-        ActionSpec::read(tracker::ISSUE, object(&[("issue", "string")], &[]), issue_output()),
-        ActionSpec::write(
-            tracker::COMMENT,
-            object(&[("issue", "string"), ("body", "string")], &[]),
-            object(&[("id", "string"), ("body", "string")], &[("created", "boolean")]),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::read(tracker::STATUSES, object(&[], &[("project", "string")]), list()),
-        ActionSpec::write(
-            tracker::TRANSITION,
-            object(&[("issue", "string")], &[("status", "string"), ("category", "string")]),
-            issue_summary(),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::read(tracker::SCHEMA, object(&[], &[("project", "string")]), tracker_schema()),
-        ActionSpec::write(
-            tracker::SET_IMPEDIMENT,
-            object(&[("issue", "string"), ("on", "boolean")], &[("reason", "string")]),
-            object(&[("on", "boolean")], &[("reason", "string")]),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::read(
-            tracker::SEARCH,
-            object(
-                &[],
-                &[
-                    ("query", "string"),
-                    ("project", "string"),
-                    ("status", "string"),
-                    ("limit", "integer"),
-                    ("cursor", "string"),
-                ],
-            ),
-            object(&[("issues", "array")], &[("cursor", "string")]),
-        ),
-        ActionSpec::read(tracker::PROJECTS, object(&[], &[("query", "string")]), project_list()),
-        ActionSpec::read(tracker::FIELDS, object(&[], &[("project", "string"), ("type", "string")]), field_list()),
-        ActionSpec::write(
-            tracker::UPDATE_ISSUE,
-            object(&[("issue", "string")], &[("title", "string"), ("description", "string"), ("fields", "object")]),
-            issue_summary(),
-            Idempotency::Native,
-        ),
-        ActionSpec::write(
-            tracker::LINK_ISSUES,
-            object(&[("issue", "string"), ("to", "string")], &[("kind", "string")]),
-            object(&[("issue", "string"), ("to", "string")], &[("already", "boolean")]),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::write(
-            tracker::ATTACH,
-            object(&[("issue", "string"), ("files", "array")], &[]),
-            object(&[("attached", "array")], &[("skipped", "array")]),
-            Idempotency::Lookup,
-        ),
-    ]
-}
-
-fn pull_output() -> Value {
-    object(
-        &[
-            ("ref", "string"),
-            ("repo", "string"),
-            ("number", "integer"),
-            ("state", "string"),
-            ("url", "string"),
-            ("head", "string"),
-            ("base", "string"),
-            ("title", "string"),
-        ],
-        &[("body", "string"), ("created", "boolean"), ("checks", "array"), ("reviews", "array"), ("merged", "boolean")],
-    )
-}
-
-fn pull_ref() -> Value {
-    object(&[("pr", "string")], &[])
-}
-
-fn repo_list() -> Value {
-    let repo = object(
-        &[("id", "string"), ("ref", "string"), ("name", "string")],
-        &[("url", "string"), ("default_branch", "string"), ("private", "boolean")],
-    );
-    json!({ "type": "array", "items": repo })
-}
-
-fn branch_list() -> Value {
-    let branch = object(&[("name", "string")], &[("default", "boolean")]);
-    json!({ "type": "array", "items": branch })
+    catalog(TRACKER)
 }
 
 pub fn code() -> Vec<ActionSpec> {
-    let open = object(
-        &[("head", "string"), ("title", "string")],
-        &[("repo", "string"), ("base", "string"), ("body", "string"), ("draft", "boolean")],
-    );
-    let review = object(
-        &[("pr", "string"), ("verdict", "string")],
-        &[("body", "string"), ("lines", "array"), ("agent", "string")],
-    );
-    let merge = object(&[("pr", "string")], &[("method", "string"), ("delete_branch", "boolean")]);
-    vec![
-        ActionSpec::write(code::OPEN_PULL_REQUEST, open, pull_output(), Idempotency::Lookup),
-        ActionSpec::read(code::PULL_REQUEST, pull_ref(), pull_output()),
-        ActionSpec::read(code::FILES_DIFF, pull_ref(), list()),
-        ActionSpec::read(code::REVIEW_COMMENTS, pull_ref(), list()),
-        ActionSpec::write(
-            code::SUBMIT_REVIEW,
-            review,
-            object(&[("id", "string"), ("verdict", "string")], &[("created", "boolean")]),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::write(
-            code::RESOLVE_THREAD,
-            object(&[("thread", "string")], &[("pr", "string")]),
-            object(&[("thread", "string"), ("resolved", "boolean")], &[]),
-            Idempotency::Native,
-        ),
-        ActionSpec::write(
-            code::MERGE,
-            merge,
-            object(&[("merged", "boolean")], &[("sha", "string"), ("already", "boolean"), ("deleted", "boolean")]),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::read(code::REPOS, object(&[], &[("query", "string")]), repo_list()),
-        ActionSpec::read(code::PULL_REQUESTS, object(&[], &[("repo", "string")]), list()),
-        ActionSpec::read(code::BRANCHES, object(&[], &[("repo", "string")]), branch_list()),
-        ActionSpec::write(
-            code::MERGE_BRANCHES,
-            object(&[("base", "string"), ("head", "string")], &[("repo", "string"), ("message", "string")]),
-            object(&[("merged", "boolean")], &[("sha", "string"), ("already", "boolean")]),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::read(
-            code::GIT_CREDENTIALS,
-            object(&[("url", "string")], &[]),
-            object(&[("username", "string"), ("password", "string")], &[]),
-        )
-        .secret(),
-    ]
-}
-
-fn run_output() -> Value {
-    object(
-        &[("ref", "string"), ("state", "string")],
-        &[("pipeline", "string"), ("head", "string"), ("url", "string"), ("jobs", "array")],
-    )
+    catalog(CODE)
 }
 
 pub fn pipelines() -> Vec<ActionSpec> {
-    let run_ref = object(&[("run", "string")], &[]);
-    let review =
-        object(&[("run", "string"), ("decision", "string")], &[("deployments", "array"), ("comment", "string")]);
-    vec![
-        ActionSpec::read(
-            pipelines::RUNS,
-            object(
-                &[],
-                &[
-                    ("ref", "string"),
-                    ("repo", "string"),
-                    ("pipeline", "string"),
-                    ("limit", "integer"),
-                    ("status", "string"),
-                ],
-            ),
-            list(),
-        ),
-        ActionSpec::read(pipelines::RUN, run_ref.clone(), run_output()),
-        ActionSpec::read(
-            pipelines::JOB_LOG,
-            object(&[("run", "string"), ("job", "string")], &[("tail", "integer")]),
-            object(&[("text", "string")], &[("truncated", "boolean")]),
-        ),
-        ActionSpec::read(pipelines::PENDING_DEPLOYMENTS, run_ref, list()),
-        ActionSpec::write(
-            pipelines::REVIEW_DEPLOYMENT,
-            review,
-            object(&[("decision", "string"), ("deployments", "array")], &[("already", "boolean")]),
-            Idempotency::Lookup,
-        ),
-    ]
+    catalog(PIPELINES)
 }
 
 pub fn cloud() -> Vec<ActionSpec> {
-    let credentials = object(
-        &[("account", "string"), ("access_key_id", "string"), ("secret_access_key", "string")],
-        &[
-            ("role", "string"),
-            ("arn", "string"),
-            ("session_token", "string"),
-            ("expires_at", "string"),
-            ("region", "string"),
-        ],
-    );
-    vec![
-        ActionSpec::read(
-            cloud::IDENTITY,
-            object(
-                &[],
-                &[
-                    ("account", "string"),
-                    ("role", "string"),
-                    ("binding", "string"),
-                    ("profiles", "array"),
-                    ("environment", "string"),
-                ],
-            ),
-            credentials,
-        )
-        .secret(),
-        ActionSpec::read(
-            cloud::ACCOUNTS_AND_ROLES,
-            json!({ "type": "object", "properties": {} }),
-            object(&[("accounts", "array")], &[]),
-        ),
-        ActionSpec::read(
-            cloud::LAST_DEPLOYMENT,
-            object(&[("service", "string"), ("environment", "string")], &[("account", "string")]),
-            object(&[("version", "string")], &[("at", "string"), ("source", "string")]),
-        ),
-    ]
-}
-
-fn change_output() -> Value {
-    object(
-        &[("ref", "string"), ("key", "string"), ("status", "string")],
-        &[
-            ("title", "string"),
-            ("environment", "string"),
-            ("start", "string"),
-            ("end", "string"),
-            ("url", "string"),
-            ("revision", "integer"),
-            ("created", "boolean"),
-        ],
-    )
+    catalog(CLOUD)
 }
 
 pub fn changes() -> Vec<ActionSpec> {
-    let fields = [
-        ("settings", "object"),
-        ("tasks", "array"),
-        ("notes", "array"),
-        ("attachments", "array"),
-        ("versions", "array"),
-        ("description", "string"),
-    ];
-    let mut update_fields = vec![("title", "string"), ("start", "string"), ("end", "string")];
-    update_fields.extend(fields);
-    let change_ref = object(&[("change", "string")], &[]);
-    let option = object(&[("value", "string"), ("label", "string")], &[("detail", "string")]);
-    vec![
-        ActionSpec::write(
-            changes::CREATE,
-            object(&[("title", "string"), ("environment", "string"), ("start", "string"), ("end", "string")], &fields),
-            change_output(),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::write(
-            changes::UPDATE,
-            object(&[("change", "string")], &update_fields),
-            change_output(),
-            Idempotency::Native,
-        ),
-        ActionSpec::read(changes::GET, change_ref.clone(), change_output()),
-        ActionSpec::write(changes::CANCEL, change_ref, change_output(), Idempotency::Native),
-        ActionSpec::read(
-            &options_of(CHANGES),
-            object(&[], &[("query", "string"), ("field", "string"), ("chosen", "object"), ("page", "integer")]),
-            json!({ "type": "array", "items": option }),
-        ),
-    ]
-}
-
-fn with_issue_id(mut schema: Value) -> Value {
-    schema["properties"]["issue_id"] = json!({ "type": ["string", "integer"] });
-    schema
+    catalog(CHANGES)
 }
 
 pub fn tests() -> Vec<ActionSpec> {
-    let new_case = with_issue_id(object(
-        &[("title", "string")],
-        &[
-            ("project", "string"),
-            ("objective", "string"),
-            ("precondition", "string"),
-            ("labels", "array"),
-            ("steps", "array"),
-            ("folder", "string"),
-            ("issue", "string"),
-            ("issue_id", "string"),
-        ],
-    ));
-    let new_cycle = with_issue_id(object(
-        &[("title", "string")],
-        &[("project", "string"), ("description", "string"), ("issue", "string"), ("issue_id", "string")],
-    ));
-    let record = with_issue_id(object(
-        &[("case", "string"), ("cycle", "string"), ("status", "string")],
-        &[("project", "string"), ("comment", "string"), ("seconds", "number"), ("issue_id", "string")],
-    ));
-    let finish = object(&[("cycle", "string"), ("status", "string")], &[("project", "string")]);
-    let case = object(&[("ref", "string"), ("title", "string")], &[]);
-    vec![
-        ActionSpec::write(
-            tests::CREATE_CASE,
-            new_case,
-            object(&[("ref", "string"), ("title", "string"), ("url", "string")], &[("created", "boolean")]),
-            Idempotency::Lookup,
-        ),
-        ActionSpec::read(tests::CASES, object(&[("issue", "string")], &[]), json!({ "type": "array", "items": case })),
-        ActionSpec::write(
-            tests::CREATE_CYCLE,
-            new_cycle,
-            object(&[("ref", "string"), ("url", "string")], &[]),
-            Idempotency::Native,
-        ),
-        ActionSpec::write(tests::RECORD, record, object(&[("ref", "string")], &[]), Idempotency::Native),
-        ActionSpec::write(
-            tests::FINISH_CYCLE,
-            finish,
-            object(&[("ref", "string")], &[("status", "string")]),
-            Idempotency::Native,
-        ),
-        ActionSpec::read(tests::PROJECTS, object(&[], &[("query", "string")]), project_list()),
-    ]
-}
-
-fn finding_list() -> Value {
-    let finding = object(
-        &[
-            ("id", "string"),
-            ("title", "string"),
-            ("severity", "integer"),
-            ("kind", "string"),
-            ("status", "string"),
-            ("new", "boolean"),
-            ("policy", "boolean"),
-            ("description", "string"),
-        ],
-        &[
-            ("cwe", "object"),
-            ("cve", "object"),
-            ("file", "string"),
-            ("line", "integer"),
-            ("module", "string"),
-            ("component", "string"),
-            ("version", "string"),
-            ("found", "string"),
-            ("url", "string"),
-        ],
-    );
-    json!({ "type": "array", "items": finding })
+    catalog(TESTS)
 }
 
 pub fn security() -> Vec<ActionSpec> {
-    let wanted = object(
-        &[],
-        &[
-            ("project", "string"),
-            ("kinds", "array"),
-            ("minSeverity", "integer"),
-            ("policy", "boolean"),
-            ("open", "boolean"),
-            ("limit", "integer"),
-        ],
-    );
-    vec![
-        ActionSpec::read(security::PROJECTS, object(&[], &[("query", "string")]), project_list()),
-        ActionSpec::read(security::FINDINGS, wanted, finding_list()),
-    ]
+    catalog(SECURITY)
 }
 
 pub fn quality() -> Vec<ActionSpec> {
-    let wanted =
-        object(&[("project", "string")], &[("pullRequest", "string"), ("branch", "string"), ("commit", "string")]);
-    let report = object(
-        &[("status", "string")],
-        &[
-            ("gate", "string"),
-            ("ratings", "object"),
-            ("counts", "object"),
-            ("coverage", "number"),
-            ("duplication", "number"),
-            ("conditions", "array"),
-            ("issues", "array"),
-            ("total", "integer"),
-            ("url", "string"),
-            ("analyzedAt", "string"),
-        ],
-    );
-    vec![ActionSpec::read(quality::REPORT, wanted, report)]
+    catalog(QUALITY)
 }
 
 pub fn mcp() -> Vec<ActionSpec> {
-    vec![ActionSpec::read(mcp::TOOLS, object(&[], &[]), list())]
+    catalog(MCP)
 }
 
 #[cfg(test)]
 mod checks {
     use super::*;
+    use crate::descriptor::Idempotency;
 
     #[test]
     fn every_standard_action_is_named_after_its_capability() {

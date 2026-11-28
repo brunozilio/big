@@ -38,3 +38,57 @@ fn a_tool_with_a_broken_profile_does_not_load_and_one_without_is_the_riskiest() 
         super::script_tool::parse_source(std::path::Path::new("tools/Y.ts"), bare.into(), true).expect("loads");
     assert_eq!(parsed.profile, domain::operation::Profile::conservative());
 }
+#[test]
+fn a_tool_s_profile_only_tightens_what_its_call_is_asked_about() {
+    use crate::tools::{Effect, Tool, Workspace};
+    let workspace = Workspace::new(".");
+    let tool = |name: &str, profile: &str, trusted: bool| {
+        let source = format!(
+            "export const spec = {{ name: \"{name}\"{profile} }};\nexport function execute() {{ return \"\"; }}\n"
+        );
+        super::script_tool::parse_source(std::path::Path::new("tools/T.ts"), source, trusted).expect("loads")
+    };
+    let operations = |tool: &ScriptTool| -> Vec<bool> {
+        tool.effects(&serde_json::json!({}), &workspace)
+            .iter()
+            .filter_map(|effect| match effect {
+                Effect::Operation(operation) => Some(operation.strict()),
+                _ => None,
+            })
+            .collect()
+    };
+    let calm =
+        ", profile: { effects: [\"write\"], risk: \"low\", reversible: true, untrusted: false, sensitive: false }";
+    let sends = ", profile: { effects: [\"send-external\"], risk: \"medium\", reversible: false, untrusted: false, sensitive: false }";
+    assert!(operations(&tool("Calm", calm, true)).is_empty());
+    assert!(
+        tool("Calm", calm, true).effects(&serde_json::json!({}), &workspace).iter().any(Effect::acts),
+        "still asked as before"
+    );
+    assert_eq!(operations(&tool("Sends", sends, true)), [true]);
+    assert_eq!(operations(&tool("Sends", sends, false)), [true], "a project tool can tighten too");
+    assert_eq!(operations(&tool("Bare", "", true)), [true], "no profile is the riskiest");
+    assert!(operations(&shipped("Read")).is_empty(), "a built-in tool keeps its own per-call effects");
+}
+#[test]
+fn a_user_tool_without_a_profile_is_asked_about_never_refused() {
+    use crate::tools::{Tool, Workspace};
+    use domain::permission::{Bounds, Call, PolicyContext, PolicyEngine, Reason, Remembered, Verdict};
+    let workspace = Workspace::new(".");
+    let bare = "export const spec = { name: \"Bare\" };\nexport function execute() { return \"\"; }\n";
+    let tool =
+        super::script_tool::parse_source(std::path::Path::new("tools/Bare.ts"), bare.into(), true).expect("loads");
+    let effects = tool.effects(&serde_json::json!({}), &workspace);
+    let bounds = Bounds::of(vec![std::path::PathBuf::from("/work")], Vec::new());
+    let remembered = Remembered::default();
+    let cx = PolicyContext {
+        mode: domain::PermissionMode::Auto,
+        ceiling: None,
+        remembered: &remembered,
+        bounds: &bounds,
+        no_prompts: false,
+        allowed: None,
+    };
+    let verdict = PolicyEngine::decide(&Call { tool: "Bare", subject: "", effects: &effects }, &cx);
+    assert!(matches!(verdict, Verdict::Ask { reason: Reason::Declared { .. }, rememberable: false }), "{verdict:?}");
+}

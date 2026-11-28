@@ -465,8 +465,11 @@ impl Tool for ScriptTool {
     }
 
     fn effects(&self, input: &Value, workspace: &Workspace) -> Vec<Effect> {
-        let declared = self.declared.map(Effect::Declared).into_iter().collect();
         if !self.trusted || !self.exports.effects {
+            let mut declared: Vec<Effect> = self.declared.map(Effect::Declared).into_iter().collect();
+            if self.profile.strict() {
+                declared.push(Effect::Operation(self.profile.operation(&self.spec.name)));
+            }
             return declared;
         }
         let data = serde_json::json!({ "cwd": workspace.cwd.display().to_string() });

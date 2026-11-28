@@ -1,15 +1,52 @@
-provider-name crates/agent-engine/src/fake.rs: claude (the platform never names a provider; the TS content does)
-provider-name crates/agent-engine/src/mcp/channel.rs: claude (the platform never names a provider; the TS content does)
-provider-name crates/agent-engine/src/tools/builtin_skills.rs: claude (the platform never names a provider; the TS content does)
-provider-name crates/agent-engine/src/tools/workspace/starter.rs: aws (the platform never names a provider; the TS content does)
-provider-name crates/connectors/src/texts.rs: jira (the platform never names a provider; the TS content does)
-provider-name crates/domain/src/safety/permission/suggested.rs: aws (the platform never names a provider; the TS content does)
-provider-name crates/domain/src/safety/redact.rs: aws (the platform never names a provider; the TS content does)
-provider-name crates/domain/src/safety/redact.rs: github (the platform never names a provider; the TS content does)
-provider-name crates/domain/src/tools/channel_relay.rs: claude (the platform never names a provider; the TS content does)
-provider-name crates/domain/src/tools/inbox.rs: claude (the platform never names a provider; the TS content does)
-provider-name crates/llm-providers/src/model/framing.rs: aws (the platform never names a provider; the TS content does)
-provider-name crates/llm-providers/src/testing.rs: claude (the platform never names a provider; the TS content does)
-provider-name crates/orchestrator/src/cloud.rs: aws (the platform never names a provider; the TS content does)
-provider-name crates/server/src/discover.rs: claude (the platform never names a provider; the TS content does)
-provider-name crates/server/src/discover.rs: github (the platform never names a provider; the TS content does)
+provider-name crates/agent-engine/src/fake.rs: claude: let models = vec![ModelOption::new("claude-opus-5-5", "Opus 5.5")];
+provider-name crates/agent-engine/src/mcp/channel.rs: claude: assert!(hello.expect("answer")["result"]["capabilities"]["experimental"]["claude/channel"].is_object());
+provider-name crates/agent-engine/src/mcp/channel.rs: claude: printf '{"jsonrpc":"2.0","id":%s,"result":{"capabilities":{"tools":{},"experimental":{"claude/channel":{}}}}}\n' "$id"
+provider-name crates/agent-engine/src/mcp/channel.rs: claude: printf '{"jsonrpc":"2.0","method":"notifications/claude/channel","params":{"content":"deploy please","meta":{"chat_id":"7"}}}\n'
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: "jira": {"command": "jira-mcp"},
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: "jira": {"command": "user-jira"}
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: [stdio("jira", "user-jira", &[]), stdio("notes", "notes-mcp", &[("KEY", "dflt")])],
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: assert_eq!(names, ["jira", "wiki"], "a server with a wrong value is left out, the others kept");
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: info("jira", McpOrigin::Project, "jira-mcp --stdio", McpState::Ready),
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: name: "jira".into(),
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: r#"{"mcpServers": {"jira": {"command": "jira-mcp", "args": ["--stdio"]}, "sonar": {"command": "sonar-mcp"}}}"#,
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: sources.approval.disabled = vec!["jira".into(), "sonar".into()];
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: state: McpState::of(&McpOrigin::Project, "jira", &McpApproval::default())
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: stdio("jira", "jira-mcp", &[]),
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: write(project.clone(), r#"{"servers": {}, "mcpServers": {"jira": {"command": "j", "env": {"N": "1"}}}}"#);
+provider-name crates/agent-engine/src/mcp/configured.rs: jira: write(repo.path().join(concat!(brand::dir!(), "/mcp.json")), r#"{"mcpServers": {"jira": {"command": "j"}}}"#);
+provider-name crates/agent-engine/src/tools/builtin_agents.rs: claude: assert!(!agent.instructions.contains("Claude"), "{}", agent.name);
+provider-name crates/agent-engine/src/tools/builtin_skills.rs: claude: for other in ["Claude", "Anthropic", "claude.ai"] {
+provider-name crates/agent-engine/src/tools/workspace/starter.rs: aws: assert!(!serde_json::to_string(&request).expect("json").contains("AWS_PROFILE"));
+provider-name crates/agent-engine/src/tools/workspace/starter.rs: aws: assert_eq!(workspace.environment, vec![("AWS_PROFILE".to_owned(), "agent".to_owned())]);
+provider-name crates/agent-engine/src/tools/workspace/starter.rs: aws: request.host.environment = vec![("AWS_PROFILE".into(), "agent".into())];
+provider-name crates/connectors/src/texts.rs: jira: "Nenhum site do Jira foi encontrado nesta conta Atlassian. Confira se a conta tem acesso ao Jira e conecte de novo.",
+provider-name crates/connectors/src/texts.rs: jira: "No Jira site was found in this Atlassian account. Check that the account has access to Jira and connect again.";
+provider-name crates/connectors/src/texts.rs: jira: "No se encontró ningún sitio de Jira en esta cuenta de Atlassian. Comprueba que la cuenta tiene acceso a Jira y vuelve a conectar.",
+provider-name crates/connectors/src/texts.rs: jira: "Reconecte o Jira e escolha o site.",
+provider-name crates/connectors/src/texts.rs: jira: "Vuelve a conectar Jira y elige el sitio.",
+provider-name crates/connectors/src/texts.rs: jira: pub const NO_SITE: &str = "Reconnect Jira and choose the site.";
+provider-name crates/domain/src/safety/permission/suggested.rs: aws: "aws",
+provider-name crates/domain/src/safety/redact.rs: aws: fn is_aws_key(word: &str) -> bool {
+provider-name crates/domain/src/safety/redact.rs: aws: prefixed || is_aws_key(word) || is_jwt(word)
+provider-name crates/domain/src/safety/redact.rs: github: ("github_pat_", 20),
+provider-name crates/domain/src/tools/channel_relay.rs: claude: pub const PERMISSION_ANSWER: &str = "notifications/claude/channel/permission";
+provider-name crates/domain/src/tools/channel_relay.rs: claude: pub const PERMISSION_CAPABILITY: &str = "claude/channel/permission";
+provider-name crates/domain/src/tools/channel_relay.rs: claude: pub const PERMISSION_REQUEST: &str = "notifications/claude/channel/permission_request";
+provider-name crates/domain/src/tools/inbox.rs: claude: pub const CHANNEL_CAPABILITY: &str = "claude/channel";
+provider-name crates/domain/src/tools/inbox.rs: claude: pub const CHANNEL_METHOD: &str = "notifications/claude/channel";
+provider-name crates/domain/src/tools/mcp_config/mod.rs: jira: McpState::of(&McpOrigin::Project, "jira", &approval),
+provider-name crates/domain/src/tools/mcp_config/mod.rs: jira: approval.read(&json!({"disabledMcpServers": ["jira"]}));
+provider-name crates/domain/src/tools/mcp_config/mod.rs: jira: assert!(!approval.allows("jira") && approval.allows("sonar"));
+provider-name crates/domain/src/tools/mcp_config/mod.rs: jira: assert!(approval.allows("jira"), "the project's mcp.json is the configuration");
+provider-name crates/domain/src/tools/mcp_config/mod.rs: jira: assert!(is_free_name("jira"));
+provider-name crates/llm-providers/src/model/framing.rs: aws: "aws-eventstream" => Ok(Self::EventStream),
+provider-name crates/llm-providers/src/model/framing.rs: aws: other => Err(format!("unknown framing {other}; use sse, ndjson, aws-eventstream or raw")),
+provider-name crates/llm-providers/src/testing.rs: claude: [("haiku", "claude-haiku-5-5"), ("sonnet", "claude-sonnet-5-5"), ("opus", "claude-opus-5-5")];
+provider-name crates/llm-providers/src/testing.rs: claude: const FAMILY_OWNS: &[&str] = &["claude-"];
+provider-name crates/orchestrator/src/cloud.rs: aws: ("AWS_CONFIG_FILE".to_owned(), file.to_string_lossy().into_owned()),
+provider-name crates/orchestrator/src/cloud.rs: aws: ("AWS_PROFILE".to_owned(), brand::COMMAND.to_owned()),
+provider-name crates/orchestrator/src/cloud.rs: aws: ("AWS_SDK_LOAD_CONFIG".to_owned(), "1".to_owned()),
+provider-name crates/orchestrator/src/cloud.rs: aws: environment.push(("AWS_DEFAULT_REGION".to_owned(), region.to_owned()));
+provider-name crates/orchestrator/src/cloud.rs: aws: environment.push(("AWS_REGION".to_owned(), region.to_owned()));
+provider-name crates/server/src/discover.rs: claude: ("CLAUDE.md", read(folder, "CLAUDE.md")),
+provider-name crates/server/src/discover.rs: github: let listed = std::fs::read_dir(folder.join(".github/workflows")).ok()?;

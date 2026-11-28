@@ -144,6 +144,16 @@ mod tests {
 
     use super::*;
 
+    fn looked() -> domain::operation::Profile {
+        use domain::operation::{Kind, Profile, Reversible, Risk};
+        Profile::new(vec![Kind::Read], Risk::Low, Reversible::Yes, false, false)
+    }
+
+    fn changed() -> domain::operation::Profile {
+        use domain::operation::{Kind, Profile, Reversible, Risk};
+        Profile::new(vec![Kind::Write], Risk::Low, Reversible::Yes, false, false)
+    }
+
     fn record() -> ConnectionRecord {
         ConnectionRecord {
             id: "c1".into(),
@@ -157,9 +167,9 @@ mod tests {
 
     #[test]
     fn only_offered_actions_are_taken_and_writes_only_when_allowed() {
-        let issue = ActionSpec::read("tracker.issue", json!({}), json!({}));
-        let create = ActionSpec::write("tracker.create_issue", json!({}), json!({}), Idempotency::Lookup);
-        let diff = ActionSpec::read("code.files_diff", json!({}), json!({}));
+        let issue = ActionSpec::read("tracker.issue", json!({}), json!({}), looked());
+        let create = ActionSpec::write("tracker.create_issue", json!({}), json!({}), Idempotency::Lookup, changed());
+        let diff = ActionSpec::read("code.files_diff", json!({}), json!({}), looked());
         let none: [String; 0] = [];
         let reading = Wanted { provider: "*", actions: &none, writes: false, connection: None };
         assert!(reading.takes(&record(), &issue));
@@ -168,10 +178,12 @@ mod tests {
         let tracker = ["tracker".to_owned()];
         let writing = Wanted { provider: "jira", actions: &tracker, writes: true, connection: None };
         assert!(writing.takes(&record(), &create));
-        let secret = ActionSpec::read("tracker.token", json!({}), json!({})).secret();
+        let secret = ActionSpec::read("tracker.token", json!({}), json!({}), looked()).secret();
         assert!(!writing.takes(&record(), &secret));
-        let host_only =
-            ActionSpec { visibility: Visibility::Host, ..ActionSpec::read("tracker.sync", json!({}), json!({})) };
+        let host_only = ActionSpec {
+            visibility: Visibility::Host,
+            ..ActionSpec::read("tracker.sync", json!({}), json!({}), looked())
+        };
         assert!(!writing.takes(&record(), &host_only), "an action meant for the host never reaches the model");
         let only = ["tracker.issue".to_owned()];
         assert!(!Wanted { provider: "jira", actions: &only, writes: true, connection: None }.takes(&record(), &create));
@@ -191,7 +203,7 @@ mod tests {
 
     #[test]
     fn the_action_s_own_description_leads_and_writes_are_flagged() {
-        let mut issue = ActionSpec::read("tracker.issue", json!({ "type": "object" }), json!({}));
+        let mut issue = ActionSpec::read("tracker.issue", json!({ "type": "object" }), json!({}), looked());
         let tool = definition("jira_tracker_issue", "Jira", &record(), &issue);
         assert_eq!(tool["description"], "Run `tracker.issue`. Through the Jira connection \"Jira\".");
         assert_eq!(tool["annotations"]["readOnlyHint"], true);
@@ -209,20 +221,26 @@ mod tests {
     }
 
     #[test]
-    fn the_approval_card_of_a_sent_email_shows_its_effects_and_recipients() {
+    fn the_approval_card_of_a_sending_action_shows_its_effects_and_recipients() {
         use connectors::Provider;
-        let mail = connectors::scripted::ScriptedProvider::load("connectors/microsoft/index.ts").expect("mail");
-        let send = mail.descriptor().action("email.send").cloned().expect("email.send");
-        let tool = definition("mail_email_send", "Mail", &record(), &send);
+        let folder = tempfile::tempdir().expect("folder");
+        let dir = folder.path().join("connectors/fixture");
+        std::fs::create_dir_all(&dir).expect("dir");
+        std::fs::write(dir.join("index.ts"), FIXTURE).expect("fixture");
+        let fixture =
+            connectors::scripted::ScriptedProvider::load_in(Some(folder.path()), "connectors/fixture/index.ts")
+                .expect("fixture");
+        let share = fixture.descriptor().action("notes.share").cloned().expect("notes.share");
+        let tool = definition("fixture_notes_share", "Fixture", &record(), &share);
         assert_eq!(tool["annotations"]["openWorldHint"], true);
         let declared: domain::operation::Declaration =
             serde_json::from_value(tool["_meta"][domain::operation::META].clone()).expect("declared");
-        let input = json!({ "to": ["ana@example.com"], "cc": ["rui@example.com"], "subject": "Oi", "body": "…" });
+        let input = json!({ "to": ["ana@example.com", "rui@example.com"], "body": "…" });
         let operation = declared.operation(&server(), &input).expect("sending acts");
         let disclosed = domain::operation::Disclosed::of([&operation]);
         let kind = domain::AskKind::Permission {
-            tool: "mail_email_send".into(),
-            subject: "Oi".into(),
+            tool: "fixture_notes_share".into(),
+            subject: "…".into(),
             rememberable: false,
             disclosed,
         };
@@ -230,5 +248,62 @@ mod tests {
         assert_eq!(card["effects"], json!(["send-external", "pii"]));
         assert_eq!(card["recipients"], json!(["ana@example.com", "rui@example.com"]));
         assert_eq!(card["risk"], "high");
+    }
+
+    const FIXTURE: &str = r#"import { object, write } from "sdk/connectors/contracts.ts";
+export function provider() {
+  const share = { effects: ["send-external", "pii"], risk: "high", reversible: false, untrusted: false, sensitive: true, recipients: ["to"] };
+  return { schema_version: 2, name: "Fixture", capabilities: ["notes"], auth: { kind: "token", fields: [] },
+    actions: [write("notes.share", object([["to", "array"], ["body", "string"]]), object([]), "native", share)] };
+}
+export function call() { return null; }
+"#;
+
+    fn verdicts(effects: &[domain::permission::Effect]) -> Vec<domain::permission::Verdict> {
+        use domain::permission::{Allowed, Bounds, Call, Grant, PolicyContext, PolicyEngine, Remembered};
+        let bounds = Bounds::of(Vec::new(), Vec::new());
+        let remembered = Remembered::default();
+        let listed = Allowed::of([Grant::Tool("t".into())]);
+        let mut found = Vec::new();
+        for mode in domain::PermissionMode::ALL {
+            for allowed in [None, Some(&listed)] {
+                for no_prompts in [false, true] {
+                    let call = Call { tool: "t", subject: "", effects };
+                    let cx = PolicyContext {
+                        mode,
+                        ceiling: None,
+                        remembered: &remembered,
+                        bounds: &bounds,
+                        no_prompts,
+                        allowed,
+                    };
+                    found.push(cx.settled(PolicyEngine::decide(&call, &cx), "t"));
+                }
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn shipped_actions_are_judged_as_before_except_the_ones_that_declare_a_strict_effect() {
+        use domain::permission::Effect;
+        let mut changed = Vec::new();
+        for provider in connectors::scripted::discover() {
+            for action in provider.descriptor().actions.iter().filter(|action| !action.hidden()) {
+                let tool = definition("t", "P", &record(), action);
+                let declared: domain::operation::Declaration =
+                    serde_json::from_value(tool["_meta"][domain::operation::META].clone()).expect("declared");
+                let now: Vec<Effect> =
+                    declared.operation(&server(), &json!({})).map(Effect::Operation).into_iter().collect();
+                let before: Vec<Effect> =
+                    if action.writes { vec![Effect::Remote { server: server() }] } else { Vec::new() };
+                if verdicts(&now) != verdicts(&before) {
+                    changed.push(action.name.clone());
+                }
+            }
+        }
+        changed.sort();
+        changed.dedup();
+        assert_eq!(changed, ["email.create_event", "email.reply", "email.send"]);
     }
 }

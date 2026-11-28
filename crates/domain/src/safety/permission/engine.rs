@@ -75,25 +75,21 @@ fn strictly(call: &Call<'_>) -> Option<String> {
     Some(format!("declares {}", kinds.join(", ")))
 }
 
-fn free(call: &Call<'_>) -> bool {
-    let acting: Vec<&Effect> = call.effects.iter().filter(|effect| effect.acts()).collect();
-    !acting.is_empty() && acting.iter().all(|effect| matches!(effect, Effect::Operation(operation) if operation.free()))
-}
-
 fn declared(call: &Call<'_>, cx: &PolicyContext<'_>, listed: Option<Verdict>) -> Option<Verdict> {
     if matches!(listed, Some(Verdict::Deny(_))) || cx.mode() == PermissionMode::Plan {
         return listed;
     }
-    if let Some(why) = strictly(call) {
-        return Some(Verdict::Ask { reason: Reason::Declared(why), rememberable: false });
+    let allowed = matches!(listed, Some(Verdict::Allow))
+        || cx.allowed.is_some_and(|allowed| allowed.verdict(call) == Some(Behavior::Allow));
+    if operations(call).any(Operation::refused) && !allowed {
+        return Some(Verdict::Deny(format!(
+            "{} is declared not to run unless your permission list allows it.",
+            call.tool
+        )));
     }
-    if matches!(listed, Some(Verdict::Ask { reason: Reason::Listed, .. })) {
-        return listed;
-    }
-    if free(call) {
-        return Some(Verdict::Allow);
-    }
-    listed
+    let Some(why) = strictly(call) else { return listed };
+    let overrode = allowed || cx.remembered.allows(call.tool, Standing::Acts, call.subject);
+    Some(Verdict::Ask { reason: Reason::Declared { why, overrode }, rememberable: false })
 }
 
 fn read_only_write<'a>(call: &Call<'_>, cx: &'a PolicyContext<'_>) -> Option<&'a std::path::PathBuf> {

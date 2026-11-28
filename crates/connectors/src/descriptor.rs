@@ -2,7 +2,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use domain::Language;
 use domain::connection::{Capability, ProviderKey};
-use domain::operation::{Declaration, Kind, Permission, Profile, Reversible, Risk, Visibility};
+use domain::operation::{Declaration, Permission, Profile, Visibility};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
@@ -42,32 +42,12 @@ pub struct ActionSpec {
     pub permission: Permission,
 }
 
-fn reads() -> Profile {
-    Profile {
-        effects: vec![Kind::Read],
-        risk: Risk::Low,
-        reversible: Reversible::Yes,
-        untrusted: false,
-        sensitive: false,
-    }
-}
-
-fn changes() -> Profile {
-    Profile {
-        effects: vec![Kind::Write],
-        risk: Risk::Medium,
-        reversible: Reversible::No,
-        untrusted: false,
-        sensitive: false,
-    }
-}
-
 fn native() -> Idempotency {
     Idempotency::Native
 }
 
 impl ActionSpec {
-    pub fn read(name: &str, input_schema: Value, output_schema: Value) -> ActionSpec {
+    pub fn read(name: &str, input_schema: Value, output_schema: Value, profile: Profile) -> ActionSpec {
         ActionSpec {
             name: name.to_owned(),
             input_schema,
@@ -76,7 +56,7 @@ impl ActionSpec {
             idempotent: Idempotency::Native,
             description: String::new(),
             secret: false,
-            profile: reads(),
+            profile,
             recipients: Vec::new(),
             free_text: Vec::new(),
             visibility: Visibility::Model,
@@ -84,7 +64,13 @@ impl ActionSpec {
         }
     }
 
-    pub fn write(name: &str, input_schema: Value, output_schema: Value, idempotent: Idempotency) -> ActionSpec {
+    pub fn write(
+        name: &str,
+        input_schema: Value,
+        output_schema: Value,
+        idempotent: Idempotency,
+        profile: Profile,
+    ) -> ActionSpec {
         ActionSpec {
             name: name.to_owned(),
             input_schema,
@@ -93,7 +79,7 @@ impl ActionSpec {
             idempotent,
             description: String::new(),
             secret: false,
-            profile: changes(),
+            profile,
             recipients: Vec::new(),
             free_text: Vec::new(),
             visibility: Visibility::Model,
@@ -401,10 +387,19 @@ pub fn conforms(schema: &Value, value: &Value) -> Result<(), String> {
 mod tests {
     use super::*;
 
+    fn looked() -> domain::operation::Profile {
+        use domain::operation::{Kind, Profile, Reversible, Risk};
+        Profile::new(vec![Kind::Read], Risk::Low, Reversible::Yes, false, false)
+    }
+
     #[test]
     fn a_schema_lists_its_required_fields_and_an_action_finds_the_missing_one() {
-        let spec =
-            ActionSpec::read("x.y", object(&[("a", "string"), ("b", "integer")], &[("c", "boolean")]), json!({}));
+        let spec = ActionSpec::read(
+            "x.y",
+            object(&[("a", "string"), ("b", "integer")], &[("c", "boolean")]),
+            json!({}),
+            looked(),
+        );
         assert_eq!(spec.input_schema["properties"]["c"]["type"], "boolean");
         assert_eq!(spec.missing(&json!({"a": "1", "b": 2})), None);
         assert_eq!(spec.missing(&json!({"a": "1", "b": null})), Some("b".to_owned()));
