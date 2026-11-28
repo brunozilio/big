@@ -18,6 +18,22 @@ pub struct Checkout {
     pub read_only: bool,
 }
 
+impl Checkout {
+    pub fn scratch(directory: &Path) -> Checkout {
+        Checkout {
+            id: String::new(),
+            name: String::new(),
+            directory: Some(directory.to_path_buf()),
+            kind: String::new(),
+            run: Vec::new(),
+            verify: Vec::new(),
+            e2e: Vec::new(),
+            e2e_directory: String::new(),
+            read_only: false,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Worktree {
     pub checkout: Checkout,

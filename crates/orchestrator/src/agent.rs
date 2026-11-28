@@ -143,7 +143,12 @@ fn folders(shared: &Shared, item: &ItemId) -> Result<Vec<Worktree>, Failure> {
         let path = checkout.directory.clone().filter(|folder| folder.is_dir())?;
         Some(Worktree { checkout, path, branch: String::new() })
     });
-    Ok(found.collect())
+    let found: Vec<Worktree> = found.collect();
+    if !found.is_empty() {
+        return Ok(found);
+    }
+    let path = crate::scripts::scratch(shared, item)?;
+    Ok(vec![Worktree { checkout: Checkout::scratch(&path), path, branch: String::new() }])
 }
 
 pub fn branch_of(command: &Command) -> Option<&str> {

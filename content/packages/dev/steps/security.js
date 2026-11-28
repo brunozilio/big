@@ -1,6 +1,6 @@
 import { step, markdown, findingList } from "sdk";
 import { projectOf } from "sdk/bindings.js";
-import { boundPullRequests, codeOptions, defined, eachOf, effects, languageOf, object, waitOptions } from "./context.js";
+import { boundPullRequests, codeOptions, defined, eachOf, effects, languageOf, object, waitOptions } from "sdk/steps/context.js";
 
 const MINUTE = 60000;
 const DAY = 24 * 60 * MINUTE;

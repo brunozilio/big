@@ -332,7 +332,7 @@ fn a_missing_test_connection_tells_what_to_connect_and_lets_the_person_retry_or_
 
 const FIXED: &str = r#"
 import { workflow } from "sdk";
-import { develop, review } from "sdk/steps";
+import { develop, review } from "../packages/dev/steps/index.js";
 const feedback = { step: "review", outcome: "goto", data: { pr: "PR-7", comments: [
   { thread: "t1", path: "src/a.rs", line: 3, body: "trate o erro" },
   { thread: "t2", path: "src/b.rs", line: 1, body: "resolvido" },

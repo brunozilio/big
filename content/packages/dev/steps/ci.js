@@ -1,7 +1,7 @@
 import { step, pipeline, markdown } from "sdk";
 
 const NONE = "none";
-import { FINISHED, SUCCEEDED, branchOf, eachOf, failedLogs, findRun, object, pipelineOptions, pullRequestsOf, repoOf, settle, targetFields } from "./context.js";
+import { FINISHED, SUCCEEDED, branchOf, eachOf, failedLogs, findRun, object, pipelineOptions, pullRequestsOf, repoOf, settle, targetFields } from "sdk/steps/context.js";
 
 function targetsOf(ctx, opts) {
   const prs = pullRequestsOf(ctx, opts);

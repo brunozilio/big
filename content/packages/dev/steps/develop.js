@@ -1,5 +1,5 @@
 import { step, chat, markdown, transitionArgs } from "sdk";
-import { agentOptions, attempt, branchOf, codeOptions, defined, designNote, effects, feedbackText, inLanguage, issueOf, object, picturesOf, planOf, pullRequestsOf, readDesigns, source, summaryLine, trackerOptions } from "./context.js";
+import { agentOptions, attempt, branchOf, codeOptions, defined, designNote, effects, feedbackText, inLanguage, issueOf, object, picturesOf, planOf, pullRequestsOf, readDesigns, source, summaryLine, trackerOptions } from "sdk/steps/context.js";
 
 const IDLE = "Nothing to fix: the pull request has no pending review comments or reported failures.";
 

@@ -56,7 +56,8 @@ type Kind = {
   card: (asked: Asked) => { title: string; description: string; avatar?: unknown };
   open: (asked: Asked) => Opened;
   save: (saved: Saved) => string | { source: string; path: string };
-  create: (name: string, slug: string, host: Host) => { path: string; source: string };
+  create: (name: string, slug: string, host: Host & { template?: string | null }) => { path: string; source: string };
+  templates?: (language: Language) => { key: string; label: string }[];
   outline?: (source: string) => Step[];
 };
 
@@ -345,6 +346,31 @@ function outlined(source: string): Step[] {
 
 const steps = (source: string): string => outlined(source).map((step) => step.name).join(" → ");
 
+const workflowSource = (slug: string, imports: string, accepts: string[], steps: string[]): string =>
+  `import { workflow } from "sdk";\n${imports}\n\nexport default workflow({\n  schema_version: 1,\n  name: ${JSON.stringify(slug)},\n  accepts: ${JSON.stringify(accepts).replace(/,/g, ", ")},\n  triggers: [],\n  steps: [\n${steps.map((step) => `    ${step},\n`).join("")}  ],\n});\n`;
+
+const AREAS = [
+  {
+    key: "general",
+    label: (language: Language) => pick(language, "General", "General", "Geral"),
+    source: (slug: string) =>
+      workflowSource(slug, `import { draft, review, deliver } from "sdk/steps";`, ["text"], [
+        `draft({ agent: "drafter", status: { category: "doing" } })`,
+        `review({ onChanges: "draft" })`,
+        `deliver({ doneStatus: { category: "done" } })`,
+      ]),
+  },
+  {
+    key: "dev",
+    label: (language: Language) => pick(language, "Development", "Desarrollo", "Desenvolvimento"),
+    source: (slug: string) =>
+      workflowSource(slug, `import { plan, develop } from "../packages/dev/steps/index.js";`, ["issue", "text"], [
+        `plan({ agent: "planner", status: { category: "todo" } })`,
+        `develop({ agent: "developer", status: { category: "doing" } })`,
+      ]),
+  },
+];
+
 const workflows: Kind = {
   key: "workflows",
   about: "a workflow: TypeScript that composes the steps an item goes through, in order",
@@ -362,10 +388,11 @@ const workflows: Kind = {
   open: ({ path }) => code(path),
   save: ({ source }) => source,
   outline: outlined,
-  create: (_name, slug) => ({
-    path: `workflows/${slug}.ts`,
-    source: `import { workflow } from "sdk";\nimport { plan, develop } from "sdk/steps";\n\nexport default workflow({\n  schema_version: 1,\n  name: ${JSON.stringify(slug)},\n  accepts: ["issue", "text"],\n  triggers: [],\n  steps: [\n    plan({ agent: "planner", status: { category: "todo" } }),\n    develop({ agent: "developer", status: { category: "doing" } }),\n  ],\n});\n`,
-  }),
+  templates: (language) => AREAS.map((area) => ({ key: area.key, label: area.label(language) })),
+  create: (_name, slug, host) => {
+    const area = AREAS.find((found) => found.key === host.template) ?? AREAS[0];
+    return { path: `workflows/${slug}.ts`, source: area.source(slug) };
+  },
 };
 
 const brief = (value: string): string => {
@@ -513,6 +540,7 @@ export function sections(host: Host & { language: Language }) {
     icon: item.icon,
     needs: item.needs,
     creatable: item.creatable,
+    templates: item.templates?.(language) ?? [],
     label: item.label(language),
     hint: item.hint(language),
   }));
@@ -665,7 +693,7 @@ export function assisted(asking: Assisting) {
   };
 }
 
-export function create(host: Host & { section: string; name: string }) {
+export function create(host: Host & { section: string; name: string; template?: string | null }) {
   const { section, name } = host;
   const item = kind(section);
   if (!item.creatable) fail(`a ${section} item cannot be created here`);

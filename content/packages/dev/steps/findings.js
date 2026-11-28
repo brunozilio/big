@@ -1,6 +1,6 @@
 import { projectOf } from "sdk/bindings.js";
 import { step, markdown } from "sdk";
-import { attempt, codeTargets, defined, effects, languageOf, object, parsePlan, repoOf, repositoriesOf } from "./context.js";
+import { attempt, codeTargets, defined, effects, languageOf, object, parsePlan, repoOf, repositoriesOf } from "sdk/steps/context.js";
 
 const MARK = "security-findings";
 

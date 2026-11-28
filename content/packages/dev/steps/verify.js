@@ -1,5 +1,5 @@
 import { step, logs, chat, markdown } from "sdk";
-import { agentOptions, branchOf, defined, inLanguage, object, planOf, repositoriesOf, tail, writableOf } from "./context.js";
+import { agentOptions, branchOf, defined, inLanguage, object, planOf, repositoriesOf, tail, writableOf } from "sdk/steps/context.js";
 import { endToEnd, e2eLines } from "./e2e.js";
 
 export const NOTHING = "No verification command configured for this repository.\n";

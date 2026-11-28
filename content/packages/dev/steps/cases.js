@@ -1,6 +1,6 @@
 import { projectOf } from "sdk/bindings.js";
 import { step, markdown, testCases } from "sdk";
-import { agentOptions, attempt, defined, effects, inLanguage, issueOf, languageOf, missingConnection, object, planOf, unbound, waitOptions } from "./context.js";
+import { agentOptions, attempt, defined, effects, inLanguage, issueOf, languageOf, missingConnection, object, planOf, unbound, waitOptions } from "sdk/steps/context.js";
 
 const KINDS = { api: "API", ui: "UI" };
 

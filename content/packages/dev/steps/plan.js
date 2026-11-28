@@ -1,5 +1,5 @@
 import { step, chat } from "sdk";
-import { agentOptions, defined, designNote, inLanguage, issueBrief, issueOf, languageOf, linksIn, object, parsePlan, picturesOf, readDesigns, readIssue } from "./context.js";
+import { agentOptions, defined, designNote, inLanguage, issueBrief, issueOf, languageOf, linksIn, object, parsePlan, picturesOf, readDesigns, readIssue } from "sdk/steps/context.js";
 
 const UNREAD = "The issue could not be read from the tracker. Read it with your tracker tools before planning, and ask only what the issue does not answer.";
 

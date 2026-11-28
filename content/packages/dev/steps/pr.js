@@ -1,5 +1,5 @@
 import { step, change, markdown } from "sdk";
-import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, gitOf, issueOf, object, planOf, repoOf, source, sourcePullRequestOf, summaryLine, targetFields } from "./context.js";
+import { branchOf, codeOptions, codeTargets, defined, eachOf, effects, gitOf, issueOf, object, planOf, repoOf, source, sourcePullRequestOf, summaryLine, targetFields } from "sdk/steps/context.js";
 
 function describe(summary, plan, issue, extra) {
   const parts = [summary || summaryLine(plan.story) || plan.title];

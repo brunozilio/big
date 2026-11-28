@@ -1,5 +1,5 @@
 import { workflow, on } from "sdk";
-import { develop } from "sdk/steps";
+import { develop } from "../packages/dev/steps/index.js";
 import { brief, evals, promote, handoff } from "sdk/factory";
 
 export default workflow({

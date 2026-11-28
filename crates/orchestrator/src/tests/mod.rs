@@ -4,6 +4,7 @@ mod cloud;
 mod control;
 mod factory;
 mod flow;
+mod generic;
 mod links;
 mod package;
 mod policy;

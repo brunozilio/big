@@ -1,5 +1,5 @@
 import { step, merge as merging } from "sdk";
-import { codeOptions, eachOf, effects, gitOf, object, pullRequestsOf, source, targetFields, waitOptions } from "./context.js";
+import { codeOptions, eachOf, effects, gitOf, object, pullRequestsOf, source, targetFields, waitOptions } from "sdk/steps/context.js";
 
 const METHODS = ["squash", "merge", "rebase"];
 

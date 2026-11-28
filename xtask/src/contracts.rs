@@ -20,6 +20,10 @@ fn script(relative: &str) -> bool {
     relative.ends_with(".ts") || relative.ends_with(".js")
 }
 
+fn package(relative: &str) -> bool {
+    relative.split('/').count() == 2 && script(relative)
+}
+
 fn json(relative: &str) -> bool {
     relative.ends_with(".json")
 }
@@ -27,7 +31,7 @@ fn json(relative: &str) -> bool {
 const KINDS: [Kind; 4] = [
     Kind { name: "connector", folder: "content/connectors", wanted: connector },
     Kind { name: "workflow", folder: "content/workflows", wanted: top_level },
-    Kind { name: "package", folder: "content/packages", wanted: script },
+    Kind { name: "package", folder: "content/packages", wanted: package },
     Kind { name: "policy", folder: "content/safety", wanted: json },
 ];
 
@@ -87,6 +91,7 @@ mod tests {
         write(root.path(), "content/connectors/a/api.ts", "export const x = 1;");
         write(root.path(), "content/workflows/w.ts", "export default workflow({ schema_version: 1, name: \"w\" });");
         write(root.path(), "content/packages/dev/release.ts", "export default { labels: {} };");
+        write(root.path(), "content/packages/dev/steps/plan.js", "export default step({ name: \"plan\" });");
         write(root.path(), "content/safety/p.json", "{ \"schema_version\": 1 }");
         let found = findings(root.path()).expect("findings");
         assert_eq!(

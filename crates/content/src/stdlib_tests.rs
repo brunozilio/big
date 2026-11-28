@@ -29,6 +29,8 @@ const STEPS: [&str; 13] = [
     "security",
 ];
 
+const GENERIC: [&str; 5] = ["draft", "assess", "act", "wait", "deliver"];
+
 const PROVIDERS: [&str; 12] = [
     "jira",
     "github",
@@ -282,12 +284,15 @@ fn of_kind<'a>(asked: &'a [Value], kind: &str) -> Vec<&'a Value> {
 
 #[test]
 fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider() {
-    let mut paths: Vec<String> = STEPS.iter().map(|step| format!("sdk/steps/{step}.js")).collect();
+    let mut paths: Vec<String> = STEPS.iter().map(|step| format!("packages/dev/steps/{step}.js")).collect();
+    paths.extend(GENERIC.iter().map(|step| format!("sdk/steps/{step}.js")));
     paths.extend(
         [
             "sdk/steps/index.js",
             "sdk/steps/context.js",
-            "sdk/steps/e2e.js",
+            "sdk/steps/given.js",
+            "packages/dev/steps/index.js",
+            "packages/dev/steps/e2e.js",
             "workflows/default.ts",
             "workflows/pull-request.ts",
         ]
@@ -301,11 +306,15 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
         }
         assert!(!text.contains("//") || text.contains("://"), "{path} has no comments");
     }
-    assert!(
-        super::builtin_files("sdk/steps/").len() >= paths.iter().filter(|path| path.starts_with("sdk/steps/")).count()
-    );
-    let index = super::builtin_text("sdk/steps/index.js").expect("index");
+    let shipped = |prefix: &str| paths.iter().filter(|path| path.starts_with(prefix)).count();
+    assert!(super::builtin_files("sdk/steps/").len() >= shipped("sdk/steps/"));
+    assert!(super::builtin_files("packages/dev/steps/").len() >= shipped("packages/dev/steps/"));
+    let index = super::builtin_text("packages/dev/steps/index.js").expect("index");
     assert!(STEPS.iter().all(|step| index.contains(&format!("default as {step} "))));
+    let base = super::builtin_text("sdk/steps/index.js").expect("index");
+    assert!(
+        GENERIC.iter().all(|step| base.contains(&format!("as {} ", if *step == "assess" { "review" } else { step })))
+    );
 }
 
 #[test]
@@ -328,12 +337,7 @@ fn the_default_workflow_describes_its_statuses_and_its_steps_in_order() {
     let mut known = STEPS.to_vec();
     let at = known.iter().position(|step| *step == "checks").unwrap_or(0);
     known.splice(at..at, ["repo-checks", "e2e", "verifier"]);
-    known.push("aside");
-    known.push("ask");
     known.push("findings");
-    known.push("command");
-    known.push("agent");
-    known.push("script");
     assert_eq!(described["steps"], json!(known));
 }
 
@@ -1608,6 +1612,9 @@ fn cases_go_to_the_test_project_chosen_in_the_application() {
 #[path = "stdlib_input_tests.rs"]
 mod input;
 
+#[path = "stdlib_generic_tests.rs"]
+mod generic;
+
 const ENGLISH_PLAN: &str = "# Customer sign-up\n\n## Description\nAs a clerk, I want to sign customers up so that I can serve them later.\n\n## Acceptance criteria\n- Given I am on the sign-up, when I save a customer, then it shows in the list.\n\n## Subtasks\n### Create the table\nCustomers table with name and document.";
 
 #[test]
@@ -1702,9 +1709,9 @@ fn a_side_question_talks_in_the_application_folder_until_the_person_closes_it() 
 
 #[test]
 fn the_merge_waits_until_the_review_approved_every_pull_request() {
-    let loaded = source("probe.js", "import { pendingOf } from \"sdk/steps/merge.js\";\n");
+    let loaded = source("probe.js", "import { pendingOf } from \"packages/dev/steps/merge.js\";\n");
     let probe = format!(
-        "{loaded}\nexport const pending = (reviewed, prs) => __m[\"sdk/steps/merge.js\"].pendingOf(reviewed, prs);\n"
+        "{loaded}\nexport const pending = (reviewed, prs) => __m[\"packages/dev/steps/merge.js\"].pendingOf(reviewed, prs);\n"
     );
     let prs = json!([{ "pr": "acme/web#1" }, { "pr": "acme/api#2" }]);
     let pending = |reviewed: Value| call(&probe, "pending", &[reviewed, prs.clone()]);

@@ -1,5 +1,5 @@
 import { step, markdown, qualityReport } from "sdk";
-import { boundPullRequests, defined, eachOf, languageOf, object } from "./context.js";
+import { boundPullRequests, defined, eachOf, languageOf, object } from "sdk/steps/context.js";
 
 const HOUR = 3600000;
 

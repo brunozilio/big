@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
-use script::typescript::compile;
+use script::typescript::compile_named;
 
 use crate::resources::{Resources, script_candidates};
 
@@ -15,7 +15,7 @@ pub struct Bundle {
 }
 
 pub fn bundle(resources: &Resources, root: &str) -> Result<Bundle, String> {
-    let sdk = resolve(resources, None, SDK)?;
+    let sdk = resolve(resources, None, SDK, &[])?;
     let mut seen = BTreeSet::new();
     let mut modules = Vec::new();
     visit(resources, &sdk, &mut seen, &mut modules)?;
@@ -35,7 +35,7 @@ fn visit(
         return Ok(());
     }
     let found = resources.find(id).ok_or_else(|| format!("the module {id} was not found"))?;
-    let (code, imports) = compile(id, &found.text, |spec| resolve(resources, Some(id), spec))?;
+    let (code, imports) = compile_named(id, &found.text, |spec, names| resolve(resources, Some(id), spec, names))?;
     for import in imports {
         visit(resources, &import, seen, modules)?;
     }
@@ -43,7 +43,7 @@ fn visit(
     Ok(())
 }
 
-fn resolve(resources: &Resources, from: Option<&str>, spec: &str) -> Result<String, String> {
+fn resolve(resources: &Resources, from: Option<&str>, spec: &str, names: &[String]) -> Result<String, String> {
     let base = if spec.starts_with("./") || spec.starts_with("../") {
         let folder = from.and_then(|from| Path::new(from).parent()).unwrap_or(Path::new(""));
         normalized(&folder.join(spec)).ok_or_else(|| format!("the import {spec} leaves the resource folders"))?
@@ -54,13 +54,15 @@ fn resolve(resources: &Resources, from: Option<&str>, spec: &str) -> Result<Stri
     };
     let candidates = if base == SDK { script_candidates("sdk/index") } else { script_candidates(&base) };
     let importer = from.unwrap_or(spec);
-    content::retired::resolve(
+    let found = content::retired::resolve(
         &content::retired::table(),
         &candidates,
         &|candidate| resources.find(candidate).is_some(),
         importer,
     )
-    .ok_or_else(|| format!("the import {spec} was not found"))
+    .ok_or_else(|| format!("the import {spec} was not found"))?;
+    content::retired::moved(&content::retired::moved_table(), &found, names, importer);
+    Ok(found)
 }
 
 fn normalized(path: &Path) -> Option<String> {

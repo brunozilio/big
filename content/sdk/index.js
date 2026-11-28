@@ -1031,19 +1031,20 @@ export function step(definition) {
     doing: definition.doing || null,
   });
   registry.steps.set(type.name, type);
+  const named = typeof definition.id === "string" && definition.id ? definition.id : type.name;
   const use = (first, second) => {
     if (isCtx(first)) {
       const options = second || {};
-      const call = { type: "step-call", step: type.name, id: options.id || type.name, options };
+      const call = { type: "step-call", step: type.name, id: options.id || named, options };
       return runNode(first, nested(first, call), null, null).then((result) => {
         if (result.outcome === "cancelled") throw new Cancelled(result.reason);
-        if (result.outcome === "failed") throw new StepFailed(options.id || type.name, result);
+        if (result.outcome === "failed") throw new StepFailed(options.id || named, result);
         if (result.outcome === "goto") throw new TypeError("goto only works inside workflow({ steps })");
         return result;
       });
     }
     const options = first || {};
-    return Object.freeze({ type: "step-call", step: type.name, id: options.id || type.name, options });
+    return Object.freeze({ type: "step-call", step: type.name, id: options.id || named, options });
   };
   Object.defineProperty(use, "stepName", { value: type.name });
   Object.defineProperty(use, "definition", { value: type });

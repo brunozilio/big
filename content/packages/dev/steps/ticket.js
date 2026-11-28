@@ -1,5 +1,5 @@
 import { step, issue, markdown, form, actions } from "sdk";
-import { attempt, defined, effects, object, planOf, sourcesOf, unbound, waitOptions } from "./context.js";
+import { attempt, defined, effects, object, planOf, sourcesOf, unbound, waitOptions } from "sdk/steps/context.js";
 
 const UNTRACKED = "No issue tracker is connected, so the item continues without an issue.";
 

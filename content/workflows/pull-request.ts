@@ -1,5 +1,5 @@
 import { workflow, on } from "sdk";
-import { develop, checks, ci, review, merge, release } from "sdk/steps";
+import { develop, checks, ci, review, merge, release } from "../packages/dev/steps/index.js";
 import { environments } from "../environments.ts";
 import { branches } from "../branches.ts";
 

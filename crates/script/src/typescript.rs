@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::{Mutex, OnceLock};
 
 use oxc::allocator::Allocator;
-use oxc::ast::ast::{Statement, StringLiteral};
+use oxc::ast::ast::{ImportDeclarationSpecifier, Statement, StringLiteral};
 use oxc::codegen::Codegen;
 use oxc::parser::Parser;
 use oxc::semantic::SemanticBuilder;
@@ -23,6 +23,14 @@ pub fn compile(
     text: &str,
     mut resolve: impl FnMut(&str) -> Result<String, String>,
 ) -> Result<(String, Vec<String>), String> {
+    compile_named(id, text, |spec, _| resolve(spec))
+}
+
+pub fn compile_named(
+    id: &str,
+    text: &str,
+    mut resolve: impl FnMut(&str, &[String]) -> Result<String, String>,
+) -> Result<(String, Vec<String>), String> {
     let allocator = Allocator::default();
     let source_type = if typed(id) { SourceType::ts() } else { SourceType::mjs() };
     let parsed = Parser::new(&allocator, text, source_type).parse();
@@ -38,14 +46,35 @@ pub fn compile(
     }
     let mut imports = Vec::new();
     for statement in program.body.iter_mut() {
+        let names = names_of(statement);
         let Some(source) = source_of(statement) else { continue };
         let spec = source.value.as_str().unwrap_or_default().to_owned();
-        let target = resolve(&spec).map_err(|error| format!("{id}: {error}"))?;
+        let target = resolve(&spec, &names).map_err(|error| format!("{id}: {error}"))?;
         source.value = JSStr::from_str_in(&target, &&allocator);
         source.raw = None;
         imports.push(target);
     }
     Ok((Codegen::new().build(&program).code, imports))
+}
+
+fn names_of(statement: &Statement<'_>) -> Vec<String> {
+    match statement {
+        Statement::ImportDeclaration(declaration) => declaration
+            .specifiers
+            .iter()
+            .flatten()
+            .map(|specifier| match specifier {
+                ImportDeclarationSpecifier::ImportSpecifier(named) => named.imported.name().to_string(),
+                ImportDeclarationSpecifier::ImportDefaultSpecifier(_) => "default".to_owned(),
+                ImportDeclarationSpecifier::ImportNamespaceSpecifier(_) => "*".to_owned(),
+            })
+            .collect(),
+        Statement::ExportFromDeclaration(declaration) => {
+            declaration.specifiers.iter().map(|specifier| specifier.local.name().to_string()).collect()
+        }
+        Statement::ExportAllDeclaration(_) => vec!["*".to_owned()],
+        _ => Vec::new(),
+    }
 }
 
 fn source_of<'s, 'a>(statement: &'s mut Statement<'a>) -> Option<&'s mut StringLiteral<'a>> {
@@ -97,5 +126,21 @@ mod tests {
         assert!(!plain_code.contains(": number"));
         assert_eq!(plain("tools/y.ts", "export const n: number = 1;").expect("cached"), plain_code);
         assert!(plain("tools/z.ts", "export const = ;").is_err());
+    }
+
+    #[test]
+    fn each_import_reaches_the_resolver_with_the_names_it_takes() {
+        let source = "import a, { b, c as d } from \"./x\";\nimport * as all from \"./y\";\nexport { e } from \"./z\";\nexport * from \"./w\";\nexport const f = [a, b, d, all];";
+        let mut seen = Vec::new();
+        compile_named("m.js", source, |spec, names| {
+            seen.push((spec.to_owned(), names.to_vec()));
+            Ok(spec.to_owned())
+        })
+        .expect("compiled");
+        let names = |list: &[&str]| list.iter().map(|name| (*name).to_owned()).collect::<Vec<_>>();
+        assert_eq!(seen[0], ("./x".to_owned(), names(&["default", "b", "c"])));
+        assert_eq!(seen[1], ("./y".to_owned(), names(&["*"])));
+        assert_eq!(seen[2], ("./z".to_owned(), names(&["e"])));
+        assert_eq!(seen[3], ("./w".to_owned(), names(&["*"])));
     }
 }

@@ -105,7 +105,11 @@ async fn folder(shared: &Shared, item: &WorkItem, command: &Command) -> Result<P
     if !shared.checkouts(item).is_empty() {
         return crate::effects::worktree_of(shared, item, command).await;
     }
-    let scratch = shared.config.data.join(SCRATCH).join(item.id.to_string());
+    scratch(shared, &item.id)
+}
+
+pub fn scratch(shared: &Shared, item: &domain::workflow::ItemId) -> Result<PathBuf, Failure> {
+    let scratch = shared.config.data.join(SCRATCH).join(item.to_string());
     std::fs::create_dir_all(&scratch).map_err(|error| Failure::permanent(error.to_string()))?;
     Ok(scratch)
 }

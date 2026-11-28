@@ -1,5 +1,5 @@
 import { workflow } from "sdk";
-import { findings, ticket, develop, checks, pr, review } from "sdk/steps";
+import { findings, ticket, develop, checks, pr, review } from "../packages/dev/steps/index.js";
 import { branches } from "../branches.ts";
 
 export default workflow({

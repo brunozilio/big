@@ -1,5 +1,5 @@
 import { step, actions, markdown, review as changes } from "sdk";
-import { agentOptions, codeOptions, defined, effects, inLanguage, object, planOf, pullRequestsOf, source, waitOptions } from "./context.js";
+import { agentOptions, codeOptions, defined, effects, inLanguage, object, planOf, pullRequestsOf, source, waitOptions } from "sdk/steps/context.js";
 
 const VERDICTS = ["approve", "request_changes", "comment"];
 

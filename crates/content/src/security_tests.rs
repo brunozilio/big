@@ -13,7 +13,7 @@ impl script::Host for NoHost {
     }
 }
 
-const PATHS: [&str; 3] = ["workflows/security.ts", "sdk/steps/findings.js", "agents/security-fixer.ts"];
+const PATHS: [&str; 3] = ["workflows/security.ts", "packages/dev/steps/findings.js", "agents/security-fixer.ts"];
 
 const PROVIDERS: [&str; 5] = ["veracode", "snyk", "sonar", "github", "jira"];
 

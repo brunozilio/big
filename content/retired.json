@@ -1,7 +1,30 @@
 {
   "schema_version": 1,
   "imports": [
-    { "from": "packages/config.ts", "to": "packages/dev/release.ts" }
+    { "from": "packages/config.ts", "to": "packages/dev/release.ts" },
+    { "from": "sdk/steps/plan.js", "to": "packages/dev/steps/plan.js" },
+    { "from": "sdk/steps/ticket.js", "to": "packages/dev/steps/ticket.js" },
+    { "from": "sdk/steps/cases.js", "to": "packages/dev/steps/cases.js" },
+    { "from": "sdk/steps/develop.js", "to": "packages/dev/steps/develop.js" },
+    { "from": "sdk/steps/checks.js", "to": "packages/dev/steps/checks.js" },
+    { "from": "sdk/steps/verify.js", "to": "packages/dev/steps/verify.js" },
+    { "from": "sdk/steps/e2e.js", "to": "packages/dev/steps/e2e.js" },
+    { "from": "sdk/steps/pr.js", "to": "packages/dev/steps/pr.js" },
+    { "from": "sdk/steps/ci.js", "to": "packages/dev/steps/ci.js" },
+    { "from": "sdk/steps/quality.js", "to": "packages/dev/steps/quality.js" },
+    { "from": "sdk/steps/review.js", "to": "packages/dev/steps/review.js" },
+    { "from": "sdk/steps/provision.js", "to": "packages/dev/steps/provision.js" },
+    { "from": "sdk/steps/merge.js", "to": "packages/dev/steps/merge.js" },
+    { "from": "sdk/steps/release.js", "to": "packages/dev/steps/release.js" },
+    { "from": "sdk/steps/security.js", "to": "packages/dev/steps/security.js" },
+    { "from": "sdk/steps/findings.js", "to": "packages/dev/steps/findings.js" }
+  ],
+  "exports": [
+    {
+      "from": "sdk/steps/index.js",
+      "to": "packages/dev/steps/index.js",
+      "names": ["plan", "ticket", "cases", "develop", "checks", "repoChecks", "e2e", "verifier", "pr", "ci", "quality", "provision", "merge", "release", "security", "findings"]
+    }
   ],
   "ids": [
     { "from": "route:/mcp/browser", "to": null, "reason": "the browser is a resource of the generic MCP route, asked for in the mcp-resources header" }

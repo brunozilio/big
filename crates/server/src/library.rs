@@ -36,6 +36,7 @@ pub struct Created {
     section: Option<String>,
     item: Option<String>,
     name: String,
+    template: Option<String>,
 }
 
 fn refused(failure: Failure) -> ApiError {
@@ -87,7 +88,7 @@ pub async fn create(State(ctx): State<Ctx>, Json(created): Json<Created>) -> Api
     let name = created.name.trim().to_owned();
     let made = worked(move || match (created.item, created.section) {
         (Some(item), _) => library::create_file(&item, &name, language),
-        (None, Some(section)) => library::create(&section, &name, language),
+        (None, Some(section)) => library::create(&section, &name, created.template.as_deref(), language),
         (None, None) => Err(Failure::Missing),
     });
     Ok(reply(made.await?))

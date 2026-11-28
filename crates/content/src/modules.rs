@@ -1,7 +1,7 @@
 use std::collections::BTreeSet;
 use std::path::{Component, Path, PathBuf};
 
-use script::typescript::compile;
+use script::typescript::compile_named;
 
 const SDK: &str = "sdk/";
 const ENDINGS: [&str; 5] = ["", ".ts", ".js", "/index.ts", "/index.js"];
@@ -28,7 +28,7 @@ fn exists(folder: Option<&Path>, path: &str) -> bool {
         || folder.and_then(|folder| super::override_path(folder, path)).is_some_and(|file| file.is_file())
 }
 
-fn resolve(folder: Option<&Path>, from: &str, spec: &str) -> Result<String, String> {
+fn resolve(folder: Option<&Path>, from: &str, spec: &str, names: &[String]) -> Result<String, String> {
     let base = if spec.starts_with("./") || spec.starts_with("../") {
         let parent = Path::new(from).parent().unwrap_or(Path::new(""));
         normalized(&parent.join(spec)).ok_or_else(|| format!("the import {spec} leaves the content folder"))?
@@ -42,8 +42,11 @@ fn resolve(folder: Option<&Path>, from: &str, spec: &str) -> Result<String, Stri
         .map(|ending| format!("{base}{ending}"))
         .filter(|candidate| candidate.ends_with(".ts") || candidate.ends_with(".js"))
         .collect();
-    super::retired::resolve(&super::retired::table(), &candidates, &|candidate| exists(folder, candidate), from)
-        .ok_or_else(|| format!("the import {spec} of {from} was not found"))
+    let found =
+        super::retired::resolve(&super::retired::table(), &candidates, &|candidate| exists(folder, candidate), from)
+            .ok_or_else(|| format!("the import {spec} of {from} was not found"))?;
+    super::retired::moved(&super::retired::moved_table(), &found, names, from);
+    Ok(found)
 }
 
 fn source_in(folder: Option<&Path>, path: &str) -> Option<String> {
@@ -60,7 +63,7 @@ fn visit(
         return Ok(());
     }
     let text = source_in(folder, path).ok_or_else(|| format!("the module {path} was not found"))?;
-    let (code, imports) = compile(path, &text, |spec| resolve(folder, path, spec))?;
+    let (code, imports) = compile_named(path, &text, |spec, names| resolve(folder, path, spec, names))?;
     for import in imports {
         visit(folder, &import, seen, modules)?;
     }

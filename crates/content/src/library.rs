@@ -67,6 +67,7 @@ fn sections(language: &str) -> Result<(Vec<Section>, Vec<String>), Failure> {
         let shown = json!({
             "key": section["key"], "label": section["label"], "hint": section["hint"], "icon": section["icon"],
             "creatable": section["creatable"].as_bool().unwrap_or(false),
+            "templates": section["templates"].as_array().cloned().unwrap_or_default(),
         });
         found.push(Section { key: word(&section["key"]), folder, exports: words(&section["exports"]), shown });
     }
@@ -317,11 +318,11 @@ pub fn assisted(path: &str, talk: &Talk, answer: &str, language: &str) -> Result
     ask("assisted", &asking)
 }
 
-pub fn create(section: &str, name: &str, language: &str) -> Result<Value, Failure> {
+pub fn create(section: &str, name: &str, template: Option<&str>, language: &str) -> Result<Value, Failure> {
     let before = library(language)?;
     let folder = &before.sections.iter().find(|found| found.key == section).ok_or(Failure::Missing)?.folder;
-    let made = super::call(ENTRY, "create", &json!({ "section": section, "name": name, "language": language }))
-        .ok_or_else(|| Failure::Invalid(name.to_owned()))?;
+    let asked = json!({ "section": section, "name": name, "template": template, "language": language });
+    let made = super::call(ENTRY, "create", &asked).ok_or_else(|| Failure::Invalid(name.to_owned()))?;
     let path = word(&made["path"]);
     if !path.starts_with(folder.as_str()) || super::override_path(std::path::Path::new(""), &path).is_none() {
         return Err(Failure::Invalid(path));
@@ -491,6 +492,25 @@ mod tests {
         assert!(matches!(checked(&section, true, "agents/x.ts", "export const spec = {"), Err(Failure::Invalid(_))));
         assert!(matches!(checked(&section, true, "agents/x.ts", "export const spec = {};"), Err(Failure::Invalid(_))));
         assert!(ask("create", &json!({ "section": "prompts", "name": "x" })).is_err());
+    }
+
+    #[test]
+    fn a_new_workflow_takes_the_steps_of_the_area_chosen() {
+        let listed = listing("pt-BR").expect("listing");
+        let section = listed["sections"].as_array().expect("sections").iter().find(|found| found["key"] == "workflows");
+        let templates: Vec<Value> = section.expect("workflows")["templates"].as_array().cloned().unwrap_or_default();
+        let keys: Vec<&str> = templates.iter().filter_map(|template| template["key"].as_str()).collect();
+        assert_eq!(keys, ["general", "dev"]);
+        for (template, wanted, module) in [
+            ("general", "draft({", "sdk/steps/draft.js"),
+            ("dev", "plan({", "packages/dev/steps/plan.js"),
+            ("other", "draft({", "sdk/steps/draft.js"),
+        ] {
+            let made = run("create", json!({ "section": "workflows", "name": "Novo", "template": template }));
+            assert_eq!(made["path"], "workflows/novo.ts");
+            assert!(word(&made["source"]).contains(wanted), "{template}: {made}");
+            assert!(crate::shipped(module).is_some(), "{module} is shipped");
+        }
     }
 
     #[test]
