@@ -10,7 +10,7 @@ use super::host::{Local, Online};
 use crate::descriptor::TokenField;
 use crate::error::ActionError;
 use crate::http::Http;
-use crate::oauth::{Authorization, DeviceSignIn, Grant, Loopback, LoopbackSignIn, Polled, Proceeded, Started};
+use crate::oauth::{Answered, Authorization, DeviceSignIn, Grant, Loopback, LoopbackSignIn, Polled, Proceeded, Started};
 
 #[derive(Debug, Clone)]
 pub struct ScriptedSignIn {
@@ -19,13 +19,23 @@ pub struct ScriptedSignIn {
     using: String,
     state: Value,
     name: String,
-    port: Option<u16>,
+    ports: Option<(u16, u16)>,
+    listens: bool,
 }
 
 pub const SIGN_IN: &str = "signIn";
 
 fn parsed<T: serde::de::DeserializeOwned>(value: Value, what: &str) -> Result<T, ActionError> {
     serde_json::from_value(value).map_err(|error| ActionError::permanent(format!("{what}: {error}")))
+}
+
+fn ports_of(declared: &Value) -> Option<(u16, u16)> {
+    let port = |value: &Value| value.as_u64().and_then(|port| u16::try_from(port).ok());
+    let (from, to) = match declared.as_array() {
+        Some(range) => (port(range.first()?)?, port(range.get(1)?)?),
+        None => (port(declared)?, port(declared)?),
+    };
+    (from <= to).then_some((from, to))
 }
 
 pub fn redirect() -> String {
@@ -40,7 +50,8 @@ impl ScriptedSignIn {
             using: using.to_owned(),
             state,
             name: key.to_owned(),
-            port: None,
+            ports: None,
+            listens: false,
         };
         let input = made.input(json!({}));
         let local: Arc<dyn script::Host> = Arc::new(Local);
@@ -48,8 +59,8 @@ impl ScriptedSignIn {
         if let Some(name) = named.and_then(|name| name.as_str().map(str::to_owned)) {
             made.name = name;
         }
-        let port = made.script.invoke_here(&made.named("port"), &input, local).ok().and_then(|port| port.as_u64());
-        made.port = port.and_then(|port| u16::try_from(port).ok());
+        made.ports = made.script.invoke_here(&made.named("port"), &input, local).ok().as_ref().and_then(ports_of);
+        made.listens = made.script.kind(&made.named("answer")) == "function";
         made
     }
 
@@ -78,7 +89,15 @@ impl LoopbackSignIn for ScriptedSignIn {
     }
 
     fn callback_port(&self) -> Option<u16> {
-        self.port
+        self.ports.map(|(from, _)| from)
+    }
+
+    fn callback_ports(&self) -> Option<(u16, u16)> {
+        self.ports
+    }
+
+    fn listens(&self) -> bool {
+        self.listens
     }
 
     fn fields(&self, language: Language) -> Vec<TokenField> {
@@ -106,7 +125,23 @@ impl LoopbackSignIn for ScriptedSignIn {
     }
 
     async fn begin(&self, http: &dyn Http, port: u16) -> Result<Authorization, ActionError> {
-        parsed(self.online(http, &self.named("begin"), json!({ "port": port })).await?, "authorization")
+        self.begin_at(http, port, None).await
+    }
+
+    async fn begin_at(&self, http: &dyn Http, port: u16, callback: Option<u16>) -> Result<Authorization, ActionError> {
+        let extra = json!({ "port": port, "callback": callback });
+        parsed(self.online(http, &self.named("begin"), extra).await?, "authorization")
+    }
+
+    async fn answer(
+        &self,
+        http: &dyn Http,
+        authorization: &Authorization,
+        request: &Value,
+        now: Timestamp,
+    ) -> Result<Answered, ActionError> {
+        let extra = json!({ "authorization": authorization, "request": request, "now": now.as_second() });
+        parsed(self.online(http, &self.named("answer"), extra).await?, "answer")
     }
 
     async fn exchange(

@@ -2,10 +2,11 @@ use domain::Language;
 use domain::connection::Capability;
 use serde_json::{Value, json};
 
-use super::{creds, loaded};
+use super::{creds, loaded, now};
 use crate::descriptor::{AuthSpec, TokenForm};
 use crate::error::{ActionError, ErrorClass};
 use crate::http::{FakeHttp, Method};
+use crate::oauth::{Authorization, Loopback};
 use crate::provider::Provider;
 
 async fn call(http: &FakeHttp, settings: Value, action: &str, args: Value) -> Result<Value, ActionError> {
@@ -33,11 +34,21 @@ const MEASURES: &str = r#"{"component":{"measures":[
 const ISSUES: &str = r#"{"total":7,"issues":[
     {"key":"AX1","type":"BUG","severity":"MAJOR","message":"Null check","component":"acme_web:src/cart.ts","line":12}]}"#;
 
+fn sign_in() -> Loopback {
+    let AuthSpec::Loopback(sign_in) = loaded("sonarqube").descriptor().auth else { panic!("not loopback") };
+    sign_in
+}
+
 #[test]
-fn the_provider_signs_in_with_an_address_an_organization_and_a_token_and_binds_repositories() {
+fn the_provider_signs_in_through_the_browser_or_with_an_address_an_organization_and_a_token() {
     let provider = loaded("sonarqube");
     let descriptor = provider.descriptor();
-    let AuthSpec::Token(spec) = descriptor.auth else { panic!("not a token") };
+    let sign_in = sign_in();
+    assert_eq!((sign_in.0.callback_ports(), sign_in.0.listens()), (Some((64120, 64130)), true));
+    let entered: Vec<String> = sign_in.0.fields(Language::Portuguese).into_iter().map(|field| field.name).collect();
+    assert_eq!(entered, ["url", "organization"]);
+    let [alternate] = provider.alternatives(Language::Portuguese).try_into().unwrap_or_else(|_| panic!("one"));
+    let AuthSpec::Token(spec) = alternate.auth else { panic!("not a token") };
     let names: Vec<(&str, bool, bool)> =
         spec.fields.iter().map(|field| (field.name.as_str(), field.secret, field.setting)).collect();
     assert_eq!(names, [("url", false, true), ("organization", false, true), ("token", true, false)]);
@@ -59,6 +70,48 @@ fn the_provider_signs_in_with_an_address_an_organization_and_a_token_and_binds_r
     assert!(look.bindings[0].suggests);
     let summary = look.bindings[0].summary.clone().unwrap_or_default();
     assert_eq!((summary.parts, summary.separator.as_str()), (vec!["{label}".to_owned()], " · "));
+}
+
+async fn begun(http: &FakeHttp) -> (Loopback, Authorization) {
+    let entered = json!({ "url": "sonar.empresa.com/sonar/", "organization": "" });
+    let sign_in = sign_in().entered(&entered, Language::Portuguese).unwrap_or_else(|error| panic!("{error}"));
+    let begun = sign_in.0.begin_at(http, 7420, Some(64121)).await.unwrap_or_else(|error| panic!("{error:?}"));
+    (sign_in, begun)
+}
+
+#[tokio::test]
+async fn the_browser_sign_in_opens_the_token_page_with_the_port_that_listens() {
+    let http = FakeHttp::new();
+    let (_, begun) = begun(&http).await;
+    let ide = url::form_urlencoded::byte_serialize(brand::NAME.as_bytes()).collect::<String>().replace('+', "%20");
+    let expected = format!("https://sonar.empresa.com/sonar/sonarlint/auth?ideName={ide}&port=64121");
+    assert_eq!(begun.url, expected);
+    assert!(!begun.state.is_empty());
+    let without = sign_in().0.begin_at(&http, 7420, None).await;
+    assert!(without.is_err(), "{without:?}");
+}
+
+#[tokio::test]
+async fn the_listening_port_says_it_needs_a_token_and_takes_the_token_the_page_posts() {
+    let http = FakeHttp::new();
+    let (sign_in, begun) = begun(&http).await;
+    let asked = |method: &str, path: &str, body: Value| json!({ "method": method, "path": path, "query": {}, "origin": "https://sonar.empresa.com", "body": body });
+    let ask = |request: Value| {
+        let sign_in = sign_in.clone();
+        let begun = begun.clone();
+        let http = &http;
+        async move { sign_in.0.answer(http, &begun, &request, now()).await.unwrap_or_else(|error| panic!("{error:?}")) }
+    };
+    let status = ask(asked("GET", "/sonarlint/api/status", Value::Null)).await;
+    assert_eq!((status.status, status.body["needsToken"].clone(), status.grant), (200, json!(true), None));
+    assert_eq!(status.body["ideName"], brand::NAME);
+    let given = ask(asked("POST", "/sonarlint/api/token", json!({ "token": "squ_1" }))).await;
+    let grant = given.grant.unwrap_or_else(|| panic!("no grant"));
+    assert_eq!((given.status, grant.access_token.as_str(), grant.refresh_token), (200, "squ_1", None));
+    let empty = ask(asked("POST", "/sonarlint/api/token", json!({}))).await;
+    assert_eq!((empty.status, empty.grant), (400, None));
+    let other = ask(asked("GET", "/elsewhere", Value::Null)).await;
+    assert_eq!((other.status, other.grant), (404, None));
 }
 
 #[tokio::test]

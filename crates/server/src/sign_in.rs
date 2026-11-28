@@ -3,7 +3,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use connectors::{
-    AccountOption, AuthSpec, Authorization, DeviceApp, DeviceCode, Grant, Loopback, Polled, Proceeded,
+    AccountOption, Answered, AuthSpec, Authorization, DeviceApp, DeviceCode, Grant, Loopback, Polled, Proceeded,
     ProviderDescriptor, Started, Stepped,
 };
 use domain::Language;
@@ -108,6 +108,23 @@ impl Flows {
             })
             .map(|(id, _)| id.clone())
     }
+
+    pub fn listening(&self, origin: &str) -> Option<String> {
+        let flows = held(&self.0);
+        flows
+            .iter()
+            .find(|(_, flow)| {
+                matches!(&flow.stage, Stage::Waiting(Waiting::Redirect { sign_in, authorization })
+                    if sign_in.0.listens() && origin_of(&authorization.url).is_some_and(|opened| opened == origin))
+            })
+            .map(|(id, _)| id.clone())
+    }
+}
+
+pub fn origin_of(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    let origin = parsed.origin();
+    origin.is_tuple().then(|| origin.ascii_serialization())
 }
 
 fn descriptor(shared: &Shared, provider: &str) -> ApiResult<ProviderDescriptor> {
@@ -180,11 +197,7 @@ pub async fn start(
                 let flow = shared.flows.granted(provider, grant, method, fields.clone())?;
                 return Ok(json!({ "flow": flow, "kind": "token" }));
             }
-            let shared_mode = crate::scope::shared_mode();
-            if let Some(port) = sign_in.0.callback_port().filter(|port| *port != shared.port && !shared_mode) {
-                crate::callback_port::open(shared, port).await?;
-            }
-            let authorization = sign_in.0.begin(http, shared.port).await?;
+            let authorization = redirected(shared, &sign_in).await?;
             let url = authorization.url.clone();
             let relay = crate::relay::for_connector(shared.port, &authorization.redirect_uri);
             let flow = opened(Waiting::Redirect { sign_in, authorization })?;
@@ -220,6 +233,46 @@ pub async fn start(
             let token = spec.access_token(fields, shared.language()).map_err(ApiError::bad)?;
             let flow = shared.flows.granted(provider, Grant::bearer(&token), method, spec.settings(fields))?;
             Ok(json!({ "flow": flow, "kind": "token" }))
+        }
+    }
+}
+
+fn here_only(language: Language) -> String {
+    language.pick(
+        "This sign-in hands the account to the app on this computer, so it does not work on a shared server. Use the token instead.",
+        "Este inicio de sesión entrega la cuenta a la app en esta computadora, así que no funciona en un servidor compartido. Usa el token.",
+        "Esta entrada entrega a conta ao app neste computador, então não funciona num servidor compartilhado. Use o token.",
+    )
+    .to_owned()
+}
+
+async fn redirected(shared: &crate::state::Ctx, sign_in: &Loopback) -> ApiResult<Authorization> {
+    let shared_mode = crate::scope::shared_mode();
+    if shared_mode && sign_in.0.listens() {
+        return Err(ApiError::bad(here_only(shared.language())));
+    }
+    let mut callback = None;
+    if let Some((from, to)) = sign_in.0.callback_ports().filter(|(from, _)| *from != shared.port && !shared_mode) {
+        callback = Some(crate::callback_port::open(shared, from, to).await?);
+    }
+    Ok(sign_in.0.begin_at(shared.backend.connectors.http(), shared.port, callback).await?)
+}
+
+pub async fn answered(shared: &Shared, id: &str, request: &Value) -> (u16, Value, bool) {
+    let Some(Flow { stage: Stage::Waiting(Waiting::Redirect { sign_in, authorization }), .. }) = shared.flows.get(id)
+    else {
+        return (410, Value::Null, false);
+    };
+    let http = shared.backend.connectors.http();
+    match sign_in.0.answer(http, &authorization, request, jiff::Timestamp::now()).await {
+        Ok(Answered { status, body, grant: Some(grant) }) => {
+            shared.flows.set(id, Stage::Granted(grant));
+            (status, body, true)
+        }
+        Ok(Answered { status, body, grant: None }) => (status, body, false),
+        Err(error) => {
+            shared.flows.set(id, Stage::Failed(error.message.clone()));
+            (400, json!(error.message), true)
         }
     }
 }

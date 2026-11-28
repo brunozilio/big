@@ -12,7 +12,7 @@ use axum::http::{Method, Request, StatusCode};
 use connectors::descriptor::object;
 use connectors::oauth::Dialect;
 use connectors::{
-    AccountOption, ActionError, ActionSpec, AlternateAuth, AuthSpec, Authorization, Connectors, Credentials, DeviceApp,
+    AccountOption, ActionError, ActionSpec, AlternateAuth, Answered, AuthSpec, Authorization, Connectors, Credentials, DeviceApp,
     FakeHttp, FixedClock, Grant, Http, Loopback, LoopbackSignIn, Provider, ProviderDescriptor, TokenField, TokenForm,
     TokenKeeper, TokenStore,
 };
@@ -233,6 +233,94 @@ impl LoopbackSignIn for WebSignIn {
     }
 }
 
+pub fn handoff_port() -> u16 {
+    static PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
+    *PORT.get_or_init(|| {
+        let free = std::net::TcpListener::bind(("127.0.0.1", 0)).expect("free port");
+        free.local_addr().expect("address").port()
+    })
+}
+
+pub const HANDOFF_ORIGIN: &str = "https://handoff.test";
+
+#[derive(Debug, Default)]
+pub struct HandoffSignIn;
+
+#[async_trait]
+impl LoopbackSignIn for HandoffSignIn {
+    fn name(&self) -> &str {
+        "handoff"
+    }
+
+    fn callback_port(&self) -> Option<u16> {
+        Some(handoff_port())
+    }
+
+    fn listens(&self) -> bool {
+        true
+    }
+
+    async fn begin(&self, _: &dyn Http, _: u16) -> Result<Authorization, ActionError> {
+        Err(ActionError::permanent("the handoff begins only on its own port"))
+    }
+
+    async fn begin_at(&self, _: &dyn Http, _: u16, callback: Option<u16>) -> Result<Authorization, ActionError> {
+        let port = callback.ok_or_else(|| ActionError::permanent("no port"))?;
+        Ok(Authorization {
+            url: format!("{HANDOFF_ORIGIN}/auth?port={port}"),
+            state: "h1".into(),
+            verifier: String::new(),
+            redirect_uri: String::new(),
+            carried: Value::Null,
+        })
+    }
+
+    async fn exchange(&self, _: &dyn Http, _: &Authorization, _: &str, _: jiff::Timestamp) -> Result<Grant, ActionError> {
+        Err(ActionError::auth("no code here"))
+    }
+
+    async fn answer(
+        &self,
+        _: &dyn Http,
+        _: &Authorization,
+        request: &Value,
+        _: jiff::Timestamp,
+    ) -> Result<Answered, ActionError> {
+        let token = request["body"]["token"].as_str();
+        Ok(match (request["method"].as_str(), token) {
+            (Some("POST"), Some(token)) => Answered { status: 200, body: json!("OK"), grant: Some(Grant::bearer(token)) },
+            _ => Answered { status: 200, body: json!({ "needsToken": true }), grant: None },
+        })
+    }
+
+    async fn refresh(&self, _: &dyn Http, grant: &Grant, _: jiff::Timestamp) -> Result<Grant, ActionError> {
+        Ok(grant.clone())
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct Handoff;
+
+#[async_trait]
+impl Provider for Handoff {
+    fn descriptor(&self) -> ProviderDescriptor {
+        let mut descriptor = Picky.descriptor();
+        descriptor.key = ProviderKey::from("handoff");
+        descriptor.name = "Handoff".into();
+        descriptor.auth = AuthSpec::Loopback(Loopback::new(HandoffSignIn));
+        descriptor
+    }
+
+    async fn call(&self, _: &dyn Http, _: &Credentials, _: &str, _: &Value, _: &str) -> Result<Value, ActionError> {
+        Ok(json!({}))
+    }
+
+    async fn accounts(&self, _: &dyn Http, creds: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
+        let label = format!("handoff:{}", creds.access_token);
+        Ok(vec![AccountOption { id: label.clone(), label, settings: json!({}) }])
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct Web;
 
@@ -352,8 +440,9 @@ impl World {
         let fake: &'static dyn Provider = provider;
         let picky: &'static dyn Provider = &Picky;
         let web: &'static dyn Provider = &Web;
+        let handoff: &'static dyn Provider = &Handoff;
         let sink = Arc::new(server::StoredSettings(Arc::clone(&store)));
-        let mut providers: Vec<Arc<dyn Provider>> = [fake, picky, web]
+        let mut providers: Vec<Arc<dyn Provider>> = [fake, picky, web, handoff]
             .into_iter()
             .map(|provider| Arc::new(connectors::providers::Shared(provider)) as Arc<dyn Provider>)
             .collect();

@@ -18,10 +18,12 @@ import {
   text,
   textOf,
   optionalField,
+  tokenAlternative,
   tokenField,
   unknownAction,
 } from "sdk/connectors/index.ts";
 import { binding, namesOf, options, quality, suggestBy } from "sdk/connectors/contracts.ts";
+import { signInWith } from "./login.ts";
 
 export const URL_SETTING = "url";
 export const ORGANIZATION = "organization";
@@ -65,7 +67,7 @@ export function isCloud(base: string, hosts: string | undefined): boolean {
   return (hosts ?? "").split(/\s+/).some((cloud) => cloud !== "" && (host === cloud || host.endsWith(`.${cloud}`)));
 }
 
-function fields(ctx: Ctx, language: Language) {
+function siteFields(ctx: Ctx, language: Language) {
   const url = settingField(
     URL_SETTING,
     pick(language, "SonarQube address", "Dirección de SonarQube", "Endereço do SonarQube"),
@@ -87,21 +89,27 @@ function fields(ctx: Ctx, language: Language) {
       "Deixe em branco no SonarQube Server, que não tem organizações.",
     ),
   ));
+  return [url, organization];
+}
+
+function fields(ctx: Ctx, language: Language) {
   const help = pick(
     language,
     "In SonarQube, open My Account › Security and generate a user token.",
     "En SonarQube, abre Mi cuenta › Seguridad y genera un token de usuario.",
     "No SonarQube, abra Minha conta › Segurança e gere um token de usuário.",
   );
-  return [url, organization, tokenField("token", "Token", help, true)];
+  return [...siteFields(ctx, language), tokenField("token", "Token", help, true)];
 }
 
-export function provider({ language }: { language?: Language }, ctx: Ctx) {
+export const signIn = signInWith(baseOf, siteFields);
+
+export function provider() {
   return {
     name: "SonarQube",
     logo: "logo.svg",
     capabilities: ["quality"],
-    auth: { kind: "token", fields: fields(ctx, language ?? "pt-BR"), form: "bearer" },
+    auth: { kind: "loopback" },
     actions: [...quality(), options("quality")],
   };
 }
@@ -116,6 +124,12 @@ export function presentation({ language }: { language: Language }) {
     hidden: false,
     bindings: [binding("quality", "repository", "SonarQube", { section: pick(language, "Quality and security", "Calidad y seguridad", "Qualidade e segurança"), order: 40, suggests: true })],
   };
+}
+
+export function alternatives({ language }: { language: Language }, ctx: Ctx) {
+  const way = pick(language, "Use a user token", "Usar un token de usuario", "Usar token de usuário");
+  const site = pick(language, "SonarQube", "de SonarQube", "do SonarQube");
+  return [tokenAlternative(language, "api_token", way, site, fields(ctx, language), "bearer")];
 }
 
 function apiOf(ctx: Ctx, creds: Creds): Api {

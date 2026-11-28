@@ -544,6 +544,46 @@ async fn a_connection_saved_without_its_choice_learns_the_only_one_and_a_sign_in
     assert_eq!(world.store.connections().expect("store").len(), 2, "nothing was saved without a choice");
 }
 
+async fn asked_on(port: u16, request: &str) -> String {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let mut stream = tokio::net::TcpStream::connect(("127.0.0.1", port)).await.expect("connect");
+    stream.write_all(request.as_bytes()).await.expect("write");
+    let mut answer = String::new();
+    stream.read_to_string(&mut answer).await.expect("read");
+    answer
+}
+
+fn request(method: &str, path: &str, origin: &str, body: &str) -> String {
+    let length = body.len();
+    format!(
+        "{method} {path} HTTP/1.1\r\nhost: 127.0.0.1\r\norigin: {origin}\r\ncontent-type: application/json\r\ncontent-length: {length}\r\nconnection: close\r\n\r\n{body}"
+    )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_page_hands_the_token_to_the_listening_port_only_from_the_origin_it_was_opened_on() {
+    let world = World::new().await;
+    let started = world.send(Method::POST, "/api/connections/handoff/start", Some(json!({ "fields": {} }))).await.1;
+    let port = support::handoff_port();
+    assert_eq!(started["url"], format!("{}/auth?port={port}", support::HANDOFF_ORIGIN), "{started}");
+    let flow = started["flow"].as_str().expect("flow").to_owned();
+    let origin = support::HANDOFF_ORIGIN;
+    let preflight = asked_on(port, &request("OPTIONS", "/api/token", origin, "")).await;
+    assert!(preflight.starts_with("HTTP/1.1 204"), "{preflight}");
+    assert!(preflight.contains(&format!("access-control-allow-origin: {origin}")), "{preflight}");
+    assert!(preflight.contains("access-control-allow-private-network: true"), "{preflight}");
+    let stranger = asked_on(port, &request("OPTIONS", "/api/token", "https://evil.test", "")).await;
+    assert!(stranger.starts_with("HTTP/1.1 403"), "{stranger}");
+    let status = asked_on(port, &request("GET", "/api/status", origin, "")).await;
+    assert!(status.starts_with("HTTP/1.1 200") && status.contains(r#"{"needsToken":true}"#), "{status}");
+    let pending = world.send(Method::POST, "/api/connections/device/poll", Some(json!({ "flow": flow }))).await.1;
+    assert_eq!(pending["state"], "pending", "{pending}");
+    let posted = asked_on(port, &request("POST", "/api/token", origin, r#"{"token":"squ_9"}"#)).await;
+    assert!(posted.starts_with("HTTP/1.1 200") && posted.ends_with("OK"), "{posted}");
+    let done = world.send(Method::POST, "/api/connections/device/poll", Some(json!({ "flow": flow }))).await.1;
+    assert_eq!((done["state"].clone(), done["connection"]["label"].clone()), (json!("done"), json!("handoff:squ_9")), "{done}");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_browser_comes_back_to_the_connections_screen_after_signing_in() {
     let world = World::new().await;

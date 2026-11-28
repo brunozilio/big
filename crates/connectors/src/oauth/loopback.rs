@@ -20,6 +20,20 @@ pub struct Authorization {
     pub carried: Value,
 }
 
+#[derive(Debug, Clone, PartialEq, serde::Deserialize)]
+pub struct Answered {
+    #[serde(default = "ok")]
+    pub status: u16,
+    #[serde(default)]
+    pub body: Value,
+    #[serde(default)]
+    pub grant: Option<Grant>,
+}
+
+const fn ok() -> u16 {
+    200
+}
+
 #[derive(Debug, Clone)]
 pub enum Proceeded {
     Granted(Grant),
@@ -32,6 +46,14 @@ pub trait LoopbackSignIn: Send + Sync + std::fmt::Debug {
 
     fn callback_port(&self) -> Option<u16> {
         None
+    }
+
+    fn callback_ports(&self) -> Option<(u16, u16)> {
+        self.callback_port().map(|port| (port, port))
+    }
+
+    fn listens(&self) -> bool {
+        false
     }
 
     fn fields(&self, _language: Language) -> Vec<TokenField> {
@@ -47,6 +69,20 @@ pub trait LoopbackSignIn: Send + Sync + std::fmt::Debug {
     }
 
     async fn begin(&self, http: &dyn Http, port: u16) -> Result<Authorization, ActionError>;
+
+    async fn begin_at(&self, http: &dyn Http, port: u16, _callback: Option<u16>) -> Result<Authorization, ActionError> {
+        self.begin(http, port).await
+    }
+
+    async fn answer(
+        &self,
+        _http: &dyn Http,
+        _authorization: &Authorization,
+        _request: &Value,
+        _now: Timestamp,
+    ) -> Result<Answered, ActionError> {
+        Err(ActionError::auth("this sign-in does not answer requests"))
+    }
 
     async fn exchange(
         &self,

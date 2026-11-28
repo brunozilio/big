@@ -345,6 +345,8 @@ memory_search = true
 [sonarqube]
 url = "https://sonarcloud.io"
 cloud = "sonarcloud.io sonarqube.us"
+loopback_from = "64120"
+loopback_to = "64130"
 
 [figma]
 host = "figma.com"
