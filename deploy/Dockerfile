@@ -11,8 +11,11 @@ ARG OVERLAY=deploy/shared.toml
 WORKDIR /src
 COPY . .
 COPY --from=web /src/web/dist web/dist
-ENV SKIP_WEB_BUILD=1 BRAND_OVERLAY=/src/${OVERLAY} CARGO_TARGET_DIR=/src/target/agents/image
-RUN cargo build --release -p cli --bin ${COMMAND} && cp target/agents/image/release/${COMMAND} /app
+ENV SKIP_WEB_BUILD=1 BRAND_OVERLAY=/src/${OVERLAY} CARGO_TARGET_DIR=/cache/target
+RUN --mount=type=cache,id=cargo-registry,target=/usr/local/cargo/registry \
+    --mount=type=cache,id=cargo-git,target=/usr/local/cargo/git \
+    --mount=type=cache,id=image-target,target=/cache/target \
+    cargo build --profile image -p cli --bin ${COMMAND} && cp /cache/target/image/${COMMAND} /app
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates git ripgrep bash curl \
