@@ -911,7 +911,12 @@
               "usage": null
             },
             {
-              "attrs": [],
+              "attrs": [
+                [
+                  "agent",
+                  "Explore"
+                ]
+              ],
               "context": null,
               "end_ms": 7200,
               "failed": false,

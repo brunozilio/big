@@ -5,6 +5,8 @@ use std::time::{Duration, Instant};
 
 use agent_engine::model::http::Http;
 use crossbeam_channel::{Receiver, Sender, TrySendError};
+use domain::redact::Redactor;
+use domain::trace::otlp::Capture;
 use domain::trace::runs::{Run, Status};
 use domain::{EngineEvent, SessionId};
 use platform::sync::Locked;
@@ -12,6 +14,7 @@ use platform::sync::Locked;
 const QUEUED_AT_MOST: usize = 256;
 const BATCH_WAIT: Duration = Duration::from_secs(2);
 const BATCH_MOST: usize = 64;
+const CAPTURED_AT_MOST: usize = 16_384;
 
 pub type Traced = Arc<dyn Fn(&Path, &SessionId) -> Result<Vec<Run>, String> + Send + Sync>;
 
@@ -36,6 +39,25 @@ impl Otlp {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Content {
+    pub redactor: Arc<Redactor>,
+    pub limit: usize,
+}
+
+impl Content {
+    pub fn from(on: &str, limit: &str, redactor: impl FnOnce() -> Arc<Redactor>) -> Option<Self> {
+        let limit = limit.trim().parse().unwrap_or(CAPTURED_AT_MOST);
+        (on.trim() == "true").then(|| Self { redactor: redactor(), limit })
+    }
+
+    fn capture(&self) -> Capture<'_> {
+        Capture { redactor: &self.redactor, limit: self.limit }
+    }
+}
+
+type Captured = Arc<Mutex<Option<Content>>>;
+
 #[derive(Debug)]
 struct Job {
     cwd: PathBuf,
@@ -46,6 +68,7 @@ struct Job {
 pub struct Exporter {
     jobs: Sender<Job>,
     said: Arc<Said>,
+    content: Captured,
 }
 
 impl std::fmt::Debug for Exporter {
@@ -75,15 +98,27 @@ impl Exporter {
     pub fn start(otlp: Otlp, traced: Traced, http: Arc<dyn Http>) -> Option<Self> {
         let (jobs, waiting) = crossbeam_channel::bounded(QUEUED_AT_MOST);
         let said = Arc::new(Said::default());
-        let worker = Worker { otlp, traced, http, said: Arc::clone(&said), exported: HashMap::new() };
+        let content = Captured::default();
+        let worker = Worker {
+            otlp,
+            traced,
+            http,
+            said: Arc::clone(&said),
+            content: Arc::clone(&content),
+            exported: HashMap::new(),
+        };
         let started = std::thread::Builder::new().name("otlp-export".into()).spawn(move || worker.serve(&waiting));
         match started {
-            Ok(_) => Some(Self { jobs, said }),
+            Ok(_) => Some(Self { jobs, said, content }),
             Err(error) => {
                 said.failed(&error.to_string());
                 None
             }
         }
+    }
+
+    pub fn capturing(&self, content: Option<Content>) {
+        *self.content.locked() = content;
     }
 
     pub fn finished(&self, cwd: &Path, session: &SessionId) {
@@ -129,6 +164,7 @@ struct Worker {
     traced: Traced,
     http: Arc<dyn Http>,
     said: Arc<Said>,
+    content: Captured,
     exported: HashMap<String, usize>,
 }
 
@@ -165,7 +201,9 @@ impl Worker {
     }
 
     fn send(&self, runs: &[Run]) {
-        let body = domain::trace::otlp::request(runs, env!("CARGO_PKG_VERSION")).to_string();
+        let content = self.content.locked().clone();
+        let capture = content.as_ref().map(Content::capture);
+        let body = domain::trace::otlp::request_with(runs, env!("CARGO_PKG_VERSION"), capture).to_string();
         match self.http.post(&self.otlp.url, &self.otlp.headers, &body) {
             Ok(answer) if (200..300).contains(&answer.status) => {}
             Ok(answer) => {

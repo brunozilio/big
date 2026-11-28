@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use domain::SessionId;
+use domain::trace::RunInfo;
 
 use super::equip::{MainAgent, Toolbox};
 use super::runtime::{Runtime, SessionWorktree};
@@ -26,6 +27,7 @@ pub(super) struct Framed {
 impl Job {
     pub(super) fn frame(&self, runtime: Runtime, brief: &Brief, session: &SessionId) -> Result<Framed, Stop> {
         let Runtime { mut workspace, mut toolbox, main, worktree } = runtime;
+        workspace.trace = Some(uuid::Uuid::new_v4().simple().to_string());
         let setup = &worktree.lease.setup;
         let environment = self.environment(&workspace, &toolbox, setup, brief, session);
         let style = self.request.session.output_style.as_deref().and_then(prompt::output_style::find);
@@ -77,7 +79,8 @@ impl Job {
             top_level: prompt::top_level(&workspace.cwd),
         });
         if let Some(recorder) = &self.recorder {
-            recorder.opened(self.run_info(&workspace.cwd, snapshot.git.as_ref()));
+            let run = self.run_info(&workspace.cwd, snapshot.git.as_ref());
+            recorder.opened(RunInfo { trace: workspace.trace.clone(), ..run });
         }
         let language_servers = workspace.services.lsp.as_ref();
         Environment {

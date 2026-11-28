@@ -95,13 +95,16 @@ impl Job {
     pub(super) fn run_info(&self, cwd: &std::path::Path, git: Option<&GitSnapshot>) -> RunInfo {
         RunInfo {
             model: self.request.session.model.id.clone(),
-            provider: format!("{:?}", self.request.session.model.provider),
+            provider: self.request.session.model.provider.id().to_owned(),
             permission: format!("{:?}", self.request.policy.permission),
             effort: format!("{:?}", self.request.session.effort),
             cwd: cwd.display().to_string(),
             branch: git.map(|git| git.branch.clone()),
             recent: git.map(|git| git.recent.clone()),
             status: git.map(|git| git.status.clone()),
+            trace: None,
+            agent: self.request.session.agent.as_ref().map(|agent| agent.name.clone()),
+            attribution: self.request.host.attribution.clone(),
         }
     }
 }

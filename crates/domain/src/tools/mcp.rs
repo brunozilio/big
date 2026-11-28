@@ -11,6 +11,21 @@ pub trait McpEndpoint: std::any::Any + Send + Sync {
 }
 
 pub const PROTOCOL_VERSION: &str = "2025-06-18";
+pub const TRACEPARENT: &str = "traceparent";
+
+fn meta_traceparent(message: &Value) -> Option<&str> {
+    message["params"]["_meta"][TRACEPARENT].as_str()
+}
+
+pub fn traceparent(message: &Value) -> Option<&str> {
+    let one = meta_traceparent;
+    let given = message.as_array().map_or_else(|| one(message), |all| all.iter().find_map(one))?;
+    let hex = |part: &str, length: usize| part.len() == length && part.bytes().all(|byte| byte.is_ascii_hexdigit());
+    let parts: Vec<&str> = given.split('-').collect();
+    let valid = matches!(parts.as_slice(), [version, trace, span, flags]
+        if hex(version, 2) && hex(trace, 32) && hex(span, 16) && hex(flags, 2));
+    valid.then_some(given)
+}
 
 pub fn browser_server() -> String {
     format!("{}_browser", brand::COMMAND.replace('-', "_"))

@@ -4,7 +4,7 @@ mod redactor;
 mod rules;
 mod scan;
 
-pub use assemble::{Problem, Severity, assemble, layer, shipped};
+pub use assemble::{Problem, Severity, assemble, layer, shipped, widened};
 pub use known::Known;
 pub use redactor::{ENTROPY, JWT, Redactor};
 pub use rules::{Entropy, Pattern, Prefix, Rules};
@@ -12,6 +12,7 @@ pub use scan::{ASSIGNMENT, KNOWN, LABEL, Redaction};
 
 pub const REDACTED: &str = "[redacted]";
 pub const FILE: &str = "safety/redaction.json";
+pub const PERSONAL_FILE: &str = "safety/personal.json";
 
 #[cfg(test)]
 pub(crate) fn testing() -> Redactor {

@@ -64,16 +64,29 @@ impl Policy {
     }
 }
 
-pub fn redactor() -> Arc<Redactor> {
-    let shipped = content::builtin_text(FILE);
-    let mine = content::user_text(content::folder().as_deref(), FILE);
-    let (redactor, problems) = domain::redact::assemble(shipped.as_deref(), mine.as_deref(), &[]);
+fn told(problems: Vec<domain::redact::Problem>) {
     for problem in problems {
         match problem.severity {
             Severity::Error => tracing::error!(%problem, "redaction rules"),
             Severity::Warning => tracing::warn!(%problem, "redaction rules"),
         }
     }
+}
+
+pub fn redactor() -> Arc<Redactor> {
+    let shipped = content::builtin_text(FILE);
+    let mine = content::user_text(content::folder().as_deref(), FILE);
+    let (redactor, problems) = domain::redact::assemble(shipped.as_deref(), mine.as_deref(), &[]);
+    told(problems);
+    Arc::new(redactor)
+}
+
+pub fn personal(base: &Redactor) -> Arc<Redactor> {
+    let file = domain::redact::PERSONAL_FILE;
+    let shipped = content::builtin_text(file);
+    let mine = content::user_text(content::folder().as_deref(), file);
+    let (redactor, problems) = domain::redact::widened(base, shipped.as_deref(), mine.as_deref());
+    told(problems);
     Arc::new(redactor)
 }
 

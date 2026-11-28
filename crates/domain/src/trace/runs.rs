@@ -134,6 +134,12 @@ pub struct Run {
     pub systems: BTreeMap<String, String>,
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     pub tools: BTreeMap<String, Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub trace: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    #[serde(skip_serializing_if = "crate::origin::Attribution::is_unset")]
+    pub attribution: crate::origin::Attribution,
 }
 
 impl Run {
@@ -219,6 +225,9 @@ fn summarize(
         messages: Vec::new(),
         systems: BTreeMap::new(),
         tools: BTreeMap::new(),
+        trace: info.as_ref().and_then(|info| info.trace.clone()),
+        agent: info.as_ref().and_then(|info| info.agent.clone()),
+        attribution: info.as_ref().map(|info| info.attribution.clone()).unwrap_or_default(),
     };
     let calls: Vec<Usage> = run.calls().map(|(_, usage)| usage.clone()).collect();
     run.cost_usd = cost.unwrap_or_else(|| dollars(calls.iter().map(|usage| usage.cost_usd))) + 0.0;

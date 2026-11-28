@@ -244,6 +244,7 @@ impl Spans {
         let id = self.add(parent, SpanKind::Agent, name, at, until);
         let span = self.span(id);
         (span.input, span.failed) = (agent.prompt.clone(), failed);
+        span.attrs = vec![("agent".into(), agent.name.clone())];
         self.lane(&agent.lane, id);
         let latest = self.list.iter().filter(|span| span.parent == id).map(|span| span.end_ms).max();
         let span = self.span(id);

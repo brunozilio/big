@@ -45,6 +45,12 @@ pub struct RunInfo {
     pub recent: Option<String>,
     #[serde(default)]
     pub status: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trace: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent: Option<String>,
+    #[serde(default, skip_serializing_if = "crate::origin::Attribution::is_unset")]
+    pub attribution: crate::origin::Attribution,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]

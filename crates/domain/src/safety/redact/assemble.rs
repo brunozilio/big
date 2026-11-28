@@ -65,3 +65,18 @@ pub fn assemble(shipped_text: Option<&str>, mine: Option<&str>, connectors: &[Ru
     problems.extend(left_out.into_iter().map(|text| Problem::warning(format!("a pattern was left out: {text}"))));
     (redactor, problems)
 }
+
+pub fn widened(base: &Redactor, shipped_text: Option<&str>, mine: Option<&str>) -> (Redactor, Vec<Problem>) {
+    let mut rules = base.rules().clone();
+    let mut problems = Vec::new();
+    for (whose, text) in [("shipped", shipped_text), ("user's", mine)] {
+        match text.map(layer) {
+            Some(Ok(added)) => rules.merge(&added),
+            Some(Err(error)) => problems.push(Problem::warning(format!("the {whose} rules do not load: {error}"))),
+            None => {}
+        }
+    }
+    let (redactor, left_out) = Redactor::compiled(rules);
+    problems.extend(left_out.into_iter().map(|text| Problem::warning(format!("a pattern was left out: {text}"))));
+    (redactor, problems)
+}

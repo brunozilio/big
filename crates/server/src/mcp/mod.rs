@@ -164,7 +164,10 @@ pub async fn post(State(ctx): State<Ctx>, headers: HeaderMap, body: Bytes) -> Re
         Ok(endpoint) => endpoint,
         Err((status, told)) => return refused(status, &told),
     };
-    let replied = tokio::task::spawn_blocking(move || answer(&endpoint, &message)).await.ok().flatten();
+    let traceparent = domain::mcp::traceparent(&message).unwrap_or_default().to_owned();
+    let span = tracing::info_span!("mcp.request", traceparent);
+    let replied =
+        tokio::task::spawn_blocking(move || span.in_scope(|| answer(&endpoint, &message))).await.ok().flatten();
     let mut response = match replied {
         Some(reply) => axum::Json(reply).into_response(),
         None => StatusCode::ACCEPTED.into_response(),

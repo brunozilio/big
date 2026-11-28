@@ -4,6 +4,7 @@ pub mod bank;
 pub mod bank_run;
 pub mod builtin;
 pub mod builtin_agents;
+pub mod calling;
 #[cfg(test)]
 mod builtin_skills;
 pub mod checked;
@@ -48,7 +49,7 @@ pub use llm_providers::web_search::WEB_SEARCH;
 pub(crate) use outside::settled;
 pub use workspace::{
     CodePointers, Launch, Launcher, Models, Network, OnThisMachine, Pointers, Policy, Starter, WebSearcher, Workspace,
-    env_secrets, redactor,
+    env_secrets, personal, redactor,
 };
 
 use crate::model::ToolSpec;

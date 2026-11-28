@@ -17,7 +17,7 @@ use std::sync::atomic::AtomicBool;
 
 pub use launcher::{Launch, Launcher, OnThisMachine};
 pub use models::Models;
-pub use policy::{Policy, env_secrets, redactor};
+pub use policy::{Policy, env_secrets, personal, redactor};
 pub use services::{CodePointers, Network, Pointers, Services, WebSearcher};
 pub use starter::Starter;
 pub(crate) use tracking::Tracking;
@@ -40,6 +40,7 @@ pub struct Workspace {
     pub observing: Option<domain::observer::Observing>,
     pub teammate: Option<crate::team::Me>,
     pub session_id: String,
+    pub trace: Option<String>,
     pub owner: Option<String>,
     pub rules: Vec<crate::prompt::rules::Rule>,
     pub anchored_memories: Vec<domain::Memory>,
@@ -70,6 +71,7 @@ impl Workspace {
             observing: None,
             teammate: None,
             session_id: uuid::Uuid::new_v4().to_string(),
+            trace: None,
             owner: None,
             rules: Vec::new(),
             anchored_memories: Vec::new(),
@@ -119,6 +121,7 @@ impl Workspace {
             observing: self.observing.as_ref().and_then(domain::observer::Observing::inherited),
             teammate: self.teammate.clone(),
             session_id: self.session_id.clone(),
+            trace: self.trace.clone(),
             owner: self.owner.clone(),
             rules: self.rules.clone(),
             anchored_memories: self.anchored_memories.clone(),

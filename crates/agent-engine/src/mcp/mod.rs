@@ -43,6 +43,7 @@ pub(crate) const MESSAGE_AT_MOST: usize = 16 * 1024 * 1024;
 pub type Listener = Arc<dyn Fn(&str, &Value) + Send + Sync>;
 
 pub const TOOLS_CHANGED: &str = "notifications/tools/list_changed";
+pub use domain::mcp::TRACEPARENT;
 
 #[derive(Debug, Default)]
 pub struct ToolsChanged(std::sync::atomic::AtomicBool);
@@ -302,11 +303,19 @@ impl McpServer {
         Err("MCP catalog exceeded the pagination limit".into())
     }
 
-    fn call(&self, name: &str, arguments: &Value, stop: &platform::Stop) -> Outcome {
+    fn call(&self, name: &str, arguments: &Value, stop: &platform::Stop, traceparent: Option<String>) -> Outcome {
         let arguments = if arguments.is_null() { json!({}) } else { arguments.clone() };
-        match self.transport.request_stopped(&json!({"jsonrpc":"2.0","id":self.next.fetch_add(1,Ordering::Relaxed),"method":"tools/call","params":{"name":name,"arguments":arguments}}),stop).and_then(|reply| {
-            if let Some(error)=reply.get("error") {Err(McpError::Failed(error["message"].as_str().unwrap_or("MCP call failed").to_owned()))} else {Ok(reply["result"].clone())}
-        }) {
+        let mut params = json!({ "name": name, "arguments": arguments });
+        if let Some(traceparent) = traceparent {
+            params["_meta"] = json!({ TRACEPARENT: traceparent });
+        }
+        let id = self.next.fetch_add(1, Ordering::Relaxed);
+        let message = json!({ "jsonrpc": "2.0", "id": id, "method": "tools/call", "params": params });
+        let answered = self.transport.request_stopped(&message, stop).and_then(|reply| match reply.get("error") {
+            Some(error) => Err(McpError::Failed(error["message"].as_str().unwrap_or("MCP call failed").to_owned())),
+            None => Ok(reply["result"].clone()),
+        });
+        match answered {
             Ok(result) => outcome(&result),
             Err(error) => Outcome::error(error.to_string()),
         }

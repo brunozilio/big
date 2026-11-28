@@ -198,6 +198,7 @@ fn a_conversation_opened_in_plan_mode_outside_any_item_stays_in_plan_mode() {
         branch: None,
         recent: None,
         status: None,
+        ..Default::default()
     };
     let opened = Shown::of(&[Record::Opened { at_ms: 1, run }]);
     assert_eq!(free_mode(None, &opened), Some(PermissionMode::Plan));

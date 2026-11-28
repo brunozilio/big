@@ -58,6 +58,9 @@ fn run(day: u64, index: usize, spans: Vec<Span>) -> Run {
         messages: Vec::new(),
         systems: std::collections::BTreeMap::new(),
         tools: std::collections::BTreeMap::new(),
+        trace: None,
+        agent: None,
+        attribution: Default::default(),
     }
 }
 

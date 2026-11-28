@@ -91,6 +91,7 @@ fn opening(start: u64) -> Vec<Record> {
         branch: Some("main".into()),
         recent: None,
         status: Some("M src/invoice.rs".into()),
+        ..Default::default()
     };
     let ask = AgentAsk { id: AskId("a1".into()), kind: AskKind::permission("Bash", "cargo test", true) };
     vec![

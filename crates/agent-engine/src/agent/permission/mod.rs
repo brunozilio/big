@@ -125,14 +125,15 @@ impl Agent<'_> {
 
     pub(in crate::agent) fn went_ahead(&self, id: &str, tool: &dyn Tool, input: &Value) -> Outcome {
         self.workspace.tracking.count_refusal(false);
+        let run = || crate::tools::calling::within(id, || tool.run(input, self.workspace));
         if !tool.effects(input, self.workspace).iter().any(Effect::acts) {
-            return tool.run(input, self.workspace);
+            return run();
         }
         let show = |line: String| {
             let line = self.workspace.policy.redacted(&line);
             (self.emit)(EngineEvent::ToolProgress { id: id.to_owned(), line });
         };
-        crate::tools::progress::watched(&show, || tool.run(input, self.workspace))
+        crate::tools::progress::watched(&show, run)
     }
 
     pub(in crate::agent) fn refused(&self, tool: &str, reason: impl Into<String>) -> Outcome {

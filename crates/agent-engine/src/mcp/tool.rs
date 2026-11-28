@@ -133,7 +133,7 @@ impl Tool for McpTool {
     }
 
     fn run(&self, input: &Value, workspace: &Workspace) -> Outcome {
-        self.server.call(&self.name, input, &workspace.stop)
+        self.server.call(&self.name, input, &workspace.stop, crate::tools::calling::traceparent(workspace))
     }
 
     fn kept(&self) -> Option<Arc<dyn Tool>> {

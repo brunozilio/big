@@ -78,6 +78,9 @@ fn run(session: &str, index: usize, status: Status) -> Run {
         messages: Vec::new(),
         systems: BTreeMap::new(),
         tools: BTreeMap::new(),
+        trace: None,
+        agent: None,
+        attribution: Default::default(),
     }
 }
 
@@ -196,4 +199,25 @@ fn a_watched_run_is_exported_under_the_session_it_started_or_resumed() {
     resumed.observe(&EngineEvent::Cancelled);
     let (sent, _) = collector.received.recv_timeout(WAIT).expect("export");
     assert!(sent.to_string().contains("\"old\"") && !sent.to_string().contains("no session"));
+}
+
+#[test]
+fn content_is_captured_only_when_the_config_turns_it_on_and_leaves_redacted() {
+    assert_eq!(brand::traces::CAPTURE_CONTENT, "false", "capture starts off");
+    let secrets = || Arc::new(domain::redact::Redactor::default());
+    assert!(Content::from(brand::traces::CAPTURE_CONTENT, brand::traces::CAPTURE_LIMIT, secrets).is_none());
+    let collector = collector(200);
+    let traced: Traced = Arc::new(|_: &Path, session: &SessionId| {
+        let mut said = run(&session.0, 0, Status::Ok);
+        said.spans[0].input = "call me at ana@example.com".into();
+        Ok(vec![said])
+    });
+    let exporter = Exporter::start(otlp(&collector.url), traced, Arc::new(NetHttp)).expect("exporter");
+    let personal = || agent_engine::tools::personal(&domain::redact::Redactor::default());
+    exporter.capturing(Content::from("true", "", personal));
+    exporter.finished(Path::new("/repo"), &SessionId("s".into()));
+    let (sent, _) = collector.received.recv_timeout(WAIT).expect("export");
+    let sent = sent.to_string();
+    assert!(sent.contains("gen_ai.input.messages") && sent.contains("call me at [redacted]"), "{sent}");
+    assert!(!sent.contains("ana@example.com"));
 }

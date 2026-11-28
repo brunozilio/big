@@ -44,6 +44,7 @@ fn an_http_server_s_tools_are_named_for_it_and_called_with_its_headers() {
         (202, String::new()),
         (200, listed(2)),
         (200, called.to_string()),
+        (200, called.to_string()),
     ]));
     let shared: Arc<dyn Http> = http.clone();
     let (_dir, request) = docs_request();
@@ -60,6 +61,14 @@ fn an_http_server_s_tools_are_named_for_it_and_called_with_its_headers() {
     assert!(sent.iter().all(|s| s.headers.contains(&("authorization".to_owned(), "Bearer t-1".to_owned()))));
     let call: Value = serde_json::from_str(&sent[3].body).expect("json");
     assert_eq!((call["method"].as_str(), call["params"]["name"].as_str()), (Some("tools/call"), Some("search")));
+    assert!(call["params"].get("_meta").is_none(), "a run without a trace sends no trace context");
+    let mut traced = Workspace::new("/repo");
+    traced.trace = Some("0af7651916cd43dd8448eb211c80319c".into());
+    crate::tools::calling::within("toolu_1", || tools[0].run(&input, &traced));
+    let call: Value = serde_json::from_str(&http.sent()[4].body).expect("json");
+    let span = domain::trace::otlp::call_span_id("0af7651916cd43dd8448eb211c80319c", "toolu_1");
+    let expected = format!("00-0af7651916cd43dd8448eb211c80319c-{span}-01");
+    assert_eq!(call["params"]["_meta"][super::TRACEPARENT].as_str(), Some(expected.as_str()));
 }
 
 #[test]
@@ -70,8 +79,8 @@ fn a_failed_call_and_an_unreachable_server_say_so() {
     let spec = servers(request.folder(), &super::McpSources::default()).remove(0);
     let server = McpServer::open(&spec, &http).expect("open");
     let stop = platform::Stop::new();
-    assert_eq!(server.call("search", &Value::Null, &stop), Outcome::error("no"));
-    assert!(server.call("search", &Value::Null, &stop).content.contains("HTTP 401"));
+    assert_eq!(server.call("search", &Value::Null, &stop, None), Outcome::error("no"));
+    assert!(server.call("search", &Value::Null, &stop, None).content.contains("HTTP 401"));
     let none: Arc<dyn Http> = Arc::new(ScriptedHttp::new([]));
     assert!(tools(&request, &none).is_empty(), "the run goes on without it");
 }

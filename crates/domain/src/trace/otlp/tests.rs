@@ -61,6 +61,9 @@ fn run(status: Status) -> Run {
         messages: Vec::new(),
         systems: BTreeMap::new(),
         tools: BTreeMap::new(),
+        trace: None,
+        agent: None,
+        attribution: Default::default(),
     }
 }
 
@@ -81,7 +84,8 @@ fn a_run_is_a_trace_whose_model_and_tool_calls_are_child_spans_with_their_figure
     assert!(spans.iter().all(|span| span["traceId"] == trace.as_str()));
 
     let (root, call, tool) = (&spans[0], &spans[1], &spans[2]);
-    assert_eq!(root["name"], "run");
+    assert_eq!(root["name"], "invoke_agent main");
+    assert_eq!(attribute(root, &own("span.name")), &json!({"stringValue": "run"}));
     assert!(root.get("parentSpanId").is_none());
     assert_eq!(call["parentSpanId"], root["spanId"]);
     assert_eq!(tool["parentSpanId"], root["spanId"]);

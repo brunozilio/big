@@ -326,6 +326,8 @@ retention_days = ""
 [traces]
 otlp_endpoint = ""
 otlp_headers = ""
+capture_content = false
+capture_limit = 16384
 
 [secrets]
 backend = "file"
