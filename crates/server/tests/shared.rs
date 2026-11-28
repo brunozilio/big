@@ -325,3 +325,13 @@ async fn a_signed_in_person_downloads_the_extension_package() {
     let bytes = response.into_body().collect().await.expect("body").to_bytes();
     assert!(bytes.starts_with(b"PK"));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_ai_sign_in_return_needs_a_session_and_an_open_sign_in() {
+    let world = shared_world().await;
+    let (status, _) = send(&world, None, Method::GET, "/oauth/loopback/1455/auth/callback?code=x", None).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    let ana = signed(&world, "ana");
+    let (status, _) = send(&world, Some(&ana), Method::GET, "/oauth/loopback/1455/auth/callback?code=x", None).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}

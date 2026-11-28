@@ -22,7 +22,7 @@ fn open(method: &Method, path: &str) -> bool {
 }
 
 fn guarded(path: &str) -> bool {
-    path.starts_with("/api/") || path == "/oauth/callback"
+    path.starts_with("/api/") || path == "/oauth/callback" || path.starts_with("/oauth/loopback/")
 }
 
 fn same_origin(request: &Request, origin: &str) -> bool {
@@ -84,6 +84,7 @@ mod tests {
         assert!(!guarded("/items/1"));
         assert!(guarded("/api/items"));
         assert!(guarded("/oauth/callback"));
+        assert!(guarded("/oauth/loopback/1455/auth/callback"));
         assert!(open(&Method::POST, "/api/auth/email"));
         assert!(open(&Method::GET, "/api/branding"));
         assert!(!open(&Method::PUT, "/api/branding"));
