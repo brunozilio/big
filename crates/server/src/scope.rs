@@ -5,7 +5,7 @@ use store::ownership::{APPLICATION, ATTACHMENT, CONNECTION, SESSION};
 
 use crate::auth::settings::{self, Mode};
 use crate::error::{ApiError, ApiResult, said};
-use crate::roles::{Grant, Grants, Roles};
+use crate::roles::Grant;
 use crate::state::Shared;
 
 pub fn shared_mode() -> bool {
@@ -58,39 +58,8 @@ pub fn admins() -> Vec<String> {
     all
 }
 
-pub fn roles() -> &'static Roles {
-    static ROLES: std::sync::OnceLock<Roles> = std::sync::OnceLock::new();
-    ROLES.get_or_init(Roles::configured)
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Standing {
-    pub roles: Vec<String>,
-    pub grants: Grants,
-}
-
-pub fn standing_from(roles: &Roles, listed_admin: bool, kept: &[String]) -> Standing {
-    let held = roles.held(listed_admin, kept);
-    let grants = if listed_admin { Grants::everything() } else { roles.grants(&held) };
-    Standing { roles: held, grants }
-}
-
-pub fn standing(shared: &Shared, person: &Principal) -> Standing {
-    if !shared_mode() {
-        return Standing { roles: roles().held(true, &[]), grants: Grants::everything() };
-    }
-    let kept = match shared.backend.store.roles_of(&person.user) {
-        Ok(held) => held.into_iter().map(|held| held.role).collect(),
-        Err(error) => {
-            tracing::warn!(%error, "the roles of a person could not be read");
-            Vec::new()
-        }
-    };
-    standing_from(roles(), admins().contains(&person.email), &kept)
-}
-
 pub fn is_admin(shared: &Shared, person: &Principal) -> bool {
-    !shared_mode() || standing(shared, person).grants.has(Grant::Admin)
+    !shared_mode() || crate::roles::standing(shared, person).grants.has(Grant::Admin)
 }
 
 pub fn item_owner(shared: &Shared, id: &str) -> ApiResult<Option<String>> {
@@ -150,9 +119,11 @@ fn needed(method: &Method, parts: &[&str]) -> Option<Grant> {
         ["api", "items" | "sessions", _, "open"] | ["api", "agents", _, "kill"] => Some(Grant::Admin),
         ["api", "admin", ..] => Some(Grant::Admin),
         ["api", "library", ..] => Some(Grant::Author),
-        ["api", "items" | "sessions" | "btw" | "connections" | "applications" | "attachments", ..] if changes => {
-            Some(Grant::Use)
-        }
+        [
+            "api",
+            "items" | "sessions" | "btw" | "connections" | "applications" | "attachments" | "inbox" | "browser",
+            ..,
+        ] if changes => Some(Grant::Use),
         _ => None,
     }
 }
@@ -184,7 +155,7 @@ pub fn check(shared: &Shared, person: &Principal, method: &Method, path: &str) -
     }
     let parts = segments(path);
     if let Some(grant) = needed(method, &parts)
-        && !standing(shared, person).grants.has(grant)
+        && !crate::roles::standing(shared, person).grants.has(grant)
     {
         return Err(refused(grant));
     }
@@ -211,6 +182,7 @@ pub fn live_filter(ctx: &crate::state::Ctx, owner: &str) -> crate::live::Allowed
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::roles::{Roles, Standing, standing_from};
 
     fn needs_admin(method: &Method, path: &str) -> bool {
         needed(method, &segments(path)) == Some(Grant::Admin)
@@ -303,5 +275,21 @@ mod tests {
         let standing = standing_from(&roles, false, &[]);
         assert!(allowed(&standing, Method::GET, "/api/items"));
         assert!(!allowed(&standing, Method::POST, "/api/items"));
+        assert!(allowed(&standing, Method::GET, "/api/inbox"));
+        assert!(!allowed(&standing, Method::POST, "/api/inbox/respond"));
+        assert!(!allowed(&standing, Method::POST, "/api/browser/pairing"));
+        assert!(!allowed(&standing, Method::DELETE, "/api/browser/devices/d-1"));
+        assert!(allowed(&standing, Method::GET, "/api/browser/devices"));
+        assert!(allowed(&standing, Method::PUT, "/api/branding"));
+        assert!(allowed(&standing, Method::PUT, "/api/onboarding"));
+    }
+
+    #[test]
+    fn the_inbox_and_the_own_browser_need_use_and_the_shared_browser_setting_needs_an_admin() {
+        assert_eq!(needed(&Method::POST, &segments("/api/inbox/respond")), Some(Grant::Use));
+        assert_eq!(needed(&Method::POST, &segments("/api/browser/pairing")), Some(Grant::Use));
+        assert_eq!(needed(&Method::DELETE, &segments("/api/browser/devices/d-1")), Some(Grant::Use));
+        assert_eq!(needed(&Method::PUT, &segments("/api/browser")), Some(Grant::Admin));
+        assert_eq!(needed(&Method::GET, &segments("/api/browser/extension.zip")), None);
     }
 }

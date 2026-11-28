@@ -64,7 +64,7 @@ async fn methods(State(ctx): State<Ctx>) -> ApiResult<Response> {
 async fn me(State(ctx): State<Ctx>, headers: HeaderMap) -> ApiResult<Response> {
     match session::person(&ctx, &headers)? {
         Some(person) => {
-            let standing = crate::scope::standing(&ctx, &person);
+            let standing = crate::roles::standing(&ctx, &person);
             let grants = standing.grants;
             let admin = grants.has(crate::roles::Grant::Admin);
             Ok(reply(json!({

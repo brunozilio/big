@@ -1,4 +1,7 @@
+use domain::principal::Principal;
 use serde_json::Value;
+
+use crate::state::Shared;
 
 pub const ASSIGNED: &str = "assigned";
 pub const SSO: &str = "sso";
@@ -153,6 +156,37 @@ impl Roles {
         }
         roles
     }
+}
+
+pub fn roles() -> &'static Roles {
+    static ROLES: std::sync::OnceLock<Roles> = std::sync::OnceLock::new();
+    ROLES.get_or_init(Roles::configured)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Standing {
+    pub roles: Vec<String>,
+    pub grants: Grants,
+}
+
+pub fn standing_from(roles: &Roles, listed_admin: bool, kept: &[String]) -> Standing {
+    let held = roles.held(listed_admin, kept);
+    let grants = if listed_admin { Grants::everything() } else { roles.grants(&held) };
+    Standing { roles: held, grants }
+}
+
+pub fn standing(shared: &Shared, person: &Principal) -> Standing {
+    if !crate::scope::shared_mode() {
+        return Standing { roles: roles().held(true, &[]), grants: Grants::everything() };
+    }
+    let kept = match shared.backend.store.roles_of(&person.user) {
+        Ok(held) => held.into_iter().map(|held| held.role).collect(),
+        Err(error) => {
+            tracing::warn!(%error, "the roles of a person could not be read");
+            Vec::new()
+        }
+    };
+    standing_from(roles(), crate::scope::admins().contains(&person.email), &kept)
 }
 
 #[cfg(test)]

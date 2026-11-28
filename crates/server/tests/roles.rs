@@ -111,3 +111,27 @@ async fn an_administrator_gives_a_declared_role_to_a_person() {
     let (status, _) = send(&world, &bia, Method::GET, "/api/library", None).await;
     assert_eq!(status, StatusCode::OK);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_role_without_use_answers_nothing_and_pairs_no_browser_but_keeps_its_own_look() {
+    let world = shared_world().await;
+    let eva = signed(&world, "eva", "eva@example.com");
+    world.store.set_roles(&UserId("u-eva".into()), "assigned", &["viewer".to_owned()]).expect("viewer");
+    let (_, me) = send(&world, &eva, Method::GET, "/api/auth/me", None).await;
+    assert_eq!(me["grants"], json!([]), "{me}");
+    let answer = json!({ "item": "i-1", "step": "review", "value": {} });
+    let (status, body) = send(&world, &eva, Method::POST, "/api/inbox/respond", Some(answer)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
+    assert_eq!(body["error"]["code"], "role_denied");
+    let (status, _) = send(&world, &eva, Method::POST, "/api/browser/pairing", Some(json!({}))).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = send(&world, &eva, Method::DELETE, "/api/browser/devices/d-1", None).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _) = send(&world, &eva, Method::GET, "/api/inbox", None).await;
+    assert_eq!(status, StatusCode::OK);
+    let (status, _) = send(&world, &eva, Method::PUT, "/api/branding", Some(json!({ "theme": "dark" }))).await;
+    assert_eq!(status, StatusCode::OK);
+    let rui = signed(&world, "rui", "rui@example.com");
+    let (status, body) = send(&world, &rui, Method::POST, "/api/browser/pairing", Some(json!({}))).await;
+    assert_ne!(status, StatusCode::FORBIDDEN, "{body}");
+}

@@ -128,7 +128,7 @@ async fn finish(shared: &Shared, code: &str, state: &str) -> ApiResult<(HeaderMa
         return Err(ApiError::bad(format!("{} is not allowed", domain_of(&person.email))));
     }
     let person = shared.backend.store.ensure_user(&person, settings::now())?;
-    let roles = crate::scope::roles().roles_in(&claims);
+    let roles = crate::roles::roles().roles_in(&claims);
     shared.backend.store.set_roles(&person.user, crate::roles::SSO, &roles)?;
     tracing::info!(target: "audit", user = %person.user, roles = %roles.join(","), "auth.sso_roles");
     Ok((session::signed_in(shared, &person)?, pending.next))
