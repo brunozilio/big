@@ -7,6 +7,7 @@ mod factory;
 mod flow;
 mod generic;
 mod kill;
+mod labels;
 mod links;
 mod overrun;
 mod package;
@@ -52,6 +53,7 @@ pub struct FakeProvider {
     errors: Mutex<HashMap<String, VecDeque<ActionError>>>,
     hangs: Mutex<HashMap<String, usize>>,
     answers: Mutex<HashMap<String, Value>>,
+    shaped: Mutex<HashMap<String, ActionSpec>>,
     pub calls: Mutex<Vec<(String, Value, String)>>,
 }
 
@@ -95,6 +97,10 @@ impl FakeProvider {
         self.answers.lock().expect("lock").insert(action.into(), value);
     }
 
+    pub fn shape(&self, spec: ActionSpec) {
+        self.shaped.lock().expect("lock").insert(spec.name.clone(), spec);
+    }
+
     pub fn count(&self, action: &str) -> usize {
         self.calls.lock().expect("lock").iter().filter(|(name, _, _)| name == action).count()
     }
@@ -129,7 +135,13 @@ impl Provider for FakeProvider {
                 start_fields: Vec::new(),
                 dialect: Dialect::Form,
             }),
-            actions: ACTIONS.iter().map(|name| ActionSpec::read(name, object(&[], &[]), json!({}), looked())).collect(),
+            actions: ACTIONS
+                .iter()
+                .map(|name| {
+                    let shaped = self.shaped.lock().expect("lock").get(*name).cloned();
+                    shaped.unwrap_or_else(|| ActionSpec::read(name, object(&[], &[]), json!({}), looked()))
+                })
+                .collect(),
         }
     }
 

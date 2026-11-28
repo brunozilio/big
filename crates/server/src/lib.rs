@@ -29,6 +29,7 @@ mod folders;
 mod item_usage;
 mod change_view;
 mod delivered_view;
+mod sensitivity_view;
 mod item_view;
 #[cfg(test)]
 mod view_fixtures;

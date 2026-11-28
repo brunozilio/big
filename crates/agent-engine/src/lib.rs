@@ -14,6 +14,7 @@ pub mod frontmatter;
 pub mod history;
 pub mod hooks;
 pub mod intercept;
+pub mod labels;
 pub use language_servers as lsp;
 pub mod limits;
 pub mod lsp_catalog;

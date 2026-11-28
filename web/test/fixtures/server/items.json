@@ -42,6 +42,7 @@
     "owner": "local",
     "recap": null,
     "running": [],
+    "sensitivity": null,
     "sources": [],
     "status": null,
     "steps": [

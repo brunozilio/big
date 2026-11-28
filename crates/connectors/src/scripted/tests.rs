@@ -11,6 +11,7 @@ mod datadog;
 mod figma;
 mod github;
 mod jira;
+mod labelled;
 mod mcp;
 mod microsoft;
 mod mock_changes;
@@ -132,7 +133,7 @@ export function provider() {
 export function call() { return null; }
 "#;
 
-fn installed(name: &str, source: &str) -> (tempfile::TempDir, Result<ScriptedProvider, String>) {
+pub fn installed(name: &str, source: &str) -> (tempfile::TempDir, Result<ScriptedProvider, String>) {
     let folder = tempfile::tempdir().expect("folder");
     let dir = folder.path().join(format!("connectors/{name}"));
     std::fs::create_dir_all(&dir).expect("dir");

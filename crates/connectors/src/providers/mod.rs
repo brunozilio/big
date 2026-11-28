@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use serde_json::Value;
+
 use crate::provider::Provider;
 
 pub fn all() -> Vec<Arc<dyn Provider>> {
@@ -64,6 +66,10 @@ impl Provider for Shared {
 
     fn secret_patterns(&self) -> domain::redact::Rules {
         self.0.secret_patterns()
+    }
+
+    fn labelled(&self, action: &str, result: &Value) -> Option<String> {
+        self.0.labelled(action, result)
     }
 }
 

@@ -188,8 +188,7 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
     let who = Who { owner: &owner, language, charged: &charged };
     match launch.command.kind.as_str() {
         AGENT => {
-            let effect =
-                AgentEffect {
+            let effect = AgentEffect {
                 shared,
                 item,
                 command: &launch.command,
@@ -209,8 +208,9 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
             call(who, &gated, &launch.command, &key).await
         }
         WAIT_POLL => {
-            Gated { shared, item: &state, key: &launch.key, owner: &owner }.check(&launch.command.call()).await?;
-            poll(shared, who, &launch.command, &key).await
+            let gated = Gated { shared, item: &state, key: &launch.key, owner: &owner };
+            gated.check(&launch.command.call()).await?;
+            poll(&gated, who, &launch.command, &key).await
         }
         STATUS | IMPEDIMENT => push(shared, &state, &launch.command, &launch.key).await,
         other => Err(Failure::permanent(format!("the kernel does not know the command {other}"))),
@@ -279,25 +279,29 @@ async fn call(who: Who<'_>, gated: &Gated<'_>, command: &Command, key: &str) -> 
         }
     }
     gated.check(&call).await?;
-    connector(shared, who, &call, key).await
+    labelled(shared, who, &call, key).await.map(|read| gated.read(read))
 }
 
 pub async fn connector(shared: &Shared, who: Who<'_>, call: &Call, key: &str) -> Result<Value, Failure> {
+    labelled(shared, who, call, key).await.map(|read| read.value)
+}
+
+async fn labelled(shared: &Shared, who: Who<'_>, call: &Call, key: &str) -> Result<connectors::Labelled, Failure> {
     let (connection, settings) = connection_of(shared, who.owner, call)?;
     let hub = &shared.config.connectors;
-    let called = hub.call_for(Some(who.charged), &connection, &settings, &call.action, &call.args, key);
+    let called = hub.call_labelled(Some(who.charged), &connection, &settings, &call.action, &call.args, key);
     called.await.map_err(|error| match error.blocker() {
         Some(reason) => Failure::Blocked(hub.told(&connection.provider, who.language, reason)),
         None => Failure::Class(error.class, error.message),
     })
 }
 
-async fn poll(shared: &Shared, who: Who<'_>, command: &Command, key: &str) -> Result<Value, Failure> {
+async fn poll(gated: &Gated<'_>, who: Who<'_>, command: &Command, key: &str) -> Result<Value, Failure> {
     let every = Duration::from_millis(command.args["every"].as_u64().unwrap_or(30_000).max(10));
     let until = &command.args["until"];
     loop {
-        let wait = match connector(shared, who, &command.call(), key).await {
-            Ok(value) if matches(until, &value) => return Ok(value),
+        let wait = match labelled(gated.shared, who, &command.call(), key).await {
+            Ok(read) if matches(until, &read.value) => return Ok(gated.read(read)),
             Ok(_) => every,
             Err(Failure::Class(ErrorClass::Permanent, message)) => return Err(Failure::permanent(message)),
             Err(Failure::Class(ErrorClass::Auth, message)) => return Err(Failure::Class(ErrorClass::Auth, message)),

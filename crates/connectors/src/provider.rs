@@ -124,6 +124,10 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
     fn secret_patterns(&self) -> domain::redact::Rules {
         domain::redact::Rules::default()
     }
+
+    fn labelled(&self, _action: &str, _result: &Value) -> Option<String> {
+        None
+    }
 }
 
 pub trait SettingsSink: Send + Sync + std::fmt::Debug {

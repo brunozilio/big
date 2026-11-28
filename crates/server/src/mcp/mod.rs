@@ -18,6 +18,7 @@ pub use resources::BROWSER;
 type Refusal = (StatusCode, String);
 
 mod connector;
+mod connector_flow;
 mod resources;
 
 pub fn route() -> &'static str {

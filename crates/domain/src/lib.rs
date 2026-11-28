@@ -23,7 +23,7 @@ pub use run::{
     affected, approval, budget, ceilings, changes, claims, engines, evals, events, factory_reset, failure, follow_through,
     git_offer, image, interception, observer, overrun, quota, request, review, session_run, stuck, task_board, team,
 };
-pub use safety::{operation, permission, redact, shell};
+pub use safety::{label, operation, permission, redact, shell};
 pub use session::{catalog, chat, conversation, repeats, usage};
 pub use tools::{
     agents, brief_edits, browser_sites, channel_relay, code_mode, executable, extensions, hooks, inbox, lsp, mcp,

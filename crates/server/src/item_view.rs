@@ -396,6 +396,7 @@ pub fn item(known: &Known<'_>, summary: &ItemSummary, item: Option<&WorkItem>) -
         "application": item.map(application).unwrap_or(Value::Null),
         "joinable": item.is_some_and(joinable),
         "running": item.map(WorkItem::running_agents).unwrap_or_default(),
+        "sensitivity": crate::sensitivity_view::sensitivity(item),
     })
 }
 

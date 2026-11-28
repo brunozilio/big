@@ -17,9 +17,9 @@ use crate::provider::{AccountOption, Credentials, EventBatch, Provider, Settings
 use crate::providers;
 
 #[derive(Debug)]
-struct Entry {
-    provider: Arc<dyn Provider>,
-    descriptor: ProviderDescriptor,
+pub(crate) struct Entry {
+    pub(crate) provider: Arc<dyn Provider>,
+    pub(crate) descriptor: ProviderDescriptor,
     alternatives: Vec<AlternateAuth>,
 }
 
@@ -151,7 +151,7 @@ impl Connectors {
         &self.limiter
     }
 
-    fn entry(&self, key: &ProviderKey) -> Result<&Entry, ActionError> {
+    pub(crate) fn entry(&self, key: &ProviderKey) -> Result<&Entry, ActionError> {
         self.entries
             .iter()
             .find(|entry| &entry.descriptor.key == key)

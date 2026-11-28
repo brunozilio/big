@@ -2,6 +2,7 @@ use base64::Engine;
 use base64::engine::general_purpose::STANDARD;
 use domain::Language;
 use domain::connection::{Capability, ProviderKey};
+use domain::label::Trust;
 use domain::operation::{Declaration, Permission, Profile, Visibility};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -42,6 +43,12 @@ pub struct ActionSpec {
     pub permission: Permission,
     #[serde(default, rename = "secretFields", skip_serializing_if = "Vec::is_empty")]
     pub secret_fields: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trust: Option<Trust>,
+    #[serde(default, rename = "outputLevel", skip_serializing_if = "Option::is_none")]
+    pub output_level: Option<String>,
+    #[serde(default, rename = "maxInputLevel", skip_serializing_if = "Option::is_none")]
+    pub max_input_level: Option<String>,
 }
 
 fn native() -> Idempotency {
@@ -64,6 +71,9 @@ impl ActionSpec {
             visibility: Visibility::Model,
             permission: Permission::default(),
             secret_fields: Vec::new(),
+            trust: None,
+            output_level: None,
+            max_input_level: None,
         }
     }
 
@@ -88,6 +98,9 @@ impl ActionSpec {
             visibility: Visibility::Model,
             permission: Permission::default(),
             secret_fields: Vec::new(),
+            trust: None,
+            output_level: None,
+            max_input_level: None,
         }
     }
 
@@ -108,6 +121,14 @@ impl ActionSpec {
             free_text: self.free_text.clone(),
             permission: self.permission,
         }
+    }
+
+    pub fn trusted(&self) -> Trust {
+        self.trust.unwrap_or(if self.profile.untrusted { Trust::External } else { Trust::System })
+    }
+
+    pub fn risky(&self) -> bool {
+        self.profile.acts() && (self.profile.strict() || self.permission.always_ask)
     }
 
     pub fn capability(&self) -> Option<Capability> {

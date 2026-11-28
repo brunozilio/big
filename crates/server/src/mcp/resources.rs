@@ -74,7 +74,7 @@ impl Asked<'_> {
                     connected = true;
                     let wanted =
                         super::connector::Wanted { provider: connector, actions, writes: *writes, connection: chosen };
-                    parts.extend(super::connector::local(self.ctx, &wanted, self.runtime.clone()));
+                    parts.extend(super::connector::local(self.ctx, &wanted, self.runtime.clone(), self.id));
                 }
             }
         }

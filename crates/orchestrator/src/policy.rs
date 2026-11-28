@@ -1,8 +1,12 @@
+use agent_engine::labels;
 use agent_engine::policy_gate::{self, Asked};
+use connectors::Labelled;
 use domain::effect::{Call, IdempotencyKey};
-use domain::permission::{Call as Judged, Effect, Layer, Surface, Verdict};
-use domain::workflow::WorkItem;
+use domain::label::{self, Levels, Mark, Sink};
+use domain::permission::{Call as Judged, Effect, Layer, Reason, Surface, Verdict};
+use domain::workflow::{WorkItem, WorkflowEvent};
 use domain::{AskId, AskKind, Decision};
+use serde_json::Value;
 
 use crate::agent::Failure;
 use crate::asking::Asking;
@@ -25,21 +29,54 @@ impl Gated<'_> {
         let server = domain::mcp::connectors_server();
         let tool = domain::mcp::served_name(&server, &domain::mcp::connector_tool(&connection.label, &call.action));
         let hub = &self.shared.config.connectors;
-        let declared = hub.descriptor(&connection.provider).ok().and_then(|descriptor| {
-            let action = descriptor.actions.iter().find(|action| action.name == call.action)?;
-            action.declaration().operation(&server, &call.args)
-        });
+        let descriptor = hub.descriptor(&connection.provider).ok();
+        let spec = descriptor.and_then(|descriptor| descriptor.action(&call.action));
+        let declared = spec.and_then(|action| action.declaration().operation(&server, &call.args));
         let effects: Vec<Effect> = declared.map(Effect::Operation).into_iter().collect();
         let asked = Asked { surface: surface_of(self.item), stage: &self.key.step, owner: self.owner };
         let subject = policy_gate::subject(&call.action, &call.args);
-        match policy_gate::decide(asked, &Judged { tool: &tool, subject: &subject, effects: &effects }) {
+        let verdict = match policy_gate::decide(asked, &Judged { tool: &tool, subject: &subject, effects: &effects }) {
+            Verdict::Allow => self.flow(asked, &tool, spec),
+            listed => listed,
+        };
+        match verdict {
             Verdict::Allow => Ok(()),
             Verdict::Deny(reason) => Err(Failure::permanent(policy_gate::refusal(&reason))),
+            Verdict::Ask { reason: Reason::Flow(why), .. } if asked.surface == Surface::Routine => {
+                let told = Reason::Flow(why).unattended(&tool);
+                policy_gate::blocked(asked, &tool, &told, Layer::Declared);
+                Err(Failure::permanent(policy_gate::refusal(&told)))
+            }
             Verdict::Ask { .. } if asked.surface == Surface::Routine => {
                 Err(Failure::permanent(policy_gate::unasked(asked, &tool)))
             }
+            Verdict::Ask { reason: Reason::Flow(why), .. } => {
+                self.approved(asked, &tool, &format!("{} {why}", call.action)).await
+            }
             Verdict::Ask { .. } => self.approved(asked, &tool, &call.action).await,
         }
+    }
+
+    fn flow(&self, asked: Asked<'_>, tool: &str, spec: Option<&connectors::ActionSpec>) -> Verdict {
+        let Some(spec) = spec else { return Verdict::Allow };
+        let levels = self.levels();
+        let mark = Mark::of(&levels, &label::reads(self.item));
+        let sink = Sink { ceiling: spec.max_input_level.as_deref(), risky: spec.risky() };
+        labels::flow(asked, tool, &levels, &mark, &sink)
+    }
+
+    fn levels(&self) -> Levels {
+        let resources = self.shared.resources_in(self.shared.home(&self.item.input).as_deref());
+        resources.find(labels::FILE).map(|found| labels::levels_of(&found.text)).unwrap_or_default()
+    }
+
+    pub fn read(&self, labelled: Labelled) -> Value {
+        let read = labels::classified(&self.levels(), labelled.read, &labelled.value);
+        let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data: read.progress() };
+        if let Err(error) = self.shared.append_open(&self.item.id, &[progress], || {}) {
+            tracing::warn!(%error, "what the call read could not be kept in the log");
+        }
+        labelled.value
     }
 
     async fn approved(&self, asked: Asked<'_>, tool: &str, subject: &str) -> Result<(), Failure> {

@@ -31,6 +31,7 @@ use crate::provider::{AccountOption, Credentials, EventBatch, EventSource, Exter
 
 pub const FOLDER: &str = "connectors/";
 pub const ENTRY: &str = "index.ts";
+const LABELS: &str = "labels";
 
 #[derive(Debug, Deserialize)]
 struct Declared {
@@ -75,6 +76,7 @@ pub struct ScriptedProvider {
     answers: Arc<dyn Answers>,
     sessions: Arc<McpSessions>,
     shown: Mutex<Vec<(String, Language, Value)>>,
+    labels: bool,
 }
 
 #[derive(Debug)]
@@ -168,6 +170,7 @@ impl ScriptedProvider {
         let declared: Declared = serde_json::from_value(declared).map_err(|error| format!("{entry}: {error}"))?;
         let key = if declared.key.is_empty() { named } else { declared.key.clone() };
         let polls = script.kind("poll") == "function";
+        let labels = script.kind(LABELS) == "function";
         let descriptor = ProviderDescriptor {
             key: ProviderKey::from(key.as_str()),
             name: declared.name,
@@ -196,6 +199,7 @@ impl ScriptedProvider {
             answers,
             sessions,
             shown: Mutex::default(),
+            labels,
         })
     }
 
@@ -355,6 +359,21 @@ impl Provider for ScriptedProvider {
                 |error| tracing::warn!(connector = self.key, %error, "the connector's secret patterns do not read"),
             )
             .unwrap_or_default()
+    }
+
+    fn labelled(&self, action: &str, result: &Value) -> Option<String> {
+        if !self.labels {
+            return None;
+        }
+        let input = json!({ "action": action, "result": result });
+        match self.script.invoke_here(LABELS, &input, Arc::new(Local)) {
+            Ok(Value::String(label)) => Some(label),
+            Ok(_) => None,
+            Err(error) => {
+                tracing::warn!(connector = self.key, action, error = error.message, "the connector's labels did not run");
+                None
+            }
+        }
     }
 }
 

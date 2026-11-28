@@ -10,6 +10,10 @@ export type Visibility = "model" | "host";
 
 export type Permission = { default: "ask" | "deny"; alwaysAsk: boolean };
 
+export type Trust = "user-authored" | "external" | "system";
+
+export type Labels = (read: { action: string; result: unknown }) => string | null | undefined;
+
 export type Profile = {
   effects: Effect[];
   risk: Risk;
@@ -20,6 +24,9 @@ export type Profile = {
   freeText?: string[];
   visibility?: Visibility;
   permission?: Permission;
+  trust?: Trust;
+  outputLevel?: string;
+  maxInputLevel?: string;
 };
 
 export type Action = {
@@ -98,22 +105,22 @@ const PROFILES: Record<string, Profile> = {
   "tests.projects": looks(),
   "security.status": looks(),
   "security.projects": looks(),
-  "security.findings": looks(false, true),
+  "security.findings": { ...looks(false, true), outputLevel: "confidential" },
   "mcp.tools": looks(true),
   "quality.report": looks(),
-  "email.list_messages": looks(true, true, ["pii"]),
-  "email.message": looks(true, true, ["pii"]),
-  "email.send": alters("high", false, { effects: ["send-external", "pii"], sensitive: true, recipients: ["to", "cc"], freeText: ["subject", "body"], permission: ALWAYS_ASK }),
-  "email.reply": alters("high", false, { effects: ["send-external", "pii"], sensitive: true, freeText: ["body"], permission: ALWAYS_ASK }),
-  "email.list_events": looks(true, true, ["pii"]),
-  "email.create_event": alters("medium", "compensate", { effects: ["write", "send-external", "pii"], sensitive: true, recipients: ["attendees"], freeText: ["subject", "body"] }),
+  "email.list_messages": { ...looks(true, true, ["pii"]), outputLevel: "internal" },
+  "email.message": { ...looks(true, true, ["pii"]), outputLevel: "internal" },
+  "email.send": alters("high", false, { effects: ["send-external", "pii"], sensitive: true, recipients: ["to", "cc"], freeText: ["subject", "body"], permission: ALWAYS_ASK, maxInputLevel: "internal" }),
+  "email.reply": alters("high", false, { effects: ["send-external", "pii"], sensitive: true, freeText: ["body"], permission: ALWAYS_ASK, maxInputLevel: "internal" }),
+  "email.list_events": { ...looks(true, true, ["pii"]), outputLevel: "internal" },
+  "email.create_event": alters("medium", "compensate", { effects: ["write", "send-external", "pii"], sensitive: true, recipients: ["attendees"], freeText: ["subject", "body"], maxInputLevel: "internal" }),
   "files.list": looks(false, true),
   "files.search": looks(true, true),
-  "files.download": looks(true, true),
+  "files.download": { ...looks(true, true), outputLevel: "confidential" },
   "files.sites": looks(),
   "messaging.list_chats": looks(false, true, ["pii"]),
-  "messaging.list_messages": looks(true, true, ["pii"]),
-  "messaging.send_message": alters("medium", "compensate", { recipients: ["chat"], freeText: ["text"] }),
+  "messaging.list_messages": { ...looks(true, true, ["pii"]), outputLevel: "internal" },
+  "messaging.send_message": alters("medium", "compensate", { recipients: ["chat"], freeText: ["text"], maxInputLevel: "internal" }),
   "design.frame": looks(true),
   "assistant.ask": { ...looks(true, false, ["consumes-budget"]), freeText: ["question", "context"] },
 };

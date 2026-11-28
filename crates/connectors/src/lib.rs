@@ -9,6 +9,7 @@ pub mod error;
 pub mod http;
 pub mod hub;
 pub mod idempotency;
+pub mod labelled;
 pub mod limiter;
 pub mod manifest;
 pub mod mcp;
@@ -29,6 +30,7 @@ pub use descriptor::{
 pub use error::{ActionError, ErrorClass};
 pub use http::{FakeHttp, Http, HttpRequest, HttpResponse, Method, Part, ReqwestHttp};
 pub use hub::Connectors;
+pub use labelled::Labelled;
 pub use limiter::RateLimiter;
 pub use oauth::{
     Answered, Authorization, DeviceApp, DeviceCode, DeviceSignIn, Grant, Loopback, LoopbackSignIn, MemoryTokenStore,
