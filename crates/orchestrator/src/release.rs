@@ -41,7 +41,7 @@ pub fn release(shared: &Arc<Shared>, item: &WorkItem) {
 }
 
 fn branches(item: &WorkItem, repo: &str) -> BTreeSet<String> {
-    [Some(git::head_of(item, repo)), git::lane(item), Some(git::branch_name(item.id.as_str()))]
+    [Some(git::head_of(item, repo)), crate::bindings::lane(item), Some(git::branch_name(item.id.as_str()))]
         .into_iter()
         .flatten()
         .collect()

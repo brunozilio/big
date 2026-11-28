@@ -43,7 +43,7 @@ fn text_at(value: &Value) -> Option<String> {
 }
 
 pub fn base_of(item: &WorkItem) -> Option<String> {
-    let given = crate::git::chosen(item).into_iter().find_map(|wanted| wanted.base);
+    let given = crate::bindings::chosen(item).into_iter().find_map(|wanted| wanted.base);
     given.or_else(|| {
         item.steps.iter().rev().find_map(|run| {
             text_at(&run.output["base"])

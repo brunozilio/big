@@ -120,7 +120,7 @@ pub async fn choose(shared: &Arc<Shared>, id: &ItemId, repository: &str, base: &
             }
         }
     }
-    shared.append(id, &[git::chosen_base(repository, base)])?;
+    shared.append(id, &[crate::bindings::chosen_base(repository, base)])?;
     let item = shared.item(id)?;
     if item.impediment.is_some() {
         shared.append(id, &[WorkflowEvent::ImpedimentSet { on: false, reason: None }])?;

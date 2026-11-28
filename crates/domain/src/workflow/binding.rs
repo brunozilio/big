@@ -11,6 +11,9 @@ pub struct Binding {
 }
 
 impl Binding {
+    pub const LANE: &'static str = "branch";
+    pub const BASE: &'static str = "base";
+
     pub fn new(connection: &str, kind: &str, value: Value) -> Self {
         Self { connection: connection.to_owned(), kind: kind.to_owned(), value }
     }

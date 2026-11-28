@@ -408,9 +408,9 @@ mod tests {
             "git": { "api": { "base": "develop" } },
         }));
         let mut chosen = domain::workflow::replay(&[
-            git::named_lane("big/x".into()),
-            git::chosen_base("api", "release/1".into()),
-            git::named_lane("big/y".into()),
+            crate::bindings::named_lane("big/x".into()),
+            crate::bindings::chosen_base("api", "release/1".into()),
+            crate::bindings::named_lane("big/y".into()),
         ]);
         chosen.id = given.id.clone();
         chosen.input = given.input;

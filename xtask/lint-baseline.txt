@@ -1,6 +1,108 @@
+dev-term crates/domain/src/knowledge/memory/check.rs: git: sent for review. Read them with `git diff {base}` (and `git status` for new files). Do not change any \
+dev-term crates/domain/src/knowledge/memory/optimize.rs: merged: - Merge memories that say the same thing: revise one to hold the merged text and forget the others.\n\
+dev-term crates/domain/src/lib.rs: git: git_offer, image, interception, observer, overrun, quota, request, review, session_run, stuck, task_board, team,
+dev-term crates/domain/src/run/events.rs: branched: Branched {
+dev-term crates/domain/src/run/git_offer.rs: git: "Runs git init with an empty first commit, so changes can be reviewed, undone and isolated in worktrees",
+dev-term crates/domain/src/run/git_offer.rs: git: "Yes, initialize git",
+dev-term crates/domain/src/run/git_offer.rs: git: header: "Git".into(),
+dev-term crates/domain/src/run/git_offer.rs: git: pub const ASK: &str = "git-offer";
+dev-term crates/domain/src/run/git_offer.rs: git: text: "This folder is not a git repository. Initialize one here?".into(),
+dev-term crates/domain/src/run/mod.rs: git: pub mod git_offer;
+dev-term crates/domain/src/safety/permission/allowed.rs: git: "git blame",
+dev-term crates/domain/src/safety/permission/allowed.rs: git: "git diff",
+dev-term crates/domain/src/safety/permission/allowed.rs: git: "git log",
+dev-term crates/domain/src/safety/permission/allowed.rs: git: "git ls-files",
+dev-term crates/domain/src/safety/permission/allowed.rs: git: "git rev-parse",
+dev-term crates/domain/src/safety/permission/allowed.rs: git: "git show",
+dev-term crates/domain/src/safety/permission/allowed.rs: git: "git status",
+dev-term crates/domain/src/safety/permission/context.rs: git: Protected { name: ".git".to_owned(), guard: Guard::GitFolder },
+dev-term crates/domain/src/safety/permission/suggested.rs: git: "git",
+dev-term crates/domain/src/safety/permission/verdict.rs: git: "This writes inside the repository's .git folder, where hooks and configuration can run commands:"
+dev-term crates/domain/src/safety/permission/verdict.rs: git: GitFolder,
+dev-term crates/domain/src/safety/permission/verdict.rs: git: Self::GitFolder => {
+dev-term crates/domain/src/session/conversation/mod.rs: branched: Branched,
+dev-term crates/domain/src/tools/output/filters/mod.rs: git: const FILTERS: [Filter; 5] = [rust::CARGO, git::GIT, js::JS, python::PYTHON, go::GO_TEST];
+dev-term crates/domain/src/tools/output/filters/mod.rs: git: mod git;
+dev-term crates/domain/src/tools/output/filters/rust.rs: git: "Updating git repository",
+dev-term crates/domain/src/trace/runs/spans.rs: git: ("git status", info.status.as_ref()),
+dev-term crates/orchestrator/src/agent.rs: git: .map_err(|error| match git::missing_base(&error) {
+dev-term crates/orchestrator/src/agent.rs: git: blocking(move || places.iter().map(|place| git::head(place)).collect()).await
+dev-term crates/orchestrator/src/agent.rs: git: git::push(place, branch);
+dev-term crates/orchestrator/src/agent.rs: git: let base = git::base_of(&state, &checkout.id);
+dev-term crates/orchestrator/src/agent.rs: git: let branch = chosen.map_or_else(|| git::head_of(&state, &checkout.id), str::to_owned);
+dev-term crates/orchestrator/src/agent.rs: git: let copy = blocking(move || git::detached(&repo, &data, &named)).await?.map_err(|error| {
+dev-term crates/orchestrator/src/agent.rs: git: let path = blocking(move || git::worktree(repo.as_deref(), &data, &named, base.as_deref(), &folder))
+dev-term crates/orchestrator/src/agent.rs: git: let usual = checkouts.first().map_or_else(|| git::head_of(&state, ""), |first| git::head_of(&state, &first.id));
+dev-term crates/orchestrator/src/agent.rs: git: use crate::git;
+dev-term crates/orchestrator/src/api.rs: pull request: "code" => "pull_request",
+dev-term crates/orchestrator/src/application.rs: git: let mine = |repository: &&Repository| name.ends_with(&format!("--{}", crate::git::folder_for(&repository.id)));
+dev-term crates/orchestrator/src/bases.rs: git: .filter(|folder| git::is_repo(folder))
+dev-term crates/orchestrator/src/bases.rs: git: Err(std::io::Error::other(git::MissingBase(from.to_owned())))
+dev-term crates/orchestrator/src/bases.rs: git: git::attempt(repo, &["branch", "--no-track", base, &start])?;
+dev-term crates/orchestrator/src/bases.rs: git: git::attempt(repo, &["check-ref-format", "--branch", base])?;
+dev-term crates/orchestrator/src/bases.rs: git: git::attempt(repo, &["push", "--quiet", "origin", &format!("refs/heads/{base}:refs/heads/{base}")])?;
+dev-term crates/orchestrator/src/bases.rs: git: git::run(repo, &["fetch", "--quiet", "origin"]);
+dev-term crates/orchestrator/src/bases.rs: git: if !git::exists(repo, &format!("refs/heads/{base}")) {
+dev-term crates/orchestrator/src/bases.rs: git: if git::exists(repo, &local) {
+dev-term crates/orchestrator/src/bases.rs: git: if remote && !git::exists(repo, &format!("refs/remotes/origin/{base}")) {
+dev-term crates/orchestrator/src/bases.rs: git: if remote && git::exists(repo, &tracked) {
+dev-term crates/orchestrator/src/bases.rs: git: let current = || git::run(repo, &["symbolic-ref", "--quiet", "--short", "HEAD"]).filter(|name| !own(name));
+dev-term crates/orchestrator/src/bases.rs: git: let found = git::run(repo, &refs).unwrap_or_default();
+dev-term crates/orchestrator/src/bases.rs: git: let remote = git::default_branch(repo).and_then(|name| name.strip_prefix("origin/").map(str::to_owned));
+dev-term crates/orchestrator/src/bases.rs: git: let remote = git::origin(repo).is_some();
+dev-term crates/orchestrator/src/bases.rs: git: use crate::git;
+dev-term crates/orchestrator/src/bindings.rs: git: let given = item.input["git"].as_object().into_iter().flat_map(|all| all.keys().cloned());
+dev-term crates/orchestrator/src/bindings.rs: git: let text = item.input["git"][repo][name].as_str().map(str::trim)?;
+dev-term crates/orchestrator/src/branches.rs: git: if !input["git"].is_object() {
+dev-term crates/orchestrator/src/branches.rs: git: if !input["git"][key].is_object() {
+dev-term crates/orchestrator/src/branches.rs: git: if !input["git"][key]["promote"].is_array()
+dev-term crates/orchestrator/src/branches.rs: git: if text(&input["git"][key][name]).is_none()
+dev-term crates/orchestrator/src/branches.rs: git: input["git"] = json!({});
+dev-term crates/orchestrator/src/branches.rs: git: input["git"][key] = json!({});
+dev-term crates/orchestrator/src/branches.rs: git: input["git"][key]["promote"] = steps.clone();
+dev-term crates/orchestrator/src/branches.rs: git: input["git"][key][name] = json!(value);
+dev-term crates/orchestrator/src/editor.rs: git: let tree = data.join("worktrees").join(repos::folder(&git::head_of(item, &checkout.id), &checkout.id));
+dev-term crates/orchestrator/src/editor.rs: git: let workspace = data.join("workspaces").join(git::folder_for(item.id.as_str()));
+dev-term crates/orchestrator/src/editor.rs: git: use crate::git;
+dev-term crates/orchestrator/src/effects.rs: git: let (branch, base) = (git::head_of(item, &checkout.id), git::base_of(item, &checkout.id));
+dev-term crates/orchestrator/src/effects.rs: git: use crate::git;
+dev-term crates/orchestrator/src/kept_blocks.rs: pr: const RETIRED_REF: &str = "pr";
+dev-term crates/orchestrator/src/lib.rs: git: mod git;
+dev-term crates/orchestrator/src/lib.rs: git: pub use git::{is_repo, origin};
+dev-term crates/orchestrator/src/links.rs: git: crate::git::base_of(item, repo).or_else(|| fallback.clone()).is_some_and(|base| base == lane)
+dev-term crates/orchestrator/src/links.rs: git: item.input["git"].as_object().into_iter().flatten().any(|(repo, entry)| {
+dev-term crates/orchestrator/src/links.rs: pr: .or_else(|| run.output["prs"].as_array().and_then(|prs| prs.iter().find_map(|pr| text_at(&pr["base"]))))
+dev-term crates/orchestrator/src/links.rs: prs: .or_else(|| run.output["prs"].as_array().and_then(|prs| prs.iter().find_map(|pr| text_at(&pr["base"]))))
+dev-term crates/orchestrator/src/matching.rs: merged: if let (Some(fields), Some(top)) = (merged.as_object_mut(), event.as_object()) {
+dev-term crates/orchestrator/src/matching.rs: merged: let mut merged =
+dev-term crates/orchestrator/src/matching.rs: merged: matches(filter, &merged) || matches(filter, event)
+dev-term crates/orchestrator/src/naming.rs: pull request: issue || sources.iter().any(|source| matches!(source["kind"].as_str(), Some("issue" | "pull_request" | "schedule")))
+dev-term crates/orchestrator/src/provenance.rs: git: git[name] = json!(branch);
+dev-term crates/orchestrator/src/provenance.rs: git: if git.as_object().is_some_and(|fields| !fields.is_empty()) {
+dev-term crates/orchestrator/src/provenance.rs: git: input["git"] = json!({ repository: git });
+dev-term crates/orchestrator/src/provenance.rs: git: let mut git = json!({});
+dev-term crates/orchestrator/src/release.rs: git: [Some(git::head_of(item, repo)), crate::bindings::lane(item), Some(git::branch_name(item.id.as_str()))]
+dev-term crates/orchestrator/src/release.rs: git: git::prune_worktrees(&repo);
+dev-term crates/orchestrator/src/release.rs: git: if let Err(error) = git::remove_worktree(&place.repo, &place.path) {
+dev-term crates/orchestrator/src/release.rs: git: use crate::git;
+dev-term crates/orchestrator/src/repos.rs: git: format!("{}--{}", git::folder_for(branch), git::folder_for(id))
+dev-term crates/orchestrator/src/repos.rs: git: git::folder_for(branch)
+dev-term crates/orchestrator/src/repos.rs: git: use crate::git;
+dev-term crates/orchestrator/src/rewind.rs: git: let _ = tokio::task::spawn_blocking(move || git::restore(&place, &base)).await;
+dev-term crates/orchestrator/src/rewind.rs: git: use crate::git;
+dev-term crates/orchestrator/src/views.rs: git: fields.insert("git".into(), heads(item));
+dev-term crates/orchestrator/src/views.rs: git: let mut pair = item.input["git"][&id].as_object().cloned().unwrap_or_default();
+dev-term crates/orchestrator/src/views.rs: git: pair.insert("base".into(), json!(git::base_of(item, &id)));
+dev-term crates/orchestrator/src/views.rs: git: pair.insert("head".into(), json!(git::head_of(item, &id)));
+dev-term crates/orchestrator/src/views.rs: git: repositories(item).first().map_or_else(|| git::head_of(item, ""), |first| git::head_of(item, first))
+dev-term crates/orchestrator/src/views.rs: git: use crate::git;
+dev-term crates/orchestrator/src/views.rs: merged: fn merged(mut spans: Vec<(i64, i64)>) -> Vec<(i64, i64)> {
+dev-term crates/orchestrator/src/views.rs: merged: let busy = merged(
+dev-term crates/orchestrator/src/views.rs: merged: let paused = merged(
 dev-term crates/server/src/calls.rs: merged: Some("merged") => "merged",
 dev-term crates/server/src/calls.rs: pr: let args = json!({ "pr": raw });
-dev-term crates/server/src/calls.rs: pull_request: let pull = caller.call(code::PULL_REQUEST, args.clone()).await?;
+dev-term crates/server/src/calls.rs: pull request: let pull = caller.call(code::PULL_REQUEST, args.clone()).await?;
+dev-term crates/server/src/calls.rs: pull requests: "code.pulls" => Ok(pulls(&caller.call(code::PULL_REQUESTS, json!({ "repo": arg(args, "repo")? })).await?)),
 dev-term crates/server/src/change_view.rs: merged: value["merged"] = json!(false);
 dev-term crates/server/src/change_view.rs: merged: value["merged"] = json!(found.done);
 dev-term crates/server/src/folders.rs: git: dir.join(".git").exists()
@@ -28,21 +130,25 @@ dev-term crates/server/src/items.rs: pull request: "Describe el ítem o elige un
 dev-term crates/server/src/items.rs: pull request: "Describe the item or choose a source: issue, pull request or branch.",
 dev-term crates/server/src/items.rs: pull request: "La cuenta del pull request ya no está conectada.",
 dev-term crates/server/src/items.rs: pull request: "The pull request account is no longer connected.",
+dev-term crates/server/src/items.rs: pull request: Some(PULL_REQUEST) => self.pull(shared, applications, at).await?,
+dev-term crates/server/src/items.rs: pull request: const KINDS: [&str; 3] = [PULL_REQUEST, ISSUE, BRANCH];
+dev-term crates/server/src/items.rs: pull request: const PULL_REQUEST: &str = "pull_request";
 dev-term crates/server/src/items.rs: pull request: format!("Could not read pull request {subject}: {}", error.shown()),
 dev-term crates/server/src/items.rs: pull request: format!("El pull request {subject} no dice de qué repositorio es."),
 dev-term crates/server/src/items.rs: pull request: format!("No pude leer el pull request {subject}: {}", error.shown()),
 dev-term crates/server/src/items.rs: pull request: format!("Não consegui ler o pull request {subject}: {}", error.shown()),
 dev-term crates/server/src/items.rs: pull request: format!("O pull request {subject} não diz de qual repositório é."),
 dev-term crates/server/src/items.rs: pull request: format!("Pull request {subject} does not say which repository it is from."),
-dev-term crates/server/src/items.rs: pull_request: Some(PULL_REQUEST) => self.pull(shared, applications, at).await?,
-dev-term crates/server/src/items.rs: pull_request: const KINDS: [&str; 3] = [PULL_REQUEST, ISSUE, BRANCH];
-dev-term crates/server/src/items.rs: pull_request: const PULL_REQUEST: &str = "pull_request";
-dev-term crates/server/src/items.rs: pull_request: let found = hub.call(&connection(record), &record.settings, code::PULL_REQUEST, &args, &key).await;
+dev-term crates/server/src/items.rs: pull request: let found = hub.call(&connection(record), &record.settings, code::PULL_REQUEST, &args, &key).await;
+dev-term crates/server/src/lib.rs: git: pub use workspaces::HELPER_COMMAND as GIT_CREDENTIAL_COMMAND;
 dev-term crates/server/src/workspaces.rs: git: if !folder.join(".git").exists() {
+dev-term crates/server/src/workspaces.rs: git: let (owner, connection) = ctx.backend.store.git_token(&token)?.ok_or_else(missing)?;
+dev-term crates/server/src/workspaces.rs: git: let found = crate::calls::run(&ctx, &record, code::GIT_CREDENTIALS, &json!({ "url": url })).await?;
 dev-term crates/server/src/workspaces.rs: git: let kept = platform::git::command(folder).args(["config", "credential.helper", helper]).output();
 dev-term crates/server/src/workspaces.rs: git: let mut command = platform::git::command(parent);
 dev-term crates/server/src/workspaces.rs: git: pub const CREDENTIALS_PATH: &str = "/api/git/credentials/";
 dev-term crates/server/src/workspaces.rs: git: pub const HELPER_COMMAND: &str = "git-credential";
+dev-term crates/server/src/workspaces.rs: git: shared.backend.store.put_git_token(&token, owner, connection)?;
 provider-name crates/agent-engine/src/fake.rs: claude: let models = vec![ModelOption::new("claude-opus-5-5", "Opus 5.5")];
 provider-name crates/agent-engine/src/tools/builtin_skills.rs: claude: for other in ["Claude", "Anthropic", "claude.ai"] {
 provider-name crates/domain/src/safety/permission/suggested.rs: aws: "aws",

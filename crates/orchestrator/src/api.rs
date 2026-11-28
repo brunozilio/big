@@ -249,7 +249,7 @@ impl Orchestrator {
             }
             (None, None) => json!([]),
         };
-        let blocks = crate::kept_blocks::upgraded(&blocks);
+        let blocks = crate::kept_blocks::upgraded(&blocks, id.as_str(), step);
         Ok(StepView {
             item: id.clone(),
             step: step.to_owned(),

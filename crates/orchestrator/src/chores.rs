@@ -165,11 +165,11 @@ pub fn ensure_branch(shared: &Shared, item: &WorkItem, current: &str) -> WorkIte
         .effects
         .iter()
         .any(|(key, entry)| key != current && matches!(entry.request.effect, Effect::AgentRun { .. }));
-    if crate::git::lane(item).is_some() || started {
+    if crate::bindings::lane(item).is_some() || started {
         return item.clone();
     }
     let Some(name) = branch_for(item) else { return item.clone() };
-    shared.append(&item.id, &[crate::git::named_lane(name)]).unwrap_or_else(|error| {
+    shared.append(&item.id, &[crate::bindings::named_lane(name)]).unwrap_or_else(|error| {
         tracing::warn!(%error, "the item's branch name could not be kept");
         item.clone()
     })

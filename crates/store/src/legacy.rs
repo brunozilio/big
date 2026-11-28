@@ -1,8 +1,8 @@
-use domain::workflow::{WorkItem, WorkflowEvent};
+use domain::workflow::{Binding, WorkItem, WorkflowEvent};
 use serde_json::{Value, json};
 
-const ITEM_LANE: &str = "branch";
-const BASE: &str = "base";
+const ITEM_LANE: &str = Binding::LANE;
+const BASE: &str = Binding::BASE;
 
 pub(crate) fn event(text: &str) -> serde_json::Result<Option<WorkflowEvent>> {
     let value: Value = serde_json::from_str(text)?;
@@ -37,8 +37,6 @@ pub(crate) fn item(text: &str) -> serde_json::Result<WorkItem> {
 
 #[cfg(test)]
 mod tests {
-    use domain::workflow::Binding;
-
     use super::*;
 
     #[test]

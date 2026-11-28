@@ -79,7 +79,8 @@ async fn an_agent_resumed_after_its_branch_got_a_name_keeps_the_folder_its_sessi
     let body = "const r = await ctx.agent(\"worker\", \"faça\", { worktree: ctx.item.branch }); return ctx.pass({ session: r.session });";
     world.workflow("agent", &single("agent", body));
     let started = |item: &WorkItem| {
-        crate::git::lane(item).is_some() && item.effects.values().any(|entry| entry.progress["session"].is_string())
+        crate::bindings::lane(item).is_some()
+            && item.effects.values().any(|entry| entry.progress["session"].is_string())
     };
     let (kernel, id) = interrupted(&world, "agent", started).await;
     ended(&kernel, &id).await;

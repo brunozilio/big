@@ -113,10 +113,6 @@ pub enum WorkflowEvent {
 const RETIRED: &[&str] = &["heads_up"];
 
 impl WorkflowEvent {
-    pub fn read(text: &str) -> serde_json::Result<Option<Self>> {
-        Self::decoded(serde_json::from_str(text)?)
-    }
-
     pub fn decoded(value: Value) -> serde_json::Result<Option<Self>> {
         if value["type"].as_str().is_some_and(|kind| RETIRED.contains(&kind)) {
             return Ok(None);
