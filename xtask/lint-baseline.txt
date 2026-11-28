@@ -1,9 +1,6 @@
 provider-name crates/agent-engine/src/fake.rs: claude: let models = vec![ModelOption::new("claude-opus-5-5", "Opus 5.5")];
 provider-name crates/agent-engine/src/tools/builtin_skills.rs: claude: for other in ["Claude", "Anthropic", "claude.ai"] {
 provider-name crates/domain/src/safety/permission/suggested.rs: aws: "aws",
-provider-name crates/domain/src/safety/redact.rs: aws: fn is_aws_key(word: &str) -> bool {
-provider-name crates/domain/src/safety/redact.rs: aws: prefixed || is_aws_key(word) || is_jwt(word)
-provider-name crates/domain/src/safety/redact.rs: github: ("github_pat_", 20),
 provider-name crates/domain/src/tools/channel_relay.rs: claude: pub const PERMISSION_ANSWER: &str = "notifications/claude/channel/permission";
 provider-name crates/domain/src/tools/channel_relay.rs: claude: pub const PERMISSION_CAPABILITY: &str = "claude/channel/permission";
 provider-name crates/domain/src/tools/channel_relay.rs: claude: pub const PERMISSION_REQUEST: &str = "notifications/claude/channel/permission_request";

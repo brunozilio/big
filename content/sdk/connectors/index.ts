@@ -157,6 +157,13 @@ export function idAt(value: unknown, path: string[] | string): string {
   return "";
 }
 
+export type SecretPatterns = {
+  prefixes?: { name: string; prefix: string; min?: number }[];
+  patterns?: { name: string; regex: string }[];
+  keys?: string[];
+  labels?: string[];
+};
+
 export const blocked = (reason: string): never => fail("permanent", `blocked: ${reason}`);
 
 export const NO_PROJECT = "Choose the project.";

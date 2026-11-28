@@ -21,6 +21,7 @@ impl Agent<'_> {
         turn.reminders.deliver(reminder, turn.history);
         run.transition(turn.history);
         let mut request = TurnRequest { messages: turn.history.clone(), ..self.turn_template(turn.fell_back.as_ref()) };
+        self.workspace.policy.redact_prompt(&mut request.messages);
         self.intercept_request(&mut request, &turn.rejections)?;
         if let Some(why) = self.workspace.models.unmet(&request.model) {
             let refused = crate::data_gate::refused(&[Skipped { model: request.model.clone(), why }]);

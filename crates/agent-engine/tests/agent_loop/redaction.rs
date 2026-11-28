@@ -46,6 +46,20 @@ fn secrets_in_a_command_s_output_reach_neither_the_model_nor_the_events() {
 }
 
 #[test]
+fn a_secret_in_the_prompt_reaches_the_model_redacted_while_the_history_keeps_what_was_said() {
+    let mut rig = Rig::new(domain::Reviewer::Nobody);
+    rig.workspace.policy.redact = Some(Arc::new(domain::redact::Known::default()));
+    let model = ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Done".into())])]);
+    let said = format!("push with {TOKEN} please");
+    let mut history = vec![Message::user(said.clone())];
+    rig.run(&model, &mut history).expect("run");
+
+    let asked = serde_json::to_string(&model.asked()[0].messages).expect("asked");
+    assert!(!asked.contains(TOKEN) && asked.contains("push with [redacted] please"), "{asked}");
+    assert_eq!(history[0].text(), said);
+}
+
+#[test]
 fn without_the_flag_output_is_left_as_it_is() {
     let rig = Rig::new(domain::Reviewer::Nobody);
     let model = ScriptedModel::new([

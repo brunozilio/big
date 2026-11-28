@@ -14,7 +14,5 @@ impl Sanitized {
 }
 
 pub fn sanitize(text: &str) -> Sanitized {
-    let mut redact_next = false;
-    let words = text.split_whitespace().map(|word| crate::redact::word(word, &mut redact_next));
-    Sanitized(words.collect::<Vec<_>>().join(" "))
+    Sanitized(crate::redact::words(text).join(" "))
 }

@@ -111,6 +111,10 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
     fn messages(&self, _language: Language) -> BTreeMap<String, String> {
         BTreeMap::new()
     }
+
+    fn secret_patterns(&self) -> domain::redact::Rules {
+        domain::redact::Rules::default()
+    }
 }
 
 pub trait SettingsSink: Send + Sync + std::fmt::Debug {

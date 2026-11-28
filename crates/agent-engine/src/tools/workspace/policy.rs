@@ -1,10 +1,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use domain::redact::Known;
+use domain::redact::{Known, Rules};
 use domain::web_reading::WebReading;
 
 use crate::tools::script_tool::ScriptGrants;
+use crate::transcript::{Block, Message, Role};
+
+const CONTENT: &str = "content";
 
 #[derive(Debug, Default)]
 pub struct Policy {
@@ -47,6 +50,26 @@ impl Policy {
             Some(known) => domain::redact::redact(text, known),
             None => text.to_owned(),
         }
+    }
+
+    pub fn redact_prompt(&self, messages: &mut [Message]) {
+        let Some(known) = &self.redact else { return };
+        let engine = domain::redact::current();
+        for message in messages.iter_mut().filter(|message| message.role == Role::User) {
+            for block in &mut message.blocks {
+                if let Block::Text(text) | Block::Reminder(text) = block {
+                    *text = engine.redact(text, known).text;
+                }
+            }
+        }
+    }
+}
+
+pub fn declare_redaction() {
+    let (rules, mut problems) = Rules::layered(&content::schema::policies(domain::redact::FILE));
+    problems.extend(domain::redact::declare(CONTENT, rules));
+    for problem in problems {
+        tracing::warn!(%problem, "a redaction rule was left out");
     }
 }
 

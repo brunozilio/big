@@ -1,4 +1,4 @@
-import { type Creds, type Language, optionalText, pick, text, textAt, tokenAlternative, tokenField, unknownAction, words } from "sdk/connectors/index.ts";
+import { type Creds, type Language, type SecretPatterns, optionalText, pick, text, textAt, tokenAlternative, tokenField, unknownAction, words } from "sdk/connectors/index.ts";
 import { binding, options, projectOptions, tracker } from "sdk/connectors/contracts.ts";
 import { items } from "sdk/connectors/mcp.ts";
 import { NO_SITES, apiOf, projectOf, siteApi } from "./api.ts";
@@ -24,6 +24,10 @@ export function provider() {
     actions: [...tracker(), options("tracker")],
     chooses: ["cloud_id"],
   };
+}
+
+export function secretPatterns(): SecretPatterns {
+  return { prefixes: [{ name: "atlassian-api-token", prefix: "ATATT", min: 40 }] };
 }
 
 export function presentation({ language }: { language: Language }) {

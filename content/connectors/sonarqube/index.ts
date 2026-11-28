@@ -2,6 +2,7 @@ import {
   type Creds,
   type Language,
   type Response,
+  type SecretPatterns,
   ActionError,
   bearer,
   checked,
@@ -101,6 +102,16 @@ export function provider() {
     capabilities: ["quality"],
     auth: { kind: "loopback" },
     actions: [...quality(), options("quality")],
+  };
+}
+
+export function secretPatterns(): SecretPatterns {
+  return {
+    prefixes: [
+      { name: "sonarqube-user-token", prefix: "squ_", min: 40 },
+      { name: "sonarqube-project-token", prefix: "sqp_", min: 40 },
+      { name: "sonarqube-analysis-token", prefix: "sqa_", min: 40 },
+    ],
   };
 }
 

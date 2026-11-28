@@ -1,4 +1,4 @@
-import { type Creds, type Language, checked, fail, json, pick, send, siteOf, text, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
+import { type Creds, type Language, type SecretPatterns, checked, fail, json, pick, send, siteOf, text, textOf, tokenAlternative, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { design } from "sdk/connectors/contracts.ts";
 import { base, heldBy, userOf } from "./login.ts";
 
@@ -34,6 +34,10 @@ export function provider(_args: { language?: Language }, _ctx: Ctx) {
 export function alternatives({ language }: { language: Language }, _ctx: Ctx) {
   const label = pick(language, "Use a personal access token", "Usar un token de acceso personal", "Usar token de acesso pessoal");
   return [tokenAlternative(language, "token", label, pick(language, "Figma", "de Figma", "do Figma"), tokenFields(language), "json")];
+}
+
+export function secretPatterns(): SecretPatterns {
+  return { prefixes: [{ name: "figma-token", prefix: "figd_", min: 40 }] };
 }
 
 export function presentation({ language }: { language: Language }, _ctx: Ctx) {

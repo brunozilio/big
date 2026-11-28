@@ -68,7 +68,7 @@ impl Connectors {
     }
 
     pub fn from_providers(providers: Vec<Arc<dyn Provider>>, http: Arc<dyn Http>, keeper: TokenKeeper) -> Connectors {
-        let entries = providers
+        let entries: Vec<Entry> = providers
             .into_iter()
             .map(|provider| Entry {
                 descriptor: provider.descriptor(),
@@ -76,6 +76,7 @@ impl Connectors {
                 provider,
             })
             .collect();
+        crate::redaction::declare(entries.iter().map(|entry| entry.provider.as_ref()));
         let learned = Mutex::default();
         Connectors { entries, http, keeper, limiter: RateLimiter::new(), learned, sink: None, calls: None }
     }
@@ -207,6 +208,7 @@ impl Connectors {
         if let Some(missing) = spec.missing(args) {
             return Err(ActionError::missing(&missing));
         }
+        let args = &crate::redaction::guarded(spec, args);
         let settings = self.completed(entry, connection, settings).await;
         let mut creds = self.credentials(entry, connection, &settings).await?;
         let metered = Metered { inner: self.http.as_ref(), limiter: &self.limiter, connection: &connection.id };

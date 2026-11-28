@@ -41,6 +41,7 @@ impl Provider for Echo {
             actions: vec![
                 ActionSpec::read("x.read", object(&[("a", "string")], &[]), json!({}), looked()),
                 ActionSpec::read("y.read", object(&[], &[]), json!({}), looked()),
+                ActionSpec::write("x.send", object(&[], &[]), json!({}), crate::Idempotency::Lookup, sends()),
             ],
         }
     }
@@ -66,6 +67,11 @@ impl Provider for Echo {
 
     fn events(&self) -> Option<&dyn EventSource> {
         Some(self)
+    }
+
+    fn secret_patterns(&self) -> domain::redact::Rules {
+        let declared = json!({ "prefixes": [{ "name": "echo-key", "prefix": "echo_", "min": 12 }] });
+        domain::redact::Rules::read(&declared).unwrap_or_default()
     }
 }
 
@@ -347,3 +353,10 @@ async fn the_hub_hands_out_what_each_connector_requires_and_nothing_for_others()
     assert!(hub.requires(&ProviderKey::from("nobody")).is_empty());
     assert!(self::hub(FakeHttp::new(), None).await.requires(&ProviderKey::from("echo")).is_empty());
 }
+
+fn sends() -> domain::operation::Profile {
+    use domain::operation::{Kind, Profile, Reversible, Risk};
+    Profile::new(vec![Kind::Write, Kind::SendExternal], Risk::Medium, Reversible::No, false, true)
+}
+
+mod redaction;

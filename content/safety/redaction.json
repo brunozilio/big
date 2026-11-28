@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "prefixes": [
+    { "name": "openai-key", "prefix": "sk-", "min": 20 },
+    { "name": "stripe-key", "prefix": "sk_", "min": 20 },
+    { "name": "github-token", "prefix": "ghp_", "min": 20 },
+    { "name": "github-oauth", "prefix": "gho_", "min": 20 },
+    { "name": "github-app", "prefix": "ghs_", "min": 20 },
+    { "name": "github-user", "prefix": "ghu_", "min": 20 },
+    { "name": "github-fine-grained", "prefix": "github_pat_", "min": 20 },
+    { "name": "gitlab-token", "prefix": "glpat-", "min": 20 },
+    { "name": "slack-bot", "prefix": "xoxb-", "min": 10 },
+    { "name": "slack-user", "prefix": "xoxp-", "min": 10 },
+    { "name": "slack-app", "prefix": "xoxa-", "min": 10 },
+    { "name": "slack-session", "prefix": "xoxs-", "min": 10 }
+  ],
+  "patterns": [
+    { "name": "aws-access-key", "regex": "^(AKIA|ASIA)[A-Z0-9]{16}$" }
+  ],
+  "keys": ["password", "passwd", "secret", "token", "api_key", "apikey", "api-key"],
+  "labels": ["bearer"],
+  "parseErrors": ["unexpected", "invalid", "unknown", "unterminated", "illegal", "bad"],
+  "jwt": true
+}

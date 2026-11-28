@@ -116,6 +116,21 @@ pub fn read(contract: Contract, value: &mut Value, at: &str) -> Result<Read, Sch
     Ok(read)
 }
 
+pub fn policies(path: &str) -> Vec<Value> {
+    let layers = crate::builtin_text(path).into_iter().chain(crate::user_text(crate::folder().as_deref(), path));
+    layers
+        .filter_map(|text| {
+            let mut value: Value = serde_json::from_str(&text)
+                .inspect_err(|error| tracing::warn!(path, %error, "a policy file is not JSON"))
+                .ok()?;
+            read(Contract::Policy, &mut value, path)
+                .inspect_err(|error| tracing::warn!(%error, "a policy file does not load"))
+                .ok()?;
+            Some(value)
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;

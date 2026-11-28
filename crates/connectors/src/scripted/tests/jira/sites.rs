@@ -190,6 +190,12 @@ fn the_connector_tells_its_blockers_in_the_chosen_language() {
     assert_eq!(jira().messages(Language::English).get(NO_SITE).map(String::as_str), Some(NO_SITE));
 }
 
+#[test]
+fn the_connector_declares_the_shape_of_its_own_tokens() {
+    let declared = jira().secret_patterns();
+    assert!(declared.prefixes.iter().any(|rule| rule.prefix == "ATATT"), "{declared:?}");
+}
+
 #[tokio::test]
 async fn projects_list_the_visible_projects_of_the_site_and_page_through_them() {
     let full: Vec<Value> = (0..50).map(|n| json!({"id": n.to_string(), "key": format!("P{n}"), "name": "x"})).collect();

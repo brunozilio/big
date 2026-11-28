@@ -315,6 +315,16 @@ impl Provider for ScriptedProvider {
     fn messages(&self, language: Language) -> std::collections::BTreeMap<String, String> {
         serde_json::from_value(self.local("messages", language)).unwrap_or_default()
     }
+
+    fn secret_patterns(&self) -> domain::redact::Rules {
+        let declared = self.local("secretPatterns", Language::default());
+        if declared.is_null() {
+            return domain::redact::Rules::default();
+        }
+        domain::redact::Rules::read(&declared)
+            .inspect_err(|error| tracing::warn!(connector = self.key, %error, "the connector's secret patterns do not read"))
+            .unwrap_or_default()
+    }
 }
 
 #[async_trait]

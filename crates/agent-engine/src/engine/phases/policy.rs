@@ -47,6 +47,7 @@ impl Job {
 }
 
 pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path) -> Policy {
+    tools::declare_redaction();
     Policy {
         scripts: settings.scripts,
         redact: on(flags::REDACT_SECRETS).then(|| Arc::new(tools::env_secrets(cwd))),

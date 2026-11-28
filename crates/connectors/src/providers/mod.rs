@@ -57,6 +57,10 @@ impl Provider for Shared {
     fn messages(&self, language: domain::Language) -> std::collections::BTreeMap<String, String> {
         self.0.messages(language)
     }
+
+    fn secret_patterns(&self) -> domain::redact::Rules {
+        self.0.secret_patterns()
+    }
 }
 
 #[cfg(test)]
