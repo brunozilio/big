@@ -7,20 +7,7 @@ fn attribute(value: &str) -> String {
 }
 
 fn defused(text: &str) -> String {
-    let lower = text.to_ascii_lowercase();
-    let mut out = String::with_capacity(text.len());
-    let mut last = 0;
-    for (at, _) in lower.match_indices(TAG) {
-        let opened = at.checked_sub(1).filter(|before| lower.as_bytes()[*before] == b'<');
-        let closed = at.checked_sub(2).filter(|before| &lower[*before..at] == "</");
-        if let Some(start) = closed.or(opened) {
-            out.push_str(&text[last..start]);
-            out.push_str("&lt;");
-            last = start + 1;
-        }
-    }
-    out.push_str(&text[last..]);
-    out
+    text.replace('<', "&lt;").replace('>', "&gt;")
 }
 
 pub fn envelope(read: &Read, text: &str) -> String {

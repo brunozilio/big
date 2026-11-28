@@ -1,5 +1,6 @@
 mod bridge;
 mod host;
+mod labels;
 mod secrets;
 mod sessions;
 mod sign_in;
@@ -17,6 +18,7 @@ pub use bridge::{Answers, Script};
 use bridge::{WRAPPER, invoke, wrapper};
 pub use host::Local;
 use host::{Kept, Online};
+use labels::Labels;
 use secrets::ScriptedSecrets;
 use sessions::McpSessions;
 pub use sign_in::ScriptedSignIn;
@@ -31,7 +33,6 @@ use crate::provider::{AccountOption, Credentials, EventBatch, EventSource, Exter
 
 pub const FOLDER: &str = "connectors/";
 pub const ENTRY: &str = "index.ts";
-const LABELS: &str = "labels";
 
 #[derive(Debug, Deserialize)]
 struct Declared {
@@ -76,7 +77,7 @@ pub struct ScriptedProvider {
     answers: Arc<dyn Answers>,
     sessions: Arc<McpSessions>,
     shown: Mutex<Vec<(String, Language, Value)>>,
-    labels: bool,
+    labels: Labels,
 }
 
 #[derive(Debug)]
@@ -170,7 +171,7 @@ impl ScriptedProvider {
         let declared: Declared = serde_json::from_value(declared).map_err(|error| format!("{entry}: {error}"))?;
         let key = if declared.key.is_empty() { named } else { declared.key.clone() };
         let polls = script.kind("poll") == "function";
-        let labels = script.kind(LABELS) == "function";
+        let labels = Labels::of(&script);
         let descriptor = ProviderDescriptor {
             key: ProviderKey::from(key.as_str()),
             name: declared.name,
@@ -362,18 +363,7 @@ impl Provider for ScriptedProvider {
     }
 
     fn labelled(&self, action: &str, result: &Value) -> Option<String> {
-        if !self.labels {
-            return None;
-        }
-        let input = json!({ "action": action, "result": result });
-        match self.script.invoke_here(LABELS, &input, Arc::new(Local)) {
-            Ok(Value::String(label)) => Some(label),
-            Ok(_) => None,
-            Err(error) => {
-                tracing::warn!(connector = self.key, action, error = error.message, "the connector's labels did not run");
-                None
-            }
-        }
+        self.labels.of_result(&self.key, action, result)
     }
 }
 

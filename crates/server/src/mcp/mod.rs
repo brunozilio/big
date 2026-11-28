@@ -20,6 +20,7 @@ type Refusal = (StatusCode, String);
 mod connector;
 mod connector_flow;
 mod resources;
+mod session_reads;
 
 pub fn route() -> &'static str {
     brand::mcp::ROUTE.trim()
@@ -156,6 +157,9 @@ pub async fn post(State(ctx): State<Ctx>, headers: HeaderMap, body: Bytes) -> Re
         Ok(id) => id,
         Err(error) => return refused(StatusCode::INTERNAL_SERVER_ERROR, &error),
     };
+    if initializes(&message) && id != EXTERNAL {
+        session_reads::open(&id);
+    }
     let endpoint = match bundle(&ctx, &headers, &id) {
         Ok(endpoint) => endpoint,
         Err((status, told)) => return refused(status, &told),
@@ -175,7 +179,10 @@ pub async fn other() -> Response {
     (StatusCode::METHOD_NOT_ALLOWED, [(header::ALLOW, "POST, DELETE")]).into_response()
 }
 
-pub async fn ended() -> StatusCode {
+pub async fn ended(headers: HeaderMap) -> StatusCode {
+    if let Some(id) = header(&headers, SESSION_HEADER) {
+        session_reads::close(id);
+    }
     StatusCode::OK
 }
 

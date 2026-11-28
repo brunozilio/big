@@ -8,7 +8,8 @@ use serde_json::{Value, json};
 use store::Binding;
 
 use crate::agent::Failure;
-use crate::effects::{Who, connector};
+use crate::effects::Who;
+use crate::reading::connector;
 use crate::protocol::Command;
 use crate::shared::Shared;
 

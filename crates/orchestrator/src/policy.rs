@@ -70,13 +70,14 @@ impl Gated<'_> {
         resources.find(labels::FILE).map(|found| labels::levels_of(&found.text)).unwrap_or_default()
     }
 
-    pub fn read(&self, labelled: Labelled) -> Value {
+    pub fn read(&self, labelled: Labelled) -> Result<Value, Failure> {
         let read = labels::classified(&self.levels(), labelled.read, &labelled.value);
         let progress = WorkflowEvent::EffectProgress { key: self.key.clone(), data: read.progress() };
-        if let Err(error) = self.shared.append_open(&self.item.id, &[progress], || {}) {
-            tracing::warn!(%error, "what the call read could not be kept in the log");
-        }
-        labelled.value
+        self.shared.append_open(&self.item.id, &[progress], || {}).map_err(|error| {
+            let told = format!("what the call read could not be kept in the log: {error}");
+            Failure::Class(domain::effect::ErrorClass::Transient, told)
+        })?;
+        Ok(labelled.value)
     }
 
     async fn approved(&self, asked: Asked<'_>, tool: &str, subject: &str) -> Result<(), Failure> {

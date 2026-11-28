@@ -9,6 +9,7 @@ use domain::operation::Kind;
 use serde_json::{Value, json};
 use store::ConnectionRecord;
 
+use super::connector_flow::Guarded;
 use crate::calls::connection;
 use crate::state::Ctx;
 
@@ -56,7 +57,7 @@ pub struct ConnectorTools {
     hub: Arc<Connectors>,
     runtime: tokio::runtime::Handle,
     tools: Vec<Tool>,
-    session: String,
+    session: Option<String>,
 }
 
 fn definition(name: &str, provider: &str, record: &ConnectionRecord, action: &ActionSpec) -> Value {
@@ -100,7 +101,7 @@ pub fn local(ctx: &Ctx, wanted: &Wanted<'_>, runtime: tokio::runtime::Handle, se
     let records = ctx.backend.store.connections_of(domain::principal::LOCAL_USER).unwrap_or_default();
     let hub = Arc::clone(&ctx.backend.connectors);
     let tools = tools_of(&hub, records, wanted);
-    let session = session.to_owned();
+    let session = Some(session).filter(|session| *session != super::EXTERNAL).map(str::to_owned);
     (!tools.is_empty()).then(|| LocalMcp::new(server(), Arc::new(ConnectorTools { hub, runtime, tools, session })))
 }
 
@@ -108,14 +109,20 @@ fn server() -> String {
     domain::mcp::connectors_server()
 }
 
-fn refused(tool: &Tool, arguments: &Value, session: &str) -> Option<String> {
+const ASKED: Asked<'static> = Asked { surface: Surface::Mcp, stage: STAGE, owner: domain::principal::LOCAL_USER };
+
+fn served(tool: &Tool) -> String {
+    served_name(&server(), tool.definition["name"].as_str().unwrap_or_default())
+}
+
+fn refused(tool: &Tool, arguments: &Value) -> Option<String> {
     let server = server();
-    let name = served_name(&server, tool.definition["name"].as_str().unwrap_or_default());
+    let name = served(tool);
     let effects: Vec<Effect> = tool.declared.operation(&server, arguments).map(Effect::Operation).into_iter().collect();
-    let asked = Asked { surface: Surface::Mcp, stage: STAGE, owner: domain::principal::LOCAL_USER };
+    let asked = ASKED;
     let subject = policy_gate::subject(&tool.action, arguments);
     match policy_gate::decide(asked, &Call { tool: &name, subject: &subject, effects: &effects }) {
-        Verdict::Allow => super::connector_flow::refused(asked, session, &name, Some(&tool.spec)),
+        Verdict::Allow => None,
         Verdict::Deny(reason) => Some(policy_gate::refusal(&reason)),
         Verdict::Ask { .. } => Some(policy_gate::unasked(asked, &name)),
     }
@@ -124,7 +131,7 @@ fn refused(tool: &Tool, arguments: &Value, session: &str) -> Option<String> {
 impl ConnectorTools {
     fn call(&self, tool: &Tool, arguments: &Value) -> Value {
         let arguments = if arguments.is_null() { json!({}) } else { arguments.clone() };
-        if let Some(refused) = refused(tool, &arguments, &self.session) {
+        if let Some(refused) = refused(tool, &arguments) {
             return text_result(refused, true);
         }
         let Ok(key) = crate::attachments::random_id() else {
@@ -136,9 +143,11 @@ impl ConnectorTools {
         let charged = domain::origin::Attribution::default();
         let called =
             self.hub.call_labelled(Some(&charged), &connection, &record.settings, &tool.action, &arguments, &key);
-        match self.runtime.block_on(called) {
-            Ok(labelled) => text_result(super::connector_flow::wrapped(&self.session, labelled), false),
-            Err(error) => text_result(error.message, true),
+        let (name, levels) = (served(tool), app::labels::levels());
+        let guarded = Guarded { asked: ASKED, session: self.session.as_deref(), tool: &name, spec: &tool.spec, levels: &levels };
+        match guarded.run(|| self.runtime.block_on(called)) {
+            Ok(text) => text_result(text, false),
+            Err(told) => text_result(told, true),
         }
     }
 }
