@@ -58,11 +58,33 @@ pub fn install(terminal: bool, kept: bool) -> Option<PathBuf> {
             .with_writer(Redacted(Outbound::configured(Shape::Json, Box::new(file))))
             .with_filter(filter(Some(brand::log::FILTER)))
     });
+    warn_ignored_sharing();
     let shown = terminal.then(|| shown(Format::chosen(brand::log::FORMAT)));
     let trail = kept.then(server::trail::layer);
     tracing_subscriber::registry().with(saved).with(shown).with(trail).try_init().ok()?;
     log_panics();
     path
+}
+
+pub fn ignored_sharing(sinks: &[(&str, &str)]) -> Vec<String> {
+    sinks
+        .iter()
+        .filter_map(|(section, said)| {
+            let ignored = domain::trace::capture::Sharing::ignored(said)?;
+            Some(format!(
+                "[{section}] sharing = {ignored:?} is not full, metadata or disabled; it was ignored and only metadata is shared"
+            ))
+        })
+        .collect()
+}
+
+fn warn_ignored_sharing() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        for warning in ignored_sharing(&[("log", brand::log::SHARING), ("traces", brand::traces::SHARING)]) {
+            eprintln!("{warning}");
+        }
+    });
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -150,6 +172,14 @@ mod tests {
         let line: serde_json::Value = serde_json::from_str(written.trim_end()).expect("one json line");
         assert_eq!(line["message"], "Bearer [redacted]", "{written}");
         assert_eq!(line["policy_revision"].as_str(), Some(outbound.revision().as_str()));
+    }
+
+    #[test]
+    fn an_unknown_sharing_is_named_and_the_known_ones_are_not() {
+        let warnings = ignored_sharing(&[("log", "full"), ("traces", "everything")]);
+        assert_eq!(warnings.len(), 1);
+        assert!(warnings[0].starts_with("[traces] sharing = \"everything\""), "{warnings:?}");
+        assert!(ignored_sharing(&[("log", brand::log::SHARING), ("traces", brand::traces::SHARING)]).is_empty());
     }
 
     #[test]

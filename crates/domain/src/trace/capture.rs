@@ -92,6 +92,11 @@ impl Sharing {
         }
     }
 
+    pub fn ignored(text: &str) -> Option<&str> {
+        let text = text.trim();
+        (!matches!(text, "" | "full" | "metadata" | "disabled")).then_some(text)
+    }
+
     pub fn carries_content(self) -> bool {
         self == Sharing::Full
     }
@@ -123,6 +128,8 @@ mod tests {
         assert_eq!(Sharing::read(" metadata "), Sharing::Metadata);
         assert_eq!(Sharing::read(""), Sharing::Full);
         assert_eq!(Sharing::read("everything"), Sharing::Metadata);
+        assert_eq!(Sharing::ignored(" everything "), Some("everything"));
+        assert_eq!(Sharing::ignored("disabled"), None);
     }
 
     #[test]

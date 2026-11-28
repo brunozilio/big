@@ -96,3 +96,63 @@ fn a_wider_redactor_attached_later_changes_the_revision() {
     outbound.redacting(Arc::new(Redactor::compiled(Rules::read(&rules).unwrap_or_default()).0));
     assert_ne!(outbound.revision(), before);
 }
+
+#[test]
+fn the_fields_keep_the_order_they_were_written_in() {
+    let (outbound, kept) = outbound(Shape::Json, Sharing::Full);
+    written(&outbound, "{\"timestamp\":\"t\",\"level\":\"INFO\",\"message\":\"m\",\"target\":\"x\"}\n");
+    let expected = format!(
+        "{{\"timestamp\":\"t\",\"level\":\"INFO\",\"message\":\"m\",\"target\":\"x\",\"policy_revision\":\"{}\"}}\n",
+        outbound.revision()
+    );
+    assert_eq!(kept.text(), expected);
+}
+
+struct Panicking {
+    rules: Rules,
+    outbound: std::sync::OnceLock<std::sync::Weak<Outbound>>,
+}
+
+impl Panicking {
+    fn told_and_failed(&self) -> ! {
+        if let Some(outbound) = self.outbound.get().and_then(std::sync::Weak::upgrade) {
+            written(&outbound, "{\"level\":\"ERROR\",\"message\":\"the redactor panicked\"}\n");
+        }
+        panic!("the redactor broke");
+    }
+}
+
+impl Redacts for Panicking {
+    fn rules(&self) -> &Rules {
+        &self.rules
+    }
+
+    fn text(&self, _: &str) -> String {
+        self.told_and_failed()
+    }
+
+    fn value(&self, _: &str, _: &Value) -> Value {
+        self.told_and_failed()
+    }
+}
+
+#[test]
+fn a_redactor_that_panics_and_logs_again_drops_both_lines_without_redacting_twice() {
+    let kept = Kept::default();
+    let panicking = Arc::new(Panicking { rules: Rules::default(), outbound: std::sync::OnceLock::new() });
+    let outbound = Arc::new(Outbound::new(
+        Shape::Json,
+        Sharing::Full,
+        Keys::default(),
+        Arc::clone(&panicking) as Arc<dyn Redacts>,
+        Box::new(kept.clone()),
+    ));
+    let _ = panicking.outbound.set(Arc::downgrade(&outbound));
+    let before = capture::dropped();
+    written(&outbound, "{\"level\":\"INFO\",\"message\":\"Bearer abc\"}\n");
+    assert_eq!(kept.text(), "");
+    assert!(capture::dropped() >= before + 2, "the line and the one logged while redacting are both counted");
+    outbound.redacting(redactor());
+    written(&outbound, "{\"message\":\"Bearer abc\"}\n");
+    assert!(kept.text().contains("Bearer [redacted]"), "the guard is released after the panic: {}", kept.text());
+}

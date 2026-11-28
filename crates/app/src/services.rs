@@ -4,7 +4,6 @@ use std::sync::Arc;
 use agent_engine::AgentEngine;
 use agent_engine::sessions::FileSessions;
 use domain::redact::Redactor;
-use domain::trace::capture::{Keys, Sharing};
 
 use crate::data_root::DataRoot;
 use crate::extensions::Extensions;
@@ -81,31 +80,6 @@ pub struct LocalServices {
     pub(crate) exporter: Option<crate::features::trace::export::Exporter>,
 }
 
-fn exporter(sessions: &Arc<FileSessions>, secrets: &Redactor) -> Option<crate::features::trace::export::Exporter> {
-    use crate::features::trace::export::{Exporter, Otlp, Traced};
-    if Sharing::read(brand::traces::SHARING) == Sharing::Disabled {
-        return None;
-    }
-    let otlp = Otlp::from(brand::traces::OTLP_ENDPOINT, brand::traces::OTLP_HEADERS)?;
-    let store = Arc::clone(sessions);
-    let traced: Traced = Arc::new(move |cwd, id| crate::features::trace::traced(&store, cwd, id));
-    let exporter = Exporter::start(otlp, traced, Arc::new(agent_engine::model::http::NetHttp))?;
-    exporter.capturing(policy(secrets));
-    Some(exporter)
-}
-
-fn policy(secrets: &Redactor) -> crate::features::trace::export::Policy {
-    use crate::features::trace::export::{Content, Policy, Secrets};
-    let sharing = Sharing::read(brand::traces::SHARING);
-    let configured = Keys::configured();
-    let keys = configured.shared(sharing);
-    let redactor = agent_engine::tools::personal(secrets);
-    let revision = domain::trace::capture::revision(configured, sharing, redactor.rules());
-    let folder_secrets: Secrets = Arc::new(agent_engine::tools::env_secrets);
-    let content = Content::from(keys, brand::traces::CAPTURE_LIMIT, || redactor, folder_secrets);
-    Policy { content, usage: keys.usage, revision }
-}
-
 impl std::fmt::Debug for LocalServices {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LocalServices").field("root", &self.root).finish_non_exhaustive()
@@ -142,7 +116,7 @@ impl LocalServices {
 
     pub fn with_redactor(mut self, redactor: Arc<Redactor>) -> Self {
         if let Some(exporter) = &self.exporter {
-            exporter.capturing(policy(&redactor));
+            exporter.capturing(crate::features::trace::configured::policy(&redactor));
         }
         self.memories = self.memories.with_redactor(redactor);
         self
@@ -175,7 +149,7 @@ impl LocalServices {
             root,
             settings: stores.settings,
             catalog: stores.catalog,
-            exporter: exporter(&stores.sessions, stores.memories.redactor()),
+            exporter: crate::features::trace::configured::exporter(&stores.sessions, stores.memories.redactor()),
             memories: stores.memories,
             database: stores.database,
             sessions: stores.sessions,
@@ -217,7 +191,7 @@ impl LocalServices {
             catalog: stores.catalog,
             memories: stores.memories.with_redactor(Arc::clone(self.memories.redactor())),
             database: stores.database,
-            exporter: exporter(&stores.sessions, self.memories.redactor()),
+            exporter: crate::features::trace::configured::exporter(&stores.sessions, self.memories.redactor()),
             sessions: stores.sessions,
             providers: self.providers.with_store(stores.providers).with_secrets(Arc::clone(&stores.secrets)),
             mcp_auth: self.mcp_auth.with_secrets(Arc::clone(&stores.secrets)),

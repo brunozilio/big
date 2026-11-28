@@ -1,13 +1,39 @@
+mod ordered;
+mod redacts;
+
+use std::cell::Cell;
 use std::io::Write;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::{Arc, Mutex, RwLock, Weak};
 
-use domain::redact::{Known, REDACTED, Redactor};
+use domain::redact::Redactor;
 use domain::trace::capture::{self, CONTENT_FIELDS, Keys, Sharing};
 use platform::sync::Locked;
-use serde_json::{Map, Value};
+use serde_json::Value;
+
+use self::ordered::Ordered;
+pub use self::redacts::Redacts;
 
 const REVISION: &str = "policy_revision";
+
+thread_local! {
+    static CLEANING: Cell<bool> = const { Cell::new(false) };
+}
+
+struct Cleaning;
+
+impl Cleaning {
+    fn enter() -> Option<Cleaning> {
+        let busy = CLEANING.with(|cleaning| cleaning.replace(true));
+        (!busy).then_some(Cleaning)
+    }
+}
+
+impl Drop for Cleaning {
+    fn drop(&mut self) {
+        CLEANING.with(|cleaning| cleaning.set(false));
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Shape {
@@ -15,9 +41,8 @@ pub enum Shape {
     Text,
 }
 
-#[derive(Debug)]
 struct Active {
-    redactor: Arc<Redactor>,
+    redactor: Arc<dyn Redacts>,
     revision: String,
 }
 
@@ -44,12 +69,12 @@ pub fn attach(redactor: &Arc<Redactor>) {
     let mut outbounds = live().locked();
     outbounds.retain(|outbound| outbound.strong_count() > 0);
     for outbound in outbounds.iter().filter_map(Weak::upgrade) {
-        outbound.redacting(Arc::clone(redactor));
+        outbound.redacting(Arc::clone(redactor) as Arc<dyn Redacts>);
     }
 }
 
 impl Outbound {
-    pub fn new(shape: Shape, sharing: Sharing, keys: Keys, redactor: Arc<Redactor>, sink: Box<dyn Write + Send>) -> Self {
+    pub fn new(shape: Shape, sharing: Sharing, keys: Keys, redactor: Arc<dyn Redacts>, sink: Box<dyn Write + Send>) -> Self {
         let active = Arc::new(Active { revision: capture::revision(keys, sharing, redactor.rules()), redactor });
         Self { shape, sharing, keys, active: RwLock::new(active), sink: Mutex::new(sink) }
     }
@@ -62,7 +87,7 @@ impl Outbound {
         outbound
     }
 
-    pub fn redacting(&self, redactor: Arc<Redactor>) {
+    pub fn redacting(&self, redactor: Arc<dyn Redacts>) {
         let revision = capture::revision(self.keys, self.sharing, redactor.rules());
         let fresh = Arc::new(Active { redactor, revision });
         match self.active.write() {
@@ -90,10 +115,14 @@ impl Outbound {
         if self.sharing == Sharing::Disabled {
             return None;
         }
+        let Some(_cleaning) = Cleaning::enter() else {
+            capture::drop_one();
+            return None;
+        };
         let active = self.current();
         let cleaned = catch_unwind(AssertUnwindSafe(|| match self.shape {
             Shape::Json => self.json(&active, text),
-            Shape::Text => Some(active.redactor.redact(text, &Known::default()).text),
+            Shape::Text => Some(active.redactor.text(text)),
         }));
         let cleaned = cleaned.ok().flatten();
         if cleaned.is_none() {
@@ -103,18 +132,18 @@ impl Outbound {
     }
 
     fn json(&self, active: &Active, text: &str) -> Option<String> {
-        let Ok(Value::Object(fields)) = serde_json::from_str::<Value>(text.trim_end()) else { return None };
+        let Ok(Ordered(fields)) = serde_json::from_str::<Ordered>(text.trim_end()) else { return None };
         let shared = |key: &String| self.sharing.carries_content() || !CONTENT_FIELDS.contains(&key.as_str());
-        let mut kept: Map<String, Value> = fields
+        let mut kept: Vec<(String, Value)> = fields
             .into_iter()
-            .filter(|(key, _)| shared(key))
+            .filter(|(key, _)| shared(key) && key != REVISION)
             .map(|(key, value)| {
-                let value = cleaned_value(&active.redactor, &key, &value);
+                let value = active.redactor.value(&key, &value);
                 (key, value)
             })
             .collect();
-        kept.insert(REVISION.to_owned(), Value::String(active.revision.clone()));
-        let mut line = serde_json::to_string(&kept).ok()?;
+        kept.push((REVISION.to_owned(), Value::String(active.revision.clone())));
+        let mut line = serde_json::to_string(&Ordered(kept)).ok()?;
         line.push('\n');
         Some(line)
     }
@@ -125,13 +154,6 @@ impl Outbound {
             let mut sink = self.sink.locked();
             let _ = sink.write_all(line.as_bytes()).and_then(|()| sink.flush());
         }
-    }
-}
-
-fn cleaned_value(redactor: &Redactor, key: &str, value: &Value) -> Value {
-    match value {
-        Value::String(text) if !text.is_empty() && redactor.secret_key(key) => Value::String(REDACTED.to_owned()),
-        other => redactor.redact_value(other, &Known::default()).0,
     }
 }
 
