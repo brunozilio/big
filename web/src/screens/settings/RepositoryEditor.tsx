@@ -1,8 +1,10 @@
-import { memo, useCallback, useMemo, useState } from 'react'
-import type { ApplicationRepository, Bindings, DirListing, RepositoryKind } from '@/api/contract'
+import { memo, useCallback, useEffect, useMemo, useState } from 'react'
+import type { ApplicationRepository, Bindings, CodeRepo, DirListing, RepositoryKind } from '@/api/contract'
+import { api } from '@/api'
+import { useStore } from '@/api/store'
 import { IconButton } from '@/ui/button'
 import { cn } from '@/ui/cn'
-import { Field, Input, Select, Switch } from '@/ui/form'
+import { Field, Select, Switch } from '@/ui/form'
 import { useAdmin, useShared } from '@/api/me'
 import { Icon } from '@/ui/icon'
 import { Collapse } from '@/ui/motion'
@@ -56,14 +58,35 @@ export function DirectoryField({ value, onChoose }: { value: string; onChoose: (
   )
 }
 
+function useCodeRepos(connection: string | undefined): CodeRepo[] {
+  const [repos, setRepos] = useState<CodeRepo[]>([])
+  useEffect(() => {
+    if (!connection) return
+    let alive = true
+    void api().call(connection, 'code.repos', {}).then((listed) => {
+      if (alive) setRepos(listed as CodeRepo[])
+    }).catch(() => {
+      if (alive) setRepos([])
+    })
+    return () => {
+      alive = false
+    }
+  }, [connection])
+  return repos
+}
+
 export function RemoteField({ value, onChange }: { value: string; onChange: (remote: string) => void }) {
   const t = useT()
+  const connections = useStore((s) => s.connections)?.connections ?? []
+  const repos = useCodeRepos(connections.find((c) => c.capabilities.includes('code'))?.id)
+  const options = useMemo(() => {
+    const listed = repos.filter((repo) => repo.url).map((repo) => ({ value: repo.url as string, label: repo.ref }))
+    return value && !listed.some((option) => option.value === value) ? [...listed, { value, label: value }] : listed
+  }, [repos, value])
   return (
-    <label className="block space-y-2">
-      <span className="block text-base font-medium text-fg">{t('settings.app_remote')}</span>
-      <Input type="url" inputMode="url" value={value} placeholder={t('settings.app_remotePlaceholder')} onChange={(e) => onChange(e.target.value.trim())} className="font-mono text-sm" />
-      <span className="block text-sm text-muted">{t('settings.app_remoteHint')}</span>
-    </label>
+    <Field label={t('settings.app_remote')}>
+      <Select label={t('settings.app_remote')} className="w-full" value={value} options={options} placeholder={t('settings.app_remotePlaceholder')} onValueChange={onChange} />
+    </Field>
   )
 }
 
@@ -86,7 +109,7 @@ function RepositoryBody({ value, fields, kinds, problem, edit, onChoose }: BodyP
     <div className="space-y-5 border-t px-3 py-4">
       <div className="grid gap-4 sm:grid-cols-2">
         {shared && <RemoteField value={value.remote ?? ''} onChange={(remote) => edit((r) => ({ ...r, remote }))} />}
-        {admin && <DirectoryField value={value.directory} onChoose={onChoose} />}
+        {admin && !shared && <DirectoryField value={value.directory} onChoose={onChoose} />}
         <BindingFields fields={groups[0].fields} bindings={value.bindings} problem={problem} onChange={bound} />
         <KindSelect value={value.kind} kinds={kinds} onChange={(kind) => edit((r) => ({ ...r, kind }))} />
       </div>

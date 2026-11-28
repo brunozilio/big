@@ -107,7 +107,7 @@ export function Onboarding({ onDone, resumed, onResumed }: { onDone: () => void;
     <OnboardingShell labels={installed ? [...installerLabels(t), ...labels] : labels} current={installed ? at + 2 : at} outside={connect}>
       <motion.div key={stage} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} transition={tweenClose} className="flex min-h-0 flex-1 flex-col">
         <StageHeading title={current.title} text={current.text} />
-        <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2">
+        <div className="scrollbar-thin -mx-1 min-h-0 flex-1 overflow-y-auto px-1 pb-2 pt-1">
           {stage === 'browser' ? (
             <CloudBrowser />
           ) : stage !== 'application' ? (

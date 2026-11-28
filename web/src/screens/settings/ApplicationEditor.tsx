@@ -150,13 +150,14 @@ function useFolderActions(editing: Editing, own: BindingField[], kind: string | 
   latest.current = { editing, own, kind }
   const suggest = useCallback((listing: DirListing, current: Bindings | undefined) => {
     const now = latest.current
+    change({ type: 'remote', path: listing.path, remote: listing.remote.url ?? '' })
     void suggested(listing.remote.ref, now.own, current, [folderName(listing.path), now.editing.name]).then((bindings) => change({ type: 'suggested', path: listing.path, bindings }))
   }, [change])
   const onFolder = useCallback((key: string, listing: DirListing) => {
     const rows = latest.current.editing.repositories
     const row = rows.find((r) => r.key === key)
     if (!row) return
-    change({ type: 'repository', key, change: (r) => ({ ...r, directory: listing.path }) })
+    change({ type: 'repository', key, change: (r) => ({ ...r, directory: listing.path, remote: listing.remote.url ?? '' }) })
     if (rows[0]?.key === key) change({ type: 'named', path: listing.path })
     suggest(listing, row.value.bindings)
   }, [change, suggest])

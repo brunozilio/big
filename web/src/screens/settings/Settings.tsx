@@ -147,6 +147,15 @@ export function accountsOf(provider: Provider, connections: Connection[]) {
   return connections.filter((c) => c.provider === provider.key)
 }
 
+function providerCards(p: Provider, connections: Connection[], onConnect: (provider: string) => void) {
+  const accounts = accountsOf(p, connections)
+  if (!p.custom) return [<ConnectionCard key={p.key} provider={p} accounts={accounts} onConnect={onConnect} />]
+  return [
+    ...accounts.map((a) => <ConnectionCard key={`${p.key}:${a.id}`} provider={p} accounts={[a]} account={a} onConnect={onConnect} />),
+    <ConnectionCard key={p.key} provider={p} accounts={[]} onConnect={onConnect} />,
+  ]
+}
+
 function ConnectionsView({ onConnect }: { onConnect: (provider: string) => void }) {
   const t = useT()
   const data = useStore((s) => s.connections)
@@ -168,7 +177,7 @@ function ConnectionsView({ onConnect }: { onConnect: (provider: string) => void 
         <section key={g} data-group={g}>
           <h2 className={cn('mb-2.5 text-base font-medium transition-colors', focus === g ? 'text-fg' : 'text-muted')}>{groupName(t, g)}</h2>
           <div className="grid gap-2.5 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
-            {providers.filter((p) => p.group === g).map((p) => <ConnectionCard key={p.key} provider={p} accounts={accountsOf(p, data.connections)} onConnect={onConnect} />)}
+            {providers.filter((p) => p.group === g).flatMap((p) => providerCards(p, data.connections, onConnect))}
           </div>
         </section>
       ))}

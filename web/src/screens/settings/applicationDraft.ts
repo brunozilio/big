@@ -88,6 +88,7 @@ export type Change =
   | { type: 'folders'; paths: string[]; kind?: string }
   | { type: 'blank'; kind?: string }
   | { type: 'suggested'; path: string; bindings: Bindings }
+  | { type: 'remote'; path: string; remote: string }
 
 function withFolderRows(rows: Row[], paths: string[], kind?: string): Row[] {
   const next = withFolders(rows.map((r) => r.value), paths, kind)
@@ -114,5 +115,7 @@ export function reduce(state: Editing, change: Change): Editing {
       return { ...state, repositories: withFolderRows(state.repositories, change.paths, change.kind) }
     case 'suggested':
       return { ...state, repositories: state.repositories.map((r) => (r.value.directory === change.path ? { key: r.key, value: { ...r.value, bindings: { ...change.bindings, ...r.value.bindings } } } : r)) }
+    case 'remote':
+      return { ...state, repositories: state.repositories.map((r) => (r.value.directory === change.path ? { key: r.key, value: { ...r.value, remote: change.remote } } : r)) }
   }
 }

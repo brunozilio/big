@@ -161,13 +161,13 @@ function Outdated({ pkg }: { pkg: string }) {
     void reloadExtension().then(() => setTimeout(() => window.location.reload(), 1500))
   }
   return (
-    <Card className="space-y-3 px-4 py-4">
+    <div className="space-y-3">
       <p className="text-sm text-fg">{t('settings.browser_cloud_outdated')}</p>
       <div className="flex flex-wrap gap-2">
         <a href={at(pkg)} download className="inline-flex"><Button size="sm" variant="secondary" icon={<Icon name="download" size={14} />}>{t('settings.browser_cloud_download')}</Button></a>
         <Button size="sm" variant="primary" onClick={reload} disabled={reloading}>{t('settings.browser_cloud_reloadExtension')}</Button>
       </div>
-    </Card>
+    </div>
   )
 }
 
@@ -200,17 +200,20 @@ function ConnectThis({ onDone }: { onDone: () => void }) {
   )
 }
 
-function Devices({ devices, onChange }: { devices: PairedDevice[]; onChange: () => void }) {
+function Devices({ devices, onChange, update }: { devices: PairedDevice[]; onChange: () => void; update: ReactNode }) {
   const t = useT()
-  if (devices.length === 0) return null
+  if (devices.length === 0) return update ? <Card className="px-4 py-4">{update}</Card> : null
   const forget = (device: string) => void request('DELETE', `/api/browser/devices/${encodeURIComponent(device)}`).finally(onChange)
   return (
     <Card className="divide-y divide-border">
       {devices.map((device) => (
-        <div key={device.device} className="flex items-center gap-3 px-4 py-3">
-          <p className="min-w-0 flex-1 truncate text-sm text-fg">{device.name}</p>
-          <StatusBadge connected={device.connected} />
-          <Button size="sm" variant="ghost" onClick={() => forget(device.device)}>{t('settings.browser_cloud_forget')}</Button>
+        <div key={device.device}>
+          <div className="flex items-center gap-3 px-4 py-3">
+            <p className="min-w-0 flex-1 truncate text-sm text-fg">{device.name}</p>
+            <StatusBadge connected={device.connected} />
+            <Button size="sm" variant="ghost" onClick={() => forget(device.device)}>{t('settings.browser_cloud_forget')}</Button>
+          </div>
+          {device.connected && update && <div className="px-4 pb-3">{update}</div>}
         </div>
       ))}
     </Card>
@@ -220,11 +223,11 @@ function Devices({ devices, onChange }: { devices: PairedDevice[]; onChange: () 
 function CloudView({ status, onChange }: { status: BrowserStatus; onChange: () => void }) {
   const installed = extensionBuild()
   const pkg = status.package ?? '/api/browser/extension.zip'
+  const outdated = installed && status.build && installed !== status.build ? <Outdated pkg={pkg} /> : null
   return (
     <section className="space-y-3">
       {!installed && <CloudSetup pkg={pkg} />}
-      {installed && status.build && installed !== status.build && <Outdated pkg={pkg} />}
-      <Devices devices={status.devices ?? []} onChange={onChange} />
+      <Devices devices={status.devices ?? []} onChange={onChange} update={outdated} />
       {installed && <ConnectThis onDone={onChange} />}
     </section>
   )

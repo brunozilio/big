@@ -43,7 +43,7 @@ export function presentation({ language }: { language: Language }) {
       "Conecta tu propio servidor MCP",
       "Conecte o seu próprio servidor MCP",
     ),
-    group: "mcp",
+    group: "customization",
     button: connect(language),
     site: pick(language, "the MCP server", "del servidor MCP", "do servidor MCP"),
     choose_title: pick(language, "MCP server", "Servidor MCP", "Servidor MCP"),

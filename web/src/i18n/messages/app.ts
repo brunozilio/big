@@ -31,7 +31,7 @@ export default namespace(
     stageAdminLabel: 'Administrador',
     stageBrowserLabel: 'Navegador',
     stageBrowserTitle: 'Conecte o seu Chrome',
-    stageBrowserText: 'Os agentes usam o seu Chrome, com os seus logins, para abrir páginas e testar. Dá para fazer depois em Configurações.',
+    stageBrowserText: 'Os agentes usam o seu Chrome, com os seus logins, para abrir páginas e testar.',
     stageConnectionsLabel: 'Conexões',
     stageConnectionsTitle: 'Conecte suas ferramentas',
     stageConnectionsText: 'Código, tarefas e nuvem. Dá para mudar depois em Configurações.',

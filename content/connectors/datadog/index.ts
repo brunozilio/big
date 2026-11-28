@@ -52,7 +52,7 @@ export function provider() {
 export function presentation({ language }: { language: Language }) {
   return {
     description: pick(language, "Your Datadog account", "Tu cuenta de Datadog", "Sua conta Datadog"),
-    group: "mcp",
+    group: "observability",
     button: pick(language, "Continue on Datadog", "Continuar en Datadog", "Continuar no Datadog"),
     site: pick(language, "Datadog", "de Datadog", "do Datadog"),
     choose_title: pick(language, "Datadog site", "Sitio de Datadog", "Site do Datadog"),

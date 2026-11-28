@@ -22,13 +22,15 @@ function CardStatus({ accounts, onConnect }: { accounts: Connection[]; onConnect
   )
 }
 
-export function ConnectionCard({ provider: p, accounts, onConnect }: { provider: Provider; accounts: Connection[]; onConnect: (provider: string) => void }) {
+export function ConnectionCard({ provider: p, accounts, account, onConnect }: { provider: Provider; accounts: Connection[]; account?: Connection; onConnect: (provider: string) => void }) {
+  const title = account ? account.label : p.name
+  const hint = account ? account.account || p.description : p.description
   return (
-    <div role="button" tabIndex={0} data-provider={p.key} onClick={() => onConnect(p.key)} onKeyDown={(e) => e.key === 'Enter' && onConnect(p.key)} className="flex h-14 cursor-pointer items-center gap-3 rounded-card bg-surface px-3 shadow-card transition-shadow hover:shadow-pop">
-      <LogoTile logo={p.logo} name={p.name} size={32} />
+    <div role="button" tabIndex={0} data-provider={p.key} data-account={account?.id} onClick={() => onConnect(p.key)} onKeyDown={(e) => e.key === 'Enter' && onConnect(p.key)} className="flex h-14 cursor-pointer items-center gap-3 rounded-card bg-surface px-3 shadow-card transition-shadow hover:shadow-pop">
+      <LogoTile logo={p.logo} name={title} size={32} />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-base font-medium text-fg">{p.name}</p>
-        <p className="truncate text-sm text-muted">{p.description}</p>
+        <p className="truncate text-base font-medium text-fg">{title}</p>
+        <p className="truncate text-sm text-muted">{hint}</p>
       </div>
       <CardStatus accounts={accounts} onConnect={() => onConnect(p.key)} />
     </div>
