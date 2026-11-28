@@ -158,4 +158,13 @@ fn a_matcher_that_is_no_pattern_blocks_a_decision_and_says_how_to_let_it_through
     let ran = hooks.run(super::HookEvent::PreToolUse, "Bash", json!({}), &workspace).expect("decided");
     let blocked = ran.blocked.unwrap_or_default();
     assert!(blocked.contains("PreToolUse hook failed") && blocked.contains("failClosed: false"), "{blocked}");
+    let closed = json!({"type": "command", "command": "true"});
+    let open = json!({"type": "command", "command": "true", "failClosed": false});
+    let parsed = super::Hooks::parse(&json!({"PreToolUse": [{"hooks": [closed, open]}]}));
+    let mut mixed = parsed.expect("hooks");
+    for groups in mixed.0.values_mut() {
+        groups[0].matcher = "(".into();
+    }
+    let ran = mixed.run(super::HookEvent::PreToolUse, "Bash", json!({}), &workspace).expect("skipped");
+    assert_eq!(ran.blocked, None, "a group with a hook that fails open is skipped, not blocking");
 }
