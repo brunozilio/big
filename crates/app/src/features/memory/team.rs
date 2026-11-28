@@ -4,16 +4,17 @@ use agent_engine::scope::Scope;
 use brand::features as flags;
 use domain::features::on;
 use domain::memory::{Memory, team};
+use domain::redact::Redactor;
 
 pub fn folder(project: &Path) -> PathBuf {
     project.join(brand::DIR).join("memory")
 }
 
-pub fn load(gate: &Scope) -> Vec<Memory> {
-    load_in(gate.cwd())
+pub fn load(gate: &Scope, redactor: &Redactor) -> Vec<Memory> {
+    load_in(gate.cwd(), redactor)
 }
 
-pub fn load_in(project: &Path) -> Vec<Memory> {
+pub fn load_in(project: &Path, redactor: &Redactor) -> Vec<Memory> {
     if !on(flags::TEAM_MEMORY) {
         return Vec::new();
     }
@@ -31,7 +32,7 @@ pub fn load_in(project: &Path) -> Vec<Memory> {
         .filter_map(|(at, path)| {
             let text = std::fs::read_to_string(path).ok()?;
             let name = path.file_name()?.to_string_lossy().into_owned();
-            team::parse(at, &name, &text)
+            team::parse(at, &name, &text, redactor)
         })
         .collect()
 }
@@ -64,7 +65,7 @@ mod tests {
         let (name, text) = team::file(&mine, &team::Sharer::default());
         std::fs::create_dir_all(folder(project.path())).expect("folder");
         std::fs::write(folder(project.path()).join(name), text).expect("shared");
-        let loaded = load(&gate);
+        let loaded = load(&gate, &Redactor::default());
 
         assert_eq!(loaded.len(), 1);
         assert!(team::is_team(loaded[0].id));

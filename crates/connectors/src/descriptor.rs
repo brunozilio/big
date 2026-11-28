@@ -40,6 +40,8 @@ pub struct ActionSpec {
     pub visibility: Visibility,
     #[serde(default)]
     pub permission: Permission,
+    #[serde(default, rename = "secretFields", skip_serializing_if = "Vec::is_empty")]
+    pub secret_fields: Vec<String>,
 }
 
 fn native() -> Idempotency {
@@ -61,6 +63,7 @@ impl ActionSpec {
             free_text: Vec::new(),
             visibility: Visibility::Model,
             permission: Permission::default(),
+            secret_fields: Vec::new(),
         }
     }
 
@@ -84,6 +87,7 @@ impl ActionSpec {
             free_text: Vec::new(),
             visibility: Visibility::Model,
             permission: Permission::default(),
+            secret_fields: Vec::new(),
         }
     }
 

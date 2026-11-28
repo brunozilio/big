@@ -17,7 +17,7 @@ use std::sync::atomic::AtomicBool;
 
 pub use launcher::{Launch, Launcher, OnThisMachine};
 pub use models::Models;
-pub use policy::{Policy, declare_redaction, env_secrets};
+pub use policy::{Policy, env_secrets, redactor};
 pub use services::{CodePointers, Network, Pointers, Services, WebSearcher};
 pub use starter::Starter;
 pub(crate) use tracking::Tracking;

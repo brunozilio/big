@@ -52,6 +52,7 @@ pub struct Engine {
     launch: crate::tools::Launch,
     live: Arc<live::LiveSessions>,
     runtime: Result<tokio::runtime::Handle, String>,
+    redactor: Arc<domain::redact::Redactor>,
 }
 
 impl std::fmt::Debug for Engine {
@@ -73,7 +74,13 @@ impl Engine {
             launch: crate::tools::Launch::default(),
             live: Arc::default(),
             runtime: task::runtime().map_err(|error| error.to_string()),
+            redactor: crate::tools::redactor(),
         }
+    }
+
+    pub fn with_redactor(mut self, redactor: Arc<domain::redact::Redactor>) -> Self {
+        self.redactor = redactor;
+        self
     }
 
     pub fn with_language_servers(mut self, lsp: Arc<dyn LanguageServers>) -> Self {
@@ -123,6 +130,7 @@ impl AgentEngine for Engine {
             recorder: None,
             held: Arc::default(),
             live: live::Live::of(&self.live),
+            redactor: Arc::clone(&self.redactor),
         };
         let runtime = self
             .runtime

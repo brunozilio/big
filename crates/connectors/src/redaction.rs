@@ -1,35 +1,61 @@
-use std::borrow::Cow;
+use std::sync::Arc;
 
-use domain::redact::{Known, Rules};
+use domain::redact::{FILE, Known, Redactor, Rules, Severity};
 use serde_json::Value;
 
 use crate::descriptor::ActionSpec;
+use crate::error::ActionError;
 use crate::provider::Provider;
 
-const CONTENT: &str = "content";
-const CONNECTORS: &str = "connectors";
-
-pub fn declare<'a>(providers: impl Iterator<Item = &'a dyn Provider>) {
-    let (content, mut problems) = Rules::layered(&content::schema::policies(domain::redact::FILE));
-    problems.extend(domain::redact::declare(CONTENT, content));
-    let mut declared = Rules::default();
-    for provider in providers {
-        declared.merge(&provider.secret_patterns());
-    }
-    problems.extend(domain::redact::declare(CONNECTORS, declared));
+pub fn redactor<'a>(providers: impl Iterator<Item = &'a dyn Provider>) -> Arc<Redactor> {
+    let declared: Vec<Rules> = providers.map(Provider::secret_patterns).collect();
+    let shipped = content::builtin_text(FILE);
+    let mine = content::user_text(content::folder().as_deref(), FILE);
+    let (redactor, problems) = domain::redact::assemble(shipped.as_deref(), mine.as_deref(), &declared);
     for problem in problems {
-        tracing::warn!(%problem, "a redaction rule was left out");
+        match problem.severity {
+            Severity::Error => tracing::error!(%problem, "redaction rules"),
+            Severity::Warning => tracing::warn!(%problem, "redaction rules"),
+        }
+    }
+    Arc::new(redactor)
+}
+
+fn carries_a_secret(redactor: &Redactor, value: &Value) -> bool {
+    !redactor.redact_value(value, &Known::default()).1.is_empty()
+}
+
+pub fn guarded(redactor: &Redactor, spec: &ActionSpec, args: &Value) -> Result<(), ActionError> {
+    if !spec.profile.acts() {
+        return Ok(());
+    }
+    let meant = |field: &str| spec.secret_fields.iter().any(|secret| secret == field);
+    let found = match args {
+        Value::Object(fields) => fields
+            .iter()
+            .find(|(field, value)| !meant(field) && carries_a_secret(redactor, value))
+            .map(|(field, _)| field.clone()),
+        other => carries_a_secret(redactor, other).then(String::new),
+    };
+    match found {
+        Some(field) => {
+            tracing::warn!(action = spec.name, field, "a write carried a secret outside its secret fields");
+            Err(ActionError::secret_in(&field))
+        }
+        None => Ok(()),
     }
 }
 
-pub fn guarded<'a>(spec: &ActionSpec, args: &'a Value) -> Cow<'a, Value> {
-    if !spec.profile.acts() {
-        return Cow::Borrowed(args);
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_shipped_rules_load_and_are_never_empty() {
+        let (rules, problem) = domain::redact::shipped(content::builtin_text(FILE).as_deref());
+        assert_eq!(problem, None);
+        assert!(!rules.prefixes.is_empty() && !rules.patterns.is_empty() && !rules.keys.is_empty(), "{rules:?}");
+        assert!(rules.jwt && !rules.labels.is_empty() && rules.value_min.is_some() && !rules.type_names.is_empty());
+        assert_eq!(rules.entropy, None, "entropy stays off until content turns it on");
     }
-    let (redacted, found) = domain::redact::current().redact_value(args, &Known::default());
-    if found.is_empty() {
-        return Cow::Borrowed(args);
-    }
-    tracing::warn!(action = spec.name, ?found, "secrets were taken out of the arguments before they left");
-    Cow::Owned(redacted)
 }

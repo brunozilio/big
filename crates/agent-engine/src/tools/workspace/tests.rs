@@ -12,6 +12,7 @@ fn a_forked_policy_keeps_its_settings_and_scripts() {
     let policy = Policy {
         scripts: ScriptGrants::none(),
         redact: Some(Arc::new(domain::redact::Known::default())),
+        redactor: Arc::default(),
         escalation: true,
         auto_review: true,
         follow_through: true,

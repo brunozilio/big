@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use domain::Language;
+use domain::redact::Redactor;
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use domain::origin::{Attribution, Origin};
 use serde_json::{Map, Value};
@@ -31,6 +32,7 @@ pub struct Connectors {
     learned: Mutex<HashMap<ConnectionId, Value>>,
     sink: Option<Arc<dyn SettingsSink>>,
     calls: Option<Arc<dyn CallSink>>,
+    redactor: Arc<Redactor>,
 }
 
 pub const POLL: &str = "events.poll";
@@ -76,9 +78,17 @@ impl Connectors {
                 provider,
             })
             .collect();
-        crate::redaction::declare(entries.iter().map(|entry| entry.provider.as_ref()));
-        let learned = Mutex::default();
-        Connectors { entries, http, keeper, limiter: RateLimiter::new(), learned, sink: None, calls: None }
+        let redactor = crate::redaction::redactor(entries.iter().map(|entry| entry.provider.as_ref()));
+        Connectors {
+            entries,
+            http,
+            keeper,
+            limiter: RateLimiter::new(),
+            learned: Mutex::default(),
+            sink: None,
+            calls: None,
+            redactor,
+        }
     }
 
     pub fn with_sink(mut self, sink: Arc<dyn SettingsSink>) -> Connectors {
@@ -118,6 +128,10 @@ impl Connectors {
     pub fn told(&self, key: &ProviderKey, language: Language, text: &str) -> String {
         let said = self.entry(key).ok().and_then(|entry| entry.provider.messages(language).remove(text));
         said.unwrap_or_else(|| text.to_owned())
+    }
+
+    pub fn redactor(&self) -> Arc<Redactor> {
+        Arc::clone(&self.redactor)
     }
 
     pub fn http(&self) -> &dyn Http {
@@ -208,7 +222,7 @@ impl Connectors {
         if let Some(missing) = spec.missing(args) {
             return Err(ActionError::missing(&missing));
         }
-        let args = &crate::redaction::guarded(spec, args);
+        crate::redaction::guarded(&self.redactor, spec, args)?;
         let settings = self.completed(entry, connection, settings).await;
         let mut creds = self.credentials(entry, connection, &settings).await?;
         let metered = Metered { inner: self.http.as_ref(), limiter: &self.limiter, connection: &connection.id };

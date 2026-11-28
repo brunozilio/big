@@ -90,7 +90,7 @@ pub(super) fn applied(memories: &Memories, project: &Path, edit: MemoryEdit, ori
     };
     let told = match &edit {
         MemoryEdit::Remember { text, .. } => {
-            let text = domain::memory::sanitize(text).into_inner();
+            let text = domain::memory::sanitize(text, memories.redactor()).into_inner();
             let kept = listing.memories.iter().find(|memory| memory.text == text);
             kept.map_or_else(|| "Remembered.".to_owned(), |memory| format!("Remembered as [{}].", memory.id.0))
         }

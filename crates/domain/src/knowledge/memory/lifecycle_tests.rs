@@ -2,25 +2,26 @@ use super::tests::{book, by_agent, remember};
 use super::*;
 
 #[test]
-fn secrets_never_reach_a_memory() {
+fn secrets_never_reach_a_memory_once_its_edit_is_redacted() {
+    let redactor = crate::redact::testing();
     let cases = [
-        ("The key is sk-ant-api03-AbCdEf0123456789xyz", "The key is [redacted]"),
-        ("Token ghp_0123456789abcdefABCDEF0123456789abcd works", "Token [redacted] works"),
-        ("Slack bot (xoxb-1234-5678-abcdefgh) posts", "Slack bot ([redacted]) posts"),
-        ("AWS AKIAIOSFODNN7EXAMPLE in CI", "AWS [redacted] in CI"),
+        ("Token house_0123456789abcdef works", "Token [redacted] works"),
+        ("Deploy key (house_0123456789abcdef) set", "Deploy key ([redacted]) set"),
         ("Send Authorization: Bearer abc.def-123", "Send Authorization: Bearer [redacted]"),
-        ("Login with password=hunter2 and API_KEY=xyz", "Login with password=[redacted] and API_KEY=[redacted]"),
+        ("Login with password=hunter2 and API_KEY=xyz", "Login with password=[redacted] and API_KEY=xyz"),
         ("The db password: hunter2 is old", "The db password: [redacted] is old"),
         ("JWT eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl here", "JWT [redacted] here"),
-        ("Run cargo test --workspace; the task-id is sk-short", "Run cargo test --workspace; the task-id is sk-short"),
+        ("The token: string field is typed", "The token: string field is typed"),
+        ("Run cargo test --workspace; the task-id is house_x", "Run cargo test --workspace; the task-id is house_x"),
     ];
     for (written, kept) in cases {
         let mut book = MemoryBook::default();
-        book.apply(&[remember(MemoryKind::Semantic, written, &[])], &by_agent(1));
+        book.apply(&[remember(MemoryKind::Semantic, written, &[]).redacted(&redactor)], &by_agent(1));
         assert_eq!(book.memories[0].text, kept, "from {written:?}");
     }
     let mut book = book();
-    book.apply(&[MemoryEdit::Revise { id: MemoryId(0), text: "Use token=s3cr3t".into() }], &by_agent(2));
+    let revised = MemoryEdit::Revise { id: MemoryId(0), text: "Use token=s3cr3t".into() };
+    book.apply(&[revised.redacted(&redactor)], &by_agent(2));
     assert_eq!(book.memories[0].text, "Use token=[redacted]", "revisions are cleaned too");
 }
 

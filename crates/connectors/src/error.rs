@@ -7,6 +7,7 @@ pub const DEFAULT_RETRY_AFTER: Duration = Duration::from_secs(60);
 pub const RECONNECT: &str = "the access could not be renewed; reconnect the account";
 pub const BLOCKED: &str = "blocked: ";
 pub const LOGIN: &str = "login required: ";
+pub const SECRET: &str = "a secret was found in the argument ";
 
 pub use domain::effect::ErrorClass;
 
@@ -59,6 +60,15 @@ impl ActionError {
 
     pub fn shown(&self) -> &str {
         self.blocker().or_else(|| self.message.strip_prefix(LOGIN)).unwrap_or(&self.message)
+    }
+
+    pub fn secret_in(field: &str) -> ActionError {
+        ActionError::permanent(format!("{SECRET}{field}; the action did not run. Leave the secret out, or declare the field in secretFields if it is meant to carry one"))
+    }
+
+    pub fn secret_field(&self) -> Option<&str> {
+        let rest = self.message.strip_prefix(SECRET)?;
+        rest.split_once(';').map(|(field, _)| field)
     }
 
     pub fn rate_limited(retry_after: Duration, message: impl Into<String>) -> ActionError {

@@ -48,7 +48,7 @@ pub use llm_providers::web_search::WEB_SEARCH;
 pub(crate) use outside::settled;
 pub use workspace::{
     CodePointers, Launch, Launcher, Models, Network, OnThisMachine, Pointers, Policy, Starter, WebSearcher, Workspace,
-    declare_redaction, env_secrets,
+    env_secrets, redactor,
 };
 
 use crate::model::ToolSpec;

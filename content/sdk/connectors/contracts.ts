@@ -30,6 +30,7 @@ export type Action = {
   idempotent: "native" | "lookup";
   description?: string;
   secret?: boolean;
+  secretFields?: string[];
 } & Profile;
 
 export const looks = (untrusted = false, sensitive = false, more: Effect[] = []): Profile => ({

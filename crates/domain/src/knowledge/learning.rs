@@ -118,12 +118,12 @@ pub fn script_name(name: &str) -> Option<String> {
 
 const LEARNED: &str = "## Learned";
 
-pub fn with_learned(instructions: &str, line: &str) -> Result<String, String> {
+pub fn with_learned(instructions: &str, line: &str, redactor: &crate::redact::Redactor) -> Result<String, String> {
     let line = line.split_whitespace().collect::<Vec<_>>().join(" ");
     if line.is_empty() {
         return Err("The instruction is empty.".into());
     }
-    if crate::redact::redact(&line, &crate::redact::Known::default()) != line {
+    if redactor.redact(&line, &crate::redact::Known::default()).sensitive() {
         return Err("The instruction holds what looks like a secret, so it was not written.".into());
     }
     let bullet = format!("- {line}");
@@ -234,14 +234,14 @@ mod tests {
         assert_eq!(keeping(&lesson), Keeping::Instruction("Run cargo nextest, not cargo test.".into()));
         assert!(offered(&lesson).contains(&format!("add to {}: Run cargo nextest", brand::INSTRUCTIONS)));
 
-        let first = with_learned("# Project\nUse Rust.\n", "Run cargo nextest.").expect("added");
+        let first = with_learned("# Project\nUse Rust.\n", "Run cargo nextest.", &crate::redact::testing()).expect("added");
         assert_eq!(first, "# Project\nUse Rust.\n\n## Learned\n- Run cargo nextest.\n");
-        let second = with_learned(&first, "Keep commits small.").expect("added");
+        let second = with_learned(&first, "Keep commits small.", &crate::redact::testing()).expect("added");
         assert_eq!(second, "# Project\nUse Rust.\n\n## Learned\n- Run cargo nextest.\n- Keep commits small.\n");
-        assert_eq!(with_learned(&second, "Run cargo nextest.").as_deref(), Ok(second.as_str()), "once");
-        assert_eq!(with_learned("", "Be brief.").as_deref(), Ok("## Learned\n- Be brief.\n"));
-        assert!(with_learned("", "Use token=abc123 for the API.").is_err(), "no secrets in instructions");
-        assert!(with_learned("", "  ").is_err());
+        assert_eq!(with_learned(&second, "Run cargo nextest.", &crate::redact::testing()).as_deref(), Ok(second.as_str()), "once");
+        assert_eq!(with_learned("", "Be brief.", &crate::redact::testing()).as_deref(), Ok("## Learned\n- Be brief.\n"));
+        assert!(with_learned("", "Use token=abc123 for the API.", &crate::redact::testing()).is_err(), "no secrets in instructions");
+        assert!(with_learned("", "  ", &crate::redact::testing()).is_err());
     }
 
     #[test]

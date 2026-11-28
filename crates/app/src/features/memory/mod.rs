@@ -18,6 +18,7 @@ use domain::{
     Author, Forgotten, Memory, MemoryBook, MemoryBrief, MemoryEdit, MemoryId, MemoryScope, PromptRequest, Provenance,
     RunId,
 };
+use domain::redact::Redactor;
 use platform::sync::Locked;
 use store::{InMemoryStore, MemoryStore, Revised, SqliteMemoryStore};
 
@@ -33,6 +34,7 @@ pub struct Memories {
     books: Arc<Mutex<Books>>,
     homes: Arc<dyn crate::Homes>,
     applications: Option<ApplicationOf>,
+    redactor: Arc<Redactor>,
 }
 
 impl std::fmt::Debug for Memories {
@@ -51,7 +53,13 @@ fn shown(scope: MemoryScope, memory: &Memory) -> Memory {
 
 impl Memories {
     pub fn new(store: Arc<dyn MemoryStore>) -> Self {
-        Self { store, books: Arc::default(), homes: Arc::new(crate::OwnerHome::none()), applications: None }
+        Self {
+            store,
+            books: Arc::default(),
+            homes: Arc::new(crate::OwnerHome::none()),
+            applications: None,
+            redactor: agent_engine::tools::redactor(),
+        }
     }
 
     fn gate(&self, project: &Path) -> agent_engine::scope::Scope {
@@ -64,6 +72,15 @@ impl Memories {
 
     pub(crate) fn only_in_the_process() -> Self {
         Self::new(Arc::new(InMemoryStore::default()))
+    }
+
+    pub fn with_redactor(mut self, redactor: Arc<Redactor>) -> Self {
+        self.redactor = redactor;
+        self
+    }
+
+    pub fn redactor(&self) -> &Redactor {
+        &self.redactor
     }
 
     pub fn with_homes(mut self, homes: Arc<dyn crate::Homes>) -> Self {
@@ -135,7 +152,7 @@ impl Memories {
     }
 
     pub fn shared(&self, project: &Path) -> Vec<Memory> {
-        team::load_in(project)
+        team::load_in(project, &self.redactor)
     }
 
     pub fn application_of(&self, project: &Path) -> Option<ApplicationRef> {
@@ -173,7 +190,8 @@ impl Memories {
     }
 
     fn apply(&self, shelf: &MemoryShelf, edits: &[MemoryEdit], by: &Provenance) -> Result<(), String> {
-        self.update(shelf, &mut |book| drop(book.apply(edits, by))).map_err(|error| {
+        let edits: Vec<MemoryEdit> = edits.iter().map(|edit| edit.redacted(&self.redactor)).collect();
+        self.update(shelf, &mut |book| drop(book.apply(&edits, by))).map_err(|error| {
             tracing::warn!(%error, "could not save memory");
             format!("could not save memory: {error}")
         })

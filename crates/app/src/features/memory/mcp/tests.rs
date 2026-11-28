@@ -159,11 +159,11 @@ fn a_run_of_the_app_only_searches() {
 
 #[test]
 fn a_secret_in_what_an_agent_remembers_is_kept_as_redacted() {
-    let mine = json!({ "prefixes": [{ "name": "house", "prefix": "house_", "min": 12 }] });
-    domain::redact::declare("test", domain::redact::Rules::read(&mine).unwrap_or_default());
-    let memories = remembered(&[]);
-    let server = MemoryEndpoint::for_agent(memories.clone(), "/repo".into(), "Kiro".into());
-    let text = "Deploy with ghp_0123456789abcdefghij, house_0123456789 and password=hunter2";
+    let mine = json!({ "prefixes": [{ "name": "house", "prefix": "house_", "min": 12 }], "keys": ["password"], "valueMin": 6 });
+    let (redactor, _) = domain::redact::Redactor::compiled(domain::redact::Rules::read(&mine).unwrap_or_default());
+    let memories = remembered(&[]).with_redactor(Arc::new(redactor));
+    let server = MemoryEndpoint::for_agent(memories.clone(), "/repo".into(), "Helper".into());
+    let text = "Deploy with house_0123456789, house_abcdefghij and password=hunter2";
     let remember = json!({ "text": text, "kind": "procedural" });
     assert_eq!(said(&server, "memory_remember", remember), ("Remembered as [0].".to_owned(), false));
     let kept: Vec<String> = memories.load(std::path::Path::new("/repo")).memories.into_iter().map(|m| m.text).collect();

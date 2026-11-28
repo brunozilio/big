@@ -19,6 +19,8 @@
   ],
   "keys": ["password", "passwd", "secret", "token", "api_key", "apikey", "api-key"],
   "labels": ["bearer"],
+  "valueMin": 6,
+  "typeNames": ["string", "str", "number", "integer", "int", "boolean", "bool", "object", "array", "any", "unknown", "null", "undefined", "none", "optional", "required", "redacted"],
   "parseErrors": ["unexpected", "invalid", "unknown", "unterminated", "illegal", "bad"],
   "jwt": true
 }

@@ -12,7 +12,7 @@ impl Memories {
     pub fn find(&self, project: &Path, query: &str, limit: usize, searches: &mut MemorySearches) -> SearchAnswer {
         let shelves = self.shelves(project);
         let (kept, _) = self.known(&shelves);
-        let known: Vec<Memory> = kept.into_iter().chain(team::load(&self.gate(project))).collect();
+        let known: Vec<Memory> = kept.into_iter().chain(team::load(&self.gate(project), &self.redactor)).collect();
         let scores = search(query, &known);
         let mut order: Vec<usize> = (0..known.len()).filter(|&i| scores[i] > 0.0).collect();
         order.sort_by(|&a, &b| scores[b].total_cmp(&scores[a]).then(a.cmp(&b)));
@@ -42,7 +42,7 @@ impl Memories {
         let budget = if tool { RecallBudget::WITH_TOOL } else { RecallBudget::default() };
         let (kept, _) = self.known(&shelves);
         let held = kept.len();
-        let known: Vec<Memory> = kept.into_iter().chain(team::load_in(project)).collect();
+        let known: Vec<Memory> = kept.into_iter().chain(team::load_in(project, &self.redactor)).collect();
         let recalled = recall(&request.prompt.text, &known, budget, now());
         self.mark_used(&shelves, &personal(&recalled));
         let anchored = if base.anchors {

@@ -1,6 +1,6 @@
 use serde_json::Value;
 
-use super::{Engine, Known, REDACTED};
+use super::{Known, REDACTED, Redactor};
 
 pub const ASSIGNMENT: &str = "assignment";
 pub const LABEL: &str = "label";
@@ -19,7 +19,7 @@ impl Redaction {
 }
 
 struct Scan<'a> {
-    engine: &'a Engine,
+    engine: &'a Redactor,
     next: bool,
     found: Vec<String>,
 }
@@ -32,11 +32,11 @@ impl Scan<'_> {
     }
 
     fn word(&mut self, word: &str) -> String {
-        if std::mem::take(&mut self.next) {
+        let core = core(word);
+        if std::mem::take(&mut self.next) && self.engine.secret_value(core) {
             self.saw(LABEL);
             return replace_core(word);
         }
-        let core = core(word);
         if let Some(name) = self.engine.token(core) {
             let name = name.to_owned();
             self.saw(&name);
@@ -53,7 +53,7 @@ impl Scan<'_> {
     fn assignment(&self, word: &str) -> Option<usize> {
         let at = word.find(['=', ':'])?;
         let (key, value) = (&word[..at], &word[at + 1..]);
-        (!core(value).is_empty() && self.engine.secret_key(core(key))).then_some(at + 1)
+        (self.engine.secret_value(core(value)) && self.engine.secret_key(core(key))).then_some(at + 1)
     }
 
     fn secret_label(&self, word: &str) -> bool {
@@ -65,7 +65,7 @@ impl Scan<'_> {
     }
 }
 
-impl Engine {
+impl Redactor {
     fn scan(&self) -> Scan<'_> {
         Scan { engine: self, next: false, found: Vec::new() }
     }

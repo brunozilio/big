@@ -7,7 +7,12 @@ use serde_json::json;
 
 use crate::{Rig, tool_use};
 
-const TOKEN: &str = "ghp_0123456789abcdefghijKLMN";
+const TOKEN: &str = "echo_0123456789abcdefghijKLMN";
+
+fn redactor() -> Arc<domain::redact::Redactor> {
+    let rules = json!({ "prefixes": [{ "name": "echo", "prefix": "echo_", "min": 12 }] });
+    Arc::new(domain::redact::Redactor::compiled(domain::redact::Rules::read(&rules).unwrap_or_default()).0)
+}
 const DATABASE: &str = "postgres://app:hunter2hunter@db/main";
 
 #[test]
@@ -15,6 +20,7 @@ fn secrets_in_a_command_s_output_reach_neither_the_model_nor_the_events() {
     let mut rig = Rig::new(domain::Reviewer::Nobody);
     std::fs::write(rig.dir.path().join(".env"), format!("DATABASE_URL={DATABASE}\n")).expect("env");
     rig.workspace.policy.redact = Some(Arc::new(agent_engine::tools::env_secrets(rig.dir.path())));
+    rig.workspace.policy.redactor = redactor();
     let command = format!("echo token {TOKEN}; echo url {DATABASE}; echo plain");
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("b", "Bash", json!({ "command": command }))]),
@@ -49,6 +55,7 @@ fn secrets_in_a_command_s_output_reach_neither_the_model_nor_the_events() {
 fn a_secret_in_the_prompt_reaches_the_model_redacted_while_the_history_keeps_what_was_said() {
     let mut rig = Rig::new(domain::Reviewer::Nobody);
     rig.workspace.policy.redact = Some(Arc::new(domain::redact::Known::default()));
+    rig.workspace.policy.redactor = redactor();
     let model = ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Done".into())])]);
     let said = format!("push with {TOKEN} please");
     let mut history = vec![Message::user(said.clone())];
@@ -77,6 +84,7 @@ fn a_command_s_lines_show_while_it_runs_and_keep_secrets_out() {
     let mut rig = Rig::new(domain::Reviewer::Nobody);
     std::fs::write(rig.dir.path().join(".env"), format!("DATABASE_URL={DATABASE}\n")).expect("env");
     rig.workspace.policy.redact = Some(Arc::new(agent_engine::tools::env_secrets(rig.dir.path())));
+    rig.workspace.policy.redactor = redactor();
     let command = format!("echo compiling one; sleep 0.5; echo url {DATABASE}; sleep 0.5; echo finished");
     let model = ScriptedModel::new([
         ScriptedModel::reply(vec![tool_use("b", "Bash", json!({ "command": command }))]),

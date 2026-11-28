@@ -4,6 +4,7 @@ use std::sync::Arc;
 use brand::features as flags;
 use domain::features::on;
 use domain::model_roles::ModelRoles;
+use domain::redact::Redactor;
 use domain::{PromptRequest, SessionId};
 
 use super::equip::{Equipped, MainAgent, Toolbox};
@@ -30,7 +31,7 @@ impl Job {
     ) -> Result<Governed, Stop> {
         let settings = &brief.settings;
         let Equipped { mut workspace, mut toolbox, main } = equipped;
-        workspace.policy = flagged(settings, &workspace.cwd);
+        workspace.policy = flagged(settings, &workspace.cwd, &self.redactor);
         workspace.models.escalation.clone_from(&settings.escalation);
         self.request.policy.budgets = budgets(&self.request);
         workspace.services.files = Some(Arc::default());
@@ -46,11 +47,11 @@ impl Job {
     }
 }
 
-pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path) -> Policy {
-    tools::declare_redaction();
+pub(in crate::engine) fn flagged(settings: &Settings, cwd: &Path, redactor: &Arc<Redactor>) -> Policy {
     Policy {
         scripts: settings.scripts,
         redact: on(flags::REDACT_SECRETS).then(|| Arc::new(tools::env_secrets(cwd))),
+        redactor: Arc::clone(redactor),
         escalation: on(flags::ESCALATION),
         auto_review: on(flags::AUTO_REVIEW),
         follow_through: on(flags::FOLLOW_THROUGH),

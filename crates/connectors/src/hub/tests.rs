@@ -42,6 +42,10 @@ impl Provider for Echo {
                 ActionSpec::read("x.read", object(&[("a", "string")], &[]), json!({}), looked()),
                 ActionSpec::read("y.read", object(&[], &[]), json!({}), looked()),
                 ActionSpec::write("x.send", object(&[], &[]), json!({}), crate::Idempotency::Lookup, sends()),
+                ActionSpec {
+                    secret_fields: vec!["token".into()],
+                    ..ActionSpec::write("x.keep", object(&[], &[]), json!({}), crate::Idempotency::Lookup, sends())
+                },
             ],
         }
     }

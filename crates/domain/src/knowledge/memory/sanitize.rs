@@ -1,4 +1,6 @@
+use super::MemoryEdit;
 pub use crate::redact::REDACTED;
+use crate::redact::Redactor;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Sanitized(String);
@@ -13,6 +15,16 @@ impl Sanitized {
     }
 }
 
-pub fn sanitize(text: &str) -> Sanitized {
-    Sanitized(crate::redact::words(text).join(" "))
+pub fn sanitize(text: &str, redactor: &Redactor) -> Sanitized {
+    Sanitized(redactor.words(text).join(" "))
+}
+
+impl MemoryEdit {
+    pub fn redacted(&self, redactor: &Redactor) -> MemoryEdit {
+        let mut edit = self.clone();
+        if let MemoryEdit::Remember { text, .. } | MemoryEdit::Revise { text, .. } = &mut edit {
+            *text = sanitize(text, redactor).into_inner();
+        }
+        edit
+    }
 }

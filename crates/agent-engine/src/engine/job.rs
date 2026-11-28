@@ -21,6 +21,7 @@ pub(super) struct Job {
     pub(super) recorder: Option<Arc<super::record::Recorder>>,
     pub(super) held: Arc<Mutex<Option<crate::sessions::Hold>>>,
     pub(super) live: super::live::Live,
+    pub(super) redactor: Arc<domain::redact::Redactor>,
 }
 
 impl Job {

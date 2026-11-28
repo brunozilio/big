@@ -1,18 +1,17 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use domain::redact::{Known, Rules};
+use domain::redact::{FILE, Known, Redactor, Severity};
 use domain::web_reading::WebReading;
 
 use crate::tools::script_tool::ScriptGrants;
 use crate::transcript::{Block, Message, Role};
 
-const CONTENT: &str = "content";
-
 #[derive(Debug, Default)]
 pub struct Policy {
     pub scripts: ScriptGrants,
     pub redact: Option<Arc<Known>>,
+    pub redactor: Arc<Redactor>,
     pub escalation: bool,
     pub auto_review: bool,
     pub follow_through: bool,
@@ -31,6 +30,7 @@ impl Policy {
         Self {
             scripts: self.scripts,
             redact: self.redact.clone(),
+            redactor: Arc::clone(&self.redactor),
             escalation: self.escalation,
             auto_review: self.auto_review,
             follow_through: self.follow_through,
@@ -47,30 +47,34 @@ impl Policy {
 
     pub fn redacted(&self, text: &str) -> String {
         match &self.redact {
-            Some(known) => domain::redact::redact(text, known),
+            Some(known) => self.redactor.redact(text, known).text,
             None => text.to_owned(),
         }
     }
 
     pub fn redact_prompt(&self, messages: &mut [Message]) {
         let Some(known) = &self.redact else { return };
-        let engine = domain::redact::current();
         for message in messages.iter_mut().filter(|message| message.role == Role::User) {
             for block in &mut message.blocks {
                 if let Block::Text(text) | Block::Reminder(text) = block {
-                    *text = engine.redact(text, known).text;
+                    *text = self.redactor.redact(text, known).text;
                 }
             }
         }
     }
 }
 
-pub fn declare_redaction() {
-    let (rules, mut problems) = Rules::layered(&content::schema::policies(domain::redact::FILE));
-    problems.extend(domain::redact::declare(CONTENT, rules));
+pub fn redactor() -> Arc<Redactor> {
+    let shipped = content::builtin_text(FILE);
+    let mine = content::user_text(content::folder().as_deref(), FILE);
+    let (redactor, problems) = domain::redact::assemble(shipped.as_deref(), mine.as_deref(), &[]);
     for problem in problems {
-        tracing::warn!(%problem, "a redaction rule was left out");
+        match problem.severity {
+            Severity::Error => tracing::error!(%problem, "redaction rules"),
+            Severity::Warning => tracing::warn!(%problem, "redaction rules"),
+        }
     }
+    Arc::new(redactor)
 }
 
 pub fn env_secrets(project: &Path) -> Known {

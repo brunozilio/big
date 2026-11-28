@@ -1,26 +1,30 @@
+mod assemble;
 mod known;
+mod redactor;
 mod rules;
 mod scan;
-mod shared;
 
+pub use assemble::{Problem, Severity, assemble, layer, shipped};
 pub use known::Known;
-pub use rules::{ENTROPY, Engine, Entropy, JWT, Pattern, Prefix, Rules};
+pub use redactor::{ENTROPY, JWT, Redactor};
+pub use rules::{Entropy, Pattern, Prefix, Rules};
 pub use scan::{ASSIGNMENT, KNOWN, LABEL, Redaction};
-pub use shared::{current, declare, shipped};
 
 pub const REDACTED: &str = "[redacted]";
 pub const FILE: &str = "safety/redaction.json";
 
-pub fn redact(text: &str, known: &Known) -> String {
-    current().redact(text, known).text
-}
-
-pub fn found(text: &str, known: &Known) -> Vec<String> {
-    current().redact(text, known).found
-}
-
-pub(crate) fn words(text: &str) -> Vec<String> {
-    current().words(text)
+#[cfg(test)]
+pub(crate) fn testing() -> Redactor {
+    let rules = serde_json::json!({
+        "prefixes": [{ "name": "house", "prefix": "house_", "min": 12 }],
+        "keys": ["password", "secret", "token", "api_key"],
+        "labels": ["bearer"],
+        "parseErrors": ["unexpected", "invalid"],
+        "typeNames": ["string", "number"],
+        "valueMin": 6,
+        "jwt": true
+    });
+    Redactor::compiled(Rules::read(&rules).unwrap_or_default()).0
 }
 
 #[cfg(test)]

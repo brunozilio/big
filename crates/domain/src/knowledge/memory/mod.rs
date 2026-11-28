@@ -229,7 +229,7 @@ impl MemoryBook {
 }
 
 fn clean_text(text: &str) -> Option<String> {
-    let text = sanitize(text).into_inner();
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
     if text.is_empty() {
         return None;
     }

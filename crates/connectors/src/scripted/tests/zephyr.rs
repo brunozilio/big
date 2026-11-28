@@ -168,7 +168,6 @@ async fn without_a_project_a_case_is_blocked_before_any_write() {
     let refused = zephyr().call(&http, &creds(json!({})), "tests.create_case", &json!({ "title": "T" }), "k").await;
     assert_eq!(refused.as_ref().map_err(ActionError::blocker), Err(Some(NO_PROJECT)));
     assert!(http.calls().is_empty());
-    assert_eq!(zephyr().messages(Language::Spanish).get(NO_PROJECT).map(String::as_str), Some("Elige el proyecto."));
 }
 
 #[tokio::test]

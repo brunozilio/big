@@ -7,7 +7,7 @@ use domain::memory::{Author, Memory, MemoryBrief, MemoryId, MemoryKind};
 use super::*;
 
 fn policy() -> Policy {
-    flagged(&Settings::default(), Path::new("/nowhere"))
+    flagged(&Settings::default(), Path::new("/nowhere"), &Arc::default())
 }
 
 fn request() -> PromptRequest {
@@ -48,7 +48,7 @@ fn every_switch_follows_its_flag_in_the_config() {
 #[test]
 fn the_scripts_are_the_ones_the_settings_describe() {
     let settings = Settings::default();
-    let policy = flagged(&settings, Path::new("/nowhere"));
+    let policy = flagged(&settings, Path::new("/nowhere"), &Arc::default());
     assert_eq!(policy.scripts, settings.scripts);
 }
 
@@ -57,7 +57,7 @@ fn secrets_are_read_from_the_folder_s_env_files_while_redaction_is_on() {
     let dir = tempfile::tempdir().expect("dir");
     std::fs::write(dir.path().join(".env"), "TOKEN=s3cr3t-value-123456\n").expect("env");
     let said = "the token is s3cr3t-value-123456";
-    let redacting = flagged(&Settings::default(), dir.path());
+    let redacting = flagged(&Settings::default(), dir.path(), &Arc::default());
     assert_eq!(redacting.redacted(said).contains("s3cr3t-value-123456"), !on(flags::REDACT_SECRETS));
 }
 

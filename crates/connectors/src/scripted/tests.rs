@@ -169,10 +169,47 @@ fn a_connector_whose_write_declares_no_effects_does_not_load() {
 
 #[test]
 fn a_connector_declares_what_the_models_working_on_its_data_must_meet() {
-    let declared = FIXTURE.replace("capabilities: [\"notes\"],", "capabilities: [\"notes\"], requires: { regions: [\"eu\"], noTraining: true, retentionDays: 0 },");
+    let declared = FIXTURE.replace(
+        "capabilities: [\"notes\"],",
+        "capabilities: [\"notes\"], requires: { regions: [\"eu\"], noTraining: true, retentionDays: 0 },",
+    );
     let (_folder, loaded) = installed("strict", &declared);
-    let wanted = domain::data_policy::Requires { regions: Some(vec!["eu".into()]), no_training: true, retention_days: Some(0) };
+    let wanted =
+        domain::data_policy::Requires { regions: Some(vec!["eu".into()]), no_training: true, retention_days: Some(0) };
     assert_eq!(loaded.unwrap_or_else(|error| panic!("{error}")).requires(), wanted);
     let (_folder, plain) = installed("fixture", FIXTURE);
     assert!(plain.unwrap_or_else(|error| panic!("{error}")).requires().is_empty());
+}
+
+const TOLD: &str = r#"import { looks, object, read, write } from "sdk/connectors/contracts.ts";
+import { NO_PROJECT, messages as sdk, pick } from "sdk/connectors/index.ts";
+export const NO_ROOM = "Choose the room.";
+export function provider() {
+  const keeps = { effects: ["write"], risk: "low", reversible: true, untrusted: false, sensitive: true };
+  return { schema_version: 2, name: "Told", capabilities: ["notes"], auth: { kind: "token", fields: [] },
+    actions: [{ ...write("notes.hook", object([["url", "string"], ["token", "string"]]), object([]), "native", keeps), secretFields: ["token"] }, read("notes.list", object([]), object([]), looks())] };
+}
+export function messages({ language }) {
+  return { ...sdk({ language }), [NO_ROOM]: pick(language, NO_ROOM, "Elige la sala.", "Escolha a sala.") };
+}
+export function secretPatterns() {
+  return { prefixes: [{ name: "told", prefix: "told_", min: 12 }], entropy: { minLength: 4, bits: 0.5 } };
+}
+export function call() { return null; }
+"#;
+
+#[test]
+fn a_connector_tells_its_blockers_declares_its_token_shape_and_its_secret_fields() {
+    use domain::Language;
+    let (_folder, told) = installed("told", TOLD);
+    let told = told.unwrap_or_else(|error| panic!("{error}"));
+    let portuguese = told.messages(Language::Portuguese);
+    assert_eq!(portuguese.get("Choose the room.").map(String::as_str), Some("Escolha a sala."));
+    assert_eq!(portuguese.get("Choose the project.").map(String::as_str), Some("Escolha o projeto."));
+    assert_eq!(told.messages(Language::Spanish).get("Choose the room.").map(String::as_str), Some("Elige la sala."));
+    let declared = told.secret_patterns();
+    assert_eq!(declared.prefixes.iter().map(|rule| rule.prefix.as_str()).collect::<Vec<_>>(), ["told_"]);
+    assert_eq!(declared.shapes().entropy, None, "a connector cannot turn entropy on for everyone");
+    let hook = told.descriptor().action("notes.hook").cloned().expect("notes.hook");
+    assert_eq!(hook.secret_fields, ["token"]);
 }
