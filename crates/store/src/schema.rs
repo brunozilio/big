@@ -234,18 +234,32 @@ const MIGRATIONS: &[&str] = &[
 const SQLITE_GUARD: &str = "CREATE TRIGGER IF NOT EXISTS audit_trail_only_grows BEFORE UPDATE ON audit_trail
     BEGIN SELECT RAISE(ABORT, 'the audit trail only grows'); END;";
 
-const POSTGRES_GUARD: &str = "CREATE OR REPLACE FUNCTION audit_trail_only_grows() RETURNS trigger LANGUAGE plpgsql
-    AS $$ BEGIN RAISE EXCEPTION 'the audit trail only grows'; END $$;
-    DROP TRIGGER IF EXISTS audit_trail_only_grows ON audit_trail;
-    CREATE TRIGGER audit_trail_only_grows BEFORE UPDATE ON audit_trail
-    FOR EACH ROW EXECUTE FUNCTION audit_trail_only_grows();";
+const GUARDING: i64 = 0x7374_6f72_655f_6175;
+
+const POSTGRES_GUARD: &str = "DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'audit_trail_only_grows'
+        AND pronamespace = current_schema()::regnamespace) THEN
+        CREATE FUNCTION audit_trail_only_grows() RETURNS trigger LANGUAGE plpgsql
+        AS $f$ BEGIN RAISE EXCEPTION 'the audit trail only grows'; END $f$;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname = 'audit_trail_only_grows'
+        AND tgrelid = 'audit_trail'::regclass) THEN
+        CREATE TRIGGER audit_trail_only_grows BEFORE UPDATE ON audit_trail
+        FOR EACH ROW EXECUTE FUNCTION audit_trail_only_grows();
+    END IF;
+END $$;";
+
+fn guarded_on_postgres(conn: &mut dyn database::Conn) -> database::Result<()> {
+    conn.batch(&format!("SELECT pg_advisory_xact_lock({GUARDING})"))?;
+    conn.batch(POSTGRES_GUARD)
+}
 
 const ORDERED: [&str; 4] = ["connections", "applications", "factory_findings", "items"];
 
 pub fn migrate(database: &Database) -> database::Result<()> {
     database.migrate("store_schema", MIGRATIONS)?;
     if database.dialect() != Dialect::Sqlite {
-        return database.write(|conn| conn.batch(POSTGRES_GUARD));
+        return database.write(guarded_on_postgres);
     }
     database.write(|conn| conn.batch(SQLITE_GUARD))?;
     database.write(|conn| {
