@@ -102,8 +102,8 @@ fn every_shipped_action_says_what_it_does_and_credentials_are_kept_secret() {
         let descriptor = provider.descriptor();
         for action in &descriptor.actions {
             assert!(!action.description.trim().is_empty(), "{}: {} has no description", descriptor.key, action.name);
-            let gives_credentials = matches!(action.name.as_str(), "code.git_credentials" | "cloud.identity");
-            assert_eq!(action.secret, gives_credentials, "{}: {}", descriptor.key, action.name);
+            let host_only = matches!(action.name.as_str(), "code.git_credentials" | "cloud.identity" | "audit.deliver");
+            assert_eq!(action.secret, host_only, "{}: {}", descriptor.key, action.name);
         }
     }
 }

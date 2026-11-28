@@ -2,8 +2,8 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
 use std::time::{Duration, Instant};
 
-use domain::redact::Redactor;
 use domain::audit::AuditEvent;
+use domain::redact::Redactor;
 use store::Store;
 
 use super::capture::Captured;
@@ -21,6 +21,7 @@ pub struct Writer {
     pub redactor: Arc<Redactor>,
     pub queue: Arc<Queue>,
     pub retention: Option<Duration>,
+    pub sinks: Vec<String>,
 }
 
 enum Next {
@@ -96,7 +97,12 @@ impl Writer {
 
     fn prune(&self) {
         let Some(older_than) = self.retention else { return };
-        match self.store.forget_audit(older_than) {
+        let forgotten = if self.sinks.is_empty() {
+            self.store.forget_audit(older_than)
+        } else {
+            self.store.forget_audit_delivered(older_than, &self.sinks)
+        };
+        match forgotten {
             Ok(0) => {}
             Ok(forgotten) => tracing::info!(forgotten, "audit records past their retention were forgotten"),
             Err(error) => tracing::warn!(%error, "the audit retention could not run"),

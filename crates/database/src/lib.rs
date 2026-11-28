@@ -138,6 +138,9 @@ impl Database {
     pub fn migrate(&self, table: &str, migrations: &[&str]) -> Result<usize> {
         let dialect = self.dialect();
         self.write(|conn| {
+            if dialect == Dialect::Postgres {
+                conn.batch(&format!("SELECT pg_advisory_xact_lock(hashtext(current_schema() || '.{table}'))"))?;
+            }
             conn.batch(&format!("CREATE TABLE IF NOT EXISTS {table} (version BIGINT NOT NULL)"))?;
             let current: i64 = conn.one(&format!("SELECT COUNT(*) FROM {table}"), &[])?.unwrap_or(0);
             let done = usize::try_from(current).unwrap_or(0);

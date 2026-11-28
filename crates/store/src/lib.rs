@@ -2,6 +2,7 @@ mod applications;
 mod archive;
 mod audit;
 mod audit_chain;
+mod audit_delivery;
 mod audit_row;
 mod branding;
 mod browser_devices;
@@ -27,19 +28,20 @@ use std::time::{Duration, Instant};
 
 use database::{Conn, Database};
 
+pub use applications::{Application, Binding, Bindings, Choice, Environment, Fields, Repository, watched};
 pub use audit::{AuditFacets, AuditFilter, AuditPage, AuditRecord};
 pub use audit_chain::{AuditVerified, GENESIS};
-pub use applications::{Application, Binding, Bindings, Choice, Environment, Fields, Repository, watched};
+pub use audit_delivery::AuditDelivery;
 pub use browser_devices::BrowserDevice;
 pub use connections::ConnectionRecord;
 pub use connector_calls::{ConnectorCall, ConnectorCalls};
-pub use spend::Spent;
 pub use error::Error;
 pub use factory::Generation;
 pub use identity::{CodeCheck, Passkey, Person};
 pub use ownership::OwnedIds;
 pub use retention::Forgotten;
 pub use roles::HeldRole;
+pub use spend::Spent;
 
 pub type Result<T> = std::result::Result<T, Error>;
 

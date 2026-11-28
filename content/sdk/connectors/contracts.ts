@@ -126,6 +126,7 @@ const PROFILES: Record<string, Profile> = {
   "messaging.send_message": alters("medium", "compensate", { recipients: ["chat"], freeText: ["text"], maxInputLevel: "internal" }),
   "design.frame": looks(true),
   "assistant.ask": { ...looks(true, false, ["consumes-budget"]), freeText: ["question", "context"] },
+  "audit.deliver": { ...alters("low", true, { effects: ["send-external"] }), visibility: "host" },
 };
 
 export const CONNECTOR_SCHEMA = 2;
@@ -219,6 +220,7 @@ const DESCRIPTIONS: Record<string, string> = {
   "messaging.send_message": "Send a message to a chat.",
   "design.frame": "Read a design frame by its link.",
   "assistant.ask": "Ask the connected assistant a question.",
+  "audit.deliver": "Deliver audit events, oldest first, and answer how many were taken.",
 };
 
 type Plain = Omit<Action, keyof Profile>;
@@ -492,6 +494,12 @@ export function security(): Action[] {
   );
   const wanted = object([], [["project", "string"], ["kinds", "array"], ["minSeverity", "integer"], ["policy", "boolean"], ["open", "boolean"], ["limit", "integer"]]);
   return [read("security.projects", object([], [["query", "string"]]), projectList()), read("security.findings", wanted, listOf(finding))];
+}
+
+export type AuditAck = { ack: number; rejected?: number };
+
+export function audit(): Action[] {
+  return [write("audit.deliver", object([["events", "array"]]), object([["ack", "integer"]], [["rejected", "integer"]]), "native")];
 }
 
 export function mcp(): Action[] {

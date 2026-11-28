@@ -24,7 +24,8 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let providers = connectors::providers::all();
     let redactor = connectors::redaction::redactor(providers.iter().map(AsRef::as_ref));
     let (store, services) = if cloud {
-        let store = Store::with_database(crate::cloud_db::connect(&providers)?, every).map_err(|error| error.to_string())?;
+        let store =
+            Store::with_database(crate::cloud_db::connect(&providers)?, every).map_err(|error| error.to_string())?;
         let services =
             app::LocalServices::detect_redacting(Some(crate::cloud_db::connect(&providers)?), Arc::clone(&redactor));
         crate::cloud_db::copy_local(&launch.data, &store);
@@ -48,6 +49,7 @@ pub async fn run(launch: Launch, stop: impl Future<Output = ()> + Send + 'static
     let calls = Arc::new(crate::usage_calls::StoredCalls(Arc::clone(&store)));
     let connectors = Connectors::from_providers(providers, http, keeper).with_redactor(redactor);
     let connectors = Arc::new(connectors.with_sink(sink).with_calls(calls));
+    crate::trail::deliver(&store, &connectors);
     app::install_spend(Arc::new(crate::usage_calls::StoredSpend(Arc::clone(&store))));
     connectors::memory::install(Arc::new(crate::connector_memory::StoredMemory(Arc::clone(&store))));
     let runtime = tokio::runtime::Handle::current();

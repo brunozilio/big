@@ -58,7 +58,8 @@ fn the_writer_keeps_the_captured_events_and_tells_what_was_dropped() {
         tracing::warn!(target: "audit", agent = "dev", layer = "floor", "policy.blocked");
         tracing::warn!(target: "audit", agent = "dev", "policy.blocked");
     });
-    let writer = Writer { store: Arc::clone(&store), redactor: Arc::default(), queue, retention: None };
+    let writer =
+        Writer { store: Arc::clone(&store), redactor: Arc::default(), queue, retention: None, sinks: Vec::new() };
     let mut pending = got.into_iter().map(|captured| entry::draft_of(captured, &writer.redactor)).collect();
     writer.write(&mut pending);
     assert!(pending.is_empty());
@@ -81,4 +82,6 @@ fn the_settings_keep_the_trail_unless_a_retention_is_declared() {
     let forgets = Settings::read("warn", "", "5", "30");
     assert_eq!((forgets.level, forgets.capacity), (Level::WARN, 5));
     assert_eq!(forgets.retention, Some(Duration::from_secs(30 * DAY)));
+    assert!(forgets.sinks.is_empty());
+    assert_eq!(forgets.with_sinks("one, two").sinks, ["one", "two"]);
 }

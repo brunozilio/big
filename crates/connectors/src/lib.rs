@@ -1,3 +1,4 @@
+pub mod audit_sink;
 pub mod browser;
 pub mod calls;
 pub mod clock;

@@ -251,6 +251,16 @@ const MIGRATIONS: &[&str] = &[
         PRIMARY KEY (\"user\", source, role)
     );
 ",
+    "
+    CREATE TABLE audit_delivery (
+        sink TEXT PRIMARY KEY,
+        delivered INTEGER NOT NULL,
+        dropped INTEGER NOT NULL,
+        attempts INTEGER NOT NULL,
+        failure TEXT,
+        at INTEGER NOT NULL
+    );
+",
 ];
 
 const SQLITE_GUARD: &str = "CREATE TRIGGER IF NOT EXISTS audit_trail_only_grows BEFORE UPDATE ON audit_trail

@@ -334,6 +334,11 @@ level = "info"
 skip = "http.server.request http.client.request"
 queue = "10000"
 retention_days = ""
+sinks = ""
+
+[webhook_jsonl]
+url = ""
+batch = "100"
 
 [traces]
 otlp_endpoint = ""

@@ -1,5 +1,6 @@
 mod capture;
 mod entry;
+pub mod outbox;
 mod queue;
 mod versioned;
 mod writer;
@@ -25,19 +26,33 @@ pub struct Settings {
     pub skip: Vec<String>,
     pub capacity: usize,
     pub retention: Option<Duration>,
+    pub sinks: Vec<String>,
+}
+
+fn words(text: &str) -> Vec<String> {
+    text.split([' ', ',']).filter(|word| !word.is_empty()).map(str::to_owned).collect()
 }
 
 impl Settings {
     pub fn configured() -> Self {
-        Self::read(brand::audit::LEVEL, brand::audit::SKIP, brand::audit::QUEUE, brand::audit::RETENTION_DAYS)
+        let read =
+            Self::read(brand::audit::LEVEL, brand::audit::SKIP, brand::audit::QUEUE, brand::audit::RETENTION_DAYS);
+        let section = connectors::config::Configuration::read().section("audit");
+        let sinks = section.get("sinks").and_then(serde_json::Value::as_str).unwrap_or(brand::audit::SINKS);
+        read.with_sinks(sinks)
+    }
+
+    pub fn with_sinks(mut self, sinks: &str) -> Self {
+        self.sinks = words(sinks);
+        self
     }
 
     pub fn read(level: &str, skip: &str, capacity: &str, retention_days: &str) -> Self {
         let level = level.trim().parse().unwrap_or(Level::INFO);
-        let skip = skip.split([' ', ',']).filter(|word| !word.is_empty()).map(str::to_owned).collect();
+        let skip = words(skip);
         let capacity = capacity.trim().parse().unwrap_or(10_000);
         let days: Option<u64> = retention_days.trim().parse().ok().filter(|days| *days > 0);
-        Self { level, skip, capacity, retention: days.map(|days| Duration::from_secs(days * DAY)) }
+        Self { level, skip, capacity, retention: days.map(|days| Duration::from_secs(days * DAY)), sinks: Vec::new() }
     }
 }
 
@@ -62,11 +77,15 @@ where
 pub fn attach(store: Arc<Store>, redactor: Arc<Redactor>) {
     let queue = Arc::clone(queue());
     let Some(receiver) = queue.take_receiver() else { return };
-    let writer = Writer { store, redactor, queue, retention: settings().retention };
+    let writer = Writer { store, redactor, queue, retention: settings().retention, sinks: settings().sinks.clone() };
     let started = std::thread::Builder::new().name("audit-trail".to_owned()).spawn(move || writer.run(&receiver));
     if let Err(error) = started {
         tracing::warn!(%error, "the audit trail writer did not start");
     }
+}
+
+pub fn deliver(store: &Arc<Store>, connectors: &Arc<connectors::Connectors>) {
+    outbox::start(store, connectors, &settings().sinks);
 }
 
 #[cfg(test)]

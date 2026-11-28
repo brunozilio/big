@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "creds": { "token": "sink-token", "settings": { "url": "https://sink.test/audit" } },
+  "config": { "batch": 2 },
+  "cases": [
+    {
+      "name": "entrega o lote em JSON Lines e confirma o que levou",
+      "action": "audit.deliver",
+      "args": { "events": [{ "id": "a1", "action": "tool.call" }, { "id": "b2", "action": "policy.blocked" }] },
+      "http": [{ "method": "POST", "url": "/audit", "status": 202, "body": "" }],
+      "expect": { "ok": { "ack": 2 } },
+      "sent": ["POST https://sink.test/audit"]
+    },
+    {
+      "name": "um lote maior que o configurado leva só o começo",
+      "action": "audit.deliver",
+      "args": { "events": [{ "id": "a1" }, { "id": "b2" }, { "id": "c3" }] },
+      "http": [{ "method": "POST", "url": "/audit", "body": "" }],
+      "expect": { "ok": { "ack": 2 } }
+    },
+    {
+      "name": "um lote vazio não envia nada",
+      "action": "audit.deliver",
+      "args": { "events": [] },
+      "expect": { "ok": { "ack": 0 } }
+    },
+    {
+      "name": "sem destino é recusado",
+      "action": "audit.deliver",
+      "args": { "events": [{ "id": "a1" }] },
+      "creds": { "token": "", "settings": {} },
+      "expect": { "error": "permanent" }
+    }
+  ]
+}
