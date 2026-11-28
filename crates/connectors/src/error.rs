@@ -50,6 +50,10 @@ impl ActionError {
         self.class == ErrorClass::Auth && self.message.starts_with(LOGIN)
     }
 
+    pub fn needs_reconnect(&self) -> bool {
+        self.class == ErrorClass::Auth && self.message.starts_with(RECONNECT)
+    }
+
     pub fn blocked(reason: impl fmt::Display) -> ActionError {
         ActionError::permanent(format!("{BLOCKED}{reason}"))
     }
@@ -63,7 +67,9 @@ impl ActionError {
     }
 
     pub fn secret_in(field: &str) -> ActionError {
-        ActionError::permanent(format!("{SECRET}{field}; the action did not run. Leave the secret out, or declare the field in secretFields if it is meant to carry one"))
+        ActionError::permanent(format!(
+            "{SECRET}{field}; the action did not run. Leave the secret out, or declare the field in secretFields if it is meant to carry one"
+        ))
     }
 
     pub fn secret_field(&self) -> Option<&str> {
@@ -197,5 +203,13 @@ mod tests {
         assert_eq!(error.shown(), "faça login no Helix");
         assert!(!ActionError::auth("expired").needs_login());
         assert!(!ActionError::reconnect().needs_login());
+    }
+
+    #[test]
+    fn a_renewal_that_was_refused_needs_the_account_reconnected() {
+        assert!(ActionError::reconnect().needs_reconnect());
+        assert!(!ActionError::auth("expired").needs_reconnect());
+        assert!(!ActionError::login_required("faça login").needs_reconnect());
+        assert!(!ActionError::transient("timeout").needs_reconnect());
     }
 }

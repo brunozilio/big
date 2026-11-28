@@ -137,7 +137,8 @@ impl From<store::Error> for ApiError {
 
 impl From<connectors::ActionError> for ApiError {
     fn from(error: connectors::ActionError) -> ApiError {
-        ApiError::upstream(error.shown())
+        let code = if error.needs_reconnect() { "reconnect" } else { "upstream" };
+        ApiError::new(StatusCode::BAD_GATEWAY, code, error.shown().to_string())
     }
 }
 
