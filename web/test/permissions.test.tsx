@@ -134,6 +134,14 @@ describe('aba de permissões', () => {
     expect((await view.findByRole('alert')).textContent).toContain('Comandos e sites estão negados')
   })
 
+  test('regras salvas que liberavam tudo aparecem como deixadas de fora', async () => {
+    serve([{ kind: 'command', value: 'ls' }], [], { dropped: [{ kind: 'command', value: '*', behavior: 'allow' }, { kind: 'site', value: '*', behavior: 'ask' }] })
+    const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)
+    const alert = await view.findByRole('alert')
+    expect(alert.textContent).toContain('foram deixadas de fora: Bash, Site(*)')
+    expect(alert.textContent).not.toContain('corrompida')
+  })
+
   test('liberar tudo com * é recusado e diz o porquê', async () => {
     serve([])
     const view = render(<TooltipProvider><PermissionsView /></TooltipProvider>)

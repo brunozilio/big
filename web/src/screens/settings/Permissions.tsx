@@ -39,8 +39,9 @@ function BehaviorPicker({ value, onChange, name }: { value: Behavior; onChange: 
 }
 
 export interface ListProblem {
-  fallback: 'last_good' | 'closed'
-  error: string
+  fallback?: 'last_good' | 'closed'
+  error?: string
+  dropped?: Grant[]
 }
 
 interface Listed {
@@ -178,8 +179,13 @@ export function BrokenList({ problem }: { problem: ListProblem }) {
   const t = useT()
   return (
     <div role="alert" className="rounded-md bg-danger-soft px-4 py-3 text-sm text-danger-fg">
-      <p>{problem.fallback === 'last_good' ? t('settings.perm_brokenLastGood') : t('settings.perm_brokenClosed')}</p>
-      <code className="mt-1 block break-all font-mono text-xs text-muted">{problem.error}</code>
+      {problem.fallback && <p>{problem.fallback === 'last_good' ? t('settings.perm_brokenLastGood') : t('settings.perm_brokenClosed')}</p>}
+      {problem.error && <code className="mt-1 block break-all font-mono text-xs text-muted">{problem.error}</code>}
+      {problem.dropped && problem.dropped.length > 0 && (
+        <p className={problem.fallback ? 'mt-2' : undefined}>
+          {t('settings.perm_dropped', { rules: problem.dropped.map(ruleOf).join(', ') })}
+        </p>
+      )}
     </div>
   )
 }
