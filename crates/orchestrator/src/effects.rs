@@ -185,7 +185,7 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
     let owner = crate::owners::of(&shared.store, &state);
     let charged = Attribution::of_step(launch.key.item.clone(), launch.key.step.clone(), Origin::Step);
     let language = crate::agent::language_of(shared, &state.input);
-    let who = Who { owner: &owner, language, charged: &charged };
+    let who = Who { owner: &owner, language, charged: &charged, space: &state.input };
     match launch.command.kind.as_str() {
         AGENT => {
             let effect = AgentEffect {
@@ -205,14 +205,12 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
         }
         CALL => {
             let gated = Gated { shared, item: &state, key: &launch.key, owner: &owner };
-            let command = crate::space::routed(&shared.store, &owner, &state.input, &launch.command);
-            call(who, &gated, &command, &key).await
+            call(who, &gated, &launch.command, &key).await
         }
         WAIT_POLL => {
             let gated = Gated { shared, item: &state, key: &launch.key, owner: &owner };
-            let command = crate::space::routed(&shared.store, &owner, &state.input, &launch.command);
-            gated.check(&command.call()).await?;
-            crate::reading::poll(&gated, who, &command, &key).await
+            gated.check(&launch.command.call()).await?;
+            crate::reading::poll(&gated, who, &launch.command, &key).await
         }
         STATUS | IMPEDIMENT => push(shared, &state, &launch.command, &launch.key).await,
         other => Err(Failure::permanent(format!("the kernel does not know the command {other}"))),
@@ -235,13 +233,11 @@ async fn push(shared: &Shared, item: &WorkItem, command: &Command, key: &Idempot
     }
 }
 
-pub fn connection_of(shared: &Shared, owner: &str, call: &Call) -> Result<(Connection, Value), Failure> {
+pub fn connection_of(shared: &Shared, owner: &str, space: &Value, call: &Call) -> Result<(Connection, Value), Failure> {
     let records =
         shared.store.connections_of(owner).map_err(|error| Failure::Class(ErrorClass::Transient, error.to_string()))?;
-    let found = records.into_iter().find(|record| match &call.connection {
-        Some(id) => &record.id == id,
-        None => record.capabilities.iter().any(|name| name == &call.capability),
-    });
+    let bound = crate::space::route::bound(&shared.store, space, &call.capability);
+    let found = crate::space::route::chosen(records, call.connection.as_deref(), bound.as_deref(), &call.capability);
     let Some(record) = found else {
         let wanted = call.connection.clone().unwrap_or_else(|| call.capability.clone());
         return Err(Failure::Blocked(format!("{NEEDS_CONNECTION}{wanted}")));
@@ -261,6 +257,7 @@ pub struct Who<'a> {
     pub owner: &'a str,
     pub language: Language,
     pub charged: &'a Attribution,
+    pub space: &'a Value,
 }
 
 async fn call(who: Who<'_>, gated: &Gated<'_>, command: &Command, key: &str) -> Result<Value, Failure> {
@@ -274,7 +271,7 @@ async fn call(who: Who<'_>, gated: &Gated<'_>, command: &Command, key: &str) -> 
     })
     .await?;
     if command.optional && call.connection.is_none() {
-        match connection_of(shared, who.owner, &call) {
+        match connection_of(shared, who.owner, who.space, &call) {
             Err(Failure::Blocked(_)) => return Ok(Value::Null),
             Err(other) => return Err(other),
             Ok(_) => {}

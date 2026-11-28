@@ -15,7 +15,7 @@ pub async fn connector(shared: &Shared, who: Who<'_>, call: &Call, key: &str) ->
 }
 
 pub(crate) async fn labelled(shared: &Shared, who: Who<'_>, call: &Call, key: &str) -> Result<connectors::Labelled, Failure> {
-    let (connection, settings) = connection_of(shared, who.owner, call)?;
+    let (connection, settings) = connection_of(shared, who.owner, who.space, call)?;
     let hub = &shared.config.connectors;
     let called = hub.call_labelled(Some(who.charged), &connection, &settings, &call.action, &call.args, key);
     called.await.map_err(|error| match error.blocker() {

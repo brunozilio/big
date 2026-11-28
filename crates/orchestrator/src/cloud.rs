@@ -148,7 +148,7 @@ fn environment(file: &std::path::Path, region: Option<&str>) -> Vec<(String, Str
 pub async fn lease(shared: &Arc<Shared>, command: &Command, input: &Value) -> Result<Option<Lease>, Failure> {
     let Some((call, optional)) = wanted(command, chosen(shared, input).as_ref()) else { return Ok(None) };
     let owner = domain::principal::owner_in(input).to_owned();
-    let (connection, _) = match crate::effects::connection_of(shared, &owner, &call) {
+    let (connection, _) = match crate::effects::connection_of(shared, &owner, input, &call) {
         Ok(found) => found,
         Err(Failure::Blocked(_)) if optional => return Ok(None),
         Err(failure) => return Err(failure),
@@ -156,7 +156,7 @@ pub async fn lease(shared: &Arc<Shared>, command: &Command, input: &Value) -> Re
     let base = shared.config.server.clone().ok_or_else(|| Failure::permanent("the server address is not known"))?;
     let call = Call { connection: Some(connection.id.to_string()), ..call };
     let token = token();
-    let who = Who { owner: &owner, language: crate::agent::language_of(shared, input), charged: &STEP };
+    let who = Who { owner: &owner, language: crate::agent::language_of(shared, input), charged: &STEP, space: input };
     let identity = connector(shared, who, &call, &format!("{}:{CREDENTIALS_COMMAND}:{token}", brand::COMMAND)).await?;
     let region = identity["region"].as_str().filter(|region| !region.is_empty()).map(str::to_owned);
     let url = format!("{}{CREDENTIALS_PATH}{token}", base.trim_end_matches('/'));
@@ -191,7 +191,7 @@ pub async fn credentials(shared: &Shared, token: &str) -> crate::error::Result<V
     let (owner, call) = shared.clouds.call(token).ok_or(crate::error::Error::UnknownCloudToken)?;
     let key = format!("{}:{CREDENTIALS_COMMAND}:{}", brand::COMMAND, uuid::Uuid::new_v4().simple());
     let language = shared.store.language().unwrap_or_default();
-    match connector(shared, Who { owner: &owner, language, charged: &STEP }, &call, &key).await {
+    match connector(shared, Who { owner: &owner, language, charged: &STEP, space: &Value::Null }, &call, &key).await {
         Ok(identity) => Ok(process_credentials(&identity)),
         Err(Failure::Class(_, message) | Failure::Blocked(message)) => Err(crate::error::Error::Cloud(message)),
     }

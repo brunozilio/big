@@ -33,7 +33,7 @@ fn finance() -> Value {
             "fields": { "company": { "value": "acme", "label": "ACME Indústria" } } } },
         "repositories": [],
         "workflow": " invoice-match ",
-        "skills": ["conciliacao", " ", "conciliacao"],
+        "skills": ["review", " ", "review"],
         "instructions": " Só libere nota com pedido aprovado. ",
     })
 }
@@ -44,7 +44,7 @@ async fn a_finance_space_with_an_erp_and_no_repository_runs_an_invoice_from_star
     let (status, space) = world.send(Method::POST, "/api/applications", Some(finance())).await;
     assert_eq!(status, StatusCode::OK, "{space}");
     assert_eq!(space["repositories"], json!([]));
-    assert_eq!((&space["workflow"], &space["skills"]), (&json!("invoice-match"), &json!(["conciliacao"])));
+    assert_eq!((&space["workflow"], &space["skills"]), (&json!("invoice-match"), &json!(["review"])));
     assert_eq!(space["instructions"], "Só libere nota com pedido aprovado.");
     let item = json!({ "text": "Conferir a NF 4521", "issue": null, "model": "auto", "attachments": [], "application": space["id"] });
     let (status, created) = world.send(Method::POST, "/api/items", Some(item)).await;
@@ -78,11 +78,16 @@ async fn a_finance_space_with_an_erp_and_no_repository_runs_an_invoice_from_star
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_space_refuses_a_default_workflow_that_does_not_exist_and_lists_its_own_items() {
+async fn a_space_refuses_a_default_workflow_or_a_skill_that_does_not_exist_and_lists_its_own_items() {
     let world = with_an_erp().await;
     let mut wrong = finance();
     wrong["workflow"] = json!("nao-existe");
     assert_eq!(world.send(Method::POST, "/api/applications", Some(wrong)).await.0, StatusCode::BAD_REQUEST);
+    let mut unknown = finance();
+    unknown["skills"] = json!(["review", "conciliacao"]);
+    let (status, refused) = world.send(Method::POST, "/api/applications", Some(unknown)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(refused["error"]["message"].as_str().is_some_and(|text| text.contains("conciliacao")), "{refused}");
     let space = world.send(Method::POST, "/api/applications", Some(finance())).await.1;
     let mine = json!({ "text": "Conferir a NF 4533", "issue": null, "model": "auto", "attachments": [], "application": space["id"] });
     let loose = json!({ "text": "Revisar o contrato", "issue": null, "model": "auto", "attachments": [], "workflow": "invoice-match" });

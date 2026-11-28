@@ -127,6 +127,10 @@ impl Orchestrator {
         self.shared.config.resources.workflows()
     }
 
+    pub fn skills(&self) -> Vec<String> {
+        self.shared.config.resources.skills()
+    }
+
     pub fn create_item(&self, workflow: &str, input: Value) -> Result<ItemId> {
         self.create_with(workflow, input, None)
     }

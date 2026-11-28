@@ -43,3 +43,46 @@ async fn an_agent_outside_any_space_runs_as_before() {
     assert!(asked.session.skills.is_empty());
     assert!(!asked.session.append_system.unwrap_or_default().contains("Instructions for the work"));
 }
+
+const LOOKUP: &str = r#"
+import { workflow } from "sdk";
+import { act } from "sdk/steps/general.js";
+export default workflow({ name: "consulta", steps: [act({ capability: "changes", action: "get", args: { change: "GMUD-1" } })] });
+"#;
+
+async fn looked_up(bound_now: bool) -> WorkItem {
+    let world = World::new();
+    world.workflow("consulta", LOOKUP);
+    world.provider.always("changes.get", json!({ "id": "GMUD-1" }));
+    let unsigned = store::ConnectionRecord {
+        id: "c2".into(),
+        provider: "fake".into(),
+        label: "Sem login".into(),
+        account: None,
+        capabilities: vec!["changes".into()],
+        settings: json!({}),
+    };
+    let binding = store::Bindings::from([("changes".to_owned(), store::Binding::new("c2", "OPS"))]);
+    let live = if bound_now { binding.clone() } else { store::Bindings::new() };
+    let space =
+        store::Application { id: "ops".into(), name: "Ops".into(), bindings: live, ..store::Application::default() };
+    world.store().save_application(&space).expect("space");
+    let kernel = world.start().await;
+    world.store().save_connection(&unsigned).expect("listed after the first one");
+    let snapshot = json!({ "id": "ops", "name": "Ops", "bindings": binding, "repositories": [] });
+    let id = kernel.create_item("consulta", json!({ "title": "GMUD-1", "application": snapshot })).expect("item");
+    until(&kernel, &id, |item| item.is_ended() || item.impediment.is_some()).await
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_call_goes_through_the_connection_the_live_space_binds() {
+    let item = looked_up(true).await;
+    assert!(item.impediment.is_some(), "the bound connection has no sign in: {:?}", item.steps);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_binding_removed_from_the_space_no_longer_routes_the_call() {
+    let item = looked_up(false).await;
+    assert!(item.impediment.is_none(), "{:?}", item.impediment);
+    assert_eq!(item.step("act", Some("main")).map(|run| run.state), Some(StepState::Passed));
+}

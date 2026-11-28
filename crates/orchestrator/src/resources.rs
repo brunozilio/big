@@ -113,6 +113,27 @@ impl Resources {
         names
     }
 
+    pub fn skills(&self) -> Vec<String> {
+        let mut names: Vec<String> = Vec::new();
+        let mut add = |name: &str| {
+            if !name.is_empty() && !names.iter().any(|known| known == name) {
+                names.push(name.to_owned());
+            }
+        };
+        for (_, dir) in &self.layers {
+            let Ok(entries) = std::fs::read_dir(dir.join("skills")) else { continue };
+            for entry in entries.flatten().filter(|entry| entry.path().is_dir()) {
+                add(&entry.file_name().to_string_lossy());
+            }
+        }
+        for path in self.listed.iter().filter_map(|path| path.strip_prefix("skills/")) {
+            if let Some((name, _)) = path.split_once('/') {
+                add(name);
+            }
+        }
+        names
+    }
+
     pub fn find(&self, path: &str) -> Option<Resource> {
         let alias = path.strip_prefix("sdk/").filter(|rest| OVERRIDABLE.iter().any(|dir| rest.starts_with(dir)));
         let candidates: Vec<(&str, &str)> =

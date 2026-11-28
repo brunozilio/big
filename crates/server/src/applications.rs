@@ -125,7 +125,19 @@ fn bound(given: Bindings) -> Bindings {
         .collect()
 }
 
-fn work(application: &mut Application, workflows: &[String]) -> ApiResult<()> {
+pub struct Known {
+    pub workflows: Vec<String>,
+    pub skills: Vec<String>,
+}
+
+impl Known {
+    pub fn of(shared: &Shared) -> Known {
+        let orchestrator = &shared.backend.orchestrator;
+        Known { workflows: orchestrator.workflows(), skills: orchestrator.skills() }
+    }
+}
+
+fn normalized_work(application: &mut Application) {
     application.instructions = trimmed(&application.instructions);
     let mut skills: Vec<String> = Vec::new();
     for skill in application.skills.iter().map(|skill| trimmed(skill)).filter(|skill| !skill.is_empty()) {
@@ -135,18 +147,28 @@ fn work(application: &mut Application, workflows: &[String]) -> ApiResult<()> {
     }
     application.skills = skills;
     application.workflow = trimmed(&application.workflow);
-    let wanted = &application.workflow;
-    if wanted.is_empty() || workflows.contains(wanted) {
-        return Ok(());
-    }
-    Err(ApiError::bad(said(
-        format!("There is no workflow {wanted}."),
-        format!("No existe el workflow {wanted}."),
-        format!("Não há o workflow {wanted}."),
-    )))
 }
 
-pub fn checked(mut application: Application, workflows: &[String]) -> ApiResult<Application> {
+fn known_work(application: &Application, known: &Known) -> ApiResult<()> {
+    let wanted = &application.workflow;
+    if !wanted.is_empty() && !known.workflows.contains(wanted) {
+        return Err(ApiError::bad(said(
+            format!("There is no workflow {wanted}."),
+            format!("No existe el workflow {wanted}."),
+            format!("Não há o workflow {wanted}."),
+        )));
+    }
+    match application.skills.iter().find(|skill| !known.skills.contains(skill)) {
+        Some(missing) => Err(ApiError::bad(said(
+            format!("There is no skill {missing}."),
+            format!("No existe la skill {missing}."),
+            format!("Não há a skill {missing}."),
+        ))),
+        None => Ok(()),
+    }
+}
+
+pub fn checked(mut application: Application, known: &Known) -> ApiResult<Application> {
     application.name = trimmed(&application.name);
     if application.name.is_empty() {
         return Err(ApiError::bad(said(
@@ -155,7 +177,8 @@ pub fn checked(mut application: Application, workflows: &[String]) -> ApiResult<
             "Dê um nome à aplicação.",
         )));
     }
-    work(&mut application, workflows)?;
+    normalized_work(&mut application);
+    known_work(&application, known)?;
     application.bindings = bound(application.bindings);
     application.env = environment(application.env)?;
     let mut kept: Vec<Repository> = Vec::new();
@@ -207,7 +230,7 @@ pub async fn create(
     let mut application = parsed(body)?;
     application.id = random_id()?;
     let application = crate::workspaces::cloned(&ctx, person.owner(), application).await?;
-    let application = checked(application, &ctx.backend.orchestrator.workflows())?;
+    let application = checked(application, &Known::of(&ctx))?;
     ctx.backend.store.save_application(&application)?;
     ctx.backend.store.set_owner(store::ownership::APPLICATION, &application.id, person.owner())?;
     Ok(reply(application))
@@ -229,7 +252,7 @@ pub async fn update(
     let mut application = parsed(body)?;
     application.id = id;
     let application = crate::workspaces::cloned(&ctx, person.owner(), application).await?;
-    let application = checked(application, &ctx.backend.orchestrator.workflows())?;
+    let application = checked(application, &Known::of(&ctx))?;
     ctx.backend.store.save_application(&application)?;
     Ok(reply(application))
 }

@@ -53,7 +53,7 @@ pub struct Gated<'a> {
 
 impl Gated<'_> {
     pub async fn check(&self, call: &Call) -> Result<Authorized, Failure> {
-        let Ok((connection, _)) = crate::effects::connection_of(self.shared, self.owner, call) else {
+        let Ok((connection, _)) = crate::effects::connection_of(self.shared, self.owner, &self.item.input, call) else {
             return Ok(Authorized::standing(tag_of(call, None)));
         };
         let server = domain::mcp::connectors_server();

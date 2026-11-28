@@ -33,7 +33,7 @@ impl Job {
         let style = self.request.session.output_style.as_deref().and_then(prompt::output_style::find);
         workspace.style_reminder = style.as_ref().and_then(|style| style.turn_reminder.clone());
         let mut appended = style.map(|style| style.system()).unwrap_or_default();
-        appended.push_str(&self.extra_instructions(&main, setup, &toolbox, &workspace)?);
+        appended.push_str(&self.extra_instructions(&main, setup, &toolbox, &workspace, &brief.skills)?);
         let system = prompt::system(&Environment { appended, ..environment.clone() });
         workspace.prompt_context = Some(environment);
         let offered = Agent::specs(&toolbox.tools).into_iter().filter(|spec| main.config.allows(&spec.name)).collect();
@@ -116,6 +116,7 @@ impl Job {
         setup: &Setup,
         toolbox: &Toolbox,
         workspace: &Workspace,
+        known: &[tools::skill::FoundSkill],
     ) -> Result<String, Stop> {
         let mut extra = String::new();
         if let Some(agent) = &main.found {
@@ -134,17 +135,28 @@ impl Job {
                 setup.memory
             ));
         }
-        let asked = self.request.session.skills.iter().filter(|skill| !main.config.skills.contains(skill));
-        for skill in main.config.skills.iter().chain(asked) {
-            let Some(tool) = toolbox.tools.iter().find(|tool| tool.spec().name == crate::tools::names::SKILL) else {
-                return Err(Stop::failed("Configured agent requires the Skill tool"));
-            };
-            let loaded = crate::tools::skill::preloaded(tool.skills(), skill, workspace);
-            if loaded.is_error {
-                return Err(Stop::failed(loaded.content));
+        let tool = toolbox.tools.iter().find(|tool| tool.spec().name == crate::tools::names::SKILL);
+        for skill in &main.config.skills {
+            let Some(tool) = tool else { return Err(Stop::failed("Configured agent requires the Skill tool")) };
+            extra.push_str(&preloaded(tool.skills(), skill, workspace)?);
+        }
+        let found = tool.map_or(known, |tool| tool.skills());
+        for skill in self.request.session.skills.iter().filter(|skill| !main.config.skills.contains(skill)) {
+            match preloaded(found, skill, workspace) {
+                Ok(text) => extra.push_str(&text),
+                Err(_) => {
+                    tracing::warn!(%skill, "a skill the request requires is not available; the run goes on without it")
+                }
             }
-            extra.push_str(&format!("\n\n# Preloaded skill\n{}", loaded.content));
         }
         Ok(extra)
     }
+}
+
+fn preloaded(skills: &[tools::skill::FoundSkill], name: &str, workspace: &Workspace) -> Result<String, Stop> {
+    let loaded = tools::skill::preloaded(skills, name, workspace);
+    if loaded.is_error {
+        return Err(Stop::failed(loaded.content));
+    }
+    Ok(format!("\n\n# Preloaded skill\n{}", loaded.content))
 }

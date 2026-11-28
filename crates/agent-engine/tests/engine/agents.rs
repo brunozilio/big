@@ -125,8 +125,11 @@ fn a_skill_the_request_requires_loads_once_beside_the_ones_the_agent_preloads() 
     std::fs::create_dir_all(root.join("agents")).expect("agents");
     for (name, sentinel) in [("check", "AGENT_SKILL_SENTINEL"), ("ledger", "REQUIRED_SKILL_SENTINEL")] {
         std::fs::create_dir_all(root.join("skills").join(name)).expect("skill");
-        std::fs::write(root.join("skills").join(name).join("SKILL.md"), format!("---\nname: {name}\ndescription: Checks.\n---\n{sentinel}"))
-            .expect("skill");
+        std::fs::write(
+            root.join("skills").join(name).join("SKILL.md"),
+            format!("---\nname: {name}\ndescription: Checks.\n---\n{sentinel}"),
+        )
+        .expect("skill");
     }
     std::fs::write(root.join("settings.json"), r#"{"agent":"builder"}"#).expect("settings");
     std::fs::write(root.join("agents/builder.md"), "---\nname: builder\nskills: [check]\n---\nBuild.").expect("agent");
@@ -140,6 +143,42 @@ fn a_skill_the_request_requires_loads_once_beside_the_ones_the_agent_preloads() 
     let system = &model_api.asked()[0].system;
     assert!(system.contains("REQUIRED_SKILL_SENTINEL"));
     assert_eq!(system.matches("AGENT_SKILL_SENTINEL").count(), 1);
+}
+
+fn required_by_an_agent_without_the_skill_tool(skills: &[&str]) -> (Vec<EngineEvent>, String) {
+    let dir = tempfile::tempdir().expect("dir");
+    let root = dir.path().join(brand::DIR);
+    std::fs::create_dir_all(root.join("agents")).expect("agents");
+    std::fs::create_dir_all(root.join("skills/ledger")).expect("skill");
+    std::fs::write(
+        root.join("skills/ledger/SKILL.md"),
+        "---\nname: ledger\ndescription: Books.\n---\nREQUIRED_SKILL_SENTINEL",
+    )
+    .expect("skill");
+    std::fs::write(root.join("settings.json"), r#"{"agent":"reader"}"#).expect("settings");
+    std::fs::write(root.join("agents/reader.md"), "---\nname: reader\ntools: [Read]\n---\nRead.").expect("agent");
+    let model_api = Arc::new(ScriptedModel::new([ScriptedModel::reply(vec![Block::Text("Read".into())])]));
+    let engine =
+        Engine::new(Arc::new(Source(Mutex::new(vec![model_api.clone()]))), Arc::new(InMemorySessions::default()));
+    let mut request = crate::asked_in(dir.path(), "Read it");
+    request.session.skills = skills.iter().map(|skill| (*skill).to_owned()).collect();
+    let events = finish(&start(&engine, &request));
+    let system = model_api.asked().first().map(|asked| asked.system.clone()).unwrap_or_default();
+    (events, system)
+}
+
+#[test]
+fn a_required_skill_reaches_an_agent_that_cannot_call_the_skill_tool_as_context() {
+    let (events, system) = required_by_an_agent_without_the_skill_tool(&["ledger"]);
+    assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");
+    assert!(system.contains("REQUIRED_SKILL_SENTINEL"));
+}
+
+#[test]
+fn a_required_skill_that_is_gone_does_not_stop_the_run() {
+    let (events, system) = required_by_an_agent_without_the_skill_tool(&["removed", "ledger"]);
+    assert!(matches!(events.last(), Some(EngineEvent::Completed { .. })), "{events:?}");
+    assert!(system.contains("REQUIRED_SKILL_SENTINEL"));
 }
 
 #[test]
