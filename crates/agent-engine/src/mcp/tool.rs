@@ -150,7 +150,9 @@ impl Tool for McpTool {
 pub fn remote_effects(server: &str, name: &str) -> Vec<Effect> {
     use domain::memory;
     match server {
-        memory::MEMORY_SERVER if name == memory::MEMORY_SEARCH_TOOL => Vec::new(),
+        memory::MEMORY_SERVER if name == memory::MEMORY_SEARCH_TOOL => {
+            vec![Effect::Memory(domain::permission::MemoryAccess::Read)]
+        }
         _ => vec![Effect::Remote { server: server.to_owned() }],
     }
 }

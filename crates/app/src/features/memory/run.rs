@@ -16,7 +16,8 @@ pub fn prepare(context: &Context<'_>, run: RunId, request: PromptRequest) -> (Pr
         let first = request.session.resume.is_none();
         let shown = if first { brief.recalled.iter().map(|m| m.id).collect() } else { Vec::new() };
         let searches = MemorySearches::new(shown);
-        let endpoint = MemoryEndpoint::for_run(memories.clone(), request.session.cwd.clone(), searches);
+        let surface = super::gate::surface_of(&request);
+        let endpoint = MemoryEndpoint::for_run(memories.clone(), request.session.cwd.clone(), searches, surface);
         request.host.credentials.mcp.push(endpoint);
     }
     let kept = request.clone();

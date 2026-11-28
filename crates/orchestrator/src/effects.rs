@@ -18,6 +18,7 @@ use crate::agent::{AgentEffect, Failure, blocking, worktree};
 use crate::events::Wake;
 use crate::git;
 use crate::matching::{event_matches, matches};
+use crate::policy::Gated;
 use crate::protocol::{
     AGENT, CALL, CHILD, Command, EVENT, EXEC, IMPEDIMENT, SCRIPT, SLEEP, STATUS, WAIT_HUMAN, WAIT_POLL,
 };
@@ -203,8 +204,14 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
         CALL if launch.command.call().capability == crate::links::CAPABILITY => {
             crate::links::call(shared, item, &launch.command.call())
         }
-        CALL => call(shared, who, &launch.command, &key).await,
-        WAIT_POLL => poll(shared, who, &launch.command, &key).await,
+        CALL => {
+            let gated = Gated { shared, item: &state, key: &launch.key, owner: &owner };
+            call(who, &gated, &launch.command, &key).await
+        }
+        WAIT_POLL => {
+            Gated { shared, item: &state, key: &launch.key, owner: &owner }.check(&launch.command.call()).await?;
+            poll(shared, who, &launch.command, &key).await
+        }
         STATUS | IMPEDIMENT => push(shared, &state, &launch.command, &launch.key).await,
         other => Err(Failure::permanent(format!("the kernel does not know the command {other}"))),
     }
@@ -254,7 +261,8 @@ pub struct Who<'a> {
     pub charged: &'a Attribution,
 }
 
-async fn call(shared: &Shared, who: Who<'_>, command: &Command, key: &str) -> Result<Value, Failure> {
+async fn call(who: Who<'_>, gated: &Gated<'_>, command: &Command, key: &str) -> Result<Value, Failure> {
+    let shared = gated.shared;
     let mut call = command.call();
     let store = crate::kept::store(&shared.config.data);
     let mut args = std::mem::take(&mut call.args);
@@ -270,6 +278,7 @@ async fn call(shared: &Shared, who: Who<'_>, command: &Command, key: &str) -> Re
             Ok(_) => {}
         }
     }
+    gated.check(&call).await?;
     connector(shared, who, &call, key).await
 }
 

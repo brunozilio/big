@@ -1,3 +1,4 @@
+mod gate;
 pub(crate) mod lesson;
 pub mod mcp;
 mod recalled;
@@ -243,6 +244,8 @@ impl Memories {
         let json = completed.then(|| std::fs::read_to_string(&brief.output).ok()).flatten();
         let _ = std::fs::remove_file(&brief.output);
         let edits = json.and_then(|json| domain::memory::parse_memory_edits(&json)).unwrap_or_default();
+        let surface = gate::surface_of(request);
+        let edits = gate::Gate { memories: self, project: &request.session.cwd, surface, stage: "finish" }.kept(edits);
         if edits.is_empty() {
             return None;
         }

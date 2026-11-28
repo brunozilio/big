@@ -20,6 +20,17 @@ pub fn connectors_server() -> String {
     format!("{}_connectors", brand::COMMAND.replace('-', "_"))
 }
 
+pub const CONNECTOR_TOOL_LIMIT: usize = 64;
+
+pub fn connector_tool(label: &str, action: &str) -> String {
+    let name = format!("{}_{}", slug(label), action.replace('.', "_"));
+    name.chars().take(CONNECTOR_TOOL_LIMIT).collect()
+}
+
+pub fn served_name(server: &str, tool: &str) -> String {
+    format!("mcp__{server}__{tool}")
+}
+
 pub type RpcError = (i64, String);
 
 pub fn respond(

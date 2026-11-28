@@ -4,9 +4,9 @@ use domain::mcp::text_result;
 use domain::{Author, MemoryEdit, MemoryId, Provenance};
 use serde_json::{Map, Value, json};
 
+use super::super::gate::REMEMBER;
 use super::super::{Memories, now};
 
-const REMEMBER: &str = "memory_remember";
 const REVISE: &str = "memory_revise";
 const FORGET: &str = "memory_forget";
 

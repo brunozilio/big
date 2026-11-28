@@ -6,6 +6,7 @@ mod factory;
 mod flow;
 mod links;
 mod package;
+mod policy;
 mod repos;
 mod restart;
 mod triggers;

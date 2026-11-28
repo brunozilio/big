@@ -259,6 +259,7 @@ mod brief;
 pub mod check;
 pub mod decision_note;
 mod optimize;
+mod policy;
 mod recall;
 mod sanitize;
 mod scope;
@@ -270,6 +271,7 @@ pub mod team;
 
 pub use brief::{MEMORY_SEARCH_TOOL, MEMORY_SERVER, MemoryBrief, parse_memory_edits};
 pub use optimize::optimize_prompt;
+pub use policy::{MemoryPolicy, MemoryRules};
 pub use recall::{RecallBudget, links, recall};
 pub use sanitize::{REDACTED, Sanitized, sanitize};
 pub use scope::MemoryScope;

@@ -1,4 +1,4 @@
-use domain::permission::{Call, Effect, Judgement, PolicyContext, PolicyEngine};
+use domain::permission::{Call, Effect, Judgement, PolicyContext, PolicyEngine, Surface, Verdict};
 use serde_json::Value;
 
 use crate::agent::Agent;
@@ -29,6 +29,12 @@ impl Agent<'_> {
             no_prompts: self.control.no_prompts(),
             allowed: allowed.as_ref(),
         };
-        PolicyEngine::judge(&called.call(), &context)
+        let judgement = PolicyEngine::judge(&called.call(), &context);
+        if let Verdict::Deny(reason) = &judgement.verdict {
+            let stage = self.workspace.session_id.as_str();
+            let asked = crate::policy_gate::Asked { surface: Surface::Chat, stage, owner: "" };
+            crate::policy_gate::blocked(asked, called.name, reason, PolicyEngine::layer(&called.call(), &context));
+        }
+        judgement
     }
 }

@@ -3,16 +3,19 @@ use std::sync::{Arc, Mutex};
 
 use domain::mcp::{LocalMcp, McpEndpoint, RpcError, text_result};
 use domain::memory::{MEMORY_SEARCH_TOOL, MEMORY_SERVER, MemorySearches, SearchAnswer};
+use domain::permission::{MemoryAccess, Surface};
 use domain::{Memory, MemoryKind};
 use platform::sync::Locked;
 use serde_json::{Value, json};
 
 use super::Memories;
+use super::gate::{Gate, access_of};
 
 const DEFAULT_LIMIT: usize = 8;
 const MAX_LIMIT: usize = 25;
 
-pub fn respond(message: &Value, search: impl Fn(&str, usize) -> String) -> Option<Value> {
+#[cfg(test)]
+fn respond(message: &Value, search: impl Fn(&str, usize) -> String) -> Option<Value> {
     domain::mcp::respond(
         message,
         MEMORY_SERVER,
@@ -88,18 +91,36 @@ pub struct MemoryEndpoint {
     project: PathBuf,
     searches: Mutex<MemorySearches>,
     writer: Option<String>,
+    surface: Surface,
 }
 
 impl MemoryEndpoint {
-    pub fn for_run(memories: Memories, project: PathBuf, searches: MemorySearches) -> LocalMcp {
-        let endpoint = Self { memories, project, searches: Mutex::new(searches), writer: None };
+    pub fn for_run(memories: Memories, project: PathBuf, searches: MemorySearches, surface: Surface) -> LocalMcp {
+        let endpoint = Self { memories, project, searches: Mutex::new(searches), writer: None, surface };
         LocalMcp::new(MEMORY_SERVER, Arc::new(endpoint))
     }
 
     pub fn for_agent(memories: Memories, project: PathBuf, origin: String) -> LocalMcp {
         let searches = Mutex::new(MemorySearches::default());
-        let endpoint = Self { memories, project, searches, writer: Some(origin) };
+        let endpoint = Self { memories, project, searches, writer: Some(origin), surface: Surface::Mcp };
         LocalMcp::new(MEMORY_SERVER, Arc::new(endpoint))
+    }
+
+    fn gate(&self, stage: &'static str) -> Gate<'_> {
+        Gate { memories: &self.memories, project: &self.project, surface: self.surface, stage }
+    }
+
+    fn searched(&self, name: &str, arguments: &Value) -> Result<Value, RpcError> {
+        let gate = self.gate("tools/call");
+        let refused = match (name == MEMORY_SEARCH_TOOL, &self.writer) {
+            (false, _) => None,
+            (true, Some(_)) => gate.listed(MEMORY_SEARCH_TOOL, MemoryAccess::Read),
+            (true, None) => gate.refused(MemoryAccess::Read),
+        };
+        match refused {
+            Some(refused) => Ok(text_result(refused, true)),
+            None => call(name, arguments, |query, limit| self.search(query, limit)),
+        }
     }
 
     fn search(&self, query: &str, limit: usize) -> String {
@@ -114,16 +135,21 @@ impl MemoryEndpoint {
 impl McpEndpoint for MemoryEndpoint {
     fn handle(&self, message: &Value) -> Option<Value> {
         let Some(origin) = &self.writer else {
-            return respond(message, |query, limit| self.search(query, limit));
+            return domain::mcp::respond(message, MEMORY_SERVER, || vec![tool_definition()], |name, arguments| {
+                self.searched(name, arguments)
+            });
         };
         domain::mcp::respond(
             message,
             MEMORY_SERVER,
             || std::iter::once(tool_definition()).chain(write::tools()).collect(),
             |name, arguments| match write::edit_of(name, arguments) {
-                None => call(name, arguments, |query, limit| self.search(query, limit)),
+                None => self.searched(name, arguments),
                 Some(Err(told)) => Ok(text_result(told, true)),
-                Some(Ok(edit)) => Ok(write::applied(&self.memories, &self.project, edit, origin)),
+                Some(Ok(edit)) => match self.gate("tools/call").listed(name, access_of(&edit)) {
+                    Some(refused) => Ok(text_result(refused, true)),
+                    None => Ok(write::applied(&self.memories, &self.project, edit, origin)),
+                },
             },
         )
     }

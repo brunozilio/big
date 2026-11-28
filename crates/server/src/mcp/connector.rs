@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use connectors::{ActionSpec, Connectors};
 use domain::connection::{Capability, ProviderKey};
-use domain::mcp::{LocalMcp, McpEndpoint, respond, slug, text_result};
+use app::policy_gate::{self, Asked};
+use domain::mcp::{LocalMcp, McpEndpoint, connector_tool, respond, served_name, slug, text_result};
+use domain::permission::{Call, Effect, Surface, Verdict};
 use domain::operation::Kind;
 use serde_json::{Value, json};
 use store::ConnectionRecord;
@@ -11,7 +13,7 @@ use crate::calls::connection;
 use crate::state::Ctx;
 
 const ANY: &str = "*";
-const NAME_LIMIT: usize = 64;
+const STAGE: &str = "tools/call";
 
 pub struct Wanted<'a> {
     pub provider: &'a str,
@@ -46,17 +48,13 @@ struct Tool {
     definition: Value,
     record: ConnectionRecord,
     action: String,
+    declared: domain::operation::Declaration,
 }
 
 pub struct ConnectorTools {
     hub: Arc<Connectors>,
     runtime: tokio::runtime::Handle,
     tools: Vec<Tool>,
-}
-
-fn tool_name(label: &str, action: &str) -> String {
-    let name = format!("{}_{}", slug(label), action.replace('.', "_"));
-    name.chars().take(NAME_LIMIT).collect()
 }
 
 fn definition(name: &str, provider: &str, record: &ConnectionRecord, action: &ActionSpec) -> Value {
@@ -86,9 +84,10 @@ fn tools_of(hub: &Connectors, records: Vec<ConnectionRecord>, wanted: &Wanted<'_
         }
         let Ok(descriptor) = hub.descriptor(&ProviderKey::from(record.provider.as_str())) else { continue };
         for action in descriptor.actions.iter().filter(|action| wanted.takes(&record, action)) {
-            let name = tool_name(&record.label, &action.name);
+            let name = connector_tool(&record.label, &action.name);
             let definition = definition(&name, &descriptor.name, &record, action);
-            tools.push(Tool { definition, record: record.clone(), action: action.name.clone() });
+            let declared = action.declaration();
+            tools.push(Tool { definition, record: record.clone(), action: action.name.clone(), declared });
         }
     }
     tools
@@ -105,14 +104,29 @@ fn server() -> String {
     domain::mcp::connectors_server()
 }
 
+fn refused(tool: &Tool, arguments: &Value) -> Option<String> {
+    let server = server();
+    let name = served_name(&server, tool.definition["name"].as_str().unwrap_or_default());
+    let effects: Vec<Effect> = tool.declared.operation(&server, arguments).map(Effect::Operation).into_iter().collect();
+    let asked = Asked { surface: Surface::Mcp, stage: STAGE, owner: domain::principal::LOCAL_USER };
+    match policy_gate::decide(asked, &Call { tool: &name, subject: &tool.action, effects: &effects }) {
+        Verdict::Allow => None,
+        Verdict::Deny(reason) => Some(policy_gate::refusal(&reason)),
+        Verdict::Ask { .. } => Some(policy_gate::unasked(asked, &name)),
+    }
+}
+
 impl ConnectorTools {
     fn call(&self, tool: &Tool, arguments: &Value) -> Value {
+        let arguments = if arguments.is_null() { json!({}) } else { arguments.clone() };
+        if let Some(refused) = refused(tool, &arguments) {
+            return text_result(refused, true);
+        }
         let Ok(key) = crate::attachments::random_id() else {
             return text_result("No idempotency key could be made.", true);
         };
         let key = format!("{}:{key}", brand::connectors::MARKER);
         let record = &tool.record;
-        let arguments = if arguments.is_null() { json!({}) } else { arguments.clone() };
         let connection = connection(record);
         let charged = domain::origin::Attribution::default();
         let called = self.hub.call_for(Some(&charged), &connection, &record.settings, &tool.action, &arguments, &key);
@@ -217,8 +231,8 @@ mod tests {
 
     #[test]
     fn a_tool_is_named_by_its_connection_and_action_within_the_limit() {
-        assert_eq!(tool_name("Jira Prod", "tracker.issue"), "jira-prod_tracker_issue");
-        assert_eq!(tool_name(&"x".repeat(80), "a.b").len(), NAME_LIMIT);
+        assert_eq!(connector_tool("Jira Prod", "tracker.issue"), "jira-prod_tracker_issue");
+        assert_eq!(connector_tool(&"x".repeat(80), "a.b").len(), domain::mcp::CONNECTOR_TOOL_LIMIT);
     }
 }
 

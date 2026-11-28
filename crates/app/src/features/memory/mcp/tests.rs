@@ -84,7 +84,7 @@ fn text_of(server: &LocalMcp, query: &str) -> String {
 fn a_run_never_gets_the_same_memory_twice_and_stops_searching_at_the_limit() {
     let memories = remembered(&["Run clippy before committing", "Run nextest for tests"]);
     let shown = MemorySearches::new([MemoryId(0)]);
-    let server = MemoryEndpoint::for_run(memories, "/repo".into(), shown);
+    let server = MemoryEndpoint::for_run(memories, "/repo".into(), shown, Surface::Chat);
     assert!(text_of(&server, "clippy").contains("already in this conversation"), "recalled into the prompt");
     assert_eq!(text_of(&server, "run"), "[1] procedural: Run nextest for tests");
     assert!(text_of(&server, "jira").starts_with("Nothing in this project's memory matches"));
@@ -105,7 +105,7 @@ fn a_run_searches_only_its_own_project_s_memory() {
     memories.edit(std::path::Path::new("/repo"), &[edit], by).expect("edit");
     let call = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": MEMORY_SEARCH_TOOL, "arguments": { "query": "clippy" } } });
     let text = |project: &str| {
-        let server = MemoryEndpoint::for_run(memories.clone(), project.into(), MemorySearches::default());
+        let server = MemoryEndpoint::for_run(memories.clone(), project.into(), MemorySearches::default(), Surface::Chat);
         assert_eq!(server.name, MEMORY_SERVER);
         server.endpoint.handle(&call).expect("answer")["result"]["content"][0]["text"].as_str().map(str::to_owned)
     };
@@ -152,7 +152,7 @@ fn another_agent_reads_and_writes_the_project_s_memory() {
 
 #[test]
 fn a_run_of_the_app_only_searches() {
-    let server = MemoryEndpoint::for_run(remembered(&[]), "/repo".into(), MemorySearches::default());
+    let server = MemoryEndpoint::for_run(remembered(&[]), "/repo".into(), MemorySearches::default(), Surface::Chat);
     let answer = server.endpoint.handle(&tool_call("memory_remember", json!({ "text": "x", "kind": "semantic" })));
     assert_eq!(answer.expect("answer")["error"]["code"], -32602);
 }

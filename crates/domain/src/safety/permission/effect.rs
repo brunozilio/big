@@ -51,6 +51,7 @@ pub enum Effect {
     Operation(Operation),
     Declared(Declared),
     Install { server: String, what: String },
+    Memory(super::MemoryAccess),
 }
 
 impl Effect {
@@ -66,7 +67,8 @@ impl Effect {
             | Self::WritePath(_)
             | Self::Cancel { own: true }
             | Self::Spawn(SpawnKind::Agent | SpawnKind::Watch)
-            | Self::Declared(Declared::Edits) => false,
+            | Self::Declared(Declared::Edits)
+            | Self::Memory(_) => false,
             Self::Exec(_)
             | Self::Net { .. }
             | Self::Fetch { .. }

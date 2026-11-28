@@ -101,12 +101,10 @@ fn read_only_write<'a>(call: &Call<'_>, cx: &'a PolicyContext<'_>) -> Option<&'a
 
 fn by_the_list(call: &Call<'_>, cx: &PolicyContext<'_>, standing: Standing) -> Option<Verdict> {
     let allowed = cx.allowed?;
-    let listed = allowed.verdict(call);
-    match listed {
-        Some(Behavior::Deny) => return Some(Verdict::Deny(format!("{} is denied by the permission list.", call.tool))),
-        Some(Behavior::Ask) => return Some(Verdict::Ask { reason: Reason::Listed, rememberable: false }),
-        _ => {}
+    if let Some(verdict) = super::gate::listed(call, allowed) {
+        return Some(verdict);
     }
+    let listed = allowed.verdict(call);
     if standing != Standing::Acts {
         return None;
     }

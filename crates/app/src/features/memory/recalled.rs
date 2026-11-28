@@ -36,6 +36,11 @@ impl Memories {
             application: shelves.application.as_ref().map(|application| application.name.clone()),
             ..MemoryBrief::default()
         };
+        let surface = super::gate::surface_of(request);
+        let gate = super::gate::Gate { memories: self, project, surface, stage: "brief" };
+        if gate.refused(domain::permission::MemoryAccess::Read).is_some() {
+            return with_memory(request, base);
+        }
         if domain::features::on(brand::features::MEMORY_SCORECARD) && self.holds_out(project) {
             return with_memory(request, MemoryBrief { held_out: true, ..base });
         }
