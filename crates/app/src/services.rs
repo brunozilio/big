@@ -230,7 +230,7 @@ mod tests {
             touches: Vec::new(),
             scope: Default::default(),
         };
-        let by = domain::Provenance { author: domain::Author::User, now: 5, origin: None };
+        let by = domain::Provenance { author: domain::Author::User, now: 5, origin: None, lineage: None };
         crate::features::memory::of(&services).edit(Path::new("/work"), &[remember], by).expect("memory");
 
         for kept in ["app.db", "providers/local/providers.json"] {
@@ -258,7 +258,7 @@ mod tests {
             touches: Vec::new(),
             scope: Default::default(),
         };
-        let by = domain::Provenance { author: domain::Author::User, now: 5, origin: None };
+        let by = domain::Provenance { author: domain::Author::User, now: 5, origin: None, lineage: None };
         let memories = crate::features::memory::of(&services);
         memories.edit(Path::new("/work"), &[remember], by).expect("memory");
         let kept: Vec<String> = memories.load(Path::new("/work")).memories.into_iter().map(|memory| memory.text).collect();

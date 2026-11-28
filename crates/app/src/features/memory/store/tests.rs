@@ -14,7 +14,7 @@ type Change = Box<dyn Fn(&mut MemoryBook) + Send + Sync>;
 const DAY: i64 = 24 * 60 * 60;
 
 fn by(now: i64) -> Provenance {
-    Provenance { author: Author::User, now, origin: Some("Night sky".into()) }
+    Provenance { author: Author::User, now, origin: Some("Night sky".into()), lineage: None }
 }
 
 fn remember(kind: MemoryKind, text: &str, tags: &[&str], touches: &[&str]) -> MemoryEdit {

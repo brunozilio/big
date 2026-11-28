@@ -13,6 +13,8 @@ use crate::workflow::WorkItem;
 
 pub const READ: &str = "read";
 
+pub type Reads = std::sync::Arc<std::sync::Mutex<Vec<Read>>>;
+
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Trust {

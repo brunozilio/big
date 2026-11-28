@@ -24,6 +24,7 @@ fn retries() -> Memory {
         last_used: 0,
         touches: vec!["client.go".into()],
         credit: Some("Maya, 2026-10-09".into()),
+        lineage: None,
     }
 }
 

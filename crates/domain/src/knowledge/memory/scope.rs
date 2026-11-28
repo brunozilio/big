@@ -74,6 +74,11 @@ impl MemoryEdit {
                 let (scope, id) = local(id);
                 (scope, MemoryEdit::Reclassify { id, kind })
             }
+            MemoryEdit::Purge { id } => {
+                let (scope, id) = local(id);
+                (scope, MemoryEdit::Purge { id })
+            }
+            MemoryEdit::PurgeSource { source } => (MemoryScope::Repository, MemoryEdit::PurgeSource { source }),
         }
     }
 }

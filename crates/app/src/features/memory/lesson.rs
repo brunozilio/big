@@ -100,7 +100,7 @@ fn keep(services: &LocalServices, cwd: PathBuf, proposal: &Proposal) {
         }
         return;
     }
-    let by = Provenance { author: Author::Agent, now: super::now(), origin: Some(ORIGIN.to_owned()) };
+    let by = Provenance { author: Author::Agent, now: super::now(), origin: Some(ORIGIN.to_owned()), lineage: None };
     if let Err(error) = super::of(services).edit(&cwd, &[edit_of(proposal)], by) {
         tracing::warn!(%error, "a lesson could not be kept in memory");
     }

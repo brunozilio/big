@@ -51,7 +51,7 @@ fn notes_db(place: &Place) -> Db {
 fn holds_every_table_at_the_newest_version(place: &Place) {
     let db = place.open();
 
-    assert_eq!(version(&db), 1);
+    assert_eq!(version(&db), 2);
     assert_eq!(tables(&db), ["memories", "memory_books", "memory_undo_points", "schema_version", "sessions"]);
 }
 
@@ -153,7 +153,7 @@ fn a_migration_that_fails_leaves_the_database_at_the_version_it_had() {
 #[test]
 fn a_database_from_a_newer_version_is_refused_and_left_as_it_is() {
     a_newer_database_is_refused(&Place::file());
-    assert_eq!(MIGRATIONS.len(), 1, "a second migration is appended to the list, never edited into the first");
+    assert_eq!(MIGRATIONS.len(), 2, "a second migration is appended to the list, never edited into the first");
 }
 
 #[test]
@@ -183,11 +183,11 @@ fn two_opening_at_once_migrate_once(place: &Place) {
         for _ in 0..4 {
             scope.spawn(|| {
                 start.wait();
-                assert_eq!(version(&place.open()), 1);
+                assert_eq!(version(&place.open()), 2);
             });
         }
     });
-    assert_eq!(version(&place.open()), 1);
+    assert_eq!(version(&place.open()), 2);
 }
 
 #[test]
@@ -236,7 +236,7 @@ fn a_database_in_memory_has_the_same_tables_and_is_its_own() {
 fn a_database_handed_over_is_migrated_like_one_opened_from_a_file() {
     let db = Db::with_database(Database::sqlite_in_memory().expect("database")).expect("migrated");
 
-    assert_eq!(version(&db), 1);
+    assert_eq!(version(&db), 2);
     assert_eq!(tables(&db), tables(&Db::in_memory().expect("in memory")));
 }
 

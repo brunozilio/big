@@ -60,6 +60,8 @@ pub struct Memory {
     pub touches: Vec<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub credit: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub lineage: Option<Lineage>,
 }
 
 fn is_zero<T: Default + PartialEq>(value: &T) -> bool {
@@ -107,6 +109,12 @@ pub enum MemoryEdit {
     Restore {
         id: MemoryId,
     },
+    Purge {
+        id: MemoryId,
+    },
+    PurgeSource {
+        source: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -114,6 +122,7 @@ pub struct Provenance {
     pub author: Author,
     pub now: i64,
     pub origin: Option<String>,
+    pub lineage: Option<Lineage>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
@@ -138,69 +147,99 @@ impl MemoryBook {
         self.forgotten.retain(|f| f.at >= expiry);
         let mut touched = Vec::new();
         for edit in edits {
-            match edit {
-                MemoryEdit::Remember { kind, text, tags, touches, .. } => {
-                    let Some(text) = clean_text(text) else { continue };
-                    let touches = anchors::clean(touches);
-                    if let Some(same) = self.memories.iter_mut().find(|m| m.kind == *kind && same_text(&m.text, &text))
-                    {
-                        if anchors::widen(&mut same.touches, &touches) {
-                            touched.push(same.id);
-                        }
-                        continue;
-                    }
-                    let id = MemoryId(self.next.max(self.after_highest()));
-                    self.next = id.0 + 1;
-                    self.memories.push(Memory {
-                        id,
-                        kind: *kind,
-                        text,
-                        tags: clean_tags(tags),
-                        created: by.now,
-                        origin: by.origin.clone(),
-                        author: by.author,
-                        history: Vec::new(),
-                        uses: 0,
-                        last_used: 0,
-                        touches,
-                        credit: None,
-                    });
-                    touched.push(id);
-                }
+            let changed = match edit {
+                MemoryEdit::Remember { kind, text, tags, touches, .. } => self.remember(*kind, text, tags, touches, by),
                 MemoryEdit::Forget { id } => {
-                    if let Some(at) = self.memories.iter().position(|m| m.id == *id) {
-                        let memory = self.memories.remove(at);
-                        self.forgotten.push(Forgotten { memory, at: by.now });
-                    }
+                    self.forget(*id, by.now);
+                    None
                 }
-                MemoryEdit::Restore { id } => {
-                    if let Some(at) = self.forgotten.iter().position(|f| f.memory.id == *id) {
-                        let memory = self.forgotten.remove(at).memory;
-                        let place = self.memories.partition_point(|m| m.id < memory.id);
-                        self.memories.insert(place, memory);
-                        touched.push(*id);
-                    }
+                MemoryEdit::Restore { id } => self.restore(*id),
+                MemoryEdit::Reclassify { id, kind } => self.reclassify(*id, *kind),
+                MemoryEdit::Revise { id, text } => self.revise(*id, text, by),
+                MemoryEdit::Purge { id } => {
+                    self.purge(|memory| memory.id == *id);
+                    None
                 }
-                MemoryEdit::Reclassify { id, kind } => {
-                    if let Some(memory) = self.memories.iter_mut().find(|m| m.id == *id && m.kind != *kind) {
-                        memory.kind = *kind;
-                        touched.push(*id);
-                    }
+                MemoryEdit::PurgeSource { source } => {
+                    self.purge(|memory| memory.lineage.as_ref().is_some_and(|lineage| lineage.names(source)));
+                    None
                 }
-                MemoryEdit::Revise { id, text } => {
-                    let (Some(text), Some(memory)) = (clean_text(text), self.memories.iter_mut().find(|m| m.id == *id))
-                    else {
-                        continue;
-                    };
-                    let old = std::mem::replace(&mut memory.text, text);
-                    memory.history.push(Revision { text: old, until: by.now });
-                    let extra = memory.history.len().saturating_sub(REVISIONS_KEPT);
-                    memory.history.drain(..extra);
-                    touched.push(*id);
-                }
-            }
+            };
+            touched.extend(changed);
         }
         touched
+    }
+
+    fn remember(
+        &mut self,
+        kind: MemoryKind,
+        text: &str,
+        tags: &[String],
+        touches: &[String],
+        by: &Provenance,
+    ) -> Option<MemoryId> {
+        let text = clean_text(text)?;
+        let touches = anchors::clean(touches);
+        if let Some(same) = self.memories.iter_mut().find(|m| m.kind == kind && same_text(&m.text, &text)) {
+            return anchors::widen(&mut same.touches, &touches).then_some(same.id);
+        }
+        let id = MemoryId(self.next.max(self.after_highest()));
+        self.next = id.0 + 1;
+        self.memories.push(Memory {
+            id,
+            kind,
+            text,
+            tags: clean_tags(tags),
+            created: by.now,
+            origin: by.origin.clone(),
+            author: by.author,
+            history: Vec::new(),
+            uses: 0,
+            last_used: 0,
+            touches,
+            credit: None,
+            lineage: by.lineage.clone(),
+        });
+        Some(id)
+    }
+
+    fn forget(&mut self, id: MemoryId, now: i64) {
+        if let Some(at) = self.memories.iter().position(|m| m.id == id) {
+            let memory = self.memories.remove(at);
+            self.forgotten.push(Forgotten { memory, at: now });
+        }
+    }
+
+    fn restore(&mut self, id: MemoryId) -> Option<MemoryId> {
+        let at = self.forgotten.iter().position(|f| f.memory.id == id)?;
+        let memory = self.forgotten.remove(at).memory;
+        let place = self.memories.partition_point(|m| m.id < memory.id);
+        self.memories.insert(place, memory);
+        Some(id)
+    }
+
+    fn reclassify(&mut self, id: MemoryId, kind: MemoryKind) -> Option<MemoryId> {
+        let memory = self.memories.iter_mut().find(|m| m.id == id && m.kind != kind)?;
+        memory.kind = kind;
+        Some(id)
+    }
+
+    fn revise(&mut self, id: MemoryId, text: &str, by: &Provenance) -> Option<MemoryId> {
+        let text = clean_text(text)?;
+        let memory = self.memories.iter_mut().find(|m| m.id == id)?;
+        let old = std::mem::replace(&mut memory.text, text);
+        memory.history.push(Revision { text: old, until: by.now });
+        let extra = memory.history.len().saturating_sub(REVISIONS_KEPT);
+        memory.history.drain(..extra);
+        if let Some(lineage) = by.lineage.as_ref().filter(|lineage| lineage::replaces(lineage, memory)) {
+            memory.lineage = Some(lineage.clone());
+        }
+        Some(id)
+    }
+
+    fn purge(&mut self, gone: impl Fn(&Memory) -> bool) {
+        self.memories.retain(|memory| !gone(memory));
+        self.forgotten.retain(|forgotten| !gone(&forgotten.memory));
     }
 
     pub fn take(&mut self, id: MemoryId) -> Option<Memory> {
@@ -258,6 +297,7 @@ pub mod anchors;
 mod brief;
 pub mod check;
 pub mod decision_note;
+pub mod lineage;
 mod optimize;
 mod policy;
 mod recall;
@@ -270,6 +310,7 @@ pub mod seed;
 pub mod team;
 
 pub use brief::{MEMORY_SEARCH_TOOL, MEMORY_SERVER, MemoryBrief, parse_memory_edits};
+pub use lineage::Lineage;
 pub use optimize::optimize_prompt;
 pub use policy::{MemoryPolicy, MemoryRules};
 pub use recall::{RecallBudget, links, recall};

@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
+use domain::label::Reads;
 use domain::mcp::{LocalMcp, McpEndpoint, RpcError, text_result};
 use domain::memory::{MEMORY_SEARCH_TOOL, MEMORY_SERVER, MemorySearches, SearchAnswer};
 use domain::permission::{MemoryAccess, Surface};
@@ -10,6 +11,7 @@ use serde_json::{Value, json};
 
 use super::Memories;
 use super::gate::{Gate, access_of};
+use super::reading::Noted;
 
 const DEFAULT_LIMIT: usize = 8;
 const MAX_LIMIT: usize = 25;
@@ -80,7 +82,7 @@ fn listing(memories: &[Memory]) -> String {
                 MemoryKind::Procedural => "procedural",
             };
             let origin = m.origin.as_deref().map(|o| format!(" (from \"{o}\")")).unwrap_or_default();
-            format!("[{}] {kind}: {}{origin}", m.id.0, m.text)
+            m.wrapped(format!("[{}] {kind}: {}{origin}", m.id.0, m.text))
         })
         .collect::<Vec<_>>()
         .join("\n")
@@ -92,17 +94,25 @@ pub struct MemoryEndpoint {
     searches: Mutex<MemorySearches>,
     writer: Option<String>,
     surface: Surface,
+    reads: Option<Reads>,
 }
 
 impl MemoryEndpoint {
-    pub fn for_run(memories: Memories, project: PathBuf, searches: MemorySearches, surface: Surface) -> LocalMcp {
-        let endpoint = Self { memories, project, searches: Mutex::new(searches), writer: None, surface };
+    pub fn for_run(
+        memories: Memories,
+        project: PathBuf,
+        searches: MemorySearches,
+        surface: Surface,
+        reads: Reads,
+    ) -> LocalMcp {
+        let searches = Mutex::new(searches);
+        let endpoint = Self { memories, project, searches, writer: None, surface, reads: Some(reads) };
         LocalMcp::new(MEMORY_SERVER, Arc::new(endpoint))
     }
 
-    pub fn for_agent(memories: Memories, project: PathBuf, origin: String) -> LocalMcp {
+    pub fn for_agent(memories: Memories, project: PathBuf, origin: String, reads: Option<Reads>) -> LocalMcp {
         let searches = Mutex::new(MemorySearches::default());
-        let endpoint = Self { memories, project, searches, writer: Some(origin), surface: Surface::Mcp };
+        let endpoint = Self { memories, project, searches, writer: Some(origin), surface: Surface::Mcp, reads };
         LocalMcp::new(MEMORY_SERVER, Arc::new(endpoint))
     }
 
@@ -128,7 +138,11 @@ impl MemoryEndpoint {
         if self.writer.is_some() {
             *searches = MemorySearches::default();
         }
-        answer(self.memories.find(&self.project, query, limit, &mut searches))
+        let found = self.memories.find(&self.project, query, limit, &mut searches);
+        if let SearchAnswer::Found(memories) = &found {
+            Noted { surface: self.surface, stage: "tools/call" }.read(self.reads.as_ref(), memories);
+        }
+        answer(found)
     }
 }
 
@@ -148,7 +162,10 @@ impl McpEndpoint for MemoryEndpoint {
                 Some(Err(told)) => Ok(text_result(told, true)),
                 Some(Ok(edit)) => match self.gate("tools/call").listed(name, access_of(&edit)) {
                     Some(refused) => Ok(text_result(refused, true)),
-                    None => Ok(write::applied(&self.memories, &self.project, edit, origin)),
+                    None => {
+                        let by = write::Writer { origin, lineage: super::reading::lineage(self.reads.as_ref()) };
+                        Ok(write::applied(&self.memories, &self.project, edit, by))
+                    }
                 },
             },
         )

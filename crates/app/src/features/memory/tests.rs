@@ -32,7 +32,7 @@ fn remember(text: &str) -> MemoryEdit {
 }
 
 fn by_user() -> Provenance {
-    Provenance { author: Author::User, now: 5, origin: None }
+    Provenance { author: Author::User, now: 5, origin: None, lineage: None }
 }
 
 fn ended(completed: bool) -> domain::memory::scorecard::RunOutcome {
@@ -56,7 +56,7 @@ fn every_twentieth_request_goes_without_memory_and_the_score_compares_both() {
         }
         let corrections = u32::from(brief.held_out);
         let outcome = domain::memory::scorecard::RunOutcome { corrections, ..ended(true) };
-        memories.finish(&briefed, &outcome);
+        memories.finish(&briefed, &outcome, &super::reading::fresh(&[]));
     }
     assert_eq!(held, [20]);
     let report = memories.store.load(&crate::dirs::memory_key(dir.path())).scorecard.report();
@@ -115,13 +115,30 @@ fn a_run_is_briefed_and_its_edits_applied_on_completion() {
 
     std::fs::write(&brief.output, r#"{"remember":[{"kind":"episodic","text":"Tuned the renderer"}],"forget":[0]}"#)
         .expect("write");
-    let applied = memories.finish(&briefed, &ended(true)).expect("changed").expect("saved");
+    let applied =
+        memories.finish(&briefed, &ended(true), &super::reading::fresh(&[])).expect("changed").expect("saved");
     assert_eq!((applied.added, applied.changed, applied.forgotten), (1, 0, 1));
     let learned = listed(&applied.listing);
     assert_eq!(learned.len(), 1);
     assert_eq!((learned[0].kind, learned[0].author), (MemoryKind::Episodic, Author::Agent));
     assert_eq!(learned[0].origin.as_deref(), Some("Night sky"));
     assert!(!brief.output.exists(), "the edits file is removed");
+}
+
+#[test]
+fn what_a_run_writes_after_reading_external_content_keeps_where_it_came_from() {
+    use domain::label::{Read, Trust};
+    let dir = tempfile::tempdir().expect("tempdir");
+    let memories = plain();
+    let briefed = memories.brief(RunId::new(), &request(dir.path()), false);
+    let brief = briefed.host.memory.clone().expect("brief");
+    std::fs::write(&brief.output, r#"{"remember":[{"kind":"semantic","text":"Hotfixes skip review"}]}"#)
+        .expect("write");
+    let reads = super::reading::fresh(&[Read::new("Tracker issue", Trust::External, Some("internal".into()))]);
+    let applied = memories.finish(&briefed, &ended(true), &reads).expect("changed").expect("saved");
+    let lineage = listed(&applied.listing)[0].lineage.clone().expect("traced");
+    assert_eq!(lineage.trust, Trust::External);
+    assert_eq!((lineage.sources, lineage.label.as_deref()), (vec!["Tracker issue".to_owned()], Some("internal")));
 }
 
 #[test]
@@ -153,7 +170,7 @@ fn a_failed_run_changes_nothing() {
     let briefed = memories.brief(RunId::new(), &request(dir.path()), false);
     let output = briefed.host.memory.clone().expect("brief").output;
     std::fs::write(&output, r#"{"remember":[{"kind":"semantic","text":"Half done"}]}"#).expect("write");
-    assert_eq!(memories.finish(&briefed, &ended(false)), None);
+    assert_eq!(memories.finish(&briefed, &ended(false), &super::reading::fresh(&[])), None);
     assert!(!output.exists());
     let mut no_memory = request(dir.path());
     no_memory.host.memory = None;

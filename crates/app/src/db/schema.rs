@@ -51,4 +51,6 @@ CREATE TABLE memory_undo_points (
 );
 ";
 
-pub(super) const MIGRATIONS: &[&str] = &[SESSIONS_AND_MEMORY];
+const MEMORY_LINEAGE: &str = "ALTER TABLE memories ADD COLUMN lineage TEXT";
+
+pub(super) const MIGRATIONS: &[&str] = &[SESSIONS_AND_MEMORY, MEMORY_LINEAGE];

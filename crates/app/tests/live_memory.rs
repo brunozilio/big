@@ -25,7 +25,7 @@ fn seed(services: &LocalServices, project: &Path) {
         touches: vec![],
         scope: Default::default(),
     }));
-    let by = Provenance { author: Author::User, now: 0, origin: None };
+    let by = Provenance { author: Author::User, now: 0, origin: None, lineage: None };
     services.memories.edit(project, &edits, by).expect("seed");
 }
 

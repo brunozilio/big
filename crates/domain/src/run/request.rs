@@ -103,6 +103,8 @@ pub struct HostContext {
     pub environment: Vec<(String, String)>,
     #[serde(skip)]
     pub owner: Option<String>,
+    #[serde(skip)]
+    pub reads: Vec<crate::label::Read>,
     #[serde(default, skip_serializing_if = "crate::origin::Attribution::is_unset")]
     pub attribution: crate::origin::Attribution,
 }

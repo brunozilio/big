@@ -106,7 +106,13 @@ impl Asked<'_> {
     fn host(&self, name: &str) -> Result<LocalMcp, Refusal> {
         match name {
             BROWSER => self.browser(),
-            MEMORY => Ok(self.ctx.backend.client.memory_mcp(&super::project(self.headers)?, ORIGIN)),
+            MEMORY => {
+                let reads = match super::session_reads::find(Some(self.id)) {
+                    super::session_reads::Session::Open(reads) => Some(reads),
+                    _ => None,
+                };
+                Ok(self.ctx.backend.client.memory_mcp(&super::project(self.headers)?, ORIGIN, reads))
+            }
             _ => {
                 let told = format!(
                     "The content asks for `{name}`, which the app does not serve; it serves {}.",

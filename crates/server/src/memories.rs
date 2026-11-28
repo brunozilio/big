@@ -180,5 +180,11 @@ mod tests {
             parsed(json!({ "shelf": { "scope": "global" }, "edit": { "op": "forget", "id": 3 } })).expect("change");
         assert!(matches!(change.shelf, Shelf::Global));
         assert_eq!(change.edit, MemoryEdit::Forget { id: MemoryId(3) });
+        let purge: Change =
+            parsed(json!({ "shelf": { "scope": "global" }, "edit": { "op": "purge", "id": 3 } })).expect("purge");
+        assert_eq!(purge.edit, MemoryEdit::Purge { id: MemoryId(3) });
+        let every = json!({ "shelf": { "scope": "global" }, "edit": { "op": "purge_source", "source": "Mail" } });
+        let every: Change = parsed(every).expect("purge source");
+        assert_eq!(every.edit, MemoryEdit::PurgeSource { source: "Mail".into() });
     }
 }

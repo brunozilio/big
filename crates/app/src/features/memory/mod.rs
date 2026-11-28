@@ -1,6 +1,7 @@
 mod gate;
 pub(crate) mod lesson;
 pub mod mcp;
+pub mod reading;
 mod recalled;
 pub mod run;
 mod score;
@@ -19,6 +20,7 @@ use domain::{
     Author, Forgotten, Memory, MemoryBook, MemoryBrief, MemoryEdit, MemoryId, MemoryScope, PromptRequest, Provenance,
     RunId,
 };
+use domain::label::Reads;
 use domain::redact::Redactor;
 use platform::sync::Locked;
 use store::{InMemoryStore, MemoryStore, Revised, SqliteMemoryStore};
@@ -186,8 +188,14 @@ impl Memories {
         edits: &[MemoryEdit],
         by: Provenance,
     ) -> Result<MemoryListing, String> {
+        let purges = edits.iter().any(|edit| matches!(edit, MemoryEdit::Purge { .. } | MemoryEdit::PurgeSource { .. }));
+        let before = purges.then(|| everything(&self.shelf(shelf)));
         self.apply(shelf, edits, &by)?;
-        Ok(self.shelf(shelf))
+        let listing = self.shelf(shelf);
+        if let Some(before) = before {
+            reading::purged(&before, &everything(&listing));
+        }
+        Ok(listing)
     }
 
     fn apply(&self, shelf: &MemoryShelf, edits: &[MemoryEdit], by: &Provenance) -> Result<(), String> {
@@ -237,7 +245,12 @@ impl Memories {
         }
     }
 
-    pub fn finish(&self, request: &PromptRequest, outcome: &RunOutcome) -> Option<Result<MemoryApplied, String>> {
+    pub fn finish(
+        &self,
+        request: &PromptRequest,
+        outcome: &RunOutcome,
+        reads: &Reads,
+    ) -> Option<Result<MemoryApplied, String>> {
         let brief = request.host.memory.as_ref()?;
         self.keep_score(request, brief.held_out, outcome);
         let completed = outcome.completed;
@@ -249,11 +262,16 @@ impl Memories {
         if edits.is_empty() {
             return None;
         }
-        let by = Provenance { author: Author::Agent, now: now(), origin: brief.origin.clone() };
+        let lineage = reading::lineage(Some(reads));
+        let by = Provenance { author: Author::Agent, now: now(), origin: brief.origin.clone(), lineage };
         let before = self.load(&request.session.cwd).memories;
         let applied = self.edit(&request.session.cwd, &edits, by);
         Some(applied.map(|listing| applied_since(&before, listing)))
     }
+}
+
+fn everything(listing: &MemoryListing) -> Vec<Memory> {
+    listing.memories.iter().cloned().chain(listing.forgotten.iter().map(|f| f.memory.clone())).collect()
 }
 
 fn with_memory(request: &PromptRequest, brief: MemoryBrief) -> PromptRequest {

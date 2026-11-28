@@ -101,6 +101,7 @@ fn anchor() -> Memory {
         last_used: 0,
         touches: vec!["client.go".into()],
         credit: None,
+        lineage: None,
     }
 }
 

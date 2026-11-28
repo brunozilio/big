@@ -57,6 +57,7 @@ pub fn parse(at: usize, name: &str, text: &str, redactor: &crate::redact::Redact
         last_used: 0,
         touches,
         credit,
+        lineage: None,
     })
 }
 

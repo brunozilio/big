@@ -79,6 +79,7 @@ mod tests {
             last_used: 0,
             touches: touches.iter().map(|t| (*t).to_owned()).collect(),
             credit: None,
+            lineage: None,
         }
     }
 

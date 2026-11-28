@@ -19,14 +19,14 @@ const KEEP_BOOK: &str = "INSERT INTO memory_books (project, next, revision, with
      without_corrections = excluded.without_corrections, without_cost_usd = excluded.without_cost_usd, \
      briefed = excluded.briefed";
 const MEMORIES: &str = "SELECT id, forgotten_at, kind, author, text, tags, touches, history, created, origin, uses, \
-     last_used, credit, position FROM memories WHERE project = ?1 ORDER BY forgotten_at IS NOT NULL, position";
+     last_used, credit, position, lineage FROM memories WHERE project = ?1 ORDER BY forgotten_at IS NOT NULL, position";
 const KEEP_MEMORY: &str = "INSERT INTO memories (project, id, position, forgotten_at, kind, author, text, tags, \
-     touches, history, created, origin, uses, last_used, credit) \
-     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15) \
+     touches, history, created, origin, uses, last_used, credit, lineage) \
+     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16) \
      ON CONFLICT (project, id) DO UPDATE SET position = excluded.position, forgotten_at = excluded.forgotten_at, \
      kind = excluded.kind, author = excluded.author, text = excluded.text, tags = excluded.tags, \
      touches = excluded.touches, history = excluded.history, created = excluded.created, origin = excluded.origin, \
-     uses = excluded.uses, last_used = excluded.last_used, credit = excluded.credit";
+     uses = excluded.uses, last_used = excluded.last_used, credit = excluded.credit, lineage = excluded.lineage";
 
 #[derive(Debug, Clone)]
 pub struct SqliteMemoryStore {
@@ -186,6 +186,7 @@ fn memory(row: &Row) -> database::Result<Memory> {
         uses: small(row.get(10)?),
         last_used: row.get(11)?,
         credit: row.get(12)?,
+        lineage: row.get::<Option<String>>(14)?.map(|text| from_json(14, &text)).transpose()?,
     })
 }
 
@@ -215,8 +216,9 @@ pub(super) fn keep(conn: &mut dyn Conn, key: &str, before: &Stored, after: &Memo
     let wanted = in_their_order(after, &before.positions);
     let held: HashSet<MemoryId> = wanted.iter().map(|entry| entry.memory.id).collect();
     for entry in wanted.iter().filter(|entry| had.get(&entry.memory.id).copied() != Some(*entry)) {
-        let Memory { id, kind, text, tags, created, origin, author, history, uses, last_used, touches, credit } =
+        let Memory { id, kind, text, tags, created, origin, author, history, uses, last_used, touches, credit, lineage } =
             entry.memory;
+        let lineage = lineage.as_ref().map(json).transpose()?;
         conn.execute(
             KEEP_MEMORY,
             args![
@@ -234,7 +236,8 @@ pub(super) fn keep(conn: &mut dyn Conn, key: &str, before: &Stored, after: &Memo
                 origin,
                 uses,
                 last_used,
-                credit
+                credit,
+                lineage
             ],
         )?;
     }

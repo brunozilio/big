@@ -1,7 +1,7 @@
 use super::*;
 
 pub(super) fn by_agent(now: i64) -> Provenance {
-    Provenance { author: Author::Agent, now, origin: Some("Night sky".into()) }
+    Provenance { author: Author::Agent, now, origin: Some("Night sky".into()), lineage: None }
 }
 
 pub(super) fn remember(kind: MemoryKind, text: &str, tags: &[&str]) -> MemoryEdit {

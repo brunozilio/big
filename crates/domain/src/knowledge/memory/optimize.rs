@@ -45,6 +45,7 @@ mod tests {
             last_used: 0,
             touches: Vec::new(),
             credit: None,
+            lineage: None,
         };
         let prompt =
             optimize_prompt(&[memory(3, MemoryKind::Semantic, &["ci", "lint"]), memory(7, MemoryKind::Episodic, &[])]);

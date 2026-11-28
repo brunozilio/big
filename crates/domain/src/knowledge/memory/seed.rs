@@ -122,6 +122,7 @@ mod tests {
             last_used: 0,
             touches: Vec::new(),
             credit: None,
+            lineage: None,
         };
 
         assert_eq!(candidates(&sessions, std::slice::from_ref(&known)), []);

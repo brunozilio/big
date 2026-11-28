@@ -73,10 +73,11 @@ pub fn about_file(memories: &[Memory], file: &str, shown: &mut HashSet<MemoryId>
 }
 
 pub fn line(memory: &Memory) -> String {
-    match &memory.credit {
+    let line = match &memory.credit {
         Some(credit) => format!("[{}] {} ({credit})", memory.id.0, memory.text),
         None => format!("[{}] {}", memory.id.0, memory.text),
-    }
+    };
+    memory.wrapped(line)
 }
 
 #[cfg(test)]
@@ -98,6 +99,7 @@ mod tests {
             last_used: 0,
             touches: touches.iter().map(|t| (*t).to_owned()).collect(),
             credit: None,
+            lineage: None,
         }
     }
 

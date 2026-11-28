@@ -1,6 +1,7 @@
 use std::path::Path;
 
 use domain::mcp::text_result;
+use domain::memory::Lineage;
 use domain::{Author, MemoryEdit, MemoryId, Provenance};
 use serde_json::{Map, Value, json};
 
@@ -78,12 +79,18 @@ fn target(edit: &MemoryEdit) -> Option<MemoryId> {
     }
 }
 
-pub(super) fn applied(memories: &Memories, project: &Path, edit: MemoryEdit, origin: &str) -> Value {
+pub(super) struct Writer<'a> {
+    pub origin: &'a str,
+    pub lineage: Option<Lineage>,
+}
+
+pub(super) fn applied(memories: &Memories, project: &Path, edit: MemoryEdit, writer: Writer<'_>) -> Value {
     let known = memories.load(project).memories;
     if let Some(id) = target(&edit).filter(|id| !known.iter().any(|memory| memory.id == *id)) {
         return text_result(format!("There is no memory [{}] in this project; search for it first.", id.0), true);
     }
-    let by = Provenance { author: Author::Agent, now: now(), origin: Some(origin.to_owned()) };
+    let origin = Some(writer.origin.to_owned());
+    let by = Provenance { author: Author::Agent, now: now(), origin, lineage: writer.lineage };
     let listing = match memories.edit(project, std::slice::from_ref(&edit), by) {
         Ok(listing) => listing,
         Err(error) => return text_result(error, true),
@@ -96,7 +103,10 @@ pub(super) fn applied(memories: &Memories, project: &Path, edit: MemoryEdit, ori
         }
         MemoryEdit::Revise { id, .. } => format!("Revised [{}].", id.0),
         MemoryEdit::Forget { id } => format!("Forgot [{}].", id.0),
-        MemoryEdit::Reclassify { id, .. } | MemoryEdit::Restore { id } => format!("Changed [{}].", id.0),
+        MemoryEdit::Reclassify { id, .. } | MemoryEdit::Restore { id } | MemoryEdit::Purge { id } => {
+            format!("Changed [{}].", id.0)
+        }
+        MemoryEdit::PurgeSource { .. } => "Changed.".to_owned(),
     };
     text_result(told, false)
 }

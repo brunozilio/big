@@ -14,6 +14,7 @@ fn memory(id: u32) -> Memory {
         last_used: 0,
         touches: Vec::new(),
         credit: None,
+        lineage: None,
     }
 }
 

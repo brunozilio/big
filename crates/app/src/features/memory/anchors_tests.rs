@@ -23,7 +23,7 @@ fn a_run_is_handed_the_memories_about_files_that_its_prompt_did_not_recall() {
         remember("Keep defaultRetryMax at 4", &["client.go"]),
         remember("The renderer draws signed distance fields", &[]),
     ];
-    let by = Provenance { author: Author::User, now: 1, origin: None };
+    let by = Provenance { author: Author::User, now: 1, origin: None, lineage: None };
     memories.edit(project.path(), &edits, by).expect("edit");
     let request = PromptRequest::plain(project.path().into(), "Tune the renderer", ModelOption::new("m", "M"))
         .remembering(MemoryBrief::new(None));
@@ -56,7 +56,7 @@ fn the_context_features_follow_the_config_whatever_the_project_s_settings_say() 
     } });
     std::fs::write(settings.join("settings.json"), off.to_string()).expect("settings");
     let memories = Memories::new(Arc::new(InMemoryStore::default()));
-    let by = Provenance { author: Author::User, now: 1, origin: None };
+    let by = Provenance { author: Author::User, now: 1, origin: None, lineage: None };
     memories.edit(project.path(), &[remember("Keep retries at 4", &["client.go"])], by).expect("edit");
     let request = PromptRequest::plain(project.path().into(), "Tune the renderer", ModelOption::new("m", "M"))
         .remembering(MemoryBrief::new(None));

@@ -103,7 +103,7 @@ fn native_backend_searches_memory_and_learns() {
         touches: vec![],
         scope: Default::default(),
     }));
-    let by = domain::Provenance { author: domain::Author::User, now: 0, origin: None };
+    let by = domain::Provenance { author: domain::Author::User, now: 0, origin: None, lineage: None };
     services.memories.edit(dir.path(), &edits, by).expect("valid test fixture");
     let backend = LocalBackend::new(services, Arc::new(|| {})).expect("valid test fixture");
     let model = ModelOption::new("fixture", "Fixture inference").served_by(ModelProvider::new("keyed"));

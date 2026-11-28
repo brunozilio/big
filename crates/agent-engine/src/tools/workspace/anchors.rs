@@ -40,6 +40,7 @@ mod tests {
             last_used: 0,
             touches: vec!["src".into()],
             credit: None,
+            lineage: None,
         }];
 
         let first = workspace.anchored(&dir.path().join("src/client.rs"));

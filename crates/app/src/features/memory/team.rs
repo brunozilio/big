@@ -59,6 +59,7 @@ mod tests {
             last_used: 0,
             touches: vec!["ci".into()],
             credit: None,
+            lineage: None,
         };
 
         let gate = Scope::at(project.path(), None);

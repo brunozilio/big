@@ -1,5 +1,7 @@
 use std::path::Path;
 
+use domain::label::Reads;
+use domain::memory::Lineage;
 use domain::{Author, Memory, MemoryEdit, MemoryId, Provenance};
 
 use crate::Client;
@@ -16,7 +18,7 @@ impl Client {
     }
 
     pub fn edit_memory(&self, shelf: &MemoryShelf, edit: MemoryEdit) -> Result<MemoryListing, String> {
-        let by = Provenance { author: Author::User, now: memory::now(), origin: None };
+        let by = Provenance { author: Author::User, now: memory::now(), origin: None, lineage: Some(Lineage::user()) };
         memory::of(&self.services).edit_shelf(shelf, &[edit], by)
     }
 
@@ -24,9 +26,9 @@ impl Client {
         memory::of(&self.services).move_memory(from, id, to)
     }
 
-    pub fn memory_mcp(&self, project: &Path, origin: &str) -> domain::mcp::LocalMcp {
+    pub fn memory_mcp(&self, project: &Path, origin: &str, reads: Option<Reads>) -> domain::mcp::LocalMcp {
         let memories = memory::of(&self.services);
-        memory::mcp::MemoryEndpoint::for_agent(memories, project.to_path_buf(), origin.to_owned())
+        memory::mcp::MemoryEndpoint::for_agent(memories, project.to_path_buf(), origin.to_owned(), reads)
     }
 }
 
@@ -72,6 +74,9 @@ mod tests {
         assert_eq!((forgotten.memories.len(), forgotten.forgotten.len()), (0, 1));
         let restored = client.edit_memory(&shelf, MemoryEdit::Restore { id }).expect("restore");
         assert_eq!(client.memory_shelf(&shelf), restored);
+        assert_eq!(restored.memories[0].lineage, Some(domain::memory::Lineage::user()));
+        let purged = client.edit_memory(&shelf, MemoryEdit::Purge { id }).expect("purge");
+        assert_eq!((purged.memories.len(), purged.forgotten.len()), (0, 0), "purged leaves no way back");
         let other = MemoryShelf::Repository(PathBuf::from("/work/shop"));
         assert!(client.memory_shelf(&other).memories.is_empty(), "each repository keeps its own");
     }
@@ -96,7 +101,7 @@ mod tests {
     fn a_run_reads_its_repository_its_application_and_the_global_memory() {
         let client = client();
         let memories = crate::features::memory::of(&client.services);
-        let by = || domain::Provenance { author: domain::Author::Agent, now: 1, origin: None };
+        let by = || domain::Provenance { author: domain::Author::Agent, now: 1, origin: None, lineage: None };
         let edits = [
             remember("api uses axum", MemoryScope::Repository),
             remember("deploys on tuesdays", MemoryScope::Application),

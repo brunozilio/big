@@ -4,7 +4,7 @@ use domain::label::Read;
 
 pub const MOST: usize = 256;
 
-pub type Reads = Arc<Mutex<Vec<Read>>>;
+pub use domain::label::Reads;
 
 static SESSIONS: Mutex<Vec<(String, Reads)>> = Mutex::new(Vec::new());
 
