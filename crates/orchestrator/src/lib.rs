@@ -23,6 +23,7 @@ mod events;
 mod factory;
 mod git;
 mod kept;
+mod kept_blocks;
 mod kill;
 pub mod kinds;
 pub mod mcp_resources;

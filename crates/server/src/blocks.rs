@@ -74,19 +74,23 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
             let key = text(if raw["key"].is_null() { &raw["ref"] } else { &raw["key"] });
             json!({ "type": "issue", "connection": place.connection("tracker"), "key": key, "comment": true })
         }
-        "change" => json!({ "type": "change", "connection": place.connection("code"), "change": text(&raw["pr"]) }),
-        "review" => json!({
-            "type": "review", "connection": place.connection("code"), "change": text(&raw["pr"]),
-            "editable": place.waiting, "session": raw["session"].as_str(), "submit": REVIEW,
-        }),
+        "change" => changed(place, raw, json!({ "type": "change" })),
+        "review" => changed(
+            place,
+            raw,
+            json!({ "type": "review", "editable": place.waiting, "session": raw["session"].as_str(), "submit": REVIEW }),
+        ),
         "pipeline" => json!({
             "type": "pipeline", "connection": place.connection("pipelines"), "run": text(&raw["run"]), "gate": null,
         }),
-        "merge" => json!({
-            "type": "merge", "connection": place.connection("code"), "change": text(&raw["pr"]),
-            "ready": place.waiting, "methods": raw["methods"].as_array().cloned().unwrap_or_default(),
-            "action": MERGE, "checks": [], "result": null,
-        }),
+        "merge" => changed(
+            place,
+            raw,
+            json!({
+                "type": "merge", "ready": place.waiting, "methods": raw["methods"].as_array().cloned().unwrap_or_default(),
+                "action": MERGE, "checks": [], "result": null,
+            }),
+        ),
         "markdown" => json!({ "type": "markdown", "text": text(&raw["text"]), "muted": raw["muted"] == true }),
         "cases" => cases(place, raw),
         "logs" => logs(raw, place.language),
@@ -135,6 +139,12 @@ fn one(place: &Place<'_>, raw: &Value) -> Option<Value> {
         _ => return None,
     };
     Some(block)
+}
+
+fn changed(place: &Place<'_>, raw: &Value, mut block: Value) -> Value {
+    block["connection"] = json!(bound(place, raw, raw["capability"].as_str().unwrap_or_default()));
+    block["change"] = json!(text(&raw["change"]));
+    block
 }
 
 fn bound(place: &Place<'_>, raw: &Value, capability: &str) -> String {
@@ -242,18 +252,23 @@ mod tests {
         let raw = json!([
             { "type": "chat", "session": "s1" },
             { "type": "issue", "ref": "K-1" },
-            { "type": "merge", "pr": "o/r#3", "methods": ["squash"] },
+            { "type": "merge", "change": "o/r#3", "capability": "code", "methods": ["squash"] },
+            { "type": "change", "change": "o/r#4", "capability": "code", "connection": "other" },
             { "type": "logs", "text": "ok" },
             { "type": "actions", "buttons": [{ "id": "retry", "label": "retry" }] },
             { "type": "unknown" },
         ]);
         let blocks = normalized(&place, &raw);
-        assert_eq!(blocks.len(), 5);
+        assert_eq!(blocks.len(), 6);
         assert_eq!(blocks[0], json!({ "type": "chat", "session": "s1", "composer": false }));
         assert_eq!(blocks[1]["connection"], "t");
-        assert_eq!(blocks[2]["ready"], true);
-        assert_eq!(blocks[3]["commands"][0]["log"], "ok");
-        assert_eq!(blocks[4]["buttons"][0]["action"], "retry");
+        assert_eq!(
+            (blocks[2]["ready"].clone(), blocks[2]["connection"].clone(), blocks[2]["change"].clone()),
+            (json!(true), json!("c"), json!("o/r#3"))
+        );
+        assert_eq!((blocks[3]["connection"].clone(), blocks[3]["change"].clone()), (json!("other"), json!("o/r#4")));
+        assert_eq!(blocks[4]["commands"][0]["log"], "ok");
+        assert_eq!(blocks[5]["buttons"][0]["action"], "retry");
     }
 
     #[test]

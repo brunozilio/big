@@ -314,9 +314,14 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
     let index = super::builtin_text("packages/dev/steps/index.js").expect("index");
     assert!(STEPS.iter().all(|step| index.contains(&format!("default as {step} "))));
     let base = super::builtin_text("sdk/steps/general.js").expect("general");
-    assert!(
-        GENERIC.iter().all(|step| base.contains(&format!("as {} ", match *step { "assess" => "review", "criterion" => "verify", other => other })))
-    );
+    assert!(GENERIC.iter().all(|step| base.contains(&format!(
+        "as {} ",
+        match *step {
+            "assess" => "review",
+            "criterion" => "verify",
+            other => other,
+        }
+    ))));
 }
 
 #[test]
@@ -1074,26 +1079,32 @@ fn each_step_view_is_made_of_blocks() {
     assert_eq!(stopped, json!([{ "type": "logs", "text": "erro" }]), "a stopped step has no verifier still at it");
     assert_eq!(view("pr", json!({ "title": "T", "body": "B" })), json!([{ "type": "markdown", "text": "# T\n\nB" }]));
     assert_eq!(view("ci", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));
-    assert_eq!(view("review", json!({ "pr": "P" })), json!([{ "type": "review", "pr": "P" }]));
+    assert_eq!(
+        view("review", json!({ "pr": "P" })),
+        json!([{ "type": "review", "change": "P", "capability": "code" }])
+    );
     assert_eq!(
         view("review", json!({ "pr": "P", "session": "r1" })),
-        json!([{ "type": "review", "pr": "P", "session": "r1" }])
+        json!([{ "type": "review", "change": "P", "capability": "code", "session": "r1" }])
     );
     assert_eq!(
         view("merge", json!({ "pr": "P", "methods": ["squash"] })),
-        json!([{ "type": "merge", "pr": "P", "methods": ["squash"] }])
+        json!([{ "type": "merge", "change": "P", "capability": "code", "methods": ["squash"] }])
     );
     assert_eq!(view("release", json!({ "run": "R" })), json!([{ "type": "pipeline", "run": "R" }]));
     assert_eq!(view("plan", json!({})), json!([]));
     let prs = json!({ "prs": [{ "pr": "P1", "name": "a/web", "title": "T", "body": "" }, { "pr": "P2", "name": "a/api", "title": "T", "body": "" }] });
-    assert_eq!(view("pr", prs), json!([{ "type": "change", "pr": "P1" }, { "type": "change", "pr": "P2" }]));
+    assert_eq!(
+        view("pr", prs),
+        json!([{ "type": "change", "change": "P1", "capability": "code" }, { "type": "change", "change": "P2", "capability": "code" }])
+    );
     let drafts = json!({ "prs": [{ "name": "a/web", "title": "T", "body": "" }, { "name": "a/api", "title": "T", "body": "" }] });
     let shown: Vec<Value> =
         view("pr", drafts).as_array().expect("blocks").iter().map(|block| block["text"].clone()).collect();
     assert_eq!(shown, [json!("# a/web: T\n\n"), json!("# a/api: T\n\n")]);
     assert_eq!(
         view("pr", json!({ "pr": "o/r#3", "title": "T", "body": "B" })),
-        json!([{ "type": "change", "pr": "o/r#3" }])
+        json!([{ "type": "change", "change": "o/r#3", "capability": "code" }])
     );
     let runs = json!({ "run": "R1", "runs": [{ "run": "R1" }, { "run": "R2" }] });
     assert_eq!(

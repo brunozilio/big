@@ -43,10 +43,12 @@ const block = (type, fields) => Object.freeze({ type, ...fields });
 
 export const chat = (session, options) => block("chat", { session, composer: Boolean(options && options.composer) });
 export const issue = (ref) => block("issue", { ref });
-export const change = (pr) => block("change", { pr });
-export const review = (pr, options) => block("review", options && options.session ? { pr, session: options.session } : { pr });
+const changeOf = (ref, options) => ({ change: ref, capability: (options && options.capability) || "code" });
+export const change = (ref, options) => block("change", changeOf(ref, options));
+export const review = (ref, options) =>
+  block("review", options && options.session ? { ...changeOf(ref, options), session: options.session } : changeOf(ref, options));
 export const pipeline = (run) => block("pipeline", { run });
-export const merge = (pr, methods) => block("merge", { pr, methods: methods || [] });
+export const merge = (ref, methods, options) => block("merge", { ...changeOf(ref, options), methods: methods || [] });
 export const findingList = (fields) => block("findings", fields || {});
 export const qualityReport = (fields) => block("quality", fields || {});
 export const markdown = (text) => block("markdown", { text: String(text === undefined ? "" : text) });
