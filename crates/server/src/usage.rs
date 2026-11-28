@@ -79,6 +79,7 @@ fn gather(shared: &Shared, days: i64, only: Option<&str>) -> ApiResult<Value> {
     let report = tally.report();
     let mut listed = listing(days, &window, &report, &providers, shared.language());
     listed["byRun"] = crate::usage_runs::by_run(&report.by_run, &sessions);
+    listed["byResult"] = crate::usage_results::by_result_of(shared, &report.by_item);
     connector_calls(shared, &mut listed, start, only);
     Ok(listed)
 }

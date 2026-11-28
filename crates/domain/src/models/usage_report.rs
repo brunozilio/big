@@ -82,6 +82,7 @@ pub struct UsageReport {
     pub by_agent: Vec<Ranked>,
     pub by_origin: Vec<(Origin, Tally)>,
     pub by_run: Vec<RunUsage>,
+    pub by_item: BTreeMap<String, Cost>,
     pub unattributed: Tally,
 }
 
@@ -98,6 +99,7 @@ pub struct UsageTally {
     agents: BTreeMap<String, Tally>,
     origins: BTreeMap<Origin, Tally>,
     runs: RunTally,
+    items: BTreeMap<String, Cost>,
     unattributed: Tally,
 }
 
@@ -150,6 +152,9 @@ impl UsageTally {
         self.accounts.entry((provider, usage.account.clone())).or_default().add(usage);
         self.origins.entry(usage.attribution.origin).or_default().add(usage);
         self.runs.used(session, self.agent_of.get(session), lane, usage);
+        if let Some(item) = &usage.attribution.item {
+            self.items.entry(item.clone()).or_default().add(cost);
+        }
         match self.agent_of.get(session) {
             Some(agent) => self.agents.entry(agent.clone()).or_default().add(usage),
             None if usage.attribution.item.is_none() => self.unattributed.add(usage),
@@ -180,6 +185,7 @@ impl UsageTally {
             by_agent: ranked(self.agents),
             by_origin,
             by_run: self.runs.report(),
+            by_item: self.items,
             unattributed: self.unattributed,
         }
     }

@@ -9,4 +9,5 @@ pub mod routing;
 pub mod small_model;
 pub mod spend;
 pub mod usage_report;
+pub mod usage_results;
 pub mod usage_runs;

@@ -58,6 +58,7 @@ mod usage;
 mod usage_cache;
 mod usage_calls;
 mod usage_connections;
+mod usage_results;
 mod usage_runs;
 mod vault;
 mod watched;
