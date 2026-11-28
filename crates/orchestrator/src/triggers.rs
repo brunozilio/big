@@ -22,17 +22,11 @@ pub fn platform() -> Vec<Value> {
     PLATFORM.iter().map(|name| json!({ "name": name, "namespace": namespace(name) })).collect()
 }
 
-pub struct Loaded<'a> {
-    pub workflow: &'a str,
-    pub builtin: bool,
-}
-
-pub fn checked(connectors: &Connectors, described: &Value, loaded: &Loaded) -> Result<(), String> {
+pub fn checked(connectors: &Connectors, described: &Value, workflow: &str) -> Result<(), String> {
     for shape in described["workflows"].as_array().into_iter().flatten() {
         for trigger in shape["triggers"].as_array().into_iter().flatten() {
             let kind = trigger["kind"].as_str().unwrap_or_default();
-            let workflow = loaded.workflow;
-            known(connectors, kind, loaded).map_err(|why| format!("workflows/{workflow}: {why}"))?;
+            known(connectors, kind, workflow).map_err(|why| format!("workflows/{workflow}: {why}"))?;
         }
     }
     Ok(())
@@ -44,7 +38,7 @@ const NAMESPACE_TYPO: usize = 1;
 fn typo_of<'a>(kind: &str, connectors: &'a Connectors) -> Option<&'a str> {
     let declared = connectors.declared().flat_map(|spec| {
         std::iter::once((spec.name.as_str(), spec.name.as_str()))
-            .chain(spec.aliases.iter().map(|alias| (alias.as_str(), spec.name.as_str())))
+            .chain(spec.aliases.iter().map(|alias| (alias.as_str(), alias.as_str())))
     });
     typo_among(kind, PLATFORM.into_iter().map(|name| (name, name)).chain(declared))
 }
@@ -59,19 +53,8 @@ fn typo_among<'a>(kind: &str, named: impl Iterator<Item = (&'a str, &'a str)>) -
     found.iter().find(|(name, _)| *name == nearest).map(|(_, suggested)| *suggested)
 }
 
-fn known(connectors: &Connectors, kind: &str, loaded: &Loaded) -> Result<(), String> {
-    let workflow = loaded.workflow;
-    if PLATFORM.contains(&kind) || connectors.declared().any(|spec| spec.name == kind) {
-        return Ok(());
-    }
-    let renamed: Vec<&str> =
-        connectors.declared().filter(|spec| spec.answers(kind)).map(|spec| spec.name.as_str()).collect();
-    if !renamed.is_empty() && loaded.builtin {
-        return Ok(());
-    }
-    if !renamed.is_empty() {
-        let replacement = renamed.join(", ");
-        tracing::warn!(workflow, kind, %replacement, "this event name is retired; trigger on the connector's own name");
+fn known(connectors: &Connectors, kind: &str, workflow: &str) -> Result<(), String> {
+    if PLATFORM.contains(&kind) || connectors.declared().any(|spec| spec.answers(kind)) {
         return Ok(());
     }
     match typo_of(kind, connectors) {
@@ -89,9 +72,9 @@ mod tests {
     fn named() -> Vec<(&'static str, &'static str)> {
         vec![
             ("github.pr.merged", "github.pr.merged"),
-            ("code.pr.merged", "github.pr.merged"),
+            ("code.pr.merged", "code.pr.merged"),
             ("jira.issue.created", "jira.issue.created"),
-            ("tracker.issue.created", "jira.issue.created"),
+            ("tracker.issue.created", "tracker.issue.created"),
         ]
     }
 
@@ -99,7 +82,7 @@ mod tests {
     fn only_a_near_miss_of_a_declared_name_is_a_typo() {
         assert_eq!(typo_among("jira.issue.creatd", named().into_iter()), Some("jira.issue.created"));
         assert_eq!(typo_among("jiar.issue.created", named().into_iter()), Some("jira.issue.created"));
-        assert_eq!(typo_among("tracker.issue.creatd", named().into_iter()), Some("jira.issue.created"));
+        assert_eq!(typo_among("tracker.issue.creatd", named().into_iter()), Some("tracker.issue.created"));
         assert_eq!(typo_among("gitlab.mr.merged", named().into_iter()), None);
         assert_eq!(typo_among("gitlab.pr.merged", named().into_iter()), None);
         assert_eq!(typo_among("jira.sprint.started", named().into_iter()), None);

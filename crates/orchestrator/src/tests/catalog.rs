@@ -40,10 +40,10 @@ async fn a_trigger_on_an_event_nobody_declares_fails_the_load_naming_the_closest
     triggered(&world, "typo", "fake.issue.creatd");
     triggered(&world, "old", "tracker.issue.creatd");
     let kernel = world.start().await;
-    for workflow in ["typo", "old"] {
+    for (workflow, closest) in [("typo", "fake.issue.created"), ("old", "tracker.issue.created")] {
         let error = kernel.loads(workflow).expect_err("refused").to_string();
         assert!(error.contains("no connector declares this event"), "{error}");
-        assert!(error.contains("the closest is fake.issue.created"), "{error}");
+        assert!(error.contains(&format!("the closest is {closest}")), "{error}");
     }
 }
 
@@ -63,7 +63,7 @@ async fn a_trigger_on_the_old_name_and_on_the_new_one_both_fire_and_say_the_decl
     declared(&world);
     triggered(&world, "legacy", "tracker.issue.created");
     let kernel = world.start().await;
-    assert_eq!(kernel.trigger(&created("Antiga")).expect("trigger"), 1, "the retired name is an alias");
+    assert_eq!(kernel.trigger(&created("Antiga")).expect("trigger"), 1, "the capability name answers too");
 }
 
 #[tokio::test(flavor = "multi_thread")]
