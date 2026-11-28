@@ -22,6 +22,7 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "registry"] }
 axum = { workspace = true, features = ["multipart", "ws"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "net", "sync", "macros", "time", "fs"] }
 futures-util.workspace = true

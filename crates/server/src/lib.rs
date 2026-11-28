@@ -64,6 +64,8 @@ mod usage_runs;
 mod vault;
 mod watched;
 mod workspaces;
+pub mod trail;
+mod audit;
 
 pub use auth::settings::{Mode as AuthMode, force as force_auth_mode, force_setup_file};
 pub use backend::Backend;

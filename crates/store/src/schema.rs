@@ -211,15 +211,43 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX spend_by_owner ON spend (owner, at);
     CREATE INDEX spend_by_at ON spend (at);
 ",
+    "
+    CREATE TABLE audit_trail (
+        seq INTEGER PRIMARY KEY,
+        at INTEGER NOT NULL,
+        actor TEXT,
+        subject TEXT,
+        action TEXT NOT NULL,
+        policy TEXT,
+        outcome TEXT,
+        detail TEXT NOT NULL,
+        prev TEXT NOT NULL,
+        hash TEXT NOT NULL
+    );
+    CREATE INDEX audit_trail_by_at ON audit_trail (at);
+    CREATE INDEX audit_trail_by_actor ON audit_trail (actor, at);
+    CREATE INDEX audit_trail_by_subject ON audit_trail (subject, at);
+    CREATE INDEX audit_trail_by_action ON audit_trail (action, at);
+",
 ];
+
+const SQLITE_GUARD: &str = "CREATE TRIGGER IF NOT EXISTS audit_trail_only_grows BEFORE UPDATE ON audit_trail
+    BEGIN SELECT RAISE(ABORT, 'the audit trail only grows'); END;";
+
+const POSTGRES_GUARD: &str = "CREATE OR REPLACE FUNCTION audit_trail_only_grows() RETURNS trigger LANGUAGE plpgsql
+    AS $$ BEGIN RAISE EXCEPTION 'the audit trail only grows'; END $$;
+    DROP TRIGGER IF EXISTS audit_trail_only_grows ON audit_trail;
+    CREATE TRIGGER audit_trail_only_grows BEFORE UPDATE ON audit_trail
+    FOR EACH ROW EXECUTE FUNCTION audit_trail_only_grows();";
 
 const ORDERED: [&str; 4] = ["connections", "applications", "factory_findings", "items"];
 
 pub fn migrate(database: &Database) -> database::Result<()> {
     database.migrate("store_schema", MIGRATIONS)?;
     if database.dialect() != Dialect::Sqlite {
-        return Ok(());
+        return database.write(|conn| conn.batch(POSTGRES_GUARD));
     }
+    database.write(|conn| conn.batch(SQLITE_GUARD))?;
     database.write(|conn| {
         for table in ORDERED {
             conn.execute(&format!("UPDATE {table} SET seq = rowid WHERE seq = 0"), &[])?;

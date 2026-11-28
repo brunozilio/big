@@ -33,7 +33,7 @@ pub fn open(file: &Path) -> std::io::Result<File> {
     OpenOptions::new().create(true).append(true).open(file)
 }
 
-pub fn install(terminal: bool) -> Option<PathBuf> {
+pub fn install(terminal: bool, kept: bool) -> Option<PathBuf> {
     let path = platform::local_data_dir(brand::NAME, brand::COMMAND).map(|data| file_in(&data));
     let file = path.as_deref().and_then(|path| open(path).ok());
     let saved = file.map(|file| {
@@ -46,7 +46,8 @@ pub fn install(terminal: bool) -> Option<PathBuf> {
             .with_filter(filter(Some(brand::log::FILTER)))
     });
     let shown = terminal.then(|| shown(Format::chosen(brand::log::FORMAT)));
-    tracing_subscriber::registry().with(saved).with(shown).try_init().ok()?;
+    let trail = kept.then(server::trail::layer);
+    tracing_subscriber::registry().with(saved).with(shown).with(trail).try_init().ok()?;
     log_panics();
     path
 }

@@ -16,6 +16,12 @@ struct Open {
     at_ms: u64,
 }
 
+pub(super) fn around(request: &domain::PromptRequest) -> tracing::Span {
+    let agent = request.session.agent.as_ref().map(|spec| spec.name.as_str());
+    let user = request.host.owner.as_deref();
+    tracing::info_span!(target: "audit", "agent.run", agent, user)
+}
+
 #[derive(Default)]
 pub(super) struct Audit {
     tools: Mutex<HashMap<String, Open>>,
@@ -152,7 +158,7 @@ fn step(session: &str, agent: Option<usize>, event: &EngineEvent) -> bool {
             tracing::event!(target: "audit", tracing::Level::INFO, session.id = session, agent.index = agent, ask.id = ?ask, ask.decision = ?decision, "agent.ask.answer");
         }
         EngineEvent::Refused { tool, reason } => {
-            tracing::event!(target: "audit", tracing::Level::WARN, session.id = session, agent.index = agent, gen_ai.tool.name = %tool, error.message = %preview(reason), "tool.denied");
+            tracing::event!(target: "audit", tracing::Level::WARN, session.id = session, agent.index = agent, gen_ai.tool.name = %tool, outcome = "denied", error.message = %preview(reason), "tool.denied");
         }
         EngineEvent::AgentUpdate { index, status, .. } => subagent(session, *index, status),
         _ => return false,

@@ -69,7 +69,7 @@ impl AgentEffect<'_> {
         let Overrun::Smaller(model) = declared else { return false };
         let fallen = self.progress()["overrun"]["fell"].as_str() == Some(model.as_str());
         if fallen && let Some(why) = self.fall_to(next, model) {
-            tracing::warn!(target: "audit", item = %self.item, %why, "budget.overrun.restored");
+            tracing::warn!(target: "audit", agent = self.command.text("name"), item = %self.item, %why, "budget.overrun.restored");
         }
         fallen
     }
@@ -114,10 +114,13 @@ impl AgentEffect<'_> {
         let Told { declared, reached, went, ref skipped, fell } = *told;
         tracing::info!(
             target: "audit",
+            agent = self.command.text("name"),
             item = %self.item,
             step = self.key.step,
+            outcome = if went { "allowed" } else { "denied" },
             scope = reached.scope.word(),
             action = declared.word(),
+            policy = declared.word(),
             went,
             skipped = skipped.as_deref().unwrap_or_default(),
             "budget.overrun"

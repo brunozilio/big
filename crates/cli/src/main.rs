@@ -49,13 +49,14 @@ fn main() -> ExitCode {
     if let Some((command, given)) = discovered::chosen(&found, &matches) {
         let args = given.get_many::<OsString>(discovered::ARGS).map(|args| args.cloned().collect()).unwrap_or_default();
         if command.page {
-            logging::install(false);
+            logging::install(false, false);
             return finish(runner::run(command, args, &root));
         }
         return finish(discovered::run(command, args, &root));
     }
     let cli = Cli::from_arg_matches(&matches).unwrap_or_else(|error| error.exit());
-    logging::install(cli.command.is_none());
+    let serving = cli.command.is_none();
+    logging::install(serving, serving);
     finish(launched(cli, &root))
 }
 

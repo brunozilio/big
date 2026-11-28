@@ -4167,6 +4167,7 @@ dependencies = [
  "tower",
  "tower-http",
  "tracing",
+ "tracing-subscriber",
  "url",
  "uuid",
 ]
@@ -4334,6 +4335,7 @@ dependencies = [
  "jiff",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
  "tempfile",
  "thiserror",
  "tracing",

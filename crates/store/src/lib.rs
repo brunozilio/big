@@ -1,5 +1,7 @@
 mod applications;
 mod archive;
+mod audit;
+mod audit_chain;
 mod branding;
 mod browser_devices;
 mod connections;
@@ -23,6 +25,8 @@ use std::time::{Duration, Instant};
 
 use database::{Conn, Database};
 
+pub use audit::{AuditDraft, AuditFacets, AuditFilter, AuditPage, AuditRecord};
+pub use audit_chain::{AuditVerified, GENESIS};
 pub use applications::{Application, Binding, Bindings, Choice, Environment, Fields, Repository, watched};
 pub use browser_devices::BrowserDevice;
 pub use connections::ConnectionRecord;

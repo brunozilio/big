@@ -25,6 +25,7 @@ pub(super) struct Recorder {
     started: AtomicBool,
     compacted: AtomicBool,
     audit: super::audit::Audit,
+    around: tracing::Span,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,6 +52,7 @@ impl Recorder {
             started: AtomicBool::new(false),
             compacted: AtomicBool::new(false),
             audit: super::audit::Audit::default(),
+            around: super::audit::around(request),
         };
         if request.session.command.is_none() {
             if let Some(shown) = &request.prompt.shown {
@@ -178,7 +180,7 @@ impl Recorder {
     }
 
     fn write(&self, entry: Entry) {
-        self.audit.entry(&self.session, &entry);
+        self.around.in_scope(|| self.audit.entry(&self.session, &entry));
         let mut waiting = self.waiting.locked();
         match waiting.as_mut() {
             Some(waiting) => waiting.push(entry),

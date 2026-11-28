@@ -33,6 +33,11 @@ impl Store {
             Ok(Forgotten { items, snapshots })
         })
     }
+
+    pub fn forget_audit(&self, older_than: Duration) -> Result<usize> {
+        let cutoff = now().saturating_sub(i64::try_from(older_than.as_millis()).unwrap_or(i64::MAX));
+        self.write(|conn| Ok(count(conn.execute("DELETE FROM audit_trail WHERE at < ?1", args![cutoff])?)))
+    }
 }
 
 fn month_start() -> i64 {

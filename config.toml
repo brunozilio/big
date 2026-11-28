@@ -317,6 +317,12 @@ filter = "info"
 terminal = "info,hyper=warn,reqwest=warn,h2=warn,rustls=warn"
 format = "text"
 
+[audit]
+level = "info"
+skip = "http.server.request http.client.request"
+queue = "10000"
+retention_days = ""
+
 [traces]
 otlp_endpoint = ""
 otlp_headers = ""

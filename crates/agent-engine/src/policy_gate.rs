@@ -100,6 +100,7 @@ pub fn blocked(asked: Asked<'_>, tool: &str, reason: &str, layer: Layer) {
         tool,
         reason,
         layer = layer.word(),
+        outcome = "denied",
         "policy.blocked"
     );
 }
