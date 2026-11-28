@@ -1,3 +1,4 @@
+use domain::Language;
 use serde_json::{Value, json};
 
 use super::{NO_PROJECT, NO_SITE, NO_SITES, call, creds, jira, real_sites, session, structured, tool_calls};
@@ -177,8 +178,16 @@ async fn a_connection_without_a_site_or_a_project_is_blocked() {
     let refused = jira().call(&http, &siteless, "tracker.create_issue", &json!({"title": "T"}), "").await;
     assert_eq!(refused.as_ref().map_err(ActionError::blocker), Err(Some(NO_PROJECT)));
     assert!(tool_calls(&http).is_empty());
-    assert_eq!(crate::texts::NO_SITE, NO_SITE);
-    assert_eq!(crate::texts::NO_SITES, NO_SITES);
+}
+
+#[test]
+fn the_connector_tells_its_blockers_in_the_chosen_language() {
+    let told = jira().messages(Language::Portuguese);
+    assert_eq!(told.get(NO_SITE).map(String::as_str), Some("Reconecte o Jira e escolha o site."));
+    assert_eq!(told.get(NO_PROJECT).map(String::as_str), Some("Escolha o projeto."));
+    let spanish = jira().messages(Language::Spanish);
+    assert!(spanish.get(NO_SITES).is_some_and(|said| said.starts_with("No se encontró")));
+    assert_eq!(jira().messages(Language::English).get(NO_SITE).map(String::as_str), Some(NO_SITE));
 }
 
 #[tokio::test]

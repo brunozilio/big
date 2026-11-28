@@ -21,6 +21,8 @@ import { binding, namesOf, options, projectOptions, security, securityStatus, su
 import { type Filter, chosen, filterOf } from "./findings.ts";
 import { type Keys, header, readKeys } from "./sign.ts";
 
+export { messages } from "sdk/connectors/index.ts";
+
 export const REGION = "region";
 export const regions = (ctx: Ctx): [string, string, string][] =>
   entries(ctx.config.regions).map(([region, host, label]) => [region, host ?? "", label ? ` ${label}` : ""]);

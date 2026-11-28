@@ -536,7 +536,7 @@ async fn accounts(shared: &Shared, flow: &Flow, mut grant: Grant) -> Stage {
             let fallback = AccountOption { id: String::new(), label: found.name.clone(), settings: json!({}) };
             finish(shared, flow, &grant, options.first().unwrap_or(&fallback)).await
         }
-        Err(error) => Stage::Failed(error.message),
+        Err(error) => Stage::Failed(shared.backend.connectors.told(&found.key, shared.language(), &error.message)),
     }
 }
 

@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 use store::Binding;
 
 use crate::agent::Failure;
-use crate::effects::connector;
+use crate::effects::{Who, connector};
 use crate::protocol::Command;
 use crate::shared::Shared;
 
@@ -154,8 +154,8 @@ pub async fn lease(shared: &Arc<Shared>, command: &Command, input: &Value) -> Re
     let base = shared.config.server.clone().ok_or_else(|| Failure::permanent("the server address is not known"))?;
     let call = Call { connection: Some(connection.id.to_string()), ..call };
     let token = token();
-    let identity =
-        connector(shared, &owner, &call, &format!("{}:{CREDENTIALS_COMMAND}:{token}", brand::COMMAND), &STEP).await?;
+    let who = Who { owner: &owner, language: crate::agent::language_of(shared, input), charged: &STEP };
+    let identity = connector(shared, who, &call, &format!("{}:{CREDENTIALS_COMMAND}:{token}", brand::COMMAND)).await?;
     let region = identity["region"].as_str().filter(|region| !region.is_empty()).map(str::to_owned);
     let url = format!("{}{CREDENTIALS_PATH}{token}", base.trim_end_matches('/'));
     let text = profile_text(&url, region.as_deref())?;
@@ -188,7 +188,8 @@ pub fn process_credentials(identity: &Value) -> Value {
 pub async fn credentials(shared: &Shared, token: &str) -> crate::error::Result<Value> {
     let (owner, call) = shared.clouds.call(token).ok_or(crate::error::Error::UnknownCloudToken)?;
     let key = format!("{}:{CREDENTIALS_COMMAND}:{}", brand::COMMAND, uuid::Uuid::new_v4().simple());
-    match connector(shared, &owner, &call, &key, &STEP).await {
+    let language = shared.store.language().unwrap_or_default();
+    match connector(shared, Who { owner: &owner, language, charged: &STEP }, &call, &key).await {
         Ok(identity) => Ok(process_credentials(&identity)),
         Err(Failure::Class(_, message) | Failure::Blocked(message)) => Err(crate::error::Error::Cloud(message)),
     }

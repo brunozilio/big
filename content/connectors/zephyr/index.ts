@@ -4,6 +4,8 @@ import { items } from "sdk/connectors/mcp.ts";
 import { cases, createCase, createCycle, finishCycle, record } from "./cases.ts";
 import { type Api, idOf, lastPage, MOST_PAGES, PAGE } from "./api.ts";
 
+export { messages } from "sdk/connectors/index.ts";
+
 export const API_TOKEN = "api_token";
 
 type Ctx = { config: { mcp_url: string; oauth_redirect: string; scopes: string } } & Record<string, any>;

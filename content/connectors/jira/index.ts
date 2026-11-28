@@ -2,6 +2,8 @@ import { type Creds, type Language, optionalText, pick, text, textAt, tokenAlter
 import { binding, options, projectOptions, tracker } from "sdk/connectors/contracts.ts";
 import { items } from "sdk/connectors/mcp.ts";
 import { NO_SITES, apiOf, projectOf, siteApi } from "./api.ts";
+
+export { messages } from "./api.ts";
 import { attach } from "./attach.ts";
 import { linkIssues, updateIssue } from "./edit.ts";
 import { fields, statuses } from "./metadata.ts";

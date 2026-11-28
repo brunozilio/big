@@ -1,9 +1,20 @@
-import { type Creds, blocked, fail, optionalText, setting } from "sdk/connectors/index.ts";
+import { type Creds, type Language, NO_PROJECT, blocked, fail, messages as sdkMessages, optionalText, pick, setting } from "sdk/connectors/index.ts";
 
 export const NO_SITE = "Reconnect Jira and choose the site.";
-export const NO_PROJECT = "Choose the project.";
 export const NO_SITES =
   "No Jira site was found in this Atlassian account. Check that the account has access to Jira and connect again.";
+
+export const messages = ({ language }: { language: Language }): Record<string, string> => ({
+  ...sdkMessages({ language }),
+  [NO_SITE]: pick(language, NO_SITE, "Vuelve a conectar Jira y elige el sitio.", "Reconecte o Jira e escolha o site."),
+  [NO_SITES]: pick(
+    language,
+    NO_SITES,
+    "No se encontró ningún sitio de Jira en esta cuenta de Atlassian. Comprueba que la cuenta tiene acceso a Jira y vuelve a conectar.",
+    "Nenhum site do Jira foi encontrado nesta conta Atlassian. Confira se a conta tem acesso ao Jira e conecte de novo.",
+  ),
+});
+
 export const DEFAULT_FLAG_FIELD = "customfield_10021";
 
 export type Api = {

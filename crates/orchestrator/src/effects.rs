@@ -4,6 +4,7 @@ use std::sync::{Arc, PoisonError};
 use std::time::Duration;
 
 use connectors::contracts;
+use domain::Language;
 use domain::connection::{Capability, Connection, ConnectionId, ProviderKey};
 use domain::effect::{Call, Effect, EffectOutcome, EffectRequest, ErrorClass, IdempotencyKey, next_retry};
 use domain::origin::{Attribution, Origin};
@@ -125,7 +126,6 @@ fn perform(shared: &Arc<Shared>, item: &ItemId, launch: Launch) -> AbortHandle {
             Ok(value) => EffectOutcome::Ok { value },
             Err(Failure::Class(class, message)) => EffectOutcome::Failed { class, message },
             Err(Failure::Blocked(reason)) => {
-                let reason = connectors::texts::blocker(crate::texts::of_item(&shared, &item), &reason);
                 shared.wake(&item, Wake::Blocked(launch.key.seq));
                 if let Err(error) = crate::runner::block(&shared, &item, &launch.key, &reason) {
                     tracing::warn!(%error, "a blocked effect could not be recorded");
@@ -183,6 +183,8 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
     let key = format!("{}:{}", brand::connectors::MARKER, launch.key);
     let owner = crate::owners::of(&shared.store, &state);
     let charged = Attribution::of_step(launch.key.item.clone(), launch.key.step.clone(), Origin::Step);
+    let language = crate::agent::language_of(shared, &state.input);
+    let who = Who { owner: &owner, language, charged: &charged };
     match launch.command.kind.as_str() {
         AGENT => {
             let effect =
@@ -201,8 +203,8 @@ async fn once(shared: &Arc<Shared>, item: &ItemId, launch: &Launch) -> Result<Va
         CALL if launch.command.call().capability == crate::links::CAPABILITY => {
             crate::links::call(shared, item, &launch.command.call())
         }
-        CALL => call(shared, &owner, &launch.command, &key, &charged).await,
-        WAIT_POLL => poll(shared, &owner, &launch.command, &key, &charged).await,
+        CALL => call(shared, who, &launch.command, &key).await,
+        WAIT_POLL => poll(shared, who, &launch.command, &key).await,
         STATUS | IMPEDIMENT => push(shared, &state, &launch.command, &launch.key).await,
         other => Err(Failure::permanent(format!("the kernel does not know the command {other}"))),
     }
@@ -245,13 +247,14 @@ pub fn connection_of(shared: &Shared, owner: &str, call: &Call) -> Result<(Conne
     Ok((connection, record.settings))
 }
 
-async fn call(
-    shared: &Shared,
-    owner: &str,
-    command: &Command,
-    key: &str,
-    charged: &Attribution,
-) -> Result<Value, Failure> {
+#[derive(Debug, Clone, Copy)]
+pub struct Who<'a> {
+    pub owner: &'a str,
+    pub language: Language,
+    pub charged: &'a Attribution,
+}
+
+async fn call(shared: &Shared, who: Who<'_>, command: &Command, key: &str) -> Result<Value, Failure> {
     let mut call = command.call();
     let store = crate::kept::store(&shared.config.data);
     let mut args = std::mem::take(&mut call.args);
@@ -261,43 +264,30 @@ async fn call(
     })
     .await?;
     if command.optional && call.connection.is_none() {
-        match connection_of(shared, owner, &call) {
+        match connection_of(shared, who.owner, &call) {
             Err(Failure::Blocked(_)) => return Ok(Value::Null),
             Err(other) => return Err(other),
             Ok(_) => {}
         }
     }
-    connector(shared, owner, &call, key, charged).await
+    connector(shared, who, &call, key).await
 }
 
-pub async fn connector(
-    shared: &Shared,
-    owner: &str,
-    call: &Call,
-    key: &str,
-    charged: &Attribution,
-) -> Result<Value, Failure> {
-    let (connection, settings) = connection_of(shared, owner, call)?;
-    let called = shared.config.connectors.call_for(Some(charged), &connection, &settings, &call.action, &call.args, key);
-    called.await.map_err(|error| {
-        match error.blocker() {
-            Some(reason) => Failure::Blocked(reason.to_owned()),
-            None => Failure::Class(error.class, error.message),
-        }
+pub async fn connector(shared: &Shared, who: Who<'_>, call: &Call, key: &str) -> Result<Value, Failure> {
+    let (connection, settings) = connection_of(shared, who.owner, call)?;
+    let hub = &shared.config.connectors;
+    let called = hub.call_for(Some(who.charged), &connection, &settings, &call.action, &call.args, key);
+    called.await.map_err(|error| match error.blocker() {
+        Some(reason) => Failure::Blocked(hub.told(&connection.provider, who.language, reason)),
+        None => Failure::Class(error.class, error.message),
     })
 }
 
-async fn poll(
-    shared: &Shared,
-    owner: &str,
-    command: &Command,
-    key: &str,
-    charged: &Attribution,
-) -> Result<Value, Failure> {
+async fn poll(shared: &Shared, who: Who<'_>, command: &Command, key: &str) -> Result<Value, Failure> {
     let every = Duration::from_millis(command.args["every"].as_u64().unwrap_or(30_000).max(10));
     let until = &command.args["until"];
     loop {
-        let wait = match connector(shared, owner, &command.call(), key, charged).await {
+        let wait = match connector(shared, who, &command.call(), key).await {
             Ok(value) if matches(until, &value) => return Ok(value),
             Ok(_) => every,
             Err(Failure::Class(ErrorClass::Permanent, message)) => return Err(Failure::permanent(message)),

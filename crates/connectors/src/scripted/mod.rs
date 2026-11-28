@@ -311,6 +311,10 @@ impl Provider for ScriptedProvider {
     fn requires(&self) -> domain::data_policy::Requires {
         self.requires.clone()
     }
+
+    fn messages(&self, language: Language) -> std::collections::BTreeMap<String, String> {
+        serde_json::from_value(self.local("messages", language)).unwrap_or_default()
+    }
 }
 
 #[async_trait]

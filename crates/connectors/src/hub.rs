@@ -114,6 +114,11 @@ impl Connectors {
         self.entry(key).map(|entry| entry.provider.alternatives(language))
     }
 
+    pub fn told(&self, key: &ProviderKey, language: Language, text: &str) -> String {
+        let said = self.entry(key).ok().and_then(|entry| entry.provider.messages(language).remove(text));
+        said.unwrap_or_else(|| text.to_owned())
+    }
+
     pub fn http(&self) -> &dyn Http {
         self.http.as_ref()
     }

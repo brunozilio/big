@@ -1,10 +1,5 @@
 use domain::Language;
 
-pub const NO_SITE: &str = "Reconnect Jira and choose the site.";
-pub const NO_PROJECT: &str = "Choose the project.";
-pub const NO_SITES: &str =
-    "No Jira site was found in this Atlassian account. Check that the account has access to Jira and connect again.";
-
 pub fn connect(language: Language) -> &'static str {
     language.pick("Connect", "Conectar", "Conectar")
 }
@@ -51,24 +46,6 @@ pub fn detail(language: Language, settings: &serde_json::Value) -> Option<String
     Some(format!("{} · {host}", tools(language, count)))
 }
 
-pub fn blocker(language: Language, reason: &str) -> String {
-    let told = match reason {
-        NO_SITE => language.pick(
-            NO_SITE,
-            "Vuelve a conectar Jira y elige el sitio.",
-            "Reconecte o Jira e escolha o site.",
-        ),
-        NO_PROJECT => language.pick(NO_PROJECT, "Elige el proyecto.", "Escolha o projeto."),
-        NO_SITES => language.pick(
-            NO_SITES,
-            "No se encontró ningún sitio de Jira en esta cuenta de Atlassian. Comprueba que la cuenta tiene acceso a Jira y vuelve a conectar.",
-            "Nenhum site do Jira foi encontrado nesta conta Atlassian. Confira se a conta tem acesso ao Jira e conecte de novo.",
-        ),
-        other => other,
-    };
-    told.to_owned()
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -76,7 +53,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn details_and_blockers_read_in_the_chosen_language() {
+    fn details_read_in_the_chosen_language() {
         let keys = ["APP".to_owned(), "OPS".to_owned()];
         assert_eq!(projects(Language::English, &keys), "Projects APP, OPS");
         assert_eq!(projects(Language::Portuguese, &keys[..1]), "Projeto APP");
@@ -85,8 +62,5 @@ mod tests {
             Some("2 herramientas · a.test")
         );
         assert_eq!(detail(Language::English, &json!({ "detail": "x" })), None);
-        assert_eq!(blocker(Language::English, NO_PROJECT), "Choose the project.");
-        assert_eq!(blocker(Language::Portuguese, NO_SITE), "Reconecte o Jira e escolha o site.");
-        assert_eq!(blocker(Language::English, "something else"), "something else");
     }
 }

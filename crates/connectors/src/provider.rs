@@ -1,3 +1,5 @@
+use std::collections::BTreeMap;
+
 use async_trait::async_trait;
 use domain::Language;
 use domain::connection::{Capability, ConnectionId};
@@ -104,6 +106,10 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
 
     fn requires(&self) -> domain::data_policy::Requires {
         domain::data_policy::Requires::default()
+    }
+
+    fn messages(&self, _language: Language) -> BTreeMap<String, String> {
+        BTreeMap::new()
     }
 }
 

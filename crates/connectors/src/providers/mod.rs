@@ -53,6 +53,10 @@ impl Provider for Shared {
     fn requires(&self) -> domain::data_policy::Requires {
         self.0.requires()
     }
+
+    fn messages(&self, language: domain::Language) -> std::collections::BTreeMap<String, String> {
+        self.0.messages(language)
+    }
 }
 
 #[cfg(test)]

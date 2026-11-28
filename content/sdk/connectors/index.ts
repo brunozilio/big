@@ -161,6 +161,10 @@ export const blocked = (reason: string): never => fail("permanent", `blocked: ${
 
 export const NO_PROJECT = "Choose the project.";
 
+export const messages = ({ language }: { language: Language }): Record<string, string> => ({
+  [NO_PROJECT]: pick(language, NO_PROJECT, "Elige el proyecto.", "Escolha o projeto."),
+});
+
 export const useApiToken = (language: Language) => pick(language, "Use an API token", "Usar un API token", "Usar API token");
 
 export function text(args: Record<string, unknown>, name: string): string {

@@ -1,11 +1,5 @@
 provider-name crates/agent-engine/src/fake.rs: claude: let models = vec![ModelOption::new("claude-opus-5-5", "Opus 5.5")];
 provider-name crates/agent-engine/src/tools/builtin_skills.rs: claude: for other in ["Claude", "Anthropic", "claude.ai"] {
-provider-name crates/connectors/src/texts.rs: jira: "Nenhum site do Jira foi encontrado nesta conta Atlassian. Confira se a conta tem acesso ao Jira e conecte de novo.",
-provider-name crates/connectors/src/texts.rs: jira: "No Jira site was found in this Atlassian account. Check that the account has access to Jira and connect again.";
-provider-name crates/connectors/src/texts.rs: jira: "No se encontró ningún sitio de Jira en esta cuenta de Atlassian. Comprueba que la cuenta tiene acceso a Jira y vuelve a conectar.",
-provider-name crates/connectors/src/texts.rs: jira: "Reconecte o Jira e escolha o site.",
-provider-name crates/connectors/src/texts.rs: jira: "Vuelve a conectar Jira y elige el sitio.",
-provider-name crates/connectors/src/texts.rs: jira: pub const NO_SITE: &str = "Reconnect Jira and choose the site.";
 provider-name crates/domain/src/safety/permission/suggested.rs: aws: "aws",
 provider-name crates/domain/src/safety/redact.rs: aws: fn is_aws_key(word: &str) -> bool {
 provider-name crates/domain/src/safety/redact.rs: aws: prefixed || is_aws_key(word) || is_jwt(word)
