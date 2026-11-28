@@ -308,7 +308,7 @@ pub fn live_blocks(ledger: &Ledger, step: &str) -> Option<Value> {
     if let Some(Effect::WaitHuman { view }) =
         open.iter().rev().map(|request| &request.effect).find(|effect| kind_of(effect) == WAIT_HUMAN)
     {
-        return Some(crate::kept_blocks::upgraded(view));
+        return Some(view.clone());
     }
     let Some(running) = open.iter().rev().find(|request| kind_of(&request.effect) == AGENT) else {
         return calls_block(ledger, step).map(|block| json!([block]));

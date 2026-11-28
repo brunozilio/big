@@ -14,7 +14,7 @@ mod package;
 mod policy;
 mod repos;
 mod restart;
-mod retired;
+pub(crate) mod retired;
 mod triggers;
 mod unbound;
 mod versions;

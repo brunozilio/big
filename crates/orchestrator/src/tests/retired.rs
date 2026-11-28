@@ -19,7 +19,7 @@ export default workflow({
 "#;
 
 #[derive(Clone, Default)]
-struct Heard(Arc<Mutex<Vec<String>>>);
+pub(crate) struct Heard(pub(crate) Arc<Mutex<Vec<String>>>);
 
 struct Line(String);
 
@@ -74,4 +74,27 @@ fn an_old_workflow_that_imports_review_from_the_sdk_keeps_the_pull_request_revie
         lines.iter().any(|line| line.contains("sdk/steps/general.js") && line.contains("name=review")),
         "{lines:?}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_new_wait_whose_blocks_still_name_pr_shows_the_change_through_the_code_capability() {
+    let world = super::World::new();
+    let blocks = r#"[{ type: "merge", pr: "o/r#9", methods: ["squash"] }, { type: "change", pr: "o/r#9" }]"#;
+    let source = format!(
+        "import {{ workflow, step }} from \"sdk\";\nconst only = step({{ name: \"only\", async run(ctx) {{ await ctx.waitHuman({blocks}); return ctx.pass(1); }} }});\nexport default workflow({{ name: \"antigo\", steps: [only()] }});\n"
+    );
+    world.workflow("antigo", &source);
+    let kernel = world.start().await;
+    let id = kernel.create_item("antigo", serde_json::json!({})).expect("item");
+    let waiting = |item: &domain::workflow::WorkItem| {
+        item.step("only", Some("main")).is_some_and(|run| run.state == domain::workflow::StepState::WaitingHuman)
+    };
+    super::until(&kernel, &id, waiting).await;
+    let view = kernel.step_view(&id, "only", None).await.expect("view");
+    for block in view.blocks.as_array().into_iter().flatten() {
+        assert_eq!(block["change"], "o/r#9", "{block}");
+        assert_eq!(block["capability"], connectors::contracts::CODE, "{block}");
+    }
+    assert_eq!(view.blocks[0]["methods"], serde_json::json!(["squash"]));
+    assert_eq!(view.blocks.as_array().map(Vec::len), Some(2));
 }
