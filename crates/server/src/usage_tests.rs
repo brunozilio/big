@@ -70,7 +70,7 @@ fn the_report_names_providers_and_counts_every_day() {
     assert_eq!(listed["totals"]["sessions"], 1);
     assert_eq!(
         listed["byProvider"][0],
-        json!({ "id": "claude-subscription", "name": "Claude", "logo": "claude", "costUsd": 0.5, "unpricedCalls": 0, "tokens": 15, "calls": 1 })
+        json!({ "id": "claude-subscription", "name": "Claude", "logo": "claude", "costUsd": 0.5, "unpricedCalls": 0, "tokens": 15, "calls": 1, "cacheHitRate": 0.0 })
     );
     assert_eq!(listed["byProvider"][1]["name"], UNRECORDED);
     assert_eq!(listed["byAccount"][0]["id"], "claude-subscription:fulano@x.com");

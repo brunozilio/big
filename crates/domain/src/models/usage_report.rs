@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use crate::EngineEvent;
 use crate::billing::{Cost, ModelUsage};
 use crate::origin::Origin;
+use crate::models::usage_runs::{RunTally, RunUsage};
 
 pub const UNKNOWN: &str = "unknown";
 
@@ -11,14 +12,26 @@ pub struct Tally {
     pub cost: Cost,
     pub tokens: u64,
     pub calls: u64,
+    pub prompt: u64,
+    pub cache_read: u64,
 }
 
 impl Tally {
-    fn add(&mut self, usage: &ModelUsage) {
+    pub(crate) fn add(&mut self, usage: &ModelUsage) {
         self.cost.add(Cost::of(usage));
         self.tokens += usage.input + usage.output + usage.cache_read + usage.cache_write;
         self.calls += 1;
+        self.prompt += usage.input + usage.cache_read + usage.cache_write;
+        self.cache_read += usage.cache_read;
     }
+
+    pub fn cache_hit_rate(&self) -> Option<f64> {
+        hit_rate(self.cache_read, self.prompt)
+    }
+}
+
+fn hit_rate(read: u64, prompt: u64) -> Option<f64> {
+    (prompt > 0).then(|| read as f64 / prompt as f64)
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -30,6 +43,12 @@ pub struct Totals {
     pub cache_write: u64,
     pub calls: u64,
     pub sessions: u64,
+}
+
+impl Totals {
+    pub fn cache_hit_rate(&self) -> Option<f64> {
+        hit_rate(self.cache_read, self.input + self.cache_read + self.cache_write)
+    }
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
@@ -62,6 +81,7 @@ pub struct UsageReport {
     pub by_account: Vec<AccountRanked>,
     pub by_agent: Vec<Ranked>,
     pub by_origin: Vec<(Origin, Tally)>,
+    pub by_run: Vec<RunUsage>,
     pub unattributed: Tally,
 }
 
@@ -77,6 +97,7 @@ pub struct UsageTally {
     agent_of: HashMap<String, String>,
     agents: BTreeMap<String, Tally>,
     origins: BTreeMap<Origin, Tally>,
+    runs: RunTally,
     unattributed: Tally,
 }
 
@@ -95,13 +116,20 @@ impl UsageTally {
 
     pub fn add(&mut self, session: &str, date: &str, event: &EngineEvent) {
         match event {
-            EngineEvent::Usage(usage) => self.used(session, date, usage),
-            EngineEvent::AgentEvent { event, .. } => self.add(session, date, event),
+            EngineEvent::Usage(usage) => self.used(session, date, usage, None),
+            EngineEvent::AgentSpawned { index, kind, summary, .. } => {
+                self.runs.spawned(session, *index, kind, summary);
+            }
+            EngineEvent::AgentEvent { index, event } => {
+                if let Some(usage) = spent_in(event) {
+                    self.used(session, date, usage, Some(*index));
+                }
+            }
             _ => {}
         }
     }
 
-    fn used(&mut self, session: &str, date: &str, usage: &ModelUsage) {
+    fn used(&mut self, session: &str, date: &str, usage: &ModelUsage, lane: Option<usize>) {
         let Some(day) = self.daily.iter_mut().find(|day| day.date == date) else {
             return;
         };
@@ -121,6 +149,7 @@ impl UsageTally {
         self.models.entry(model).or_default().add(usage);
         self.accounts.entry((provider, usage.account.clone())).or_default().add(usage);
         self.origins.entry(usage.attribution.origin).or_default().add(usage);
+        self.runs.used(session, self.agent_of.get(session), lane, usage);
         match self.agent_of.get(session) {
             Some(agent) => self.agents.entry(agent.clone()).or_default().add(usage),
             None if usage.attribution.item.is_none() => self.unattributed.add(usage),
@@ -150,12 +179,21 @@ impl UsageTally {
             by_account,
             by_agent: ranked(self.agents),
             by_origin,
+            by_run: self.runs.report(),
             unattributed: self.unattributed,
         }
     }
 }
 
-fn ranking(a: &Tally, b: &Tally) -> std::cmp::Ordering {
+fn spent_in(event: &EngineEvent) -> Option<&ModelUsage> {
+    match event {
+        EngineEvent::Usage(usage) => Some(usage),
+        EngineEvent::AgentEvent { event, .. } => spent_in(event),
+        _ => None,
+    }
+}
+
+pub(crate) fn ranking(a: &Tally, b: &Tally) -> std::cmp::Ordering {
     b.cost.known_micros.cmp(&a.cost.known_micros).then(b.calls.cmp(&a.calls))
 }
 

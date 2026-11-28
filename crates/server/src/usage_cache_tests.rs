@@ -63,3 +63,20 @@ fn an_unreadable_or_vanished_session_is_forgotten() {
     cache.keep_only(&[]);
     assert!(cache.spent(&done, || None).is_empty());
 }
+
+#[test]
+fn a_sub_agent_s_announcement_is_kept_without_its_prompt() {
+    let mut cache = UsageCache::default();
+    let spawned = |prompt: &str| EngineEvent::AgentSpawned {
+        index: 1,
+        kind: "explore".into(),
+        summary: "look".into(),
+        prompt: prompt.into(),
+    };
+    let nested = EngineEvent::AgentEvent { index: 1, event: Box::new(spawned("inner")) };
+    let read = || {
+        Some(vec![Record::Event { at_ms: 1, event: spawned("a long task") }, Record::Event { at_ms: 2, event: nested }])
+    };
+    let kept = cache.spent(&row("s", 10, SessionStatus::Done), read);
+    assert_eq!(kept, [(1, spawned(""))]);
+}

@@ -45,9 +45,13 @@ fn settled(status: SessionStatus) -> bool {
 }
 
 fn spends(event: &EngineEvent) -> bool {
+    matches!(event, EngineEvent::AgentSpawned { .. }) || costs(event)
+}
+
+fn costs(event: &EngineEvent) -> bool {
     match event {
         EngineEvent::Usage(_) => true,
-        EngineEvent::AgentEvent { event, .. } => spends(event),
+        EngineEvent::AgentEvent { event, .. } => costs(event),
         _ => false,
     }
 }
@@ -58,11 +62,20 @@ fn spent_in(records: Vec<Record>) -> Spent {
         .filter_map(|record| match record {
             Record::Event { at_ms, mut event } if spends(&event) => {
                 crate::usage::priced(&mut event);
-                Some((at_ms, event))
+                Some((at_ms, slim(event)))
             }
             _ => None,
         })
         .collect()
+}
+
+fn slim(event: EngineEvent) -> EngineEvent {
+    match event {
+        EngineEvent::AgentSpawned { index, kind, summary, .. } => {
+            EngineEvent::AgentSpawned { index, kind, summary, prompt: String::new() }
+        }
+        other => other,
+    }
 }
 
 #[cfg(test)]

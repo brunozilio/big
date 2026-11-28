@@ -76,7 +76,9 @@ fn gather(shared: &Shared, days: i64, only: Option<&str>) -> ApiResult<Value> {
             }
         }
     }
-    let mut listed = listing(days, &window, &tally.report(), &providers, shared.language());
+    let report = tally.report();
+    let mut listed = listing(days, &window, &report, &providers, shared.language());
+    listed["byRun"] = crate::usage_runs::by_run(&report.by_run, &sessions);
     connector_calls(shared, &mut listed, start, only);
     Ok(listed)
 }
@@ -124,11 +126,12 @@ fn named(id: &str, providers: &[ProviderSummary], language: Language) -> (Value,
     }
 }
 
-fn counted(mut fields: Value, tally: &Tally) -> Value {
+pub fn counted(mut fields: Value, tally: &Tally) -> Value {
     fields["costUsd"] = json!(tally.cost.known_usd());
     fields["unpricedCalls"] = json!(tally.cost.unpriced_calls);
     fields["tokens"] = json!(tally.tokens);
     fields["calls"] = json!(tally.calls);
+    fields["cacheHitRate"] = json!(tally.cache_hit_rate());
     fields
 }
 
@@ -183,6 +186,7 @@ pub fn listing(
             "costUsd": totals.cost.known_usd(), "unpricedCalls": totals.cost.unpriced_calls,
             "basis": totals.cost.basis, "input": totals.input, "output": totals.output,
             "cacheRead": totals.cache_read, "cacheWrite": totals.cache_write,
+            "cacheHitRate": totals.cache_hit_rate(),
             "calls": totals.calls, "sessions": totals.sessions,
         },
         "daily": daily, "byProvider": by_provider, "byModel": by_model, "byAccount": by_account,
