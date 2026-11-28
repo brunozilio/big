@@ -1,6 +1,9 @@
 {
   "schema_version": 1,
   "creds": { "token": "Squad XPTO", "settings": {} },
+  "events": {
+    "mock-changes.status.changed": { "ref": "mock-1764200000-1", "status": "executing" }
+  },
   "cases": [
     {
       "name": "cria uma mudança",

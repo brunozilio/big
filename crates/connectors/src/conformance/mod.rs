@@ -1,4 +1,5 @@
 mod cases;
+mod events;
 mod fixture;
 mod mock;
 
@@ -80,10 +81,15 @@ pub async fn connector(content: &Path, name: &str) -> (Vec<String>, BTreeSet<Str
         Err(error) => return (vec![format!("does not load: {error}")], BTreeSet::new()),
     };
     let mut found = declared(&provider);
-    let ids = provider.descriptor().published();
+    let catalog = provider.catalog(domain::Language::default());
+    let mut ids = provider.descriptor().published();
+    ids.extend(catalog.iter().map(crate::catalog::EventSpec::published));
     match fixture {
         Err(why) => found.push(why),
-        Ok(fixture) => found.extend(exercised(&loader, &provider, &fixture).await),
+        Ok(fixture) => {
+            found.extend(events::checked(&catalog, &fixture.events, provider.events().is_some()));
+            found.extend(exercised(&loader, &provider, &fixture).await);
+        }
     }
     (found, ids)
 }

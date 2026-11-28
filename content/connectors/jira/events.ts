@@ -1,6 +1,7 @@
 import { type Creds, fail, isObject, setting, textAt, timestampOf, timestampText } from "sdk/connectors/index.ts";
 import { items } from "sdk/connectors/mcp.ts";
 import { type Api, apiOf, jqlKey, search, tool } from "./api.ts";
+import { COMMENTED, CREATED, FLAGGED, MOVED } from "./catalog.ts";
 import { commentOf } from "./tracker.ts";
 
 const PAGES = 10;
@@ -54,10 +55,10 @@ class Collector {
     const parent = textAt(fields, "/parent/key");
     if (type !== "") summary.type = type;
     if (parent !== "") summary.parent = parent;
-    this.push(`jira:${key}:created`, "tracker.issue.created", key, summary, textAt(fields, "/created"));
+    this.push(`jira:${key}:created`, CREATED, key, summary, textAt(fields, "/created"));
     for (const history of asList(issue?.changelog?.histories)) this.history(key, history);
     for (const comment of asList(fields?.comment?.comments)) {
-      this.push(`jira:${key}:comment:${textAt(comment, "/id")}`, "tracker.comment.added", key, commentOf(comment), textAt(comment, "/created"));
+      this.push(`jira:${key}:comment:${textAt(comment, "/id")}`, COMMENTED, key, commentOf(comment), textAt(comment, "/created"));
     }
   }
 
@@ -71,10 +72,10 @@ class Collector {
       let data: unknown;
       const lower = field.toLowerCase();
       if (lower === "status") {
-        kind = "tracker.status.changed";
+        kind = MOVED;
         data = { from: owned(item, "fromString"), to: owned(item, "toString"), author };
       } else if (lower === "flagged") {
-        kind = "tracker.impediment.changed";
+        kind = FLAGGED;
         data = { from: flag("/fromString"), to: flag("/toString"), author };
       } else {
         continue;

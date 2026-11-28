@@ -13,6 +13,7 @@ import { search } from "./search.ts";
 import { comment, createIssue, issue, projectOptionsPage, projects, setImpediment, transition, transitions } from "./tracker.ts";
 
 export { poll } from "./events.ts";
+export { events } from "./catalog.ts";
 
 export function provider() {
   return {

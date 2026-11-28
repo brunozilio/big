@@ -54,6 +54,18 @@ pub struct ExternalEvent {
     pub at: Timestamp,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub scope: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
+}
+
+impl ExternalEvent {
+    pub fn answers(&self, kind: &str) -> bool {
+        self.kind == kind || self.aliases.iter().any(|alias| alias == kind)
+    }
+
+    pub fn names(&self) -> Vec<&str> {
+        std::iter::once(self.kind.as_str()).chain(self.aliases.iter().map(String::as_str)).collect()
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -95,6 +107,10 @@ pub trait Provider: Send + Sync + std::fmt::Debug {
 
     fn events(&self) -> Option<&dyn EventSource> {
         None
+    }
+
+    fn catalog(&self, _language: Language) -> Vec<crate::catalog::EventSpec> {
+        Vec::new()
     }
 
     fn secrets(&self) -> Option<&dyn SecretSource> {

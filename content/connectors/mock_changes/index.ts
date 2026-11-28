@@ -1,7 +1,9 @@
 import { type Creds, type Language, connect, fail, optionalText, pick, text, tokenField, unknownAction } from "sdk/connectors/index.ts";
 import { binding, bindingField, changes } from "sdk/connectors/contracts.ts";
+import { TEXT, event } from "sdk/connectors/events.ts";
 
 export const KEY = "mock-changes";
+export const STATUS_CHANGED = `${KEY}.status.changed`;
 export const AWAITING = "awaiting_approval";
 export const EXECUTING = "executing";
 export const DONE = "done";
@@ -138,7 +140,7 @@ export function eventsBetween({ ledger, pace, since, now }) {
         found.push({
           id: `${reference}:${turned}`,
           capability: "changes",
-          kind: "changes.status.changed",
+          kind: STATUS_CHANGED,
           subject: reference,
           data: { ref: reference, status: turned },
           at: new Date(at * 1000).toISOString(),
@@ -221,6 +223,19 @@ export function call({ action, args, idempotencyKey, creds }: { action: string; 
 export function accounts({ creds }: { creds: Creds }) {
   const label = creds.token.trim() === "" ? KEY : creds.token;
   return [{ id: KEY, label, settings: {} }];
+}
+
+export function events({ language }: { language: Language }) {
+  return [
+    event(STATUS_CHANGED, {
+      label: pick(language, "Change status changed", "Estado del cambio cambiado", "Status da mudança alterado"),
+      capability: "changes",
+      aliases: ["changes.status.changed"],
+      properties: { ref: TEXT, status: { type: "string", enum: [AWAITING, EXECUTING, DONE] } },
+      required: ["ref", "status"],
+      filters: ["status"],
+    }),
+  ];
 }
 
 export function poll({ cursor }: { cursor: string | null }, ctx) {

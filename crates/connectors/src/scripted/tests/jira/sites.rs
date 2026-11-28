@@ -33,7 +33,7 @@ async fn the_first_poll_starts_the_cursor_and_later_polls_read_changes_since_it(
     let batch = source.poll(&http, &creds(), Some("2024-01-02T00:00:00Z"), &[]).await;
     let Ok(batch) = batch else { panic!("{batch:?}") };
     let kinds: Vec<&str> = batch.events.iter().map(|e| e.kind.as_str()).collect();
-    assert_eq!(kinds, ["tracker.comment.added", "tracker.status.changed"]);
+    assert_eq!(kinds, ["jira.comment.added", "jira.status.changed"]);
     assert_eq!(batch.events[0].data["body"], "novo");
     assert_eq!(batch.events[0].data["author"], json!({"id": "Ana", "name": "Ana"}));
     assert_eq!(batch.events[0].connection, creds().connection);
@@ -108,7 +108,7 @@ async fn a_flag_change_in_the_history_is_an_impediment_event_with_booleans() {
     let source = provider.events().unwrap_or_else(|| panic!("no events"));
     let batch = source.poll(&session(&[page, detail]), &creds(), Some("2024-01-01T00:00:00Z"), &[]).await;
     let Ok(batch) = batch else { panic!("{batch:?}") };
-    assert_eq!(batch.events[0].kind, "tracker.impediment.changed");
+    assert_eq!(batch.events[0].kind, "jira.impediment.changed");
     assert_eq!(batch.events[0].id, "jira:BIG-1:Flagged:h2");
     assert_eq!(batch.events[0].data, json!({"from": false, "to": true, "author": "Ana"}));
 }

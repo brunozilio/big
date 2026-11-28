@@ -421,7 +421,7 @@ async fn events_come_from_pulls_reviews_and_runs_changed_since_the_cursor_and_et
     let batch = source.poll(&http, &creds(), Some(cursor), &[]).await;
     let Ok(batch) = batch else { panic!("{batch:?}") };
     let kinds: Vec<&str> = batch.events.iter().map(|e| e.kind.as_str()).collect();
-    assert_eq!(kinds, ["pipelines.run.finished", "code.review.submitted", "code.pr.merged"]);
+    assert_eq!(kinds, ["github.run.finished", "github.review.submitted", "github.pr.merged"]);
     assert_eq!(batch.events[2].subject, "acme/app#7");
     assert_eq!(batch.events[2].data["state"], "merged");
     assert_eq!(batch.events[0].subject, "acme/app/runs/5");

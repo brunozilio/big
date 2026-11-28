@@ -1,5 +1,6 @@
 import { type Creds, iso, json, jsonText, listIn, setting, settingsList, textOf, timestamp } from "sdk/connectors/index.ts";
 import { strip } from "sdk/connectors/idempotency.ts";
+import { CLOSED, FINISHED, MERGED, REVIEWED, UPDATED, WAITING, legacyKind } from "./catalog.ts";
 import { type Api, api, get, pullRef, raw, request, runRef, state, verdict } from "./api.ts";
 
 type Cursor = { since: string; etags: Record<string, string> };
@@ -40,14 +41,14 @@ function reviews(poll: Poll, repo: string, pull: any, subject: string) {
       body: strip(poll.api.command, typeof review?.body === "string" ? review.body : ""),
     };
     const id = `github:${repo}:review:${jsonText(review?.id)}`;
-    push(poll, "code", "code.review.submitted", id, subject, data, textOf(review, ["submitted_at"]));
+    push(poll, "code", REVIEWED, id, subject, data, textOf(review, ["submitted_at"]));
   }
 }
 
 function kindOf(pull: any): [string, string, string] {
-  if (typeof pull?.merged_at === "string") return ["code.pr.merged", pull.merged_at, "merged"];
-  if (pull?.state === "closed") return ["code.pr.closed", textOf(pull, ["closed_at"]), "closed"];
-  return ["code.pr.updated", textOf(pull, ["updated_at"]), "open"];
+  if (typeof pull?.merged_at === "string") return [MERGED, pull.merged_at, "merged"];
+  if (pull?.state === "closed") return [CLOSED, textOf(pull, ["closed_at"]), "closed"];
+  return [UPDATED, textOf(pull, ["updated_at"]), "open"];
 }
 
 function pulls(poll: Poll, repo: string) {
@@ -61,7 +62,7 @@ function pulls(poll: Poll, repo: string) {
     const head = textOf(pull, ["head", "ref"]);
     const base = textOf(pull, ["base", "ref"]);
     const data = { pr: subject, repo, number, head, base, state: shown, title: pull?.title ?? null };
-    push(poll, "code", kind, `github:${repo}:pr:${number}:${kind}:${at}`, subject, data, at);
+    push(poll, "code", kind, `github:${repo}:pr:${number}:${legacyKind(kind)}:${at}`, subject, data, at);
     reviews(poll, repo, pull, subject);
   }
 }
@@ -70,9 +71,9 @@ function runs(poll: Poll, repo: string) {
   const found = changed(poll, `/repos/${repo}/actions/runs?per_page=50`);
   if (found === undefined) return;
   for (const run of found) {
-    const kind = run?.status === "completed" ? "pipelines.run.finished" : run?.status === "waiting" ? "pipelines.deployment.waiting" : undefined;
+    const kind = run?.status === "completed" ? FINISHED : run?.status === "waiting" ? WAITING : undefined;
     if (kind === undefined) continue;
-    const id = `github:${repo}:run:${jsonText(run?.id)}:${jsonText(run?.run_attempt)}:${kind}`;
+    const id = `github:${repo}:run:${jsonText(run?.id)}:${jsonText(run?.run_attempt)}:${legacyKind(kind)}`;
     const subject = runRef(repo, typeof run?.id === "number" ? run.id : 0);
     const data = {
       run: subject,

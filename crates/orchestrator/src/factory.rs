@@ -225,7 +225,7 @@ impl Orchestrator {
             return Ok(0);
         }
         let mut created = 0;
-        for workflow in self.triggered(kind, &event) {
+        for workflow in self.triggered(&[kind], &event) {
             let known =
                 existing.iter().any(|item| item.input["factory"]["subject"] == subject && item.workflow == workflow);
             if known {

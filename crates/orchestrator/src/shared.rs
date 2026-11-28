@@ -243,7 +243,12 @@ impl Shared {
         if let Some(found) = self.scripts.lock().unwrap_or_else(PoisonError::into_inner).get(&key) {
             return Ok(Arc::clone(found));
         }
-        let loaded = Arc::new(Script::load(&self.resources_in(home), workflow).map_err(Error::Script)?);
+        let resources = self.resources_in(home);
+        let loaded = Script::load(&resources, workflow).map_err(Error::Script)?;
+        let builtin = resources.workflow(workflow).is_some_and(|found| found.origin == crate::Origin::Builtin);
+        let checked = crate::triggers::Loaded { workflow, builtin };
+        crate::triggers::checked(&self.config.connectors, &loaded.described, &checked).map_err(Error::Script)?;
+        let loaded = Arc::new(loaded);
         let mut scripts = self.scripts.lock().unwrap_or_else(PoisonError::into_inner);
         Ok(Arc::clone(scripts.entry(key).or_insert(loaded)))
     }

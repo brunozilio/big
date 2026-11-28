@@ -25,9 +25,9 @@ fn observed(server: &Server, id: &str) -> Vec<String> {
     let events = server.store.timed_events(&ItemId::from(id), 0).expect("events");
     events
         .into_iter()
-        .filter_map(|(_, _, event)| match event {
-            WorkflowEvent::ExternalObserved(seen) => Some(seen.kind),
-            _ => None,
+        .flat_map(|(_, _, event)| match event {
+            WorkflowEvent::ExternalObserved(seen) => seen.names().into_iter().map(str::to_owned).collect(),
+            _ => Vec::new(),
         })
         .collect()
 }

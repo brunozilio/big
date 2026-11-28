@@ -25,6 +25,13 @@ pub fn closest<'a>(name: &str, known: impl IntoIterator<Item = &'a str>) -> Opti
         .map(|(_, candidate)| candidate)
 }
 
+pub fn nearest<'a>(name: &str, known: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    let name = name.to_ascii_lowercase();
+    known
+        .into_iter()
+        .min_by_key(|candidate| (distance(&name, &candidate.to_ascii_lowercase()), name.len().abs_diff(candidate.len())))
+}
+
 fn distance(a: &str, b: &str) -> usize {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();

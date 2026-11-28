@@ -54,6 +54,7 @@ pub fn event_of(progress: &Progress, item: &WorkItem) -> ExternalEvent {
         }),
         at: jiff::Timestamp::now(),
         scope: String::new(),
+        aliases: Vec::new(),
     }
 }
 
@@ -110,7 +111,7 @@ impl Orchestrator {
         let value = serde_json::to_value(event).unwrap_or(Value::Null);
         let all = self.shared.store.items()?;
         let mut made = 0;
-        for workflow in self.triggered(&event.kind, &value) {
+        for workflow in self.triggered(&event.names(), &value) {
             if workflow == origin.workflow || claimed_by_peers(&all, &workflow).contains(&origin.id) {
                 continue;
             }

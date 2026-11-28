@@ -72,6 +72,7 @@ pub(crate) fn observed(event: &ExternalEvent) -> Observed {
         subject: event.subject.clone(),
         data: event.data.clone(),
         at: event.at.as_millisecond(),
+        aliases: event.aliases.clone(),
     }
 }
 
@@ -337,6 +338,7 @@ impl Synchronizer {
             data,
             at: jiff::Timestamp::now(),
             scope: String::new(),
+            aliases: Vec::new(),
         }
     }
 }

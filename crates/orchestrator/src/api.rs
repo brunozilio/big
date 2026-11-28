@@ -390,7 +390,7 @@ impl Orchestrator {
         let matched = {
             let mut waits = self.shared.waits.lock().unwrap_or_else(PoisonError::into_inner);
             let (hit, kept): (Vec<_>, Vec<_>) =
-                waits.drain(..).partition(|wait| wait.kind == event.kind && event_matches(&wait.filter, &value));
+                waits.drain(..).partition(|wait| event.answers(&wait.kind) && event_matches(&wait.filter, &value));
             *waits = kept;
             hit
         };
@@ -412,7 +412,7 @@ impl Orchestrator {
             return Ok(0);
         }
         let fresh: Vec<String> = self
-            .triggered(&event.kind, &value)
+            .triggered(&event.names(), &value)
             .into_iter()
             .filter(|workflow| {
                 !existing.iter().any(|item| &item.workflow == workflow && mentions(&item.input, &event.subject))
@@ -422,7 +422,9 @@ impl Orchestrator {
         let custom =
             |workflow: &&String| resources.workflow(workflow).is_some_and(|found| found.origin != Origin::Builtin);
         let Some(workflow) = fresh.iter().find(custom).or(fresh.first()) else { return Ok(0) };
-        let kind = source_kind(event.kind.split('.').next().unwrap_or(event.capability.as_str()));
+        let connectors = &self.shared.config.connectors;
+        let declared = connectors.event(&event.kind).map(|spec| spec.source.as_str()).filter(|source| !source.is_empty());
+        let kind = declared.unwrap_or(event.capability.as_str());
         let title = value["data"]["title"].as_str().unwrap_or(&event.subject).to_owned();
         let source = json!({ "kind": kind, "connection": event.connection, "subject": event.subject });
         let mut input = json!({ "title": title, "sources": [source], "event": value });
@@ -441,18 +443,23 @@ impl Orchestrator {
         shapes.into_iter().find(|shape| shape["name"] == script.target["workflow"])
     }
 
+    pub fn loads(&self, workflow: &str) -> Result<()> {
+        self.shared.script(workflow).map(|_| ())
+    }
+
     pub fn accepts(&self, workflow: &str) -> Vec<String> {
         let Some(shape) = self.shape(workflow) else { return Vec::new() };
         let listed = shape["accepts"].as_array().cloned().unwrap_or_default();
         listed.iter().filter_map(Value::as_str).map(str::to_owned).collect()
     }
 
-    pub(crate) fn triggered(&self, kind: &str, event: &Value) -> Vec<String> {
+    pub(crate) fn triggered(&self, names: &[&str], event: &Value) -> Vec<String> {
         let mut fired = Vec::new();
         for workflow in self.workflows() {
             let Some(shape) = self.shape(&workflow) else { continue };
             let triggers = shape["triggers"].as_array().cloned().unwrap_or_default();
-            if triggers.iter().any(|on| on["kind"] == kind && event_matches(&on["filter"], event)) {
+            let named = |on: &Value| on["kind"].as_str().is_some_and(|kind| names.contains(&kind));
+            if triggers.iter().any(|on| named(on) && event_matches(&on["filter"], event)) {
                 fired.push(workflow);
             }
         }
@@ -473,14 +480,6 @@ fn flatten(steps: &Value, found: &mut Vec<(String, Option<String>)>) {
         let Some(id) = call["path"].as_str().or_else(|| call["id"].as_str()) else { continue };
         found.push((id.to_owned(), call["step"].as_str().map(str::to_owned)));
         flatten(&call["steps"], found);
-    }
-}
-
-fn source_kind(capability: &str) -> &str {
-    match capability {
-        "tracker" => ISSUE,
-        "code" => "pull_request",
-        other => other,
     }
 }
 

@@ -73,6 +73,11 @@ impl Provider for Echo {
         Some(self)
     }
 
+    fn catalog(&self, _language: Language) -> Vec<crate::catalog::EventSpec> {
+        let declared = json!([{ "name": "echo.x.changed", "capability": "x", "aliases": ["x.changed"] }]);
+        crate::catalog::read("echo", &declared).unwrap_or_default()
+    }
+
     fn secret_patterns(&self) -> domain::redact::Rules {
         let declared = json!({ "prefixes": [{ "name": "echo-key", "prefix": "echo_", "min": 12 }] });
         domain::redact::Rules::read(&declared).unwrap_or_default()
@@ -97,6 +102,7 @@ impl EventSource for Echo {
             data: json!({}),
             at: jiff::Timestamp::UNIX_EPOCH,
             scope: String::new(),
+            aliases: Vec::new(),
         };
         Ok(EventBatch { events: vec![event("x"), event("y")], cursor: format!("{}+", cursor.unwrap_or_default()) })
     }
@@ -363,4 +369,5 @@ fn sends() -> domain::operation::Profile {
     Profile::new(vec![Kind::Write, Kind::SendExternal], Risk::Medium, Reversible::No, false, true)
 }
 
+mod catalog;
 mod redaction;

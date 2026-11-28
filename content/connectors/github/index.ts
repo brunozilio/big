@@ -5,6 +5,7 @@ import * as reviews from "./code.ts";
 import * as runs from "./pipelines.ts";
 
 export { poll } from "./events.ts";
+export { events } from "./catalog.ts";
 
 export function provider(_: unknown, ctx) {
   return {

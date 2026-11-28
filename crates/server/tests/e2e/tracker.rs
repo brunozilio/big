@@ -72,6 +72,7 @@ impl Tracker {
             data: json!({ "from": from, "to": to, "author": "Ana" }),
             at: jiff::Timestamp::now(),
             scope: String::new(),
+            aliases: Vec::new(),
         });
     }
 }

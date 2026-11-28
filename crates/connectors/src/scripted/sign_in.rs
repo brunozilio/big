@@ -10,7 +10,9 @@ use super::host::{Local, Online};
 use crate::descriptor::TokenField;
 use crate::error::ActionError;
 use crate::http::Http;
-use crate::oauth::{Answered, Authorization, DeviceSignIn, Grant, Loopback, LoopbackSignIn, Polled, Proceeded, Started};
+use crate::oauth::{
+    Answered, Authorization, DeviceSignIn, Grant, Loopback, LoopbackSignIn, Polled, Proceeded, Started,
+};
 
 #[derive(Debug, Clone)]
 pub struct ScriptedSignIn {

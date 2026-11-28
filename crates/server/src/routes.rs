@@ -43,6 +43,7 @@ fn api() -> Router<Ctx> {
         .route("/api/inbox/claim", post(crate::inbox::claim))
         .route("/api/inbox/release", post(crate::inbox::release))
         .route("/api/connections", get(connections::list))
+        .route("/api/events", get(crate::catalog::list))
         .route("/api/connections/oauth/callback", get(connections::callback))
         .route("/oauth/callback", get(connections::callback))
         .route(crate::relay::LOOPBACK_ROUTE, get(crate::relay::returned))

@@ -15,6 +15,8 @@ pub mod kinds {
     pub const PR_UPDATED: &str = "code.pr.updated";
     pub const RUN_FINISHED: &str = "pipelines.run.finished";
     pub const DEPLOYMENT_WAITING: &str = "pipelines.deployment.waiting";
+    pub const ALL: [&str; 7] =
+        [STATUS_CHANGED, IMPEDIMENT_CHANGED, PR_MERGED, PR_CLOSED, PR_UPDATED, RUN_FINISHED, DEPLOYMENT_WAITING];
 }
 
 pub const MERGED: &str = "merged";
@@ -106,7 +108,8 @@ impl Desired {
 
     pub fn waits_on(&self, connection: &Connection) -> bool {
         self.waits.iter().any(|wait| {
-            connection.offers(&wait.capability().into())
+            let space = wait.capability();
+            (connection.offers(&space.into()) || connection.provider.as_str() == space)
                 && wait.connection().is_none_or(|id| id == connection.id.as_str())
         })
     }
@@ -209,7 +212,8 @@ impl Desired {
         }
     }
 
-    pub fn observe(&mut self, kind: &str, subject: &str, data: &Value) {
+    pub fn observe(&mut self, names: &[&str], subject: &str, data: &Value) {
+        let kind = names.iter().copied().find(|name| kinds::ALL.contains(name)).unwrap_or_default();
         let pull_state = match kind {
             kinds::PR_MERGED => Some(MERGED.to_owned()),
             kinds::PR_CLOSED => Some(CLOSED.to_owned()),
@@ -244,9 +248,12 @@ fn ordered(item: &WorkItem) -> Vec<&EffectEntry> {
     entries
 }
 
-fn event_of(outcome: Option<&EffectOutcome>) -> Option<(String, String, Value)> {
+fn event_of(outcome: Option<&EffectOutcome>) -> Option<(Vec<String>, String, Value)> {
     let Some(EffectOutcome::Ok { value }) = outcome else { return None };
-    Some((text(value, "kind")?, text(value, "subject")?, value.get("data").cloned().unwrap_or(Value::Null)))
+    let aliases = value["aliases"].as_array().map(Vec::as_slice).unwrap_or_default();
+    let mut names = vec![text(value, "kind")?];
+    names.extend(aliases.iter().filter_map(Value::as_str).map(str::to_owned));
+    Some((names, text(value, "subject")?, value.get("data").cloned().unwrap_or(Value::Null)))
 }
 
 pub fn desired_of(item: &WorkItem, policy: ReconcilePolicy) -> Desired {
@@ -279,12 +286,13 @@ pub fn desired_of(item: &WorkItem, policy: ReconcilePolicy) -> Desired {
         .iter()
         .filter(|entry| matches!(entry.request.effect, Effect::WaitEvent { .. }))
         .filter_map(|entry| event_of(entry.outcome.as_ref()));
-    for (kind, subject, data) in waited {
-        desired.observe(&kind, &subject, &data);
+    for (names, subject, data) in waited {
+        let names: Vec<&str> = names.iter().map(String::as_str).collect();
+        desired.observe(&names, &subject, &data);
     }
     let mut seen: Vec<_> = item.observed.values().collect();
     seen.sort_by_key(|seen| seen.at);
-    seen.iter().for_each(|seen| desired.observe(&seen.kind, &seen.subject, &seen.data));
+    seen.iter().for_each(|seen| desired.observe(&seen.names(), &seen.subject, &seen.data));
     desired
 }
 

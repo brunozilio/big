@@ -17,6 +17,8 @@ pub struct Fixture {
     pub config: Map<String, Value>,
     #[serde(default)]
     pub handles: BTreeMap<String, Vec<u16>>,
+    #[serde(default)]
+    pub events: BTreeMap<String, Value>,
     pub cases: Vec<Case>,
 }
 

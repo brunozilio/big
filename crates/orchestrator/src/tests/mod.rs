@@ -1,5 +1,6 @@
 mod application;
 mod budget;
+mod catalog;
 mod cloud;
 mod control;
 mod delivered;
@@ -32,7 +33,8 @@ use async_trait::async_trait;
 use connectors::descriptor::object;
 use connectors::oauth::Dialect;
 use connectors::{
-    AccountOption, ActionError, ActionSpec, AuthSpec, Connectors, Credentials, DeviceApp, FakeHttp, FixedClock, Grant,
+    AccountOption, ActionError, ActionSpec, AuthSpec, Connectors, Credentials, DeviceApp, EventSpec, FakeHttp, FixedClock,
+    Grant,
     Http, MemoryTokenStore, Provider, ProviderDescriptor, TokenKeeper, TokenStore,
 };
 use domain::connection::{Capability, ConnectionId, ProviderKey};
@@ -56,6 +58,7 @@ pub struct FakeProvider {
     hangs: Mutex<HashMap<String, usize>>,
     answers: Mutex<HashMap<String, Value>>,
     shaped: Mutex<HashMap<String, ActionSpec>>,
+    catalog: Mutex<Vec<EventSpec>>,
     pub calls: Mutex<Vec<(String, Value, String)>>,
 }
 
@@ -93,6 +96,10 @@ impl FakeProvider {
             Reply::Fail(error) => self.errors.lock().expect("lock").entry(action.into()).or_default().push_back(error),
             Reply::Hang => *self.hangs.lock().expect("lock").entry(action.into()).or_default() += 1,
         }
+    }
+
+    pub fn declare(&self, events: Value) {
+        *self.catalog.lock().expect("lock") = connectors::catalog::read("fake", &events).expect("catalog");
     }
 
     pub fn always(&self, action: &str, value: Value) {
@@ -179,6 +186,10 @@ impl Provider for FakeProvider {
 
     async fn accounts(&self, _http: &dyn Http, _creds: &Credentials) -> Result<Vec<AccountOption>, ActionError> {
         Ok(Vec::new())
+    }
+
+    fn catalog(&self, _language: domain::Language) -> Vec<EventSpec> {
+        self.catalog.lock().expect("lock").clone()
     }
 }
 

@@ -55,6 +55,7 @@ mod spend;
 mod sink;
 mod steering;
 mod texts;
+mod triggers;
 mod views;
 
 pub use api::{Handle, Orchestrator};
@@ -76,6 +77,7 @@ pub use provenance::snapshot as application_snapshot;
 pub use resources::{Builtin, Origin, Resource, Resources};
 pub use schedules::{Cron, Schedules};
 pub use texts::is_workflow_changed;
+pub use triggers::platform as platform_events;
 pub use views::{Attempt, ItemSummary, StepSummary, StepView};
 
 #[cfg(test)]

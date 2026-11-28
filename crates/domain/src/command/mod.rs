@@ -2,7 +2,7 @@ use crate::{Effort, PermissionMode};
 
 mod slash;
 mod sub;
-pub use slash::{closest, mistyped_slash, slash_name};
+pub use slash::{closest, mistyped_slash, nearest, slash_name};
 pub use sub::{McpCommand, MemoryCommand, RoleChange};
 
 #[derive(Debug, Clone, PartialEq, Eq)]

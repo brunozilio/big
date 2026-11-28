@@ -400,6 +400,7 @@ fn observed(id: &str, subject: &str, to: &str, at: i64) -> WorkflowEvent {
         subject: subject.into(),
         data: json!({"to": to}),
         at,
+        aliases: Vec::new(),
     })
 }
 

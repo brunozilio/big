@@ -1,6 +1,14 @@
 {
   "schema_version": 1,
   "creds": { "token": "gho_conformance", "settings": { "repo": "acme/web" } },
+  "events": {
+    "github.review.submitted": { "pr": "acme/web#12", "repo": "acme/web", "number": 12, "head": "feat/cache", "base": "main", "title": "Cache de sessão", "verdict": "request_changes", "author": "octo", "body": "Faltou o teste do expirado." },
+    "github.pr.merged": { "pr": "acme/web#12", "repo": "acme/web", "number": 12, "head": "feat/cache", "base": "main", "state": "merged", "title": "Cache de sessão" },
+    "github.pr.closed": { "pr": "acme/web#13", "repo": "acme/web", "number": 13, "head": "spike/redis", "base": "main", "state": "closed", "title": null },
+    "github.pr.updated": { "pr": "acme/web#14", "repo": "acme/web", "number": 14, "head": "fix/login", "base": "develop", "state": "open", "title": "Login com SSO" },
+    "github.run.finished": { "run": "acme/web/runs/981", "repo": "acme/web", "pipeline": "CI", "head": "feat/cache", "sha": "4f2a9c1", "state": "passed" },
+    "github.deployment.waiting": { "run": "acme/web/runs/982", "repo": "acme/web", "pipeline": "Deploy", "head": "main", "sha": "4f2a9c1", "state": "waiting" }
+  },
   "cases": [
     {
       "name": "the account is the signed-in login",

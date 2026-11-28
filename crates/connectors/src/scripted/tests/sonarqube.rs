@@ -278,7 +278,10 @@ async fn sonarqube_cloud_lists_the_projects_of_every_organization_the_user_belon
         .once(Method::Get, "/api/components/search", 200, beta);
     let found = call(&http, json!({}), "quality.options", json!({})).await;
     let Ok(found) = found else { panic!("{found:?}") };
-    assert_eq!(found, json!([{ "value": "acme_web", "label": "acme · acme_web" }, { "value": "beta_api", "label": "beta · beta_api" }]));
+    assert_eq!(
+        found,
+        json!([{ "value": "acme_web", "label": "acme · acme_web" }, { "value": "beta_api", "label": "beta · beta_api" }])
+    );
     let sent: Vec<String> = http.sent().iter().map(|request| request.url.clone()).collect();
     assert!(sent[0].contains("/api/organizations/search?") && sent[0].contains("member=true"), "{sent:?}");
     assert!(sent[1].contains("organization=acme") && sent[2].contains("organization=beta"), "{sent:?}");

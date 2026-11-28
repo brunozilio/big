@@ -1,6 +1,7 @@
 pub mod audit_sink;
 pub mod browser;
 pub mod calls;
+pub mod catalog;
 pub mod clock;
 pub mod config;
 pub mod conformance;
@@ -23,6 +24,7 @@ pub mod redaction;
 pub mod scripted;
 pub mod texts;
 
+pub use catalog::EventSpec;
 pub use clock::{Clock, FixedClock, SystemClock};
 pub use descriptor::{
     ActionSpec, AlternateAuth, AuthSpec, Idempotency, Presentation, ProviderDescriptor, TokenField, TokenForm,

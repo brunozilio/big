@@ -8,6 +8,12 @@
       "project": "BIG"
     }
   },
+  "events": {
+    "jira.issue.created": { "ref": "BIG-212", "title": "Catálogo de eventos do conector", "status": "A fazer", "type": "História", "parent": "BIG-200" },
+    "jira.comment.added": { "id": "10421", "author": { "name": "Ana" }, "body": "Pode seguir.", "at": "2026-11-27T14:02:11.000-0300" },
+    "jira.status.changed": { "from": "A fazer", "to": "Fazendo", "author": "Ana" },
+    "jira.impediment.changed": { "from": false, "to": true, "author": "Ana" }
+  },
   "cases": [
     {
       "name": "lists the sites with their projects",

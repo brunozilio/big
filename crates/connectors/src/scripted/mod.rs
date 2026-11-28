@@ -1,6 +1,7 @@
 mod bridge;
 mod host;
 mod labels;
+mod polled;
 mod secrets;
 mod sessions;
 mod sign_in;
@@ -19,17 +20,19 @@ use bridge::{WRAPPER, invoke, wrapper};
 pub use host::Local;
 use host::{Kept, Online};
 use labels::Labels;
+use polled::ScriptedEvents;
 use secrets::ScriptedSecrets;
 use sessions::McpSessions;
 pub use sign_in::ScriptedSignIn;
 use sign_in::{SIGN_IN, redirect};
 
+use crate::catalog::{self, EventSpec};
 use crate::config::{self, Configuration};
 use crate::descriptor::{ActionSpec, AlternateAuth, AuthSpec, Presentation, ProviderDescriptor, TokenSpec};
 use crate::error::ActionError;
 use crate::http::Http;
 use crate::oauth::{DeviceApp, Loopback, Stepped};
-use crate::provider::{AccountOption, Credentials, EventBatch, EventSource, ExternalEvent, Provider, SecretSource};
+use crate::provider::{AccountOption, Credentials, EventSource, Provider, SecretSource};
 
 pub const FOLDER: &str = "connectors/";
 pub const ENTRY: &str = "index.ts";
@@ -78,13 +81,7 @@ pub struct ScriptedProvider {
     sessions: Arc<McpSessions>,
     shown: Mutex<Vec<(String, Language, Value)>>,
     labels: Labels,
-}
-
-#[derive(Debug)]
-struct ScriptedEvents {
-    script: Script,
-    answers: Arc<dyn Answers>,
-    sessions: Arc<McpSessions>,
+    catalog: Vec<EventSpec>,
 }
 
 fn data_of(config: Map<String, Value>, configuration: &Configuration) -> Value {
@@ -172,6 +169,7 @@ impl ScriptedProvider {
         let key = if declared.key.is_empty() { named } else { declared.key.clone() };
         let polls = script.kind("poll") == "function";
         let labels = Labels::of(&script);
+        let catalog = declared_events(&script, &key)?;
         let descriptor = ProviderDescriptor {
             key: ProviderKey::from(key.as_str()),
             name: declared.name,
@@ -180,6 +178,12 @@ impl ScriptedProvider {
             auth: auth_of(&script, &key, &declared.auth)?,
             actions: declared.actions,
         };
+        if let Some(event) = catalog.iter().find(|event| !descriptor.capabilities.contains(&event.capability)) {
+            return Err(format!(
+                "{key}: the event {} is of {}, a capability it does not offer",
+                event.name, event.capability
+            ));
+        }
         let answers: Arc<dyn Answers> = Arc::new(Local);
         let sessions = Arc::new(McpSessions::default());
         let events = polls.then(|| ScriptedEvents {
@@ -201,6 +205,7 @@ impl ScriptedProvider {
             sessions,
             shown: Mutex::default(),
             labels,
+            catalog,
         })
     }
 
@@ -250,7 +255,16 @@ pub fn evaluate(root: Option<&std::path::Path>, entry: &str, function: &str, inp
     script.invoke_here(function, input, Arc::new(Local)).map_err(|error| error.message)
 }
 
-fn creds_of(creds: &Credentials) -> Value {
+fn declared_events(script: &Script, key: &str) -> Result<Vec<EventSpec>, String> {
+    if script.kind(catalog::EXPORT) != "function" {
+        return Ok(Vec::new());
+    }
+    let input = json!({ "language": Language::default().code() });
+    let declared = script.invoke_here(catalog::EXPORT, &input, Arc::new(Local)).map_err(|error| error.message)?;
+    catalog::read(key, &declared)
+}
+
+pub(crate) fn creds_of(creds: &Credentials) -> Value {
     json!({ "connection": creds.connection, "token": creds.access_token, "settings": creds.settings })
 }
 
@@ -315,6 +329,13 @@ impl Provider for ScriptedProvider {
         self.secrets.as_ref().map(|secrets| secrets as &dyn SecretSource)
     }
 
+    fn catalog(&self, language: Language) -> Vec<EventSpec> {
+        if language == Language::default() || self.catalog.is_empty() {
+            return self.catalog.clone();
+        }
+        catalog::read(&self.key, &self.local(catalog::EXPORT, language)).unwrap_or_else(|_| self.catalog.clone())
+    }
+
     fn presentation(&self, language: Language) -> Presentation {
         serde_json::from_value(self.local("presentation", language)).unwrap_or_default()
     }
@@ -364,28 +385,6 @@ impl Provider for ScriptedProvider {
 
     fn labelled(&self, action: &str, result: &Value) -> Option<String> {
         self.labels.of_result(&self.key, action, result)
-    }
-}
-
-#[async_trait]
-impl EventSource for ScriptedEvents {
-    async fn poll(
-        &self,
-        http: &dyn Http,
-        creds: &Credentials,
-        cursor: Option<&str>,
-        watch: &[String],
-    ) -> Result<EventBatch, ActionError> {
-        let input = json!({ "creds": creds_of(creds), "cursor": cursor, "watch": watch });
-        let online = Online::pooled(http, redirect(), Arc::clone(&self.sessions), &input);
-        let answers = Kept::of(&self.answers, &input);
-        let batch = invoke(&self.script, answers, &online, "poll", input).await?;
-        let mut events = Vec::new();
-        for mut event in batch["events"].as_array().cloned().unwrap_or_default() {
-            event["connection"] = json!(creds.connection);
-            events.push(serde_json::from_value::<ExternalEvent>(event).map_err(ActionError::decode)?);
-        }
-        Ok(EventBatch { events, cursor: batch["cursor"].as_str().unwrap_or_default().to_owned() })
     }
 }
 

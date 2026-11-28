@@ -114,11 +114,17 @@ pub struct Observed {
     pub subject: String,
     pub data: Value,
     pub at: i64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub aliases: Vec<String>,
 }
 
 impl Observed {
     pub fn slot(&self) -> String {
         format!("{}@{}", self.kind, self.subject)
+    }
+
+    pub fn names(&self) -> Vec<&str> {
+        std::iter::once(self.kind.as_str()).chain(self.aliases.iter().map(String::as_str)).collect()
     }
 }
 

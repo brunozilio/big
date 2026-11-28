@@ -44,6 +44,10 @@ impl Provider for Shared {
         self.0.secrets()
     }
 
+    fn catalog(&self, language: domain::Language) -> Vec<crate::catalog::EventSpec> {
+        self.0.catalog(language)
+    }
+
     fn presentation(&self, language: domain::Language) -> crate::descriptor::Presentation {
         self.0.presentation(language)
     }
@@ -94,6 +98,14 @@ mod tests {
                     "{} offers {} outside its capabilities",
                     descriptor.key,
                     action.name
+                );
+            }
+            for event in provider.catalog(domain::Language::default()) {
+                assert!(
+                    descriptor.capabilities.contains(&event.capability),
+                    "{} declares {} outside its capabilities",
+                    descriptor.key,
+                    event.name
                 );
             }
         }

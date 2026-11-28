@@ -82,6 +82,7 @@ fn the_input_issue_wins_and_events_seen_later_move_the_known_state() {
         subject: "o/r#3".into(),
         data: json!({}),
         at: 10,
+        aliases: Vec::new(),
     }));
     let resolved_wait = IdempotencyKey::new("i1", "s", None, 3, 1);
     events.push(wait(3, kinds::RUN_FINISHED, json!({})));

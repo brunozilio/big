@@ -318,6 +318,7 @@ async fn at_most_the_configured_number_of_items_work_at_once() {
 async fn a_trigger_creates_one_item_per_subject_and_the_sync_reports_health() {
     let mut world = World::new();
     world.sync = true;
+    world.provider.declare(json!([{ "name": "fake.issue.created", "capability": "tracker", "source": "issue", "aliases": ["tracker.issue.created"] }]));
     world.workflow(
         "intake",
         "import { workflow, on } from \"sdk\";\nexport default workflow({ name: \"intake\", triggers: [on(\"tracker.issue.created\", { status: \"A fazer\" })], async run(ctx) { return await ctx.waitHuman([]); } });",
@@ -325,7 +326,9 @@ async fn a_trigger_creates_one_item_per_subject_and_the_sync_reports_health() {
     let kernel = world.start().await;
     assert!(kernel.health().is_some());
     let mut created =
-        super::restart::event("t1", "tracker.issue.created", json!({ "status": "A fazer", "title": "Nova" }));
+        super::restart::event("t1", "fake.issue.created", json!({ "status": "A fazer", "title": "Nova" }));
+    created.aliases = vec!["tracker.issue.created".into()];
+    created.capability = Capability::from("tracker");
     created.subject = "K-9".into();
     assert_eq!(kernel.trigger(&created).expect("trigger"), 1);
     assert_eq!(kernel.trigger(&created).expect("trigger"), 0, "one item per subject");
@@ -346,6 +349,7 @@ async fn a_trigger_creates_one_item_per_subject_and_the_sync_reports_health() {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_pull_request_trigger_keeps_a_typed_source_and_no_issue() {
     let world = World::new();
+    world.provider.declare(json!([{ "name": "fake.pr.opened", "capability": "code", "source": "pull_request", "aliases": ["code.pr.opened"] }]));
     world.workflow(
         "reviews",
         "import { workflow, on } from \"sdk\";\nexport default workflow({ name: \"reviews\", triggers: [on(\"code.pr.opened\")], async run(ctx) { return await ctx.waitHuman([]); } });",

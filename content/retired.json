@@ -29,6 +29,17 @@
     }
   ],
   "ids": [
-    { "from": "route:/mcp/browser", "to": null, "reason": "the browser is a resource of the generic MCP route, asked for in the mcp-resources header" }
+    { "from": "route:/mcp/browser", "to": null, "reason": "the browser is a resource of the generic MCP route, asked for in the mcp-resources header" },
+    { "from": "event:tracker.issue.created", "to": "event:jira.issue.created" },
+    { "from": "event:tracker.comment.added", "to": "event:jira.comment.added" },
+    { "from": "event:tracker.status.changed", "to": "event:jira.status.changed" },
+    { "from": "event:tracker.impediment.changed", "to": "event:jira.impediment.changed" },
+    { "from": "event:code.review.submitted", "to": "event:github.review.submitted" },
+    { "from": "event:code.pr.merged", "to": "event:github.pr.merged" },
+    { "from": "event:code.pr.closed", "to": "event:github.pr.closed" },
+    { "from": "event:code.pr.updated", "to": "event:github.pr.updated" },
+    { "from": "event:pipelines.run.finished", "to": "event:github.run.finished" },
+    { "from": "event:pipelines.deployment.waiting", "to": "event:github.deployment.waiting" },
+    { "from": "event:changes.status.changed", "to": "event:mock-changes.status.changed" }
   ]
 }

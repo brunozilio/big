@@ -358,5 +358,6 @@ pub fn event(id: &str, connection: &str, kind: &str, subject: &str, data: Value,
         data,
         at: jiff::Timestamp::from_second(second).unwrap(),
         scope: String::new(),
+        aliases: Vec::new(),
     }
 }

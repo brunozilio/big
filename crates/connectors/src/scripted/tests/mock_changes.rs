@@ -167,7 +167,7 @@ fn every_status_turn_between_two_polls_becomes_one_event() {
     assert_eq!(first.len(), 1);
     assert_eq!(
         (first[0]["kind"].clone(), first[0]["subject"].clone()),
-        (json!("changes.status.changed"), made["ref"].clone())
+        (json!("mock-changes.status.changed"), made["ref"].clone())
     );
     assert_eq!(first[0]["data"]["status"], EXECUTING);
     let later = mock.events(115, 200);

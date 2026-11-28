@@ -140,6 +140,7 @@ async fn a_package_gathers_stories_goes_to_internal_homologation_and_needs_a_cha
             data: json!({ "ref": "mock-1", "status": "done" }),
             at: jiff::Timestamp::UNIX_EPOCH,
             scope: String::new(),
+            aliases: Vec::new(),
         })
         .expect("deliver");
     let item = until(&kernel, &package, |item| item.waiting_human() && stage(item, "hext")["state"] == "passed").await;

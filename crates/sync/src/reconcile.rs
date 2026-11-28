@@ -226,7 +226,9 @@ impl Synchronizer {
         if self.store.was_seen(connection, &event.id)? {
             return Ok(None);
         }
-        let handled = self.sink.deliver(event).await? + self.sink.trigger(event).await?;
+        let mut event = event.clone();
+        self.connectors.canonical(&entry.connection.provider, &mut event);
+        let handled = self.sink.deliver(&event).await? + self.sink.trigger(&event).await?;
         if handled > 0 {
             self.store.mark_seen(connection, &event.id)?;
         }

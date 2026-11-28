@@ -8,6 +8,7 @@ use domain::origin::{Attribution, Origin};
 use serde_json::{Map, Value};
 
 use crate::calls::{CallSink, Called};
+use crate::catalog::EventSpec;
 use crate::descriptor::{AlternateAuth, Presentation, ProviderDescriptor};
 use crate::error::{ActionError, ErrorClass, RECONNECT};
 use crate::http::Http;
@@ -20,6 +21,7 @@ use crate::providers;
 pub(crate) struct Entry {
     pub(crate) provider: Arc<dyn Provider>,
     pub(crate) descriptor: ProviderDescriptor,
+    pub(crate) events: Vec<EventSpec>,
     alternatives: Vec<AlternateAuth>,
 }
 
@@ -74,6 +76,7 @@ impl Connectors {
             .into_iter()
             .map(|provider| Entry {
                 descriptor: provider.descriptor(),
+                events: provider.catalog(Language::default()),
                 alternatives: provider.alternatives(Language::default()),
                 provider,
             })
@@ -274,6 +277,7 @@ impl Connectors {
         let trigger = Attribution { origin: Origin::Trigger, ..Attribution::default() };
         self.counted(connection, POLL, Some(&trigger), polled.is_ok());
         let mut batch = polled.inspect_err(|error| self.limiter.learn(&connection.id, error))?;
+        batch.events.iter_mut().for_each(|event| entry.named(event));
         batch.events.retain(|event| connection.offers(&event.capability));
         Ok(Some(batch))
     }
@@ -285,6 +289,9 @@ impl Connectors {
         entry.provider.accounts(&metered, &creds).await
     }
 }
+
+mod catalog;
+pub use catalog::Catalogued;
 
 #[cfg(test)]
 mod tests;

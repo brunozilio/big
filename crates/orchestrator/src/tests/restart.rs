@@ -139,6 +139,7 @@ pub fn event(id: &str, kind: &str, data: serde_json::Value) -> connectors::Exter
         data,
         at: jiff::Timestamp::UNIX_EPOCH,
         scope: String::new(),
+        aliases: Vec::new(),
     }
 }
 
