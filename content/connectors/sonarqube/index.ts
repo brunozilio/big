@@ -17,7 +17,6 @@ import {
   siteOf,
   text,
   textOf,
-  optionalField,
   tokenAlternative,
   tokenField,
   unknownAction,
@@ -79,17 +78,7 @@ function siteFields(ctx: Ctx, language: Language) {
     ),
     ctx.config.url,
   );
-  const organization = optionalField(settingField(
-    ORGANIZATION,
-    pick(language, "Organization (SonarQube Cloud only)", "Organización (solo SonarQube Cloud)", "Organização (só SonarQube Cloud)"),
-    pick(
-      language,
-      "Leave it blank for SonarQube Server, which has no organizations.",
-      "Déjala en blanco para SonarQube Server, que no tiene organizaciones.",
-      "Deixe em branco no SonarQube Server, que não tem organizações.",
-    ),
-  ));
-  return [url, organization];
+  return [url];
 }
 
 function fields(ctx: Ctx, language: Language) {
@@ -189,30 +178,35 @@ function scoped(target: Target): [string, string][] {
   return target.branch ? [["branch", target.branch]] : [];
 }
 
-function needsOrganization(api: Api) {
-  if (isCloud(api.base, api.ctx.config.cloud) && !api.organization) {
-    fail("permanent", "SonarQube Cloud needs the organization; fill it in the connection (leave it blank only for SonarQube Server)");
-  }
+function organizationsOf(api: Api): (string | undefined)[] {
+  if (!isCloud(api.base, api.ctx.config.cloud)) return [undefined];
+  return api.organization ? [api.organization] : memberOf(api);
 }
 
-function projects(api: Api, wanted: string) {
-  needsOrganization(api);
-  const found: { value: string; label: string }[] = [];
+function projectsIn(api: Api, organization: string | undefined, wanted: string, found: { value: string; label: string }[], shown: boolean) {
   for (let page = 1; page <= MOST_PAGES; page++) {
     const pairs: [string, string][] = [["qualifiers", "TRK"], ["ps", PAGE], ["p", String(page)]];
-    if (wanted.length >= 2) pairs.push(["q", wanted]);
-    if (api.organization) pairs.push(["organization", api.organization]);
+    const named = shown && organization !== undefined && organization.toLowerCase().includes(wanted.toLowerCase());
+    if (wanted.length >= 2 && !named) pairs.push(["q", wanted]);
+    if (organization) pairs.push(["organization", organization]);
     const answered = get(api, "/api/components/search", pairs);
     const listed = listIn(answered?.components);
     for (const component of listed) {
       const key = textOf(component, ["key"]);
       const name = textOf(component, ["name"]);
-      const hit = wanted === "" || `${key} ${name}`.toLowerCase().includes(wanted.toLowerCase());
-      if (key !== "" && hit && !found.some((known) => known.value === key)) found.push({ value: key, label: key });
+      const hit = wanted === "" || named || `${key} ${name}`.toLowerCase().includes(wanted.toLowerCase());
+      const label = shown && organization ? `${organization} · ${key}` : key;
+      if (key !== "" && hit && !found.some((known) => known.value === key)) found.push({ value: key, label });
     }
     const total = Number(answered?.paging?.total);
     if (listed.length === 0 || (Number.isFinite(total) ? page * Number(PAGE) >= total : listed.length < Number(PAGE))) break;
   }
+}
+
+function projects(api: Api, wanted: string) {
+  const found: { value: string; label: string }[] = [];
+  const organizations = organizationsOf(api);
+  for (const organization of organizations) projectsIn(api, organization, wanted, found, organizations.length > 1);
   return found;
 }
 
@@ -407,9 +401,22 @@ function signedIn(api: Api): string {
   return fail("auth", `SonarQube at ${api.base} did not accept the token (tried Bearer and the token as the basic-auth login); generate a user token in My Account › Security`);
 }
 
+function memberOf(api: Api): string[] {
+  const found: string[] = [];
+  for (let page = 1; page <= MOST_PAGES; page++) {
+    const answered = get(api, "/api/organizations/search", [["member", "true"], ["ps", PAGE], ["p", String(page)]]);
+    for (const organization of listIn(answered?.organizations)) {
+      const key = textOf(organization, ["key"]);
+      if (key !== "" && !found.includes(key)) found.push(key);
+    }
+    const total = Number(answered?.paging?.total);
+    if (!Number.isFinite(total) || page * Number(PAGE) >= total) break;
+  }
+  return found;
+}
+
 export function accounts({ creds }: { creds: Creds }, ctx: Ctx) {
   const api = apiOf(ctx, creds);
-  needsOrganization(api);
   const login = signedIn(api);
   const host = api.base.replace(/^https?:\/\//i, "");
   const label = [login, api.organization ?? host].filter(Boolean).join(" · ");

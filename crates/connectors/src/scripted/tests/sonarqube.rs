@@ -40,22 +40,22 @@ fn sign_in() -> Loopback {
 }
 
 #[test]
-fn the_provider_signs_in_through_the_browser_or_with_an_address_an_organization_and_a_token() {
+fn the_provider_signs_in_through_the_browser_or_with_an_address_and_a_token() {
     let provider = loaded("sonarqube");
     let descriptor = provider.descriptor();
     let sign_in = sign_in();
     assert_eq!((sign_in.0.callback_ports(), sign_in.0.listens()), (Some((64120, 64130)), true));
     let entered: Vec<String> = sign_in.0.fields(Language::Portuguese).into_iter().map(|field| field.name).collect();
-    assert_eq!(entered, ["url", "organization"]);
+    assert_eq!(entered, ["url"]);
     let [alternate] = provider.alternatives(Language::Portuguese).try_into().unwrap_or_else(|_| panic!("one"));
     let AuthSpec::Token(spec) = alternate.auth else { panic!("not a token") };
     let names: Vec<(&str, bool, bool)> =
         spec.fields.iter().map(|field| (field.name.as_str(), field.secret, field.setting)).collect();
-    assert_eq!(names, [("url", false, true), ("organization", false, true), ("token", true, false)]);
+    assert_eq!(names, [("url", false, true), ("token", true, false)]);
     assert_eq!(spec.fields[0].value, "https://sonarcloud.io");
     let optional: Vec<bool> = spec.fields.iter().map(|field| field.optional).collect();
-    assert_eq!(optional, [false, true, false]);
-    let given = json!({ "url": "https://sonar.empresa.com", "organization": " ", "token": "squ" });
+    assert_eq!(optional, [false, false]);
+    let given = json!({ "url": "https://sonar.empresa.com", "token": "squ" });
     assert_eq!(spec.access_token(&given, Language::Portuguese), Ok("squ".to_owned()));
     assert_eq!(spec.settings(&given), json!({ "url": "https://sonar.empresa.com" }));
     assert_eq!(spec.form, TokenForm::Bearer);
@@ -73,7 +73,7 @@ fn the_provider_signs_in_through_the_browser_or_with_an_address_an_organization_
 }
 
 async fn begun(http: &FakeHttp) -> (Loopback, Authorization) {
-    let entered = json!({ "url": "sonar.empresa.com/sonar/", "organization": "" });
+    let entered = json!({ "url": "sonar.empresa.com/sonar/" });
     let sign_in = sign_in().entered(&entered, Language::Portuguese).unwrap_or_else(|error| panic!("{error}"));
     let begun = sign_in.0.begin_at(http, 7420, Some(64121)).await.unwrap_or_else(|error| panic!("{error:?}"));
     (sign_in, begun)
@@ -250,13 +250,38 @@ async fn a_token_sonarqube_refuses_is_an_auth_error_and_a_valid_one_names_the_ac
     assert_eq!(found[0].label, "ana · acme");
 }
 
+fn signed_in() -> FakeHttp {
+    FakeHttp::new().once(Method::Get, "/api/authentication/validate", 200, r#"{"valid":true}"#).once(
+        Method::Get,
+        "/api/users/current",
+        200,
+        r#"{"login":"ana","isLoggedIn":true}"#,
+    )
+}
+
 #[tokio::test]
-async fn sonarqube_cloud_without_an_organization_asks_for_it() {
-    let http = FakeHttp::new();
-    let refused = loaded("sonarqube").accounts(&http, &creds("squ", json!({}))).await;
-    let Err(refused) = refused else { panic!("{refused:?}") };
-    assert!(refused.message.contains("organization"), "{}", refused.message);
-    assert!(http.sent().is_empty());
+async fn sonarqube_cloud_connects_the_account_without_asking_for_an_organization() {
+    let found = loaded("sonarqube").accounts(&signed_in(), &creds("squ", json!({}))).await;
+    let Ok(found) = found else { panic!("{found:?}") };
+    let offered: Vec<(&str, &Value)> = found.iter().map(|option| (option.label.as_str(), &option.settings)).collect();
+    assert_eq!(offered, [("ana · sonarcloud.io", &json!({ "url": "https://sonarcloud.io" }))]);
+}
+
+#[tokio::test]
+async fn sonarqube_cloud_lists_the_projects_of_every_organization_the_user_belongs_to() {
+    let listed = r#"{"organizations":[{"key":"acme"},{"key":"beta"}],"paging":{"total":2}}"#;
+    let acme = r#"{"components":[{"key":"acme_web","name":"web"}],"paging":{"total":1}}"#;
+    let beta = r#"{"components":[{"key":"beta_api","name":"api"}],"paging":{"total":1}}"#;
+    let http = FakeHttp::new()
+        .once(Method::Get, "/api/organizations/search", 200, listed)
+        .once(Method::Get, "/api/components/search", 200, acme)
+        .once(Method::Get, "/api/components/search", 200, beta);
+    let found = call(&http, json!({}), "quality.options", json!({})).await;
+    let Ok(found) = found else { panic!("{found:?}") };
+    assert_eq!(found, json!([{ "value": "acme_web", "label": "acme · acme_web" }, { "value": "beta_api", "label": "beta · beta_api" }]));
+    let sent: Vec<String> = http.sent().iter().map(|request| request.url.clone()).collect();
+    assert!(sent[0].contains("/api/organizations/search?") && sent[0].contains("member=true"), "{sent:?}");
+    assert!(sent[1].contains("organization=acme") && sent[2].contains("organization=beta"), "{sent:?}");
 }
 
 #[tokio::test]
