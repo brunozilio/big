@@ -24,7 +24,8 @@
       "from": "sdk/steps/index.js",
       "to": "packages/dev/steps/index.js",
       "names": ["plan", "ticket", "cases", "develop", "checks", "repoChecks", "e2e", "verifier", "pr", "ci", "quality", "review", "provision", "merge", "release", "security", "findings"],
-      "becomes": { "review": "sdk/steps/general.js" }
+      "becomes": { "review": "sdk/steps/general.js" },
+      "alias": "sdk/steps/legacy.js"
     }
   ],
   "ids": [

@@ -139,16 +139,16 @@ pub fn in_place(command: &Command) -> bool {
 
 fn folders(shared: &Shared, item: &ItemId) -> Result<Vec<Worktree>, Failure> {
     let state = shared.item(item).map_err(|error| Failure::permanent(error.to_string()))?;
-    let found = shared.checkouts(&state).into_iter().filter_map(|checkout| {
+    let checkouts = shared.checkouts(&state);
+    if repos::unbound(&checkouts) {
+        let path = crate::scripts::scratch(shared, item)?;
+        return Ok(vec![Worktree { checkout: Checkout::scratch(&path), path, branch: String::new() }]);
+    }
+    let found = checkouts.into_iter().filter_map(|checkout| {
         let path = checkout.directory.clone().filter(|folder| folder.is_dir())?;
         Some(Worktree { checkout, path, branch: String::new() })
     });
-    let found: Vec<Worktree> = found.collect();
-    if !found.is_empty() {
-        return Ok(found);
-    }
-    let path = crate::scripts::scratch(shared, item)?;
-    Ok(vec![Worktree { checkout: Checkout::scratch(&path), path, branch: String::new() }])
+    Ok(found.collect())
 }
 
 pub fn branch_of(command: &Command) -> Option<&str> {

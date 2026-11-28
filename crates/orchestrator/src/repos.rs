@@ -94,6 +94,10 @@ pub fn of_input(input: &Value, fallback: Option<&Path>) -> Vec<Checkout> {
     }]
 }
 
+pub fn unbound(checkouts: &[Checkout]) -> bool {
+    checkouts.iter().all(|checkout| checkout.id.is_empty() && checkout.directory.is_none())
+}
+
 pub fn home(input: &Value, fallback: Option<&Path>) -> Option<PathBuf> {
     of_input(input, fallback).into_iter().next().and_then(|first| first.directory)
 }

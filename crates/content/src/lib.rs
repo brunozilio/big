@@ -14,6 +14,7 @@ mod graph_tests;
 mod install;
 pub mod library;
 mod modules;
+pub mod moved;
 mod place;
 mod render;
 pub mod retired;

@@ -292,6 +292,7 @@ fn every_step_and_the_default_workflow_are_built_in_typed_and_name_no_provider()
             "sdk/steps/context.js",
             "sdk/steps/given.js",
             "sdk/steps/general.js",
+            "sdk/steps/legacy.js",
             "packages/dev/steps/index.js",
             "packages/dev/steps/e2e.js",
             "workflows/default.ts",

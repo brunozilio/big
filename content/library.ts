@@ -349,6 +349,8 @@ const steps = (source: string): string => outlined(source).map((step) => step.na
 const workflowSource = (slug: string, imports: string, accepts: string[], steps: string[]): string =>
   `import { workflow } from "sdk";\n${imports}\n\nexport default workflow({\n  schema_version: 1,\n  name: ${JSON.stringify(slug)},\n  accepts: ${JSON.stringify(accepts).replace(/,/g, ", ")},\n  triggers: [],\n  steps: [\n${steps.map((step) => `    ${step},\n`).join("")}  ],\n});\n`;
 
+const DEFAULT_AREA = "dev";
+
 const AREAS = [
   {
     key: "general",
@@ -390,7 +392,7 @@ const workflows: Kind = {
   outline: outlined,
   templates: (language) => AREAS.map((area) => ({ key: area.key, label: area.label(language) })),
   create: (_name, slug, host) => {
-    const area = AREAS.find((found) => found.key === host.template) ?? AREAS[0];
+    const area = AREAS.find((found) => found.key === host.template) ?? AREAS.find((found) => found.key === DEFAULT_AREA) ?? AREAS[0];
     return { path: `workflows/${slug}.ts`, source: area.source(slug) };
   },
 };

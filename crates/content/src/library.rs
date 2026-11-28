@@ -504,9 +504,11 @@ mod tests {
         for (template, wanted, module) in [
             ("general", "draft({", "sdk/steps/draft.js"),
             ("dev", "plan({", "packages/dev/steps/plan.js"),
-            ("other", "draft({", "sdk/steps/draft.js"),
+            ("other", "plan({", "packages/dev/steps/plan.js"),
+            ("", "plan({", "packages/dev/steps/plan.js"),
         ] {
-            let made = run("create", json!({ "section": "workflows", "name": "Novo", "template": template }));
+            let asked = if template.is_empty() { Value::Null } else { json!(template) };
+            let made = run("create", json!({ "section": "workflows", "name": "Novo", "template": asked }));
             assert_eq!(made["path"], "workflows/novo.ts");
             assert!(word(&made["source"]).contains(wanted), "{template}: {made}");
             assert!(crate::shipped(module).is_some(), "{module} is shipped");

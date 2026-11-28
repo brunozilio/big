@@ -4,4 +4,4 @@ export { default as ask } from "./ask.js";
 export { default as command } from "./command.js";
 export { default as agent } from "./agent.js";
 export { default as script } from "./script.js";
-export { plan, ticket, cases, develop, checks, repoChecks, e2e, verifier, pr, ci, quality, review, provision, merge, release, security, findings } from "../../packages/dev/steps/index.js";
+export { plan, ticket, cases, develop, checks, repoChecks, e2e, verifier, pr, ci, quality, review, provision, merge, release, security, findings } from "./legacy.js";

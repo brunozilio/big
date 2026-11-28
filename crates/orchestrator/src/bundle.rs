@@ -61,7 +61,7 @@ fn resolve(resources: &Resources, from: Option<&str>, spec: &str, names: &[Strin
         importer,
     )
     .ok_or_else(|| format!("the import {spec} was not found"))?;
-    content::retired::moved(&content::retired::moved_table(), &found, names, importer);
+    content::moved::warned(&content::moved::table(), &found, names, importer);
     Ok(found)
 }
 

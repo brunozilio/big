@@ -42,6 +42,40 @@ async fn a_draft_is_reviewed_acted_on_and_delivered_with_no_code_connector() {
     assert_eq!(ran(&world, "code.") + ran(&world, "pipelines."), 0);
 }
 
+const DRAFT_ONLY: &str = r#"
+import { workflow } from "sdk";
+import { draft } from "sdk/steps/general.js";
+export default workflow({ name: "rascunho", steps: [draft({ agent: "worker" })] });
+"#;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_agent_with_no_repository_bound_drafts_in_the_scratch_folder_of_the_item() {
+    let world = World::new();
+    world.workflow("rascunho", DRAFT_ONLY);
+    let kernel = world.start().await;
+    let id = kernel.create_item("rascunho", json!({ "title": "Responder Ana" })).expect("item");
+    let item = ended(&kernel, &id).await;
+    assert_eq!(item.step("draft", Some("main")).map(|run| run.state), Some(StepState::Passed));
+    let cwd = world.engine.requests()[0].session.cwd.clone();
+    assert!(cwd.ends_with(std::path::Path::new("scratch").join(id.to_string())), "{}", cwd.display());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_agent_whose_bound_repository_has_no_folder_still_fails_as_before() {
+    let world = World::new();
+    world.workflow("rascunho", DRAFT_ONLY);
+    let kernel = world.start().await;
+    let application = json!({ "id": "app", "name": "XPTO", "bindings": {},
+        "repositories": [{ "id": "api", "name": "api" }] });
+    let id =
+        kernel.create_item("rascunho", json!({ "title": "Responder Ana", "application": application })).expect("item");
+    let failed = |item: &WorkItem| item.step("draft", Some("main")).is_some_and(|run| run.state == StepState::Failed);
+    let item = until(&kernel, &id, failed).await;
+    let run = item.step("draft", Some("main")).cloned().expect("draft");
+    assert_eq!(run.output["error"], "the item has no repository");
+    assert_eq!(world.engine.runs(), 0);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn the_invoice_and_order_example_loads_with_its_declared_criterion() {
     let world = World::new();

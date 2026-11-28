@@ -45,7 +45,7 @@ fn resolve(folder: Option<&Path>, from: &str, spec: &str, names: &[String]) -> R
     let found =
         super::retired::resolve(&super::retired::table(), &candidates, &|candidate| exists(folder, candidate), from)
             .ok_or_else(|| format!("the import {spec} of {from} was not found"))?;
-    super::retired::moved(&super::retired::moved_table(), &found, names, from);
+    super::moved::warned(&super::moved::table(), &found, names, from);
     Ok(found)
 }
 
